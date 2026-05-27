@@ -155,10 +155,10 @@ const interestBadge = (status?: string) => {
   const map: Record<string, string> = {
     "Interested": "text-green-400 bg-green-500/10 border-green-500/30",
     "Not Interested": "text-red-400 bg-red-500/10 border-red-500/30",
-    "Non Qualified Lead": "text-yellow-400 bg-yellow-500/10 border-yellow-500/30",
+    "Non Genuine Demand": "text-yellow-400 bg-yellow-500/10 border-yellow-500/30",
   };
   const short: Record<string, string> = {
-    "Interested": "Interested", "Not Interested": "Not Int.", "Non Qualified Lead": "Non Qualified Lead",
+    "Interested": "Interested", "Not Interested": "Not Int.", "Non Genuine Demand": "Non Genuine Demand",
   };
   return (
     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border whitespace-nowrap ${map[status] ?? "text-gray-400 bg-gray-500/10 border-gray-500/30"}`}>
@@ -1831,9 +1831,9 @@ function CallerControlMode({ leads, savedLeads, setSavedLeads, adminName, onExit
     const map: Record<string, string> = {
       "Interested": "text-green-400 bg-green-500/10 border-green-500/30",
       "Not Interested": "text-red-400 bg-red-500/10 border-red-500/30",
-      "Non Qualified Lead": "text-yellow-400 bg-yellow-500/10 border-yellow-500/30",
+      "Non Genuine Demand": "text-yellow-400 bg-yellow-500/10 border-yellow-500/30",
     };
-    const short: Record<string, string> = { "Interested": "Interested", "Not Interested": "Not Int.", "Non Qualified Lead": "Non Qualified Lead" };
+    const short: Record<string, string> = { "Interested": "Interested", "Not Interested": "Not Int.", "Non Genuine Demand": "Non Genuine Demand" };
     return <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border whitespace-nowrap ${map[status] ?? "text-gray-400 bg-gray-500/10 border-gray-500/30"}`}>{short[status] ?? status}</span>;
   };
 
@@ -1845,7 +1845,7 @@ function CallerControlMode({ leads, savedLeads, setSavedLeads, adminName, onExit
     if (lead.dbId) fetch(`/api/caller-leads/${lead.dbId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "saved" }) }).catch(() => { });
   };
 
-  const setInterest = async (lead: any, status: "Interested" | "Not Interested" | "Non Qualified Lead") => {
+  const setInterest = async (lead: any, status: "Interested" | "Not Interested" | "Non Genuine Demand") => {
     setSavedLeads(prev => prev.map(l => l.id === lead.id ? { ...l, interestStatus: status, status: status === "Not Interested" ? "not_interested" : "saved" } : l));
     if (detailLead?.id === lead.id) setDetailLead((p: any) => ({ ...p, interestStatus: status }));
     if (lead.dbId) await fetch(`/api/caller-leads/${lead.dbId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ interest_status: status, status: status === "Not Interested" ? "not_interested" : "saved" }) }).catch(() => { });
@@ -2425,7 +2425,7 @@ function CallerControlMode({ leads, savedLeads, setSavedLeads, adminName, onExit
                     {sl.interestStatus && iBadge(sl.interestStatus)}
                     {sl.interestStatus !== "Interested" && <button onClick={() => setInterest(sl, "Interested")} className="flex items-center gap-2 bg-green-600/10 hover:bg-green-600 border border-green-500/30 text-green-400 hover:text-white font-bold px-3 py-2 rounded-lg text-xs cursor-pointer transition-colors"><FaCheckCircle /> Interested</button>}
                     {sl.interestStatus !== "Not Interested" && <button onClick={() => setInterest(sl, "Not Interested")} className="flex items-center gap-2 bg-red-600/10 hover:bg-red-600 border border-red-500/30 text-red-400 hover:text-white font-bold px-3 py-2 rounded-lg text-xs cursor-pointer transition-colors"><FaTimes /> Not Interested</button>}
-                    {sl.interestStatus !== "Non Qualified Lead" && <button onClick={() => setInterest(sl, "Non Qualified Lead")} className="flex items-center gap-2 bg-yellow-600/10 hover:bg-yellow-600 border border-yellow-500/30 text-yellow-400 hover:text-white font-bold px-3 py-2 rounded-lg text-xs cursor-pointer transition-colors">Non Qualified Lead</button>}
+                    {sl.interestStatus !== "Non Genuine Demand" && <button onClick={() => setInterest(sl, "Non Genuine Demand")} className="flex items-center gap-2 bg-yellow-600/10 hover:bg-yellow-600 border border-yellow-500/30 text-yellow-400 hover:text-white font-bold px-3 py-2 rounded-lg text-xs cursor-pointer transition-colors">Non Genuine Demand</button>}
                   </div>
                 </div>
                 <div className="flex flex-col lg:flex-row gap-4 flex-1 min-h-0">

@@ -98,10 +98,10 @@ function buildTheme(isDark: boolean) {
     accentBg: isDark ? "bg-[#9E217B]/10 text-[#d946a8] border border-[#9E217B]/30" : "bg-[#9E217B]/10 text-[#9E217B] border border-[#9E217B]/30",
     sectionTitle: isDark ? "text-[#d946a8]" : "text-[#9E217B]",
     sectionBorder: isDark ? "border-[#9E217B]/20" : "border-[#9E217B]/25",
-    btnPrimary: isDark ? "bg-[#9E217B] hover:bg-[#b8268f] text-white shadow-md" : "bg-[#9E217B] hover:bg-[#8a1d6b] text-white shadow-sm",
-    btnSecondary: isDark ? "bg-[#00AEEF] hover:bg-[#0099d4] text-white shadow-md" : "bg-[#00AEEF] hover:bg-[#0099d4] text-white shadow-sm",
-    btnDanger: isDark ? "bg-[#3B1F1F] text-[#F28B82] hover:bg-red-900/40 border border-red-900/30" : "bg-[#9E217B]/10 text-[#9E217B] hover:bg-[#9E217B] hover:text-white border border-[#9E217B]/30",
-    btnWarning: isDark ? "bg-yellow-600 hover:bg-yellow-500 text-white shadow-md" : "bg-amber-500 hover:bg-amber-400 text-white shadow-sm",
+    btnPrimary: isDark ? "bg-[#9E217B] hover:bg-[#7a1960] text-white shadow-md transition-colors duration-200" : "bg-[#9E217B] hover:bg-[#7a1960] text-white shadow-sm transition-colors duration-200",
+    btnSecondary: isDark ? "bg-[#00AEEF] hover:bg-[#0088bb] text-white shadow-md transition-colors duration-200" : "bg-[#00AEEF] hover:bg-[#0088bb] text-white shadow-sm transition-colors duration-200",
+    btnDanger: isDark ? "bg-[#3B1F1F] text-[#F28B82] hover:bg-[#4f2a2a] border border-red-900/30 transition-colors duration-200" : "bg-[#9E217B]/10 text-[#9E217B] hover:bg-[#9E217B]/20 border border-[#9E217B]/30 transition-colors duration-200",
+    btnWarning: isDark ? "bg-yellow-600 hover:bg-yellow-700 text-white shadow-md transition-colors duration-200" : "bg-amber-500 hover:bg-amber-600 text-white shadow-sm transition-colors duration-200",
     btnClosingBadge: isDark ? "bg-yellow-900/20 border border-yellow-500/40 text-yellow-400" : "bg-amber-50 border border-amber-400/60 text-amber-600",
     logoBg: isDark ? "bg-[#9E217B] shadow-lg shadow-[#9E217B]/30" : "bg-[#9E217B] shadow-lg shadow-[#9E217B]/30",
     chartColors: isDark
@@ -3130,10 +3130,10 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                                   <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Planning to Buy?</p><p className={`font-semibold ${theme.text}`}>{selectedLead.planningPurchase || "Pending"}</p></div>
                                   <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Loan Required?</p><p className={`font-semibold ${theme.text}`}>{getLatestLoanDetails()?.loanRequired}</p></div>
                                   <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Status</p><span className={`text-sm font-bold ${selectedLead.status === "Closing" ? "text-amber-500" : selectedLead.status === "Visit Scheduled" ? "text-orange-400" : theme.accentText}`}>{selectedLead.status || "Routed"}</span></div>
-                                  {/* <div className={`col-span-2 p-3 rounded-xl border ${theme.settingsBg}`} style={theme.settingsBgGl}>
+                                  <div className={`col-span-2 p-3 rounded-xl border ${theme.settingsBg}`} style={theme.settingsBgGl}>
                                     <p className={`text-xs font-bold uppercase tracking-wider mb-0.5 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>📍 Site Visit Date</p>
                                     <p className={`text-base font-black ${theme.text}`}>{selectedLead.mongoVisitDate ? formatDate(selectedLead.mongoVisitDate) : "Not Scheduled"}</p>
-                                  </div> */}
+                                  </div>
                                   {selectedLead.is_lost_lead && (
                                     <div className={`col-span-2 p-3 rounded-xl border ${theme.statusLost}`}>
                                       <p className="text-xs font-bold uppercase tracking-wider mb-1">Lost Lead Record</p>

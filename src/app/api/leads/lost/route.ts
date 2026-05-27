@@ -1,3 +1,4 @@
+//api/leads/lost/route.ts
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { broadcastLeadUpdate } from "@/lib/lostLeadEvents";

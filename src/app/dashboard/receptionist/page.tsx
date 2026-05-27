@@ -138,11 +138,11 @@ function buildTheme(isDark: boolean) {
     sectionBorder: isDark ? "border-[#9E217B]/20" : "border-[#9E217B]/25",
 
     // ── Buttons (Hover Scale & Shadow Pop-out) ──
-    btnPrimary: isDark ? "bg-[#9E217B] hover:bg-[#7a1a5e] text-white shadow-md transform transition-all duration-300 hover:-translate-y-1 hover:scale-[1.03] hover:shadow-lg" : "bg-[#00AEEF] hover:bg-[#0099d4] text-white shadow-sm transform transition-all duration-300 hover:-translate-y-1 hover:scale-[1.03] hover:shadow-lg",
-    btnSecondary: isDark ? "bg-blue-700 hover:bg-blue-600 text-white shadow-md transform transition-all duration-300 hover:-translate-y-1 hover:scale-[1.03] hover:shadow-lg" : "bg-[#9E217B] hover:bg-[#8a1d6b] text-white shadow-sm transform transition-all duration-300 hover:-translate-y-1 hover:scale-[1.03] hover:shadow-lg",
-    btnWarning: isDark ? "bg-yellow-600 hover:bg-yellow-500 text-white shadow-md transform transition-all duration-300 hover:-translate-y-1 hover:scale-[1.03] hover:shadow-lg" : "bg-amber-500 hover:bg-amber-400 text-white shadow-sm transform transition-all duration-300 hover:-translate-y-1 hover:scale-[1.03] hover:shadow-lg",
-    btnDanger: isDark ? "bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white border border-red-500/30 transform transition-all duration-300 hover:-translate-y-1 hover:scale-[1.03] hover:shadow-lg" : "bg-[#9E217B]/10 text-[#9E217B] hover:bg-[#9E217B] hover:text-white border border-[#9E217B]/30 transform transition-all duration-300 hover:-translate-y-1 hover:scale-[1.03] hover:shadow-lg",
-    btnTransfer: isDark ? "bg-purple-600 hover:bg-purple-500 text-white shadow-md transform transition-all duration-300 hover:-translate-y-1 hover:scale-[1.03] hover:shadow-lg" : "bg-purple-600 hover:bg-purple-700 text-white shadow-sm transform transition-all duration-300 hover:-translate-y-1 hover:scale-[1.03] hover:shadow-lg",
+    btnPrimary: isDark ? "bg-[#9E217B] hover:bg-[#7a1960] text-white shadow-md transition-colors duration-200" : "bg-[#00AEEF] hover:bg-[#0088bb] text-white shadow-sm transition-colors duration-200",
+    btnSecondary: isDark ? "bg-blue-700 hover:bg-blue-800 text-white shadow-md transition-colors duration-200" : "bg-[#9E217B] hover:bg-[#7a1960] text-white shadow-sm transition-colors duration-200",
+    btnWarning: isDark ? "bg-yellow-600 hover:bg-yellow-700 text-white shadow-md transition-colors duration-200" : "bg-amber-500 hover:bg-amber-600 text-white shadow-sm transition-colors duration-200",
+    btnDanger: isDark ? "bg-red-500/10 text-red-500 hover:bg-red-600/20 border border-red-500/30 transition-colors duration-200" : "bg-[#9E217B]/10 text-[#9E217B] hover:bg-[#9E217B]/20 border border-[#9E217B]/30 transition-colors duration-200",
+    btnTransfer: isDark ? "bg-purple-600 hover:bg-purple-700 text-white shadow-md transition-colors duration-200" : "bg-purple-600 hover:bg-purple-700 text-white shadow-sm transition-colors duration-200",
     scroll: isDark ? "custom-scrollbar" : "custom-scrollbar",
     logoBg: isDark ? "bg-[#9E217B] shadow-lg shadow-[#9E217B]/30" : "bg-[#9E217B] shadow-lg shadow-[#9E217B]/30",
     selectSmall: isDark ? "bg-[#1A1A28] border-[#2A2A35] text-white" : "bg-white border-[#D1D5DB] text-[#6B7280]",
@@ -167,7 +167,7 @@ function InterestBadge({ status, size = "md" }: { status: string; size?: "sm" | 
   const colorMap: Record<string, string> = {
     Interested: "border-green-500/40 text-green-400 bg-green-500/10",
     "Not Interested": "border-red-500/40 text-red-400 bg-red-500/10",
-    "Non Qualified Lead": "border-yellow-500/40 text-yellow-400 bg-yellow-500/10",
+    "Non Genuine Demand": "border-yellow-500/40 text-yellow-400 bg-yellow-500/10",
   };
   const cls = colorMap[status] ?? "border-blue-500/30 text-blue-400 bg-blue-500/10";
   const sz = size === "sm" ? "text-[9px] px-2 py-0.5" : "text-[10px] px-3 py-1";
@@ -1792,7 +1792,7 @@ export default function ReceptionistDashboard() {
             <div className="flex justify-between items-center mb-8">
               <h1 className={`text-xl md:text-3xl font-bold flex items-center flex-wrap gap-2 md:gap-3 ${t.text}`}>
                 Hi, {String(user?.name || "User").split(" ")[0]}
-                <span className={`text-xs md:text-sm font-medium px-2 py-0.5 md:px-3 md:py-1 rounded-full capitalize ${isDark ? "text-[#9E217B] bg-white/80 border border-[#9E217B]/40" : "text-[#9E217B] bg-[#9E217B]/10 border border-[#9E217B]/20"}`}>{user?.role}</span>
+                <span className={`text-xs md:text-sm font-medium px-2 py-0.5 md:px-3 md:py-1 rounded-full capitalize ${isDark ? "text-[#9E217B] bg-white/80 border border-[#9E217B]/40" : "text-[#9E217B] bg-[#9E217B]/10 border border-[#9E217B]/20"}`}>Front Desk</span>
               </h1>
               <button onClick={refetchAll} className={`text-white text-xs md:text-sm font-semibold flex items-center gap-1 md:gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-lg transition-all shadow-sm ${t.btnPrimary}`}>
                 <span className="md:hidden">↻ Sync</span>
@@ -2497,7 +2497,7 @@ export default function ReceptionistDashboard() {
                             </div>
                             <div className={`border-t pt-3 mt-1 ${t.tableBorder}`}>
                               <label className={`block text-xs font-bold mb-1.5 ${t.accentText}`}>Lead Interest Status *</label>
-                              <select required value={salesForm.leadStatus} onChange={e => setSalesForm({ ...salesForm, leadStatus: e.target.value })} className={formSelect}><option value="" disabled>Select Status</option><option>Interested</option><option>Not Interested</option><option>Non Qualified Lead</option></select>
+                              <select required value={salesForm.leadStatus} onChange={e => setSalesForm({ ...salesForm, leadStatus: e.target.value })} className={formSelect}><option value="" disabled>Select Status</option><option>Interested</option><option>Not Interested</option><option>Non Genuine Demand</option></select>
                             </div>
                             <div className={`border-t pt-3 mt-1 ${t.tableBorder}`}>
                               <label className={`block text-xs font-bold mb-1.5 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}>Loan Planned?</label>
