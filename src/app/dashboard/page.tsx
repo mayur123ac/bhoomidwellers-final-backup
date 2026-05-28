@@ -16,6 +16,7 @@ import {
   CartesianGrid, PieChart, Pie,
 } from "recharts";
 import LostLeadModal from "@/components/LostLeadModal";
+import MarkClosingModal from "@/components/MarkClosingModal";
 import {
   handleMarkLostLead as markLostLeadApi,
   handleRestoreLead as restoreLeadApi,
@@ -125,8 +126,11 @@ function buildTheme(isDark: boolean) {
     statusLost: isDark ? "text-red-400 border-red-500/30 bg-red-500/10" : "text-red-600 border-red-300 bg-red-50",
     lostLeadBadge: isDark ? "bg-red-900/20 border border-red-500/30 text-red-400" : "bg-red-50 border border-red-300 text-red-600",
     lostLeadRow: isDark ? "opacity-50" : "opacity-50 bg-gray-50/50",
+    statusNGD: "bg-[rgba(251,146,60,0.12)] text-[#F97316] border border-[rgba(249,115,22,0.4)]",
     cardLost: isDark ? "bg-[#171717] border border-red-900/25 opacity-70 grayscale saturate-50 hover:opacity-90 hover:border-red-500/30" : "bg-slate-100 border border-red-200 opacity-75 grayscale saturate-50 hover:opacity-90 hover:border-red-300",
+    cardNGD: "bg-[rgba(249,115,22,0.06)] border border-[rgba(249,115,22,0.35)] hover:border-[#F97316] shadow-[0_4px_12px_rgba(249,115,22,0.12)] transition-all duration-300 flex flex-col h-full",
     rowLost: isDark ? "bg-[#151515]/80 text-gray-500 opacity-75 grayscale" : "bg-slate-100/80 text-slate-500 opacity-80 grayscale",
+    rowNGD: "bg-[rgba(249,115,22,0.03)]",
     scroll: isDark ? "scrollbar-dark" : "scrollbar-light",
   };
 }
@@ -259,7 +263,8 @@ function InterestBadge({ status, size = "md", isDark }: { status: string; size?:
   const colorMap: Record<string, string> = {
     "Interested": isDark ? "border-green-500/40 text-green-400 bg-green-500/10" : "border-green-300 text-green-700 bg-green-50",
     "Not Interested": isDark ? "border-red-500/40 text-red-400 bg-red-500/10" : "border-red-300 text-red-700 bg-red-50",
-    "Non Qualified lead": isDark ? "border-yellow-500/40 text-yellow-400 bg-yellow-500/10" : "border-yellow-300 text-yellow-700 bg-yellow-50",
+    "NON GENUINE DEMAND (NGD)": isDark ? "border-orange-500/40 text-orange-400 bg-orange-500/10" : "border-orange-300 text-orange-700 bg-orange-50",
+    "Non Qualified lead": isDark ? "border-orange-500/40 text-orange-400 bg-orange-500/10" : "border-orange-300 text-orange-700 bg-orange-50",
   };
   const cls = colorMap[status] ?? (isDark ? "border-[#9E217B]/30 text-[#d946a8] bg-[#9E217B]/10" : "border-[#9E217B]/30 text-[#9E217B] bg-[#9E217B]/10");
   const sz = size === "sm" ? "text-[9px] px-2 py-0.5" : "text-[10px] px-3 py-1";
@@ -572,13 +577,13 @@ export default function AdminAtlasDashboard() {
   const handleLogout = () => { clearCrmSession(); router.replace("/"); };
 
   const menuItems = [
-    { id: "dashboard",   icon: FaThLarge,       label: "Overview" },
-    { id: "receptionist",icon: FaClipboardList,  label: "Receptionist" },
-    { id: "sales",       icon: FaUsers,          label: "Sales Managers" },
-    { id: "site_head",   icon: FaUniversity,     label: "Site Heads" },
-    { id: "monitoring",  icon: FaChartPie,       label: "Daily Monitor" }, // ← ADD THIS
-    { id: "caller",      icon: FaPhoneAlt,       label: "Caller Panel" },
-    { id: "employees",   icon: FaIdCard,         label: "Add Employee" },
+    { id: "dashboard", icon: FaThLarge, label: "Overview" },
+    { id: "receptionist", icon: FaClipboardList, label: "Receptionist" },
+    { id: "sales", icon: FaUsers, label: "Sales Managers" },
+    { id: "site_head", icon: FaUniversity, label: "Site Heads" },
+    { id: "monitoring", icon: FaChartPie, label: "Daily Monitor" }, // ← ADD THIS
+    { id: "caller", icon: FaPhoneAlt, label: "Caller Panel" },
+    { id: "employees", icon: FaIdCard, label: "Add Employee" },
   ];
 
   const handleMenuClick = (itemId: string) => {
@@ -771,11 +776,11 @@ export default function AdminAtlasDashboard() {
               isDark={isDark}
             />
           )}
-        {activeView === "monitoring" && (
-          <div className="flex-1 overflow-hidden h-full">
-            <DailyMonitoringPanel theme={theme} isDark={isDark} />
-          </div>
-        )}
+          {activeView === "monitoring" && (
+            <div className="flex-1 overflow-hidden h-full">
+              <DailyMonitoringPanel theme={theme} isDark={isDark} />
+            </div>
+          )}
         </main>
       </div>
     </div>
@@ -790,8 +795,13 @@ function DashboardAnalytics({ leads, theme, isDark }: { leads: any[]; theme: any
   const [barMode, setBarMode] = useState<"weekly" | "source" | "cp">("weekly");
 
   const interestData = useMemo(() => {
-    const c: Record<string, number> = { Interested: 0, "Not Interested": 0, "Non Qualified Lead": 0, Pending: 0 };
-    leads.forEach(l => { const s = l.leadInterestStatus; if (s && s !== "Pending" && c[s] !== undefined) c[s]++; else c["Pending"]++; });
+    const c: Record<string, number> = { Interested: 0, "Not Interested": 0, "NON GENUINE DEMAND (NGD)": 0, Pending: 0 };
+    leads.forEach(l => {
+      const s = l.leadInterestStatus;
+      if (s === "NON GENUINE DEMAND (NGD)" || s === "Non Qualified Lead" || s === "Non Qualified Leads" || s === "Non qualified Lead") c["NON GENUINE DEMAND (NGD)"]++;
+      else if (s && s !== "Pending" && c[s] !== undefined) c[s]++;
+      else c["Pending"]++;
+    });
     return Object.entries(c).filter(([, v]) => v > 0).map(([name, value]) => ({ name, value }));
   }, [leads]);
 
@@ -864,7 +874,7 @@ function DashboardAnalytics({ leads, theme, isDark }: { leads: any[]; theme: any
     return Object.entries(c).map(([cp, count]) => ({ cp, count })).sort((a, b) => b.count - a.count).slice(0, 8);
   }, [leads]);
 
-  const interestColors: Record<string, string> = { Interested: "#4ade80", "Not Interested": "#f87171", "Non Qualified Lead": "#fbbf24", Pending: "#6b7280" };
+  const interestColors: Record<string, string> = { Interested: "#4ade80", "Not Interested": "#f87171", "NON GENUINE DEMAND (NGD)": "#F97316", "Non Qualified Lead": "#F97316", Pending: "#6b7280" };
   const loanColors: Record<string, string> = { Approved: "#4ade80", "In Progress": "#fbbf24", Rejected: "#f87171", "N/A": "#6b7280" };
   const useTypeColors: Record<string, string> = { "Self Use": "#9E217B", Investment: "#34d399", "Personal use": "#f87171", "N/A": "#6b7280" };
   const loanReqColors: Record<string, string> = { Yes: "#9E217B", No: "#6b7280", "Not Sure": "#fbbf24", Pending: "#374151" };
@@ -1153,6 +1163,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
   // Lost Lead filter states
   const [lostLeadFilter, setLostLeadFilter] = useState<"all" | "active" | "lost">("all");
   const [showLostLeads, setShowLostLeads] = useState(true);
+  const [showNGDLeads, setShowNGDLeads] = useState(true);
 
   // ── Reset search when switching perfMode ──────────────────────────────────
   useEffect(() => {
@@ -1244,8 +1255,14 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
     } else if (!showLostLeads) {
       leads = leads.filter((l: any) => !l.is_lost_lead);
     }
+    if (!showNGDLeads) {
+      leads = leads.filter((l: any) => {
+        const isNGD = l.status === "NON GENUINE DEMAND (NGD)" || l.leadStatus === "NON GENUINE DEMAND (NGD)" || l.leadInterestStatus === "NON GENUINE DEMAND (NGD)" || l.leadInterestStatus === "Non Qualified Lead" || l.leadInterestStatus === "Non Qualified Leads" || l.leadInterestStatus === "Non qualified Lead";
+        return !isNGD;
+      });
+    }
     return leads;
-  }, [allLeads, overviewSearch, overviewSearchColumn, lostLeadFilter, showLostLeads]);
+  }, [allLeads, overviewSearch, overviewSearchColumn, lostLeadFilter, showLostLeads, showNGDLeads]);
 
   const formatDate = (ds: string) => {
     if (!ds) return "—";
@@ -2212,7 +2229,7 @@ function WhatsAppSendModal({
   const phoneOptions = useMemo(() => {
     const opts: { label: string; value: string }[] = [];
     const primary = String(lead?.phone || lead?.contact_no || "").replace(/\D/g, "");
-    const alt     = String(lead?.alt_phone || lead?.altPhone || "").replace(/\D/g, "");
+    const alt = String(lead?.alt_phone || lead?.altPhone || "").replace(/\D/g, "");
     if (primary) opts.push({ label: `Primary — ${primary}`, value: primary });
     if (alt && alt !== primary) opts.push({ label: `Alt — ${alt}`, value: alt });
     return opts;
@@ -2258,10 +2275,9 @@ function WhatsAppSendModal({
                 <p className="text-xs text-red-400">No phone number on this lead.</p>
               ) : phoneOptions.length === 1 ? (
                 /* Only one number — show it as a static badge */
-                <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border font-mono text-sm ${
-                  isDark ? "bg-green-500/10 border-green-500/30 text-green-300"
-                         : "bg-green-50 border-green-200 text-green-700"
-                }`}>
+                <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border font-mono text-sm ${isDark ? "bg-green-500/10 border-green-500/30 text-green-300"
+                    : "bg-green-50 border-green-200 text-green-700"
+                  }`}>
                   <FaWhatsapp />
                   {phoneOptions[0].label}
                 </div>
@@ -2270,15 +2286,14 @@ function WhatsAppSendModal({
                 <div className="flex flex-col gap-2">
                   {phoneOptions.map(opt => (
                     <label key={opt.value}
-                      className={`flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-all ${
-                        selectedPhone === opt.value
+                      className={`flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-all ${selectedPhone === opt.value
                           ? (isDark
-                              ? "bg-green-500/15 border-green-500/50 text-green-300"
-                              : "bg-green-50 border-green-400 text-green-700")
+                            ? "bg-green-500/15 border-green-500/50 text-green-300"
+                            : "bg-green-50 border-green-400 text-green-700")
                           : (isDark
-                              ? "bg-transparent border-[#333] text-gray-400 hover:border-green-500/30"
-                              : "bg-white border-gray-200 text-gray-500 hover:border-green-300")
-                      }`}>
+                            ? "bg-transparent border-[#333] text-gray-400 hover:border-green-500/30"
+                            : "bg-white border-gray-200 text-gray-500 hover:border-green-300")
+                        }`}>
                       <input
                         type="radio"
                         name="wa_phone"
@@ -2306,11 +2321,10 @@ function WhatsAppSendModal({
                 onChange={e => setMessage(e.target.value)}
                 rows={6}
                 placeholder="Type your message here..."
-                className={`w-full rounded-xl px-4 py-3 text-sm outline-none resize-none leading-relaxed border-2 transition-colors custom-scrollbar ${
-                  isDark
+                className={`w-full rounded-xl px-4 py-3 text-sm outline-none resize-none leading-relaxed border-2 transition-colors custom-scrollbar ${isDark
                     ? "bg-[#14141B] border-green-500/30 text-white focus:border-green-500"
                     : "bg-white border-green-200 text-[#1A1A1A] focus:border-green-500"
-                }`}
+                  }`}
               />
             </div>
           </div>
@@ -2323,11 +2337,10 @@ function WhatsAppSendModal({
             </button>
             <button type="submit"
               disabled={isSending || !message.trim() || !selectedPhone}
-              className={`px-8 py-2.5 rounded-lg font-bold transition-colors flex items-center gap-2 ${
-                isSending || !message.trim() || !selectedPhone
+              className={`px-8 py-2.5 rounded-lg font-bold transition-colors flex items-center gap-2 ${isSending || !message.trim() || !selectedPhone
                   ? "opacity-50 cursor-not-allowed bg-green-600/40 text-white"
                   : "cursor-pointer bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-600/20"
-              }`}>
+                }`}>
               {isSending ? "Opening..." : <><FaWhatsapp /> Open WhatsApp</>}
             </button>
           </div>
@@ -2347,6 +2360,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
   const [subView, setSubView] = useState<"list" | "detail">("list");
   const [selectedLead, setSelectedLead] = useState<any>(null);
   const [detailTab, setDetailTab] = useState<"personal" | "loan">("personal");
+  const [isClosingModalOpen, setIsClosingModalOpen] = useState(false);
   const followUpEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -2362,6 +2376,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
   const [isSendingWa, setIsSendingWa] = useState(false);
   const [leadStatusFilter, setLeadStatusFilter] = useState<"all" | "active" | "lost">("all");
   const [showLostLeads, setShowLostLeads] = useState(true);
+  const [showNGDLeads, setShowNGDLeads] = useState(true);
   const [showLostModal, setShowLostModal] = useState(false);
   const [lostReason, setLostReason] = useState("");
   const [lostError, setLostError] = useState("");
@@ -2477,10 +2492,17 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
   // Derived Datasets for Tabs
   const managerName = selectedManager?.name ?? "";
   const applyLostVisibility = useCallback((lead: any) => {
+    let passNGD = true;
+    const isNGD = lead.status === "NON GENUINE DEMAND (NGD)" || lead.leadStatus === "NON GENUINE DEMAND (NGD)" || lead.leadInterestStatus === "NON GENUINE DEMAND (NGD)" || lead.leadInterestStatus === "Non Qualified Lead" || lead.leadInterestStatus === "Non Qualified Leads" || lead.leadInterestStatus === "Non qualified Lead";
+    if (!showNGDLeads && isNGD) {
+      passNGD = false;
+    }
+    if (!passNGD) return false;
+
     if (leadStatusFilter === "lost") return !!lead.is_lost_lead;
     if (leadStatusFilter === "active") return !lead.is_lost_lead;
     return showLostLeads || !lead.is_lost_lead;
-  }, [leadStatusFilter, showLostLeads]);
+  }, [leadStatusFilter, showLostLeads, showNGDLeads]);
   const assignedLeads = useMemo(() => mergedLeads.filter((l: any) => l.assigned_to === managerName && l.status !== "Closing" && !l.closingDate && applyLostVisibility(l)), [mergedLeads, managerName, applyLostVisibility]);
   const closedLeads = useMemo(() => mergedLeads.filter((l: any) => l.assigned_to === managerName && (l.status === "Closing" || l.status === "Closed" || !!l.closingDate)), [mergedLeads, managerName]);
   const filteredManagers = (managers || []).filter((s: any) => s.name?.toLowerCase().includes(searchManager.toLowerCase()));
@@ -2768,49 +2790,51 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
               <tr><td colSpan={10} className={`text-center py-12 ${theme.textMuted}`}>No leads found.</td></tr>
             ) : leads.map((lead: any) => {
               const isLost = !!lead.is_lost_lead;
+              const isNGD = lead.status === "NON GENUINE DEMAND (NGD)" || lead.leadStatus === "NON GENUINE DEMAND (NGD)" || lead.leadInterestStatus === "NON GENUINE DEMAND (NGD)";
               return (
-              <tr key={lead.id} className={`transition-colors cursor-pointer ${isLost ? theme.rowLost : theme.tableRow}`} onClick={() => { setSelectedLead(lead); setSubView("detail"); }}>
-                <td className={`px-4 py-4 font-black text-sm ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>#{lead.id}</td>
-                <td className={`px-4 py-4 font-semibold ${theme.text}`}>{lead.name}</td>
-                <td className={`px-4 py-4 font-semibold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget || lead.budget || "N/A"}</td>
-                <td className={`px-4 py-4 font-mono text-xs ${theme.textMuted}`}>{maskPhone(lead.phone, adminUser?.role, lead.assigned_to === adminUser?.name)}</td>
-                <td className={`px-4 py-4 text-xs ${theme.textMuted}`}>{lead.source || "—"}</td>
-                <td className="px-4 py-4">
-                  <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase border flex-shrink-0 ${isLost ? theme.statusLost : statusCls(lead.status)}`}>
-                    {isLost ? "Lost" : (lead.status || "Routed")}
-                  </span>
-                </td>
-                <td className="px-4 py-4">
-                  {lead.leadInterestStatus && lead.leadInterestStatus !== "Pending" ? (
-                    <InterestBadge status={lead.leadInterestStatus} size="sm" isDark={isDark} />
-                  ) : <span className={`text-xs italic ${theme.textFaint}`}>—</span>}
-                </td>
-                <td className={`px-4 py-4 text-xs ${lead.mongoVisitDate ? "text-orange-500 font-semibold" : theme.textFaint}`}>
-                  {lead.mongoVisitDate ? formatDate(lead.mongoVisitDate).split(",")[0] : "—"}
-                </td>
-                <td className={`px-4 py-4 text-xs ${theme.textFaint}`}>
-                  {formatDate(lead.created_at).split(",")[0]}
-                </td>
-                <td className="px-4 py-4">
-                  {isLost ? (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleRestoreLead(lead); }}
-                      disabled={isSavingLost}
-                      className={`text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer transition-colors ${theme.btnPrimary} disabled:opacity-60`}
-                    >
-                      Restore Lead
-                    </button>
-                  ) : (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); openLostLeadModal(lead); }}
-                      className={`text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer transition-colors ${theme.btnDanger}`}
-                    >
-                      Lost Lead
-                    </button>
-                  )}
-                </td>
-              </tr>
-            );})}
+                <tr key={lead.id} className={`transition-colors cursor-pointer ${isLost ? theme.rowLost : isNGD ? theme.rowNGD : theme.tableRow}`} onClick={() => { setSelectedLead(lead); setSubView("detail"); }}>
+                  <td className={`px-4 py-4 font-black text-sm ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>#{lead.id}</td>
+                  <td className={`px-4 py-4 font-semibold ${theme.text}`}>{lead.name}</td>
+                  <td className={`px-4 py-4 font-semibold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget || lead.budget || "N/A"}</td>
+                  <td className={`px-4 py-4 font-mono text-xs ${theme.textMuted}`}>{maskPhone(lead.phone, adminUser?.role, lead.assigned_to === adminUser?.name)}</td>
+                  <td className={`px-4 py-4 text-xs ${theme.textMuted}`}>{lead.source || "—"}</td>
+                  <td className="px-4 py-4">
+                    <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase border flex-shrink-0 ${isLost ? theme.statusLost : isNGD ? theme.statusNGD : statusCls(lead.status)}`}>
+                      {isLost ? "Lost" : isNGD ? "NGD" : (lead.status || "Routed")}
+                    </span>
+                  </td>
+                  <td className="px-4 py-4">
+                    {lead.leadInterestStatus && lead.leadInterestStatus !== "Pending" ? (
+                      <InterestBadge status={lead.leadInterestStatus} size="sm" isDark={isDark} />
+                    ) : <span className={`text-xs italic ${theme.textFaint}`}>—</span>}
+                  </td>
+                  <td className={`px-4 py-4 text-xs ${lead.mongoVisitDate ? "text-orange-500 font-semibold" : theme.textFaint}`}>
+                    {lead.mongoVisitDate ? formatDate(lead.mongoVisitDate).split(",")[0] : "—"}
+                  </td>
+                  <td className={`px-4 py-4 text-xs ${theme.textFaint}`}>
+                    {formatDate(lead.created_at).split(",")[0]}
+                  </td>
+                  <td className="px-4 py-4">
+                    {isLost ? (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleRestoreLead(lead); }}
+                        disabled={isSavingLost}
+                        className={`text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer transition-colors ${theme.btnPrimary} disabled:opacity-60`}
+                      >
+                        Restore Lead
+                      </button>
+                    ) : (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); openLostLeadModal(lead); }}
+                        className={`text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer transition-colors ${theme.btnDanger}`}
+                      >
+                        Lost Lead
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
         {/* ── BOTTOM SENTINEL — triggers load more ── */}
@@ -2936,6 +2960,10 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                             <input type="checkbox" checked={showLostLeads} onChange={e => setShowLostLeads(e.target.checked)} disabled={leadStatusFilter !== "all"} className="accent-red-500" />
                             Show Lost
                           </label>
+                          <label className={`flex items-center gap-2 text-xs font-bold ${theme.textMuted}`}>
+                            <input type="checkbox" checked={showNGDLeads} onChange={e => setShowNGDLeads(e.target.checked)} disabled={leadStatusFilter !== "all"} className="accent-[#F97316]" />
+                            Show NGD Leads
+                          </label>
                         </>
                       )}
                       <button
@@ -2966,9 +2994,11 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                         {selectedLead.status === "Closing" && (
                           <span className={`text-[11px] font-bold px-3 py-1 rounded-full border flex items-center gap-1.5 ${theme.statusClosing}`}><FaHandshake className="text-xs" /> Closing</span>
                         )}
-                        {selectedLead.is_lost_lead && (
+                        {selectedLead.is_lost_lead ? (
                           <span className={`text-[11px] font-bold px-3 py-1 rounded-full border flex items-center gap-1.5 ${theme.statusLost}`}><FaEyeSlash className="text-xs" /> Lost Lead</span>
-                        )}
+                        ) : (selectedLead.status === "NON GENUINE DEMAND (NGD)" || selectedLead.leadStatus === "NON GENUINE DEMAND (NGD)" || selectedLead.leadInterestStatus === "NON GENUINE DEMAND (NGD)") ? (
+                          <span className={`text-[11px] font-bold px-3 py-1 rounded-full border flex items-center gap-1.5 ${theme.statusNGD}`}>NON GENUINE DEMAND</span>
+                        ) : null}
                       </h1>
                     </div>
                     <div className="flex gap-3 flex-wrap justify-end">
@@ -2981,7 +3011,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                             <FaUsers /> Track Loan
                           </button>
                           {selectedLead.mongoVisitDate && selectedLead.status !== "Closing" && !selectedLead.is_lost_lead && (
-                            <button onClick={handleMarkAsClosing} className={`font-bold px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer ${theme.btnWarning}`}>
+                            <button onClick={() => setIsClosingModalOpen(true)} className={`font-bold px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer ${theme.btnWarning}`}>
                               <FaHandshake /> Mark Closing
                             </button>
                           )}
@@ -3029,7 +3059,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                             </div>
                             <div className={`border-t pt-3 ${theme.tableBorder}`}>
                               <label className={`block text-xs font-bold mb-1.5 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>Lead Interest Status *</label>
-                              <select required value={salesForm.leadStatus} onChange={e => setSalesForm({ ...salesForm, leadStatus: e.target.value })} className={formSelect}><option value="" disabled>Select Status</option><option>Interested</option><option>Not Interested</option><option>Non qualified Lead</option></select>
+                              <select required value={salesForm.leadStatus} onChange={e => setSalesForm({ ...salesForm, leadStatus: e.target.value })} className={formSelect}><option value="" disabled>Select Status</option><option>Interested</option><option>Not Interested</option><option>NON GENUINE DEMAND (NGD)</option></select>
                             </div>
                             <div className={`border-t pt-3 ${theme.tableBorder}`}>
                               <label className={`block text-xs font-bold mb-1.5 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>Loan Planned?</label>
@@ -3150,7 +3180,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                                     <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Primary Source</p><p className={`font-medium text-sm ${theme.text}`}>{selectedLead.source || "N/A"}</p></div>
                                     {selectedLead.source === "Others" && (<div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Specified Name</p><p className={`font-medium text-sm ${theme.text}`}>{selectedLead.sourceOther}</p></div>)}
                                   </div>
-                                  
+
                                   {selectedLead.source === "Channel Partner" ? (
                                     <div className={`mt-2 pt-2 border-t grid grid-cols-1 sm:grid-cols-3 gap-3 ${theme.tableBorder}`}>
                                       {[{ label: "CP Name", val: selectedLead.cpName || selectedLead.cp_name }, { label: "CP Company", val: selectedLead.cp_company || selectedLead.cpCompany }, { label: "CP Phone", val: selectedLead.cp_phone || selectedLead.cpPhone }].map(({ label, val }) => (
@@ -3292,6 +3322,13 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
               />
             )}
 
+            <MarkClosingModal
+              isOpen={isClosingModalOpen}
+              onClose={() => setIsClosingModalOpen(false)}
+              onConfirm={handleMarkAsClosing}
+              isDark={isDark}
+            />
+
             {/* ── TRANSFER MODAL ── */}
             {isTransferModalOpen && selectedLead && (
               <div className="fixed inset-0 bg-black/75 z-[200] flex justify-center items-center p-4 sm:p-6 animate-fadeIn" style={{ backdropFilter: "blur(8px)" }}>
@@ -3355,6 +3392,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
   const [subView, setSubView] = useState<"list" | "detail">("list");
   const [selectedLead, setSelectedLead] = useState<any>(null);
   const [detailTab, setDetailTab] = useState<"personal" | "loan">("personal");
+  const [isClosingModalOpen, setIsClosingModalOpen] = useState(false);
   const followUpEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -3370,6 +3408,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
   const [isSendingWa, setIsSendingWa] = useState(false);
   const [leadStatusFilter, setLeadStatusFilter] = useState<"all" | "active" | "lost">("all");
   const [showLostLeads, setShowLostLeads] = useState(true);
+  const [showNGDLeads, setShowNGDLeads] = useState(true);
   const [showLostModal, setShowLostModal] = useState(false);
   const [lostReason, setLostReason] = useState("");
   const [lostError, setLostError] = useState("");
@@ -3485,10 +3524,17 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
   // Derived Datasets for Tabs
   const siteHeadName = selectedSiteHead?.name ?? "";
   const applyLostVisibility = useCallback((lead: any) => {
+    let passNGD = true;
+    const isNGD = lead.status === "NON GENUINE DEMAND (NGD)" || lead.leadStatus === "NON GENUINE DEMAND (NGD)" || lead.leadInterestStatus === "NON GENUINE DEMAND (NGD)" || lead.leadInterestStatus === "Non Qualified Lead" || lead.leadInterestStatus === "Non Qualified Leads" || lead.leadInterestStatus === "Non qualified Lead";
+    if (!showNGDLeads && isNGD) {
+      passNGD = false;
+    }
+    if (!passNGD) return false;
+
     if (leadStatusFilter === "lost") return !!lead.is_lost_lead;
     if (leadStatusFilter === "active") return !lead.is_lost_lead;
     return showLostLeads || !lead.is_lost_lead;
-  }, [leadStatusFilter, showLostLeads]);
+  }, [leadStatusFilter, showLostLeads, showNGDLeads]);
   const assignedLeads = useMemo(() => mergedLeads.filter((l: any) => l.assigned_to === siteHeadName && l.status !== "Closing" && !l.closingDate && applyLostVisibility(l)), [mergedLeads, siteHeadName, applyLostVisibility]);
   const closedLeads = useMemo(() => mergedLeads.filter((l: any) => l.assigned_to === siteHeadName && (l.status === "Closing" || l.status === "Closed" || !!l.closingDate)), [mergedLeads, siteHeadName]);
   const filteredSiteHeads = (siteHeads || []).filter((s: any) => s.name?.toLowerCase().includes(searchSiteHead.toLowerCase()));
@@ -3770,49 +3816,51 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
               <tr><td colSpan={10} className={`text-center py-12 ${theme.textMuted}`}>No leads found.</td></tr>
             ) : leads.map((lead: any) => {
               const isLost = !!lead.is_lost_lead;
+              const isNGD = lead.status === "NON GENUINE DEMAND (NGD)" || lead.leadStatus === "NON GENUINE DEMAND (NGD)" || lead.leadInterestStatus === "NON GENUINE DEMAND (NGD)";
               return (
-              <tr key={lead.id} className={`transition-colors cursor-pointer ${isLost ? theme.rowLost : theme.tableRow}`} onClick={() => { setSelectedLead(lead); setSubView("detail"); }}>
-                <td className={`px-4 py-4 font-black text-sm ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>#{lead.id}</td>
-                <td className={`px-4 py-4 font-semibold ${theme.text}`}>{lead.name}</td>
-                <td className={`px-4 py-4 font-semibold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget || lead.budget || "N/A"}</td>
-                <td className={`px-4 py-4 font-mono text-xs ${theme.textMuted}`}>{maskPhone(lead.phone, adminUser?.role, lead.assigned_to === adminUser?.name)}</td>
-                <td className={`px-4 py-4 text-xs ${theme.textMuted}`}>{lead.source || "—"}</td>
-                <td className="px-4 py-4">
-                  <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase border flex-shrink-0 ${isLost ? theme.statusLost : statusCls(lead.status)}`}>
-                    {isLost ? "Lost" : (lead.status || "Routed")}
-                  </span>
-                </td>
-                <td className="px-4 py-4">
-                  {lead.leadInterestStatus && lead.leadInterestStatus !== "Pending" ? (
-                    <InterestBadge status={lead.leadInterestStatus} size="sm" isDark={isDark} />
-                  ) : <span className={`text-xs italic ${theme.textFaint}`}>—</span>}
-                </td>
-                <td className={`px-4 py-4 text-xs ${lead.mongoVisitDate ? "text-orange-500 font-semibold" : theme.textFaint}`}>
-                  {lead.mongoVisitDate ? formatDate(lead.mongoVisitDate).split(",")[0] : "—"}
-                </td>
-                <td className={`px-4 py-4 text-xs ${theme.textFaint}`}>
-                  {formatDate(lead.created_at).split(",")[0]}
-                </td>
-                <td className="px-4 py-4">
-                  {isLost ? (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleRestoreLead(lead); }}
-                      disabled={isSavingLost}
-                      className={`text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer transition-colors ${theme.btnPrimary} disabled:opacity-60`}
-                    >
-                      Restore Lead
-                    </button>
-                  ) : (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); openLostLeadModal(lead); }}
-                      className={`text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer transition-colors ${theme.btnDanger}`}
-                    >
-                      Lost Lead
-                    </button>
-                  )}
-                </td>
-              </tr>
-            );})}
+                <tr key={lead.id} className={`transition-colors cursor-pointer ${isLost ? theme.rowLost : isNGD ? theme.rowNGD : theme.tableRow}`} onClick={() => { setSelectedLead(lead); setSubView("detail"); }}>
+                  <td className={`px-4 py-4 font-black text-sm ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>#{lead.id}</td>
+                  <td className={`px-4 py-4 font-semibold ${theme.text}`}>{lead.name}</td>
+                  <td className={`px-4 py-4 font-semibold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget || lead.budget || "N/A"}</td>
+                  <td className={`px-4 py-4 font-mono text-xs ${theme.textMuted}`}>{maskPhone(lead.phone, adminUser?.role, lead.assigned_to === adminUser?.name)}</td>
+                  <td className={`px-4 py-4 text-xs ${theme.textMuted}`}>{lead.source || "—"}</td>
+                  <td className="px-4 py-4">
+                    <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase border flex-shrink-0 ${isLost ? theme.statusLost : isNGD ? theme.statusNGD : statusCls(lead.status)}`}>
+                      {isLost ? "Lost" : isNGD ? "NGD" : (lead.status || "Routed")}
+                    </span>
+                  </td>
+                  <td className="px-4 py-4">
+                    {lead.leadInterestStatus && lead.leadInterestStatus !== "Pending" ? (
+                      <InterestBadge status={lead.leadInterestStatus} size="sm" isDark={isDark} />
+                    ) : <span className={`text-xs italic ${theme.textFaint}`}>—</span>}
+                  </td>
+                  <td className={`px-4 py-4 text-xs ${lead.mongoVisitDate ? "text-orange-500 font-semibold" : theme.textFaint}`}>
+                    {lead.mongoVisitDate ? formatDate(lead.mongoVisitDate).split(",")[0] : "—"}
+                  </td>
+                  <td className={`px-4 py-4 text-xs ${theme.textFaint}`}>
+                    {formatDate(lead.created_at).split(",")[0]}
+                  </td>
+                  <td className="px-4 py-4">
+                    {isLost ? (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleRestoreLead(lead); }}
+                        disabled={isSavingLost}
+                        className={`text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer transition-colors ${theme.btnPrimary} disabled:opacity-60`}
+                      >
+                        Restore Lead
+                      </button>
+                    ) : (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); openLostLeadModal(lead); }}
+                        className={`text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer transition-colors ${theme.btnDanger}`}
+                      >
+                        Lost Lead
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
         {/* ── BOTTOM SENTINEL — triggers load more ── */}
@@ -3856,6 +3904,13 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
           onSubmit={handleMarkLostLead}
         />
       )}
+
+      <MarkClosingModal
+        isOpen={isClosingModalOpen}
+        onClose={() => setIsClosingModalOpen(false)}
+        onConfirm={handleMarkAsClosing}
+        isDark={isDark}
+      />
 
       {/* Sidebar for Site Heads */}
       <div className={`w-72 border-r flex flex-col h-full flex-shrink-0 z-20 shadow-xl ${theme.innerBlock}`}>
@@ -3952,6 +4007,10 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                             <input type="checkbox" checked={showLostLeads} onChange={e => setShowLostLeads(e.target.checked)} disabled={leadStatusFilter !== "all"} className="accent-red-500" />
                             Show Lost
                           </label>
+                          <label className={`flex items-center gap-2 text-xs font-bold ${theme.textMuted}`}>
+                            <input type="checkbox" checked={showNGDLeads} onChange={e => setShowNGDLeads(e.target.checked)} disabled={leadStatusFilter !== "all"} className="accent-[#F97316]" />
+                            Show NGD Leads
+                          </label>
                         </>
                       )}
                       <button
@@ -3982,9 +4041,11 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                         {selectedLead.status === "Closing" && (
                           <span className={`text-[11px] font-bold px-3 py-1 rounded-full border flex items-center gap-1.5 ${theme.statusClosing}`}><FaHandshake className="text-xs" /> Closing</span>
                         )}
-                        {selectedLead.is_lost_lead && (
+                        {selectedLead.is_lost_lead ? (
                           <span className={`text-[11px] font-bold px-3 py-1 rounded-full border flex items-center gap-1.5 ${theme.statusLost}`}><FaEyeSlash className="text-xs" /> Lost Lead</span>
-                        )}
+                        ) : (selectedLead.status === "NON GENUINE DEMAND (NGD)" || selectedLead.leadStatus === "NON GENUINE DEMAND (NGD)" || selectedLead.leadInterestStatus === "NON GENUINE DEMAND (NGD)") ? (
+                          <span className={`text-[11px] font-bold px-3 py-1 rounded-full border flex items-center gap-1.5 ${theme.statusNGD}`}>NON GENUINE DEMAND</span>
+                        ) : null}
                       </h1>
                     </div>
                     <div className="flex gap-3 flex-wrap justify-end">
@@ -3997,7 +4058,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                             <FaUniversity /> Track Loan
                           </button>
                           {selectedLead.mongoVisitDate && selectedLead.status !== "Closing" && !selectedLead.is_lost_lead && (
-                            <button onClick={handleMarkAsClosing} className={`font-bold px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer ${theme.btnWarning}`}>
+                            <button onClick={() => setIsClosingModalOpen(true)} className={`font-bold px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer ${theme.btnWarning}`}>
                               <FaHandshake /> Mark Closing
                             </button>
                           )}
@@ -4045,7 +4106,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                             </div>
                             <div className={`border-t pt-3 ${theme.tableBorder}`}>
                               <label className={`block text-xs font-bold mb-1.5 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>Lead Interest Status *</label>
-                              <select required value={salesForm.leadStatus} onChange={e => setSalesForm({ ...salesForm, leadStatus: e.target.value })} className={formSelect}><option value="" disabled>Select Status</option><option>Interested</option><option>Not Interested</option><option>Non Qualified Leads</option></select>
+                              <select required value={salesForm.leadStatus} onChange={e => setSalesForm({ ...salesForm, leadStatus: e.target.value })} className={formSelect}><option value="" disabled>Select Status</option><option>Interested</option><option>Not Interested</option><option>NON GENUINE DEMAND (NGD)</option></select>
                             </div>
                             <div className={`border-t pt-3 ${theme.tableBorder}`}>
                               <label className={`block text-xs font-bold mb-1.5 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>Loan Planned?</label>
@@ -4158,39 +4219,39 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                                     </div>
                                   )}
                                 </div>
-                               <div className={`mt-3 border rounded-xl p-3 ${theme.settingsBg}`} style={theme.settingsBgGl}>
-                                <h3 className={`text-xs font-bold uppercase tracking-wider mb-2 border-b pb-2 ${theme.sectionTitle} ${theme.sectionBorder}`}>
-                                  {selectedLead.source && selectedLead.source !== "N/A" ? `${selectedLead.source} Data` : "Source Data"}
-                                </h3>
-                                <div className="grid grid-cols-2 gap-2">
-                                  <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Primary Source</p><p className={`font-medium text-sm ${theme.text}`}>{selectedLead.source || "N/A"}</p></div>
-                                  {selectedLead.source === "Others" && (<div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Specified Name</p><p className={`font-medium text-sm ${theme.text}`}>{selectedLead.sourceOther}</p></div>)}
-                                </div>
-                                
-                                {selectedLead.source === "Channel Partner" ? (
-                                  <div className={`mt-2 pt-2 border-t grid grid-cols-1 sm:grid-cols-3 gap-3 ${theme.tableBorder}`}>
-                                    {[{ label: "CP Name", val: selectedLead.cpName || selectedLead.cp_name }, { label: "CP Company", val: selectedLead.cp_company || selectedLead.cpCompany }, { label: "CP Phone", val: selectedLead.cp_phone || selectedLead.cpPhone }].map(({ label, val }) => (
-                                      <div key={label}><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>{label}</p><p className={`font-medium text-sm ${theme.text}`}>{val || "N/A"}</p></div>
-                                    ))}
+                                <div className={`mt-3 border rounded-xl p-3 ${theme.settingsBg}`} style={theme.settingsBgGl}>
+                                  <h3 className={`text-xs font-bold uppercase tracking-wider mb-2 border-b pb-2 ${theme.sectionTitle} ${theme.sectionBorder}`}>
+                                    {selectedLead.source && selectedLead.source !== "N/A" ? `${selectedLead.source} Data` : "Source Data"}
+                                  </h3>
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Primary Source</p><p className={`font-medium text-sm ${theme.text}`}>{selectedLead.source || "N/A"}</p></div>
+                                    {selectedLead.source === "Others" && (<div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Specified Name</p><p className={`font-medium text-sm ${theme.text}`}>{selectedLead.sourceOther}</p></div>)}
                                   </div>
-                                ) : selectedLead.source === "Referral" && selectedLead.referral_name ? (
-                                  <div className={`mt-2 pt-2 border-t grid grid-cols-1 sm:grid-cols-3 gap-3 ${theme.tableBorder}`}>
-                                    <div>
-                                      <p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Referred By</p>
-                                      <p className={`font-medium text-sm ${theme.text}`}>{selectedLead.referral_name}</p>
+
+                                  {selectedLead.source === "Channel Partner" ? (
+                                    <div className={`mt-2 pt-2 border-t grid grid-cols-1 sm:grid-cols-3 gap-3 ${theme.tableBorder}`}>
+                                      {[{ label: "CP Name", val: selectedLead.cpName || selectedLead.cp_name }, { label: "CP Company", val: selectedLead.cp_company || selectedLead.cpCompany }, { label: "CP Phone", val: selectedLead.cp_phone || selectedLead.cpPhone }].map(({ label, val }) => (
+                                        <div key={label}><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>{label}</p><p className={`font-medium text-sm ${theme.text}`}>{val || "N/A"}</p></div>
+                                      ))}
                                     </div>
-                                  </div>
-                                ) : null}
-                              </div>
-                              <div className="mt-3">
-                                <SiteVisitScheduler
-                                  lead={selectedLead}
-                                  adminUser={adminUser}
-                                  isDark={isDark}
-                                  theme={theme}
-                                  onSuccess={refetch}
-                                />
-                              </div>
+                                  ) : selectedLead.source === "Referral" && selectedLead.referral_name ? (
+                                    <div className={`mt-2 pt-2 border-t grid grid-cols-1 sm:grid-cols-3 gap-3 ${theme.tableBorder}`}>
+                                      <div>
+                                        <p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Referred By</p>
+                                        <p className={`font-medium text-sm ${theme.text}`}>{selectedLead.referral_name}</p>
+                                      </div>
+                                    </div>
+                                  ) : null}
+                                </div>
+                                <div className="mt-3">
+                                  <SiteVisitScheduler
+                                    lead={selectedLead}
+                                    adminUser={adminUser}
+                                    isDark={isDark}
+                                    theme={theme}
+                                    onSuccess={refetch}
+                                  />
+                                </div>
                               </div>
                             ) : (
                               <div>
@@ -4355,6 +4416,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
 
   // ── Full detail panel state ──────────────────────────────────────────
   const [detailTab, setDetailTab] = useState<"personal" | "loan">("personal");
+  const [isClosingModalOpen, setIsClosingModalOpen] = useState(false);
   const [showSalesForm, setShowSalesForm] = useState(false);
   const [showLoanForm, setShowLoanForm] = useState(false);
   const [salesForm, setSalesForm] = useState({ propertyType: "", location: "", budget: "", useType: "", purchaseDate: "", loanPlanned: "", siteVisit: "", leadStatus: "" });
@@ -5055,50 +5117,61 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
             {subView === "detail" && selectedLead && !isEnquiryView && (
               <div className={`flex-1 overflow-y-auto p-6 ${theme.scroll}`}>
                 <div className="animate-fadeIn max-w-[1200px] mx-auto flex flex-col" style={{ minHeight: "500px" }}>
-                  <div className={`flex items-center justify-between mb-4 rounded-2xl border p-4 sm:p-5 shadow-xl flex-shrink-0 ${theme.card}`} style={theme.cardGlass}>
-                    <div className="flex items-center gap-4">
-                      <button onClick={() => { setSubView("list"); setSelectedLead(null); setIsEnquiryView(false); setShowSalesForm(false); setShowLoanForm(false); }}
-                        className={`w-10 h-10 flex items-center justify-center border rounded-lg transition-colors cursor-pointer ${theme.innerBlock} ${theme.textMuted}`}>
-                        <FaChevronLeft className="text-sm" />
-                      </button>
-                      <h1 className={`text-xl md:text-2xl font-bold flex items-center gap-3 ${theme.text}`}>
-                        <span className={isDark ? "text-[#d946a8]" : "text-[#9E217B]"}>#{selectedLead.id}</span>
-                        <span>{selectedLead.name}</span>
-                        <span className={`text-xs px-2 py-0.5 rounded-full border ${theme.settingsBg} ${theme.textFaint}`}>
-                          {selectedLead.assigned_receptionist || selectedReceptionist?.name}
-                        </span>
-                        {selectedLead.status === "Closing" && (
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${isDark ? "text-yellow-400 border-yellow-500/40 bg-yellow-500/10" : "text-amber-600 border-amber-400/50 bg-amber-50"}`}>
-                            <FaHandshake className="inline mr-1 text-[9px]" />Closing
-                          </span>
-                        )}
-                      </h1>
-                    </div>
-                    <div className="flex gap-3 flex-wrap justify-end">
-                      {!showSalesForm && !showLoanForm && (
-                        <>
-                          <button onClick={() => { prefillSalesForm(); setShowSalesForm(true); setShowLoanForm(false); }}
-                            className={`${theme.btnPrimary} px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer`}>
-                            <FaFileInvoice /> Fill Salesform
+                  {(() => {
+                    const isNGD = selectedLead.status === "NON GENUINE DEMAND (NGD)" || selectedLead.leadStatus === "NON GENUINE DEMAND (NGD)" || selectedLead.leadInterestStatus === "NON GENUINE DEMAND (NGD)";
+                    return (
+                      <div className={`flex items-center justify-between mb-4 rounded-2xl border p-4 sm:p-5 shadow-xl flex-shrink-0 ${selectedLead.is_lost_lead ? theme.cardLost : isNGD ? theme.cardNGD : theme.card}`} style={theme.cardGlass}>
+                        <div className="flex items-center gap-4">
+                          <button onClick={() => { setSubView("list"); setSelectedLead(null); setIsEnquiryView(false); setShowSalesForm(false); setShowLoanForm(false); }}
+                            className={`w-10 h-10 flex items-center justify-center border rounded-lg transition-colors cursor-pointer ${theme.innerBlock} ${theme.textMuted}`}>
+                            <FaChevronLeft className="text-sm" />
                           </button>
-                          <button onClick={() => { prefillLoanForm(); setShowLoanForm(true); setShowSalesForm(false); }}
-                            className={`${theme.btnSecondary} px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer`}>
-                            <FaUniversity /> Track Loan
-                          </button>
-                          {selectedLead.mongoVisitDate && selectedLead.status !== "Closing" && (
-                            <button onClick={handleMarkAsClosing}
-                              className={`${theme.btnWarning} px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer`}>
-                              <FaHandshake /> Mark Closing
-                            </button>
+                          <h1 className={`text-xl md:text-2xl font-bold flex items-center gap-3 ${theme.text}`}>
+                            <span className={isDark ? "text-[#d946a8]" : "text-[#9E217B]"}>#{selectedLead.id}</span>
+                            <span>{selectedLead.name}</span>
+                            <span className={`text-xs px-2 py-0.5 rounded-full border ${theme.settingsBg} ${theme.textFaint}`}>
+                              {selectedLead.assigned_receptionist || selectedReceptionist?.name}
+                            </span>
+                            {selectedLead.status === "Closing" && (
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${isDark ? "text-yellow-400 border-yellow-500/40 bg-yellow-500/10" : "text-amber-600 border-amber-400/50 bg-amber-50"}`}>
+                                <FaHandshake className="inline mr-1 text-[9px]" />Closing
+                              </span>
+                            )}
+                            {selectedLead.is_lost_lead && (
+                              <span className={`text-[11px] font-bold px-3 py-1 rounded-full border flex items-center gap-1.5 ${theme.statusLost}`}><FaEyeSlash className="text-xs" /> Lost Lead</span>
+                            )}
+                            {!selectedLead.is_lost_lead && isNGD && (
+                              <span className={`text-[11px] font-bold px-3 py-1 rounded-full border flex items-center gap-1.5 ${theme.statusNGD}`}>NON GENUINE DEMAND</span>
+                            )}
+                          </h1>
+                        </div>
+                        <div className="flex gap-3 flex-wrap justify-end">
+                          {!showSalesForm && !showLoanForm && (
+                            <>
+                              <button onClick={() => { prefillSalesForm(); setShowSalesForm(true); setShowLoanForm(false); }}
+                                className={`${theme.btnPrimary} px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer`}>
+                                <FaFileInvoice /> Fill Salesform
+                              </button>
+                              <button onClick={() => { prefillLoanForm(); setShowLoanForm(true); setShowSalesForm(false); }}
+                                className={`${theme.btnSecondary} px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer`}>
+                                <FaUniversity /> Track Loan
+                              </button>
+                              {selectedLead.mongoVisitDate && selectedLead.status !== "Closing" && (
+                                <button onClick={() => setIsClosingModalOpen(true)}
+                                  className={`${theme.btnWarning} px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer`}>
+                                  <FaHandshake /> Mark Closing
+                                </button>
+                              )}
+                              <button onClick={() => { setTransferTarget(""); setTransferNote(""); setIsTransferModalOpen(true); }}
+                                className={`font-bold px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer ${isDark ? "bg-purple-600 hover:bg-purple-500 text-white" : "bg-purple-600 hover:bg-purple-700 text-white"}`}>
+                                <FaExchangeAlt /> Transfer
+                              </button>
+                            </>
                           )}
-                          <button onClick={() => { setTransferTarget(""); setTransferNote(""); setIsTransferModalOpen(true); }}
-                            className={`font-bold px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer ${isDark ? "bg-purple-600 hover:bg-purple-500 text-white" : "bg-purple-600 hover:bg-purple-700 text-white"}`}>
-                            <FaExchangeAlt /> Transfer
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   <div className="flex flex-col lg:flex-row gap-6 flex-1 min-h-0 pb-2">
                     <div className="w-full lg:w-[45%] flex flex-col gap-4 h-full pb-2 min-h-0">
@@ -5133,7 +5206,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                             <div className={`border-t pt-3 mt-1 ${theme.tableBorder}`}>
                               <label className={`block text-xs font-bold mb-1.5 ${theme.accentText}`}>Lead Interest Status *</label>
                               <select required value={salesForm.leadStatus} onChange={e => setSalesForm({ ...salesForm, leadStatus: e.target.value })} className={`w-full rounded-lg px-4 py-2 text-sm outline-none cursor-pointer ${theme.select}`}>
-                                <option value="" disabled>Select Status</option><option>Interested</option><option>Not Interested</option><option>Non Qualified Lead</option>
+                                <option value="" disabled>Select Status</option><option>Interested</option><option>Not Interested</option><option>NON GENUINE DEMAND (NGD)</option>
                               </select>
                             </div>
                             <div className={`border-t pt-3 mt-1 ${theme.tableBorder}`}>
@@ -5244,39 +5317,39 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                                     </div>
                                   )}
                                 </div>
-                               <div className={`mt-3 border rounded-xl p-3 ${theme.settingsBg}`} style={theme.settingsBgGl}>
-                                <h3 className={`text-xs font-bold uppercase tracking-wider mb-2 border-b pb-2 ${theme.sectionTitle} ${theme.sectionBorder}`}>
-                                  {selectedLead.source && selectedLead.source !== "N/A" ? `${selectedLead.source} Data` : "Source Data"}
-                                </h3>
-                                <div className="grid grid-cols-2 gap-2">
-                                  <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Primary Source</p><p className={`font-medium text-sm ${theme.text}`}>{selectedLead.source || "N/A"}</p></div>
-                                  {selectedLead.source === "Others" && (<div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Specified Name</p><p className={`font-medium text-sm ${theme.text}`}>{selectedLead.sourceOther}</p></div>)}
-                                </div>
-                                
-                                {selectedLead.source === "Channel Partner" ? (
-                                  <div className={`mt-2 pt-2 border-t grid grid-cols-1 sm:grid-cols-3 gap-3 ${theme.tableBorder}`}>
-                                    {[{ label: "CP Name", val: selectedLead.cpName || selectedLead.cp_name }, { label: "CP Company", val: selectedLead.cp_company || selectedLead.cpCompany }, { label: "CP Phone", val: selectedLead.cp_phone || selectedLead.cpPhone }].map(({ label, val }) => (
-                                      <div key={label}><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>{label}</p><p className={`font-medium text-sm ${theme.text}`}>{val || "N/A"}</p></div>
-                                    ))}
+                                <div className={`mt-3 border rounded-xl p-3 ${theme.settingsBg}`} style={theme.settingsBgGl}>
+                                  <h3 className={`text-xs font-bold uppercase tracking-wider mb-2 border-b pb-2 ${theme.sectionTitle} ${theme.sectionBorder}`}>
+                                    {selectedLead.source && selectedLead.source !== "N/A" ? `${selectedLead.source} Data` : "Source Data"}
+                                  </h3>
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Primary Source</p><p className={`font-medium text-sm ${theme.text}`}>{selectedLead.source || "N/A"}</p></div>
+                                    {selectedLead.source === "Others" && (<div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Specified Name</p><p className={`font-medium text-sm ${theme.text}`}>{selectedLead.sourceOther}</p></div>)}
                                   </div>
-                                ) : selectedLead.source === "Referral" && selectedLead.referral_name ? (
-                                  <div className={`mt-2 pt-2 border-t grid grid-cols-1 sm:grid-cols-3 gap-3 ${theme.tableBorder}`}>
-                                    <div>
-                                      <p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Referred By</p>
-                                      <p className={`font-medium text-sm ${theme.text}`}>{selectedLead.referral_name}</p>
+
+                                  {selectedLead.source === "Channel Partner" ? (
+                                    <div className={`mt-2 pt-2 border-t grid grid-cols-1 sm:grid-cols-3 gap-3 ${theme.tableBorder}`}>
+                                      {[{ label: "CP Name", val: selectedLead.cpName || selectedLead.cp_name }, { label: "CP Company", val: selectedLead.cp_company || selectedLead.cpCompany }, { label: "CP Phone", val: selectedLead.cp_phone || selectedLead.cpPhone }].map(({ label, val }) => (
+                                        <div key={label}><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>{label}</p><p className={`font-medium text-sm ${theme.text}`}>{val || "N/A"}</p></div>
+                                      ))}
                                     </div>
-                                  </div>
-                                ) : null}
-                              </div>
-                              <div className="mt-3">
-                                <SiteVisitScheduler
-                                  lead={selectedLead}
-                                  adminUser={adminUser}
-                                  isDark={isDark}
-                                  theme={theme}
-                                  onSuccess={refetch}
-                                />
-                              </div>
+                                  ) : selectedLead.source === "Referral" && selectedLead.referral_name ? (
+                                    <div className={`mt-2 pt-2 border-t grid grid-cols-1 sm:grid-cols-3 gap-3 ${theme.tableBorder}`}>
+                                      <div>
+                                        <p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Referred By</p>
+                                        <p className={`font-medium text-sm ${theme.text}`}>{selectedLead.referral_name}</p>
+                                      </div>
+                                    </div>
+                                  ) : null}
+                                </div>
+                                <div className="mt-3">
+                                  <SiteVisitScheduler
+                                    lead={selectedLead}
+                                    adminUser={adminUser}
+                                    isDark={isDark}
+                                    theme={theme}
+                                    onSuccess={refetch}
+                                  />
+                                </div>
                               </div>
                             ) : (
                               <div>
@@ -5517,7 +5590,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                 <textarea required value={transferNote} onChange={e => setTransferNote(e.target.value)} rows={7}
                   placeholder="Summarize actions, discussions, interest level..."
                   className={`w-full rounded-xl px-4 py-3 text-sm outline-none resize-none leading-relaxed border-2 transition-colors custom-scrollbar ${isDark ? "bg-[#14141B] border-purple-500/30 text-white focus:border-purple-500" : "bg-white border-purple-200 text-[#1A1A1A] focus:border-purple-500"}`} />
-                
+
               </div>
             </div>
             <div className={`p-5 border-t flex justify-end gap-3 ${theme.modalHeader} ${theme.tableBorder}`}>
@@ -5588,6 +5661,13 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
           </div>
         </div>
       )}
+
+      <MarkClosingModal
+        isOpen={isClosingModalOpen}
+        onClose={() => setIsClosingModalOpen(false)}
+        onConfirm={handleMarkAsClosing}
+        isDark={isDark}
+      />
 
     </div>
   );
@@ -5664,12 +5744,11 @@ function SiteVisitCenter({
       <button
         onClick={() => toggle(id)}
         className={`w-full flex items-center justify-between px-5 py-3.5 transition-all duration-200 group cursor-pointer
-          ${
-            isOpen
-              ? isDark
-                ? "bg-[#1e1e1e]"
-                : "bg-indigo-50/80"
-              : isDark
+          ${isOpen
+            ? isDark
+              ? "bg-[#1e1e1e]"
+              : "bg-indigo-50/80"
+            : isDark
               ? "hover:bg-[#1a1a1a]"
               : "hover:bg-[#F8FAFC]"
           }
@@ -5682,9 +5761,8 @@ function SiteVisitCenter({
           {badge}
         </div>
         <span
-          className={`text-xs transition-transform duration-300 ${theme.textFaint} ${
-            isOpen ? "rotate-180" : "rotate-0"
-          }`}
+          className={`text-xs transition-transform duration-300 ${theme.textFaint} ${isOpen ? "rotate-180" : "rotate-0"
+            }`}
         >
           ▼
         </span>
@@ -5713,9 +5791,8 @@ function SiteVisitCenter({
         }}
       >
         <div
-          className={`px-4 pb-4 pt-1 ${
-            isDark ? "bg-[#111]" : "bg-[#F8FAFC]"
-          }`}
+          className={`px-4 pb-4 pt-1 ${isDark ? "bg-[#111]" : "bg-[#F8FAFC]"
+            }`}
         >
           {children}
         </div>
@@ -5739,16 +5816,14 @@ function SiteVisitCenter({
       <table className="w-full text-left text-xs whitespace-nowrap">
         <thead>
           <tr
-            className={`${
-              isDark ? "bg-[#1a1a1a] text-gray-400" : "bg-[#F1F5F9] text-gray-500"
-            }`}
+            className={`${isDark ? "bg-[#1a1a1a] text-gray-400" : "bg-[#F1F5F9] text-gray-500"
+              }`}
           >
             {headers.map((h) => (
               <th
                 key={h}
-                className={`px-3 py-2.5 font-bold uppercase tracking-wider border-b ${
-                  isDark ? "border-[#2a2a2a]" : "border-indigo-100"
-                }`}
+                className={`px-3 py-2.5 font-bold uppercase tracking-wider border-b ${isDark ? "border-[#2a2a2a]" : "border-indigo-100"
+                  }`}
               >
                 {h}
               </th>
@@ -5756,9 +5831,8 @@ function SiteVisitCenter({
           </tr>
         </thead>
         <tbody
-          className={`divide-y ${
-            isDark ? "divide-[#1e1e1e]" : "divide-indigo-50"
-          }`}
+          className={`divide-y ${isDark ? "divide-[#1e1e1e]" : "divide-indigo-50"
+            }`}
         >
           {children}
         </tbody>
@@ -5769,11 +5843,10 @@ function SiteVisitCenter({
   // ── empty state ───────────────────────────────────────────────────────────
   const EmptyState = ({ msg }: { msg: string }) => (
     <div
-      className={`mt-2 rounded-xl border py-6 text-center ${
-        isDark
+      className={`mt-2 rounded-xl border py-6 text-center ${isDark
           ? "border-[#2a2a2a] bg-[#161616]"
           : "border-indigo-100 bg-white"
-      }`}
+        }`}
     >
       <p className="text-2xl mb-1">📭</p>
       <p className={`text-xs font-semibold ${theme.textMuted}`}>{msg}</p>
@@ -5783,28 +5856,25 @@ function SiteVisitCenter({
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <div
-      className={`rounded-2xl border overflow-hidden ${
-        isDark ? "bg-[#161616] border-[#2a2a2a]" : "bg-white border-indigo-200"
-      }`}
+      className={`rounded-2xl border overflow-hidden ${isDark ? "bg-[#161616] border-[#2a2a2a]" : "bg-white border-indigo-200"
+        }`}
     >
       {/* ── Module header ─────────────────────────────────────────────────── */}
       <div
-        className={`px-5 py-4 border-b flex items-center justify-between ${
-          isDark
+        className={`px-5 py-4 border-b flex items-center justify-between ${isDark
             ? "bg-[#1a1a1a] border-[#2a2a2a]"
             : "bg-white border-indigo-100"
-        }`}
+          }`}
       >
         <h3 className={`font-bold text-sm flex items-center gap-2 ${theme.text}`}>
           🗂️ Site Visit Center
         </h3>
         <div className="flex items-center gap-2">
           <span
-            className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${
-              isDark
+            className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${isDark
                 ? "text-orange-400 border-orange-500/30 bg-orange-500/10"
                 : "text-orange-600 border-orange-200 bg-orange-50"
-            }`}
+              }`}
           >
             {data.siteVisitsToday.length + (data.siteVisitsTomorrow ?? []).length} total
           </span>
@@ -5844,14 +5914,12 @@ function SiteVisitCenter({
                 <>
                   <tr
                     key={v.id}
-                    className={`transition-colors ${
-                      isDark ? "hover:bg-[#1e1e1e]" : "hover:bg-indigo-50/40"
-                    }`}
+                    className={`transition-colors ${isDark ? "hover:bg-[#1e1e1e]" : "hover:bg-indigo-50/40"
+                      }`}
                   >
                     <td
-                      className={`px-3 py-2.5 font-bold ${
-                        isDark ? "text-[#d946a8]" : "text-[#9E217B]"
-                      }`}
+                      className={`px-3 py-2.5 font-bold ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"
+                        }`}
                     >
                       #{v.lead_id}
                     </td>
@@ -5864,9 +5932,9 @@ function SiteVisitCenter({
                     <td className="px-3 py-2.5 text-orange-500 font-semibold">
                       {v.visit_date
                         ? new Date(v.visit_date).toLocaleTimeString("en-IN", {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })
                         : "—"}
                     </td>
                     <td className="px-3 py-2.5">
@@ -5883,15 +5951,14 @@ function SiteVisitCenter({
                         onClick={() =>
                           setExpandedVisitLeadId(isOpen ? null : v.lead_id)
                         }
-                        className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition-all cursor-pointer ${
-                          isOpen
+                        className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition-all cursor-pointer ${isOpen
                             ? isDark
                               ? "bg-orange-600/20 border-orange-500/40 text-orange-400"
                               : "bg-orange-50 border-orange-300 text-orange-600"
                             : isDark
-                            ? "bg-[#222] border-[#333] text-gray-400 hover:bg-[#2a2a2a]"
-                            : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
-                        }`}
+                              ? "bg-[#222] border-[#333] text-gray-400 hover:bg-[#2a2a2a]"
+                              : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
+                          }`}
                       >
                         {isOpen ? "▲ Hide" : "▼ Manage"}
                       </button>
@@ -5902,9 +5969,8 @@ function SiteVisitCenter({
                     <tr key={`expand-${v.id}`}>
                       <td
                         colSpan={6}
-                        className={`px-3 py-3 ${
-                          isDark ? "bg-[#0e0e0e]" : "bg-indigo-50/60"
-                        }`}
+                        className={`px-3 py-3 ${isDark ? "bg-[#0e0e0e]" : "bg-indigo-50/60"
+                          }`}
                       >
                         <SiteVisitScheduler
                           lead={leadObj}
@@ -5951,14 +6017,12 @@ function SiteVisitCenter({
             {(data.siteVisitsTomorrow ?? []).map((v: any) => (
               <tr
                 key={v.id}
-                className={`transition-colors ${
-                  isDark ? "hover:bg-[#1e1e1e]" : "hover:bg-indigo-50/40"
-                }`}
+                className={`transition-colors ${isDark ? "hover:bg-[#1e1e1e]" : "hover:bg-indigo-50/40"
+                  }`}
               >
                 <td
-                  className={`px-3 py-2.5 font-bold ${
-                    isDark ? "text-[#d946a8]" : "text-[#9E217B]"
-                  }`}
+                  className={`px-3 py-2.5 font-bold ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"
+                    }`}
                 >
                   #{v.lead_id ?? v.id}
                 </td>
@@ -5971,9 +6035,9 @@ function SiteVisitCenter({
                 <td className="px-3 py-2.5 text-blue-400 font-semibold">
                   {v.visit_date
                     ? new Date(v.visit_date).toLocaleTimeString("en-IN", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })
                     : "—"}
                 </td>
                 <td className="px-3 py-2.5">
@@ -6047,26 +6111,23 @@ function SiteVisitCenter({
             {filteredSiteVisitActions.map((a: any, idx: number) => (
               <div
                 key={a.id}
-                className={`relative pl-8 pr-4 py-3 rounded-xl border transition-colors ${
-                  isDark
+                className={`relative pl-8 pr-4 py-3 rounded-xl border transition-colors ${isDark
                     ? "bg-[#1a1a1a] border-[#2a2a2a] hover:bg-[#1e1e1e]"
                     : "bg-white border-indigo-100 hover:bg-indigo-50/40"
-                }`}
+                  }`}
               >
                 {/* timeline dot */}
                 <div
-                  className={`absolute left-3 top-4 w-2 h-2 rounded-full border-2 ${
-                    isDark
+                  className={`absolute left-3 top-4 w-2 h-2 rounded-full border-2 ${isDark
                       ? "bg-purple-500 border-purple-400"
                       : "bg-purple-500 border-purple-300"
-                  }`}
+                    }`}
                 />
                 {/* vertical line except last */}
                 {idx < filteredSiteVisitActions.length - 1 && (
                   <div
-                    className={`absolute left-[14px] top-6 bottom-[-10px] w-px ${
-                      isDark ? "bg-[#2e2e2e]" : "bg-indigo-100"
-                    }`}
+                    className={`absolute left-[14px] top-6 bottom-[-10px] w-px ${isDark ? "bg-[#2e2e2e]" : "bg-indigo-100"
+                      }`}
                   />
                 )}
 
@@ -6093,11 +6154,11 @@ function SiteVisitCenter({
                   >
                     {a.created_at
                       ? new Date(a.created_at).toLocaleString("en-IN", {
-                          day: "2-digit",
-                          month: "short",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })
+                        day: "2-digit",
+                        month: "short",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })
                       : "—"}
                   </span>
                 </div>
@@ -6227,8 +6288,8 @@ function DailyMonitoringPanel({
   const tabs = [
     { key: "overview", label: "📋 Overview" },
     { key: "managers", label: "👤 By Role" },
-    { key: "visits",   label: "📅 Site Visits" },
-    { key: "alerts",   label: `🚨 Alerts${alertCount > 0 ? ` (${alertCount})` : ""}` },
+    { key: "visits", label: "📅 Site Visits" },
+    { key: "alerts", label: `🚨 Alerts${alertCount > 0 ? ` (${alertCount})` : ""}` },
   ];
 
   const getRoleBadge = (role: string) => {
@@ -6280,33 +6341,30 @@ function DailyMonitoringPanel({
           <div className="flex items-center gap-3 flex-wrap">
             {alertCount > 0 && (
               <span
-                className={`text-xs font-bold px-3 py-1.5 rounded-full border flex items-center gap-1.5 ${
-                  isDark
+                className={`text-xs font-bold px-3 py-1.5 rounded-full border flex items-center gap-1.5 ${isDark
                     ? "text-red-400 border-red-500/30 bg-red-500/10"
                     : "text-red-700 border-red-200 bg-red-50"
-                }`}
+                  }`}
               >
                 🚨 {alertCount} no activity
               </span>
             )}
             {highPending > 0 && (
               <span
-                className={`text-xs font-bold px-3 py-1.5 rounded-full border flex items-center gap-1.5 ${
-                  isDark
+                className={`text-xs font-bold px-3 py-1.5 rounded-full border flex items-center gap-1.5 ${isDark
                     ? "text-yellow-400 border-yellow-500/30 bg-yellow-500/10"
                     : "text-yellow-700 border-yellow-200 bg-yellow-50"
-                }`}
+                  }`}
               >
                 ⚠️ {highPending} high pending
               </span>
             )}
             <button
               onClick={fetchStats}
-              className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-colors ${
-                isDark
+              className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-colors ${isDark
                   ? "bg-[#222] border-[#333] text-white hover:bg-[#333]"
                   : "bg-white border-indigo-200 text-[#9E217B] hover:bg-[#F8FAFC]"
-              }`}
+                }`}
             >
               ↻ Refresh
             </button>
@@ -6319,13 +6377,11 @@ function DailyMonitoringPanel({
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key as any)}
-              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                activeTab === tab.key
+              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeTab === tab.key
                   ? "bg-[#9E217B] text-white shadow-md"
-                  : `${theme.textMuted} ${
-                      isDark ? "hover:bg-[#222]" : "hover:bg-[#F1F5F9]"
-                    }`
-              }`}
+                  : `${theme.textMuted} ${isDark ? "hover:bg-[#222]" : "hover:bg-[#F1F5F9]"
+                  }`
+                }`}
             >
               {tab.label}
             </button>
@@ -6341,10 +6397,10 @@ function DailyMonitoringPanel({
           <div className="space-y-6 animate-fadeIn">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {[
-                { label: "Total Staff",         value: allStaff.length,             glow: theme.statGlow1, color: isDark ? "text-[#d946a8]" : "text-[#9E217B]" },
-                { label: "Follow-ups Today",    value: data.totalFollowUpsToday,    glow: theme.statGlow5, color: isDark ? "text-green-400" : "text-emerald-600" },
-                { label: "WhatsApp Sent Today", value: data.totalWaToday,           glow: theme.statGlow3, color: isDark ? "text-blue-400" : "text-blue-600" },
-                { label: "Site Visits Today",   value: data.siteVisitsToday.length, glow: theme.statGlow4, color: isDark ? "text-orange-400" : "text-orange-600" },
+                { label: "Total Staff", value: allStaff.length, glow: theme.statGlow1, color: isDark ? "text-[#d946a8]" : "text-[#9E217B]" },
+                { label: "Follow-ups Today", value: data.totalFollowUpsToday, glow: theme.statGlow5, color: isDark ? "text-green-400" : "text-emerald-600" },
+                { label: "WhatsApp Sent Today", value: data.totalWaToday, glow: theme.statGlow3, color: isDark ? "text-blue-400" : "text-blue-600" },
+                { label: "Site Visits Today", value: data.siteVisitsToday.length, glow: theme.statGlow4, color: isDark ? "text-orange-400" : "text-orange-600" },
               ].map((card, i) => (
                 <div
                   key={i}
@@ -6374,11 +6430,10 @@ function DailyMonitoringPanel({
                   📊 Team Performance Table — Today
                 </h3>
                 <span
-                  className={`text-xs px-2 py-0.5 rounded-full border font-bold ${
-                    isDark
+                  className={`text-xs px-2 py-0.5 rounded-full border font-bold ${isDark
                       ? "text-green-400 border-green-500/30 bg-green-500/10"
                       : "text-green-700 border-green-200 bg-green-50"
-                  }`}
+                    }`}
                 >
                   🟢 Live
                 </span>
@@ -6413,13 +6468,12 @@ function DailyMonitoringPanel({
                         return (
                           <tr
                             key={s.name}
-                            className={`transition-colors ${theme.tableRow} ${
-                              hasNoActivity
+                            className={`transition-colors ${theme.tableRow} ${hasNoActivity
                                 ? isDark
                                   ? "bg-red-500/5"
                                   : "bg-red-50/50"
                                 : ""
-                            }`}
+                              }`}
                           >
                             <td className={`px-4 py-3 text-xs font-bold ${theme.textFaint}`}>{i + 1}</td>
                             <td className={`px-4 py-3 font-bold ${theme.text}`}>{s.name}</td>
@@ -6439,13 +6493,12 @@ function DailyMonitoringPanel({
                             </td>
                             <td className="px-4 py-3">
                               <span
-                                className={`text-xs font-bold px-2 py-0.5 rounded-full border ${
-                                  s.remainingToday === 0
+                                className={`text-xs font-bold px-2 py-0.5 rounded-full border ${s.remainingToday === 0
                                     ? isDark ? "text-green-400 border-green-500/30 bg-green-500/10" : "text-green-700 border-green-200 bg-green-50"
                                     : isHighPending
-                                    ? isDark ? "text-red-400 border-red-500/30 bg-red-500/10" : "text-red-700 border-red-200 bg-red-50"
-                                    : isDark ? "text-yellow-400 border-yellow-500/30 bg-yellow-500/10" : "text-yellow-700 border-yellow-200 bg-yellow-50"
-                                }`}
+                                      ? isDark ? "text-red-400 border-red-500/30 bg-red-500/10" : "text-red-700 border-red-200 bg-red-50"
+                                      : isDark ? "text-yellow-400 border-yellow-500/30 bg-yellow-500/10" : "text-yellow-700 border-yellow-200 bg-yellow-50"
+                                  }`}
                               >
                                 {s.remainingToday}
                               </span>
@@ -6527,10 +6580,10 @@ function DailyMonitoringPanel({
             {/* Stat cards row */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {[
-                { label: "Total Today",   value: data.siteVisitsToday.length,           color: isDark ? "text-[#d946a8]" : "text-[#9E217B]" },
-                { label: "Completed",     value: data.completedVisitsToday ?? 0,         color: "text-green-500" },
-                { label: "Pending Today", value: data.pendingVisitsToday ?? 0,           color: "text-orange-500" },
-                { label: "Tomorrow",      value: (data.siteVisitsTomorrow ?? []).length, color: isDark ? "text-blue-400" : "text-blue-600" },
+                { label: "Total Today", value: data.siteVisitsToday.length, color: isDark ? "text-[#d946a8]" : "text-[#9E217B]" },
+                { label: "Completed", value: data.completedVisitsToday ?? 0, color: "text-green-500" },
+                { label: "Pending Today", value: data.pendingVisitsToday ?? 0, color: "text-orange-500" },
+                { label: "Tomorrow", value: (data.siteVisitsTomorrow ?? []).length, color: isDark ? "text-blue-400" : "text-blue-600" },
               ].map((c, i) => (
                 <div
                   key={i}
@@ -6639,7 +6692,7 @@ function SiteVisitScheduler({
       const res = await fetch(`/api/site-visits?lead_id=${lead.id}`);
       const json = await res.json();
       if (json.success) setVisits(json.data);
-    } catch {}
+    } catch { }
   };
 
   useEffect(() => { fetchVisits(); }, [lead.id]);
@@ -6763,11 +6816,10 @@ function SiteVisitScheduler({
         {!isClosing && (
           <button
             onClick={() => { setEditVisit(null); setVisitDate(""); setVisitNotes(""); setShowModal(true); }}
-            className={`text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer transition-colors ${
-              visits.length === 0
+            className={`text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer transition-colors ${visits.length === 0
                 ? (isDark ? "bg-orange-600 hover:bg-orange-500 text-white" : "bg-orange-500 hover:bg-orange-400 text-white")
                 : (isDark ? "bg-orange-600/20 hover:bg-orange-600 border border-orange-500/30 text-orange-400 hover:text-white" : "bg-orange-50 hover:bg-orange-500 border border-orange-300 text-orange-600 hover:text-white")
-            }`}
+              }`}
           >
             <FaCalendarAlt className="text-[10px]" />
             {visits.length === 0 ? "Schedule Visit" : "Re-Site Visit"}
@@ -6783,11 +6835,10 @@ function SiteVisitScheduler({
           <div className="space-y-4 pl-8">
             {visits.map((v: any, i: number) => (
               <div key={v.id} className="relative">
-                <div className={`absolute -left-5 top-1 w-2.5 h-2.5 rounded-full border-2 ${
-                  v.status === "completed" ? "bg-green-500 border-green-400" :
-                  v.status === "cancelled" ? "bg-red-500 border-red-400" :
-                  "bg-yellow-500 border-yellow-400"
-                }`} />
+                <div className={`absolute -left-5 top-1 w-2.5 h-2.5 rounded-full border-2 ${v.status === "completed" ? "bg-green-500 border-green-400" :
+                    v.status === "cancelled" ? "bg-red-500 border-red-400" :
+                      "bg-yellow-500 border-yellow-400"
+                  }`} />
 
                 <div className={`rounded-xl p-3 border ${isDark ? "bg-[#222] border-[#333]" : "bg-[#F8FAFC] border-indigo-100"}`}>
                   <div className="flex items-start justify-between gap-2 mb-1.5">
@@ -6853,9 +6904,8 @@ function SiteVisitScheduler({
                   min={new Date().toISOString().slice(0, 16)}
                   onChange={e => setVisitDate(e.target.value)}
                   onClick={() => inputRef.current?.showPicker()}
-                  className={`w-full rounded-xl px-4 py-3 text-sm outline-none border-2 transition-colors ${
-                    isDark ? "bg-[#1a1a1a] border-orange-500/40 text-white focus:border-orange-500" : "bg-white border-orange-300 text-[#1A1A1A] focus:border-orange-500"
-                  }`}
+                  className={`w-full rounded-xl px-4 py-3 text-sm outline-none border-2 transition-colors ${isDark ? "bg-[#1a1a1a] border-orange-500/40 text-white focus:border-orange-500" : "bg-white border-orange-300 text-[#1A1A1A] focus:border-orange-500"
+                    }`}
                 />
               </div>
               <div>
@@ -6865,9 +6915,8 @@ function SiteVisitScheduler({
                 <textarea
                   value={visitNotes} onChange={e => setVisitNotes(e.target.value)} rows={3}
                   placeholder={visits.length > 0 ? "e.g. Customer needs to see the 3BHK units again..." : "e.g. First visit scheduled with customer..."}
-                  className={`w-full rounded-xl px-4 py-3 text-sm outline-none resize-none border-2 transition-colors ${
-                    isDark ? "bg-[#1a1a1a] border-orange-500/30 text-white focus:border-orange-500" : "bg-white border-orange-200 text-[#1A1A1A] focus:border-orange-500"
-                  }`}
+                  className={`w-full rounded-xl px-4 py-3 text-sm outline-none resize-none border-2 transition-colors ${isDark ? "bg-[#1a1a1a] border-orange-500/30 text-white focus:border-orange-500" : "bg-white border-orange-200 text-[#1A1A1A] focus:border-orange-500"
+                    }`}
                 />
               </div>
               <div className="flex gap-3 pt-2">
@@ -6876,11 +6925,10 @@ function SiteVisitScheduler({
                   Cancel
                 </button>
                 <button type="submit" disabled={isSaving || !visitDate}
-                  className={`flex-1 py-2.5 rounded-lg font-bold transition-colors flex items-center justify-center gap-2 ${
-                    isSaving || !visitDate
+                  className={`flex-1 py-2.5 rounded-lg font-bold transition-colors flex items-center justify-center gap-2 ${isSaving || !visitDate
                       ? "bg-gray-400 text-white cursor-not-allowed"
                       : (isDark ? "bg-orange-600 hover:bg-orange-500 text-white" : "bg-orange-500 hover:bg-orange-400 text-white")
-                  }`}>
+                    }`}>
                   {isSaving ? "Saving..." : editVisit ? "Reschedule" : "Schedule"}
                 </button>
               </div>
@@ -6894,7 +6942,7 @@ function SiteVisitScheduler({
 
 function StaffCard({ s, isDark, theme, getRoleBadge, getBarColor }: any) {
   const hasNoActivity = s.totalLeads > 0 && s.followUpsToday === 0;
-  const completedPct  = s.requiredToday > 0 ? Math.round((s.followUpsToday / s.requiredToday) * 100) : 0;
+  const completedPct = s.requiredToday > 0 ? Math.round((s.followUpsToday / s.requiredToday) * 100) : 0;
   return (
     <div className={`rounded-2xl border p-5 transition-all ${hasNoActivity ? (isDark ? "border-red-500/30 bg-red-500/5" : "border-red-200 bg-red-50") : theme.card}`}
       style={!hasNoActivity ? theme.cardGlass : {}}>
@@ -6914,9 +6962,9 @@ function StaffCard({ s, isDark, theme, getRoleBadge, getBarColor }: any) {
 
       <div className="grid grid-cols-3 gap-2 mb-4">
         {[
-          { label: "Total",     value: s.totalLeads,      color: theme.text },
-          { label: "Done",      value: s.followUpsToday,  color: "text-green-500" },
-          { label: "Remaining", value: s.remainingToday,  color: s.remainingToday > 0 ? "text-red-500" : "text-green-500" },
+          { label: "Total", value: s.totalLeads, color: theme.text },
+          { label: "Done", value: s.followUpsToday, color: "text-green-500" },
+          { label: "Remaining", value: s.remainingToday, color: s.remainingToday > 0 ? "text-red-500" : "text-green-500" },
         ].map(stat => (
           <div key={stat.label} className={`rounded-xl p-2 text-center border ${theme.settingsBg}`}>
             <p className={`text-[10px] font-bold ${theme.textFaint}`}>{stat.label}</p>
@@ -6932,7 +6980,7 @@ function StaffCard({ s, isDark, theme, getRoleBadge, getBarColor }: any) {
         </div>
         <div className={`w-full h-2 rounded-full ${isDark ? "bg-[#333]" : "bg-gray-200"}`}>
           <div className={`h-2 rounded-full transition-all ${getBarColor(s.followUpsToday, s.requiredToday)}`}
-            style={{ width: `${Math.min(completedPct, 100)}%` }}/>
+            style={{ width: `${Math.min(completedPct, 100)}%` }} />
         </div>
       </div>
 

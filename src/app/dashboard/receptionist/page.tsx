@@ -18,6 +18,7 @@ import {
 } from "recharts";
 import { Ghost, AlertTriangle } from "lucide-react";
 import LostLeadModal from "@/components/LostLeadModal";
+import MarkClosingModal from "@/components/MarkClosingModal";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -81,12 +82,12 @@ function buildTheme(isDark: boolean) {
     cardGlass: isDark ? {} : { boxShadow: "0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(0,174,239,0.07)" },
 
     statusLost: isDark ? "text-red-300 border-red-500/30 bg-red-950/30" : "text-red-700 border-red-300 bg-red-50",
-  cardLost: isDark
-    ? "bg-[#171717] border border-red-900/25 opacity-70 grayscale saturate-50 transition-all duration-300 hover:opacity-90 hover:border-red-500/30"
-    : "bg-slate-100 border border-red-200 opacity-75 grayscale saturate-50 transition-all duration-300 hover:opacity-90 hover:border-red-300",
-  rowLost: isDark
-    ? "bg-[#151515]/80 text-gray-500 opacity-75 grayscale"
-    : "bg-slate-100/80 text-slate-500 opacity-80 grayscale",
+    cardLost: isDark
+      ? "bg-[#171717] border border-red-900/25 opacity-70 grayscale saturate-50 transition-all duration-300 hover:opacity-90 hover:border-red-500/30"
+      : "bg-slate-100 border border-red-200 opacity-75 grayscale saturate-50 transition-all duration-300 hover:opacity-90 hover:border-red-300",
+    rowLost: isDark
+      ? "bg-[#151515]/80 text-gray-500 opacity-75 grayscale"
+      : "bg-slate-100/80 text-slate-500 opacity-80 grayscale",
     tableWrap: isDark ? "bg-[#121218] border-[#2A2A35]" : "bg-white border-[#9CA3AF]",
     tableGlass: isDark ? {} : { boxShadow: "0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(158,33,123,0.06), 0 16px 36px rgba(0,0,0,0.09)" },
     tableHead: isDark ? "bg-[#1A1A28]" : "bg-[#F1F5F9]",
@@ -157,6 +158,9 @@ function buildTheme(isDark: boolean) {
     statusRouted: isDark ? "text-blue-400 border-blue-500/30 bg-blue-500/10" : "text-[#00AEEF] border-[#00AEEF]/30 bg-[#00AEEF]/10",
     statusVisit: isDark ? "text-orange-400 border-orange-500/30 bg-orange-500/10" : "text-orange-500 border-orange-400/40 bg-orange-50",
     statusClosing: isDark ? "text-yellow-400 border-yellow-500/40 bg-yellow-500/10" : "text-amber-600 border-amber-400/50 bg-amber-50",
+    statusNGD: "bg-[rgba(251,146,60,0.12)] text-[#F97316] border border-[rgba(249,115,22,0.4)]",
+    cardNGD: "bg-[rgba(249,115,22,0.06)] border border-[rgba(249,115,22,0.35)] hover:border-[#F97316] shadow-[0_4px_12px_rgba(249,115,22,0.12)] transition-all duration-300 flex flex-col h-full",
+    rowNGD: "bg-[rgba(249,115,22,0.03)]",
   };
 }
 
@@ -191,9 +195,9 @@ function LoanStatusBadge({ status }: { status: string }) {
 function WhatsAppSettingsCard({ user, setUser, isDark, t }: {
   user: any; setUser: any; isDark: boolean; t: any;
 }) {
-  const [input, setInput]     = useState(user.whatsapp_number || "");
-  const [saving, setSaving]   = useState(false);
-  const [saved, setSaved]     = useState(false);
+  const [input, setInput] = useState(user.whatsapp_number || "");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   const handleSave = async () => {
     if (!input.trim()) return;
@@ -233,21 +237,20 @@ function WhatsAppSettingsCard({ user, setUser, isDark, t }: {
             className={`w-full rounded-lg p-3 text-sm outline-none transition-colors border ${isDark
               ? "bg-[#14141B] border-[#2A2A35] text-white focus:border-[#9E217B]"
               : "bg-white border-[#9CA3AF] text-[#1A1A1A] focus:border-[#00AEEF]"
-            }`}
+              }`}
           />
         </div>
         <button
           onClick={handleSave}
           disabled={saving || !input.trim()}
-          className={`mt-5 px-5 py-3 rounded-lg font-bold text-sm transition-all ${
-            saved
+          className={`mt-5 px-5 py-3 rounded-lg font-bold text-sm transition-all ${saved
               ? "bg-green-600 text-white"
               : saving || !input.trim()
                 ? "opacity-50 cursor-not-allowed bg-gray-400 text-white"
                 : (isDark
-                    ? "bg-[#9E217B] hover:bg-[#b8268f] text-white"
-                    : "bg-[#00AEEF] hover:bg-[#0099d4] text-white")
-          }`}
+                  ? "bg-[#9E217B] hover:bg-[#b8268f] text-white"
+                  : "bg-[#00AEEF] hover:bg-[#0099d4] text-white")
+            }`}
         >
           {saved ? "✓ Saved" : saving ? "Saving..." : "Save"}
         </button>
@@ -275,6 +278,7 @@ export default function ReceptionistDashboard() {
   const [activeTab, setActiveTab] = useState("overview");
   const [showPassword, setShowPassword] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [isClosingModalOpen, setIsClosingModalOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [toastMsg, setToastMsg] = useState<{ title: string; color: string } | null>(null);
 
@@ -295,7 +299,7 @@ export default function ReceptionistDashboard() {
     selfAssign: false,
   });
   const [showCpDropdown, setShowCpDropdown] = useState(false);
- 
+
   // ___Lost Leads
   const [showLostModal, setShowLostModal] = useState(false);
   const [lostReason, setLostReason] = useState("");
@@ -367,6 +371,7 @@ export default function ReceptionistDashboard() {
   const [searchColumn, setSearchColumn] = useState<string>("all");
   const [leadStatusFilter, setLeadStatusFilter] = useState<string>("all");
   const [showLostLeads, setShowLostLeads] = useState<boolean>(true);
+  const [showNGDLeads, setShowNGDLeads] = useState<boolean>(true);
 
   // Centralized Search Logic
   const applySearch = useCallback((leads: any[], query: string, col: string) => {
@@ -852,14 +857,14 @@ export default function ReceptionistDashboard() {
   }, [enquiries, followUps]);
 
   // Receptionist-owned leads = assigned_receptionist === user.name OR assigned_to === user.name
-// This is already correct — lost leads are NOT excluded here, keep as is:
+  // This is already correct — lost leads are NOT excluded here, keep as is:
   const myAssignedLeads = useMemo(() =>
     mergedLeads.filter((l: any) =>
       (l.assignedReceptionist === user.name || l.assigned_to === user.name) &&
       l.status !== "Closing" &&
       !l.closingDate
     )
-  , [mergedLeads, user.name]);
+    , [mergedLeads, user.name]);
 
   const currentLeadFollowUps = useMemo(() =>
     followUps.filter((f: any) => String(f.leadId) === String(selectedLead?.id))
@@ -916,8 +921,8 @@ export default function ReceptionistDashboard() {
       purpose: enquiryForm.purpose || "N/A",
       source: enquiryForm.source,
       source_other: enquiryForm.source === "Others" ? enquiryForm.sourceOther : null,
-      referral_name: enquiryForm.source === "Referral" 
-        ? enquiryForm.referralName 
+      referral_name: enquiryForm.source === "Referral"
+        ? enquiryForm.referralName
         : null,
       cp_name: enquiryForm.source === "Channel Partner" ? enquiryForm.cpDetails.name : null,
       cp_company: enquiryForm.source === "Channel Partner" ? enquiryForm.cpDetails.company : null,
@@ -1171,11 +1176,24 @@ export default function ReceptionistDashboard() {
   const paginatedAssigned = filteredAssigned.slice(0, assignedCardsPage * CARDS_PER_PAGE);
   const hasMoreAssigned = paginatedAssigned.length < filteredAssigned.length;
 
-  const filteredRecepLeads = myAssignedLeads.filter((l: any) =>
-    (l.name || "").toLowerCase().includes(searchRecepLeads.toLowerCase()) ||
-    String(l.id).includes(searchRecepLeads) ||
-    (l.phone || "").includes(searchRecepLeads)
-  );
+  const filteredRecepLeads = myAssignedLeads.filter((l: any) => {
+    let passLost = true;
+    if (leadStatusFilter === "lost") passLost = !!l.is_lost_lead;
+    else if (leadStatusFilter === "active") passLost = !l.is_lost_lead;
+    else passLost = showLostLeads || !l.is_lost_lead;
+
+    let passNGD = true;
+    const isNGD = l.status === "NON GENUINE DEMAND (NGD)" || l.leadStatus === "NON GENUINE DEMAND (NGD)" || l.leadInterestStatus === "NON GENUINE DEMAND (NGD)";
+    if (!showNGDLeads && isNGD) passNGD = false;
+
+    if (!passLost || !passNGD) return false;
+
+    return (
+      (l.name || "").toLowerCase().includes(searchRecepLeads.toLowerCase()) ||
+      String(l.id).includes(searchRecepLeads) ||
+      (l.phone || "").includes(searchRecepLeads)
+    );
+  });
 
   // ─────────────────────────────────────────────────────────────────────────
   // CHART DATA
@@ -2269,7 +2287,7 @@ export default function ReceptionistDashboard() {
                   </div>
 
                   {/* ── Channel Partner Card ── */}
-                      
+
                   {(selectedLead.cp_company || selectedLead.cpCompany) && (
                     <div className={`mt-6 rounded-xl border p-5 ${t.settingsBg}`} style={t.settingsBgGl}>
                       <h3 className={`text-xs font-bold uppercase tracking-widest mb-4 border-b pb-2 ${t.sectionTitle} ${t.tableBorder}`}>
@@ -2306,7 +2324,7 @@ export default function ReceptionistDashboard() {
                       </div>
                     </div>
                   )}
-                  
+
 
                 </div>
               </div>
@@ -2350,31 +2368,32 @@ export default function ReceptionistDashboard() {
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                       {paginatedAssigned.map((lead: any) => {
                         const isClosing = lead.status === "Closing";
-                        const isLost = !!lead.is_lost_lead; 
+                        const isLost = !!lead.is_lost_lead;
+                        const isNGD = lead.status === "NON GENUINE DEMAND (NGD)" || lead.leadStatus === "NON GENUINE DEMAND (NGD)" || lead.leadInterestStatus === "NON GENUINE DEMAND (NGD)";
                         return (
-                          <div key={lead.id} onClick={() => { setSelectedLead(lead); setAssignedSubView("detail"); setDetailTab("personal"); setShowSalesForm(false); setShowLoanForm(false); }} 
-                          className={`rounded-2xl p-6 border shadow-sm cursor-pointer group flex flex-col justify-between transition-all duration-300 ${
-                            isLost ? t.cardLost :
-                            isClosing ? `${isDark ? "bg-yellow-900/10 border-yellow-500/30" : "bg-amber-50 border-amber-200"} hover:-translate-y-1.5 hover:scale-[1.02] hover:border-yellow-400/60 hover:shadow-xl` 
-                            : t.card
-                          }`} style={t.cardGlass}>
+                          <div key={lead.id} onClick={() => { setSelectedLead(lead); setAssignedSubView("detail"); setDetailTab("personal"); setShowSalesForm(false); setShowLoanForm(false); }}
+                            className={`rounded-2xl p-6 border shadow-sm cursor-pointer group flex flex-col justify-between transition-all duration-300 ${isLost ? t.cardLost :
+                                isClosing ? `${isDark ? "bg-yellow-900/10 border-yellow-500/30" : "bg-amber-50 border-amber-200"} hover:-translate-y-1.5 hover:scale-[1.02] hover:border-yellow-400/60 hover:shadow-xl`
+                                  : isNGD ? t.cardNGD
+                                    : t.card
+                              }`} style={t.cardGlass}>
                             <div>
                               <div className={`flex justify-between items-start mb-5 pb-4 border-b ${t.tableBorder}`}>
                                 <h3 className={`text-xl font-bold transition-colors line-clamp-1 pr-2 ${t.text} ${isDark ? "group-hover:text-[#d4006e]" : "group-hover:text-[#9E217B]"}`}>
                                   <span className={`mr-2 transition-colors ${isDark ? "text-[#d4006e]" : "text-[#00AEEF] group-hover:text-[#9E217B]"}`}>#{lead.id}</span>{lead.name}
                                 </h3>
-                                <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border flex-shrink-0 ${
-                                  isLost ? t.statusLost :
-                                  isClosing ? t.statusClosing : 
-                                  lead.status === "Visit Scheduled" ? t.statusVisit : t.statusRouted
-                                }`}>{isLost ? "LOST LEAD" : (lead.status || "ROUTED")}</span>
+                                <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border flex-shrink-0 ${isLost ? t.statusLost :
+                                    isNGD ? t.statusNGD :
+                                      isClosing ? t.statusClosing :
+                                        lead.status === "Visit Scheduled" ? t.statusVisit : t.statusRouted
+                                  }`}>{isLost ? "LOST LEAD" : isNGD ? "NON GENUINE DEMAND" : (lead.status || "ROUTED")}</span>
                               </div>
 
                               {/* Lost lead banner — shown immediately after the header */}
                               {isLost && (
                                 <div className={`mb-3 flex items-center justify-between gap-2 rounded-lg px-3 py-2 border ${t.statusLost}`}>
                                   <span className="text-[10px] font-black uppercase tracking-wider flex items-center gap-2">
-                                    <Ghost className="w-3.5 h-3.5"/> Lost Lead
+                                    <Ghost className="w-3.5 h-3.5" /> Lost Lead
                                   </span>
                                   <span className="text-[10px] font-semibold normal-case truncate">
                                     {lead.lost_lead_reason || "Unresponsive"}
@@ -2448,8 +2467,8 @@ export default function ReceptionistDashboard() {
                             className={`font-bold px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer ${t.btnSecondary}`}>
                             <FaUniversity /> Track Loan
                           </button>
-                          {selectedLead.mongoVisitDate && selectedLead.status !== "Closing" && (
-                            <button onClick={handleMarkAsClosing} className={`font-bold px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer ${t.btnWarning}`}>
+                          {selectedLead.mongoVisitDate && selectedLead.status !== "Closing" && !selectedLead.is_lost_lead && (
+                            <button onClick={() => setIsClosingModalOpen(true)} className={`font-bold px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer ${t.btnWarning}`}>
                               <FaHandshake /> Mark Closing
                             </button>
                           )}
@@ -2465,11 +2484,6 @@ export default function ReceptionistDashboard() {
                               <FaCheckCircle /> Restore Lead
                             </button>
                           )}
-                          {/* TRANSFER BUTTON */}
-                          {/* <button onClick={() => { setTransferTarget(""); setTransferNote(""); setIsTransferModalOpen(true); }}
-                            className={`font-bold px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer ${t.btnTransfer}`}>
-                            <FaExchangeAlt /> Transfer Lead
-                          </button> */}
                         </>
                       )}
                     </div>
@@ -2497,7 +2511,7 @@ export default function ReceptionistDashboard() {
                             </div>
                             <div className={`border-t pt-3 mt-1 ${t.tableBorder}`}>
                               <label className={`block text-xs font-bold mb-1.5 ${t.accentText}`}>Lead Interest Status *</label>
-                              <select required value={salesForm.leadStatus} onChange={e => setSalesForm({ ...salesForm, leadStatus: e.target.value })} className={formSelect}><option value="" disabled>Select Status</option><option>Interested</option><option>Not Interested</option><option>Non Genuine Demand</option></select>
+                              <select required value={salesForm.leadStatus} onChange={e => setSalesForm({ ...salesForm, leadStatus: e.target.value })} className={formSelect}><option value="" disabled>Select Status</option><option>Interested</option><option>Not Interested</option><option>NON GENUINE DEMAND (NGD)</option></select>
                             </div>
                             <div className={`border-t pt-3 mt-1 ${t.tableBorder}`}>
                               <label className={`block text-xs font-bold mb-1.5 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}>Loan Planned?</label>
@@ -2659,7 +2673,7 @@ export default function ReceptionistDashboard() {
                               </div>
                             )}
                           </div>
-                        
+
 
 
                           <div className="grid grid-cols-2 gap-3 mt-4 flex-shrink-0">
@@ -2731,6 +2745,13 @@ export default function ReceptionistDashboard() {
             />
           )}
 
+          <MarkClosingModal
+            isOpen={isClosingModalOpen}
+            onClose={() => setIsClosingModalOpen(false)}
+            onConfirm={handleMarkAsClosing}
+            isDark={isDark}
+          />
+
           {/* ════════════════════════════════════════════════════
               RECEPTIONIST LEADS TAB
           ════════════════════════════════════════════════════ */}
@@ -2741,12 +2762,20 @@ export default function ReceptionistDashboard() {
                   <h1 className={`text-xl md:text-3xl font-bold ${t.text}`}>Receptionist Leads</h1>
                   <p className={`text-xs mt-1 ${t.textFaint}`}>Leads you have personally handled or captured</p>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="relative flex items-center gap-4 flex-wrap">
                   <div className="relative">
-                    <FaSearch className={`absolute left-3 top-1/2 -translate-y-1/2 text-xs ${t.textFaint}`} />
+                    <FaSearch className={`absolute left-3 top-1/2 -translate-y-1/2 ${t.textFaint}`} />
                     <input type="text" placeholder="Search leads..." value={searchRecepLeads} onChange={e => setSearchRecepLeads(e.target.value)}
                       className={`rounded-lg pl-9 pr-4 py-2 text-sm outline-none w-52 transition-colors border ${t.inputBg} ${t.text}`} />
                   </div>
+                  <label className={`flex items-center gap-2 text-xs font-bold ${t.textMuted}`}>
+                    <input type="checkbox" checked={showLostLeads} onChange={e => setShowLostLeads(e.target.checked)} disabled={leadStatusFilter !== "all"} className="accent-red-500" />
+                    Show Lost
+                  </label>
+                  <label className={`flex items-center gap-2 text-xs font-bold ${t.textMuted}`}>
+                    <input type="checkbox" checked={showNGDLeads} onChange={e => setShowNGDLeads(e.target.checked)} disabled={leadStatusFilter !== "all"} className="accent-[#F97316]" />
+                    Show NGD
+                  </label>
                   <button onClick={() => downloadCSV(filteredRecepLeads.map((l: any) => ({ "Lead No": l.id, "Client Name": l.name, "CP Company": l.cp_company || "N/A", "Budget": l.salesBudget || l.budget || "N/A", "Phone": l.phone || "N/A", "Alt Phone": l.altPhone || "N/A", "Date Created": l.date, "Assigned to Receptionist": l.assignedReceptionist || user.name, "Status": l.status || "Routed" })), "Receptionist_Leads.csv")} className={`p-2 border rounded-lg ${t.exportBtn}`} title="Export CSV"><FaDownload size={12} /></button>
                   <button onClick={refetchAll} className={`text-sm font-semibold flex items-center gap-2 px-4 py-2 rounded-lg ${t.btnPrimary}`}>↻ Refresh</button>
                 </div>
@@ -2760,79 +2789,96 @@ export default function ReceptionistDashboard() {
                 <div className="overflow-x-auto custom-scrollbar">
                   <table className="w-full text-left border-collapse whitespace-nowrap">
                     <thead><tr className={t.tableHead}>
-                      {["Lead No.", "Client Name", "CP Details", "Budget", "Phone", "Alt. Phone", "Date Created", "Assigned to Receptionist", "Status", "Actions"].map(h => (
+                      {["Lead No.", "Client Name", "CP Details", "Budget", "Phone", "Alt. Phone", "Date Created", "Assigned to", "Site Visits", "Status", "Actions"].map(h => (
                         <th key={h} className={`px-3 py-3 md:p-4 font-bold uppercase tracking-wider border-b ${t.textHeader} ${t.tableBorder}`}>{h}</th>
                       ))}
                     </tr></thead>
                     <tbody className={`${t.tableDivide} divide-y`}>
                       {isFetchingEnquiries ? (
-                        <tr><td colSpan={10} className={`p-8 text-center text-sm ${t.textMuted}`}>Loading your leads...</td></tr>
+                        <tr><td colSpan={11} className={`p-8 text-center text-sm ${t.textMuted}`}>Loading your leads...</td></tr>
                       ) : filteredRecepLeads.length === 0 ? (
-                        <tr><td colSpan={10} className={`p-12 text-center ${t.textMuted}`}>
+                        <tr><td colSpan={11} className={`p-12 text-center ${t.textMuted}`}>
                           <FaUserTie className={`text-5xl mx-auto mb-4 ${t.textFaint}`} />
                           <p className="text-lg font-semibold">No leads found.</p>
                           <p className={`text-sm mt-2 ${t.textFaint}`}>Self-assign leads when creating new entries.</p>
                         </td></tr>
-                      ) : filteredRecepLeads.map((lead: any) => (
-                        <tr key={lead.id} 
-                        className={`transition-colors ${!!lead.is_lost_lead ? t.rowLost : t.tableRow}`}>
-                          
-                          {/* 1. Lead No. */}
-                          <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-bold ${t.accentText}`}>#{lead.id}</td>
-                          
-                          {/* 2. Client Name */}
-                          <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-semibold ${t.text}`}>{lead.name}</td>
-                          
-                          {/* 3. CP Details */}
-                          <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm ${t.textMuted}`}>
-                            {(lead.cp_company || lead.cpCompany) ? (
-                              <div className="flex flex-col gap-0.5">
-                                <span className={`font-semibold text-xs ${t.text}`}>{lead.cp_company || lead.cpCompany}</span>
-                                {(lead.cp_phone || lead.cpPhone) && (
-                                  <span className="font-mono text-[10px] text-orange-400">{lead.cp_phone || lead.cpPhone}</span>
-                                )}
-                              </div>
-                            ) : <span className="italic text-[10px]">—</span>}
-                          </td>
-                          
-                          {/* 4. Budget */}
-                          <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-bold ${isDark ? "text-green-700" : "text-emerald-600"}`}>{lead.salesBudget || lead.budget}</td>
-                          
-                          {/* 5. Phone */}
-                          <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm font-mono ${t.text}`}>{maskPhone(lead.phone)}</td>
-                          
-                          {/* 6. Alt Phone */}
-                          <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm font-mono ${t.textMuted}`}>{maskPhone(lead.altPhone)}</td>
-                          
-                          {/* 7. Date Created */}
-                          <td className={`px-3 py-3 md:p-4 text-[10px] md:text-xs ${t.textFaint}`}>{lead.date}</td>
-                          
-                          {/* 8. Assigned to Receptionist */}
-                          <td className="px-3 py-3 md:p-4">
-                            <span className={`px-2 py-1 rounded-md text-[10px] font-semibold ${isDark ? "bg-purple-500/10 text-purple-400 border border-purple-500/30" : "bg-[#9E217B]/10 text-[#9E217B] border border-[#9E217B]/30"}`}>{lead.assignedReceptionist || user.name}</span>
-                          </td>
-                          
-                          {/* 9. Status (Merged Lost Lead logic here) */}
-                          <td className="px-3 py-3 md:p-4">
-                            {lead.is_lost_lead ? (
-                              <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase border inline-flex items-center gap-1 ${t.statusLost}`}>
-                                <Ghost className="w-3 h-3"/> Lost
-                              </span>
-                            ) : (
-                              <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase border ${lead.status === "Closing" ? t.statusClosing : lead.status === "Visit Scheduled" ? t.statusVisit : t.statusRouted
-                                }`}>{lead.status || "Routed"}</span>
-                            )}
-                          </td>
-                          
-                          {/* 10. Actions */}
-                          <td className="px-3 py-3 md:p-4">
-                            <button onClick={() => { setSelectedLead(lead); setAssignedSubView("detail"); setDetailTab("personal"); setShowSalesForm(false); setShowLoanForm(false); setActiveTab("assigned"); }}
-                              className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${t.btnPrimary}`}>
-                              Open
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+                      ) : filteredRecepLeads.map((lead: any) => {
+                        const isLost = !!lead.is_lost_lead;
+                        const isNGD = lead.status === "NON GENUINE DEMAND (NGD)" || lead.leadStatus === "NON GENUINE DEMAND (NGD)" || lead.leadInterestStatus === "NON GENUINE DEMAND (NGD)";
+                        return (
+                          <tr key={lead.id}
+                            className={`transition-colors ${isLost ? t.rowLost : isNGD ? t.rowNGD : t.tableRow}`}>
+
+                            {/* 1. Lead No. */}
+                            <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-bold ${t.accentText}`}>#{lead.id}</td>
+
+                            {/* 2. Client Name */}
+                            <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-semibold ${t.text}`}>{lead.name}</td>
+
+                            {/* 3. CP Details */}
+                            <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm ${t.textMuted}`}>
+                              {(lead.cp_company || lead.cpCompany) ? (
+                                <div className="flex flex-col gap-0.5">
+                                  <span className={`font-semibold text-xs ${t.text}`}>{lead.cp_company || lead.cpCompany}</span>
+                                  {(lead.cp_phone || lead.cpPhone) && (
+                                    <span className="font-mono text-[10px] text-orange-400">{lead.cp_phone || lead.cpPhone}</span>
+                                  )}
+                                </div>
+                              ) : <span className="italic text-[10px]">—</span>}
+                            </td>
+
+                            {/* 4. Budget */}
+                            <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-bold ${isDark ? "text-green-700" : "text-emerald-600"}`}>{lead.salesBudget || lead.budget}</td>
+
+                            {/* 5. Phone */}
+                            <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm font-mono ${t.text}`}>{maskPhone(lead.phone)}</td>
+
+                            {/* 6. Alt Phone */}
+                            <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm font-mono ${t.textMuted}`}>{maskPhone(lead.altPhone)}</td>
+
+                            {/* 7. Date Created */}
+                            <td className={`px-3 py-3 md:p-4 text-[10px] md:text-xs ${t.textFaint}`}>{lead.date}</td>
+
+                            {/* 8. Assigned to */}
+                            <td className="px-3 py-3 md:p-4">
+                              <span className={`px-2 py-1 rounded-md text-[10px] font-semibold ${isDark ? "bg-purple-500/10 text-purple-400 border border-purple-500/30" : "bg-[#9E217B]/10 text-[#9E217B] border border-[#9E217B]/30"}`}>{lead.assignedReceptionist || user.name}</span>
+                            </td>
+
+                            {/* Site Visits */}
+                            <td className="px-3 py-3 md:p-4">
+                              {lead.mongoVisitDate ? (
+                                <span className="text-orange-400 font-bold text-[10px]">{formatDate(lead.mongoVisitDate).split(",")[0]}</span>
+                              ) : (
+                                <span className={`text-[10px] ${t.textFaint}`}>No Visit</span>
+                              )}
+                            </td>
+
+                            {/* 9. Status */}
+                            <td className="px-3 py-3 md:p-4">
+                              {lead.is_lost_lead ? (
+                                <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase border inline-flex items-center gap-1 ${t.statusLost}`}>
+                                  <Ghost className="w-3 h-3" /> Lost
+                                </span>
+                              ) : isNGD ? (
+                                <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase border ${t.statusNGD}`}>
+                                  NGD
+                                </span>
+                              ) : (
+                                <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase border ${lead.status === "Closing" ? t.statusClosing : lead.status === "Visit Scheduled" ? t.statusVisit : t.statusRouted
+                                  }`}>{lead.status || "Routed"}</span>
+                              )}
+                            </td>
+
+                            {/* 10. Actions */}
+                            <td className="px-3 py-3 md:p-4">
+                              <button onClick={() => { setSelectedLead(lead); setAssignedSubView("detail"); setDetailTab("personal"); setShowSalesForm(false); setShowLoanForm(false); setActiveTab("assigned"); }}
+                                className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${t.btnPrimary}`}>
+                                Open
+                              </button>
+                            </td>
+                          </tr>
+                        )
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -3182,7 +3228,7 @@ export default function ReceptionistDashboard() {
                       <label className={`block text-xs font-bold ${isDark ? "text-[#d4006e]" : "text-[#9E217B]"}`}>Assignment Option</label>
                       <div className="flex items-center gap-3">
                         <button type="button"
-                           onClick={() => { setEnquiryForm({ ...enquiryForm, selfAssign: false }); setShowManagerDropdown(true); }}
+                          onClick={() => { setEnquiryForm({ ...enquiryForm, selfAssign: false }); setShowManagerDropdown(true); }}
                           className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-colors border ${!enquiryForm.selfAssign ? (isDark ? "bg-[#9E217B] border-[#9E217B] text-white" : "bg-[#00AEEF] border-[#00AEEF] text-white") : `${t.textMuted} ${t.tableBorder}`}`}>
                           Assign to Manager
                         </button>
@@ -3195,7 +3241,7 @@ export default function ReceptionistDashboard() {
                       {enquiryForm.selfAssign ? (
                         <p className={`text-xs ${isDark ? "text-[#d4006e]" : "text-[#9E217B]"}`}>✓ Lead will be assigned to <strong>{user.name}</strong> (you)</p>
                       ) : (
-                       <div className={`w-full rounded-xl border-2 overflow-hidden ${isDark ? "border-purple-500/40" : "border-purple-300"}`}>
+                        <div className={`w-full rounded-xl border-2 overflow-hidden ${isDark ? "border-purple-500/40" : "border-purple-300"}`}>
                           {isFetchingManagers ? (
                             <div className={`p-3 text-sm ${t.textMuted}`}>Loading managers…</div>
                           ) : combinedAssignees.length === 0 ? (
@@ -3205,11 +3251,10 @@ export default function ReceptionistDashboard() {
                               {/* Selected display or placeholder — always visible */}
                               <div
                                 onClick={() => setShowManagerDropdown(prev => !prev)}
-                                className={`px-4 py-3 text-sm cursor-pointer flex items-center justify-between ${
-                                  enquiryForm.assignedTo
+                                className={`px-4 py-3 text-sm cursor-pointer flex items-center justify-between ${enquiryForm.assignedTo
                                     ? isDark ? "text-white bg-purple-900/30" : "text-purple-800 bg-purple-100 font-semibold"
                                     : isDark ? "text-gray-400" : "text-gray-400"
-                                }`}
+                                  }`}
                               >
                                 <span>
                                   {enquiryForm.assignedTo
@@ -3240,11 +3285,10 @@ export default function ReceptionistDashboard() {
                                         setEnquiryForm({ ...enquiryForm, assignedTo: m.name });
                                         setShowManagerDropdown(false);  // ← closes on click
                                       }}
-                                      className={`px-4 py-3 text-sm cursor-pointer border-b transition-colors ${
-                                        enquiryForm.assignedTo === m.name
+                                      className={`px-4 py-3 text-sm cursor-pointer border-b transition-colors ${enquiryForm.assignedTo === m.name
                                           ? isDark ? "bg-purple-900/40 text-purple-200 font-bold" : "bg-purple-100 text-purple-800 font-bold"
                                           : isDark ? "text-white hover:bg-[#1a1a28] border-[#2a2a35]" : "text-[#1A1A1A] hover:bg-purple-50 border-gray-100"
-                                      }`}
+                                        }`}
                                     >
                                       <span className="font-semibold">{m.name}</span>
                                       <span className={`ml-2 text-xs ${isDark ? "text-gray-400" : "text-gray-500"}`}>
@@ -3501,21 +3545,21 @@ function SiteVisitScheduler({
   lead: any; adminUser: any; isDark: boolean;
   t: any; onSuccess: () => void;
 }) {
-  const [visits, setVisits]         = useState<any[]>([]);
-  const [showModal, setShowModal]   = useState(false);
-  const [visitDate, setVisitDate]   = useState("");
+  const [visits, setVisits] = useState<any[]>([]);
+  const [showModal, setShowModal] = useState(false);
+  const [visitDate, setVisitDate] = useState("");
   const [visitNotes, setVisitNotes] = useState("");
-  const [isSaving, setIsSaving]     = useState(false);
-  const [editVisit, setEditVisit]   = useState<any>(null);
-  const [toast, setToast]           = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [editVisit, setEditVisit] = useState<any>(null);
+  const [toast, setToast] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const fetchVisits = async () => {
     try {
-      const res  = await fetch(`/api/site-visits?lead_id=${lead.id}`);
+      const res = await fetch(`/api/site-visits?lead_id=${lead.id}`);
       const json = await res.json();
       if (json.success) setVisits(json.data);
-    } catch {}
+    } catch { }
   };
 
   useEffect(() => { fetchVisits(); }, [lead.id]);
@@ -3529,13 +3573,13 @@ function SiteVisitScheduler({
     if (!visitDate) return;
     setIsSaving(true);
     try {
-      const url    = editVisit ? `/api/site-visits` : `/api/site-visits`;
+      const url = editVisit ? `/api/site-visits` : `/api/site-visits`;
       const method = editVisit ? "PATCH" : "POST";
-      const body   = editVisit
+      const body = editVisit
         ? { id: editVisit.id, visit_date: visitDate, notes: visitNotes }
         : { lead_id: lead.id, visit_date: visitDate, created_by: adminUser.name, role: adminUser.role, notes: visitNotes };
 
-      const res  = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const json = await res.json();
 
       if (!json.success) { showToast("❌ " + json.message); return; }
@@ -3546,12 +3590,12 @@ function SiteVisitScheduler({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          leadId:          String(lead.id),
+          leadId: String(lead.id),
           salesManagerName: adminUser.name,
-          createdBy:        adminUser.role === "admin" ? "admin" : adminUser.role === "receptionist" ? "receptionist" : "sales",
-          message:          `📅 ${visitLabel}:\n• Date: ${new Date(visitDate).toLocaleString("en-IN")}\n• Notes: ${visitNotes || "N/A"}`,
-          siteVisitDate:    visitDate,
-          createdAt:        new Date().toISOString(),
+          createdBy: adminUser.role === "admin" ? "admin" : adminUser.role === "receptionist" ? "receptionist" : "sales",
+          message: `📅 ${visitLabel}:\n• Date: ${new Date(visitDate).toLocaleString("en-IN")}\n• Notes: ${visitNotes || "N/A"}`,
+          siteVisitDate: visitDate,
+          createdAt: new Date().toISOString(),
         }),
       });
 
@@ -3564,7 +3608,7 @@ function SiteVisitScheduler({
 
   const handleStatusChange = async (visitId: number, status: string) => {
     try {
-      const res  = await fetch("/api/site-visits", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: visitId, status }) });
+      const res = await fetch("/api/site-visits", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: visitId, status }) });
       const json = await res.json();
       if (!json.success) { showToast("❌ " + json.message); return; }
 
@@ -3572,12 +3616,12 @@ function SiteVisitScheduler({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          leadId:          String(lead.id),
+          leadId: String(lead.id),
           salesManagerName: adminUser.name,
-          createdBy:        adminUser.role === "admin" ? "admin" : adminUser.role === "receptionist" ? "receptionist" : "sales",
-          message:          `🔄 Site Visit marked as ${status.toUpperCase()} by ${adminUser.name}`,
-          siteVisitDate:    null,
-          createdAt:        new Date().toISOString(),
+          createdBy: adminUser.role === "admin" ? "admin" : adminUser.role === "receptionist" ? "receptionist" : "sales",
+          message: `🔄 Site Visit marked as ${status.toUpperCase()} by ${adminUser.name}`,
+          siteVisitDate: null,
+          createdAt: new Date().toISOString(),
         }),
       });
 
@@ -3587,7 +3631,7 @@ function SiteVisitScheduler({
   };
 
   const upcomingVisit = visits.find(v => v.status === "scheduled" && new Date(v.visit_date) >= new Date());
-  const isClosing     = lead.status === "Closing" || !!lead.closingDate;
+  const isClosing = lead.status === "Closing" || !!lead.closingDate;
 
   const statusBadge = (status: string) => {
     if (status === "completed") return "text-green-400 border-green-500/30 bg-green-500/10";
@@ -3619,11 +3663,10 @@ function SiteVisitScheduler({
         {!isClosing && (
           <button
             onClick={() => { setEditVisit(null); setVisitDate(""); setVisitNotes(""); setShowModal(true); }}
-            className={`text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer transition-colors ${
-              visits.length === 0
+            className={`text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer transition-colors ${visits.length === 0
                 ? (isDark ? "bg-orange-600 hover:bg-orange-500 text-white" : "bg-orange-500 hover:bg-orange-400 text-white")
                 : (isDark ? "bg-orange-600/20 hover:bg-orange-600 border border-orange-500/30 text-orange-400 hover:text-white" : "bg-orange-50 hover:bg-orange-500 border border-orange-300 text-orange-600 hover:text-white")
-            }`}
+              }`}
           >
             <FaCalendarAlt className="text-[10px]" />
             {visits.length === 0 ? "Schedule Visit" : "Re-Site Visit"}
@@ -3642,11 +3685,10 @@ function SiteVisitScheduler({
             {visits.map((v, i) => (
               <div key={v.id} className="relative">
                 {/* Dot */}
-                <div className={`absolute -left-5 top-1 w-2.5 h-2.5 rounded-full border-2 ${
-                  v.status === "completed" ? "bg-green-500 border-green-400" :
-                  v.status === "cancelled" ? "bg-red-500 border-red-400" :
-                  "bg-yellow-500 border-yellow-400"
-                }`} />
+                <div className={`absolute -left-5 top-1 w-2.5 h-2.5 rounded-full border-2 ${v.status === "completed" ? "bg-green-500 border-green-400" :
+                    v.status === "cancelled" ? "bg-red-500 border-red-400" :
+                      "bg-yellow-500 border-yellow-400"
+                  }`} />
 
                 <div className={`rounded-xl p-3 border ${isDark ? "bg-[#222] border-[#333]" : "bg-[#F8FAFC] border-indigo-100"}`}>
                   <div className="flex items-start justify-between gap-2 mb-1.5">
@@ -3714,9 +3756,8 @@ function SiteVisitScheduler({
                   min={new Date().toISOString().slice(0, 16)}
                   onChange={e => setVisitDate(e.target.value)}
                   onClick={() => inputRef.current?.showPicker()}
-                  className={`w-full rounded-xl px-4 py-3 text-sm outline-none border-2 transition-colors ${
-                    isDark ? "bg-[#1a1a1a] border-orange-500/40 text-white focus:border-orange-500" : "bg-white border-orange-300 text-[#1A1A1A] focus:border-orange-500"
-                  }`}
+                  className={`w-full rounded-xl px-4 py-3 text-sm outline-none border-2 transition-colors ${isDark ? "bg-[#1a1a1a] border-orange-500/40 text-white focus:border-orange-500" : "bg-white border-orange-300 text-[#1A1A1A] focus:border-orange-500"
+                    }`}
                 />
               </div>
               <div>
@@ -3726,9 +3767,8 @@ function SiteVisitScheduler({
                 <textarea
                   value={visitNotes} onChange={e => setVisitNotes(e.target.value)} rows={3}
                   placeholder={visits.length > 0 ? "e.g. Customer needs to see the 3BHK units again..." : "e.g. First visit scheduled with customer..."}
-                  className={`w-full rounded-xl px-4 py-3 text-sm outline-none resize-none border-2 transition-colors ${
-                    isDark ? "bg-[#1a1a1a] border-orange-500/30 text-white focus:border-orange-500" : "bg-white border-orange-200 text-[#1A1A1A] focus:border-orange-500"
-                  }`}
+                  className={`w-full rounded-xl px-4 py-3 text-sm outline-none resize-none border-2 transition-colors ${isDark ? "bg-[#1a1a1a] border-orange-500/30 text-white focus:border-orange-500" : "bg-white border-orange-200 text-[#1A1A1A] focus:border-orange-500"
+                    }`}
                 />
               </div>
               <div className="flex gap-3 pt-2">
@@ -3737,11 +3777,10 @@ function SiteVisitScheduler({
                   Cancel
                 </button>
                 <button type="submit" disabled={isSaving || !visitDate}
-                  className={`flex-1 py-2.5 rounded-lg font-bold transition-colors flex items-center justify-center gap-2 ${
-                    isSaving || !visitDate
+                  className={`flex-1 py-2.5 rounded-lg font-bold transition-colors flex items-center justify-center gap-2 ${isSaving || !visitDate
                       ? "opacity-50 cursor-not-allowed bg-orange-400 text-white"
                       : "cursor-pointer bg-orange-500 hover:bg-orange-400 text-white shadow-lg shadow-orange-500/20"
-                  }`}>
+                    }`}>
                   {isSaving ? "Saving..." : <><FaCalendarAlt /> {editVisit ? "Reschedule" : "Schedule"}</>}
                 </button>
               </div>

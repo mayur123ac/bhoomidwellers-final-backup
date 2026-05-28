@@ -15,7 +15,7 @@ export async function GET() {
     const mapped = users.map(u => ({ ...u, _id: String(u.id) }));
     return NextResponse.json(mapped, { status: 200 });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("GET /api/employees error:", error);
     return NextResponse.json({ message: "Error fetching employees." }, { status: 500 });
   }
@@ -52,7 +52,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ message: "Employee added successfully." }, { status: 201 });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("POST /api/employees error:", error);
     return NextResponse.json({ message: "Error adding employee." }, { status: 500 });
   }
@@ -139,7 +139,7 @@ export async function PUT(req: Request) {
 
     return NextResponse.json({ message: "No valid update data provided." }, { status: 400 });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("PUT /api/employees error:", error);
     return NextResponse.json({ message: "Error updating employee." }, { status: 500 });
   }
@@ -165,7 +165,7 @@ export async function DELETE(req: Request) {
 
     return NextResponse.json({ message: "User deleted successfully." }, { status: 200 });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("DELETE /api/employees error:", error);
     return NextResponse.json({ message: "Error deleting employee." }, { status: 500 });
   }
