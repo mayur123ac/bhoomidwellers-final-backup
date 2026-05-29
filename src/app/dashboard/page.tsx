@@ -9,7 +9,7 @@ import {
   FaThLarge, FaClipboardList, FaUsers, FaIdCard,
   FaSearch, FaBell, FaChevronLeft, FaPhoneAlt, FaComments,
   FaCheckCircle, FaCalendarAlt, FaTimes,
-  FaFileInvoice, FaPaperPlane, FaMicrophone, FaWhatsapp, FaTable, FaChartPie, FaEyeSlash, FaUniversity, FaFileAlt, FaCheck, FaClock, FaHandshake, FaExchangeAlt, FaBriefcase, FaDownload
+  FaFileInvoice, FaPaperPlane, FaMicrophone, FaWhatsapp, FaTable, FaChartPie, FaEyeSlash, FaUniversity, FaFileAlt, FaCheck, FaClock, FaHandshake, FaExchangeAlt, FaBriefcase, FaDownload, FaCog
 } from "react-icons/fa";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, Cell,
@@ -17,6 +17,7 @@ import {
 } from "recharts";
 import LostLeadModal from "@/components/LostLeadModal";
 import MarkClosingModal from "@/components/MarkClosingModal";
+import CrmUpdatesNotification from "@/components/CrmUpdatesNotification";
 import {
   handleMarkLostLead as markLostLeadApi,
   handleRestoreLead as restoreLeadApi,
@@ -46,7 +47,7 @@ const MoonIcon = () => (
 function buildTheme(isDark: boolean) {
   return {
     pageWrap: isDark ? "bg-[#0A0A0F] text-white" : "text-[#1A1A1A]",
-    mainBg: isDark ? "bg-[#121212a]" : "bg-transparent",
+    mainBg: isDark ? "bg-[#121212]" : "bg-transparent",
     sidebar: "bg-[#1a1a1a] border-r border-[#2a2a2a]",
     header: isDark ? "bg-[#1a1a1a] border-b border-[#2a2a2a]" : "bg-white border-b border-[#9CA3AF]",
     headerGlass: isDark ? {} : { boxShadow: "0 1px 0 #9CA3AF, 0 4px 16px rgba(158,33,123,0.06)" },
@@ -169,7 +170,7 @@ function useAdminData() {
       if (resLeads.ok) {
         const j = await resLeads.json();
         pgLeads = Array.isArray(j.data) ? j.data : [];
-        console.log("Admin fetched leads count:", pgLeads.length); // ← check this
+        // Admin bulk fetch — logs removed for production
       }
 
       let mongoFollowUps: any[] = [];
@@ -266,14 +267,24 @@ function InterestBadge({ status, size = "md", isDark }: { status: string; size?:
     "NON GENUINE DEMAND (NGD)": isDark ? "border-orange-500/40 text-orange-400 bg-orange-500/10" : "border-orange-300 text-orange-700 bg-orange-50",
     "Non Qualified lead": isDark ? "border-orange-500/40 text-orange-400 bg-orange-500/10" : "border-orange-300 text-orange-700 bg-orange-50",
   };
+  // Shorten long labels for compact display in the Enquiry Overview table
+  const labelMap: Record<string, string> = {
+    "NON GENUINE DEMAND (NGD)": "NGD",
+    "Non Qualified lead": "NGD",
+    "Non Qualified Lead": "NGD",
+    "Non Qualified Leads": "NGD",
+    "Non qualified Lead": "NGD",
+  };
   const cls = colorMap[status] ?? (isDark ? "border-[#9E217B]/30 text-[#d946a8] bg-[#9E217B]/10" : "border-[#9E217B]/30 text-[#9E217B] bg-[#9E217B]/10");
   const sz = size === "sm" ? "text-[9px] px-2 py-0.5" : "text-[10px] px-3 py-1";
+  const label = labelMap[status] ?? status;
   return (
     <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider border inline-flex items-center justify-center gap-1 flex-shrink-0 leading-none ${cls}`}>
-      {status}
+      {label}
     </span>
   );
 }
+
 
 function LoanStatusBadge({ status, isDark }: { status: string; isDark?: boolean }) {
   const s = (status || "").toLowerCase();
@@ -653,6 +664,15 @@ export default function AdminAtlasDashboard() {
               className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center cursor-pointer justify-center shadow-sm ${theme.toggleWrap}`}>
               {isDark ? <SunIcon /> : <MoonIcon />}
             </button>
+
+            {/* System Settings Icon */}
+            <button onClick={() => router.push("/dashboard/settings")} aria-label="Settings"
+              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center cursor-pointer justify-center shadow-sm ${theme.toggleWrap}`}>
+              <FaCog className="w-5 h-5" />
+            </button>
+
+            {/* CRM System Updates */}
+            <CrmUpdatesNotification user={user} theme={theme} isDark={isDark} />
 
             <div className="relative">
               <div className="relative cursor-pointer" onClick={() => { setIsNotifOpen(!isNotifOpen); setIsProfileOpen(false); setNotifCount(0); }}>
@@ -1295,7 +1315,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
         </div>
         <div className={`${theme.card} rounded-2xl p-4`} style={theme.cardGlass}>
           <p className={`text-xs font-bold uppercase tracking-wider ${theme.textFaint}`}>Lost / Ghosted</p>
-          <p className={`text-2xl font-black mt-1 ${isDark ? "text-red-400" : "text-red-600"}`}>👻 {allLeads.filter((l: any) => l.is_lost_lead).length}</p>
+          <p className={`text-2xl font-black mt-1 ${isDark ? "text-red-400" : "text-red-600"}`}> {allLeads.filter((l: any) => l.is_lost_lead).length}</p>
         </div>
       </div>
 
@@ -1556,7 +1576,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                         <td className="px-4 py-4">
                           {lead.is_lost_lead ? (
                             <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase border flex-shrink-0 whitespace-nowrap ${theme.statusLost}`}>
-                              👻 Lost Lead
+                              Lost Lead
                             </span>
                           ) : (
                             <span className={`text-[10px] font-semibold uppercase ${isDark ? "text-green-400" : "text-emerald-600"}`}>Active</span>
@@ -2276,7 +2296,7 @@ function WhatsAppSendModal({
               ) : phoneOptions.length === 1 ? (
                 /* Only one number — show it as a static badge */
                 <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border font-mono text-sm ${isDark ? "bg-green-500/10 border-green-500/30 text-green-300"
-                    : "bg-green-50 border-green-200 text-green-700"
+                  : "bg-green-50 border-green-200 text-green-700"
                   }`}>
                   <FaWhatsapp />
                   {phoneOptions[0].label}
@@ -2287,12 +2307,12 @@ function WhatsAppSendModal({
                   {phoneOptions.map(opt => (
                     <label key={opt.value}
                       className={`flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-all ${selectedPhone === opt.value
-                          ? (isDark
-                            ? "bg-green-500/15 border-green-500/50 text-green-300"
-                            : "bg-green-50 border-green-400 text-green-700")
-                          : (isDark
-                            ? "bg-transparent border-[#333] text-gray-400 hover:border-green-500/30"
-                            : "bg-white border-gray-200 text-gray-500 hover:border-green-300")
+                        ? (isDark
+                          ? "bg-green-500/15 border-green-500/50 text-green-300"
+                          : "bg-green-50 border-green-400 text-green-700")
+                        : (isDark
+                          ? "bg-transparent border-[#333] text-gray-400 hover:border-green-500/30"
+                          : "bg-white border-gray-200 text-gray-500 hover:border-green-300")
                         }`}>
                       <input
                         type="radio"
@@ -2322,8 +2342,8 @@ function WhatsAppSendModal({
                 rows={6}
                 placeholder="Type your message here..."
                 className={`w-full rounded-xl px-4 py-3 text-sm outline-none resize-none leading-relaxed border-2 transition-colors custom-scrollbar ${isDark
-                    ? "bg-[#14141B] border-green-500/30 text-white focus:border-green-500"
-                    : "bg-white border-green-200 text-[#1A1A1A] focus:border-green-500"
+                  ? "bg-[#14141B] border-green-500/30 text-white focus:border-green-500"
+                  : "bg-white border-green-200 text-[#1A1A1A] focus:border-green-500"
                   }`}
               />
             </div>
@@ -2338,8 +2358,8 @@ function WhatsAppSendModal({
             <button type="submit"
               disabled={isSending || !message.trim() || !selectedPhone}
               className={`px-8 py-2.5 rounded-lg font-bold transition-colors flex items-center gap-2 ${isSending || !message.trim() || !selectedPhone
-                  ? "opacity-50 cursor-not-allowed bg-green-600/40 text-white"
-                  : "cursor-pointer bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-600/20"
+                ? "opacity-50 cursor-not-allowed bg-green-600/40 text-white"
+                : "cursor-pointer bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-600/20"
                 }`}>
               {isSending ? "Opening..." : <><FaWhatsapp /> Open WhatsApp</>}
             </button>
@@ -5844,8 +5864,8 @@ function SiteVisitCenter({
   const EmptyState = ({ msg }: { msg: string }) => (
     <div
       className={`mt-2 rounded-xl border py-6 text-center ${isDark
-          ? "border-[#2a2a2a] bg-[#161616]"
-          : "border-indigo-100 bg-white"
+        ? "border-[#2a2a2a] bg-[#161616]"
+        : "border-indigo-100 bg-white"
         }`}
     >
       <p className="text-2xl mb-1">📭</p>
@@ -5862,8 +5882,8 @@ function SiteVisitCenter({
       {/* ── Module header ─────────────────────────────────────────────────── */}
       <div
         className={`px-5 py-4 border-b flex items-center justify-between ${isDark
-            ? "bg-[#1a1a1a] border-[#2a2a2a]"
-            : "bg-white border-indigo-100"
+          ? "bg-[#1a1a1a] border-[#2a2a2a]"
+          : "bg-white border-indigo-100"
           }`}
       >
         <h3 className={`font-bold text-sm flex items-center gap-2 ${theme.text}`}>
@@ -5872,8 +5892,8 @@ function SiteVisitCenter({
         <div className="flex items-center gap-2">
           <span
             className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${isDark
-                ? "text-orange-400 border-orange-500/30 bg-orange-500/10"
-                : "text-orange-600 border-orange-200 bg-orange-50"
+              ? "text-orange-400 border-orange-500/30 bg-orange-500/10"
+              : "text-orange-600 border-orange-200 bg-orange-50"
               }`}
           >
             {data.siteVisitsToday.length + (data.siteVisitsTomorrow ?? []).length} total
@@ -5952,12 +5972,12 @@ function SiteVisitCenter({
                           setExpandedVisitLeadId(isOpen ? null : v.lead_id)
                         }
                         className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition-all cursor-pointer ${isOpen
-                            ? isDark
-                              ? "bg-orange-600/20 border-orange-500/40 text-orange-400"
-                              : "bg-orange-50 border-orange-300 text-orange-600"
-                            : isDark
-                              ? "bg-[#222] border-[#333] text-gray-400 hover:bg-[#2a2a2a]"
-                              : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
+                          ? isDark
+                            ? "bg-orange-600/20 border-orange-500/40 text-orange-400"
+                            : "bg-orange-50 border-orange-300 text-orange-600"
+                          : isDark
+                            ? "bg-[#222] border-[#333] text-gray-400 hover:bg-[#2a2a2a]"
+                            : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
                           }`}
                       >
                         {isOpen ? "▲ Hide" : "▼ Manage"}
@@ -6112,15 +6132,15 @@ function SiteVisitCenter({
               <div
                 key={a.id}
                 className={`relative pl-8 pr-4 py-3 rounded-xl border transition-colors ${isDark
-                    ? "bg-[#1a1a1a] border-[#2a2a2a] hover:bg-[#1e1e1e]"
-                    : "bg-white border-indigo-100 hover:bg-indigo-50/40"
+                  ? "bg-[#1a1a1a] border-[#2a2a2a] hover:bg-[#1e1e1e]"
+                  : "bg-white border-indigo-100 hover:bg-indigo-50/40"
                   }`}
               >
                 {/* timeline dot */}
                 <div
                   className={`absolute left-3 top-4 w-2 h-2 rounded-full border-2 ${isDark
-                      ? "bg-purple-500 border-purple-400"
-                      : "bg-purple-500 border-purple-300"
+                    ? "bg-purple-500 border-purple-400"
+                    : "bg-purple-500 border-purple-300"
                     }`}
                 />
                 {/* vertical line except last */}
@@ -6342,8 +6362,8 @@ function DailyMonitoringPanel({
             {alertCount > 0 && (
               <span
                 className={`text-xs font-bold px-3 py-1.5 rounded-full border flex items-center gap-1.5 ${isDark
-                    ? "text-red-400 border-red-500/30 bg-red-500/10"
-                    : "text-red-700 border-red-200 bg-red-50"
+                  ? "text-red-400 border-red-500/30 bg-red-500/10"
+                  : "text-red-700 border-red-200 bg-red-50"
                   }`}
               >
                 🚨 {alertCount} no activity
@@ -6352,8 +6372,8 @@ function DailyMonitoringPanel({
             {highPending > 0 && (
               <span
                 className={`text-xs font-bold px-3 py-1.5 rounded-full border flex items-center gap-1.5 ${isDark
-                    ? "text-yellow-400 border-yellow-500/30 bg-yellow-500/10"
-                    : "text-yellow-700 border-yellow-200 bg-yellow-50"
+                  ? "text-yellow-400 border-yellow-500/30 bg-yellow-500/10"
+                  : "text-yellow-700 border-yellow-200 bg-yellow-50"
                   }`}
               >
                 ⚠️ {highPending} high pending
@@ -6362,8 +6382,8 @@ function DailyMonitoringPanel({
             <button
               onClick={fetchStats}
               className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-colors ${isDark
-                  ? "bg-[#222] border-[#333] text-white hover:bg-[#333]"
-                  : "bg-white border-indigo-200 text-[#9E217B] hover:bg-[#F8FAFC]"
+                ? "bg-[#222] border-[#333] text-white hover:bg-[#333]"
+                : "bg-white border-indigo-200 text-[#9E217B] hover:bg-[#F8FAFC]"
                 }`}
             >
               ↻ Refresh
@@ -6378,9 +6398,9 @@ function DailyMonitoringPanel({
               key={tab.key}
               onClick={() => setActiveTab(tab.key as any)}
               className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeTab === tab.key
-                  ? "bg-[#9E217B] text-white shadow-md"
-                  : `${theme.textMuted} ${isDark ? "hover:bg-[#222]" : "hover:bg-[#F1F5F9]"
-                  }`
+                ? "bg-[#9E217B] text-white shadow-md"
+                : `${theme.textMuted} ${isDark ? "hover:bg-[#222]" : "hover:bg-[#F1F5F9]"
+                }`
                 }`}
             >
               {tab.label}
@@ -6431,8 +6451,8 @@ function DailyMonitoringPanel({
                 </h3>
                 <span
                   className={`text-xs px-2 py-0.5 rounded-full border font-bold ${isDark
-                      ? "text-green-400 border-green-500/30 bg-green-500/10"
-                      : "text-green-700 border-green-200 bg-green-50"
+                    ? "text-green-400 border-green-500/30 bg-green-500/10"
+                    : "text-green-700 border-green-200 bg-green-50"
                     }`}
                 >
                   🟢 Live
@@ -6469,10 +6489,10 @@ function DailyMonitoringPanel({
                           <tr
                             key={s.name}
                             className={`transition-colors ${theme.tableRow} ${hasNoActivity
-                                ? isDark
-                                  ? "bg-red-500/5"
-                                  : "bg-red-50/50"
-                                : ""
+                              ? isDark
+                                ? "bg-red-500/5"
+                                : "bg-red-50/50"
+                              : ""
                               }`}
                           >
                             <td className={`px-4 py-3 text-xs font-bold ${theme.textFaint}`}>{i + 1}</td>
@@ -6494,10 +6514,10 @@ function DailyMonitoringPanel({
                             <td className="px-4 py-3">
                               <span
                                 className={`text-xs font-bold px-2 py-0.5 rounded-full border ${s.remainingToday === 0
-                                    ? isDark ? "text-green-400 border-green-500/30 bg-green-500/10" : "text-green-700 border-green-200 bg-green-50"
-                                    : isHighPending
-                                      ? isDark ? "text-red-400 border-red-500/30 bg-red-500/10" : "text-red-700 border-red-200 bg-red-50"
-                                      : isDark ? "text-yellow-400 border-yellow-500/30 bg-yellow-500/10" : "text-yellow-700 border-yellow-200 bg-yellow-50"
+                                  ? isDark ? "text-green-400 border-green-500/30 bg-green-500/10" : "text-green-700 border-green-200 bg-green-50"
+                                  : isHighPending
+                                    ? isDark ? "text-red-400 border-red-500/30 bg-red-500/10" : "text-red-700 border-red-200 bg-red-50"
+                                    : isDark ? "text-yellow-400 border-yellow-500/30 bg-yellow-500/10" : "text-yellow-700 border-yellow-200 bg-yellow-50"
                                   }`}
                               >
                                 {s.remainingToday}
@@ -6817,8 +6837,8 @@ function SiteVisitScheduler({
           <button
             onClick={() => { setEditVisit(null); setVisitDate(""); setVisitNotes(""); setShowModal(true); }}
             className={`text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer transition-colors ${visits.length === 0
-                ? (isDark ? "bg-orange-600 hover:bg-orange-500 text-white" : "bg-orange-500 hover:bg-orange-400 text-white")
-                : (isDark ? "bg-orange-600/20 hover:bg-orange-600 border border-orange-500/30 text-orange-400 hover:text-white" : "bg-orange-50 hover:bg-orange-500 border border-orange-300 text-orange-600 hover:text-white")
+              ? (isDark ? "bg-orange-600 hover:bg-orange-500 text-white" : "bg-orange-500 hover:bg-orange-400 text-white")
+              : (isDark ? "bg-orange-600/20 hover:bg-orange-600 border border-orange-500/30 text-orange-400 hover:text-white" : "bg-orange-50 hover:bg-orange-500 border border-orange-300 text-orange-600 hover:text-white")
               }`}
           >
             <FaCalendarAlt className="text-[10px]" />
@@ -6836,8 +6856,8 @@ function SiteVisitScheduler({
             {visits.map((v: any, i: number) => (
               <div key={v.id} className="relative">
                 <div className={`absolute -left-5 top-1 w-2.5 h-2.5 rounded-full border-2 ${v.status === "completed" ? "bg-green-500 border-green-400" :
-                    v.status === "cancelled" ? "bg-red-500 border-red-400" :
-                      "bg-yellow-500 border-yellow-400"
+                  v.status === "cancelled" ? "bg-red-500 border-red-400" :
+                    "bg-yellow-500 border-yellow-400"
                   }`} />
 
                 <div className={`rounded-xl p-3 border ${isDark ? "bg-[#222] border-[#333]" : "bg-[#F8FAFC] border-indigo-100"}`}>
@@ -6926,8 +6946,8 @@ function SiteVisitScheduler({
                 </button>
                 <button type="submit" disabled={isSaving || !visitDate}
                   className={`flex-1 py-2.5 rounded-lg font-bold transition-colors flex items-center justify-center gap-2 ${isSaving || !visitDate
-                      ? "bg-gray-400 text-white cursor-not-allowed"
-                      : (isDark ? "bg-orange-600 hover:bg-orange-500 text-white" : "bg-orange-500 hover:bg-orange-400 text-white")
+                    ? "bg-gray-400 text-white cursor-not-allowed"
+                    : (isDark ? "bg-orange-600 hover:bg-orange-500 text-white" : "bg-orange-500 hover:bg-orange-400 text-white")
                     }`}>
                   {isSaving ? "Saving..." : editVisit ? "Reschedule" : "Schedule"}
                 </button>

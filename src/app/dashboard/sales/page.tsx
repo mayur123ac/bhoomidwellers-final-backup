@@ -204,7 +204,7 @@ function useAdminData() {
       if (resUsers.ok) { const json = await resUsers.json(); smData = json.data || []; }
 
       let pgLeads: any[] = [];
-      const resLeads = await fetch("/api/walkin_enquiries");
+      const resLeads = await fetch("/api/walkin_enquiries?limit=1000&offset=0");
       if (resLeads.ok) { const json = await resLeads.json(); pgLeads = Array.isArray(json.data) ? json.data : []; }
 
       let mongoFollowUps: any[] = [];
@@ -364,7 +364,7 @@ export default function SalesDashboard() {
           })
           .catch(console.error);
 
-        if (parsedUser.role?.toLowerCase() !== "sales manager" && parsedUser.role?.toLowerCase() !== "admin")
+        if (!(["sales manager", "admin", "site_head", "site head"].includes(parsedUser.role?.toLowerCase())))
           router.replace("/dashboard");
       } catch { router.replace("/"); }
     } else { router.replace("/"); }
@@ -957,7 +957,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
       setToastMsg({ title: `🎉 ${selectedLead.name} marked as Closing!`, icon: <FaHandshake />, color: "green" });
       setTimeout(() => setToastMsg(null), 3500);
       refetch();
-    } catch (e) { console.log(e); }
+    } catch (e) { console.error("[Mark Closing]", e); }
   };
 
   const openLostLeadModal = () => {

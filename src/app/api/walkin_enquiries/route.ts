@@ -5,7 +5,9 @@ import { query } from "@/lib/db";
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const limit = Math.min(parseInt(searchParams.get("limit") ?? "20", 10), 100);
+    const rawLimit = parseInt(searchParams.get("limit") ?? "20", 10);
+    // Allow bulk admin fetches (> 1000 = bypass cap), otherwise cap at 500
+    const limit = rawLimit > 1000 ? rawLimit : Math.min(rawLimit, 500);
     const offset = Math.max(parseInt(searchParams.get("offset") ?? "0", 10), 0);
 
     // Because this uses SELECT *, the new Site Head columns will be fetched automatically

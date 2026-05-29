@@ -9,10 +9,6 @@ export async function GET() {
     const { AccessToken } = twilio.jwt;
     const { VoiceGrant } = AccessToken;
 
-    console.log("[token] SID:", process.env.TWILIO_ACCOUNT_SID?.slice(0, 5));
-    console.log("[token] KEY:", process.env.TWILIO_API_KEY?.slice(0, 5));
-    console.log("[token] APP:", process.env.TWILIO_TWIML_APP_SID?.slice(0, 5));
-
     const token = new AccessToken(
       process.env.TWILIO_ACCOUNT_SID!,
       process.env.TWILIO_API_KEY!,
@@ -26,7 +22,6 @@ export async function GET() {
     }));
 
     const jwt = token.toJwt();
-    console.log("[token] Generated JWT (first 30):", jwt.slice(0, 30));
 
     return NextResponse.json({ token: jwt });
 

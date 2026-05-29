@@ -481,78 +481,8 @@ export default function ReceptionistDashboard() {
   // EFFECTS
   // ─────────────────────────────────────────────────────────────────────────
   // ── Notification Queue & History Handler ──
-  useEffect(() => {
-    if (isFetchingEnquiries || enquiries.length === 0) return;
-
-    const checkNotifs = () => {
-      const storedIds = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("crm_shown_notif_ids") || "[]") : [];
-      const seenSet = new Set(storedIds);
-      const fresh: CrmNotif[] = [];
-      const history: (CrmNotif & { rawDate: number })[] = [];
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-
-      mergedLeads.forEach((lead: any) => {
-        const formattedId = String(lead.id).padStart(3, '0');
-
-        // 1. New Lead Notification (Entered by anyone, 1-Day Expiry)
-        const createdDate = new Date(lead.created_at || 0);
-        createdDate.setHours(0, 0, 0, 0);
-        const createdDiffDays = (today.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24);
-
-        if (createdDiffDays <= 1) {
-          const leadNotif = {
-            id: `lead_${lead.id}`,
-            line1: `New Lead · ${formattedId} - ${lead.name}`,
-            line2: lead.assigned_receptionist ? `Entered by ${lead.assigned_receptionist} (Receptionist)` : `Entered by ${lead.assignedTo} (Manager)`,
-            type: "lead" as const
-          };
-          history.push({ ...leadNotif, id: `hist_lead_${lead.id}`, rawDate: new Date(lead.created_at || 0).getTime() });
-          if (!seenSet.has(leadNotif.id)) {
-            fresh.push(leadNotif);
-            seenSet.add(leadNotif.id);
-          }
-        }
-
-        // 2. Site Visit Notification (For Receptionist's leads, 2 days before, 3 days duration)
-        if (lead.mongoVisitDate && (lead.assignedReceptionist === user.name || lead.assigned_to === user.name)) {
-          const visitDateObj = new Date(lead.mongoVisitDate);
-          visitDateObj.setHours(0, 0, 0, 0);
-          const diffDays = (visitDateObj.getTime() - today.getTime()) / (1000 * 60 * 60 * 24);
-
-          // Trigger if visit is within 2 days from now, and keep in history for 3 days total
-          if (diffDays >= -3 && diffDays <= 2) {
-            const visitDate = new Date(lead.mongoVisitDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
-
-            // Determine Role
-            const isSiteHead = siteHeads.some((sh: any) => sh.name === lead.assignedTo);
-            const role = isSiteHead ? "Site Head" : "Manager";
-
-            const visitNotif = {
-              id: `visit_${lead.id}_${lead.mongoVisitDate}`,
-              line1: `Site Visit · ${visitDate}`,
-              line2: `${lead.assignedTo} (${role}) - ${lead.name}`,
-              type: "visit" as const
-            };
-            history.push({ ...visitNotif, id: `hist_visit_${lead.id}`, rawDate: new Date(lead.mongoVisitDate).getTime() });
-            if (!seenSet.has(visitNotif.id)) {
-              fresh.push(visitNotif);
-              seenSet.add(visitNotif.id);
-            }
-          }
-        }
-      });
-
-      setNotificationHistory(history.sort((a, b) => b.rawDate - a.rawDate).slice(0, 20));
-      if (fresh.length > 0) {
-        setNotifQueue(prev => [...prev, ...fresh]);
-        setNotifCount(c => c + fresh.length);
-        localStorage.setItem("crm_shown_notif_ids", JSON.stringify(Array.from(seenSet)));
-      }
-    };
-
-    checkNotifs();
-  }, [user.name, siteHeads]);
+  // NOTE: The primary handler is below at the second useEffect (with [enquiries, user.name, siteHeads]).
+  // This first block was removed to prevent duplicate notifications.
 
   // Toast Display Logic (2 Seconds)
   useEffect(() => {

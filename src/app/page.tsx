@@ -38,6 +38,8 @@ export default function Login() {
           router.push("/dashboard");
         } else if (userRole === "sales manager") {
           router.push("/dashboard/sales");
+        } else if (userRole === "site_head" || userRole === "site head") {
+          router.push("/dashboard/sales"); // Site Heads use the Sales panel
         } else if (userRole === "caller") {
           router.push("/dashboard/caller");
         } else {
@@ -263,7 +265,7 @@ export default function Login() {
 
           {/* Error */}
           {error && (
-            <div className={`${theme.errorBg} border text-xs p-3 rounded-xl flex items-start animate-pulse transition-colors duration-300`}>
+            <div className={`${theme.errorBg} border text-xs p-3 rounded-xl flex items-start animate-fadeIn transition-colors duration-300`}>
               <span className="leading-relaxed">{error}</span>
             </div>
           )}

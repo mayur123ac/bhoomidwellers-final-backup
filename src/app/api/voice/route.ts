@@ -9,8 +9,6 @@ export async function POST(req: NextRequest) {
     const body = await req.formData();
     const to = body.get("To") as string;
 
-    console.log("[voice] To param received:", to); // ← add this to debug
-
     const twiml = new twilio.twiml.VoiceResponse();
 
     if (to && to.startsWith("+")) {

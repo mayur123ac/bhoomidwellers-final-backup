@@ -484,7 +484,7 @@ export default function EmployeesPage() {
     const interval = setInterval(checkNotifs, 10000);
     return () => clearInterval(interval);
   }, [siteHeads]);
-  console.log("DB:", process.env.DATABASE_URL?.slice(0, 20))
+
   // 👇 3. TRIGGER POPUP LOGIC (Exactly 2 Seconds, Duplicates Removed) 👇
   useEffect(() => {
     if (activeNotif || notifQueue.length === 0) return;
@@ -500,8 +500,6 @@ export default function EmployeesPage() {
   }, [activeSection]);
 
   const handleLogout = () => { clearCrmSession(); router.replace("/"); };
-// Temporarily add before the fetch call:
-  console.log("Submitting:", { empName, email, password: !!password, role });
   // ── Employee API ──
   // ✅ Add error feedback to fetchRoles
   const fetchRoles = async () => {
