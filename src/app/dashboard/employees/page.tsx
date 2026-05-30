@@ -17,6 +17,7 @@ import {
   FaExchangeAlt, FaEye, FaExclamationTriangle
 } from "react-icons/fa";
 import { useCallerSync } from "@/lib/hooks/useCallerSync";
+import CrmUpdatesNotification from "@/components/CrmUpdatesNotification";
 import { label } from "framer-motion/client";
 
 type RoleType = { _id: string; name: string };
@@ -233,7 +234,13 @@ const ADMIN_EMAIL = "admin@bhoomi.com";
 export default function EmployeesPage() {
   const router = useRouter();
 
-  const [isDark, setIsDark] = useState(false);
+  const [isDark, setIsDark] = useState(() => {
+    try {
+      return localStorage.getItem("crm_theme") === "dark";
+    } catch {
+      return false;
+    }
+  });
   const t = useMemo(() => buildTheme(isDark), [isDark]);
 
   const [activeSection, setActiveSection] = useState<"employees" | "callers">("employees");
@@ -265,6 +272,7 @@ export default function EmployeesPage() {
   const [activeNotif, setActiveNotif] = useState<CrmNotif | null>(null);
   const [notifCount, setNotifCount] = useState(0);
   const [notificationHistory, setNotificationHistory] = useState<(CrmNotif & { rawDate: number })[]>([]);
+  const [dismissedNotifIds, setDismissedNotifIds] = useState<Set<string>>(new Set());
 
   // ── Password Validation Helpers ──
   const validatePassword = (pwd: string) => {
@@ -769,7 +777,7 @@ export default function EmployeesPage() {
     { id: "receptionist", icon: FaClipboardList, label: "Receptionist", link: "/dashboard", section: null },
     { id: "sales", icon: FaUsers, label: "Sales Managers", link: "/dashboard", section: null },
     { id: "site_head", icon: FaUniversity, label: "Site Heads", link: "/dashboard", section: null },
-    { id: "monitoring",  icon: FaChartPie,      label: "Daily Monitor", link: "/dashboard",            section: null },
+    { id: "monitoring", icon: FaChartPie, label: "Daily Monitor", link: "/dashboard", section: null },
     { id: "callers", icon: FaPhoneAlt, label: "Caller Panel", link: "/dashboard/employees", section: "callers" as const },
     { id: "employees", icon: FaIdCard, label: "Add Employee", link: "/dashboard/employees", section: "employees" as const },
   ];
@@ -842,17 +850,29 @@ export default function EmployeesPage() {
               {callerSubView === "control" ? "Admin Acting as Caller" : "Admin Root"}
             </span>
           </h1>
-          <div className="flex items-center space-x-4 relative">
-            {/* ── Light / Dark Toggle ── */}
-            <button
-              onClick={() => setIsDark(!isDark)}
-              aria-label="Toggle theme"
-              className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-200 cursor-pointer hover:scale-105 active:scale-95 shadow-sm border ${t.toggleBtn}`}
-            >
+          <div className="flex items-center gap-6">
+            <button onClick={() => {
+              const next = !isDark;
+              setIsDark(next);
+              try {
+                localStorage.setItem("crm_theme", next ? "dark" : "light");
+              } catch { }
+            }} aria-label="Toggle theme"
+              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center cursor-pointer justify-center shadow-sm ${t.toggleBtn}`}>
               {isDark ? <SunIcon /> : <MoonIcon />}
             </button>
 
-            {/* 👇 NOTIFICATION BELL & DROPDOWN 👇 */}
+            {/* System Settings Icon */}
+            {user?.role?.toLowerCase() === "admin" && (
+              <button onClick={() => router.push("/dashboard/settings")} aria-label="Settings"
+                className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center cursor-pointer justify-center shadow-sm ${t.toggleBtn}`}>
+                <FaCog className="w-5 h-5" />
+              </button>
+            )}
+
+            {/* CRM System Updates */}
+            <CrmUpdatesNotification user={user} theme={t} isDark={isDark} />
+
             <div className="relative">
               <div className="relative cursor-pointer" onClick={() => { setIsNotifOpen(!isNotifOpen); setIsProfileOpen(false); setNotifCount(0); }}>
                 <FaBell className={`${t.textMuted} hover:text-[#9E217B] transition-colors w-5 h-5`} />
@@ -872,11 +892,11 @@ export default function EmployeesPage() {
                     <button onClick={() => setIsNotifOpen(false)} className={`${t.textMuted} hover:text-red-500`}><FaTimes className="text-xs" /></button>
                   </div>
                   <div className={`max-h-[360px] overflow-y-auto ${t.scroll}`}>
-                    {notificationHistory.length === 0 ? (
+                    {notificationHistory.filter(n => !dismissedNotifIds.has(n.id)).length === 0 ? (
                       <p className={`p-6 text-center text-xs ${t.textMuted}`}>No notifications yet.</p>
                     ) : (
-                      notificationHistory.map((n) => (
-                        <div key={n.id} className={`p-4 border-b last:border-b-0 transition-colors flex items-start gap-3 ${isDark ? "hover:bg-white/5 border-[#333]" : "hover:bg-black/5 border-[#E5E7EB]"}`}>
+                      notificationHistory.filter(n => !dismissedNotifIds.has(n.id)).map((n) => (
+                        <div key={n.id} className={`p-4 border-b last:border-b-0 transition-colors flex items-start gap-3 relative group ${isDark ? "hover:bg-white/5 border-[#333]" : "hover:bg-black/5 border-[#E5E7EB]"}`}>
                           <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-white ${n.type === "visit" ? "bg-orange-500" : "bg-[#25D366]"}`}>
                             {n.type === "visit" ? <FaCalendarAlt className="text-[12px]" /> : <FaBriefcase className="text-[12px]" />}
                           </div>
@@ -884,6 +904,16 @@ export default function EmployeesPage() {
                             <p className={`text-xs font-bold ${t.text}`}>{n.line1}</p>
                             <p className={`text-[10px] mt-1 ${t.textMuted}`}>{n.line2}</p>
                           </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDismissedNotifIds(prev => new Set([...prev, n.id]));
+                            }}
+                            className={`absolute right-3 top-3 p-1.5 rounded-md opacity-0 group-hover:opacity-100 transition-all ${t.textMuted} hover:bg-red-500/10 hover:text-red-500 cursor-pointer`}
+                            title="Delete Notification"
+                          >
+                            <FaTimes className="text-[10px]" />
+                          </button>
                         </div>
                       ))
                     )}
@@ -892,29 +922,28 @@ export default function EmployeesPage() {
               )}
             </div>
 
-            {/* ── PROFILE BUTTON & DROPDOWN ── */}
             <div className="relative">
               <div onClick={() => { setIsProfileOpen(!isProfileOpen); setIsNotifOpen(false); }}
-                className={`w-9 h-9 rounded-full border flex items-center justify-center font-bold text-sm cursor-pointer transition-colors
-                  ${isDark ? "bg-[#9E217B]/20 text-[#d946a8] border-[#9E217B]/50 hover:bg-[#9E217B]/30" : "bg-[#9E217B]/10 text-[#9E217B] border-[#9E217B]/40 hover:bg-[#9E217B]/20"}`}>
+                className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm cursor-pointer shadow-sm hover:opacity-80 transition-opacity border
+                  ${isDark ? "border-[#9E217B]/40 text-[#d946a8] bg-[#9E217B]/15" : "border-[#9E217B]/40 text-[#9E217B] bg-[#9E217B]/10"}`}>
                 {String(user?.name || "A").charAt(0).toUpperCase()}
               </div>
               {isProfileOpen && (
                 <div className={`absolute top-12 right-0 w-64 border rounded-xl shadow-2xl p-5 z-50 animate-fadeIn ${t.dropdown}`}>
                   <div className="mb-4">
                     <h3 className={`font-bold text-lg ${t.text}`}>{user?.name || "Admin"}</h3>
-                    <p className={`text-sm truncate ${t.textMuted}`}>{user?.email}</p>
+                    <p className={`text-sm truncate ${t.textMuted}`}>{user?.email || "admin@bhoomi.com"}</p>
                   </div>
                   <hr className={`mb-4 ${t.innerBorder}`} />
                   <div className="space-y-4 mb-6 text-sm">
                     <p className={`flex justify-between items-center ${t.textMuted}`}>Role:
-                      <span className={`font-bold capitalize px-2 py-0.5 rounded border ${t.profileRole}`}>{user?.role}</span>
+                      <span className={`font-bold capitalize px-2 py-0.5 rounded border ${isDark ? "text-[#d946a8] bg-[#9E217B]/10 border-[#9E217B]/30" : "text-[#9E217B] bg-[#9E217B]/10 border-[#9E217B]/30"}`}>{user?.role || "Admin"}</span>
                     </p>
                     <div>
                       <p className={`text-xs mb-1 ${t.textMuted}`}>Password</p>
                       <div className={`flex items-center justify-between border p-2 rounded-md ${t.dropdownInner}`}>
-                        <span className={`font-mono tracking-widest text-xs ${t.text}`}>{showPassword ? user?.password : "••••••••"}</span>
-                        <button onClick={() => setShowPassword(!showPassword)} className={`${t.textMuted} hover:text-[#9E217B] cursor-pointer`}>
+                        <span className={`font-mono tracking-widest text-xs ${t.text}`}>{showPassword ? (user?.password || "N/A") : "••••••••"}</span>
+                        <button onClick={() => setShowPassword(!showPassword)} className={`${t.textMuted} cursor-pointer`}>
                           {showPassword ? <FaEyeSlash /> : <FaEye />}
                         </button>
                       </div>
@@ -1769,8 +1798,8 @@ export default function EmployeesPage() {
             exit={{ opacity: 0, y: 30 }}
             className={`fixed bottom-6 right-6 z-[9999] px-5 py-3 rounded-xl shadow-2xl border text-sm font-semibold flex items-center gap-2 max-w-md
               ${toastMsg.startsWith("✅") ? isDark ? "bg-green-500/10 border-green-500/30 text-green-400" : "bg-green-50 border-green-200 text-green-700"
-              : toastMsg.startsWith("ℹ️") ? isDark ? "bg-blue-500/10 border-blue-500/30 text-blue-400" : "bg-blue-50 border-blue-200 text-blue-700"
-              : isDark ? "bg-red-500/10 border-red-500/30 text-red-400" : "bg-red-50 border-red-200 text-red-700"}`}
+                : toastMsg.startsWith("ℹ️") ? isDark ? "bg-blue-500/10 border-blue-500/30 text-blue-400" : "bg-blue-50 border-blue-200 text-blue-700"
+                  : isDark ? "bg-red-500/10 border-red-500/30 text-red-400" : "bg-red-50 border-red-200 text-red-700"}`}
           >
             {toastMsg}
             <button onClick={() => setToastMsg(null)} className="ml-2 opacity-60 hover:opacity-100 cursor-pointer"><FaTimes className="text-xs" /></button>

@@ -29,6 +29,7 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
 /* ==========================================================================
    CUSTOM SCROLLBAR DESIGNS
    ========================================================================== */
@@ -39,18 +40,23 @@ body {
   width: 6px;
   height: 6px;
 }
+
 .scrollbar-light::-webkit-scrollbar-track,
 .custom-scrollbar::-webkit-scrollbar-track {
   background: transparent;
 }
+
 .scrollbar-light::-webkit-scrollbar-thumb,
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background-color: #d1d5db; /* gray-300 */
+  background-color: #d1d5db;
+  /* gray-300 */
   border-radius: 10px;
 }
+
 .scrollbar-light::-webkit-scrollbar-thumb:hover,
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background-color: #9E217B; /* Magenta Accent */
+  background-color: #9E217B;
+  /* Magenta Accent */
 }
 
 /* --- DARK MODE SCROLLBAR --- */
@@ -58,22 +64,28 @@ body {
   width: 6px;
   height: 6px;
 }
+
 .scrollbar-dark::-webkit-scrollbar-track {
   background: transparent;
 }
+
 .scrollbar-dark::-webkit-scrollbar-thumb {
-  background-color: #333333; 
+  background-color: #333333;
   border-radius: 10px;
 }
+
 .scrollbar-dark::-webkit-scrollbar-thumb:hover {
-  background-color: #d946a8; /* Lighter Magenta Accent for Dark Mode */
+  background-color: #d946a8;
+  /* Lighter Magenta Accent for Dark Mode */
 }
 
 /* Firefox compatibility */
-.scrollbar-light, .custom-scrollbar {
+.scrollbar-light,
+.custom-scrollbar {
   scrollbar-width: thin;
   scrollbar-color: #d1d5db transparent;
 }
+
 .scrollbar-dark {
   scrollbar-width: thin;
   scrollbar-color: #333333 transparent;
@@ -82,6 +94,7 @@ body {
 .scroll-on-left {
   direction: rtl;
 }
-.scroll-on-left > * {
+
+.scroll-on-left>* {
   direction: ltr;
 }

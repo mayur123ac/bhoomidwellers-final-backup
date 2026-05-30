@@ -368,12 +368,19 @@ export default function AdminAtlasDashboard() {
   const router = useRouter();
   const [activeView, setActiveView] = useState("dashboard");
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
+  const [dismissedNotifIds, setDismissedNotifIds] = useState<Set<string>>(new Set());
   const [user, setUser] = useState<any>({ name: "Admin", role: "Admin", email: "", password: "" });
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [isDark, setIsDark] = useState(false);
+  const [isDark, setIsDark] = useState(() => {
+    try {
+      return localStorage.getItem("crm_theme") === "dark";
+    } catch {
+      return false;
+    }
+  });
 
   type CrmNotif = { id: string; line1: string; line2: string; type: "lead" | "visit" };
 
@@ -448,10 +455,14 @@ export default function AdminAtlasDashboard() {
             rawDate: new Date(lead.mongoVisitDate).getTime(),
           });
         }
+
       }
     });
-    return history.sort((a, b) => b.rawDate - a.rawDate).slice(0, 20);
-  }, [allLeads, siteHeads, receptionists]); // Added receptionists here
+    return history
+      .sort((a, b) => b.rawDate - a.rawDate)
+      .slice(0, 20)
+      .filter(n => !dismissedNotifIds.has(n.id)); // add this line
+  }, [allLeads, siteHeads, receptionists, dismissedNotifIds]); // Added receptionists here
   // ── Load User & Fetch Live Password ──
   useEffect(() => {
     const cleanupBackGuard = installLoggedOutBackGuard(() => router.replace("/"));
@@ -596,23 +607,23 @@ export default function AdminAtlasDashboard() {
     { id: "receptionist", icon: FaClipboardList, label: "Receptionist" },
     { id: "sales", icon: FaUsers, label: "Sales Managers" },
     { id: "site_head", icon: FaUniversity, label: "Site Heads" },
-    { id: "monitoring", icon: FaChartPie, label: "Daily Monitor" }, 
+    { id: "monitoring", icon: FaChartPie, label: "Daily Monitor" },
     { id: "caller", icon: FaPhoneAlt, label: "Caller Panel" },
     { id: "employees", icon: FaIdCard, label: "Add Employee" },
   ].filter(item => {
     if (isAdmin) return true;
-    
+
     // Non-admin roles should only see what's allowed.
     // Site head cannot see caller or employees panel
     if (isSiteHead && (item.id === "caller" || item.id === "employees")) {
       return false;
     }
-    
+
     // Other non-admin roles logic can be added here
     if (!isAdmin && (item.id === "employees" || item.id === "settings")) {
       return false;
     }
-    
+
     return true;
   });
 
@@ -679,7 +690,13 @@ export default function AdminAtlasDashboard() {
           </h1>
 
           <div className="flex items-center gap-6">
-            <button onClick={() => setIsDark(!isDark)} aria-label="Toggle theme"
+            <button onClick={() => {
+              const next = !isDark;
+              setIsDark(next);
+              try {
+                localStorage.setItem("crm_theme", next ? "dark" : "light");
+              } catch { }
+            }} aria-label="Toggle theme"
               className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center cursor-pointer justify-center shadow-sm ${theme.toggleWrap}`}>
               {isDark ? <SunIcon /> : <MoonIcon />}
             </button>
@@ -726,6 +743,16 @@ export default function AdminAtlasDashboard() {
                             <p className={`text-xs font-bold ${theme.text}`}>{n.line1}</p>
                             <p className={`text-[10px] mt-1 ${theme.textMuted}`}>{n.line2}</p>
                           </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDismissedNotifIds(prev => new Set([...prev, n.id]));
+                            }}
+                            className={`absolute right-3 top-3 p-1.5 rounded-md opacity-0 group-hover:opacity-100 transition-all ${theme.textMuted} hover:bg-red-500/10 hover:text-red-500 cursor-pointer`}
+                            title="Delete Notification"
+                          >
+                            <FaTimes className="text-[10px]" />
+                          </button>
                         </div>
                       ))
                     )}

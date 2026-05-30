@@ -244,12 +244,12 @@ function WhatsAppSettingsCard({ user, setUser, isDark, t }: {
           onClick={handleSave}
           disabled={saving || !input.trim()}
           className={`mt-5 px-5 py-3 rounded-lg font-bold text-sm transition-all ${saved
-              ? "bg-green-600 text-white"
-              : saving || !input.trim()
-                ? "opacity-50 cursor-not-allowed bg-gray-400 text-white"
-                : (isDark
-                  ? "bg-[#9E217B] hover:bg-[#b8268f] text-white"
-                  : "bg-[#00AEEF] hover:bg-[#0099d4] text-white")
+            ? "bg-green-600 text-white"
+            : saving || !input.trim()
+              ? "opacity-50 cursor-not-allowed bg-gray-400 text-white"
+              : (isDark
+                ? "bg-[#9E217B] hover:bg-[#b8268f] text-white"
+                : "bg-[#00AEEF] hover:bg-[#0099d4] text-white")
             }`}
         >
           {saved ? "✓ Saved" : saving ? "Saving..." : "Save"}
@@ -2303,9 +2303,9 @@ export default function ReceptionistDashboard() {
                         return (
                           <div key={lead.id} onClick={() => { setSelectedLead(lead); setAssignedSubView("detail"); setDetailTab("personal"); setShowSalesForm(false); setShowLoanForm(false); }}
                             className={`rounded-2xl p-6 border shadow-sm cursor-pointer group flex flex-col justify-between transition-all duration-300 ${isLost ? t.cardLost :
-                                isClosing ? `${isDark ? "bg-yellow-900/10 border-yellow-500/30" : "bg-amber-50 border-amber-200"} hover:-translate-y-1.5 hover:scale-[1.02] hover:border-yellow-400/60 hover:shadow-xl`
-                                  : isNGD ? t.cardNGD
-                                    : t.card
+                              isClosing ? `${isDark ? "bg-yellow-900/10 border-yellow-500/30" : "bg-amber-50 border-amber-200"} hover:-translate-y-1.5 hover:scale-[1.02] hover:border-yellow-400/60 hover:shadow-xl`
+                                : isNGD ? t.cardNGD
+                                  : t.card
                               }`} style={t.cardGlass}>
                             <div>
                               <div className={`flex justify-between items-start mb-5 pb-4 border-b ${t.tableBorder}`}>
@@ -2313,9 +2313,9 @@ export default function ReceptionistDashboard() {
                                   <span className={`mr-2 transition-colors ${isDark ? "text-[#d4006e]" : "text-[#00AEEF] group-hover:text-[#9E217B]"}`}>#{lead.id}</span>{lead.name}
                                 </h3>
                                 <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border flex-shrink-0 ${isLost ? t.statusLost :
-                                    isNGD ? t.statusNGD :
-                                      isClosing ? t.statusClosing :
-                                        lead.status === "Visit Scheduled" ? t.statusVisit : t.statusRouted
+                                  isNGD ? t.statusNGD :
+                                    isClosing ? t.statusClosing :
+                                      lead.status === "Visit Scheduled" ? t.statusVisit : t.statusRouted
                                   }`}>{isLost ? "LOST LEAD" : isNGD ? "NON GENUINE DEMAND" : (lead.status || "ROUTED")}</span>
                               </div>
 
@@ -3113,11 +3113,13 @@ export default function ReceptionistDashboard() {
                     </div>
                     <div>
                       <label className={`block text-xs mb-1.5 font-medium pl-2 ${t.textMuted}`}>Configuration (BHK)</label>
-                      <select value={enquiryForm.configuration} onChange={e => setEnquiryForm({ ...enquiryForm, configuration: e.target.value })}
-                        className={`w-full rounded-lg p-3 text-sm outline-none transition-colors border cursor-pointer ${t.modalInput} ${t.text}`}>
-                        <option value="" disabled>Select…</option>
-                        {["1 RK", "1 BHK", "2 BHK", "3 BHK", "4 BHK", "4+ BHK"].map(o => <option key={o} value={o}>{o}</option>)}
-                      </select>
+                      <input
+                        type="text"
+                        value={enquiryForm.configuration}
+                        onChange={e => setEnquiryForm({ ...enquiryForm, configuration: e.target.value })}
+                        className={`w-full rounded-lg p-3 text-sm outline-none transition-colors border ${t.modalInput} ${t.text}`}
+                        placeholder="e.g. 2 BHK, 3 BHK, Studio"
+                      />
                     </div>
                     <div>
                       <label className={`block text-xs mb-1.5 font-medium pl-2 ${t.textMuted}`}>Purpose</label>
@@ -3182,8 +3184,8 @@ export default function ReceptionistDashboard() {
                               <div
                                 onClick={() => setShowManagerDropdown(prev => !prev)}
                                 className={`px-4 py-3 text-sm cursor-pointer flex items-center justify-between ${enquiryForm.assignedTo
-                                    ? isDark ? "text-white bg-purple-900/30" : "text-purple-800 bg-purple-100 font-semibold"
-                                    : isDark ? "text-gray-400" : "text-gray-400"
+                                  ? isDark ? "text-white bg-purple-900/30" : "text-purple-800 bg-purple-100 font-semibold"
+                                  : isDark ? "text-gray-400" : "text-gray-400"
                                   }`}
                               >
                                 <span>
@@ -3216,8 +3218,8 @@ export default function ReceptionistDashboard() {
                                         setShowManagerDropdown(false);  // ← closes on click
                                       }}
                                       className={`px-4 py-3 text-sm cursor-pointer border-b transition-colors ${enquiryForm.assignedTo === m.name
-                                          ? isDark ? "bg-purple-900/40 text-purple-200 font-bold" : "bg-purple-100 text-purple-800 font-bold"
-                                          : isDark ? "text-white hover:bg-[#1a1a28] border-[#2a2a35]" : "text-[#1A1A1A] hover:bg-purple-50 border-gray-100"
+                                        ? isDark ? "bg-purple-900/40 text-purple-200 font-bold" : "bg-purple-100 text-purple-800 font-bold"
+                                        : isDark ? "text-white hover:bg-[#1a1a28] border-[#2a2a35]" : "text-[#1A1A1A] hover:bg-purple-50 border-gray-100"
                                         }`}
                                     >
                                       <span className="font-semibold">{m.name}</span>
@@ -3594,8 +3596,8 @@ function SiteVisitScheduler({
           <button
             onClick={() => { setEditVisit(null); setVisitDate(""); setVisitNotes(""); setShowModal(true); }}
             className={`text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer transition-colors ${visits.length === 0
-                ? (isDark ? "bg-orange-600 hover:bg-orange-500 text-white" : "bg-orange-500 hover:bg-orange-400 text-white")
-                : (isDark ? "bg-orange-600/20 hover:bg-orange-600 border border-orange-500/30 text-orange-400 hover:text-white" : "bg-orange-50 hover:bg-orange-500 border border-orange-300 text-orange-600 hover:text-white")
+              ? (isDark ? "bg-orange-600 hover:bg-orange-500 text-white" : "bg-orange-500 hover:bg-orange-400 text-white")
+              : (isDark ? "bg-orange-600/20 hover:bg-orange-600 border border-orange-500/30 text-orange-400 hover:text-white" : "bg-orange-50 hover:bg-orange-500 border border-orange-300 text-orange-600 hover:text-white")
               }`}
           >
             <FaCalendarAlt className="text-[10px]" />
@@ -3616,8 +3618,8 @@ function SiteVisitScheduler({
               <div key={v.id} className="relative">
                 {/* Dot */}
                 <div className={`absolute -left-5 top-1 w-2.5 h-2.5 rounded-full border-2 ${v.status === "completed" ? "bg-green-500 border-green-400" :
-                    v.status === "cancelled" ? "bg-red-500 border-red-400" :
-                      "bg-yellow-500 border-yellow-400"
+                  v.status === "cancelled" ? "bg-red-500 border-red-400" :
+                    "bg-yellow-500 border-yellow-400"
                   }`} />
 
                 <div className={`rounded-xl p-3 border ${isDark ? "bg-[#222] border-[#333]" : "bg-[#F8FAFC] border-indigo-100"}`}>
@@ -3708,8 +3710,8 @@ function SiteVisitScheduler({
                 </button>
                 <button type="submit" disabled={isSaving || !visitDate}
                   className={`flex-1 py-2.5 rounded-lg font-bold transition-colors flex items-center justify-center gap-2 ${isSaving || !visitDate
-                      ? "opacity-50 cursor-not-allowed bg-orange-400 text-white"
-                      : "cursor-pointer bg-orange-500 hover:bg-orange-400 text-white shadow-lg shadow-orange-500/20"
+                    ? "opacity-50 cursor-not-allowed bg-orange-400 text-white"
+                    : "cursor-pointer bg-orange-500 hover:bg-orange-400 text-white shadow-lg shadow-orange-500/20"
                     }`}>
                   {isSaving ? "Saving..." : <><FaCalendarAlt /> {editVisit ? "Reschedule" : "Schedule"}</>}
                 </button>

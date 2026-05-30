@@ -532,8 +532,8 @@ export default function SalesDashboard() {
               <div
                 onClick={() => { setIsProfileOpen(!isProfileOpen); setShowNotifications(false); setShowVisitNotifications(false); }}
                 className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center font-bold text-sm sm:text-base cursor-pointer shadow-md hover:scale-105 transition-transform ${isDark
-                    ? "border border-purple-500/40 text-purple-400 bg-purple-500/15"
-                    : "border border-[#00AEEF]/40 bg-[#9E217B]/20 text-[#d946a8]"
+                  ? "border border-purple-500/40 text-purple-400 bg-purple-500/15"
+                  : "border border-[#00AEEF]/40 bg-[#9E217B]/20 text-[#d946a8]"
                   }`}
               >
                 <FaUserCircle className="text-lg sm:text-xl" />
@@ -1157,10 +1157,10 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
       {/* Toast */}
       {toastMsg && (
         <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[100] px-4 sm:px-6 py-3 rounded-xl shadow-lg flex items-center gap-3 sm:gap-4 animate-fadeIn border ${toastMsg.color === "green"
-            ? "bg-green-600 border-green-400 text-white"
-            : toastMsg.color === "red"
-              ? "bg-red-600 border-red-400 text-white"
-              : "bg-blue-600 border-blue-400 text-white"
+          ? "bg-green-600 border-green-400 text-white"
+          : toastMsg.color === "red"
+            ? "bg-red-600 border-red-400 text-white"
+            : "bg-blue-600 border-blue-400 text-white"
           }`}>
           <div className="text-base sm:text-lg">{toastMsg.icon}</div>
           <span className="text-xs sm:text-sm font-bold">{toastMsg.title}</span>
@@ -1176,8 +1176,8 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
               <h1 className={`text-xl sm:text-2xl md:text-3xl font-bold flex items-center flex-wrap gap-2 sm:gap-3 ${t.text}`}>
                 Hi, {String(adminUser?.name || "User").split(" ")[0]}
                 <span className={`text-xs sm:text-sm font-medium px-2 py-0.5 sm:px-3 sm:py-1 rounded-full capitalize border ${isDark
-                    ? "text-purple-400 border-purple-500/30 bg-purple-500/10"
-                    : "text-[#9E217B] bg-[#9E217B]/10 border border-[#9E217B]/20"
+                  ? "text-purple-400 border-purple-500/30 bg-purple-500/10"
+                  : "text-[#9E217B] bg-[#9E217B]/10 border border-[#9E217B]/20"
                   }`}>{adminUser.role}</span>
               </h1>
               <button
@@ -1298,12 +1298,12 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                               <td className={`px-4 py-3 sm:py-4 font-semibold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget}</td>
                               <td className="px-4 py-3 sm:py-4">
                                 <span className={`px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold uppercase border ${isLost
-                                    ? t.statusLost
-                                    : isNGD
-                                      ? t.statusNGD
-                                      : isClosed
-                                        ? (isDark ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/10" : "text-emerald-600 border-emerald-400/40 bg-emerald-50")
-                                        : lead.status === "Visit Scheduled" ? t.statusVisit : t.statusRouted
+                                  ? t.statusLost
+                                  : isNGD
+                                    ? t.statusNGD
+                                    : isClosed
+                                      ? (isDark ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/10" : "text-emerald-600 border-emerald-400/40 bg-emerald-50")
+                                      : lead.status === "Visit Scheduled" ? t.statusVisit : t.statusRouted
                                   }`}>{isLost ? "LOST" : isNGD ? "NGD" : isClosed ? "CLOSED" : (lead.status || "ROUTED")}</span>
                               </td>
                               <td className="px-4 py-3 sm:py-4">
@@ -1434,9 +1434,9 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                                 <span className={`mr-2 ${t.accentText}`}>#{lead.id}</span>{lead.name}
                               </h3>
                               <span className={`px-2 sm:px-3 py-1 rounded-full text-[9px] sm:text-[10px] font-bold uppercase tracking-wider border flex-shrink-0 whitespace-nowrap ${isLost ? t.statusLost :
-                                  isNGD ? t.statusNGD :
-                                    isClosing ? t.statusClosing :
-                                      lead.status === "Visit Scheduled" ? t.statusVisit : t.statusRouted
+                                isNGD ? t.statusNGD :
+                                  isClosing ? t.statusClosing :
+                                    lead.status === "Visit Scheduled" ? t.statusVisit : t.statusRouted
                                 }`}>{isLost ? "LOST LEAD" : isNGD ? "NGD" : isClosing ? "CLOSING" : (lead.status || "ROUTED")}</span>
                             </div>
                             {isLost && (
@@ -2055,8 +2055,8 @@ function WaModalWithPicker({ lead, adminUser, waMessage, setWaMessage, isSending
                 <p className="text-xs text-red-400">No phone number on this lead.</p>
               ) : phoneOptions.length === 1 ? (
                 <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border font-mono text-sm ${isDark
-                    ? "bg-green-500/10 border-green-500/30 text-green-300"
-                    : "bg-green-50 border-green-200 text-green-700"
+                  ? "bg-green-500/10 border-green-500/30 text-green-300"
+                  : "bg-green-50 border-green-200 text-green-700"
                   }`}>
                   <FaWhatsapp /> {phoneOptions[0].label}
                 </div>
@@ -2065,12 +2065,12 @@ function WaModalWithPicker({ lead, adminUser, waMessage, setWaMessage, isSending
                   {phoneOptions.map(opt => (
                     <label key={opt.value}
                       className={`flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-all ${selectedPhone === opt.value
-                          ? (isDark
-                            ? "bg-green-500/15 border-green-500/50 text-green-300"
-                            : "bg-green-50 border-green-400 text-green-700")
-                          : (isDark
-                            ? "bg-transparent border-[#333] text-gray-400 hover:border-green-500/30"
-                            : "bg-white border-gray-200 text-gray-500 hover:border-green-300")
+                        ? (isDark
+                          ? "bg-green-500/15 border-green-500/50 text-green-300"
+                          : "bg-green-50 border-green-400 text-green-700")
+                        : (isDark
+                          ? "bg-transparent border-[#333] text-gray-400 hover:border-green-500/30"
+                          : "bg-white border-gray-200 text-gray-500 hover:border-green-300")
                         }`}>
                       <input
                         type="radio"
@@ -2100,8 +2100,8 @@ function WaModalWithPicker({ lead, adminUser, waMessage, setWaMessage, isSending
                 rows={6}
                 placeholder="Type your message here..."
                 className={`w-full rounded-xl px-4 py-3 text-sm outline-none resize-none leading-relaxed border-2 transition-colors custom-scrollbar ${isDark
-                    ? "bg-[#14141B] border-green-500/30 text-white focus:border-green-500"
-                    : "bg-white border-green-200 text-[#1A1A1A] focus:border-green-500"
+                  ? "bg-[#14141B] border-green-500/30 text-white focus:border-green-500"
+                  : "bg-white border-green-200 text-[#1A1A1A] focus:border-green-500"
                   }`}
               />
             </div>
@@ -2116,8 +2116,8 @@ function WaModalWithPicker({ lead, adminUser, waMessage, setWaMessage, isSending
             <button type="submit"
               disabled={isSendingWa || !waMessage.trim() || !selectedPhone}
               className={`px-8 py-2.5 rounded-lg font-bold transition-colors flex items-center gap-2 ${isSendingWa || !waMessage.trim() || !selectedPhone
-                  ? "opacity-50 cursor-not-allowed bg-green-600/40 text-white"
-                  : "cursor-pointer bg-[#25D366] hover:bg-green-500 text-white shadow-lg shadow-green-600/20"
+                ? "opacity-50 cursor-not-allowed bg-green-600/40 text-white"
+                : "cursor-pointer bg-[#25D366] hover:bg-green-500 text-white shadow-lg shadow-green-600/20"
                 }`}>
               {isSendingWa ? "Opening..." : <><FaWhatsapp /> Open WhatsApp</>}
             </button>
@@ -2415,8 +2415,8 @@ function SiteVisitScheduler({
           <button
             onClick={() => { setEditVisit(null); setVisitDate(""); setVisitNotes(""); setShowModal(true); }}
             className={`text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer transition-colors ${visits.length === 0
-                ? (isDark ? "bg-orange-600 hover:bg-orange-500 text-white" : "bg-orange-500 hover:bg-orange-400 text-white")
-                : (isDark ? "bg-orange-600/20 hover:bg-orange-600 border border-orange-500/30 text-orange-400 hover:text-white" : "bg-orange-50 hover:bg-orange-500 border border-orange-300 text-orange-600 hover:text-white")
+              ? (isDark ? "bg-orange-600 hover:bg-orange-500 text-white" : "bg-orange-500 hover:bg-orange-400 text-white")
+              : (isDark ? "bg-orange-600/20 hover:bg-orange-600 border border-orange-500/30 text-orange-400 hover:text-white" : "bg-orange-50 hover:bg-orange-500 border border-orange-300 text-orange-600 hover:text-white")
               }`}
           >
             <FaCalendarAlt className="text-[10px]" />
@@ -2437,8 +2437,8 @@ function SiteVisitScheduler({
               <div key={v.id} className="relative">
                 {/* Dot */}
                 <div className={`absolute -left-5 top-1 w-2.5 h-2.5 rounded-full border-2 ${v.status === "completed" ? "bg-green-500 border-green-400" :
-                    v.status === "cancelled" ? "bg-red-500 border-red-400" :
-                      "bg-yellow-500 border-yellow-400"
+                  v.status === "cancelled" ? "bg-red-500 border-red-400" :
+                    "bg-yellow-500 border-yellow-400"
                   }`} />
 
                 <div className={`rounded-xl p-3 border ${isDark ? "bg-[#222] border-[#333]" : "bg-[#F8FAFC] border-indigo-100"}`}>
@@ -2527,8 +2527,8 @@ function SiteVisitScheduler({
                 </button>
                 <button type="submit" disabled={isSaving || !visitDate}
                   className={`flex-1 py-2.5 rounded-lg font-bold transition-colors flex items-center justify-center gap-2 ${isSaving || !visitDate
-                      ? "opacity-50 cursor-not-allowed bg-orange-400 text-white"
-                      : "cursor-pointer bg-orange-500 hover:bg-orange-400 text-white shadow-lg shadow-orange-500/20"
+                    ? "opacity-50 cursor-not-allowed bg-orange-400 text-white"
+                    : "cursor-pointer bg-orange-500 hover:bg-orange-400 text-white shadow-lg shadow-orange-500/20"
                     }`}>
                   {isSaving ? "Saving..." : <><FaCalendarAlt /> {editVisit ? "Reschedule" : "Schedule"}</>}
                 </button>
@@ -2668,8 +2668,8 @@ function SettingsView({ adminUser, isDark, t, onSaved }: {
               type="submit"
               disabled={isSaving || whatsappNumber.length < 10}
               className={`w-full font-bold py-3 rounded-xl transition-all flex items-center justify-center gap-2 ${isSaving || whatsappNumber.length < 10
-                  ? "opacity-50 cursor-not-allowed bg-green-600/40 text-white"
-                  : "bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-600/20 cursor-pointer"
+                ? "opacity-50 cursor-not-allowed bg-green-600/40 text-white"
+                : "bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-600/20 cursor-pointer"
                 }`}
             >
               <FaWhatsapp />

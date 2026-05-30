@@ -109,8 +109,8 @@ export default function CrmUpdatesNotification({ user, theme, isDark }: { user: 
                   <div
                     key={update.id}
                     className={`p-4 border-b last:border-b-0 transition-colors ${!update.has_read
-                        ? (isDark ? "bg-[#9E217B]/10 border-[#9E217B]/20" : "bg-[#9E217B]/5 border-[#9E217B]/10")
-                        : (isDark ? "hover:bg-white/5 border-[#333]" : "hover:bg-black/5 border-[#E5E7EB]")
+                      ? (isDark ? "bg-[#9E217B]/10 border-[#9E217B]/20" : "bg-[#9E217B]/5 border-[#9E217B]/10")
+                      : (isDark ? "hover:bg-white/5 border-[#333]" : "hover:bg-black/5 border-[#E5E7EB]")
                       }`}
                   >
                     <div className="flex justify-between items-start mb-2">
