@@ -1,16 +1,15 @@
 // app/api/transfer-leads/route.ts
 import { NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
+import { requireRole } from "@/lib/serverAuth";
 
 export async function POST(req: Request) {
   try {
-    const userRole = req.headers.get("x-user-role") || "";
-
-    // ── Admin-only guard ──
-    if (userRole.toLowerCase() !== "admin") {
+    const auth = await requireRole(["admin"]);
+    if (!auth.isAuthorized) {
       return NextResponse.json(
-        { success: false, message: "Access denied. Only Admin can transfer leads." },
-        { status: 403 }
+        { success: false, message: auth.error },
+        { status: auth.status }
       );
     }
 

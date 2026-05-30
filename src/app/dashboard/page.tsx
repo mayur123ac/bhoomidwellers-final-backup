@@ -587,15 +587,34 @@ export default function AdminAtlasDashboard() {
 
   const handleLogout = () => { clearCrmSession(); router.replace("/"); };
 
+  const userRole = (user?.role || "").toLowerCase();
+  const isAdmin = userRole === "admin";
+  const isSiteHead = userRole === "site_head" || userRole === "site head";
+
   const menuItems = [
     { id: "dashboard", icon: FaThLarge, label: "Overview" },
     { id: "receptionist", icon: FaClipboardList, label: "Receptionist" },
     { id: "sales", icon: FaUsers, label: "Sales Managers" },
     { id: "site_head", icon: FaUniversity, label: "Site Heads" },
-    { id: "monitoring", icon: FaChartPie, label: "Daily Monitor" }, // ← ADD THIS
+    { id: "monitoring", icon: FaChartPie, label: "Daily Monitor" }, 
     { id: "caller", icon: FaPhoneAlt, label: "Caller Panel" },
     { id: "employees", icon: FaIdCard, label: "Add Employee" },
-  ];
+  ].filter(item => {
+    if (isAdmin) return true;
+    
+    // Non-admin roles should only see what's allowed.
+    // Site head cannot see caller or employees panel
+    if (isSiteHead && (item.id === "caller" || item.id === "employees")) {
+      return false;
+    }
+    
+    // Other non-admin roles logic can be added here
+    if (!isAdmin && (item.id === "employees" || item.id === "settings")) {
+      return false;
+    }
+    
+    return true;
+  });
 
   const handleMenuClick = (itemId: string) => {
     if (itemId === "employees") {
@@ -656,7 +675,7 @@ export default function AdminAtlasDashboard() {
         <header className={`h-16 flex items-center justify-between px-8 z-30 transition-colors duration-300 relative ${theme.header}`} style={theme.headerGlass}>
           <h1 className={`font-bold text-lg capitalize tracking-wide flex items-center gap-3 ${theme.text}`}>
             {activeView.replace("_", " ")}
-            <span className={`${theme.settingsBg} ${theme.textMuted} px-2 py-0.5 rounded text-xs border`}>Admin</span>
+            <span className={`${theme.settingsBg} ${theme.textMuted} px-2 py-0.5 rounded text-xs border capitalize`}>{user?.role || "Admin"}</span>
           </h1>
 
           <div className="flex items-center gap-6">
@@ -666,10 +685,12 @@ export default function AdminAtlasDashboard() {
             </button>
 
             {/* System Settings Icon */}
-            <button onClick={() => router.push("/dashboard/settings")} aria-label="Settings"
-              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center cursor-pointer justify-center shadow-sm ${theme.toggleWrap}`}>
-              <FaCog className="w-5 h-5" />
-            </button>
+            {isAdmin && (
+              <button onClick={() => router.push("/dashboard/settings")} aria-label="Settings"
+                className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center cursor-pointer justify-center shadow-sm ${theme.toggleWrap}`}>
+                <FaCog className="w-5 h-5" />
+              </button>
+            )}
 
             {/* CRM System Updates */}
             <CrmUpdatesNotification user={user} theme={theme} isDark={isDark} />

@@ -1,6 +1,7 @@
 // app/api/roles/route.ts
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { requireRole } from "@/lib/serverAuth";
 
 // ── GET: Fetch all roles ──────────────────────────────────────────────────────
 export async function GET() {
@@ -22,6 +23,11 @@ export async function GET() {
 // ── POST: Add a new role ──────────────────────────────────────────────────────
 export async function POST(req: Request) {
   try {
+    const auth = await requireRole(["admin"]);
+    if (!auth.isAuthorized) {
+      return NextResponse.json({ message: auth.error }, { status: auth.status });
+    }
+
     const { name } = await req.json();
 
     if (!name?.trim()) {

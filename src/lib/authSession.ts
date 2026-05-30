@@ -12,6 +12,13 @@ export function getStoredCrmUser() {
 export function clearCrmSession() {
   localStorage.removeItem("crm_user");
   sessionStorage.clear();
+  
+  // Call the logout API to clear the cookie
+  // We use fetch with keepalive or standard await depending on context, 
+  // but since this might be called on unmount or before navigating, we can just fire it off
+  if (typeof window !== "undefined") {
+    fetch("/api/auth/logout", { method: "POST" }).catch(console.error);
+  }
 }
 
 export function installLoggedOutBackGuard(onLoggedOut: () => void) {

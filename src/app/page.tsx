@@ -39,7 +39,7 @@ export default function Login() {
         } else if (userRole === "sales manager") {
           router.push("/dashboard/sales");
         } else if (userRole === "site_head" || userRole === "site head") {
-          router.push("/dashboard/sales"); // Site Heads use the Sales panel
+          router.push("/dashboard"); 
         } else if (userRole === "caller") {
           router.push("/dashboard/caller");
         } else {

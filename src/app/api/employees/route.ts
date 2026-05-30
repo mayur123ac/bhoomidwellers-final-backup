@@ -1,10 +1,16 @@
 // app/api/employees/route.ts
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { requireRole } from "@/lib/serverAuth";
 
 // ── GET: Fetch all employees ──────────────────────────────────────────────────
 export async function GET() {
   try {
+    const auth = await requireRole(["admin"]);
+    if (!auth.isAuthorized) {
+      return NextResponse.json({ message: auth.error }, { status: auth.status });
+    }
+
     const users = await query(
       `SELECT id, name, username, email, password, role, is_active as "isActive", created_at
        FROM users
@@ -24,6 +30,11 @@ export async function GET() {
 // ── POST: Add new employee ────────────────────────────────────────────────────
 export async function POST(req: Request) {
   try {
+    const auth = await requireRole(["admin"]);
+    if (!auth.isAuthorized) {
+      return NextResponse.json({ message: auth.error }, { status: auth.status });
+    }
+
     const { name, username, email, password, role } = await req.json();
 
     // Check email conflict
@@ -61,6 +72,11 @@ export async function POST(req: Request) {
 // ── PUT: Update employee (full edit OR status toggle) ────────────────────────
 export async function PUT(req: Request) {
   try {
+    const auth = await requireRole(["admin"]);
+    if (!auth.isAuthorized) {
+      return NextResponse.json({ message: auth.error }, { status: auth.status });
+    }
+
     const body = await req.json();
     const { userId } = body;
 
@@ -148,6 +164,11 @@ export async function PUT(req: Request) {
 // ── DELETE: Permanently remove an employee ────────────────────────────────────
 export async function DELETE(req: Request) {
   try {
+    const auth = await requireRole(["admin"]);
+    if (!auth.isAuthorized) {
+      return NextResponse.json({ message: auth.error }, { status: auth.status });
+    }
+
     const { userId } = await req.json();
 
     if (!userId) {
