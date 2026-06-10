@@ -16,6 +16,7 @@ import {
   FaMoneyBillWave, FaMapMarkerAlt, FaBullseye, FaSave, FaUniversity, FaBriefcase, FaChartPie,
   FaExchangeAlt, FaEye, FaExclamationTriangle
 } from "react-icons/fa";
+import { FaWandMagicSparkles } from 'react-icons/fa6'
 import { useCallerSync } from "@/lib/hooks/useCallerSync";
 import CrmUpdatesNotification from "@/components/CrmUpdatesNotification";
 import { label } from "framer-motion/client";
@@ -243,7 +244,7 @@ export default function EmployeesPage() {
   });
   const t = useMemo(() => buildTheme(isDark), [isDark]);
 
-  const [activeSection, setActiveSection] = useState<"employees" | "callers">("employees");
+  const [activeSection, setActiveSection] = useState<"employees" | "callers" | "ai">("employees");
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -346,6 +347,7 @@ export default function EmployeesPage() {
 
     const params = new URLSearchParams(window.location.search);
     if (params.get("tab") === "callers") setActiveSection("callers");
+    else if (params.get("tab") === "ai") setActiveSection("ai");
 
     const userRole = parsed.role?.toLowerCase() || "";
     if (userRole === "admin" || userRole === "site head" || userRole === "site_head") {
@@ -778,8 +780,10 @@ export default function EmployeesPage() {
     { id: "sales", icon: FaUsers, label: "Sales Managers", link: "/dashboard", section: null },
     { id: "site_head", icon: FaUniversity, label: "Site Heads", link: "/dashboard", section: null },
     { id: "monitoring", icon: FaChartPie, label: "Daily Monitor", link: "/dashboard", section: null },
+    { id: "geo", icon: FaMapMarkerAlt, label: "Geo Analytics", link: "/dashboard", section: null },
     { id: "callers", icon: FaPhoneAlt, label: "Caller Panel", link: "/dashboard/employees", section: "callers" as const },
     { id: "employees", icon: FaIdCard, label: "Add Employee", link: "/dashboard/employees", section: "employees" as const },
+    { id: "ai", icon: FaWandMagicSparkles, label: "Bhoomi AI", link: "/dashboard/employees", section: "ai" as const },
   ];
 
   if (isAuthorized === null) return <div className="min-h-screen bg-[#0a0a0a]" />;
@@ -843,7 +847,7 @@ export default function EmployeesPage() {
           <h1 className={`font-bold text-lg tracking-wide flex items-center gap-3 ${t.headerTitle}`}>
             {activeSection === "callers"
               ? callerSubView === "control" ? "Caller Control Mode" : "Caller Panel"
-              : "Add Employee"}
+              : activeSection === "ai" ? "Bhoomi AI" : "Add Employee"}
             <span className={`px-2 py-0.5 rounded text-xs border ${callerSubView === "control"
               ? "bg-orange-500/10 border-orange-500/30 text-orange-400"
               : t.headerBadge}`}>
@@ -1234,6 +1238,67 @@ export default function EmployeesPage() {
                     </tbody>
                   </table>
                 </div>
+              </div>
+            </div>
+          </main>
+
+        ) : activeSection === "ai" ? (
+
+          <main className={`flex-1 flex flex-col h-full overflow-hidden transition-colors duration-300 ${t.mainBg}`}>
+            {/* Chat History Area */}
+            <div className={`flex-1 overflow-y-auto p-8 ${t.scroll} custom-scrollbar`}>
+              <div className="max-w-4xl mx-auto space-y-8 pb-20">
+
+                {/* Intro Greeting */}
+                <div className="text-center mt-10">
+                  <div className="w-16 h-16 rounded-full bg-[#9E217B]/10 flex items-center justify-center mx-auto mb-4 border border-[#9E217B]/30 shadow-[0_0_30px_rgba(158,33,123,0.3)]">
+                    <FaWandMagicSparkles className="text-3xl text-[#d946a8]" />
+                  </div>
+                  <h1 className={`text-4xl font-black tracking-tight mb-2 ${isDark ? "text-white" : "text-gray-900"}`}>
+                    Hello, {user?.name?.split(' ')[0] || "Admin"}
+                  </h1>
+                  <p className={`text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-[#d946a8] to-orange-400`}>
+                    How can Bhoomi AI assist your sales pipeline today?
+                  </p>
+                </div>
+
+                {/* Example Mock AI Message (Replace with real state map later) */}
+                <div className="flex gap-4">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#9E217B] to-orange-500 flex items-center justify-center flex-shrink-0 shadow-lg">
+                    <FaWandMagicSparkles className="text-white text-xs" />
+                  </div>
+                  <div className={`flex-1 rounded-2xl p-5 shadow-sm leading-relaxed ${isDark ? "bg-[#111111] border border-[#222] text-gray-300" : "bg-white border border-indigo-100 text-gray-700"}`}>
+                    <p><strong>System Ready.</strong> I have analyzed your CRM data. Would you like to see the top priority leads for today, or review the employee daily monitor report?</p>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            {/* Gemini-Style Input Bar */}
+            <div className={`p-6 flex-shrink-0 flex justify-center ${isDark ? "bg-[#0a0a0a]/80" : "bg-[#F8FAFC]/80"} backdrop-blur-md`}>
+              <div className="w-full max-w-4xl relative">
+                {/* Magenta Glow Container */}
+                <div className={`relative flex items-center rounded-2xl overflow-hidden transition-shadow duration-300
+                  ${isDark
+                    ? "bg-[#1a1a1a] border border-[#9E217B]/50 shadow-[0_0_20px_rgba(158,33,123,0.25)] focus-within:shadow-[0_0_35px_rgba(158,33,123,0.5)]"
+                    : "bg-white border border-[#9E217B]/50 shadow-[0_0_20px_rgba(158,33,123,0.15)] focus-within:shadow-[0_0_35px_rgba(158,33,123,0.4)]"
+                  }`}
+                >
+                  <input
+                    type="text"
+                    placeholder="Ask Bhoomi AI to analyze leads, check employee tasks, or find a customer..."
+                    className={`w-full py-4 pl-6 pr-14 outline-none text-sm font-medium bg-transparent
+                      ${isDark ? "text-white placeholder:text-gray-500" : "text-gray-900 placeholder:text-gray-400"}
+                    `}
+                  />
+                  <button className="absolute right-3 w-10 h-10 rounded-xl bg-gradient-to-r from-[#9E217B] to-[#c7299a] text-white flex items-center justify-center hover:opacity-90 transition-opacity shadow-lg">
+                    <FaWandMagicSparkles className="text-sm" />
+                  </button>
+                </div>
+                <p className="text-center text-[10px] text-gray-500 mt-3 font-medium">
+                  Bhoomi AI may occasionally make mistakes. Always verify critical lead data.
+                </p>
               </div>
             </div>
           </main>

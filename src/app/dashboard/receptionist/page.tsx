@@ -2257,7 +2257,7 @@ export default function ReceptionistDashboard() {
                         <div>
                           <p className={`text-xs font-medium mb-1 ${t.textFaint}`}>CP Name</p>
                           <p className={`font-semibold text-sm ${t.text}`}>
-                            {selectedLead.cp_name || selectedLead.cpName || "N/A"}
+                            {selectedLead.cp_name|| selectedLead.cpName || "N/A"}
                           </p>
                         </div>
                         <div>

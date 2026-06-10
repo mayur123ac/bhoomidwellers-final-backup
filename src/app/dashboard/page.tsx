@@ -11,6 +11,7 @@ import {
   FaCheckCircle, FaCalendarAlt, FaTimes,
   FaFileInvoice, FaPaperPlane, FaMicrophone, FaWhatsapp, FaTable, FaChartPie, FaEyeSlash, FaUniversity, FaFileAlt, FaCheck, FaClock, FaHandshake, FaExchangeAlt, FaBriefcase, FaDownload, FaCog, FaMapMarkerAlt
 } from "react-icons/fa";
+import { FaWandMagicSparkles } from "react-icons/fa6";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, Cell,
   CartesianGrid, PieChart, Pie,
@@ -624,6 +625,7 @@ export default function AdminAtlasDashboard() {
     { id: "geo", icon: FaMapMarkerAlt, label: "Geo Analytics" },
     { id: "caller", icon: FaPhoneAlt, label: "Caller Panel" },
     { id: "employees", icon: FaIdCard, label: "Add Employee" },
+    { id: "ai", icon: FaWandMagicSparkles, label: "Bhoomi AI" },
   ].filter(item => {
     if (isAdmin) return true;
 
@@ -646,6 +648,8 @@ export default function AdminAtlasDashboard() {
       router.push("/dashboard/employees");
     } else if (itemId === "caller") {
       router.push("/dashboard/employees?tab=callers");
+    } else if (itemId === "ai") {
+      router.push("/dashboard/employees?tab=ai");
     } else {
       setActiveView(itemId);
       setIsSidebarHovered(false);
