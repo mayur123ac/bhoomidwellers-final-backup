@@ -843,11 +843,11 @@ export default function EmployeesPage() {
             );
           })}
         </nav>
-        <div className="px-3 mt-auto">
+        {/* <div className="px-3 mt-auto">
           <div className="flex items-center px-3 py-3.5 rounded-xl cursor-pointer text-gray-500 hover:bg-[#1a1a1a] hover:text-gray-300 transition-colors whitespace-nowrap">
             <FaCog className="w-5 h-5 min-w-[20px] ml-1" />
           </div>
-        </div>
+        </div> */}
       </motion.aside>
 
       {/* ── MAIN ── */}
