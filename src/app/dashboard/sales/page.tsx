@@ -2,8 +2,11 @@
 "use client";
 
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
+import { useActivityTracker, emitActivity } from "@/hooks/useActivityTracker";
 import { useRouter } from "next/navigation";
+import AttendanceView from "@/components/AttendanceView";
 import { clearCrmSession, getStoredCrmUser, installLoggedOutBackGuard } from "@/lib/authSession";
+import { useShiftTiming } from "@/hooks/useShiftTiming";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Bot, User, Send, BarChart2, AlertTriangle, Landmark, CalendarDays,
@@ -30,6 +33,9 @@ import OnCallBadge from "@/components/OnCallBadge";
 import LostLeadModal from "@/components/LostLeadModal";
 import MarkClosingModal from "@/components/MarkClosingModal";
 import { handleMarkLostLead as markLostLeadApi, restoreLostLead, updateLeadLostState, useLostLeadEvents } from "@/lib/lostLeadSync";
+
+import AttendanceTimerWidget from "@/components/AttendanceTimerWidget";
+
 
 const CARDS_PER_PAGE = 20;
 const MONTH_NAMES = [
@@ -286,6 +292,7 @@ function useAdminData() {
 // ============================================================================
 export default function SalesDashboard() {
   const router = useRouter();
+  useActivityTracker();
   const [isDark, setIsDark] = useState(false);
   const t = buildTheme(isDark);
 
@@ -297,7 +304,12 @@ export default function SalesDashboard() {
 
   const [activePopup, setActivePopup] = useState<"notifications" | "profile" | "visit" | null>(null);
   const topbarRef = useRef<HTMLDivElement>(null);
-
+  // ── Attendance: live clock tick ──
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (topbarRef.current && !topbarRef.current.contains(event.target as Node)) {
@@ -399,6 +411,7 @@ export default function SalesDashboard() {
             { view: "overview", icon: <FaThLarge className="w-5 h-5" />, title: "Dashboard" },
             { view: "forms", icon: <FaFileInvoice className="w-5 h-5" />, title: "Assigned Leads" },
             { view: "closed-leads", icon: <FaCheckCircle className="w-5 h-5" />, title: "Closed Leads" },
+            { view: "attendance", icon: <FaClock className="w-5 h-5" />, title: "My Attendance" },
             { view: "assistant", icon: <FaRobot className="w-5 h-5" />, title: "CRM AI Assistant" },
             { view: "settings", icon: <FaCog className="w-5 h-5" />, title: "Settings" },
           ].map(({ view, icon, title }) => (
@@ -613,6 +626,13 @@ export default function SalesDashboard() {
               allLeads={user.role === "admin" ? allLeads : allLeads.filter((l: any) => l.assigned_to === user.name)}
               isDark={isDark} t={t}
             />
+          ) : activeView === "attendance" ? (
+            <AttendanceView
+              adminUser={user}
+              isDark={isDark}
+              t={t}
+              now={now}
+            />
           ) : activeView === "settings" ? (
             <SettingsView
               adminUser={user}
@@ -632,6 +652,7 @@ export default function SalesDashboard() {
           { view: "overview", icon: <FaThLarge className="w-5 h-5 sm:w-6 sm:h-6" />, title: "Dashboard" },
           { view: "forms", icon: <FaFileInvoice className="w-5 h-5 sm:w-6 sm:h-6" />, title: "Assigned" },
           { view: "closed-leads", icon: <FaCheckCircle className="w-5 h-5 sm:w-6 sm:h-6" />, title: "Closed" },
+          { view: "attendance", icon: <FaClock className="w-5 h-5" />, title: "My Attendance" },
           { view: "assistant", icon: <FaRobot className="w-5 h-5 sm:w-6 sm:h-6" />, title: "AI" },
         ].map(({ view, icon, title }) => (
           <div key={view} onClick={() => setActiveView(view)} className="relative flex flex-col justify-center items-center h-full flex-1 cursor-pointer" title={title}>
@@ -999,6 +1020,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
     setLostReason("");
     setLostError("");
     setShowLostModal(true);
+    emitActivity({ type: 'LEAD_INTERACTION', action: 'Marking Lead as Lost', leadId: selectedLead?.id, leadName: selectedLead?.name, module: 'Lost Modal' });
   };
 
   const handleMarkLostLead = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -1629,11 +1651,11 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
               <div className="flex gap-2 sm:gap-3 flex-wrap justify-start md:justify-end flex-shrink-0">
                 {!showSalesForm && !showLoanForm && (
                   <>
-                    <button onClick={() => { prefillSalesForm(); setShowSalesForm(true); setShowLoanForm(false); }}
+                    <button onClick={() => { prefillSalesForm(); setShowSalesForm(true); setShowLoanForm(false); emitActivity({ type: 'LEAD_INTERACTION', action: 'Editing Closing Form', leadId: selectedLead?.id, leadName: selectedLead?.name, module: 'Sales Form' }); }}
                       className={`font-bold px-4 sm:px-5 py-2 rounded-lg text-xs sm:text-sm flex items-center gap-2 transition-colors cursor-pointer shadow-lg flex-1 sm:flex-none justify-center ${t.btnPrimary} ${isDark ? "shadow-purple-600/20" : "shadow-[#00AEEF]/20"}`}>
                       <FaFileInvoice /> <span className="hidden sm:inline">Fill</span> Salesform
                     </button>
-                    <button onClick={() => { prefillLoanForm(); setShowLoanForm(true); setShowSalesForm(false); }}
+                    <button onClick={() => { prefillLoanForm(); setShowLoanForm(true); setShowSalesForm(false); emitActivity({ type: 'LEAD_INTERACTION', action: 'Editing Loan Form', leadId: selectedLead?.id, leadName: selectedLead?.name, module: 'Loan Form' }); }}
                       className={`font-bold px-4 sm:px-5 py-2 rounded-lg text-xs sm:text-sm flex items-center gap-2 transition-colors cursor-pointer shadow-lg flex-1 sm:flex-none justify-center ${t.btnSecondary} ${isDark ? "shadow-blue-600/20" : "shadow-[#00AEEF]/20"}`}>
                       <FaUniversity /> <span className="hidden sm:inline">Track</span> Loan
                     </button>
@@ -2342,6 +2364,7 @@ function SiteVisitScheduler({
   const fetchVisits = async () => {
     try {
       const res = await fetch(`/api/site-visits?lead_id=${lead.id}`);
+      if (!res.ok) return;
       const json = await res.json();
       if (json.success) setVisits(json.data);
     } catch { }
@@ -2365,6 +2388,7 @@ function SiteVisitScheduler({
         : { lead_id: lead.id, visit_date: visitDate, created_by: adminUser.name, role: adminUser.role, notes: visitNotes };
 
       const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      if (!res.ok) { showToast("❌ Server error"); return; }
       const json = await res.json();
 
       if (!json.success) { showToast("❌ " + json.message); return; }
@@ -2394,6 +2418,7 @@ function SiteVisitScheduler({
   const handleStatusChange = async (visitId: number, status: string) => {
     try {
       const res = await fetch("/api/site-visits", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: visitId, status }) });
+      if (!res.ok) { showToast("❌ Server error"); return; }
       const json = await res.json();
       if (!json.success) { showToast("❌ " + json.message); return; }
 
@@ -2448,7 +2473,7 @@ function SiteVisitScheduler({
         </div>
         {!isClosing && !isLost && (
           <button
-            onClick={() => { setEditVisit(null); setVisitDate(""); setVisitNotes(""); setShowModal(true); }}
+            onClick={() => { setEditVisit(null); setVisitDate(""); setVisitNotes(""); setShowModal(true); emitActivity({ type: 'LEAD_INTERACTION', action: 'Updating Site Visit', leadId: lead?.id, leadName: lead?.name, module: 'Site Visit Modal' }); }}
             className={`text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer transition-colors ${visits.length === 0
               ? (isDark ? "bg-orange-600 hover:bg-orange-500 text-white" : "bg-orange-500 hover:bg-orange-400 text-white")
               : (isDark ? "bg-orange-600/20 hover:bg-orange-600 border border-orange-500/30 text-orange-400 hover:text-white" : "bg-orange-50 hover:bg-orange-500 border border-orange-300 text-orange-600 hover:text-white")
@@ -2590,6 +2615,7 @@ function SettingsView({ adminUser, isDark, t, onSaved }: {
     const fetchNumber = async () => {
       try {
         const res = await fetch(`/api/users/update-whatsapp?name=${encodeURIComponent(adminUser.name)}`);
+        if (!res.ok) return;
         const data = await res.json();
         if (data.success) setWhatsappNumber(data.whatsapp_number || "");
       } catch (e) { console.error(e); }
@@ -2613,6 +2639,7 @@ function SettingsView({ adminUser, isDark, t, onSaved }: {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: adminUser.name, whatsapp_number: cleaned }),
       });
+      if (!res.ok) { setToast({ msg: "❌ Server Error", ok: false }); return; }
       const data = await res.json();
       if (data.success) onSaved(cleaned); // update parent state instantly
       setToast({ msg: data.success ? "✅ WhatsApp number saved!" : "❌ " + data.message, ok: data.success });
@@ -2727,5 +2754,12 @@ function SettingsView({ adminUser, isDark, t, onSaved }: {
     </div>
   );
 }
+// ============================================================================
+// ATTENDANCE VIEW — Sales Manager self-attendance tracker
+// ============================================================================
+// ============================================================================
+// ATTENDANCE VIEW — Sales Manager self-attendance with mark-present checkbox
+// ============================================================================
+
 
 function ReceptionistView() { return null; }

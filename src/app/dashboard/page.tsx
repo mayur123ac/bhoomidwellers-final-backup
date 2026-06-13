@@ -9,7 +9,7 @@ import {
   FaThLarge, FaClipboardList, FaUsers, FaIdCard,
   FaSearch, FaBell, FaChevronLeft, FaPhoneAlt, FaComments,
   FaCheckCircle, FaCalendarAlt, FaTimes,
-  FaFileInvoice, FaPaperPlane, FaMicrophone, FaWhatsapp, FaTable, FaChartPie, FaEyeSlash, FaUniversity, FaFileAlt, FaCheck, FaClock, FaHandshake, FaExchangeAlt, FaBriefcase, FaDownload, FaCog, FaMapMarkerAlt
+  FaFileInvoice, FaPaperPlane, FaMicrophone, FaWhatsapp, FaTable, FaChartPie, FaEyeSlash, FaUniversity, FaFileAlt, FaCheck, FaClock, FaHandshake, FaExchangeAlt, FaBriefcase, FaDownload, FaCog, FaMapMarkerAlt, FaSignal, FaUserClock
 } from "react-icons/fa";
 import { FaWandMagicSparkles } from "react-icons/fa6";
 import {
@@ -27,7 +27,9 @@ import {
   useLostLeadEvents,
 } from "@/lib/lostLeadSync";
 import dynamic from "next/dynamic";
+import AttendanceView from "@/components/AttendanceView";
 const GeoAnalyticsView = dynamic(() => import("./GeoAnalyticsView"), { ssr: false });
+const LiveActivityView = dynamic(() => import("./LiveActivityView"), { ssr: false });
 
 // ─── SUN/MOON ICONS ───────────────────────────────────────────────────────────
 const SunIcon = () => (
@@ -373,6 +375,11 @@ export default function AdminAtlasDashboard() {
   const [activeView, setActiveView] = useState("dashboard");
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
   const [dismissedNotifIds, setDismissedNotifIds] = useState<Set<string>>(new Set());
+  const [currentTime, setCurrentTime] = useState(new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
   const [user, setUser] = useState<any>({ name: "Admin", role: "Admin", email: "", password: "" });
   const [activePopup, setActivePopup] = useState<"notifications" | "profile" | "updates" | null>(null);
   const topbarRef = useRef<HTMLDivElement>(null);
@@ -621,7 +628,9 @@ export default function AdminAtlasDashboard() {
     { id: "receptionist", icon: FaClipboardList, label: "Receptionist" },
     { id: "sales", icon: FaUsers, label: "Sales Managers" },
     { id: "site_head", icon: FaUniversity, label: "Site Heads" },
+    { id: "attendance", icon: FaUserClock, label: "My Attendance" },
     { id: "monitoring", icon: FaChartPie, label: "Daily Monitor" },
+    { id: "live_activity", icon: FaSignal, label: "Attendance Tracker" },
     { id: "geo", icon: FaMapMarkerAlt, label: "Geo Analytics" },
     { id: "caller", icon: FaPhoneAlt, label: "Caller Panel" },
     { id: "employees", icon: FaIdCard, label: "Add Employee" },
@@ -630,8 +639,13 @@ export default function AdminAtlasDashboard() {
     if (isAdmin) return true;
 
     // Non-admin roles should only see what's allowed.
-    // Site head cannot see caller, employees, or geo analytics panel
-    if (isSiteHead && (item.id === "caller" || item.id === "employees" || item.id === "geo")) {
+    // Admin only panels:
+    if (item.id === "live_activity" || item.id === "geo") {
+      return false;
+    }
+
+    // Site head cannot see caller, employees
+    if (isSiteHead && (item.id === "caller" || item.id === "employees")) {
       return false;
     }
 
@@ -701,13 +715,13 @@ export default function AdminAtlasDashboard() {
       </motion.aside>
 
       <div className={`flex-1 flex flex-col pl-[80px] h-screen overflow-hidden ${theme.mainBg}`}>
-        <header className={`h-16 flex items-center justify-between px-8 z-30 transition-colors duration-300 relative ${theme.header}`} style={theme.headerGlass}>
+        <header className={`h-16 flex items-center justify-between px-8 z-[40] transition-colors duration-300 relative ${theme.header}`} style={theme.headerGlass}>
           <h1 className={`font-bold text-lg capitalize tracking-wide flex items-center gap-3 ${theme.text}`}>
             {activeView.replace("_", " ")}
             <span className={`${theme.settingsBg} ${theme.textMuted} px-2 py-0.5 rounded text-xs border capitalize`}>{user?.role || "Admin"}</span>
           </h1>
 
-          <div className="flex items-center gap-6" ref={topbarRef}>
+          <div className="flex items-center gap-6 relative z-[50]" ref={topbarRef}>
             <button onClick={() => {
               const next = !isDark;
               setIsDark(next);
@@ -800,7 +814,7 @@ export default function AdminAtlasDashboard() {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: -6, scale: 0.98 }}
                     transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-                    className={`absolute top-12 right-0 w-64 border rounded-xl shadow-2xl p-5 z-50 ${theme.dropdown}`} style={theme.dropdownGlass}
+                    className={`absolute top-12 right-0 w-64 border rounded-xl shadow-2xl p-5 z-[200] ${theme.dropdown}`} style={theme.dropdownGlass}
                   >
                     <div className="mb-4">
                       <h3 className={`font-bold text-lg ${theme.text}`}>{user?.name || "Admin"}</h3>
@@ -877,6 +891,26 @@ export default function AdminAtlasDashboard() {
               theme={theme}
               isDark={isDark}
             />
+          )}
+          {activeView === "attendance" && (
+            <div className="flex flex-col h-full overflow-hidden">
+              <div className="p-4 md:p-8 overflow-y-auto">
+                <AttendanceView adminUser={user} isDark={isDark} t={theme} now={currentTime.getTime()} />
+              </div>
+            </div>
+          )}
+          {activeView === "live_activity" && (
+            <div className="flex flex-col h-full overflow-hidden">
+              {isAdmin ? (
+                <LiveActivityView theme={theme} isDark={isDark} />
+              ) : (
+                <div className="flex items-center justify-center h-full flex-col gap-4">
+                  <FaTimes className="text-red-500 w-16 h-16" />
+                  <h2 className="text-2xl font-bold text-red-500">Access Denied</h2>
+                  <p className={theme.textMuted}>You do not have permission to access this module.</p>
+                </div>
+              )}
+            </div>
           )}
           {activeView === "monitoring" && (
             <div className="flex-1 overflow-hidden h-full">

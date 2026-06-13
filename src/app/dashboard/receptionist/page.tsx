@@ -20,6 +20,9 @@ import {
 import { Ghost, AlertTriangle } from "lucide-react";
 import LostLeadModal from "@/components/LostLeadModal";
 import MarkClosingModal from "@/components/MarkClosingModal";
+import AttendanceTimerWidget from "@/components/AttendanceTimerWidget";
+import AttendanceView from "@/components/AttendanceView";
+import { useActivityTracker } from "@/hooks/useActivityTracker";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -38,6 +41,7 @@ const NAV_ITEMS = [
   { id: "assigned", icon: <FaFileInvoice className="w-5 h-5" />, title: "Assigned Forms" },
   { id: "recep-leads", icon: <FaUsers className="w-5 h-5" />, title: "Receptionist Leads" },
   { id: "closed-leads", icon: <FaCheckCircle className="w-5 h-5" />, title: "Closed Leads" },
+  { id: "attendance", icon: <FaClock className="w-5 h-5" />, title: "My Attendance" },
   { id: "assistant", icon: <FaRobot className="w-5 h-5" />, title: "CRM AI Assistant" },
 ];
 
@@ -145,8 +149,16 @@ function buildTheme(isDark: boolean) {
     btnWarning: isDark ? "bg-yellow-600 hover:bg-yellow-700 text-white shadow-md transition-colors duration-200" : "bg-amber-500 hover:bg-amber-600 text-white shadow-sm transition-colors duration-200",
     btnDanger: isDark ? "bg-red-500/10 text-red-500 hover:bg-red-600/20 border border-red-500/30 transition-colors duration-200" : "bg-[#9E217B]/10 text-[#9E217B] hover:bg-[#9E217B]/20 border border-[#9E217B]/30 transition-colors duration-200",
     btnTransfer: isDark ? "bg-purple-600 hover:bg-purple-700 text-white shadow-md transition-colors duration-200" : "bg-purple-600 hover:bg-purple-700 text-white shadow-sm transition-colors duration-200",
+    btnClosingBadge: isDark ? "bg-yellow-900/20 border border-yellow-500/40 text-yellow-400" : "bg-amber-50 border border-amber-400/60 text-amber-600",
     scroll: isDark ? "custom-scrollbar" : "custom-scrollbar",
     logoBg: isDark ? "bg-[#9E217B] shadow-lg shadow-[#9E217B]/30" : "bg-[#9E217B] shadow-lg shadow-[#9E217B]/30",
+
+    // ── Stat glow orbs (used by AttendanceView) ──
+    statGlow1: isDark ? "bg-[#d4006e]/10" : "bg-[#00AEEF]/10",
+    statGlow2: isDark ? "bg-blue-600/10" : "bg-[#9E217B]/10",
+    statGlow3: isDark ? "bg-blue-600/10" : "bg-indigo-400/10",
+    statGlow4: isDark ? "bg-yellow-500/10" : "bg-amber-400/10",
+    statGlow5: isDark ? "bg-green-600/10" : "bg-emerald-400/10",
     selectSmall: isDark ? "bg-[#1A1A28] border-[#2A2A35] text-white" : "bg-white border-[#D1D5DB] text-[#6B7280]",
     chartColors: isDark
       ? ["#d946ef", "#8b5cf6", "#3b82f6", "#0ea5e9", "#6b7280", "#f59e0b", "#10b981"]
@@ -270,6 +282,7 @@ function WhatsAppSettingsCard({ user, setUser, isDark, t }: {
 // ─────────────────────────────────────────────────────────────────────────────
 export default function ReceptionistDashboard() {
   const router = useRouter();
+  useActivityTracker();
   const [isDark, setIsDark] = useState(false);
   const t = buildTheme(isDark);
 
@@ -278,6 +291,12 @@ export default function ReceptionistDashboard() {
   const [activeTab, setActiveTab] = useState("overview");
   const [showPassword, setShowPassword] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
+  // ── Attendance: live clock tick (1-second interval for AttendanceView live timer) ──
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
   const [isClosingModalOpen, setIsClosingModalOpen] = useState(false);
   const [toastMsg, setToastMsg] = useState<{ title: string; color: string } | null>(null);
 
@@ -428,11 +447,11 @@ export default function ReceptionistDashboard() {
   // ─────────────────────────────────────────────────────────────────────────
   // DATE CONSTANTS
   // ─────────────────────────────────────────────────────────────────────────
-  const now = new Date();
+  const dateNow = new Date();
   const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
-  const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-  const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
-  const yearStart = new Date(now.getFullYear(), 0, 1);
+  const threeMonthsAgo = new Date(dateNow.getFullYear(), dateNow.getMonth() - 2, 1);
+  const sixMonthsAgo = new Date(dateNow.getFullYear(), dateNow.getMonth() - 5, 1);
+  const yearStart = new Date(dateNow.getFullYear(), 0, 1);
 
   // ─────────────────────────────────────────────────────────────────────────
   // HELPERS
@@ -1148,7 +1167,7 @@ export default function ReceptionistDashboard() {
   }, [mergedLeads, todayStart, t.chartColors]);
 
   const configMonthlyBarData = useMemo(() => {
-    const filtered = mergedLeads.filter((e: any) => { if (!e.created_at) return false; const d = new Date(e.created_at); return d.getMonth() === configChartMonth && d.getFullYear() === now.getFullYear(); });
+    const filtered = mergedLeads.filter((e: any) => { if (!e.created_at) return false; const d = new Date(e.created_at); return d.getMonth() === configChartMonth && d.getFullYear() === dateNow.getFullYear(); });
     const cc: Record<string, number> = {}; CONFIG_KEYS.forEach(k => cc[k] = 0);
     filtered.forEach((item: any) => { const c = String(item.configuration || "").trim(); if (cc[c] !== undefined) cc[c]++; else cc["Other"]++; });
     return CONFIG_KEYS.map((name, i) => ({ name, count: cc[name], color: t.chartColors[i % t.chartColors.length] })).filter(d => d.count > 0);
@@ -1162,7 +1181,7 @@ export default function ReceptionistDashboard() {
 
   const buildMonthStackedData = (numMonths: number) => {
     return Array.from({ length: numMonths }, (_, i) => numMonths - 1 - i).map(offset => {
-      const d = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+      const d = new Date(dateNow.getFullYear(), dateNow.getMonth() - offset, 1);
       const monthIdx = d.getMonth(); const year = d.getFullYear();
       const filtered = mergedLeads.filter((e: any) => { if (!e.created_at) return false; const dd = new Date(e.created_at); return dd.getMonth() === monthIdx && dd.getFullYear() === year; });
       const entry: Record<string, any> = { month: MONTH_NAMES[monthIdx].slice(0, 3) };
@@ -1176,7 +1195,7 @@ export default function ReceptionistDashboard() {
   const configYearlyBarData = useMemo(() => buildMonthStackedData(12), [mergedLeads]);
 
   const enquiriesToday = useMemo(() => mergedLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= todayStart).length, [mergedLeads]);
-  const monthlyEnquiriesSelected = useMemo(() => mergedLeads.filter((e: any) => { if (!e.created_at) return false; const d = new Date(e.created_at); return d.getMonth() === selectedMonthCard && d.getFullYear() === now.getFullYear(); }).length, [mergedLeads, selectedMonthCard]);
+  const monthlyEnquiriesSelected = useMemo(() => mergedLeads.filter((e: any) => { if (!e.created_at) return false; const d = new Date(e.created_at); return d.getMonth() === selectedMonthCard && d.getFullYear() === dateNow.getFullYear(); }).length, [mergedLeads, selectedMonthCard]);
   const enquiries3Months = useMemo(() => mergedLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= threeMonthsAgo).length, [mergedLeads]);
   const enquiries6Months = useMemo(() => mergedLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= sixMonthsAgo).length, [mergedLeads]);
   const enquiriesYear = useMemo(() => mergedLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= yearStart).length, [mergedLeads]);
@@ -1184,7 +1203,7 @@ export default function ReceptionistDashboard() {
   const managerLeadCountsFiltered = useMemo(() => {
     let filtered = mergedLeads;
     if (card3Mode === "today") filtered = mergedLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= todayStart);
-    else if (card3Mode === "monthly") filtered = mergedLeads.filter((e: any) => { if (!e.created_at) return false; const d = new Date(e.created_at); return d.getMonth() === card3Month && d.getFullYear() === now.getFullYear(); });
+    else if (card3Mode === "monthly") filtered = mergedLeads.filter((e: any) => { if (!e.created_at) return false; const d = new Date(e.created_at); return d.getMonth() === card3Month && d.getFullYear() === dateNow.getFullYear(); });
     else if (card3Mode === "3months") filtered = mergedLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= threeMonthsAgo);
     else if (card3Mode === "6months") filtered = mergedLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= sixMonthsAgo);
     else if (card3Mode === "yearly") filtered = mergedLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= yearStart);
@@ -1196,7 +1215,7 @@ export default function ReceptionistDashboard() {
   const sourceDataFiltered = useMemo(() => {
     let filtered = mergedLeads;
     if (card4Mode === "today") filtered = mergedLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= todayStart);
-    else if (card4Mode === "monthly") filtered = mergedLeads.filter((e: any) => { if (!e.created_at) return false; const d = new Date(e.created_at); return d.getMonth() === card4Month && d.getFullYear() === now.getFullYear(); });
+    else if (card4Mode === "monthly") filtered = mergedLeads.filter((e: any) => { if (!e.created_at) return false; const d = new Date(e.created_at); return d.getMonth() === card4Month && d.getFullYear() === dateNow.getFullYear(); });
     else if (card4Mode === "3months") filtered = mergedLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= threeMonthsAgo);
     else if (card4Mode === "6months") filtered = mergedLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= sixMonthsAgo);
     else if (card4Mode === "yearly") filtered = mergedLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= yearStart);
@@ -1289,6 +1308,7 @@ export default function ReceptionistDashboard() {
         <header className={`h-16 border-b flex items-center justify-between px-6 flex-shrink-0 z-30 ${t.header}`} style={t.headerGlass}>
           <h1 className={`font-bold flex items-center text-sm md:text-base tracking-wide ${t.text}`}>BhoomiDwellersCRM</h1>
           <div className="flex items-center space-x-4 relative" ref={topbarRef}>
+            <AttendanceTimerWidget />
             <button onClick={() => setIsDark(!isDark)} aria-label="Toggle theme"
               className={`w-9 h-9 rounded-xl border flex items-center justify-center transition-all duration-200 hover:scale-105 active:scale-95 shadow-sm ${t.toggleWrap}`}>
               {isDark ? <SunIcon /> : <MoonIcon />}
@@ -1764,7 +1784,7 @@ export default function ReceptionistDashboard() {
           )}
 
           {/* ── SHARED PAGE HEADER ── */}
-          {!["settings", "detail", "assistant", "assigned", "recep-leads", "closed-leads"].includes(activeTab) && (
+          {!["settings", "detail", "assistant", "assigned", "recep-leads", "closed-leads", "attendance"].includes(activeTab) && (
             <div className="flex justify-between items-center mb-8">
               <h1 className={`text-xl md:text-3xl font-bold flex items-center flex-wrap gap-2 md:gap-3 ${t.text}`}>
                 Hi, {String(user?.name || "User").split(" ")[0]}
@@ -1810,10 +1830,10 @@ export default function ReceptionistDashboard() {
                     </div>
                   </div>
                   <p className={`text-[10px] font-semibold mb-3 ${t.accentText}`}>
-                    {chartMode1 === "today" && `Today — ${now.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`}
-                    {chartMode1 === "monthly" && `${MONTH_NAMES[configChartMonth]} ${now.getFullYear()}`}
+                    {chartMode1 === "today" && `Today — ${dateNow.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`}
+                    {chartMode1 === "monthly" && `${MONTH_NAMES[configChartMonth]} ${dateNow.getFullYear()}`}
                     {chartMode1 === "3months" && "Last 3 Months"}{chartMode1 === "6months" && "Last 6 Months"}
-                    {chartMode1 === "yearly" && `Year ${now.getFullYear()}`}{chartMode1 === "inception" && "All Time"}
+                    {chartMode1 === "yearly" && `Year ${dateNow.getFullYear()}`}{chartMode1 === "inception" && "All Time"}
                   </p>
                   {isFetchingEnquiries ? (
                     <div className={`flex-1 flex items-center justify-center text-sm ${t.textMuted} min-h-[230px]`}>Calculating…</div>
@@ -1867,10 +1887,10 @@ export default function ReceptionistDashboard() {
                     </div>
                   </div>
                   <p className={`text-[10px] font-semibold mb-3 ${t.accentText}`}>
-                    {card4Mode === "today" && `Today — ${now.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`}
-                    {card4Mode === "monthly" && `${MONTH_NAMES[card4Month]} ${now.getFullYear()}`}
+                    {card4Mode === "today" && `Today — ${dateNow.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`}
+                    {card4Mode === "monthly" && `${MONTH_NAMES[card4Month]} ${dateNow.getFullYear()}`}
                     {card4Mode === "3months" && "Last 3 Months"}{card4Mode === "6months" && "Last 6 Months"}
-                    {card4Mode === "yearly" && `Year ${now.getFullYear()}`}{card4Mode === "inception" && "All Time"}
+                    {card4Mode === "yearly" && `Year ${dateNow.getFullYear()}`}{card4Mode === "inception" && "All Time"}
                   </p>
                   {isFetchingEnquiries ? (
                     <div className={`flex-1 flex items-center justify-center text-sm ${t.textMuted} min-h-[230px]`}>Calculating…</div>
@@ -1901,7 +1921,7 @@ export default function ReceptionistDashboard() {
                       <button onClick={() => {
                         let f = mergedLeads;
                         if (card2Mode === "today") f = mergedLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= todayStart);
-                        else if (card2Mode === "monthly") f = mergedLeads.filter((e: any) => e.created_at && new Date(e.created_at).getMonth() === selectedMonthCard && new Date(e.created_at).getFullYear() === now.getFullYear());
+                        else if (card2Mode === "monthly") f = mergedLeads.filter((e: any) => e.created_at && new Date(e.created_at).getMonth() === selectedMonthCard && new Date(e.created_at).getFullYear() === dateNow.getFullYear());
                         else if (card2Mode === "3months") f = mergedLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= threeMonthsAgo);
                         else if (card2Mode === "6months") f = mergedLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= sixMonthsAgo);
                         else if (card2Mode === "yearly") f = mergedLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= yearStart);
@@ -1936,11 +1956,11 @@ export default function ReceptionistDashboard() {
                       }
                     </p>
                     <p className={`text-sm mt-4 font-medium ${isDark ? "text-[#d4006e]" : "text-[#9E217B]"}`}>
-                      {card2Mode === "today" && `Enquiries on ${now.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`}
-                      {card2Mode === "monthly" && `Enquiries in ${MONTH_NAMES[selectedMonthCard]} ${now.getFullYear()}`}
+                      {card2Mode === "today" && `Enquiries on ${dateNow.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`}
+                      {card2Mode === "monthly" && `Enquiries in ${MONTH_NAMES[selectedMonthCard]} ${dateNow.getFullYear()}`}
                       {card2Mode === "3months" && "Enquiries over 3 months"}
                       {card2Mode === "6months" && "Enquiries over 6 months"}
-                      {card2Mode === "yearly" && `Enquiries in ${now.getFullYear()}`}
+                      {card2Mode === "yearly" && `Enquiries in ${dateNow.getFullYear()}`}
                       {card2Mode === "alltime" && "Total enquiries captured"}
                     </p>
                   </div>
@@ -1965,7 +1985,7 @@ export default function ReceptionistDashboard() {
                     </div>
                   </div>
                   <p className={`text-[10px] font-semibold mb-3 flex items-center justify-between ${t.accentText}`}>
-                    <span>{card3Mode === "today" && `Today — ${now.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`}{card3Mode === "monthly" && `${MONTH_NAMES[card3Month]} ${now.getFullYear()}`}{card3Mode === "3months" && "Last 3 Months"}{card3Mode === "6months" && "Last 6 Months"}{card3Mode === "yearly" && `Year ${now.getFullYear()}`}{card3Mode === "inception" && "All Time"}</span>
+                    <span>{card3Mode === "today" && `Today — ${dateNow.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`}{card3Mode === "monthly" && `${MONTH_NAMES[card3Month]} ${dateNow.getFullYear()}`}{card3Mode === "3months" && "Last 3 Months"}{card3Mode === "6months" && "Last 6 Months"}{card3Mode === "yearly" && `Year ${dateNow.getFullYear()}`}{card3Mode === "inception" && "All Time"}</span>
                     <span className={t.textFaint}>{managerLeadCountsFiltered.length} managers</span>
                   </p>
                   <div className="flex-1 overflow-y-auto custom-scrollbar max-h-[250px] pr-2">
@@ -3054,6 +3074,18 @@ export default function ReceptionistDashboard() {
                 );
               })()}
             </div>
+          )}
+
+          {/* ════════════════════════════════════════════════════
+              MY ATTENDANCE TAB
+          ════════════════════════════════════════════════════ */}
+          {activeTab === "attendance" && (
+            <AttendanceView
+              adminUser={user}
+              isDark={isDark}
+              t={t}
+              now={now}
+            />
           )}
         </main>
       </div>

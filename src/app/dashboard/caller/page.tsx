@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { useActivityTracker } from "@/hooks/useActivityTracker";
 import * as XLSX from "xlsx";
 import { clearCrmSession, getStoredCrmUser, installLoggedOutBackGuard } from "@/lib/authSession";
 import { useCallerSync } from "@/lib/hooks/useCallerSync";

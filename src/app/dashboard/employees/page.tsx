@@ -4,6 +4,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { clearCrmSession, getStoredCrmUser, installLoggedOutBackGuard } from "@/lib/authSession";
 import { motion, AnimatePresence } from "framer-motion";
 import * as XLSX from "xlsx";
@@ -14,12 +15,14 @@ import {
   FaFileExcel, FaDesktop, FaCheckCircle, FaTimes, FaPaperPlane,
   FaCalendarAlt, FaHeart, FaTimesCircle, FaAngleLeft, FaCommentAlt,
   FaMoneyBillWave, FaMapMarkerAlt, FaBullseye, FaSave, FaUniversity, FaBriefcase, FaChartPie,
-  FaExchangeAlt, FaEye, FaExclamationTriangle
+  FaExchangeAlt, FaEye, FaExclamationTriangle, FaSignal, FaUserClock
 } from "react-icons/fa";
 import { FaWandMagicSparkles } from 'react-icons/fa6'
 import { useCallerSync } from "@/lib/hooks/useCallerSync";
 import CrmUpdatesNotification from "@/components/CrmUpdatesNotification";
 import { label } from "framer-motion/client";
+
+import AttendanceTimerWidget from "@/components/AttendanceTimerWidget";
 
 type RoleType = { _id: string; name: string };
 type EmployeeType = {
@@ -234,6 +237,7 @@ const ADMIN_EMAIL = "admin@bhoomi.com";
 // ============================================================================
 export default function EmployeesPage() {
   const router = useRouter();
+  useActivityTracker();
 
   const [isDark, setIsDark] = useState(() => {
     try {
@@ -296,6 +300,8 @@ export default function EmployeesPage() {
 
   // ── Caller state ──
   const [callers, setCallers] = useState<any[]>([]);
+
+
   const [callerLeads, setCallerLeads] = useState<any[]>([]);
   const [batchList, setBatchList] = useState<any[]>([]);
   const [callerLoading, setCallerLoading] = useState(false);
@@ -319,6 +325,8 @@ export default function EmployeesPage() {
 
   const [salesManagers, setSalesManagers] = useState<any[]>([]);
   const [siteHeads, setSiteHeads] = useState<any[]>([]);
+
+
   const [isFetchingManagers, setIsFetchingManagers] = useState(true);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
@@ -779,7 +787,10 @@ export default function EmployeesPage() {
     { id: "receptionist", icon: FaClipboardList, label: "Receptionist", link: "/dashboard", section: null },
     { id: "sales", icon: FaUsers, label: "Sales Managers", link: "/dashboard", section: null },
     { id: "site_head", icon: FaUniversity, label: "Site Heads", link: "/dashboard", section: null },
+    // ADD THESE THREE — they navigate back to dashboard with the right tab
+    { id: "attendance", icon: FaUserClock, label: "My Attendance", link: "/dashboard", section: null },
     { id: "monitoring", icon: FaChartPie, label: "Daily Monitor", link: "/dashboard", section: null },
+    { id: "live_activity", icon: FaSignal, label: "Attendance Tracker", link: "/dashboard", section: null },
     { id: "geo", icon: FaMapMarkerAlt, label: "Geo Analytics", link: "/dashboard", section: null },
     { id: "callers", icon: FaPhoneAlt, label: "Caller Panel", link: "/dashboard/employees", section: "callers" as const },
     { id: "employees", icon: FaIdCard, label: "Add Employee", link: "/dashboard/employees", section: "employees" as const },

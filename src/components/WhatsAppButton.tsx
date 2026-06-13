@@ -2,6 +2,8 @@
 "use client";
 import { useState } from "react";
 
+import { emitActivity } from "@/hooks/useActivityTracker";
+
 interface Props {
   lead: { id: number; name: string; phone: string };
   salesManager: { name: string; whatsapp_number: string };
@@ -40,6 +42,14 @@ export default function WhatsAppButton({ lead, salesManager }: Props) {
     if (sending) return; // debounce
     setSending(true);
 
+    emitActivity({
+      type: "WHATSAPP_SENT",
+      action: "Sent WhatsApp Message",
+      leadId: lead.id,
+      leadName: lead.name,
+      module: "WhatsApp Modal"
+    });
+
     // 1. Log to DB
     await fetch("/api/whatsapp-logs", {
       method: "POST",
@@ -66,7 +76,16 @@ export default function WhatsAppButton({ lead, salesManager }: Props) {
     <>
       {/* Button */}
       <button
-        onClick={() => setShowModal(true)}
+        onClick={() => {
+          setShowModal(true);
+          emitActivity({
+            type: "LEAD_OPENED",
+            action: "Viewing WhatsApp",
+            leadId: lead.id,
+            leadName: lead.name,
+            module: "WhatsApp Modal"
+          });
+        }}
         className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded flex items-center gap-2"
       >
         <WhatsAppIcon /> Send WhatsApp
