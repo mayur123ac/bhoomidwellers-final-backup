@@ -58,8 +58,12 @@ function buildTheme(isDark: boolean) {
     headerTitle: isDark ? "text-white" : "text-[#1A1A1A]",
     headerBadge: isDark ? "bg-[#9E217B]/10 border-[#9E217B]/30 text-[#d946a8]" : "bg-[#9E217B]/10 border-[#9E217B]/30 text-[#9E217B]",
     // ── panels / sections ──
-    panel: isDark ? "bg-[#111111] border-[#222]" : "bg-white border-indigo-300",
-    panelHead: isDark ? "border-[#222] bg-[#151515]" : "border-indigo-200 bg-[#F1F5F9]",
+    panel: isDark
+      ? "border"
+      : "bg-white border",
+    panelHead: isDark
+      ? "border-b bg-[#0f0f0f]"
+      : "border-b bg-[#F8FAFC]",
     inner: isDark ? "bg-[#1a1a1a]" : "bg-[#F8FAFC]",
     innerBorder: isDark ? "border-[#222]" : "border-indigo-200",
     innerBorderSt: isDark ? "border-[#333]" : "border-indigo-300",
@@ -814,54 +818,212 @@ export default function EmployeesPage() {
 
       {/* ── SIDEBAR ── */}
       <motion.aside
-        initial={{ width: "80px" }} animate={{ width: isSidebarHovered ? "240px" : "80px" }} transition={{ duration: 0.2, ease: "easeInOut" }}
+        initial={{ width: "72px" }} animate={{ width: isSidebarHovered ? "248px" : "72px" }} transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
         onMouseEnter={() => setIsSidebarHovered(true)} onMouseLeave={() => setIsSidebarHovered(false)}
-        className="fixed left-0 top-0 h-screen bg-[#111111] border-r border-[#222] z-50 flex flex-col py-6 overflow-hidden shadow-2xl"
+        className="fixed left-0 top-0 h-screen z-50 flex flex-col overflow-hidden"
+        style={{
+          background: "linear-gradient(180deg, #0f0f1a 0%, #111128 40%, #0f0f1a 100%)",
+          borderRight: "1px solid rgba(158,33,123,0.15)",
+          boxShadow: "4px 0 24px rgba(0,0,0,0.4), inset -1px 0 0 rgba(158,33,123,0.08)",
+        }}
       >
-        <div className="flex items-center px-5 mb-10 whitespace-nowrap">
-          <div className="w-10 h-10 min-w-[40px] bg-[#9E217B] rounded-xl flex items-center justify-center text-xl font-bold text-white shadow-lg shadow-[#9E217B]/30">B</div>
-          <motion.span initial={{ opacity: 0 }} animate={{ opacity: isSidebarHovered ? 1 : 0 }} className="ml-4 font-bold text-lg text-white tracking-wide">Bhoomi CRM</motion.span>
+        {/* Logo */}
+        <div className="flex items-center px-4 py-5 mb-2 whitespace-nowrap flex-shrink-0">
+          <div
+            className="w-10 h-10 min-w-[40px] rounded-2xl flex items-center justify-center text-base font-black text-white flex-shrink-0"
+            style={{
+              background: "linear-gradient(135deg, #9E217B 0%, #c7299a 50%, #7B2FF7 100%)",
+              boxShadow: "0 4px 16px rgba(158,33,123,0.5), 0 0 0 1px rgba(199,41,154,0.3)",
+            }}
+          >B</div>
+          <motion.div
+            initial={{ opacity: 0, x: -8 }}
+            animate={{ opacity: isSidebarHovered ? 1 : 0, x: isSidebarHovered ? 0 : -8 }}
+            transition={{ duration: 0.25, ease: "easeOut" }}
+            className="ml-3 overflow-hidden"
+          >
+            <p className="font-black text-white text-[15px] leading-tight tracking-wide whitespace-nowrap">Bhoomi CRM</p>
+            <p className="text-[10px] font-medium whitespace-nowrap" style={{ color: "rgba(217,70,168,0.7)" }}>Admin Panel</p>
+          </motion.div>
         </div>
-        <nav className="flex flex-col gap-2 px-3 flex-1">
-          {menuItems.map(item => {
-            const isActive = item.section ? activeSection === item.section : false;
-            return item.section ? (
-              <button key={item.id}
-                onClick={() => { setActiveSection(item.section!); setIsSidebarHovered(false); if (item.section === "callers" && callerSubView === "control") setCallerSubView("table"); }}
-                className={`flex items-center px-3 py-3.5 rounded-xl cursor-pointer transition-colors whitespace-nowrap relative w-full text-left
-                  ${isActive ? "bg-[#9E217B]/20 text-[#d946a8]" : "text-gray-500 hover:bg-[#1a1a1a] hover:text-gray-300"}`}>
-                {isActive && <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-[#9E217B] rounded-r-full shadow-[0_0_8px_rgba(158,33,123,0.5)]" />}
-                <item.icon className="w-5 h-5 min-w-[20px] ml-1" />
-                <motion.span initial={{ opacity: 0 }} animate={{ opacity: isSidebarHovered ? 1 : 0 }} className={`ml-5 font-semibold text-sm ${isActive ? "text-[#d946a8]" : ""}`}>{item.label}</motion.span>
-              </button>
-            ) : (
-              <Link key={item.id} href={item.link} onClick={() => { localStorage.setItem("return_tab", item.id); setIsSidebarHovered(false); }}
-                className="flex items-center px-3 py-3.5 rounded-xl cursor-pointer transition-colors whitespace-nowrap text-gray-500 hover:bg-[#1a1a1a] hover:text-gray-300">
-                <item.icon className="w-5 h-5 min-w-[20px] ml-1" />
-                <motion.span initial={{ opacity: 0 }} animate={{ opacity: isSidebarHovered ? 1 : 0 }} className="ml-5 font-semibold text-sm">{item.label}</motion.span>
-              </Link>
-            );
-          })}
-        </nav>
-        {/* <div className="px-3 mt-auto">
-          <div className="flex items-center px-3 py-3.5 rounded-xl cursor-pointer text-gray-500 hover:bg-[#1a1a1a] hover:text-gray-300 transition-colors whitespace-nowrap">
-            <FaCog className="w-5 h-5 min-w-[20px] ml-1" />
+
+        {/* Divider */}
+        <div className="mx-4 mb-4 flex-shrink-0" style={{ height: "1px", background: "linear-gradient(90deg, transparent, rgba(158,33,123,0.3), transparent)" }} />
+
+        {/* Nav */}
+        {/* Nav */}
+        <nav className="flex flex-col gap-2 px-2 flex-1 overflow-hidden">
+          {/* Main nav items (all except last) */}
+          <div className="flex flex-col gap-2 flex-1">
+            {menuItems.slice(0, -1).map((item) => {
+              const isActive = item.section ? activeSection === item.section : false;
+              return (
+                <div
+                  key={item.id}
+                  title={!isSidebarHovered ? item.label : undefined}
+                  className="relative cursor-pointer group"
+                  onClick={() => {
+                    if (item.section) {
+                      setActiveSection(item.section!);
+                      setIsSidebarHovered(false);
+                      if (item.section === "callers" && callerSubView === "control") setCallerSubView("table");
+                    } else {
+                      localStorage.setItem("return_tab", item.id);
+                      router.push(item.link);
+                      setIsSidebarHovered(false);
+                    }
+                  }}
+                >
+                  {isActive && (
+                    <div
+                      className="absolute inset-0 rounded-xl pointer-events-none"
+                      style={{
+                        background: "radial-gradient(ellipse at left center, rgba(217,70,168,0.12) 0%, transparent 70%)",
+                        animation: "sm-glow-pulse 3s ease-in-out infinite",
+                      }}
+                    />
+                  )}
+                  <div
+                    className={`flex items-center gap-3 px-4.5 py-2.5 rounded-xl transition-all duration-200 relative overflow-hidden ${isActive ? "text-[#d946a8]" : "text-gray-500 hover:text-gray-200"
+                      }`}
+                    style={isActive ? {
+                      background: "linear-gradient(135deg, rgba(158,33,123,0.22) 0%, rgba(217,70,168,0.07) 100%)",
+                      boxShadow: "inset 0 0 0 1px rgba(217,70,168,0.28), 0 2px 16px rgba(158,33,123,0.12)",
+                    } : {}}
+                  >
+                    {isActive && (
+                      <div
+                        className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-[#d946a8]"
+                        style={{ boxShadow: "0 0 10px rgba(217,70,168,0.9), 0 0 4px rgba(217,70,168,0.6)" }}
+                      />
+                    )}
+                    {!isActive && (
+                      <div className="absolute inset-0 rounded-xl bg-white/0 group-hover:bg-white/[0.04] transition-colors duration-200" />
+                    )}
+                    <div
+                      className={`flex-shrink-0 transition-all duration-200 ${isActive ? "text-[#d946a8]" : "text-gray-600 group-hover:text-gray-300"
+                        }`}
+                      style={isActive ? { filter: "drop-shadow(0 0 5px rgba(217,70,168,0.65))" } : {}}
+                    >
+                      <item.icon style={{ width: "17px", height: "17px" }} />
+                    </div>
+                    <span
+                      className={`text-[12.5px] font-semibold whitespace-nowrap overflow-hidden transition-all duration-300 ${isActive ? "text-[#d946a8]" : "text-gray-400 group-hover:text-gray-100"
+                        }`}
+                      style={{
+                        maxWidth: isSidebarHovered ? "140px" : "0px",
+                        opacity: isSidebarHovered ? 1 : 0,
+                        transform: isSidebarHovered ? "translateX(0)" : "translateX(-6px)",
+                        letterSpacing: "0.01em",
+                      }}
+                    >
+                      {item.label}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        </div> */}
+
+          {/* Last item (Bhoomi AI) pinned to bottom */}
+          {(() => {
+            const item = menuItems[menuItems.length - 1];
+            const isActive = item.section ? activeSection === item.section : false;
+            return (
+              <div
+                key={item.id}
+                title={!isSidebarHovered ? item.label : undefined}
+                className="relative cursor-pointer group mt-auto"
+                onClick={() => {
+                  if (item.section) {
+                    setActiveSection(item.section!);
+                    setIsSidebarHovered(false);
+                  } else {
+                    localStorage.setItem("return_tab", item.id);
+                    router.push(item.link);
+                    setIsSidebarHovered(false);
+                  }
+                }}
+              >
+                {isActive && (
+                  <div
+                    className="absolute inset-0 rounded-xl pointer-events-none"
+                    style={{
+                      background: "radial-gradient(ellipse at left center, rgba(217,70,168,0.12) 0%, transparent 70%)",
+                      animation: "sm-glow-pulse 3s ease-in-out infinite",
+                    }}
+                  />
+                )}
+                <div
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 relative overflow-hidden ${isActive ? "text-[#d946a8]" : "text-gray-500 hover:text-gray-200"
+                    }`}
+                  style={isActive ? {
+                    background: "linear-gradient(135deg, rgba(158,33,123,0.22) 0%, rgba(217,70,168,0.07) 100%)",
+                    boxShadow: "inset 0 0 0 1px rgba(217,70,168,0.28), 0 2px 16px rgba(158,33,123,0.12)",
+                  } : {}}
+                >
+                  {isActive && (
+                    <div
+                      className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-[#d946a8]"
+                      style={{ boxShadow: "0 0 10px rgba(217,70,168,0.9), 0 0 4px rgba(217,70,168,0.6)" }}
+                    />
+                  )}
+                  {!isActive && (
+                    <div className="absolute inset-0 rounded-xl bg-white/0 group-hover:bg-white/[0.04] transition-colors duration-200" />
+                  )}
+                  <div
+                    className={`flex-shrink-0 transition-all duration-200 ${isActive ? "text-[#d946a8]" : "text-gray-600 group-hover:text-gray-300"
+                      }`}
+                    style={isActive ? { filter: "drop-shadow(0 0 5px rgba(217,70,168,0.65))" } : {}}
+                  >
+                    <item.icon style={{ width: "17px", height: "17px" }} />
+                  </div>
+                  <span
+                    className={`text-[12.5px] font-semibold whitespace-nowrap overflow-hidden transition-all duration-300 ${isActive ? "text-[#d946a8]" : "text-gray-400 group-hover:text-gray-100"
+                      }`}
+                    style={{
+                      maxWidth: isSidebarHovered ? "140px" : "0px",
+                      opacity: isSidebarHovered ? 1 : 0,
+                      transform: isSidebarHovered ? "translateX(0)" : "translateX(-6px)",
+                      letterSpacing: "0.01em",
+                    }}
+                  >
+                    {item.label}
+                  </span>
+                </div>
+              </div>
+            );
+          })()}
+        </nav>
+
+        {/* Bottom gradient fade */}
+        <div className="flex-shrink-0" style={{ height: "60px", background: "linear-gradient(0deg, #0f0f1a 0%, transparent 100%)" }} />
       </motion.aside>
 
       {/* ── MAIN ── */}
-      <div className={`flex-1 flex flex-col pl-[80px] h-screen overflow-hidden transition-colors duration-300 ${t.mainBg}`}>
+      <div className={`flex-1 flex flex-col pl-[72px] h-screen overflow-hidden transition-colors duration-300 ${t.mainBg}`}>
 
         {/* HEADER */}
-        <header className={`h-16 border-b flex items-center justify-between px-8 z-30 flex-shrink-0 transition-colors duration-300 ${t.header}`}>
+        <header
+          className={`h-16 flex items-center justify-between px-8 z-30 flex-shrink-0 transition-colors duration-300 ${t.header}`}
+          style={{
+            borderBottom: isDark ? "1px solid rgba(158,33,123,0.12)" : "1px solid rgba(0,0,0,0.08)",
+            backdropFilter: "blur(12px)",
+            WebkitBackdropFilter: "blur(12px)",
+            background: isDark ? "rgba(10,10,15,0.85)" : "rgba(255,255,255,0.9)",
+          }}
+        >
           <h1 className={`font-bold text-lg tracking-wide flex items-center gap-3 ${t.headerTitle}`}>
             {activeSection === "callers"
               ? callerSubView === "control" ? "Caller Control Mode" : "Caller Panel"
               : activeSection === "ai" ? "Bhoomi AI" : "Add Employee"}
-            <span className={`px-2 py-0.5 rounded text-xs border ${callerSubView === "control"
-              ? "bg-orange-500/10 border-orange-500/30 text-orange-400"
-              : t.headerBadge}`}>
+            <span
+              className="text-xs font-semibold px-2.5 py-0.5 rounded-full"
+              style={callerSubView === "control"
+                ? { background: "rgba(249,115,22,0.12)", border: "1px solid rgba(249,115,22,0.3)", color: "#fb923c" }
+                : { background: "rgba(158,33,123,0.12)", border: "1px solid rgba(158,33,123,0.3)", color: "#d946a8" }
+              }
+            >
               {callerSubView === "control" ? "Admin Acting as Caller" : "Admin Root"}
             </span>
           </h1>
@@ -1023,7 +1185,16 @@ export default function EmployeesPage() {
               </div>
 
               {/* ── Add Custom Role ── */}
-              <div className={`rounded-2xl border p-6 mb-6 shadow-sm ${t.panel}`}>
+              <div
+                className={`rounded-2xl p-6 mb-6 ${t.panel}`}
+                style={{
+                  border: isDark ? "1px solid rgba(158,33,123,0.12)" : "1px solid rgba(0,0,0,0.08)",
+                  background: isDark ? "rgba(17,17,24,0.8)" : "#ffffff",
+                  boxShadow: isDark
+                    ? "0 4px 24px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.03)"
+                    : "0 2px 16px rgba(0,0,0,0.06), 0 1px 4px rgba(0,0,0,0.04)",
+                }}
+              >
                 <h2 className={`text-base font-bold mb-4 flex items-center gap-2 ${t.text}`}>
                   <div className={`w-1 h-5 ${t.dividerBar} rounded-full`} />
                   Add a Custom System Role
@@ -1043,7 +1214,16 @@ export default function EmployeesPage() {
               </div>
 
               {/* ── Create Employee Form ── */}
-              <div className={`rounded-2xl border p-6 mb-6 shadow-sm ${t.panel}`}>
+              <div
+                className={`rounded-2xl p-6 mb-6 ${t.panel}`}
+                style={{
+                  border: isDark ? "1px solid rgba(158,33,123,0.12)" : "1px solid rgba(0,0,0,0.08)",
+                  background: isDark ? "rgba(17,17,24,0.8)" : "#ffffff",
+                  boxShadow: isDark
+                    ? "0 4px 24px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.03)"
+                    : "0 2px 16px rgba(0,0,0,0.06), 0 1px 4px rgba(0,0,0,0.04)",
+                }}
+              >
                 <h2 className={`text-base font-bold mb-5 flex items-center gap-2 ${t.text}`}>
                   <div className={`w-1 h-5 ${t.dividerBar} rounded-full`} />
                   Create & Assign Role to Employee
@@ -1097,7 +1277,16 @@ export default function EmployeesPage() {
               </div>
 
               {/* ── Account Activation Management ── */}
-              <div className={`rounded-2xl border p-6 mb-6 shadow-sm ${t.panel}`}>
+              <div
+                className={`rounded-2xl p-6 mb-6 ${t.panel}`}
+                style={{
+                  border: isDark ? "1px solid rgba(158,33,123,0.12)" : "1px solid rgba(0,0,0,0.08)",
+                  background: isDark ? "rgba(17,17,24,0.8)" : "#ffffff",
+                  boxShadow: isDark
+                    ? "0 4px 24px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.03)"
+                    : "0 2px 16px rgba(0,0,0,0.06), 0 1px 4px rgba(0,0,0,0.04)",
+                }}
+              >
                 <h2 className={`text-base font-bold mb-5 flex items-center gap-2 ${t.text}`}>
                   <div className={`w-1 h-5 ${t.dividerBar} rounded-full`} />
                   Account Activation Management
@@ -1885,16 +2074,22 @@ export default function EmployeesPage() {
 
       <style dangerouslySetInnerHTML={{
         __html: `
-        .custom-scrollbar::-webkit-scrollbar{width:6px;height:6px}
+        .custom-scrollbar::-webkit-scrollbar{width:5px;height:5px}
         .custom-scrollbar::-webkit-scrollbar-track{background:transparent}
-        .custom-scrollbar::-webkit-scrollbar-thumb{background:rgba(158,33,123,0.25);border-radius:10px}
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover{background:rgba(158,33,123,0.45)}
-        .custom-scrollbar-light::-webkit-scrollbar{width:6px;height:6px}
+        .custom-scrollbar::-webkit-scrollbar-thumb{background:rgba(158,33,123,0.3);border-radius:10px}
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover{background:rgba(158,33,123,0.55)}
+        .custom-scrollbar-light::-webkit-scrollbar{width:5px;height:5px}
         .custom-scrollbar-light::-webkit-scrollbar-track{background:transparent}
-        .custom-scrollbar-light::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:10px}
-        .custom-scrollbar-light::-webkit-scrollbar-thumb:hover{background:#94a3b8}
-        @keyframes fadeIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
-        .animate-fadeIn{animation:fadeIn 0.2s ease-out}
+        .custom-scrollbar-light::-webkit-scrollbar-thumb{background:rgba(0,0,0,0.1);border-radius:10px}
+        .custom-scrollbar-light::-webkit-scrollbar-thumb:hover{background:rgba(0,0,0,0.2)}
+        @keyframes fadeIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+        .animate-fadeIn{animation:fadeIn 0.25s cubic-bezier(0.4,0,0.2,1)}
+        @keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+        .animate-slideUp{animation:slideUp 0.3s cubic-bezier(0.4,0,0.2,1)}
+        @keyframes sm-glow-pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.55; }
+        }
       `}} />
     </div>
   );

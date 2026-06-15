@@ -53,13 +53,15 @@ function buildTheme(isDark: boolean) {
   return {
     pageWrap: isDark ? "bg-[#0A0A0F] text-white" : "text-[#1A1A1A]",
     mainBg: isDark ? "bg-[#121212]" : "bg-transparent",
-    sidebar: "bg-[#1a1a1a] border-r border-[#2a2a2a]",
+    sidebar: "",
     header: isDark ? "bg-[#1a1a1a] border-b border-[#2a2a2a]" : "bg-white border-b border-[#9CA3AF]",
     headerGlass: isDark ? {} : { boxShadow: "0 1px 0 #9CA3AF, 0 4px 16px rgba(158,33,123,0.06)" },
     card: isDark
       ? "bg-[#1a1a1a] border border-[#2a2a2a] hover:border-[#9E217B]/50 hover:bg-[#1e1e1e]"
-      : "bg-gradient-to-r from-[#f1f5ff] via-[#eef2ff] to-[#f5f3ff] border border-indigo-300 hover:border-[#9E217B]/40 hover:shadow-[0_-4px_16px_2px_rgba(158,33,123,0.2),0_0_24px_6px_rgba(158,33,123,0.12),0_4px_16px_rgba(0,0,0,0.08)]",
-    cardGlass: isDark ? {} : { boxShadow: "0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(158,33,123,0.07), 0 12px 28px rgba(0,0,0,0.08)" },
+      : "bg-white border border-indigo-300 hover:border-[#9E217B]/40 hover:shadow-[0_0_16px_rgba(158,33,123,0.15)]",
+    cardGlass: isDark
+      ? {}
+      : { boxShadow: "0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(158,33,123,0.07), 0 12px 28px rgba(0,0,0,0.08)" },
     cardClosing: isDark ? "bg-yellow-900/10 border border-yellow-500/30 hover:border-yellow-400/60" : "bg-amber-50 border border-amber-200 hover:border-amber-400/60",
     tableWrap: isDark ? "bg-[#1a1a1a] border border-[#2a2a2a]" : "bg-white border border-indigo-300",
     tableGlass: isDark ? {} : { boxShadow: "0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(158,33,123,0.06), 0 16px 36px rgba(0,0,0,0.09)" },
@@ -683,42 +685,185 @@ export default function AdminAtlasDashboard() {
       </AnimatePresence>
 
       <motion.aside
-        initial={{ width: "80px" }} animate={{ width: isSidebarHovered ? "240px" : "80px" }} transition={{ duration: 0.2, ease: "easeInOut" }}
+        initial={{ width: "72px" }} animate={{ width: isSidebarHovered ? "248px" : "72px" }} transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
         onMouseEnter={() => setIsSidebarHovered(true)} onMouseLeave={() => setIsSidebarHovered(false)}
-        className={`fixed left-0 top-0 h-screen border-r z-50 flex flex-col py-6 overflow-hidden shadow-2xl ${theme.sidebar}`}
+        className="fixed left-0 top-0 h-screen z-50 flex flex-col overflow-hidden"
+        style={{
+          background: "linear-gradient(180deg, #0f0f1a 0%, #111128 40%, #0f0f1a 100%)",
+          borderRight: "1px solid rgba(158,33,123,0.15)",
+          boxShadow: "4px 0 24px rgba(0,0,0,0.4), inset -1px 0 0 rgba(158,33,123,0.08)",
+        }}
       >
-        <div className="flex items-center px-5 mb-10 whitespace-nowrap">
-          <div className={`w-10 h-10 min-w-[40px] rounded-xl flex items-center justify-center text-xl font-bold text-white shadow-lg ${theme.logoBg}`}>B</div>
-          <motion.span initial={{ opacity: 0 }} animate={{ opacity: isSidebarHovered ? 1 : 0 }} className="ml-4 font-bold text-lg text-white tracking-wide">Bhoomi CRM</motion.span>
+        <div className="flex items-center px-4 py-5 mb-2 whitespace-nowrap flex-shrink-0">
+          <div
+            className="w-10 h-10 min-w-[40px] rounded-2xl flex items-center justify-center text-base font-black text-white flex-shrink-0"
+            style={{
+              background: "linear-gradient(135deg, #9E217B 0%, #c7299a 50%, #7B2FF7 100%)",
+              boxShadow: "0 4px 16px rgba(158,33,123,0.5), 0 0 0 1px rgba(199,41,154,0.3)",
+            }}
+          >B</div>
+          <motion.div
+            initial={{ opacity: 0, x: -8 }}
+            animate={{ opacity: isSidebarHovered ? 1 : 0, x: isSidebarHovered ? 0 : -8 }}
+            transition={{ duration: 0.25, ease: "easeOut" }}
+            className="ml-3 overflow-hidden"
+          >
+            <p className="font-black text-white text-[15px] leading-tight tracking-wide whitespace-nowrap">Bhoomi CRM</p>
+            <p className="text-[10px] font-medium whitespace-nowrap" style={{ color: "rgba(217,70,168,0.7)" }}>Admin Panel</p>
+          </motion.div>
         </div>
-        <nav className="flex flex-col gap-2 px-3 flex-1">
-          {menuItems.map((item) => {
-            const isActive = activeView === item.id && item.id !== "employees" && item.id !== "caller";
+
+        <div className="mx-4 mb-4 flex-shrink-0" style={{ height: "1px", background: "linear-gradient(90deg, transparent, rgba(158,33,123,0.3), transparent)" }} />
+
+        <nav className="flex flex-col gap-2 px-2 flex-1 overflow-hidden">
+          {/* Main nav items (all except last) */}
+          <div className="flex flex-col gap-2 flex-1">
+            {menuItems.slice(0, -1).map((item) => {
+              const isActive = activeView === item.id;
+              return (
+                <div
+                  key={item.id}
+                  onClick={() => handleMenuClick(item.id)}
+                  title={!isSidebarHovered ? item.label : undefined}
+                  className="relative cursor-pointer group"
+                >
+                  {isActive && (
+                    <div
+                      className="absolute inset-0 rounded-xl pointer-events-none"
+                      style={{
+                        background: "radial-gradient(ellipse at left center, rgba(217,70,168,0.12) 0%, transparent 70%)",
+                        animation: "sm-glow-pulse 3s ease-in-out infinite",
+                      }}
+                    />
+                  )}
+                  <div
+                    className={`flex items-center gap-3 px-4.5 py-2.5 rounded-xl transition-all duration-200 relative overflow-hidden ${isActive ? "text-[#d946a8]" : "text-gray-500 hover:text-gray-200"
+                      }`}
+                    style={isActive ? {
+                      background: "linear-gradient(135deg, rgba(158,33,123,0.22) 0%, rgba(217,70,168,0.07) 100%)",
+                      boxShadow: "inset 0 0 0 1px rgba(217,70,168,0.28), 0 2px 16px rgba(158,33,123,0.12)",
+                    } : {}}
+                  >
+                    {isActive && (
+                      <div
+                        className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-[#d946a8]"
+                        style={{ boxShadow: "0 0 10px rgba(217,70,168,0.9), 0 0 4px rgba(217,70,168,0.6)" }}
+                      />
+                    )}
+                    {!isActive && (
+                      <div className="absolute inset-0 rounded-xl bg-white/0 group-hover:bg-white/[0.04] transition-colors duration-200" />
+                    )}
+                    <div
+                      className={`flex-shrink-0 transition-all duration-200 ${isActive ? "text-[#d946a8]" : "text-gray-600 group-hover:text-gray-300"
+                        }`}
+                      style={isActive ? { filter: "drop-shadow(0 0 5px rgba(217,70,168,0.65))" } : {}}
+                    >
+                      <item.icon style={{ width: "17px", height: "17px" }} />
+                    </div>
+                    <span
+                      className={`text-[12.5px] font-semibold whitespace-nowrap overflow-hidden transition-all duration-300 ${isActive ? "text-[#d946a8]" : "text-gray-400 group-hover:text-gray-100"
+                        }`}
+                      style={{
+                        maxWidth: isSidebarHovered ? "140px" : "0px",
+                        opacity: isSidebarHovered ? 1 : 0,
+                        transform: isSidebarHovered ? "translateX(0)" : "translateX(-6px)",
+                        letterSpacing: "0.01em",
+                      }}
+                    >
+                      {item.label}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Last item pinned to bottom */}
+          {(() => {
+            const item = menuItems[menuItems.length - 1];
+            const isActive = activeView === item.id;
             return (
               <div
                 key={item.id}
                 onClick={() => handleMenuClick(item.id)}
-                className={`flex items-center px-3 py-3.5 rounded-xl cursor-pointer transition-colors whitespace-nowrap relative group
-                  ${isActive ? "bg-[#9E217B]/20 text-[#d946a8]" : "text-gray-400 hover:bg-[#252525] hover:text-gray-200"}`}
+                title={!isSidebarHovered ? item.label : undefined}
+                className="relative cursor-pointer group mt-auto"
               >
                 {isActive && (
-                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-[#9E217B] rounded-r-full shadow-[0_0_8px_rgba(158,33,123,0.6)]" />
+                  <div
+                    className="absolute inset-0 rounded-xl pointer-events-none"
+                    style={{
+                      background: "radial-gradient(ellipse at left center, rgba(217,70,168,0.12) 0%, transparent 70%)",
+                      animation: "sm-glow-pulse 3s ease-in-out infinite",
+                    }}
+                  />
                 )}
-                <item.icon className="w-5 h-5 min-w-[20px] ml-1" />
-                <motion.span initial={{ opacity: 0 }} animate={{ opacity: isSidebarHovered ? 1 : 0 }} className={`ml-5 font-semibold text-sm ${isActive ? "text-[#d946a8]" : ""}`}>
-                  {item.label}
-                </motion.span>
+                <div
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 relative overflow-hidden ${isActive ? "text-[#d946a8]" : "text-gray-500 hover:text-gray-200"
+                    }`}
+                  style={isActive ? {
+                    background: "linear-gradient(135deg, rgba(158,33,123,0.22) 0%, rgba(217,70,168,0.07) 100%)",
+                    boxShadow: "inset 0 0 0 1px rgba(217,70,168,0.28), 0 2px 16px rgba(158,33,123,0.12)",
+                  } : {}}
+                >
+                  {isActive && (
+                    <div
+                      className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-[#d946a8]"
+                      style={{ boxShadow: "0 0 10px rgba(217,70,168,0.9), 0 0 4px rgba(217,70,168,0.6)" }}
+                    />
+                  )}
+                  {!isActive && (
+                    <div className="absolute inset-0 rounded-xl bg-white/0 group-hover:bg-white/[0.04] transition-colors duration-200" />
+                  )}
+                  <div
+                    className={`flex-shrink-0 transition-all duration-200 ${isActive ? "text-[#d946a8]" : "text-gray-600 group-hover:text-gray-300"
+                      }`}
+                    style={isActive ? { filter: "drop-shadow(0 0 5px rgba(217,70,168,0.65))" } : {}}
+                  >
+                    <item.icon style={{ width: "17px", height: "17px" }} />
+                  </div>
+                  <span
+                    className={`text-[12.5px] font-semibold whitespace-nowrap overflow-hidden transition-all duration-300 ${isActive ? "text-[#d946a8]" : "text-gray-400 group-hover:text-gray-100"
+                      }`}
+                    style={{
+                      maxWidth: isSidebarHovered ? "140px" : "0px",
+                      opacity: isSidebarHovered ? 1 : 0,
+                      transform: isSidebarHovered ? "translateX(0)" : "translateX(-6px)",
+                      letterSpacing: "0.01em",
+                    }}
+                  >
+                    {item.label}
+                  </span>
+                </div>
               </div>
             );
-          })}
+          })()}
         </nav>
+
+        <div className="flex-shrink-0" style={{ height: "60px", background: "linear-gradient(0deg, #0f0f1a 0%, transparent 100%)" }} />
       </motion.aside>
 
-      <div className={`flex-1 flex flex-col pl-[80px] h-screen overflow-hidden ${theme.mainBg}`}>
-        <header className={`h-16 flex items-center justify-between px-8 z-[40] transition-colors duration-300 relative ${theme.header}`} style={theme.headerGlass}>
+      <div className={`flex-1 flex flex-col pl-[72px] h-screen overflow-hidden ${theme.mainBg}`}>
+        <header
+          className={`h-16 flex items-center justify-between px-8 z-[40] transition-colors duration-300 relative ${theme.header}`}
+          style={{
+            borderBottom: isDark ? "1px solid rgba(158,33,123,0.12)" : "1px solid rgba(0,0,0,0.07)",
+            backdropFilter: "blur(16px)",
+            WebkitBackdropFilter: "blur(16px)",
+            background: isDark ? "rgba(10,10,20,0.88)" : "rgba(255,255,255,0.92)",
+            boxShadow: isDark ? "0 1px 0 rgba(158,33,123,0.08)" : "0 1px 0 rgba(0,0,0,0.05)",
+          }}
+        >
           <h1 className={`font-bold text-lg capitalize tracking-wide flex items-center gap-3 ${theme.text}`}>
             {activeView.replace("_", " ")}
-            <span className={`${theme.settingsBg} ${theme.textMuted} px-2 py-0.5 rounded text-xs border capitalize`}>{user?.role || "Admin"}</span>
+            <span
+              className="text-xs font-semibold px-2.5 py-1 rounded-full capitalize"
+              style={{
+                background: "rgba(158,33,123,0.1)",
+                border: "1px solid rgba(158,33,123,0.25)",
+                color: isDark ? "#d946a8" : "#9E217B",
+              }}
+            >{user?.role || "Admin"}</span>
           </h1>
 
           <div className="flex items-center gap-6 relative z-[50]" ref={topbarRef}>

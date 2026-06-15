@@ -59,6 +59,7 @@ const MoonIcon = () => (
   </svg>
 );
 
+
 // ─── THEME TOKEN BUILDER ──────────────────────────────────────────────────────
 function buildTheme(isDark: boolean) {
   return {
@@ -116,7 +117,7 @@ function buildTheme(isDark: boolean) {
     textHeader: isDark ? "text-xs text-gray-500 uppercase" : "text-xs text-[#334155] font-bold uppercase",
 
     // ── Navigation ──
-    navActive: isDark ? "bg-[#9E217B]/20 border-[#9E217B]/60 text-[#d946a8]" : "bg-[#9E217B]/20 text-[#d946a8] border-transparent",
+    navActive: isDark ? "bg-gradient-to-r from-[#9E217B]/40 to-[#7B2FF7]/20 border-[#d946a8]/60 text-[#d946a8]" : "bg-gradient-to-r from-[#9E217B]/40 to-[#7B2FF7]/20 text-[#d946a8] border-transparent",
     navInactive: isDark ? "text-gray-500 hover:text-gray-300 hover:bg-white/5 border-transparent" : "text-[#9CA3AF] hover:bg-[#2A2A2A] hover:text-white border-transparent",
     navIndicator: isDark ? "bg-[#d946a8] shadow-[0_0_10px_2px_rgba(158,33,123,0.5)]" : "bg-[#9E217B] shadow-[0_0_8px_rgba(158,33,123,0.4)]",
 
@@ -295,7 +296,7 @@ export default function SalesDashboard() {
   useActivityTracker();
   const [isDark, setIsDark] = useState(false);
   const t = buildTheme(isDark);
-
+  const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const [user, setUser] = useState({ name: "Loading...", role: "Sales Manager", email: "", password: "" });
   const [activeView, setActiveView] = useState("overview");
   const [showPassword, setShowPassword] = useState(false);
@@ -404,28 +405,220 @@ export default function SalesDashboard() {
       }}
     >
       {/* ── SIDEBAR (always dark, like receptionist) ── */}
-      <aside className={`hidden md:flex w-15 border-r flex-col items-center py-3 flex-shrink-0 z-40 shadow-sm ${t.sidebar}`}>
-        <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl font-bold text-white mb-10 mt-2 cursor-pointer ${t.logoBg}`}>B</div>
-        <nav className="flex flex-col space-y-6 w-full items-center">
-          {[
-            { view: "overview", icon: <FaThLarge className="w-5 h-5" />, title: "Dashboard" },
-            { view: "forms", icon: <FaFileInvoice className="w-5 h-5" />, title: "Assigned Leads" },
-            { view: "closed-leads", icon: <FaCheckCircle className="w-5 h-5" />, title: "Closed Leads" },
-            { view: "attendance", icon: <FaClock className="w-5 h-5" />, title: "My Attendance" },
-            { view: "assistant", icon: <FaRobot className="w-5 h-5" />, title: "CRM AI Assistant" },
-            { view: "settings", icon: <FaCog className="w-5 h-5" />, title: "Settings" },
-          ].map(({ view, icon, title }) => (
-            <div key={view} onClick={() => setActiveView(view)} className="group relative flex justify-center cursor-pointer w-full" title={title}>
-              {(activeView === view || (view === "forms" && activeView === "detail")) &&
-                <div className={`absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 rounded-r ${t.navIndicator}`} />}
-              <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors border ${activeView === view || (view === "forms" && activeView === "detail") ? t.navActive : t.navInactive}`}>{icon}</div>
-            </div>
-          ))}
+      <aside
+        onMouseEnter={() => setSidebarExpanded(true)}
+        onMouseLeave={() => setSidebarExpanded(false)}
+        className="hidden md:flex flex-col py-5 px-1 z-50 overflow-hidden fixed left-0 top-0 h-full"
+        style={{
+          width: sidebarExpanded ? "232px" : "70px",
+          transition: "width 320ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 320ms ease",
+          background: "linear-gradient(180deg, #090910 0%, #0f0f18 45%, #0a0a13 100%)",
+          borderRight: "1px solid rgba(158,33,123,0.22)",
+          boxShadow: sidebarExpanded
+            ? "6px 0 48px rgba(158,33,123,0.14), 2px 0 0 rgba(217,70,168,0.06)"
+            : "2px 0 24px rgba(0,0,0,0.55)",
+        }}
+      >
+        <div
+          className="pointer-events-none absolute -top-10 left-1/2 -translate-x-1/2 w-32 h-32 rounded-full blur-3xl opacity-20 transition-opacity duration-500"
+          style={{
+            background: "radial-gradient(circle, #9E217B 0%, transparent 70%)",
+            opacity: sidebarExpanded ? 0.28 : 0.14,
+          }}
+        />
+        <div className="flex items-center px-3 mb-6 mt-1 overflow-hidden">
+          <div
+            className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg font-black text-white flex-shrink-0 cursor-pointer transition-all duration-300 ${t.logoBg}`}
+            style={{
+              background: "linear-gradient(135deg, #9E217B 0%, #c7299a 50%, #7B2FF7 100%)",
+              boxShadow: "0 4px 16px rgba(158,33,123,0.5), 0 0 0 1px rgba(199,41,154,0.3)",
+            }}
+          >
+            B
+          </div>
+          <div
+            className="ml-3 overflow-hidden transition-all duration-300"
+            style={{
+              maxWidth: sidebarExpanded ? "130px" : "0px",
+              opacity: sidebarExpanded ? 1 : 0,
+              transform: sidebarExpanded ? "translateX(0)" : "translateX(-8px)",
+            }}
+          >
+            <p className="text-white font-bold text-[18px] whitespace-nowrap leading-tight">Bhoomi CRM</p>
+            <p className="text-[#d946a8] text-[10px] font-semibold whitespace-nowrap opacity-80">Sales Manager</p>
+          </div>
+        </div>
+        <div
+          className="mx-3 mb-5 h-px transition-all duration-300"
+          style={{
+            background: "linear-gradient(90deg, transparent, rgba(158,33,123,0.4), transparent)",
+            opacity: sidebarExpanded ? 1 : 0.4,
+          }}
+        />
+        <nav className="flex flex-col gap-2 w-full px-2 flex-1">
+          {/* Main nav items */}
+          <div className="flex flex-col gap-2 flex-1">
+            {[
+              { view: "overview", icon: <FaThLarge className="w-[18px] h-[18px] flex-shrink-0" />, title: "Dashboard" },
+              { view: "forms", icon: <FaFileInvoice className="w-[18px] h-[18px] flex-shrink-0" />, title: "Assigned Leads" },
+              { view: "closed-leads", icon: <FaCheckCircle className="w-[18px] h-[18px] flex-shrink-0" />, title: "Closed Leads" },
+              { view: "attendance", icon: <FaClock className="w-[18px] h-[18px] flex-shrink-0" />, title: "My Attendance" },
+              { view: "assistant", icon: <FaRobot className="w-[18px] h-[18px] flex-shrink-0" />, title: "Bhoomi AI" },
+            ].map(({ view, icon, title }) => {
+              const isActive = activeView === view || (view === "forms" && activeView === "detail");
+              return (
+                <div
+                  key={view}
+                  onClick={() => setActiveView(view)}
+                  title={!sidebarExpanded ? title : undefined}
+                  className="relative cursor-pointer group sm-nav-item"
+                >
+                  {isActive && (
+                    <div
+                      className="absolute inset-0 rounded-xl pointer-events-none"
+                      style={{
+                        background: "radial-gradient(ellipse at left center, rgba(217,70,168,0.12) 0%, transparent 70%)",
+                        animation: "sm-glow-pulse 3s ease-in-out infinite",
+                      }}
+                    />
+                  )}
+                  <div
+                    className={`flex items-center gap-3 px-3.5 py-3 rounded-xl transition-all duration-200 relative overflow-hidden ${isActive ? "text-[#d946a8]" : "text-gray-500 hover:text-gray-200"}`}
+                    style={isActive ? {
+                      background: "linear-gradient(135deg, rgba(158,33,123,0.45) 0%, rgba(123,47,247,0.15) 100%)",
+                      boxShadow: "inset 0 0 0 1px rgba(217,70,168,0.28), 0 2px 16px rgba(158,33,123,0.12)",
+                    } : {}}
+                  >
+                    {isActive && (
+                      <div
+                        className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-[#d946a8]"
+                        style={{ boxShadow: "0 0 10px rgba(217,70,168,0.9), 0 0 4px rgba(217,70,168,0.6)" }}
+                      />
+                    )}
+                    {!isActive && (
+                      <div className="absolute inset-0 rounded-xl bg-white/0 group-hover:bg-white/[0.04] transition-colors duration-200" />
+                    )}
+                    <div
+                      className={`flex-shrink-0 transition-all duration-200 ${isActive ? "text-[#d946a8]" : "text-gray-600 group-hover:text-gray-300"}`}
+                      style={isActive ? { filter: "drop-shadow(0 0 5px rgba(217,70,168,0.65))" } : {}}
+                    >
+                      {icon}
+                    </div>
+                    <span
+                      className={`text-[12.5px] font-semibold whitespace-nowrap overflow-hidden transition-all duration-300 ${isActive ? "text-[#d946a8]" : "text-gray-400 group-hover:text-gray-100"}`}
+                      style={{
+                        maxWidth: sidebarExpanded ? "140px" : "0px",
+                        opacity: sidebarExpanded ? 1 : 0,
+                        transform: sidebarExpanded ? "translateX(0)" : "translateX(-6px)",
+                        letterSpacing: "0.01em",
+                      }}
+                    >
+                      {title}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Settings pinned to bottom */}
+          {(() => {
+            const view = "settings";
+            const icon = <FaCog className="w-[20px] h-[20px] flex-shrink-0" />;
+            const title = "Settings";
+            const isActive = activeView === view;
+            return (
+              <div
+                key={view}
+                onClick={() => setActiveView(view)}
+                title={!sidebarExpanded ? title : undefined}
+                className="relative cursor-pointer group sm-nav-item mt-auto"
+              >
+                {isActive && (
+                  <div
+                    className="absolute inset-0 rounded-xl pointer-events-none"
+                    style={{
+                      background: "radial-gradient(ellipse at left center, rgba(217,70,168,0.12) 0%, transparent 70%)",
+                      animation: "sm-glow-pulse 3s ease-in-out infinite",
+                    }}
+                  />
+                )}
+                <div
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 relative overflow-hidden ${isActive ? "text-[#d946a8]" : "text-gray-500 hover:text-gray-200"}`}
+                  style={isActive ? {
+                    background: "linear-gradient(135deg, rgba(158,33,123,0.22) 0%, rgba(217,70,168,0.07) 100%)",
+                    boxShadow: "inset 0 0 0 1px rgba(217,70,168,0.28), 0 2px 16px rgba(158,33,123,0.12)",
+                  } : {}}
+                >
+                  {isActive && (
+                    <div
+                      className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-[#d946a8]"
+                      style={{ boxShadow: "0 0 10px rgba(217,70,168,0.9), 0 0 4px rgba(217,70,168,0.6)" }}
+                    />
+                  )}
+                  {!isActive && (
+                    <div className="absolute inset-0 rounded-xl bg-white/0 group-hover:bg-white/[0.04] transition-colors duration-200" />
+                  )}
+                  <div
+                    className={`flex-shrink-0 transition-all duration-200 ${isActive ? "text-[#d946a8]" : "text-gray-600 group-hover:text-gray-300"}`}
+                    style={isActive ? { filter: "drop-shadow(0 0 5px rgba(217,70,168,0.65))" } : {}}
+                  >
+                    {icon}
+                  </div>
+                  <span
+                    className={`text-[12.5px] font-semibold whitespace-nowrap overflow-hidden transition-all duration-300 ${isActive ? "text-[#d946a8]" : "text-gray-400 group-hover:text-gray-100"}`}
+                    style={{
+                      maxWidth: sidebarExpanded ? "140px" : "0px",
+                      opacity: sidebarExpanded ? 1 : 0,
+                      transform: sidebarExpanded ? "translateX(0)" : "translateX(-6px)",
+                      letterSpacing: "0.01em",
+                    }}
+                  >
+                    {title}
+                  </span>
+                </div>
+              </div>
+            );
+          })()}
         </nav>
+        <div className="px-3 mt-4">
+          <div
+            className="h-px mb-3"
+            style={{
+              background: "linear-gradient(90deg, transparent, rgba(158,33,123,0.35), transparent)",
+            }}
+          />
+          <div
+            className="overflow-hidden transition-all duration-300 flex items-center justify-center"
+            style={{
+              opacity: sidebarExpanded ? 0.5 : 0,
+              maxHeight: sidebarExpanded ? "24px" : "0px",
+            }}
+          >
+            <span className="text-[8px] text-gray-300 whitespace-nowrap font-mono tracking-widest uppercase">
+              Bhoomi CRM · v2
+            </span>
+          </div>
+        </div>
       </aside>
+      {/* ── SIDEBAR BLUR OVERLAY (desktop only, pointer-events off) ── */}
+      <div
+        className="hidden md:block fixed inset-0 pointer-events-none"
+        style={{
+          zIndex: 45,
+          left: "72px",
+          background: "rgba(0, 0, 0, 0.2)",
+          backdropFilter: "blur(3px)",
+          WebkitBackdropFilter: "blur(3px)",
+          opacity: sidebarExpanded ? 1 : 0,
+          transition: "opacity 320ms ease",
+        }}
+      />
 
       {/* ── MAIN ── */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden relative">
+      <div className="flex-1 flex flex-col h-full overflow-hidden relative md:ml-[72px]">
+
+
         {/* HEADER */}
         <header
           className={`h-16 sm:h-20 border-b flex items-center justify-between px-4 sm:px-6 lg:px-8 flex-shrink-0 z-30 shadow-sm ${t.header}`}
@@ -666,14 +859,53 @@ export default function SalesDashboard() {
       <style dangerouslySetInnerHTML={{
         __html: `
         .custom-scrollbar::-webkit-scrollbar{width:5px;height:5px}
-        .custom-scrollbar::-webkit-scrollbar-track{background:transparent}
-        .custom-scrollbar::-webkit-scrollbar-thumb{background:rgba(120,80,220,0.3);border-radius:10px}
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover{background:rgba(150,100,240,0.5)}
-        @keyframes fadeIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
-        .animate-fadeIn{animation:fadeIn 0.2s ease-out}
-        @keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
-        .animate-bounce{animation:bounce 0.7s infinite}
-      `}} />
+          .custom-scrollbar::-webkit-scrollbar-track{background:transparent}
+          .custom-scrollbar::-webkit-scrollbar-thumb{background:rgba(120,80,220,0.3);border-radius:10px}
+          .custom-scrollbar::-webkit-scrollbar-thumb:hover{background:rgba(150,100,240,0.5)}
+        
+          /* Sidebar animations */
+          @keyframes sm-glow-pulse {
+            0%, 100% { opacity: 1; }
+            50%       { opacity: 0.55; }
+          }
+        
+          /* Nav item hover prep */
+          .sm-nav-item { user-select: none; }
+        
+          /* Sidebar tooltip for collapsed state */
+          .sm-nav-item [title]:hover::after {
+            content: attr(title);
+            position: absolute;
+            left: calc(100% + 12px);
+            top: 50%;
+            transform: translateY(-50%);
+            background: #1a1a2e;
+            border: 1px solid rgba(217,70,168,0.3);
+            color: #e2e8f0;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 5px 10px;
+            border-radius: 8px;
+            white-space: nowrap;
+            pointer-events: none;
+            z-index: 100;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.5), 0 0 0 1px rgba(217,70,168,0.1);
+          }
+        
+          /* Fade-in animation */
+          @keyframes fadeIn {
+            from { opacity:0; transform:translateY(-6px) }
+            to   { opacity:1; transform:translateY(0) }
+          }
+          .animate-fadeIn { animation: fadeIn 0.2s ease-out }
+        
+          /* Bounce */
+          @keyframes bounce {
+            0%,100% { transform:translateY(0) }
+            50%     { transform:translateY(-5px) }
+          }
+          .animate-bounce { animation: bounce 0.7s infinite }
+        `}} />
     </div>
   );
 }
