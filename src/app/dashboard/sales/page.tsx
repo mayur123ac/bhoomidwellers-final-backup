@@ -410,13 +410,13 @@ export default function SalesDashboard() {
         onMouseLeave={() => setSidebarExpanded(false)}
         className="hidden md:flex flex-col py-5 px-1 z-50 overflow-hidden fixed left-0 top-0 h-full"
         style={{
-          width: sidebarExpanded ? "232px" : "70px",
+          width: sidebarExpanded ? "248px" : "72px",
           transition: "width 320ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 320ms ease",
-          background: "linear-gradient(180deg, #090910 0%, #0f0f18 45%, #0a0a13 100%)",
-          borderRight: "1px solid rgba(158,33,123,0.22)",
+          background: "linear-gradient(180deg, #0f0f1a 0%, #111128 40%, #0f0f1a 100%)",
+          borderRight: "1px solid rgba(158,33,123,0.15)",
           boxShadow: sidebarExpanded
-            ? "6px 0 48px rgba(158,33,123,0.14), 2px 0 0 rgba(217,70,168,0.06)"
-            : "2px 0 24px rgba(0,0,0,0.55)",
+            ? "4px 0 24px rgba(0,0,0,0.4), inset -1px 0 0 rgba(158,33,123,0.08)"
+            : "2px 0 16px rgba(0,0,0,0.5)",
         }}
       >
         <div

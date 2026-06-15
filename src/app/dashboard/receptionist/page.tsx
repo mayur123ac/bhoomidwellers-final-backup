@@ -291,6 +291,7 @@ export default function ReceptionistDashboard() {
   const [activeTab, setActiveTab] = useState("overview");
   const [showPassword, setShowPassword] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [sidebarExpanded, setSidebarExpanded] = useState(false);
   // ── Attendance: live clock tick (1-second interval for AttendanceView live timer) ──
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
@@ -1280,29 +1281,200 @@ export default function ReceptionistDashboard() {
       {/* ════════════════════════════════════════════════════
           SIDEBAR (DESKTOP)
       ════════════════════════════════════════════════════ */}
-      <aside className={`hidden md:flex w-20 border-r flex-col items-center py-6 flex-shrink-0 z-40 shadow-sm ${t.sidebar}`}>
-        <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl font-bold text-white mb-10 cursor-pointer ${t.logoBg}`}>B</div>
-        <nav className="flex flex-col space-y-4 w-full items-center flex-1">
-          {NAV_ITEMS.map(({ id, icon, title }) => {
-            const active = activeTab === id || (id === "forms" && activeTab === "detail");
+      <aside
+        onMouseEnter={() => setSidebarExpanded(true)}
+        onMouseLeave={() => setSidebarExpanded(false)}
+        className={`hidden md:flex flex-col py-5 px-1 z-50 overflow-hidden fixed left-0 top-0 h-full ${t.sidebar}`}
+        style={{
+          width: sidebarExpanded ? "248px" : "72px",
+          transition: "width 320ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 320ms ease",
+          background: "linear-gradient(180deg, #0f0f1a 0%, #111128 40%, #0f0f1a 100%)",
+          borderRight: "1px solid rgba(158,33,123,0.15)",
+          boxShadow: sidebarExpanded
+            ? "4px 0 24px rgba(0,0,0,0.4), inset -1px 0 0 rgba(158,33,123,0.08)"
+            : "2px 0 16px rgba(0,0,0,0.5)",
+        }}
+      >
+        <div className="flex items-center px-3 mb-6 mt-1 overflow-hidden">
+          <div
+            className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg font-black text-white flex-shrink-0 cursor-pointer ${t.logoBg}`}
+            style={{
+              background: "linear-gradient(135deg, #9E217B 0%, #c7299a 50%, #7B2FF7 100%)",
+              boxShadow: "0 4px 16px rgba(158,33,123,0.5), 0 0 0 1px rgba(199,41,154,0.3)",
+            }}
+          >
+            B
+          </div>
+          <div
+            className="ml-3 overflow-hidden transition-all duration-300"
+            style={{
+              maxWidth: sidebarExpanded ? "130px" : "0px",
+              opacity: sidebarExpanded ? 1 : 0,
+              transform: sidebarExpanded ? "translateX(0)" : "translateX(-8px)",
+            }}
+          >
+            <p className="text-white font-bold text-[16px] whitespace-nowrap leading-tight">Bhoomi CRM</p>
+            <p className="text-[#d946a8] text-[10px] font-semibold whitespace-nowrap opacity-80">Receptionist</p>
+          </div>
+        </div>
+        <div
+          className="mx-3 mb-5 h-px transition-all duration-300"
+          style={{
+            background: "linear-gradient(90deg, transparent, rgba(158,33,123,0.4), transparent)",
+            opacity: sidebarExpanded ? 1 : 0.4,
+          }}
+        />
+        <nav className="flex flex-col gap-2 w-full px-2 flex-1">
+          <div className="flex flex-col gap-2 flex-1">
+            {NAV_ITEMS.map(({ id, icon, title }) => {
+              const isActive = activeTab === id || (id === "forms" && activeTab === "detail");
+              return (
+                <div
+                  key={id}
+                  onClick={() => setActiveTab(id)}
+                  title={!sidebarExpanded ? title : undefined}
+                  className="relative cursor-pointer group"
+                >
+                  {isActive && (
+                    <div
+                      className="absolute inset-0 rounded-xl pointer-events-none"
+                      style={{
+                        background: "radial-gradient(ellipse at left center, rgba(217,70,168,0.12) 0%, transparent 70%)",
+                      }}
+                    />
+                  )}
+                  <div
+                    className={`flex items-center gap-3 px-3.5 py-3 rounded-xl transition-all duration-200 relative overflow-hidden ${isActive ? "text-[#d946a8]" : "text-gray-500 hover:text-gray-200"}`}
+                    style={isActive ? {
+                      background: "linear-gradient(135deg, rgba(158,33,123,0.22) 0%, rgba(217,70,168,0.07) 100%)",
+                      boxShadow: "inset 0 0 0 1px rgba(217,70,168,0.28), 0 2px 16px rgba(158,33,123,0.12)",
+                    } : {}}
+                  >
+                    {isActive && (
+                      <div
+                        className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-[#d946a8]"
+                        style={{ boxShadow: "0 0 10px rgba(217,70,168,0.9), 0 0 4px rgba(217,70,168,0.6)" }}
+                      />
+                    )}
+                    {!isActive && (
+                      <div className="absolute inset-0 rounded-xl bg-white/0 group-hover:bg-white/[0.04] transition-colors duration-200" />
+                    )}
+                    <div
+                      className={`flex-shrink-0 transition-all duration-200 ${isActive ? "text-[#d946a8]" : "text-gray-600 group-hover:text-gray-300"}`}
+                      style={isActive ? { filter: "drop-shadow(0 0 5px rgba(217,70,168,0.65))" } : {}}
+                    >
+                      {icon}
+                    </div>
+                    <span
+                      className={`text-[12.5px] font-semibold whitespace-nowrap overflow-hidden transition-all duration-300 ${isActive ? "text-[#d946a8]" : "text-gray-400 group-hover:text-gray-100"}`}
+                      style={{
+                        maxWidth: sidebarExpanded ? "140px" : "0px",
+                        opacity: sidebarExpanded ? 1 : 0,
+                        transform: sidebarExpanded ? "translateX(0)" : "translateX(-6px)",
+                        letterSpacing: "0.01em",
+                      }}
+                    >
+                      {title}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Settings pinned to bottom */}
+          {(() => {
+            const isActive = activeTab === "settings";
             return (
-              <div key={id} onClick={() => setActiveTab(id)} className="group relative flex justify-center cursor-pointer w-full" title={title}>
-                {active && <div className={`absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 rounded-r ${t.navIndicator}`} />}
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all ${active ? t.navActive : t.navInactive}`}>{icon}</div>
+              <div
+                onClick={() => setActiveTab("settings")}
+                title={!sidebarExpanded ? "Settings" : undefined}
+                className="relative cursor-pointer group mt-auto"
+              >
+                {isActive && (
+                  <div
+                    className="absolute inset-0 rounded-xl pointer-events-none"
+                    style={{
+                      background: "radial-gradient(ellipse at left center, rgba(217,70,168,0.12) 0%, transparent 70%)",
+                    }}
+                  />
+                )}
+                <div
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 relative overflow-hidden ${isActive ? "text-[#d946a8]" : "text-gray-500 hover:text-gray-200"}`}
+                  style={isActive ? {
+                    background: "linear-gradient(135deg, rgba(158,33,123,0.22) 0%, rgba(217,70,168,0.07) 100%)",
+                    boxShadow: "inset 0 0 0 1px rgba(217,70,168,0.28), 0 2px 16px rgba(158,33,123,0.12)",
+                  } : {}}
+                >
+                  {isActive && (
+                    <div
+                      className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-[#d946a8]"
+                      style={{ boxShadow: "0 0 10px rgba(217,70,168,0.9), 0 0 4px rgba(217,70,168,0.6)" }}
+                    />
+                  )}
+                  {!isActive && (
+                    <div className="absolute inset-0 rounded-xl bg-white/0 group-hover:bg-white/[0.04] transition-colors duration-200" />
+                  )}
+                  <div
+                    className={`flex-shrink-0 transition-all duration-200 ${isActive ? "text-[#d946a8]" : "text-gray-600 group-hover:text-gray-300"}`}
+                    style={isActive ? { filter: "drop-shadow(0 0 5px rgba(217,70,168,0.65))" } : {}}
+                  >
+                    <FaCog className="w-[20px] h-[20px]" />
+                  </div>
+                  <span
+                    className={`text-[12.5px] font-semibold whitespace-nowrap overflow-hidden transition-all duration-300 ${isActive ? "text-[#d946a8]" : "text-gray-400 group-hover:text-gray-100"}`}
+                    style={{
+                      maxWidth: sidebarExpanded ? "140px" : "0px",
+                      opacity: sidebarExpanded ? 1 : 0,
+                      transform: sidebarExpanded ? "translateX(0)" : "translateX(-6px)",
+                      letterSpacing: "0.01em",
+                    }}
+                  >
+                    Settings
+                  </span>
+                </div>
               </div>
             );
-          })}
-          <div onClick={() => setActiveTab("settings")} className="group relative flex justify-center cursor-pointer w-full mt-auto" title="Settings">
-            {activeTab === "settings" && <div className={`absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 rounded-r ${t.navIndicator}`} />}
-            <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all ${activeTab === "settings" ? t.navActive : t.navInactive}`}><FaCog className="w-5 h-5" /></div>
-          </div>
+          })()}
         </nav>
+
+        {/* Version tag */}
+        <div className="px-3 mt-4">
+          <div
+            className="h-px mb-3"
+            style={{ background: "linear-gradient(90deg, transparent, rgba(158,33,123,0.35), transparent)" }}
+          />
+          <div
+            className="overflow-hidden transition-all duration-300 flex items-center justify-center"
+            style={{
+              opacity: sidebarExpanded ? 0.5 : 0,
+              maxHeight: sidebarExpanded ? "24px" : "0px",
+            }}
+          >
+            <span className="text-[8px] text-gray-300 whitespace-nowrap font-mono tracking-widest uppercase">
+              Bhoomi CRM · v2
+            </span>
+          </div>
+        </div>
       </aside>
+      {/* Sidebar blur overlay — desktop only */}
+      <div
+        className="hidden md:block fixed inset-0 pointer-events-none"
+        style={{
+          zIndex: 45,
+          left: "72px",
+          background: "rgba(0, 0, 0, 0.2)",
+          backdropFilter: "blur(3px)",
+          WebkitBackdropFilter: "blur(3px)",
+          opacity: sidebarExpanded ? 1 : 0,
+          transition: "opacity 320ms ease",
+        }}
+      />
 
       {/* ════════════════════════════════════════════════════
           MAIN CONTENT
       ════════════════════════════════════════════════════ */}
-      <div className="flex-1 flex flex-col overflow-hidden relative">
+      <div className="flex-1 flex flex-col overflow-hidden relative md:ml-[72px]">
 
         {/* HEADER */}
         <header className={`h-16 border-b flex items-center justify-between px-6 flex-shrink-0 z-30 ${t.header}`} style={t.headerGlass}>
@@ -2277,7 +2449,7 @@ export default function ReceptionistDashboard() {
                         <div>
                           <p className={`text-xs font-medium mb-1 ${t.textFaint}`}>CP Name</p>
                           <p className={`font-semibold text-sm ${t.text}`}>
-                            {selectedLead.cp_name|| selectedLead.cpName || "N/A"}
+                            {selectedLead.cp_name || selectedLead.cpName || "N/A"}
                           </p>
                         </div>
                         <div>
