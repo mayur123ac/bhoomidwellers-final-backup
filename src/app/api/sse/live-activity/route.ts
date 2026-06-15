@@ -2,9 +2,7 @@ import { requireRole } from "@/lib/serverAuth";
 import { addSSEClient, removeSSEClient } from "@/lib/eventBus";
 
 // ✅ Pass withCredentials so cookies are sent
-const eventSource = new EventSource('/api/sse/live-activity', {
-  withCredentials: true
-});
+
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
