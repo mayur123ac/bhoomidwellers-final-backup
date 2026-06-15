@@ -444,7 +444,7 @@ export default function SalesDashboard() {
               transform: sidebarExpanded ? "translateX(0)" : "translateX(-8px)",
             }}
           >
-            <p className="text-white font-bold text-[18px] whitespace-nowrap leading-tight">Bhoomi CRM</p>
+            <p className="text-white font-bold text-[16px] whitespace-nowrap leading-tight">Bhoomi CRM</p>
             <p className="text-[#d946a8] text-[10px] font-semibold whitespace-nowrap opacity-80">Sales Manager</p>
           </div>
         </div>
@@ -485,7 +485,7 @@ export default function SalesDashboard() {
                   <div
                     className={`flex items-center gap-3 px-3.5 py-3 rounded-xl transition-all duration-200 relative overflow-hidden ${isActive ? "text-[#d946a8]" : "text-gray-500 hover:text-gray-200"}`}
                     style={isActive ? {
-                      background: "linear-gradient(135deg, rgba(158,33,123,0.45) 0%, rgba(123,47,247,0.15) 100%)",
+                      background: "linear-gradient(135deg, rgba(158,33,123,0.22) 0%, rgba(217,70,168,0.07) 100%)",
                       boxShadow: "inset 0 0 0 1px rgba(217,70,168,0.28), 0 2px 16px rgba(158,33,123,0.12)",
                     } : {}}
                   >
