@@ -1557,7 +1557,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
 
   const formatDate = (ds: string) => {
     if (!ds) return "—";
-    try { return new Date(ds).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }); }
+    try { return new Date(ds).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }); }
     catch { return ds; }
   };
 
@@ -1816,6 +1816,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                       { label: "INTEREST", width: "min-w-[110px]" },
                       { label: "SITE VISIT", width: "min-w-[100px]" },
                       { label: "DATE CREATED", width: "min-w-[110px]" },
+                      { label: "BACKDATED ENTRY", width: "min-w-[110px]" },
                       { label: "ASSIGNED TO", width: "min-w-[140px]" },
                       { label: "REASSIGN", width: "min-w-[110px]" },
                     ].map(({ label, width }) => (
@@ -1825,9 +1826,9 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                 </thead>
                 <tbody className={`divide-y ${theme.tableDivide}`}>
                   {isLoading ? (
-                    <tr><td colSpan={13} className={`text-center py-8 ${theme.textMuted}`}>Syncing...</td></tr>
+                    <tr><td colSpan={14} className={`text-center py-8 ${theme.textMuted}`}>Syncing...</td></tr>
                   ) : filteredOverviewLeads.length === 0 ? (
-                    <tr><td colSpan={13} className={`text-center py-8 ${theme.textMuted}`}>No leads match your search.</td></tr>
+                    <tr><td colSpan={14} className={`text-center py-8 ${theme.textMuted}`}>No leads match your search.</td></tr>
                   ) : filteredOverviewLeads.slice(0, visibleCount).map((lead: any) => {
                     let assignedRole = "Unassigned";
                     let assignedName = lead.assigned_receptionist || lead.assigned_to || "";
@@ -1881,8 +1882,11 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                             ? <span className="text-orange-500 font-medium">{formatDate(lead.mongoVisitDate).split(",")[0]}</span>
                             : <span className={`text-xs italic ${theme.textFaint}`}>Pending</span>}
                         </td>
-                        <td className={`px-2 py-2 text-xs ${theme.textFaint}`}>
-                          {lead.created_at ? formatDate(lead.created_at).split(",")[0] : "—"}
+                        <td className={`px-2 py-2 text-xs whitespace-normal min-w-[120px] ${theme.textFaint}`}>
+                          {lead.created_at ? formatDate(lead.created_at) : "—"}
+                        </td>
+                        <td className={`px-2 py-2 text-xs whitespace-normal min-w-[120px] ${theme.textFaint}`}>
+                          {lead.auto_date_enabled === false && lead.enquiry_date ? formatDate(lead.enquiry_date).split(",")[0] : "-"}
                         </td>
                         <td className={`px-2 py-2 ${theme.textMuted}`}>
                           {assignedName ? (
@@ -2208,8 +2212,8 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                             lead.name
                           )}
                         </td>
-                        <td className={`px-4 py-4 text-xs ${theme.textFaint}`}>
-                          {lead.created_at ? formatDate(lead.created_at).split(",")[0] : "—"}
+                        <td className={`px-4 py-4 text-xs whitespace-normal min-w-[120px] ${theme.textFaint}`}>
+                          {lead.created_at ? formatDate(lead.created_at) : "—"}
                         </td>
                         <td className={`px-4 py-4 ${theme.textMuted}`}>{lead.propType || lead.configuration || "Pending"}</td>
                         <td className={`px-4 py-4 font-semibold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget || lead.budget || "N/A"}</td>
@@ -3126,8 +3130,8 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                   <td className={`px-4 py-4 text-xs ${lead.mongoVisitDate ? "text-orange-500 font-semibold" : theme.textFaint}`}>
                     {lead.mongoVisitDate ? formatDate(lead.mongoVisitDate).split(",")[0] : "—"}
                   </td>
-                  <td className={`px-4 py-4 text-xs ${theme.textFaint}`}>
-                    {formatDate(lead.created_at).split(",")[0]}
+                  <td className={`px-4 py-4 text-xs whitespace-normal min-w-[120px] ${theme.textFaint}`}>
+                    {formatDate(lead.created_at)}
                   </td>
                   <td className="px-4 py-4">
                     {isLost ? (
@@ -3467,7 +3471,8 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                                     <div key={f.label}><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>{f.label}</p><p className={`font-semibold ${f.mono ? "font-mono" : ""} ${theme.text}`}>{f.val}</p></div>
                                   ))}
                                   <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Lead Interest</p>{selectedLead.leadInterestStatus && selectedLead.leadInterestStatus !== "Pending" ? <InterestBadge status={selectedLead.leadInterestStatus} isDark={isDark} /> : <p className={`font-semibold ${theme.text}`}>Pending</p>}</div>
-                                  <div className="col-span-2"><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Loan Status</p>{selectedLead.loanStatus && selectedLead.loanStatus !== "N/A" ? <div className="w-fit"><LoanStatusBadge status={selectedLead.loanStatus} isDark={isDark} /></div> : <p className={`font-semibold ${theme.text}`}>N/A</p>}</div>
+                                  <div className="col-span-1"><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Loan Status</p>{selectedLead.loanStatus && selectedLead.loanStatus !== "N/A" ? <div className="w-fit"><LoanStatusBadge status={selectedLead.loanStatus} isDark={isDark} /></div> : <p className={`font-semibold ${theme.text}`}>N/A</p>}</div>
+                                  <div className="col-span-1"><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Backdated Entry</p><p className={`font-semibold ${theme.text}`}>{selectedLead.auto_date_enabled === false && selectedLead.enquiry_date ? formatDate(selectedLead.enquiry_date).split(",")[0] : "Null"}</p></div>
                                   <div className="col-span-2"><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Residential Address</p><p className={`font-semibold ${theme.text}`}>{selectedLead.address && selectedLead.address !== "N/A" ? selectedLead.address : "Not Provided"}</p></div>
                                   <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Budget</p><p className={`font-bold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{selectedLead.salesBudget !== "Pending" ? selectedLead.salesBudget : selectedLead.budget}</p></div>
                                   <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Property Type</p><p className={`font-semibold ${theme.text}`}>{selectedLead.propType || "Pending"}</p></div>
@@ -4152,8 +4157,8 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                   <td className={`px-4 py-4 text-xs ${lead.mongoVisitDate ? "text-orange-500 font-semibold" : theme.textFaint}`}>
                     {lead.mongoVisitDate ? formatDate(lead.mongoVisitDate).split(",")[0] : "—"}
                   </td>
-                  <td className={`px-4 py-4 text-xs ${theme.textFaint}`}>
-                    {formatDate(lead.created_at).split(",")[0]}
+                  <td className={`px-4 py-4 text-xs whitespace-normal min-w-[120px] ${theme.textFaint}`}>
+                    {formatDate(lead.created_at)}
                   </td>
                   <td className="px-4 py-4">
                     {isLost ? (
@@ -4514,7 +4519,8 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                                     <div key={f.label}><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>{f.label}</p><p className={`font-semibold ${f.mono ? "font-mono" : ""} ${theme.text}`}>{f.val}</p></div>
                                   ))}
                                   <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Lead Interest</p>{selectedLead.leadInterestStatus && selectedLead.leadInterestStatus !== "Pending" ? <InterestBadge status={selectedLead.leadInterestStatus} isDark={isDark} /> : <p className={`font-semibold ${theme.text}`}>Pending</p>}</div>
-                                  <div className="col-span-2"><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Loan Status</p>{selectedLead.loanStatus && selectedLead.loanStatus !== "N/A" ? <div className="w-fit"><LoanStatusBadge status={selectedLead.loanStatus} isDark={isDark} /></div> : <p className={`font-semibold ${theme.text}`}>N/A</p>}</div>
+                                  <div className="col-span-1"><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Loan Status</p>{selectedLead.loanStatus && selectedLead.loanStatus !== "N/A" ? <div className="w-fit"><LoanStatusBadge status={selectedLead.loanStatus} isDark={isDark} /></div> : <p className={`font-semibold ${theme.text}`}>N/A</p>}</div>
+                                  <div className="col-span-1"><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Backdated Entry</p><p className={`font-semibold ${theme.text}`}>{selectedLead.auto_date_enabled === false && selectedLead.enquiry_date ? formatDate(selectedLead.enquiry_date).split(",")[0] : "Null"}</p></div>
                                   <div className="col-span-2"><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Residential Address</p><p className={`font-semibold ${theme.text}`}>{selectedLead.address && selectedLead.address !== "N/A" ? selectedLead.address : "Not Provided"}</p></div>
                                   <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Budget</p><p className={`font-bold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{selectedLead.salesBudget !== "Pending" ? selectedLead.salesBudget : selectedLead.budget}</p></div>
                                   <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Property Type</p><p className={`font-semibold ${theme.text}`}>{selectedLead.propType || "Pending"}</p></div>
@@ -4959,7 +4965,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
 
   const formatDate = (ds: string) => {
     if (!ds) return "—";
-    try { return new Date(ds).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }); }
+    try { return new Date(ds).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }); }
     catch { return ds; }
   };
 
@@ -5178,8 +5184,8 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                 <td className={`px-4 py-3 text-xs whitespace-nowrap ${lead.mongoVisitDate ? "text-orange-500 font-semibold" : theme.textFaint}`}>
                   {lead.mongoVisitDate ? formatDate(lead.mongoVisitDate).split(",")[0] : "—"}
                 </td>
-                <td className={`px-4 py-3 text-xs whitespace-nowrap ${theme.textFaint}`}>
-                  {formatDate(lead.created_at).split(",")[0]}
+                <td className={`px-4 py-3 text-xs whitespace-normal min-w-[120px] ${theme.textFaint}`}>
+                  {formatDate(lead.created_at)}
                 </td>
                 <td className="px-4 py-3">
                   <button
@@ -5611,9 +5617,10 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                                   <div><p className={`text-xs font-medium mb-1 ${theme.textMuted}`}>Lead Interest</p>
                                     {selectedLead.leadInterestStatus && selectedLead.leadInterestStatus !== "Pending" ? <InterestBadge status={selectedLead.leadInterestStatus} isDark={isDark} /> : <p className={`font-semibold ${theme.text}`}>Pending</p>}
                                   </div>
-                                  <div className="col-span-2"><p className={`text-xs font-medium mb-1 ${theme.textMuted}`}>Loan Status</p>
+                                  <div className="col-span-1"><p className={`text-xs font-medium mb-1 ${theme.textMuted}`}>Loan Status</p>
                                     {selectedLead.loanStatus && selectedLead.loanStatus !== "N/A" ? <div className="w-fit"><LoanStatusBadge status={selectedLead.loanStatus} isDark={isDark} /></div> : <p className={`font-semibold ${theme.text}`}>N/A</p>}
                                   </div>
+                                  <div className="col-span-1"><p className={`text-xs font-medium mb-1 ${theme.textMuted}`}>Backdated Entry</p><p className={`font-semibold ${theme.text}`}>{selectedLead.auto_date_enabled === false && selectedLead.enquiry_date ? formatDate(selectedLead.enquiry_date).split(",")[0] : "Null"}</p></div>
                                   <div className="col-span-2"><p className={`text-xs font-medium mb-1 ${theme.textMuted}`}>Residential Address</p><p className={`font-semibold ${theme.text}`}>{selectedLead.address && selectedLead.address !== "N/A" ? selectedLead.address : "Not Provided"}</p></div>
                                   <div><p className={`text-xs font-medium mb-1 ${theme.textMuted}`}>Budget</p><p className="text-green-500 font-bold">{selectedLead.salesBudget && selectedLead.salesBudget !== "Pending" ? selectedLead.salesBudget : selectedLead.budget}</p></div>
                                   <div><p className={`text-xs font-medium mb-1 ${theme.textMuted}`}>Property Type</p><p className={`font-semibold ${theme.text}`}>{selectedLead.propType || "Pending"}</p></div>

@@ -323,13 +323,29 @@ export default function ReceptionistDashboard() {
   // ── Enquiry (new-entry) modal ──
   const [isEnquiryModalOpen, setIsEnquiryModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const getTodayString = () => new Date().toISOString().split("T")[0];
   const [enquiryForm, setEnquiryForm] = useState({
     fullName: "", mobile: "", altMobile: "", email: "", address: "",
     occupation: "", organization: "", budget: "", configuration: "",
     purpose: "", source: "", assignedTo: "", loanPlanned: "", sourceOther: "", referralName: "",
     cpDetails: { name: "", company: "", phone: "" },
     selfAssign: false,
+    enquiryDate: getTodayString(),
   });
+  // ── Auto Date toggle (persisted in sessionStorage) ──
+  const [autoDate, setAutoDate] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      const stored = sessionStorage.getItem("crm_auto_date");
+      return stored !== null ? stored === "true" : true;
+    }
+    return true;
+  });
+  useEffect(() => {
+    sessionStorage.setItem("crm_auto_date", String(autoDate));
+    if (autoDate) {
+      setEnquiryForm(prev => ({ ...prev, enquiryDate: getTodayString() }));
+    }
+  }, [autoDate]);
   const [showCpDropdown, setShowCpDropdown] = useState(false);
 
   // ___Lost Leads
@@ -459,7 +475,7 @@ export default function ReceptionistDashboard() {
   // ─────────────────────────────────────────────────────────────────────────
   const formatDate = (ds: string) => {
     if (!ds) return "N/A";
-    try { return new Date(ds).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }); }
+    try { return new Date(ds).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }); }
     catch { return "Invalid"; }
   };
   const maskPhone = (phone: any) => {
@@ -621,6 +637,8 @@ export default function ReceptionistDashboard() {
         assignedReceptionist: item.assigned_receptionist || null,
         altPhone: item.alt_phone,
         date: formatDate(item.created_at),
+        enquiryDate: item.enquiry_date || item.created_at,
+        autoDateEnabled: item.auto_date_enabled ?? true,
         status: item.status || "Routed",
       }));
       setEnquiries(prev => {
@@ -870,6 +888,13 @@ export default function ReceptionistDashboard() {
     const assignTo = enquiryForm.selfAssign ? user.name : enquiryForm.assignedTo;
     const isReceptionist = enquiryForm.selfAssign;
 
+    // Validate enquiry date when Auto Date is OFF
+    if (!autoDate && !enquiryForm.enquiryDate) {
+      alert("Please select an enquiry date.");
+      setIsSubmitting(false);
+      return;
+    }
+
     const newEntry = {
       name: enquiryForm.fullName,
       phone: enquiryForm.mobile,
@@ -893,6 +918,10 @@ export default function ReceptionistDashboard() {
       assignedTo: assignTo,
       assigned_receptionist: isReceptionist ? user.name : null,
       status: "Routed",
+      auto_date_enabled: autoDate,
+      enquiry_date: autoDate
+        ? new Date().toISOString()
+        : new Date(enquiryForm.enquiryDate + "T00:00:00").toISOString(),
     };
 
     try {
@@ -902,7 +931,7 @@ export default function ReceptionistDashboard() {
       if (res.ok) {
         showToast(isReceptionist ? `Lead self-assigned to you!` : `Lead routed to ${assignTo}!`);
         setIsEnquiryModalOpen(false);
-        setEnquiryForm({ fullName: "", mobile: "", altMobile: "", email: "", address: "", occupation: "", organization: "", budget: "", configuration: "", purpose: "", source: "", assignedTo: "", loanPlanned: "", sourceOther: "", referralName: "", cpDetails: { name: "", company: "", phone: "" }, selfAssign: false });
+        setEnquiryForm({ fullName: "", mobile: "", altMobile: "", email: "", address: "", occupation: "", organization: "", budget: "", configuration: "", purpose: "", source: "", assignedTo: "", loanPlanned: "", sourceOther: "", referralName: "", cpDetails: { name: "", company: "", phone: "" }, selfAssign: false, enquiryDate: getTodayString() });
         refetchAll();
       } else { alert("Server Error. Please check DB schema."); }
     } catch { alert("Network Error while submitting."); }
@@ -2210,15 +2239,15 @@ export default function ReceptionistDashboard() {
                 <div className="overflow-x-auto custom-scrollbar">
                   <table className="w-full text-left border-collapse whitespace-nowrap">
                     <thead><tr className={t.tableHead}>
-                      {["Lead No.", "Client Name", "CP Name", "CP Company", "CP Phone", "Budget", "Phone", "Alt. Phone", "Date Created", "Sales Manager"].map(h => (
+                      {["Lead No.", "Client Name", "CP Name", "CP Company", "CP Phone", "Budget", "Phone", "Alt. Phone", "Date Created", "Backdated Entry", "Sales Manager"].map(h => (
                         <th key={h} className={`px-3 py-3 md:p-4 font-bold uppercase tracking-wider border-b ${t.textHeader} ${t.tableBorder}`}>{h}</th>
                       ))}
                     </tr></thead>
                     <tbody className={`${t.tableDivide} divide-y`}>
                       {isFetchingEnquiries ? (
-                        <tr><td colSpan={8} className={`p-8 text-center text-sm ${t.textMuted}`}>Fetching data...</td></tr>
+                        <tr><td colSpan={11} className={`p-8 text-center text-sm ${t.textMuted}`}>Fetching data...</td></tr>
                       ) : receptionistLeads.length === 0 ? (
-                        <tr><td colSpan={8} className={`p-8 text-center text-sm ${t.textMuted}`}>No leads found.</td></tr>
+                        <tr><td colSpan={11} className={`p-8 text-center text-sm ${t.textMuted}`}>No leads found.</td></tr>
                       ) : receptionistLeads.map((enquiry: any) => (
                         <tr key={enquiry.id} className={`transition-colors cursor-pointer ${t.tableRow}`} onClick={() => { setSelectedLead(enquiry); setActiveTab("detail"); }}>
                           <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-bold ${t.accentText}`}>#{enquiry.id}</td>
@@ -2229,7 +2258,10 @@ export default function ReceptionistDashboard() {
                           <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-bold ${isDark ? "text-green-700" : "text-emerald-600"}`}>{enquiry.salesBudget || enquiry.budget}</td>
                           <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm font-mono ${t.text}`}>{maskPhone(enquiry.phone)}</td>
                           <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm font-mono ${t.textMuted}`}>{maskPhone(enquiry.altPhone)}</td>
-                          <td className={`px-3 py-3 md:p-4 text-[10px] md:text-xs ${t.textFaint}`}>{enquiry.date}</td>
+                          <td className={`px-3 py-3 md:p-4 text-[10px] md:text-xs whitespace-normal min-w-[120px] ${t.textFaint}`}>{enquiry.date}</td>
+                          <td className={`px-3 py-3 md:p-4 text-[10px] md:text-xs whitespace-normal min-w-[110px] ${t.textFaint}`}>
+                            {enquiry.autoDateEnabled === false && enquiry.enquiryDate ? formatDate(enquiry.enquiryDate).split(",")[0] : "-"}
+                          </td>
                           <td className="px-3 py-3 md:p-4 text-xs md:text-sm">
                             <span className={`px-2 py-1 rounded-md text-[10px] md:text-xs font-semibold ${t.accentBg}`}>{enquiry.assignedTo || "Unassigned"}</span>
                           </td>
@@ -2237,7 +2269,7 @@ export default function ReceptionistDashboard() {
                       ))}
                       {isLoadingMore && <LoaderRow />}
                       {!hasMore && !isFetchingEnquiries && enquiries.length > 0 && (
-                        <tr><td colSpan={8} className={`p-4 text-center text-xs ${t.textFaint}`}>All {totalCount} records loaded</td></tr>
+                        <tr><td colSpan={11} className={`p-4 text-center text-xs ${t.textFaint}`}>All {totalCount} records loaded</td></tr>
                       )}
                     </tbody>
                   </table>
@@ -2583,7 +2615,7 @@ export default function ReceptionistDashboard() {
                               </div>
                             </div>
                             <div className={`pt-4 border-t mt-auto flex justify-between items-center ${t.tableBorder}`}>
-                              <p className={`text-[10px] flex-shrink-0 ${t.textFaint}`}>{formatDate(lead.created_at).split(",")[0]}</p>
+                              <p className={`text-[10px] flex-shrink-0 whitespace-normal min-w-[120px] ${t.textFaint}`}>{formatDate(lead.created_at)}</p>
                               <span className={`text-[10px] font-bold uppercase tracking-widest transition-colors ${isDark ? "text-gray-500 group-hover:text-[#d4006e]" : "text-[#00AEEF] group-hover:text-[#9E217B]"}`}>Details →</span>
                             </div>
                           </div>
@@ -2759,7 +2791,8 @@ export default function ReceptionistDashboard() {
                                     <div key={f.label}><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>{f.label}</p><p className={`font-semibold ${f.mono ? "font-mono" : ""} ${t.text}`}>{f.val}</p></div>
                                   ))}
                                   <div><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Lead Interest</p>{selectedLead.leadInterestStatus && selectedLead.leadInterestStatus !== "Pending" ? <InterestBadge status={selectedLead.leadInterestStatus} /> : <p className={`font-semibold ${t.text}`}>Pending</p>}</div>
-                                  <div className="col-span-2"><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Loan Status</p>{selectedLead.loanStatus && selectedLead.loanStatus !== "N/A" ? <div className="w-fit"><LoanStatusBadge status={selectedLead.loanStatus} /></div> : <p className={`font-semibold ${t.text}`}>N/A</p>}</div>
+                                  <div className="col-span-1"><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Loan Status</p>{selectedLead.loanStatus && selectedLead.loanStatus !== "N/A" ? <div className="w-fit"><LoanStatusBadge status={selectedLead.loanStatus} /></div> : <p className={`font-semibold ${t.text}`}>N/A</p>}</div>
+                                  <div className="col-span-1"><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Backdated Entry</p><p className={`font-semibold ${t.text}`}>{selectedLead.auto_date_enabled === false && selectedLead.enquiry_date ? formatDate(selectedLead.enquiry_date).split(",")[0] : "Null"}</p></div>
                                   <div className="col-span-2"><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Residential Address</p><p className={`font-semibold ${t.text}`}>{selectedLead.address && selectedLead.address !== "N/A" ? selectedLead.address : "Not Provided"}</p></div>
                                   <div><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Budget</p><p className={`font-bold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{selectedLead.salesBudget !== "Pending" ? selectedLead.salesBudget : selectedLead.budget}</p></div>
                                   <div><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Property Type</p><p className={`font-semibold ${t.text}`}>{selectedLead.propType || "Pending"}</p></div>
@@ -2995,7 +3028,7 @@ export default function ReceptionistDashboard() {
                             <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm font-mono ${t.textMuted}`}>{maskPhone(lead.altPhone)}</td>
 
                             {/* 7. Date Created */}
-                            <td className={`px-3 py-3 md:p-4 text-[10px] md:text-xs ${t.textFaint}`}>{lead.date}</td>
+                            <td className={`px-3 py-3 md:p-4 text-[10px] md:text-xs whitespace-normal min-w-[120px] ${t.textFaint}`}>{lead.date}</td>
 
                             {/* 8. Assigned to */}
                             <td className="px-3 py-3 md:p-4">
@@ -3186,6 +3219,7 @@ export default function ReceptionistDashboard() {
                           { label: "Assigned To", val: selectedClosedLead.assignedTo || "Unassigned" },
                           { label: "Interest", val: selectedClosedLead.leadInterestStatus || "N/A" },
                           { label: "Loan Status", val: selectedClosedLead.loanStatus !== "N/A" ? selectedClosedLead.loanStatus : "N/A" },
+                          { label: "Backdated Entry", val: selectedClosedLead.auto_date_enabled === false && selectedClosedLead.enquiry_date ? formatDate(selectedClosedLead.enquiry_date).split(",")[0] : "Null" },
                         ].map(({ label, val }) => (
                           <div key={label}>
                             <p className={`text-xs font-medium ${t.textFaint}`}>{label}</p>
@@ -3340,6 +3374,63 @@ export default function ReceptionistDashboard() {
                         <option value="Yes">Yes</option><option value="No">No</option>
                       </select>
                     </div>
+
+                    {/* ── Auto Date Toggle + Enquiry Date Picker ── */}
+                    <div className="sm:col-span-2">
+                      <div className={`rounded-xl p-4 border ${isDark ? "bg-[#14141B]/60 border-[#2A2A35]" : "bg-[#F8FAFC] border-[#D1D5DB]"}`}>
+                        {/* Toggle Row */}
+                        <div className="flex items-center justify-between mb-3">
+                          <div>
+                            <label className={`block text-xs font-bold ${isDark ? "text-[#d4006e]" : "text-[#9E217B]"}`}>
+                              <FaCalendarAlt className="inline mr-1.5 text-[10px]" />
+                              Auto Date
+                            </label>
+                            <p className={`text-[10px] mt-0.5 ${t.textFaint}`}>
+                              {autoDate ? "Using today's date automatically." : "Select the original enquiry date."}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setAutoDate(!autoDate)}
+                            className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-300 focus:outline-none cursor-pointer flex-shrink-0"
+                            style={{
+                              backgroundColor: autoDate
+                                ? (isDark ? "#9E217B" : "#00AEEF")
+                                : (isDark ? "#2A2A35" : "#D1D5DB"),
+                              boxShadow: autoDate
+                                ? (isDark ? "0 0 8px rgba(158,33,123,0.5)" : "0 0 8px rgba(0,174,239,0.4)")
+                                : "none",
+                            }}
+                            aria-label="Toggle Auto Date"
+                          >
+                            <span
+                              className="inline-block h-4 w-4 transform rounded-full bg-white shadow-md transition-transform duration-300"
+                              style={{
+                                transform: autoDate ? "translateX(22px)" : "translateX(4px)",
+                              }}
+                            />
+                          </button>
+                        </div>
+
+                        {/* Date Picker */}
+                        <div>
+                          <label className={`block text-xs mb-1.5 font-medium pl-1 ${t.textMuted}`}>
+                            Enquiry Date {!autoDate && <span className={isDark ? "text-red-400" : "text-red-500"}>*</span>}
+                          </label>
+                          <input
+                            type="date"
+                            required={!autoDate}
+                            disabled={autoDate}
+                            value={enquiryForm.enquiryDate}
+                            max={getTodayString()}
+                            onChange={e => setEnquiryForm({ ...enquiryForm, enquiryDate: e.target.value })}
+                            className={`w-full rounded-lg p-3 text-sm outline-none transition-colors border ${t.modalInput} ${t.text} ${autoDate ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+                            style={autoDate ? { pointerEvents: "none" } : {}}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
                   </div>
                 </div>
 

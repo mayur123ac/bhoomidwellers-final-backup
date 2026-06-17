@@ -680,7 +680,7 @@ export default function SalesDashboard() {
                               <div className="flex items-start justify-between gap-3 pr-4">
                                 <div className="flex-1 min-w-0">
                                   <p className={`font-bold text-xs group-hover:text-orange-400 truncate ${t.text}`}>#{lead.id} — {lead.name}</p>
-                                  <p className={`text-[10px] mt-0.5 truncate ${t.textFaint}`}>{lead.propType !== "Pending" ? lead.propType : "Property TBD"} · {lead.salesBudget}</p>
+                                  <p className={`text-[10px] mt-0.5 truncate ${t.textFaint}`}>{(lead.propType && lead.propType !== "Pending") ? lead.propType : lead.configuration ? lead.configuration : "Property TBD"} · {lead.salesBudget}</p>
                                   <p className={`text-[10px] mt-1 ${t.textMuted}`}>📅 {new Date(lead.mongoVisitDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</p>
                                 </div>
                                 <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full border flex-shrink-0 ${isToday ? "text-red-400 bg-red-500/10 border-red-500/30" : "text-yellow-400 bg-yellow-500/10 border-yellow-500/30"}`}>{isToday ? "TODAY" : "TOMORROW"}</span>
@@ -738,7 +738,7 @@ export default function SalesDashboard() {
                             <div className="flex items-start justify-between gap-3 pr-4">
                               <div className="flex-1 min-w-0">
                                 <p className={`font-bold text-xs group-hover:text-purple-400 truncate ${t.text}`}>#{lead.id} — {lead.name}</p>
-                                <p className={`text-[10px] mt-0.5 truncate ${t.textFaint}`}>{lead.propType !== "Pending" ? lead.propType : "No property set"} · {lead.salesBudget}</p>
+                                <p className={`text-[10px] mt-0.5 truncate ${t.textFaint}`}>{(lead.propType && lead.propType !== "Pending") ? lead.propType : lead.configuration ? lead.configuration : "No property set"} · {lead.salesBudget}</p>
                                 {lead.leadInterestStatus && lead.leadInterestStatus !== "Pending" && (
                                   <span className={`inline-block mt-1 text-[9px] font-bold uppercase px-2 py-0.5 rounded-full border ${lead.leadInterestStatus === "Interested" ? "text-green-400 border-green-500/30 bg-green-500/10" : "text-yellow-400 border-yellow-500/30 bg-yellow-500/10"}`}>{lead.leadInterestStatus}</span>
                                 )}
@@ -1565,16 +1565,16 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                 <table className="w-full text-left text-sm whitespace-nowrap">
                   <thead className={t.tableHead}>
                     <tr>
-                      {["LEAD NO.", "NAME", "PROP. TYPE", "BUDGET", "STATUS", "LOST STATUS", "LOAN STATUS", "AMT REQ / APP", "SITE VISIT"].map(h => (
+                      {["LEAD NO.", "NAME", "PROP. TYPE", "BUDGET", "SOURCE", "CP NAME", "CP COMPANY", "CP PHONE", "STATUS", "LOST STATUS", "INTEREST", "DATE CREATED", "BACKDATED ENTRY", "SITE VISIT"].map(h => (
                         <th key={h} className={`px-4 sm:px-6 py-3 sm:py-4 font-bold tracking-wider border-b ${t.textHeader} ${t.tableBorder}`}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody className={`divide-y ${t.tableDivide}`}>
                     {isLoading
-                      ? <tr><td colSpan={9} className={`text-center py-8 ${t.textMuted}`}>Loading...</td></tr>
+                      ? <tr><td colSpan={14} className={`text-center py-8 ${t.textMuted}`}>Loading...</td></tr>
                       : filteredDatabaseLeads.length === 0
-                        ? <tr><td colSpan={9} className={`text-center py-8 ${t.textMuted}`}>No leads found.</td></tr>
+                        ? <tr><td colSpan={14} className={`text-center py-8 ${t.textMuted}`}>No leads found.</td></tr>
                         : filteredDatabaseLeads.map((lead: any) => {
                           const isClosed = lead.status === "Closing" || lead.status === "Completed" || lead.status === "Closed" || lead.closingDate;
                           const isLost = !!lead.is_lost_lead;
@@ -1583,8 +1583,12 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                             <tr key={lead.id} className={`transition-colors cursor-pointer ${isLost ? t.rowLost : isNGD ? t.rowNGD : t.tableRow}`} onClick={() => { setSelectedLead(lead); setMainView("detail"); setSubView("detail"); }}>
                               <td className={`px-4 sm:px-6 py-3 sm:py-4 font-bold ${t.accentText}`}>#{lead.id}</td>
                               <td className={`px-4 py-3 sm:py-4 font-medium ${t.text}`}>{lead.name}</td>
-                              <td className={`px-4 py-3 sm:py-4 ${t.textMuted}`}>{lead.propType || "Pending"}</td>
+                              <td className={`px-4 py-3 sm:py-4 ${t.textMuted}`}>{lead.propType || lead.configuration || "Pending"}</td>
                               <td className={`px-4 py-3 sm:py-4 font-semibold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget}</td>
+                              <td className={`px-4 py-3 sm:py-4 text-xs ${t.textMuted}`}>{lead.source || "—"}</td>
+                              <td className={`px-4 py-3 sm:py-4 ${t.textMuted}`}>{lead.cpName || lead.cp_name || "—"}</td>
+                              <td className={`px-4 py-3 sm:py-4 ${t.textMuted}`}>{lead.cpCompany || lead.cp_company || "—"}</td>
+                              <td className={`px-4 py-3 sm:py-4 font-mono text-xs ${t.textMuted}`}>{lead.cpPhone || lead.cp_phone || "—"}</td>
                               <td className="px-4 py-3 sm:py-4">
                                 <span className={`px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold uppercase border ${isLost
                                   ? t.statusLost
@@ -1603,16 +1607,15 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                                 ) : <span className={`text-xs font-semibold ${t.textMuted}`}>Active</span>}
                               </td>
                               <td className="px-4 py-3 sm:py-4">
-                                {lead.loanStatus && lead.loanStatus !== "N/A"
-                                  ? <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase border ${lead.loanStatus === "Approved" ? "text-green-400 border-green-500/40 bg-green-500/10" : lead.loanStatus === "Rejected" ? "text-red-400 border-red-500/40 bg-red-500/10" : lead.loanStatus === "In Progress" ? "text-yellow-400 border-yellow-500/40 bg-yellow-500/10" : "text-gray-400 border-gray-500/30 bg-gray-500/10"}`}>{lead.loanStatus}</span>
-                                  : <span className={`text-xs italic ${t.textFaint}`}>N/A</span>
-                                }
+                                {lead.leadInterestStatus && lead.leadInterestStatus !== "Pending" 
+                                  ? <InterestBadge status={lead.leadInterestStatus} size="sm" /> 
+                                  : <span className={`text-xs italic ${t.textFaint}`}>—</span>}
                               </td>
-                              <td className="px-4 py-3 sm:py-4">
-                                {lead.loanAmtReq && lead.loanAmtReq !== "N/A"
-                                  ? <div className="flex flex-col gap-0.5"><span className="text-[10px] sm:text-[11px] text-orange-400 font-medium">Req: {lead.loanAmtReq}</span><span className={`text-[10px] sm:text-[11px] font-medium ${isDark ? "text-green-400" : "text-emerald-600"}`}>App: {lead.loanAmtApp !== "N/A" ? lead.loanAmtApp : "—"}</span></div>
-                                  : <span className={`text-xs italic ${t.textFaint}`}>N/A</span>
-                                }
+                              <td className={`px-4 py-3 sm:py-4 text-xs whitespace-normal min-w-[120px] ${t.textFaint}`}>
+                                {formatDate(lead.created_at)}
+                              </td>
+                              <td className={`px-4 py-3 sm:py-4 text-xs whitespace-normal min-w-[120px] ${t.textFaint}`}>
+                                {lead.auto_date_enabled === false && lead.enquiry_date ? formatDate(lead.enquiry_date).split(",")[0] : "-"}
                               </td>
                               <td className="px-4 sm:px-6 py-3 sm:py-4">{lead.mongoVisitDate ? <span className="text-orange-400 font-medium whitespace-nowrap text-xs sm:text-sm">{formatDate(lead.mongoVisitDate).split(",")[0]}</span> : <span className={`text-xs italic ${t.textFaint}`}>Pending</span>}</td>
                             </tr>
@@ -1746,10 +1749,10 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                                   )}
                                 </div>
                               </div>
-                              {lead.propType && lead.propType !== "Pending" && (
+                              {((lead.propType && lead.propType !== "Pending") || (lead.configuration && lead.configuration !== "Pending")) && (
                                 <div>
                                   <p className={`text-xs font-medium ${t.textFaint}`}>Property</p>
-                                  <p className={`text-sm font-medium ${t.text}`}>{lead.propType}</p>
+                                  <p className={`text-sm font-medium ${t.text}`}>{(lead.propType && lead.propType !== "Pending") ? lead.propType : lead.configuration}</p>
                                 </div>
                               )}
                               <div className={`p-3 rounded-lg border flex flex-col gap-1.5 ${t.settingsBg}`} style={t.settingsBgGl}>
@@ -1770,7 +1773,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                             </div>
                           </div>
                           <div className={`pt-3 sm:pt-4 border-t mt-auto flex justify-between items-center ${t.tableBorder}`}>
-                            <p className={`text-[9px] sm:text-[10px] flex-shrink-0 ${t.textFaint}`}>{formatDate(lead.created_at).split(",")[0]}</p>
+                            <p className={`text-[9px] sm:text-[10px] flex-shrink-0 whitespace-normal min-w-[120px] ${t.textFaint}`}>{formatDate(lead.created_at)}</p>
                             <span className={`text-[9px] sm:text-[10px] font-bold uppercase tracking-widest transition-colors ${isClosing ? (isDark ? "text-yellow-500 group-hover:text-yellow-400" : "text-amber-500 group-hover:text-amber-400") : (isDark ? "text-gray-500 group-hover:text-[#d946a8]" : "text-[#9CA3AF] group-hover:text-[#9E217B]")}`}>Details →</span>
                           </div>
                         </div>
@@ -2032,10 +2035,11 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                               <div key={f.label}><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>{f.label}</p><p className={`font-semibold ${f.mono ? "font-mono" : ""} break-all ${t.text}`}>{f.val}</p></div>
                             ))}
                             <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Lead Interest</p>{selectedLead.leadInterestStatus && selectedLead.leadInterestStatus !== "Pending" ? <InterestBadge status={selectedLead.leadInterestStatus} /> : <p className={`font-semibold ${t.text}`}>Pending</p>}</div>
-                            <div className="col-span-1 sm:col-span-2"><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Loan Status</p>{selectedLead.loanStatus && selectedLead.loanStatus !== "N/A" ? <div className="w-fit"><LoanStatusBadge status={selectedLead.loanStatus} /></div> : <p className={`font-semibold ${t.text}`}>N/A</p>}</div>
+                            <div className="col-span-1"><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Loan Status</p>{selectedLead.loanStatus && selectedLead.loanStatus !== "N/A" ? <div className="w-fit"><LoanStatusBadge status={selectedLead.loanStatus} /></div> : <p className={`font-semibold ${t.text}`}>N/A</p>}</div>
+                            <div className="col-span-1"><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Backdated Entry</p><p className={`font-semibold ${t.text}`}>{selectedLead.auto_date_enabled === false && selectedLead.enquiry_date ? formatDate(selectedLead.enquiry_date).split(",")[0] : "Null"}</p></div>
                             <div className="col-span-1 sm:col-span-2"><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Residential Address</p><p className={`font-semibold ${t.text}`}>{selectedLead.address && selectedLead.address !== "N/A" ? selectedLead.address : "Not Provided"}</p></div>
                             <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Budget</p><p className={`font-bold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{selectedLead.salesBudget !== "Pending" ? selectedLead.salesBudget : selectedLead.budget}</p></div>
-                            <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Property Type</p><p className={`font-semibold ${t.text}`}>{selectedLead.propType || "Pending"}</p></div>
+                            <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Property Type</p><p className={`font-semibold ${t.text}`}>{selectedLead.propType || selectedLead.configuration || "Pending"}</p></div>
                             <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Type of Use</p><p className={`font-semibold ${t.text}`}>{selectedLead.useType !== "Pending" ? selectedLead.useType : (selectedLead.purpose || "N/A")}</p></div>
                             <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Planning to Buy?</p><p className={`font-semibold ${t.text}`}>{selectedLead.planningPurchase || "Pending"}</p></div>
                             <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Loan Required?</p><p className={`font-semibold ${t.text}`}>{getLatestLoanDetails()?.loanRequired}</p></div>

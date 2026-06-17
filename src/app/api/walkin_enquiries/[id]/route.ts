@@ -16,6 +16,7 @@ export async function PUT(
       source_other, cp_name, cp_company, cp_phone,
       assigned_to, // for transfer flow
       is_lost_lead, lost_lead_reason, lost_lead_marked_at, lost_lead_marked_by,
+      enquiry_date, // backdated enquiry date support
       // assigned_receptionist is intentionally NEVER accepted here
     } = body;
 
@@ -36,6 +37,7 @@ export async function PUT(
     if (lost_lead_reason    !== undefined) { fields.push(`lost_lead_reason = $${i++}`);    values.push(lost_lead_reason); }
     if (lost_lead_marked_at !== undefined) { fields.push(`lost_lead_marked_at = $${i++}`); values.push(lost_lead_marked_at); }
     if (lost_lead_marked_by !== undefined) { fields.push(`lost_lead_marked_by = $${i++}`); values.push(lost_lead_marked_by); }
+    if (enquiry_date !== undefined) { fields.push(`enquiry_date = $${i++}`); values.push(enquiry_date); }
 
     if (fields.length === 0) {
       return NextResponse.json({ success: false, message: "No fields to update" }, { status: 400 });

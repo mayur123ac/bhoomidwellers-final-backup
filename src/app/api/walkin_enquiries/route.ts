@@ -39,7 +39,9 @@ export async function POST(req: Request) {
       assigned_receptionist,
       status,
       is_global_shared,
-      overseeing_site_head
+      overseeing_site_head,
+      enquiry_date,            // ← Backdated enquiry date support
+      auto_date_enabled,       // ← Backdated enquiry state
     } = body;
 
     if (!name || !phone || !assignedTo) {
@@ -56,7 +58,8 @@ export async function POST(req: Request) {
         alt_phone, source_other, referral_name,
         cp_name, cp_company, cp_phone,
         loan_planned, assigned_to, assigned_receptionist, status,
-        is_global_shared, overseeing_site_head
+        is_global_shared, overseeing_site_head,
+        enquiry_date, auto_date_enabled
       )
       VALUES (
         $1,  $2,  $3,  $4,  $5,  $6,
@@ -64,7 +67,8 @@ export async function POST(req: Request) {
         $11, $12, $13,
         $14, $15, $16,
         $17, $18, $19, $20,
-        $21, $22
+        $21, $22,
+        $23, $24
       )
       RETURNING *`,
       [
@@ -89,7 +93,9 @@ export async function POST(req: Request) {
         assigned_receptionist || null,      // $19
         status || "Routed",                 // $20
         is_global_shared || false,          // $21
-        overseeing_site_head || null        // $22
+        overseeing_site_head || null,       // $22
+        enquiry_date || new Date().toISOString(), // $23 — defaults to now if not provided
+        auto_date_enabled ?? true,          // $24 — default true
       ]
     );
 
