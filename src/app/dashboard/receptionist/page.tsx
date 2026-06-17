@@ -1480,7 +1480,7 @@ export default function ReceptionistDashboard() {
         <header className={`h-16 border-b flex items-center justify-between px-6 flex-shrink-0 z-30 ${t.header}`} style={t.headerGlass}>
           <h1 className={`font-bold flex items-center text-sm md:text-base tracking-wide ${t.text}`}>BhoomiDwellersCRM</h1>
           <div className="flex items-center space-x-4 relative" ref={topbarRef}>
-            <AttendanceTimerWidget />
+            {/* <AttendanceTimerWidget /> */}
             <button onClick={() => setIsDark(!isDark)} aria-label="Toggle theme"
               className={`w-9 h-9 rounded-xl border flex items-center justify-center transition-all duration-200 hover:scale-105 active:scale-95 shadow-sm ${t.toggleWrap}`}>
               {isDark ? <SunIcon /> : <MoonIcon />}

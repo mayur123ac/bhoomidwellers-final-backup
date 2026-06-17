@@ -1802,8 +1802,24 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
               <table className="w-full text-left text-sm">
                 <thead className={`text-xs uppercase ${theme.tableHead} ${theme.textHeader}`}>
                   <tr>
-                    {["LEAD NO.", "NAME", "PROP. TYPE", "BUDGET", "SOURCE", "CP NAME", "CP COMPANY", "CP PHONE", "STATUS", "LOST STATUS", "INTEREST", "SITE VISIT", "ASSIGNED TO", "REASSIGN"].map(h => (
-                      <th key={h} className="px-3 py-4">{h}</th>
+                    {[
+                      { label: "LEAD NO.", width: "min-w-[80px]" },
+                      { label: "NAME", width: "min-w-[140px]" },
+                      { label: "PROP. TYPE", width: "min-w-[100px]" },
+                      { label: "BUDGET", width: "min-w-[100px]" },
+                      { label: "SOURCE", width: "min-w-[120px]" },
+                      { label: "CP NAME", width: "min-w-[110px]" },
+                      { label: "CP COMPANY", width: "min-w-[120px]" },
+                      { label: "CP PHONE", width: "min-w-[110px]" },
+                      { label: "STATUS", width: "min-w-[120px]" },
+                      { label: "LOST STATUS", width: "min-w-[100px]" },
+                      { label: "INTEREST", width: "min-w-[110px]" },
+                      { label: "SITE VISIT", width: "min-w-[100px]" },
+                      { label: "DATE CREATED", width: "min-w-[110px]" },
+                      { label: "ASSIGNED TO", width: "min-w-[140px]" },
+                      { label: "REASSIGN", width: "min-w-[110px]" },
+                    ].map(({ label, width }) => (
+                      <th key={label} className={`px-2 py-3 whitespace-nowrap ${width}`}>{label}</th>
                     ))}
                   </tr>
                 </thead>
@@ -1820,10 +1836,10 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                     else if (lead.assigned_to) assignedRole = "Sales Manager";
 
                     return (
-                      <tr key={lead.id} className={`transition-colors cursor-pointer ${theme.tableRow}`} style={lead.is_lost_lead ? { opacity: 0.5, filter: "grayscale(0.5)" } : {}} onClick={() => onNavigateToSales && onNavigateToSales(lead)}>
+                      <tr key={lead.id} className={`transition-colors cursor-pointer whitespace-nowrap ${theme.tableRow}`} style={lead.is_lost_lead ? { opacity: 0.5, filter: "grayscale(0.5)" } : {}} onClick={() => onNavigateToSales && onNavigateToSales(lead)}>
                         <td className={`px-6 py-4 font-bold ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>#{lead.id}</td>
                         <td className={`px-4 py-4 font-medium ${theme.text}`}>
-                          {(lead.assigned_to || lead.assigned_receptionist) ? (
+                          {(lead.assigned_to || lead.assign2d_receptionist) ? (
                             <span
                               className={`cursor-pointer hover:underline transition-colors ${isDark ? "hover:text-[#d946a8]" : "hover:text-[#9E217B]"}`}
                               title={`Open lead detail for ${lead.name}`}
@@ -1835,18 +1851,18 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                             lead.name
                           )}
                         </td>
-                        <td className={`px-4 py-4 ${theme.textMuted}`}>{lead.propType || lead.configuration || "Pending"}</td>
-                        <td className={`px-4 py-4 font-semibold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget || lead.budget || "N/A"}</td>
-                        <td className={`px-4 py-4 text-xs ${theme.textMuted}`}>{lead.source || "—"}</td>
-                        <td className={`px-4 py-4 ${theme.textMuted}`}>{lead.cpName || lead.cp_name || "—"}</td>
-                        <td className={`px-4 py-4 ${theme.textMuted}`}>{lead.cpCompany || lead.cp_company || "—"}</td>
-                        <td className={`px-4 py-4 font-mono text-xs ${theme.textMuted}`}>{lead.cpPhone || lead.cp_phone || "—"}</td>
-                        <td className="px-4 py-4">
+                        <td className={`px-2 py-2 ${theme.textMuted}`}>{lead.propType || lead.configuration || "Pending"}</td>
+                        <td className={`px-2 py-2 font-semibold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget || lead.budget || "N/A"}</td>
+                        <td className={`px-2 py-2 text-xs ${theme.textMuted}`}>{lead.source || "—"}</td>
+                        <td className={`px-2 py-2 ${theme.textMuted}`}>{lead.cpName || lead.cp_name || "—"}</td>
+                        <td className={`px-2 py-2 ${theme.textMuted}`}>{lead.cpCompany || lead.cp_company || "—"}</td>
+                        <td className={`px-2 py-2 font-mono text-xs ${theme.textMuted}`}>{lead.cpPhone || lead.cp_phone || "—"}</td>
+                        <td className="px-2 py-4">
                           <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase border flex-shrink-0 whitespace-nowrap ${lead.status === "Closing" ? theme.statusClosing : lead.status === "Visit Scheduled" ? theme.statusVisit : theme.statusRouted}`}>
                             {lead.status || "Routed"}
                           </span>
                         </td>
-                        <td className="px-4 py-4">
+                        <td className="px-2 py-2">
                           {lead.is_lost_lead ? (
                             <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase border flex-shrink-0 whitespace-nowrap ${theme.statusLost}`}>
                               Lost Lead
@@ -1855,7 +1871,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                             <span className={`text-[10px] font-semibold uppercase ${isDark ? "text-green-400" : "text-emerald-600"}`}>Active</span>
                           )}
                         </td>
-                        <td className="px-4 py-4">
+                        <td className="px-2 py-2">
                           {lead.leadInterestStatus && lead.leadInterestStatus !== "Pending"
                             ? <InterestBadge status={lead.leadInterestStatus} size="sm" isDark={isDark} />
                             : <span className={`text-xs italic ${theme.textFaint}`}>—</span>}
@@ -1865,7 +1881,10 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                             ? <span className="text-orange-500 font-medium">{formatDate(lead.mongoVisitDate).split(",")[0]}</span>
                             : <span className={`text-xs italic ${theme.textFaint}`}>Pending</span>}
                         </td>
-                        <td className={`px-4 py-4 ${theme.textMuted}`}>
+                        <td className={`px-2 py-2 text-xs ${theme.textFaint}`}>
+                          {lead.created_at ? formatDate(lead.created_at).split(",")[0] : "—"}
+                        </td>
+                        <td className={`px-2 py-2 ${theme.textMuted}`}>
                           {assignedName ? (
                             <div className="flex flex-col gap-0.5">
                               <span className={`font-semibold ${theme.text}`}>{assignedName}</span>
@@ -1875,7 +1894,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                             </div>
                           ) : "—"}
                         </td>
-                        <td className="px-4 py-4" onClick={e => e.stopPropagation()}>
+                        <td className="px-2 py-2" onClick={e => e.stopPropagation()}>
                           {lead.status === "Closing" || lead.status === "Closed" || !!lead.closingDate ? (
                             <span className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase border whitespace-nowrap ${isDark ? "text-gray-400 border-gray-600 bg-gray-800/50" : "text-gray-500 border-gray-300 bg-gray-100"}`}>
                               Marked closed
@@ -1985,7 +2004,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
               <table className="w-full text-left text-sm">
                 <thead className={`text-xs uppercase ${theme.tableHead} ${theme.textHeader}`}>
                   <tr>
-                    {["LEAD NO.", "NAME", "PROP. TYPE", "BUDGET", "SOURCE", "CP NAME", "CP PHONE", "STATUS", "INTEREST", "SITE VISIT", "ASSIGNED TO", "REASSIGN"].map(h => (
+                    {["LEAD NO.", "NAME", "PROP. TYPE", "BUDGET", "SOURCE", "CP NAME", "CP PHONE", "STATUS", "INTEREST", "SITE VISIT", "DATE CREATED", "ASSIGNED TO", "REASSIGN"].map(h => (
                       <th key={h} className="px-4 py-4">{h}</th>
                     ))}
                   </tr>
@@ -2189,6 +2208,9 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                             lead.name
                           )}
                         </td>
+                        <td className={`px-4 py-4 text-xs ${theme.textFaint}`}>
+                          {lead.created_at ? formatDate(lead.created_at).split(",")[0] : "—"}
+                        </td>
                         <td className={`px-4 py-4 ${theme.textMuted}`}>{lead.propType || lead.configuration || "Pending"}</td>
                         <td className={`px-4 py-4 font-semibold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget || lead.budget || "N/A"}</td>
                         <td className={`px-4 py-4 text-xs ${theme.textMuted}`}>{lead.source || "—"}</td>
@@ -2308,7 +2330,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
             </div>
             <div className="overflow-x-auto">
               <div ref={loadLessRef} style={{ height: "1px", width: "100%" }} />
-              <table className="w-full text-left text-sm">
+              <table className="w-full text-left text-sm min-w-[1200px]">
                 <thead className={`text-xs uppercase ${theme.tableHead} ${theme.textHeader}`}>
                   <tr>
                     {["LEAD NO.", "NAME", "PROP. TYPE", "BUDGET", "SOURCE", "CP NAME", "CP PHONE", "STATUS", "INTEREST", "SITE VISIT", "ASSIGNED TO", "REASSIGN"].map(h => (
@@ -2346,13 +2368,13 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                             lead.name
                           )}
                         </td>
-                        <td className={`px-4 py-4 ${theme.textMuted}`}>{lead.propType || lead.configuration || "Pending"}</td>
-                        <td className={`px-4 py-4 font-semibold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget || lead.budget || "N/A"}</td>
-                        <td className={`px-4 py-4 text-xs ${theme.textMuted}`}>{lead.source || "—"}</td>
-                        <td className={`px-4 py-4 ${theme.textMuted}`}>{lead.cpName || lead.cp_name || "—"}</td>
-                        <td className={`px-4 py-4 font-mono text-xs ${theme.textMuted}`}>{lead.cpPhone || lead.cp_phone || "—"}</td>
+                        <td className={`px-2 py-2 ${theme.textMuted}`}>{lead.propType || lead.configuration || "Pending"}</td>
+                        <td className={`px-2 py-2 font-semibold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget || lead.budget || "N/A"}</td>
+                        <td className={`px-2 py-2 text-xs ${theme.textMuted}`}>{lead.source || "—"}</td>
+                        <td className={`px-2 py-2 ${theme.textMuted}`}>{lead.cpName || lead.cp_name || "—"}</td>
+                        <td className={`px-2 py-2 font-mono text-xs ${theme.textMuted}`}>{lead.cpPhone || lead.cp_phone || "—"}</td>
                         <td className="px-4 py-4">
-                          <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase border flex-shrink-0 whitespace-nowrap ${lead.status === "Closing" ? theme.statusClosing : lead.status === "Visit Scheduled" ? theme.statusVisit : theme.statusRouted}`}>
+                          <span className={`px-2 p2-1 rounded-full text-[10px] font-bold uppercase border flex-shrink-0 whitespace-nowrap ${lead.status === "Closing" ? theme.statusClosing : lead.status === "Visit Scheduled" ? theme.statusVisit : theme.statusRouted}`}>
                             {lead.status || "Routed"}
                           </span>
                         </td>
