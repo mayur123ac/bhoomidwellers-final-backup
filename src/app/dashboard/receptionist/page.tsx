@@ -2223,7 +2223,7 @@ export default function ReceptionistDashboard() {
                   <div>
                     <h2 className={`text-base md:text-lg font-bold flex items-center gap-3 ${t.text}`}>
                       Front Desk Log
-                      <button onClick={() => downloadCSV(receptionistLeads.map((e: any) => ({ "Lead No": e.id, "Client Name": e.name, "CP Name": e.cp_name || "N/A", "CP Company": e.cp_company || "N/A", "CP Phone": e.cp_phone || "N/A", "Budget": e.salesBudget || "N/A", "Phone": e.phone || "N/A", "Alt Phone": e.altPhone || "N/A", "Date": e.date, "Assigned To": e.assignedTo || "Unassigned" })), "Front_Desk_Log.csv")} className={`p-1.5 border rounded-md ${t.exportBtn}`}><FaDownload size={12} /></button>
+
                     </h2>
                     <p className={`text-xs mt-0.5 ${t.textFaint}`}>{receptionistLeads.length} shown · {totalCount} total</p>
                   </div>
