@@ -1852,7 +1852,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                             lead.name
                           )}
                         </td>
-                        <td className={`px-2 py-2 ${theme.textMuted}`}>{lead.propType || lead.configuration || "Pending"}</td>
+                        <td className={`px-2 py-2 ${theme.textMuted}`}>{(lead.propType && lead.propType !== "Pending" && lead.propType !== "N/A" ? lead.propType : lead.configuration && lead.configuration !== "Pending" && lead.configuration !== "N/A" ? lead.configuration : "Pending")}</td>
                         <td className={`px-2 py-2 font-semibold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget || lead.budget || "N/A"}</td>
                         <td className={`px-2 py-2 text-xs ${theme.textMuted}`}>{lead.source || "—"}</td>
                         <td className={`px-2 py-2 ${theme.textMuted}`}>{lead.cpName || lead.cp_name || "—"}</td>
@@ -2008,7 +2008,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
               <table className="w-full text-left text-sm">
                 <thead className={`text-xs uppercase ${theme.tableHead} ${theme.textHeader}`}>
                   <tr>
-                    {["LEAD NO.", "NAME", "PROP. TYPE", "BUDGET", "SOURCE", "CP NAME", "CP PHONE", "STATUS", "INTEREST", "SITE VISIT", "DATE CREATED", "ASSIGNED TO", "REASSIGN"].map(h => (
+                    {["LEAD NO.", "NAME", "PROP. TYPE", "BUDGET", "SOURCE", "CP NAME", "CP PHONE", "STATUS", "INTEREST", "SITE VISIT", "DATE CREATED", "BACKDATED ENTRY", "ASSIGNED TO", "REASSIGN"].map(h => (
                       <th key={h} className="px-4 py-4">{h}</th>
                     ))}
                   </tr>
@@ -2043,7 +2043,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                             lead.name
                           )}
                         </td>
-                        <td className={`px-4 py-4 ${theme.textMuted}`}>{lead.propType || lead.configuration || "Pending"}</td>
+                        <td className={`px-4 py-4 ${theme.textMuted}`}>{(lead.propType && lead.propType !== "Pending" && lead.propType !== "N/A" ? lead.propType : lead.configuration && lead.configuration !== "Pending" && lead.configuration !== "N/A" ? lead.configuration : "Pending")}</td>
                         <td className={`px-4 py-4 font-semibold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget || lead.budget || "N/A"}</td>
                         <td className={`px-4 py-4 text-xs ${theme.textMuted}`}>{lead.source || "—"}</td>
                         <td className={`px-4 py-4 ${theme.textMuted}`}>{lead.cpName || lead.cp_name || "—"}</td>
@@ -2062,6 +2062,12 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                           {lead.mongoVisitDate
                             ? <span className="text-orange-500 font-medium">{formatDate(lead.mongoVisitDate).split(",")[0]}</span>
                             : <span className={`text-xs italic ${theme.textFaint}`}>Pending</span>}
+                        </td>
+                        <td className={`px-4 py-4 text-xs whitespace-normal min-w-[120px] ${theme.textFaint}`}>
+                          {lead.created_at ? formatDate(lead.created_at) : "—"}
+                        </td>
+                        <td className={`px-4 py-4 text-xs whitespace-normal min-w-[120px] ${theme.textFaint}`}>
+                          {lead.auto_date_enabled === false && lead.enquiry_date ? formatDate(lead.enquiry_date).split(",")[0] : "—"}
                         </td>
                         <td className={`px-4 py-4 ${theme.textMuted}`}>
                           {assignedName ? (
@@ -2177,7 +2183,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
               <table className="w-full text-left text-sm">
                 <thead className={`text-xs uppercase ${theme.tableHead} ${theme.textHeader}`}>
                   <tr>
-                    {["LEAD NO.", "NAME", "PROP. TYPE", "BUDGET", "SOURCE", "CP NAME", "CP PHONE", "STATUS", "INTEREST", "SITE VISIT", "ASSIGNED TO", "REASSIGN"].map(h => (
+                    {["LEAD NO.", "NAME", "PROP. TYPE", "BUDGET", "SOURCE", "CP NAME", "CP PHONE", "STATUS", "INTEREST", "SITE VISIT", "DATE CREATED", "BACKDATED ENTRY", "ASSIGNED TO", "REASSIGN"].map(h => (
                       <th key={h} className="px-4 py-4">{h}</th>
                     ))}
                   </tr>
@@ -2212,10 +2218,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                             lead.name
                           )}
                         </td>
-                        <td className={`px-4 py-4 text-xs whitespace-normal min-w-[120px] ${theme.textFaint}`}>
-                          {lead.created_at ? formatDate(lead.created_at) : "—"}
-                        </td>
-                        <td className={`px-4 py-4 ${theme.textMuted}`}>{lead.propType || lead.configuration || "Pending"}</td>
+                        <td className={`px-4 py-4 ${theme.textMuted}`}>{(lead.propType && lead.propType !== "Pending" && lead.propType !== "N/A" ? lead.propType : lead.configuration && lead.configuration !== "Pending" && lead.configuration !== "N/A" ? lead.configuration : "Pending")}</td>
                         <td className={`px-4 py-4 font-semibold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget || lead.budget || "N/A"}</td>
                         <td className={`px-4 py-4 text-xs ${theme.textMuted}`}>{lead.source || "—"}</td>
                         <td className={`px-4 py-4 ${theme.textMuted}`}>{lead.cpName || lead.cp_name || "—"}</td>
@@ -2234,6 +2237,12 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                           {lead.mongoVisitDate
                             ? <span className="text-orange-500 font-medium">{formatDate(lead.mongoVisitDate).split(",")[0]}</span>
                             : <span className={`text-xs italic ${theme.textFaint}`}>Pending</span>}
+                        </td>
+                        <td className={`px-4 py-4 text-xs whitespace-normal min-w-[120px] ${theme.textFaint}`}>
+                          {lead.created_at ? formatDate(lead.created_at) : "—"}
+                        </td>
+                        <td className={`px-4 py-4 text-xs whitespace-normal min-w-[120px] ${theme.textFaint}`}>
+                          {lead.auto_date_enabled === false && lead.enquiry_date ? formatDate(lead.enquiry_date).split(",")[0] : "—"}
                         </td>
                         <td className={`px-4 py-4 ${theme.textMuted}`}>
                           {assignedName ? (
@@ -2337,7 +2346,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
               <table className="w-full text-left text-sm min-w-[1200px]">
                 <thead className={`text-xs uppercase ${theme.tableHead} ${theme.textHeader}`}>
                   <tr>
-                    {["LEAD NO.", "NAME", "PROP. TYPE", "BUDGET", "SOURCE", "CP NAME", "CP PHONE", "STATUS", "INTEREST", "SITE VISIT", "ASSIGNED TO", "REASSIGN"].map(h => (
+                    {["LEAD NO.", "NAME", "PROP. TYPE", "BUDGET", "SOURCE", "CP NAME", "CP PHONE", "STATUS", "INTEREST", "SITE VISIT", "DATE CREATED", "BACKDATED ENTRY", "ASSIGNED TO", "REASSIGN"].map(h => (
                       <th key={h} className="px-4 py-4">{h}</th>
                     ))}
                   </tr>
@@ -2372,7 +2381,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                             lead.name
                           )}
                         </td>
-                        <td className={`px-2 py-2 ${theme.textMuted}`}>{lead.propType || lead.configuration || "Pending"}</td>
+                        <td className={`px-2 py-2 ${theme.textMuted}`}>{(lead.propType && lead.propType !== "Pending" && lead.propType !== "N/A" ? lead.propType : lead.configuration && lead.configuration !== "Pending" && lead.configuration !== "N/A" ? lead.configuration : "Pending")}</td>
                         <td className={`px-2 py-2 font-semibold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget || lead.budget || "N/A"}</td>
                         <td className={`px-2 py-2 text-xs ${theme.textMuted}`}>{lead.source || "—"}</td>
                         <td className={`px-2 py-2 ${theme.textMuted}`}>{lead.cpName || lead.cp_name || "—"}</td>
@@ -2391,6 +2400,12 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                           {lead.mongoVisitDate
                             ? <span className="text-orange-500 font-medium">{formatDate(lead.mongoVisitDate).split(",")[0]}</span>
                             : <span className={`text-xs italic ${theme.textFaint}`}>Pending</span>}
+                        </td>
+                        <td className={`px-4 py-4 text-xs whitespace-normal min-w-[120px] ${theme.textFaint}`}>
+                          {lead.created_at ? formatDate(lead.created_at) : "—"}
+                        </td>
+                        <td className={`px-4 py-4 text-xs whitespace-normal min-w-[120px] ${theme.textFaint}`}>
+                          {lead.auto_date_enabled === false && lead.enquiry_date ? formatDate(lead.enquiry_date).split(",")[0] : "—"}
                         </td>
                         <td className={`px-4 py-4 ${theme.textMuted}`}>
                           {assignedName ? (

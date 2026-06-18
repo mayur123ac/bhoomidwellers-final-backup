@@ -806,7 +806,7 @@ export default function SalesDashboard() {
           </div>
         </header>
 
-        <main className={`flex-1 overflow-hidden custom-scrollbar ${t.mainBg} ${activeView === "assistant" ? "p-0" : "p-4 sm:p-6 lg:p-8 overflow-y-auto"}`}>
+        <main className={`flex-1 overflow-hidden custom-scrollbar ${t.mainBg} ${activeView === "assistant" ? "p-0" : "p-1 sm:p-3 lg:p-4 overflow-y-auto"}`}>
           {(activeView === "sales" || activeView === "overview" || activeView === "forms" || activeView === "detail" || activeView === "closed-leads") ? (
             <SalesManagerView
               managers={managers} allLeads={allLeads} followUps={followUps}
@@ -1607,8 +1607,8 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                                 ) : <span className={`text-xs font-semibold ${t.textMuted}`}>Active</span>}
                               </td>
                               <td className="px-4 py-3 sm:py-4">
-                                {lead.leadInterestStatus && lead.leadInterestStatus !== "Pending" 
-                                  ? <InterestBadge status={lead.leadInterestStatus} size="sm" /> 
+                                {lead.leadInterestStatus && lead.leadInterestStatus !== "Pending"
+                                  ? <InterestBadge status={lead.leadInterestStatus} size="sm" />
                                   : <span className={`text-xs italic ${t.textFaint}`}>—</span>}
                               </td>
                               <td className={`px-4 py-3 sm:py-4 text-xs whitespace-normal min-w-[120px] ${t.textFaint}`}>

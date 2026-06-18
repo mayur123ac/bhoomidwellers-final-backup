@@ -3142,7 +3142,7 @@ export default function ReceptionistDashboard() {
                               <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-bold ${t.accentText}`}>#{lead.id}</td>
                               <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-semibold ${t.text}`}>{lead.name}</td>
                               <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-bold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget || lead.budget}</td>
-                              <td className={`px-3 py-3 md:p-4 text-xs ${t.textMuted}`}>{lead.propType || lead.configuration || "N/A"}</td>
+                              <td className={`px-3 py-3 md:p-4 text-xs ${t.textMuted}`}>{(lead.propType && lead.propType !== "Pending" && lead.propType !== "N/A" ? lead.propType : lead.configuration && lead.configuration !== "Pending" && lead.configuration !== "N/A" ? lead.configuration : "N/A")}</td>
                               <td className="px-3 py-3 md:p-4">
                                 <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase border ${t.statusClosing}`}>
                                   {lead.status}
