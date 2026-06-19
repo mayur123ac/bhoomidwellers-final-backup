@@ -280,7 +280,7 @@ export default function GeoAnalyticsView({
           createdAt: lead.created_at || "",
           address: addrOrigin || "N/A",
           preferredLocation: addrDest || "Pending",
-          status: lead.status || "Routed",
+          status: lead.status || "Assigned",
           interestStatus: lead.leadInterestStatus || "Pending",
         });
 

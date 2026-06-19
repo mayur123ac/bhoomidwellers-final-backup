@@ -168,8 +168,8 @@ export default function TransferModal({
             <div className="ml-auto">
               <span className={`text-[10px] px-2 py-1 rounded-full font-bold border ${
                 selectedLead.status === "Closing"   ? t.statusClosing :
-                selectedLead.status === "Visit Scheduled" ? t.statusVisit : t.statusRouted
-              }`}>{selectedLead.status || "Routed"}</span>
+                selectedLead.status === "Visit Scheduled" ? t.statusVisit : (t.statusAssigned || t.statusRouted)
+              }`}>{selectedLead.status || "Assigned"}</span>
             </div>
           </div>
 

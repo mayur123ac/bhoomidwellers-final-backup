@@ -45,6 +45,53 @@ export async function GET() {
       )
     `);
 
+    // 4. Update walkin_enquiries for new Lead Lifecycle and Tracking fields
+    await query(`
+      ALTER TABLE walkin_enquiries
+      ADD COLUMN IF NOT EXISTS assigned_at TIMESTAMP WITH TIME ZONE,
+      ADD COLUMN IF NOT EXISTS first_contact_at TIMESTAMP WITH TIME ZONE,
+      ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMP WITH TIME ZONE,
+      ADD COLUMN IF NOT EXISTS site_visit_history JSONB DEFAULT '[]'::jsonb,
+      ADD COLUMN IF NOT EXISTS loan_tracking_info JSONB DEFAULT '{}'::jsonb,
+      ADD COLUMN IF NOT EXISTS referral_info JSONB DEFAULT '{}'::jsonb;
+    `);
+
+    // 5. Update leads for new Lead Lifecycle and Tracking fields
+    await query(`
+      ALTER TABLE leads
+      ADD COLUMN IF NOT EXISTS assigned_at TIMESTAMP WITH TIME ZONE,
+      ADD COLUMN IF NOT EXISTS first_contact_at TIMESTAMP WITH TIME ZONE,
+      ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMP WITH TIME ZONE,
+      ADD COLUMN IF NOT EXISTS site_visit_history JSONB DEFAULT '[]'::jsonb,
+      ADD COLUMN IF NOT EXISTS loan_tracking_info JSONB DEFAULT '{}'::jsonb,
+      ADD COLUMN IF NOT EXISTS referral_info JSONB DEFAULT '{}'::jsonb;
+    `);
+
+    // 6. Create Audit Logs for Lead Assignments
+    await query(`
+      CREATE TABLE IF NOT EXISTS lead_assignment_logs (
+        id SERIAL PRIMARY KEY,
+        lead_id INTEGER NOT NULL,
+        assigned_to VARCHAR(255),
+        assigned_by VARCHAR(255),
+        assigned_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        reason TEXT
+      )
+    `);
+
+    // 7. Update existing status from Routed to Assigned
+    await query(`
+      UPDATE walkin_enquiries
+      SET status = 'Assigned'
+      WHERE status = 'Routed' OR status = 'ROUTED'
+    `);
+
+    await query(`
+      UPDATE leads
+      SET status = 'Assigned'
+      WHERE status = 'Routed' OR status = 'ROUTED'
+    `);
+
     return NextResponse.json({ message: "Migration successful!" }, { status: 200 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

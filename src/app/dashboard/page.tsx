@@ -126,12 +126,16 @@ function buildTheme(isDark: boolean) {
     fupLoan: isDark ? "bg-blue-900/20 border border-blue-600/40" : "bg-blue-50 border border-blue-200",
     fupSalesform: isDark ? "bg-[#222] border border-[#444]" : "bg-white border border-[#D1D5DB]",
     fupClosing: isDark ? "bg-yellow-900/20 border border-yellow-600/40" : "bg-amber-50 border border-amber-300",
-    statusRouted: isDark ? "text-[#d946a8] border border-[#9E217B]/30 bg-[#9E217B]/10" : "text-[#9E217B] border-[#9E217B]/30 bg-[#9E217B]/10",
+    statusAssigned: isDark ? "text-purple-400 border border-purple-500/30 bg-purple-500/10" : "text-purple-700 border-purple-300 bg-purple-50",
+    statusNew: isDark ? "text-blue-400 border border-blue-500/30 bg-blue-500/10" : "text-blue-700 border-blue-300 bg-blue-50",
+    statusContacted: isDark ? "text-cyan-400 border border-cyan-500/30 bg-cyan-500/10" : "text-cyan-700 border-cyan-300 bg-cyan-50",
+    statusInterested: isDark ? "text-green-400 border border-green-500/30 bg-green-500/10" : "text-green-700 border-green-300 bg-green-50",
     statusVisit: isDark ? "text-orange-400 border border-orange-500/30 bg-orange-500/10" : "text-orange-500 border-orange-400/40 bg-orange-50",
     statusClosing: isDark ? "text-yellow-400 border border-yellow-500/40 bg-yellow-500/10" : "text-amber-600 border-amber-400/50 bg-amber-50",
+    statusCompleted: isDark ? "text-emerald-400 border border-emerald-500/30 bg-emerald-500/10" : "text-emerald-700 border-emerald-300 bg-emerald-50",
+    statusLost: isDark ? "text-red-400 border-red-500/30 bg-red-500/10" : "text-red-600 border-red-300 bg-red-50",
     select: isDark ? "bg-[#121212] border border-[#333] text-white focus:border-[#9E217B]" : "bg-white border border-indigo-300 text-[#1A1A1A] focus:border-[#9E217B]",
     selectSmall: isDark ? "bg-[#222] border border-[#333] text-white" : "bg-white border border-indigo-200 text-[#6B7280]",
-    statusLost: isDark ? "text-red-400 border-red-500/30 bg-red-500/10" : "text-red-600 border-red-300 bg-red-50",
     lostLeadBadge: isDark ? "bg-red-900/20 border border-red-500/30 text-red-400" : "bg-red-50 border border-red-300 text-red-600",
     lostLeadRow: isDark ? "opacity-50" : "opacity-50 bg-gray-50/50",
     statusNGD: "bg-[rgba(251,146,60,0.12)] text-[#F97316] border border-[rgba(249,115,22,0.4)]",
@@ -343,7 +347,7 @@ const formatLeadForExport = (l: any) => ({
   "Phone": l.phone,
   "Alt Phone": l.altPhone || l.alt_phone || "N/A",
   "Source": l.source || "N/A",
-  "Status": l.status || "Routed",
+  "Status": l.status || "Assigned",
   "Interest Level": l.leadInterestStatus || "N/A",
   "Loan Status": l.loanStatus || "N/A",
   "CP Name": l.cpName || l.cp_name || "N/A",
@@ -1859,8 +1863,8 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                         <td className={`px-2 py-2 ${theme.textMuted}`}>{lead.cpCompany || lead.cp_company || "—"}</td>
                         <td className={`px-2 py-2 font-mono text-xs ${theme.textMuted}`}>{lead.cpPhone || lead.cp_phone || "—"}</td>
                         <td className="px-2 py-4">
-                          <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase border flex-shrink-0 whitespace-nowrap ${lead.status === "Closing" ? theme.statusClosing : lead.status === "Visit Scheduled" ? theme.statusVisit : theme.statusRouted}`}>
-                            {lead.status || "Routed"}
+                          <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase border flex-shrink-0 whitespace-nowrap ${lead.status === "Closing" ? theme.statusClosing : lead.status === "Visit Scheduled" ? theme.statusVisit : theme.statusAssigned}`}>
+                            {lead.status || "Assigned"}
                           </span>
                         </td>
                         <td className="px-2 py-2">
@@ -2049,8 +2053,8 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                         <td className={`px-4 py-4 ${theme.textMuted}`}>{lead.cpName || lead.cp_name || "—"}</td>
                         <td className={`px-4 py-4 font-mono text-xs ${theme.textMuted}`}>{lead.cpPhone || lead.cp_phone || "—"}</td>
                         <td className="px-4 py-4">
-                          <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase border flex-shrink-0 whitespace-nowrap ${lead.status === "Closing" ? theme.statusClosing : lead.status === "Visit Scheduled" ? theme.statusVisit : theme.statusRouted}`}>
-                            {lead.status || "Routed"}
+                          <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase border flex-shrink-0 whitespace-nowrap ${lead.status === "Closing" ? theme.statusClosing : lead.status === "Visit Scheduled" ? theme.statusVisit : theme.statusAssigned}`}>
+                            {lead.status || "Assigned"}
                           </span>
                         </td>
                         <td className="px-4 py-4">
@@ -2224,8 +2228,8 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                         <td className={`px-4 py-4 ${theme.textMuted}`}>{lead.cpName || lead.cp_name || "—"}</td>
                         <td className={`px-4 py-4 font-mono text-xs ${theme.textMuted}`}>{lead.cpPhone || lead.cp_phone || "—"}</td>
                         <td className="px-4 py-4">
-                          <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase border flex-shrink-0 whitespace-nowrap ${lead.status === "Closing" ? theme.statusClosing : lead.status === "Visit Scheduled" ? theme.statusVisit : theme.statusRouted}`}>
-                            {lead.status || "Routed"}
+                          <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase border flex-shrink-0 whitespace-nowrap ${lead.status === "Closing" ? theme.statusClosing : lead.status === "Visit Scheduled" ? theme.statusVisit : theme.statusAssigned}`}>
+                            {lead.status || "Assigned"}
                           </span>
                         </td>
                         <td className="px-4 py-4">
@@ -2387,8 +2391,8 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                         <td className={`px-2 py-2 ${theme.textMuted}`}>{lead.cpName || lead.cp_name || "—"}</td>
                         <td className={`px-2 py-2 font-mono text-xs ${theme.textMuted}`}>{lead.cpPhone || lead.cp_phone || "—"}</td>
                         <td className="px-4 py-4">
-                          <span className={`px-2 p2-1 rounded-full text-[10px] font-bold uppercase border flex-shrink-0 whitespace-nowrap ${lead.status === "Closing" ? theme.statusClosing : lead.status === "Visit Scheduled" ? theme.statusVisit : theme.statusRouted}`}>
-                            {lead.status || "Routed"}
+                          <span className={`px-2 p2-1 rounded-full text-[10px] font-bold uppercase border flex-shrink-0 whitespace-nowrap ${lead.status === "Closing" ? theme.statusClosing : lead.status === "Visit Scheduled" ? theme.statusVisit : theme.statusAssigned}`}>
+                            {lead.status || "Assigned"}
                           </span>
                         </td>
                         <td className="px-4 py-4">
@@ -3085,10 +3089,15 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
 
   // Status Classes & Sections
   const statusCls = (status: string) => {
-    const s = status || "Routed";
-    if (s === "Closing" || s === "Closed") return isDark ? "whitespace-nowrap text-yellow-400 border-yellow-500/40 bg-yellow-500/10" : "whitespace-nowrap text-amber-600 border-amber-400/50 bg-amber-50";
-    if (s === "Visit Scheduled") return isDark ? "whitespace-nowrap text-orange-400 border-orange-500/30 bg-orange-500/10" : "whitespace-nowrap text-orange-500 border-orange-400/40 bg-orange-50";
-    return isDark ? "whitespace-nowrap text-[#d946a8] border-[#9E217B]/30 bg-[#9E217B]/10" : "whitespace-nowrap text-[#9E217B] border-[#9E217B]/30 bg-[#9E217B]/10";
+    const s = status || "Assigned";
+    if (s === "New Lead") return "whitespace-nowrap " + (isDark ? "text-blue-400 border-blue-500/30 bg-blue-500/10" : "text-blue-700 border-blue-300 bg-blue-50");
+    if (s === "Assigned") return "whitespace-nowrap " + (isDark ? "text-purple-400 border-purple-500/30 bg-purple-500/10" : "text-purple-700 border-purple-300 bg-purple-50");
+    if (s === "Contacted") return "whitespace-nowrap " + (isDark ? "text-cyan-400 border-cyan-500/30 bg-cyan-500/10" : "text-cyan-700 border-cyan-300 bg-cyan-50");
+    if (s === "Interested") return "whitespace-nowrap " + (isDark ? "text-green-400 border-green-500/30 bg-green-500/10" : "text-green-700 border-green-300 bg-green-50");
+    if (s === "Visit Scheduled") return "whitespace-nowrap " + (isDark ? "text-orange-400 border-orange-500/30 bg-orange-500/10" : "text-orange-500 border-orange-400/40 bg-orange-50");
+    if (s === "Completed") return "whitespace-nowrap " + (isDark ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/10" : "text-emerald-700 border-emerald-300 bg-emerald-50");
+    if (s === "Closing" || s === "Closed") return "whitespace-nowrap " + (isDark ? "text-yellow-400 border-yellow-500/40 bg-yellow-500/10" : "text-amber-600 border-amber-400/50 bg-amber-50");
+    return "whitespace-nowrap " + (isDark ? "text-purple-400 border-purple-500/30 bg-purple-500/10" : "text-purple-700 border-purple-300 bg-purple-50");
   };
 
   const sections = [
@@ -3134,7 +3143,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                   <td className={`px-4 py-4 text-xs ${theme.textMuted}`}>{lead.source || "—"}</td>
                   <td className="px-4 py-4">
                     <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase border flex-shrink-0 ${isLost ? theme.statusLost : isNGD ? theme.statusNGD : statusCls(lead.status)}`}>
-                      {isLost ? "Lost" : isNGD ? "NGD" : (lead.status || "Routed")}
+                      {isLost ? "Lost" : isNGD ? "NGD" : (lead.status || "Assigned")}
                     </span>
                   </td>
                   <td className="px-4 py-4">
@@ -3494,7 +3503,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                                   <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Type of Use</p><p className={`font-semibold ${theme.text}`}>{selectedLead.useType !== "Pending" ? selectedLead.useType : (selectedLead.purpose || "N/A")}</p></div>
                                   <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Planning to Buy?</p><p className={`font-semibold ${theme.text}`}>{selectedLead.planningPurchase || "Pending"}</p></div>
                                   <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Loan Required?</p><p className={`font-semibold ${theme.text}`}>{getLatestLoanDetails()?.loanRequired}</p></div>
-                                  <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Status</p><span className={`text-sm font-bold ${selectedLead.status === "Closing" ? "text-amber-500" : selectedLead.status === "Visit Scheduled" ? "text-orange-400" : theme.accentText}`}>{selectedLead.status || "Routed"}</span></div>
+                                  <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Status</p><span className={`text-sm font-bold ${selectedLead.status === "Closing" ? "text-amber-500" : selectedLead.status === "Visit Scheduled" ? "text-orange-400" : theme.accentText}`}>{selectedLead.status || "Assigned"}</span></div>
                                   <div className={`col-span-2 p-3 rounded-xl border ${theme.settingsBg}`} style={theme.settingsBgGl}>
                                     <p className={`text-xs font-bold uppercase tracking-wider mb-0.5 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>📍 Site Visit Date</p>
                                     <p className={`text-base font-black ${theme.text}`}>{selectedLead.mongoVisitDate ? formatDate(selectedLead.mongoVisitDate) : "Not Scheduled"}</p>
@@ -4112,10 +4121,15 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
 
   // Status Classes & Sections
   const statusCls = (status: string) => {
-    const s = status || "Routed";
-    if (s === "Closing" || s === "Closed") return isDark ? "whitespace-nowrap text-yellow-400 border-yellow-500/40 bg-yellow-500/10" : "whitespace-nowrap text-amber-600 border-amber-400/50 bg-amber-50";
-    if (s === "Visit Scheduled") return isDark ? "whitespace-nowrap text-orange-400 border-orange-500/30 bg-orange-500/10" : "whitespace-nowrap text-orange-500 border-orange-400/40 bg-orange-50";
-    return isDark ? "whitespace-nowrap text-[#d946a8] border-[#9E217B]/30 bg-[#9E217B]/10" : "whitespace-nowrap text-[#9E217B] border-[#9E217B]/30 bg-[#9E217B]/10";
+    const s = status || "Assigned";
+    if (s === "New Lead") return "whitespace-nowrap " + (isDark ? "text-blue-400 border-blue-500/30 bg-blue-500/10" : "text-blue-700 border-blue-300 bg-blue-50");
+    if (s === "Assigned") return "whitespace-nowrap " + (isDark ? "text-purple-400 border-purple-500/30 bg-purple-500/10" : "text-purple-700 border-purple-300 bg-purple-50");
+    if (s === "Contacted") return "whitespace-nowrap " + (isDark ? "text-cyan-400 border-cyan-500/30 bg-cyan-500/10" : "text-cyan-700 border-cyan-300 bg-cyan-50");
+    if (s === "Interested") return "whitespace-nowrap " + (isDark ? "text-green-400 border-green-500/30 bg-green-500/10" : "text-green-700 border-green-300 bg-green-50");
+    if (s === "Visit Scheduled") return "whitespace-nowrap " + (isDark ? "text-orange-400 border-orange-500/30 bg-orange-500/10" : "text-orange-500 border-orange-400/40 bg-orange-50");
+    if (s === "Completed") return "whitespace-nowrap " + (isDark ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/10" : "text-emerald-700 border-emerald-300 bg-emerald-50");
+    if (s === "Closing" || s === "Closed") return "whitespace-nowrap " + (isDark ? "text-yellow-400 border-yellow-500/40 bg-yellow-500/10" : "text-amber-600 border-amber-400/50 bg-amber-50");
+    return "whitespace-nowrap " + (isDark ? "text-purple-400 border-purple-500/30 bg-purple-500/10" : "text-purple-700 border-purple-300 bg-purple-50");
   };
 
   const sections = [
@@ -4161,7 +4175,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                   <td className={`px-4 py-4 text-xs ${theme.textMuted}`}>{lead.source || "—"}</td>
                   <td className="px-4 py-4">
                     <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase border flex-shrink-0 ${isLost ? theme.statusLost : isNGD ? theme.statusNGD : statusCls(lead.status)}`}>
-                      {isLost ? "Lost" : isNGD ? "NGD" : (lead.status || "Routed")}
+                      {isLost ? "Lost" : isNGD ? "NGD" : (lead.status || "Assigned")}
                     </span>
                   </td>
                   <td className="px-4 py-4">
@@ -4542,7 +4556,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                                   <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Type of Use</p><p className={`font-semibold ${theme.text}`}>{selectedLead.useType !== "Pending" ? selectedLead.useType : (selectedLead.purpose || "N/A")}</p></div>
                                   <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Planning to Buy?</p><p className={`font-semibold ${theme.text}`}>{selectedLead.planningPurchase || "Pending"}</p></div>
                                   <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Loan Required?</p><p className={`font-semibold ${theme.text}`}>{getLatestLoanDetails()?.loanRequired}</p></div>
-                                  <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Status</p><span className={`text-sm font-bold ${selectedLead.status === "Closing" ? "text-amber-500" : selectedLead.status === "Visit Scheduled" ? "text-orange-400" : theme.accentText}`}>{selectedLead.status || "Routed"}</span></div>
+                                  <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Status</p><span className={`text-sm font-bold ${selectedLead.status === "Closing" ? "text-amber-500" : selectedLead.status === "Visit Scheduled" ? "text-orange-400" : theme.accentText}`}>{selectedLead.status || "Assigned"}</span></div>
                                   <div className={`col-span-2 p-3 rounded-xl border ${theme.settingsBg}`} style={theme.settingsBgGl}>
                                     <p className={`text-xs font-bold uppercase tracking-wider mb-0.5 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>📍 Site Visit Date</p>
                                     <p className={`text-base font-black ${theme.text}`}>{selectedLead.mongoVisitDate ? formatDate(selectedLead.mongoVisitDate) : "Not Scheduled"}</p>
@@ -5091,16 +5105,15 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
 
   // ── Status badge ─────────────────────────────────────────────────────────────
   const statusCls = (status: string) => {
-    const s = status || "Routed";
-    if (s === "Closing" || s === "Closed") return isDark
-      ? "text-yellow-400 border-yellow-500/40 bg-yellow-500/10"
-      : "text-amber-600 border-amber-400/50 bg-amber-50";
-    if (s === "Visit Scheduled") return isDark
-      ? "text-orange-400 border-orange-500/30 bg-orange-500/10 text-sm font-bold"
-      : "text-orange-500 border-orange-400/40 bg-orange-50 text-sm font-bold";
-    return isDark
-      ? "text-[#d946a8] border-[#9E217B]/30 bg-[#9E217B]/10"
-      : "text-[#9E217B] border-[#9E217B]/30 bg-[#9E217B]/10";
+    const s = status || "Assigned";
+    if (s === "New Lead") return isDark ? "text-blue-400 border-blue-500/30 bg-blue-500/10" : "text-blue-700 border-blue-300 bg-blue-50";
+    if (s === "Assigned") return isDark ? "text-purple-400 border-purple-500/30 bg-purple-500/10" : "text-purple-700 border-purple-300 bg-purple-50";
+    if (s === "Contacted") return isDark ? "text-cyan-400 border-cyan-500/30 bg-cyan-500/10" : "text-cyan-700 border-cyan-300 bg-cyan-50";
+    if (s === "Interested") return isDark ? "text-green-400 border-green-500/30 bg-green-500/10" : "text-green-700 border-green-300 bg-green-50";
+    if (s === "Visit Scheduled") return isDark ? "text-orange-400 border-orange-500/30 bg-orange-500/10" : "text-orange-500 border-orange-400/40 bg-orange-50";
+    if (s === "Completed") return isDark ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/10" : "text-emerald-700 border-emerald-300 bg-emerald-50";
+    if (s === "Closing" || s === "Closed") return isDark ? "text-yellow-400 border-yellow-500/40 bg-yellow-500/10" : "text-amber-600 border-amber-400/50 bg-amber-50";
+    return isDark ? "text-purple-400 border-purple-500/30 bg-purple-500/10" : "text-purple-700 border-purple-300 bg-purple-50";
   };
 
   // ── Section config ────────────────────────────────────────────────────────────
@@ -5171,7 +5184,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                 <td className={`px-4 py-3 text-xs ${theme.textMuted}`}>{lead.source || "—"}</td>
                 <td className="px-4 py-3">
                   <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase border flex-shrink-0 whitespace-nowrap ${statusCls(lead.status)}`}>
-                    {lead.status || "Routed"}
+                    {lead.status || "Assigned"}
                   </span>
                 </td>
                 <td className="px-4 py-3">
@@ -5362,7 +5375,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                     <span className={isDark ? "text-[#d946a8]" : "text-[#9E217B]"}>#{selectedLead.id}</span>
                     <span>{selectedLead.name}</span>
                     <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${statusCls(selectedLead.status)}`}>
-                      {selectedLead.status || "Routed"}
+                      {selectedLead.status || "Assigned"}
                     </span>
                   </h1>
                 </div>
@@ -5642,7 +5655,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                                   <div><p className={`text-xs font-medium mb-1 ${theme.textMuted}`}>Type of Use</p><p className={`font-semibold ${theme.text}`}>{selectedLead.useType && selectedLead.useType !== "Pending" ? selectedLead.useType : (selectedLead.purpose || "N/A")}</p></div>
                                   <div><p className={`text-xs font-medium mb-1 ${theme.textMuted}`}>Planning to Buy?</p><p className={`font-semibold ${theme.text}`}>{selectedLead.planningPurchase || "Pending"}</p></div>
                                   <div><p className={`text-xs font-medium mb-1 ${theme.textMuted}`}>Loan Required?</p><p className={`font-semibold ${theme.text}`}>{getLatestLoanDetails()?.loanRequired}</p></div>
-                                  <div><p className={`text-xs font-medium mb-1 ${theme.textMuted}`}>Status</p><p className={`font-semibold ${theme.accentText}`}>{selectedLead.status || "Routed"}</p></div>
+                                  <div><p className={`text-xs font-medium mb-1 ${theme.textMuted}`}>Status</p><p className={`font-semibold ${theme.accentText}`}>{selectedLead.status || "Assigned"}</p></div>
                                   <div className={`col-span-2 p-4 rounded-xl border ${isDark ? "border-[#9E217B]/20" : "border-[#9E217B]/20"} ${theme.settingsBg}`}>
                                     <p className={`text-xs font-bold uppercase tracking-wider mb-1 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>📍 Site Visit Date</p>
                                     <p className={`text-lg font-black ${theme.text}`}>{selectedLead.mongoVisitDate ? new Date(selectedLead.mongoVisitDate).toLocaleString("en-IN") : "Not Scheduled"}</p>

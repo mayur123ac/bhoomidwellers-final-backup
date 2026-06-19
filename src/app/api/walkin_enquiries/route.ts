@@ -91,7 +91,7 @@ export async function POST(req: Request) {
         loan_planned || "Pending",          // $17
         assignedTo,                         // $18
         assigned_receptionist || null,      // $19
-        status || "Routed",                 // $20
+        status || "Assigned",                // $20
         is_global_shared || false,          // $21
         overseeing_site_head || null,       // $22
         enquiry_date || new Date().toISOString(), // $23 — defaults to now if not provided

@@ -168,9 +168,13 @@ function buildTheme(isDark: boolean) {
     tooltipBorder: isDark ? "1px solid rgba(158,33,123,0.3)" : "1px solid #E5E7EB",
     legendColor: isDark ? "#9ca3af" : "#6B7280",
     exportBtn: isDark ? "border-[#2A2A35] hover:border-[#9E217B] hover:text-[#d4006e] text-[#888899]" : "border-[#9CA3AF] hover:border-[#9E217B] hover:text-[#9E217B] text-[#6B7280]",
-    statusRouted: isDark ? "text-blue-400 border-blue-500/30 bg-blue-500/10" : "text-[#00AEEF] border-[#00AEEF]/30 bg-[#00AEEF]/10",
+    statusAssigned: isDark ? "text-purple-400 border-purple-500/30 bg-purple-500/10" : "text-purple-700 border-purple-300 bg-purple-50",
+    statusNew: isDark ? "text-blue-400 border-blue-500/30 bg-blue-500/10" : "text-blue-700 border-blue-300 bg-blue-50",
+    statusContacted: isDark ? "text-cyan-400 border-cyan-500/30 bg-cyan-500/10" : "text-cyan-700 border-cyan-300 bg-cyan-50",
+    statusInterested: isDark ? "text-green-400 border-green-500/30 bg-green-500/10" : "text-green-700 border-green-300 bg-green-50",
     statusVisit: isDark ? "text-orange-400 border-orange-500/30 bg-orange-500/10" : "text-orange-500 border-orange-400/40 bg-orange-50",
     statusClosing: isDark ? "text-yellow-400 border-yellow-500/40 bg-yellow-500/10" : "text-amber-600 border-amber-400/50 bg-amber-50",
+    statusCompleted: isDark ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/10" : "text-emerald-700 border-emerald-300 bg-emerald-50",
     statusNGD: "bg-[rgba(251,146,60,0.12)] text-[#F97316] border border-[rgba(249,115,22,0.4)]",
     cardNGD: "bg-[rgba(249,115,22,0.06)] border border-[rgba(249,115,22,0.35)] hover:border-[#F97316] shadow-[0_4px_12px_rgba(249,115,22,0.12)] transition-all duration-300 flex flex-col h-full",
     rowNGD: "bg-[rgba(249,115,22,0.03)]",
@@ -184,7 +188,7 @@ function InterestBadge({ status, size = "md" }: { status: string; size?: "sm" | 
   const colorMap: Record<string, string> = {
     Interested: "border-green-500/40 text-green-400 bg-green-500/10",
     "Not Interested": "border-red-500/40 text-red-400 bg-red-500/10",
-    "Non Genuine Demand": "border-yellow-500/40 text-yellow-400 bg-yellow-500/10",
+    "NON GENUINE DEMAND": "border-yellow-500/40 text-yellow-400 bg-yellow-500/10",
   };
   const cls = colorMap[status] ?? "border-blue-500/30 text-blue-400 bg-blue-500/10";
   const sz = size === "sm" ? "text-[9px] px-2 py-0.5" : "text-[10px] px-3 py-1";
@@ -285,6 +289,19 @@ export default function ReceptionistDashboard() {
   useActivityTracker();
   const [isDark, setIsDark] = useState(false);
   const t = buildTheme(isDark);
+
+  const getStatusStyle = (status: string) => {
+    const s = status || "Assigned";
+    if (s === "New Lead") return t.statusNew;
+    if (s === "Assigned") return t.statusAssigned;
+    if (s === "Contacted") return t.statusContacted;
+    if (s === "Interested") return t.statusInterested;
+    if (s === "Visit Scheduled") return t.statusVisit;
+    if (s === "Completed") return t.statusCompleted;
+    if (s === "Closing" || s === "Closed") return t.statusClosing;
+    if (s === "Lost Lead") return t.statusLost;
+    return t.statusAssigned;
+  };
 
   // ── User & UI state ──
   const [user, setUser] = useState<any>({ name: "Loading...", role: "Receptionist", email: "", password: "" });
@@ -639,7 +656,7 @@ export default function ReceptionistDashboard() {
         date: formatDate(item.created_at),
         enquiryDate: item.enquiry_date || item.created_at,
         autoDateEnabled: item.auto_date_enabled ?? true,
-        status: item.status || "Routed",
+        status: item.status || "Assigned",
       }));
       setEnquiries(prev => {
         const base = append ? prev : [];
@@ -917,7 +934,7 @@ export default function ReceptionistDashboard() {
       loan_planned: enquiryForm.loanPlanned || "Pending",
       assignedTo: assignTo,
       assigned_receptionist: isReceptionist ? user.name : null,
-      status: "Routed",
+      status: "ASSIGNED",
       auto_date_enabled: autoDate,
       enquiry_date: autoDate
         ? new Date().toISOString()
@@ -929,7 +946,7 @@ export default function ReceptionistDashboard() {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(newEntry),
       });
       if (res.ok) {
-        showToast(isReceptionist ? `Lead self-assigned to you!` : `Lead routed to ${assignTo}!`);
+        showToast(isReceptionist ? `Lead self-assigned to you!` : `Lead assigned to ${assignTo}!`);
         setIsEnquiryModalOpen(false);
         setEnquiryForm({ fullName: "", mobile: "", altMobile: "", email: "", address: "", occupation: "", organization: "", budget: "", configuration: "", purpose: "", source: "", assignedTo: "", loanPlanned: "", sourceOther: "", referralName: "", cpDetails: { name: "", company: "", phone: "" }, selfAssign: false, enquiryDate: getTodayString() });
         refetchAll();
@@ -2343,9 +2360,7 @@ export default function ReceptionistDashboard() {
                             <span className={`flex-shrink-0 ${t.accentText}`}>#{enquiry.id}</span>
                             <span className="line-clamp-1">{enquiry.name}</span>
                           </h3>
-                          <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider flex-shrink-0 border ${enquiry.status === "Closing" ? t.statusClosing :
-                            enquiry.status === "Visit Scheduled" ? t.statusVisit : t.statusRouted
-                            }`}>{enquiry.status || "Routed"}</span>
+                          <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider flex-shrink-0 border ${getStatusStyle(enquiry.status)}`}>{enquiry.status || "Assigned"}</span>
                         </div>
 
                         {/* ── Card Body ── */}
@@ -2428,8 +2443,8 @@ export default function ReceptionistDashboard() {
                 <h1 className={`text-xl md:text-3xl font-bold flex flex-wrap items-center gap-3 ${t.text}`}>
                   <span className={t.accentText}>#{selectedLead.id}</span>
                   <span>{selectedLead.name}</span>
-                  <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${selectedLead.status === "Closing" ? t.statusClosing : selectedLead.status === "Visit Scheduled" ? t.statusVisit : t.statusRouted
-                    }`}>{selectedLead.status || "Routed"}</span>
+                  <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${getStatusStyle(selectedLead.status)
+                    }`}>{selectedLead.status || "Assigned"}</span>
                 </h1>
               </div>
               <div className={`rounded-2xl border p-6 md:p-8 ${t.card}`} style={t.cardGlass}>
@@ -2573,10 +2588,7 @@ export default function ReceptionistDashboard() {
                                   <span className={`mr-2 transition-colors ${isDark ? "text-[#d4006e]" : "text-[#00AEEF] group-hover:text-[#9E217B]"}`}>#{lead.id}</span>{lead.name}
                                 </h3>
                                 <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border flex-shrink-0 ${isLost ? t.statusLost :
-                                  isNGD ? t.statusNGD :
-                                    isClosing ? t.statusClosing :
-                                      lead.status === "Visit Scheduled" ? t.statusVisit : t.statusRouted
-                                  }`}>{isLost ? "LOST LEAD" : isNGD ? "NON GENUINE DEMAND" : (lead.status || "ROUTED")}</span>
+                                  isNGD ? t.statusNGD : getStatusStyle(lead.status)}`}>{isLost ? "LOST LEAD" : isNGD ? "NON GENUINE DEMAND" : (lead.status || "Assigned")}</span>
                               </div>
 
                               {/* Lost lead banner — shown immediately after the header */}
@@ -2799,7 +2811,7 @@ export default function ReceptionistDashboard() {
                                   <div><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Type of Use</p><p className={`font-semibold ${t.text}`}>{selectedLead.useType !== "Pending" ? selectedLead.useType : (selectedLead.purpose || "N/A")}</p></div>
                                   <div><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Planning to Buy?</p><p className={`font-semibold ${t.text}`}>{selectedLead.planningPurchase || "Pending"}</p></div>
                                   <div><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Loan Required?</p><p className={`font-semibold ${t.text}`}>{getLatestLoanDetails()?.loanRequired}</p></div>
-                                  <div><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Status</p><span className={`text-sm font-bold ${selectedLead.status === "Closing" ? "text-amber-500" : selectedLead.status === "Visit Scheduled" ? "text-orange-400" : t.accentText}`}>{selectedLead.status || "Routed"}</span></div>
+                                  <div><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Status</p><span className={`text-sm font-bold ${selectedLead.status === "Closing" ? "text-amber-500" : selectedLead.status === "Visit Scheduled" ? "text-orange-400" : t.accentText}`}>{selectedLead.status || "Assigned"}</span></div>
                                   <div className={`col-span-2 p-3 rounded-xl border ${t.settingsBg}`} style={t.settingsBgGl}>
                                     <p className={`text-xs font-bold uppercase tracking-wider mb-0.5 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}>📍 Site Visit Date</p>
                                     <p className={`text-base font-black ${t.text}`}>{selectedLead.mongoVisitDate ? formatDate(selectedLead.mongoVisitDate) : "Not Scheduled"}</p>
@@ -2967,7 +2979,7 @@ export default function ReceptionistDashboard() {
                     <input type="checkbox" checked={showNGDLeads} onChange={e => setShowNGDLeads(e.target.checked)} disabled={leadStatusFilter !== "all"} className="accent-[#F97316]" />
                     Show NGD
                   </label>
-                  <button onClick={() => downloadCSV(filteredRecepLeads.map((l: any) => ({ "Lead No": l.id, "Client Name": l.name, "CP Company": l.cp_company || "N/A", "Budget": l.salesBudget || l.budget || "N/A", "Phone": l.phone || "N/A", "Alt Phone": l.altPhone || "N/A", "Date Created": l.date, "Assigned to Receptionist": l.assignedReceptionist || user.name, "Status": l.status || "Routed" })), "Receptionist_Leads.csv")} className={`p-2 border rounded-lg ${t.exportBtn}`} title="Export CSV"><FaDownload size={12} /></button>
+                  <button onClick={() => downloadCSV(filteredRecepLeads.map((l: any) => ({ "Lead No": l.id, "Client Name": l.name, "CP Company": l.cp_company || "N/A", "Budget": l.salesBudget || l.budget || "N/A", "Phone": l.phone || "N/A", "Alt Phone": l.altPhone || "N/A", "Date Created": l.date, "Assigned to Receptionist": l.assignedReceptionist || user.name, "Status": l.status || "Assigned" })), "Receptionist_Leads.csv")} className={`p-2 border rounded-lg ${t.exportBtn}`} title="Export CSV"><FaDownload size={12} /></button>
                   <button onClick={refetchAll} className={`text-sm font-semibold flex items-center gap-2 px-4 py-2 rounded-lg ${t.btnPrimary}`}>↻ Refresh</button>
                 </div>
               </div>
@@ -3055,8 +3067,8 @@ export default function ReceptionistDashboard() {
                                   NGD
                                 </span>
                               ) : (
-                                <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase border ${lead.status === "Closing" ? t.statusClosing : lead.status === "Visit Scheduled" ? t.statusVisit : t.statusRouted
-                                  }`}>{lead.status || "Routed"}</span>
+                                <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase border ${getStatusStyle(lead.status)
+                                  }`}>{lead.status || "Assigned"}</span>
                               )}
                             </td>
 

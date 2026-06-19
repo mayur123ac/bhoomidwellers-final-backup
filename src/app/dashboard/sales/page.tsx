@@ -176,9 +176,13 @@ function buildTheme(isDark: boolean) {
     fupClosing: isDark ? "bg-yellow-900/20 border border-yellow-600/40" : "bg-amber-50 border border-amber-300",
 
     // ── Pill/badge status ──
-    statusRouted: isDark ? "text-[#d946a8] border-[#9E217B]/30 bg-[#9E217B]/10" : "text-[#00AEEF] border-[#00AEEF]/30 bg-[#00AEEF]/10",
+    statusAssigned: isDark ? "text-purple-400 border-purple-500/30 bg-purple-500/10" : "text-purple-700 border-purple-300 bg-purple-50",
+    statusNew: isDark ? "text-blue-400 border-blue-500/30 bg-blue-500/10" : "text-blue-700 border-blue-300 bg-blue-50",
+    statusContacted: isDark ? "text-cyan-400 border-cyan-500/30 bg-cyan-500/10" : "text-cyan-700 border-cyan-300 bg-cyan-50",
+    statusInterested: isDark ? "text-green-400 border-green-500/30 bg-green-500/10" : "text-green-700 border-green-300 bg-green-50",
     statusVisit: isDark ? "text-orange-400 border-orange-500/30 bg-orange-500/10" : "text-orange-500 border-orange-400/40 bg-orange-50",
     statusClosing: isDark ? "text-yellow-400 border-yellow-500/40 bg-yellow-500/10" : "text-amber-600 border-amber-400/50 bg-amber-50",
+    statusCompleted: isDark ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/10" : "text-emerald-700 border-emerald-300 bg-emerald-50",
     statusLost: isDark ? "text-red-300 border-red-500/30 bg-red-950/30" : "text-red-700 border-red-300 bg-red-50",
     statusNGD: "bg-[rgba(251,146,60,0.12)] text-[#F97316] border border-[rgba(249,115,22,0.4)]",
     cardLost: isDark ? "bg-[#171717] border border-red-900/25 opacity-70 grayscale saturate-50 transition-all duration-300 hover:opacity-90 hover:border-red-500/30 flex flex-col h-full" : "bg-slate-100 border border-red-200 opacity-75 grayscale saturate-50 transition-all duration-300 hover:opacity-90 hover:border-red-300 flex flex-col h-full",
@@ -296,6 +300,18 @@ export default function SalesDashboard() {
   useActivityTracker();
   const [isDark, setIsDark] = useState(false);
   const t = buildTheme(isDark);
+  const getStatusStyle = (status: string) => {
+    const s = status || "Assigned";
+    if (s === "New Lead") return t.statusNew;
+    if (s === "Assigned") return t.statusAssigned;
+    if (s === "Contacted") return t.statusContacted;
+    if (s === "Interested") return t.statusInterested;
+    if (s === "Visit Scheduled") return t.statusVisit;
+    if (s === "Completed") return t.statusCompleted;
+    if (s === "Closing" || s === "Closed") return t.statusClosing;
+    if (s === "Lost Lead") return t.statusLost;
+    return t.statusAssigned;
+  };
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const [user, setUser] = useState({ name: "Loading...", role: "Sales Manager", email: "", password: "" });
   const [activeView, setActiveView] = useState("overview");
@@ -1059,6 +1075,18 @@ function DashboardAnalytics({ leads, isDark, t }: { leads: any[]; isDark: boolea
 // SALES MANAGER MODULE
 // ============================================================================
 function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser, refetch, initialView, setMainView, isDark, t }: any) {
+  const getStatusStyle = (status: string) => {
+    const s = status || "Assigned";
+    if (s === "New Lead") return t.statusNew;
+    if (s === "Assigned") return t.statusAssigned;
+    if (s === "Contacted") return t.statusContacted;
+    if (s === "Interested") return t.statusInterested;
+    if (s === "Visit Scheduled") return t.statusVisit;
+    if (s === "Completed") return t.statusCompleted;
+    if (s === "Closing" || s === "Closed") return t.statusClosing;
+    if (s === "Lost Lead") return t.statusLost;
+    return t.statusAssigned;
+  };
   const [subView, setSubView] = useState<"overview" | "cards" | "detail" | "closed-leads">(
     initialView === "overview" ? "overview" : initialView === "detail" ? "detail" : initialView === "closed-leads" ? "closed-leads" : "cards"
   );
@@ -1594,10 +1622,8 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                                   ? t.statusLost
                                   : isNGD
                                     ? t.statusNGD
-                                    : isClosed
-                                      ? (isDark ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/10" : "text-emerald-600 border-emerald-400/40 bg-emerald-50")
-                                      : lead.status === "Visit Scheduled" ? t.statusVisit : t.statusRouted
-                                  }`}>{isLost ? "LOST" : isNGD ? "NGD" : isClosed ? "CLOSED" : (lead.status || "ROUTED")}</span>
+                                    : getStatusStyle(lead.status)
+                                  }`}>{isLost ? "LOST" : isNGD ? "NGD" : isClosed ? "CLOSED" : (lead.status || "Assigned")}</span>
                               </td>
                               <td className="px-4 py-3 sm:py-4">
                                 {isLost ? (
@@ -1728,8 +1754,8 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                               <span className={`px-2 sm:px-3 py-1 rounded-full text-[9px] sm:text-[10px] font-bold uppercase tracking-wider border flex-shrink-0 whitespace-nowrap ${isLost ? t.statusLost :
                                 isNGD ? t.statusNGD :
                                   isClosing ? t.statusClosing :
-                                    lead.status === "Visit Scheduled" ? t.statusVisit : t.statusRouted
-                                }`}>{isLost ? "LOST LEAD" : isNGD ? "NGD" : isClosing ? "CLOSING" : (lead.status || "ROUTED")}</span>
+                                    getStatusStyle(lead.status)
+                                }`}>{isLost ? "LOST LEAD" : isNGD ? "NGD" : isClosing ? "CLOSING" : (lead.status || "Assigned")}</span>
                             </div>
                             {isLost && (
                               <div className={`mb-4 flex items-center justify-between gap-2 rounded-lg px-3 py-2 border ${t.statusLost}`}>
@@ -2043,7 +2069,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                             <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Type of Use</p><p className={`font-semibold ${t.text}`}>{selectedLead.useType !== "Pending" ? selectedLead.useType : (selectedLead.purpose || "N/A")}</p></div>
                             <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Planning to Buy?</p><p className={`font-semibold ${t.text}`}>{selectedLead.planningPurchase || "Pending"}</p></div>
                             <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Loan Required?</p><p className={`font-semibold ${t.text}`}>{getLatestLoanDetails()?.loanRequired}</p></div>
-                            <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Status</p><span className={`text-xs sm:text-sm font-bold ${selectedLead.status === "Closing" ? "text-amber-500" : selectedLead.status === "Visit Scheduled" ? "text-orange-400" : t.accentText}`}>{selectedLead.status || "Routed"}</span></div>
+                            <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Status</p><span className={`text-xs sm:text-sm font-bold ${getStatusStyle(selectedLead.status)}`}>{selectedLead.status || "Assigned"}</span></div>
                             {/* <div className={`col-span-1 sm:col-span-2 p-3 sm:p-4 rounded-xl border ${t.settingsBg}`} style={t.settingsBgGl}>
                               <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-0.5 sm:mb-1 ${isDark?"text-[#00AEEF]":"text-[#00AEEF]"}`}>📍 Site Visit Date</p>
                               <p className={`text-sm sm:text-base font-black ${t.text}`}>{selectedLead.mongoVisitDate?formatDate(selectedLead.mongoVisitDate):"Not Scheduled"}</p>
