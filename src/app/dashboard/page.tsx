@@ -241,7 +241,8 @@ function useAdminData() {
           closingDate,
           status: lead.status === "Closing" || lead.status === "Closed" || !!closingDate
             ? (lead.status === "Closing" || lead.status === "Closed" ? lead.status : "Closing")
-            : latestVisitDate ? "Visit Scheduled" : lead.status,
+            : latestVisitDate ? "Visit Scheduled" 
+            : (lead.status === "Routed" || lead.status === "ROUTED" ? "Assigned" : lead.status),
 
         };
       });

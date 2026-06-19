@@ -656,7 +656,7 @@ export default function ReceptionistDashboard() {
         date: formatDate(item.created_at),
         enquiryDate: item.enquiry_date || item.created_at,
         autoDateEnabled: item.auto_date_enabled ?? true,
-        status: item.status || "Assigned",
+        status: (item.status === "Routed" || item.status === "ROUTED" ? "Assigned" : item.status) || "Assigned",
       }));
       setEnquiries(prev => {
         const base = append ? prev : [];
