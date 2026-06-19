@@ -561,7 +561,7 @@ export default function SalesDashboard() {
                   />
                 )}
                 <div
-                  className={`flex items-center gap-3 px-4 py-3 sm:py-4.5 rounded-xl transition-all duration-200 relative overflow-hidden ${isActive ? "text-[#d946a8]" : "text-gray-500 hover:text-gray-200"}`}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 relative overflow-hidden ${isActive ? "text-[#d946a8]" : "text-gray-500 hover:text-gray-200"}`}
                   style={isActive ? {
                     background: "linear-gradient(135deg, rgba(158,33,123,0.22) 0%, rgba(217,70,168,0.07) 100%)",
                     boxShadow: "inset 0 0 0 1px rgba(217,70,168,0.28), 0 2px 16px rgba(158,33,123,0.12)",
@@ -679,7 +679,7 @@ export default function SalesDashboard() {
                     transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
                     className={`absolute top-12 right-[-40] sm:right-0 w-72 sm:w-80 rounded-xl shadow-2xl z-50 overflow-hidden border ${t.dropdown}`} style={t.dropdownGlass}
                   >
-                    <div className={`p-5 border-b flex items-center justify-between ${t.tableBorder}`}>
+                    <div className={`p-3 border-b flex items-center justify-between ${t.tableBorder}`}>
                       <div>
                         <h3 className={`font-bold text-sm ${t.text}`}>Site Visit Reminders</h3>
                         <p className={`text-[10px] mt-0.5 ${t.textFaint}`}>Scheduled for today & tomorrow</p>
@@ -692,7 +692,7 @@ export default function SalesDashboard() {
                         : visitNotificationLeads.map((lead: any) => {
                           const isToday = lead.visitDiff === 0;
                           return (
-                            <div key={lead.id} className={`p-5 border-b transition-colors group relative ${t.dropdownItem}`}>
+                            <div key={lead.id} className={`p-3 border-b transition-colors group relative ${t.dropdownItem}`}>
                               <button onClick={e => { e.stopPropagation(); setDismissedVisits(prev => new Set([...prev, String(lead.id)])); }} className={`absolute top-3 right-3 cursor-pointer opacity-0 group-hover:opacity-100 ${t.textFaint} hover:text-red-500`}><FaTimes className="text-xs" /></button>
                               <div className="flex items-start justify-between gap-3 pr-4">
                                 <div className="flex-1 min-w-0">
@@ -707,7 +707,7 @@ export default function SalesDashboard() {
                         })
                       }
                     </div>
-                    {visitNotificationLeads.length > 0 && <div className={`p-5 border-t ${t.tableBorder}`}><p className={`text-[10px] text-center ${t.textFaint}`}>🗓️ Showing visits within the next 24 hours</p></div>}
+                    {visitNotificationLeads.length > 0 && <div className={`p-3 border-t ${t.tableBorder}`}><p className={`text-[10px] text-center ${t.textFaint}`}>🗓️ Showing visits within the next 24 hours</p></div>}
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -735,7 +735,7 @@ export default function SalesDashboard() {
                     transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
                     className={`absolute top-12 right-0 sm:right-0 w-72 sm:w-80 rounded-xl shadow-2xl z-50 overflow-hidden border ${t.dropdown}`} style={t.dropdownGlass}
                   >
-                    <div className={`p-5 border-b flex items-center justify-between ${t.tableBorder}`}>
+                    <div className={`p-3 border-b flex items-center justify-between ${t.tableBorder}`}>
                       <div>
                         <h3 className={`font-bold text-sm ${t.text}`}>Follow-up Reminders</h3>
                         <p className={`text-[10px] mt-0.5 ${t.textFaint}`}>Leads with no activity in 2+ days</p>
@@ -750,7 +750,7 @@ export default function SalesDashboard() {
                       {followUpLeads.filter((l: any) => !dismissedFollowUps.has(String(l.id))).length === 0
                         ? <div className={`p-6 text-center text-sm ${t.textFaint}`}><FaBell className="text-2xl mb-2 mx-auto opacity-20" />All leads are up to date!</div>
                         : followUpLeads.filter((l: any) => !dismissedFollowUps.has(String(l.id))).map((lead: any) => (
-                          <div key={lead.id} onClick={() => { setActivePopup(null); setActiveView("detail"); }} className={`p-5 border-b transition-colors cursor-pointer group relative ${t.dropdownItem}`}>
+                          <div key={lead.id} onClick={() => { setActivePopup(null); setActiveView("detail"); }} className={`p-3 border-b transition-colors cursor-pointer group relative ${t.dropdownItem}`}>
                             <button onClick={e => { e.stopPropagation(); setDismissedFollowUps(prev => new Set([...prev, String(lead.id)])); }} className={`absolute top-3 right-3 cursor-pointer opacity-0 group-hover:opacity-100 ${t.textFaint} hover:text-red-500`}><FaTimes className="text-xs" /></button>
                             <div className="flex items-start justify-between gap-3 pr-4">
                               <div className="flex-1 min-w-0">
@@ -770,7 +770,7 @@ export default function SalesDashboard() {
                       }
                     </div>
                     {followUpLeads.filter((l: any) => !dismissedFollowUps.has(String(l.id))).length > 0 &&
-                      <div className={`p-5 border-t ${t.tableBorder}`}><p className={`text-[10px] text-center ${t.textFaint}`}>⚠️ Not Interested & Closing leads excluded</p></div>
+                      <div className={`p-3 border-t ${t.tableBorder}`}><p className={`text-[10px] text-center ${t.textFaint}`}>⚠️ Not Interested & Closing leads excluded</p></div>
                     }
                   </motion.div>
                 )}
@@ -795,7 +795,7 @@ export default function SalesDashboard() {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: -6, scale: 0.98 }}
                     transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-                    className={`absolute top-12 right-0 w-64 rounded-xl shadow-2xl p-5 z-50 border ${t.dropdown}`} style={t.dropdownGlass}
+                    className={`absolute top-12 right-0 w-64 rounded-xl shadow-2xl p-3 z-50 border ${t.dropdown}`} style={t.dropdownGlass}
                   >
                     <div className="mb-4">
                       <h3 className={`font-bold text-lg ${t.text}`}>{user.name}</h3>
@@ -823,7 +823,7 @@ export default function SalesDashboard() {
           </div>
         </header>
 
-        <main className={`flex-1 overflow-hidden custom-scrollbar ${t.mainBg} ${activeView === "assistant" ? "p-0" : "p-1 sm:p-5 lg:p-5 overflow-y-auto"}`}>
+        <main className={`flex-1 overflow-hidden custom-scrollbar ${t.mainBg} ${activeView === "assistant" ? "p-0" : "p-1 sm:p-3 lg:p-3 overflow-y-auto"}`}>
           {(activeView === "sales" || activeView === "overview" || activeView === "forms" || activeView === "detail" || activeView === "closed-leads") ? (
             <SalesManagerView
               managers={managers} allLeads={allLeads} followUps={followUps}
@@ -985,10 +985,10 @@ function DashboardAnalytics({ leads, isDark, t }: { leads: any[]; isDark: boolea
   const totalLeads = leads.length;
 
   const BarTip = ({ active, payload, label }: any) => active && payload?.length
-    ? <div className={`rounded-lg px-4 py-3 sm:py-4 text-xs shadow-xl border ${t.dropdown}`} style={t.dropdownGlass}><p className={t.textMuted}>{label || payload[0].name}</p><p className={`font-bold ${t.text}`}>{payload[0].value}</p></div>
+    ? <div className={`rounded-lg px-3 py-2 text-xs shadow-xl border ${t.dropdown}`} style={t.dropdownGlass}><p className={t.textMuted}>{label || payload[0].name}</p><p className={`font-bold ${t.text}`}>{payload[0].value}</p></div>
     : null;
   const PieTip = ({ active, payload }: any) => active && payload?.length
-    ? <div className={`rounded-lg px-4 py-3 sm:py-4 text-xs shadow-xl border ${t.dropdown}`} style={t.dropdownGlass}><p className={`font-bold ${t.text}`}>{payload[0].name}</p><p className={t.textMuted}>{payload[0].value} leads</p></div>
+    ? <div className={`rounded-lg px-3 py-2 text-xs shadow-xl border ${t.dropdown}`} style={t.dropdownGlass}><p className={`font-bold ${t.text}`}>{payload[0].name}</p><p className={t.textMuted}>{payload[0].value} leads</p></div>
     : null;
 
   const axisColor = isDark ? "#9ca3af" : "#6B7280";
@@ -998,7 +998,7 @@ function DashboardAnalytics({ leads, isDark, t }: { leads: any[]; isDark: boolea
     <div className="space-y-4">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 sm:gap-3">
         {/* Bar chart */}
-        <div className={`rounded-xl p-5 sm:p-5 shadow-sm border ${t.tableWrap}`} style={t.tableGlass}>
+        <div className={`rounded-xl p-3 sm:p-3 shadow-sm border ${t.tableWrap}`} style={t.tableGlass}>
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
             <div>
               <h3 className={`font-bold text-sm lg:text-base ${t.text}`}>{barMode === "weekly" ? "Leads This Week" : "Lead Source Distribution"}</h3>
@@ -1031,7 +1031,7 @@ function DashboardAnalytics({ leads, isDark, t }: { leads: any[]; isDark: boolea
         </div>
 
         {/* Pie chart */}
-        <div className={`rounded-xl p-5 sm:p-5 shadow-sm border ${t.tableWrap}`} style={t.tableGlass}>
+        <div className={`rounded-xl p-3 sm:p-3 shadow-sm border ${t.tableWrap}`} style={t.tableGlass}>
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
             <h3 className={`font-bold text-sm lg:text-base ${t.text}`}>
               {pieMode === "interest" ? "Lead Interest Breakdown" : pieMode === "loan" ? "Loan Status Breakdown" : pieMode === "usetype" ? "Self-Use vs Investment" : pieMode === "loanrequired" ? "Loan Required?" : "Visit Scheduled vs Pending"}
@@ -1514,7 +1514,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                 { label: "Closing Rate", value: `${closingPct}%`, sub: `${closingLeads.length} of ${activeManagerLeads.length} leads`, glow: t.statGlow5, textColor: isDark ? "text-green-400" : "text-emerald-600" },
                 { label: "Lost Leads", value: lostManagerLeads.length, sub: `${lostRatio}% lost ratio`, glow: "bg-red-500/10", textColor: isDark ? "text-red-300" : "text-red-600" },
               ].map((stat, i) => (
-                <div key={i} className={`rounded-xl p-5 sm:p-5 shadow-sm border relative overflow-hidden transition-all flex flex-col justify-between ${t.card}`} style={t.cardGlass}>
+                <div key={i} className={`rounded-xl p-3 sm:p-3 shadow-sm border relative overflow-hidden transition-all flex flex-col justify-between ${t.card}`} style={t.cardGlass}>
                   <div className={`absolute -right-6 -top-6 w-24 h-24 rounded-full blur-2xl pointer-events-none ${stat.glow}`} />
                   <div className="flex items-start justify-between mb-2">
                     <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider leading-tight ${t.textFaint}`}>{stat.label}</p>
@@ -1539,7 +1539,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
 
             {/* Overview table */}
             <div className={`rounded-xl border shadow-sm overflow-hidden ${t.tableWrap}`} style={t.tableGlass}>
-              <div className={`p-5 sm:p-5 border-b flex flex-col gap-3 ${t.tableBorder} ${t.modalHeader}`}>
+              <div className={`p-3 sm:p-3 border-b flex flex-col gap-3 ${t.tableBorder} ${t.modalHeader}`}>
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <h3 className={`font-bold flex items-center gap-2 text-sm sm:text-base ${t.text}`}>
                     <FaClipboardList className={t.accentText} /> Leads Database
@@ -1550,7 +1550,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
 
-                  <label className={`flex items-center gap-1.5 text-xs font-semibold cursor-pointer select-none border rounded-xl px-4 py-3 sm:py-4 ${t.selectSmall}`}>
+                  <label className={`flex items-center gap-1.5 text-xs font-semibold cursor-pointer select-none border rounded-xl px-3 py-2 ${t.selectSmall}`}>
                     <input
                       type="checkbox"
                       checked={showLostLeads}
@@ -1563,7 +1563,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                   <select
                     value={columnFilter}
                     onChange={e => setColumnFilter(e.target.value)}
-                    className={`rounded-xl px-4 py-3 sm:py-4 text-xs font-semibold outline-none cursor-pointer border ${t.select}`}
+                    className={`rounded-xl px-3 py-2 text-xs font-semibold outline-none cursor-pointer border ${t.select}`}
                   >
                     <option value="all">All Columns</option>
                     <option value="name">Name</option>
@@ -1592,7 +1592,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
               </div>
               <div className="overflow-x-auto w-full custom-scrollbar">
                 <table className="w-full text-left text-sm whitespace-nowrap">
-                  <thead className={`${t.tableHead}`}>
+                  <thead className={t.tableHead}>
                     <tr>
                       {["LEAD NO.", "NAME", "PROP. TYPE", "BUDGET", "SOURCE", "CP NAME", "CP COMPANY", "CP PHONE", "STATUS", "LOST STATUS", "INTEREST", "DATE CREATED", "BACKDATED ENTRY", "SITE VISIT"].map(h => (
                         <th key={h} className={`px-4 sm:px-3 py-3 sm:py-2.5 font-bold tracking-wider border-b ${t.textHeader} ${t.tableBorder}`}>{h}</th>
@@ -1611,14 +1611,14 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                           return (
                             <tr key={lead.id} className={`transition-colors cursor-pointer ${isLost ? t.rowLost : isNGD ? t.rowNGD : t.tableRow}`} onClick={() => { setSelectedLead(lead); setMainView("detail"); setSubView("detail"); prefillSalesForm(lead); setShowSalesForm(true); setShowLoanForm(false); }}>
                               <td className={`px-4 sm:px-3 py-3 sm:py-2.5 font-bold ${t.accentText}`}>#{lead.id}</td>
-                              <td className={`px-4 py-3 sm:py-4 sm:py-2.5 font-medium ${t.text}`}>{lead.name}</td>
-                              <td className={`px-4 py-3 sm:py-4 sm:py-2.5 ${t.textMuted}`}>{lead.propType || lead.configuration || "Pending"}</td>
-                              <td className={`px-4 py-3 sm:py-4 sm:py-2.5 font-semibold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget}</td>
-                              <td className={`px-4 py-3 sm:py-4 sm:py-2.5 text-xs ${t.textMuted}`}>{lead.source || "—"}</td>
-                              <td className={`px-4 py-3 sm:py-4 sm:py-2.5 ${t.textMuted}`}>{lead.cpName || lead.cp_name || "—"}</td>
-                              <td className={`px-4 py-3 sm:py-4 sm:py-2.5 ${t.textMuted}`}>{lead.cpCompany || lead.cp_company || "—"}</td>
-                              <td className={`px-4 py-3 sm:py-4 sm:py-2.5 font-mono text-xs ${t.textMuted}`}>{lead.cpPhone || lead.cp_phone || "—"}</td>
-                              <td className="px-4 py-3 sm:py-4 sm:py-2.5">
+                              <td className={`px-4 py-3 sm:py-2.5 font-medium ${t.text}`}>{lead.name}</td>
+                              <td className={`px-4 py-3 sm:py-2.5 ${t.textMuted}`}>{lead.propType || lead.configuration || "Pending"}</td>
+                              <td className={`px-4 py-3 sm:py-2.5 font-semibold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget}</td>
+                              <td className={`px-4 py-3 sm:py-2.5 text-xs ${t.textMuted}`}>{lead.source || "—"}</td>
+                              <td className={`px-4 py-3 sm:py-2.5 ${t.textMuted}`}>{lead.cpName || lead.cp_name || "—"}</td>
+                              <td className={`px-4 py-3 sm:py-2.5 ${t.textMuted}`}>{lead.cpCompany || lead.cp_company || "—"}</td>
+                              <td className={`px-4 py-3 sm:py-2.5 font-mono text-xs ${t.textMuted}`}>{lead.cpPhone || lead.cp_phone || "—"}</td>
+                              <td className="px-4 py-3 sm:py-2.5">
                                 <span className={`px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold uppercase border ${isLost
                                   ? t.statusLost
                                   : isNGD
@@ -1626,22 +1626,22 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                                     : getStatusStyle(lead.status)
                                   }`}>{isLost ? "LOST" : isNGD ? "NGD" : isClosed ? "CLOSED" : (lead.status || "Assigned")}</span>
                               </td>
-                              <td className="px-4 py-3 sm:py-4 sm:py-2.5">
+                              <td className="px-4 py-3 sm:py-2.5">
                                 {isLost ? (
                                   <span className={`px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold uppercase border inline-flex items-center gap-1 ${t.statusLost}`}>
                                     <Ghost className="w-3 h-3" /> Lost Lead
                                   </span>
                                 ) : <span className={`text-xs font-semibold ${t.textMuted}`}>Active</span>}
                               </td>
-                              <td className="px-4 py-3 sm:py-4 sm:py-2.5">
+                              <td className="px-4 py-3 sm:py-2.5">
                                 {lead.leadInterestStatus && lead.leadInterestStatus !== "Pending"
                                   ? <InterestBadge status={lead.leadInterestStatus} size="sm" />
                                   : <span className={`text-xs italic ${t.textFaint}`}>—</span>}
                               </td>
-                              <td className={`px-4 py-3 sm:py-4 sm:py-2.5 text-xs whitespace-normal min-w-[120px] ${t.textFaint}`}>
+                              <td className={`px-4 py-3 sm:py-2.5 text-xs whitespace-normal min-w-[120px] ${t.textFaint}`}>
                                 {formatDate(lead.created_at)}
                               </td>
-                              <td className={`px-4 py-3 sm:py-4 sm:py-2.5 text-xs whitespace-normal min-w-[120px] ${t.textFaint}`}>
+                              <td className={`px-4 py-3 sm:py-2.5 text-xs whitespace-normal min-w-[120px] ${t.textFaint}`}>
                                 {lead.auto_date_enabled === false && lead.enquiry_date ? formatDate(lead.enquiry_date).split(",")[0] : "-"}
                               </td>
                               <td className="px-4 sm:px-3 py-3 sm:py-2.5">{lead.mongoVisitDate ? <span className="text-orange-400 font-medium whitespace-nowrap text-xs sm:text-sm">{formatDate(lead.mongoVisitDate).split(",")[0]}</span> : <span className={`text-xs italic ${t.textFaint}`}>Pending</span>}</td>
@@ -1660,7 +1660,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
         {subView === "cards" && (
           <div className="animate-fadeIn">
             {/* ── Admin-style Enquiry Toolbar ── */}
-            <div className={`rounded-xl border p-5 mb-6 ${t.tableWrap}`} style={t.tableGlass}>
+            <div className={`rounded-xl border p-3 mb-6 ${t.tableWrap}`} style={t.tableGlass}>
               <div className="flex flex-col gap-3">
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <h2 className={`font-bold text-base flex items-center gap-2 ${t.text}`}>
@@ -1675,7 +1675,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
 
 
                   {/* Show Lost Checkbox */}
-                  <label className={`flex items-center gap-1.5 text-xs font-semibold cursor-pointer select-none border rounded-xl px-4 py-3 sm:py-4 ${t.selectSmall}`}>
+                  <label className={`flex items-center gap-1.5 text-xs font-semibold cursor-pointer select-none border rounded-xl px-3 py-2 ${t.selectSmall}`}>
                     <input
                       type="checkbox"
                       checked={showLostLeads}
@@ -1690,7 +1690,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                   <select
                     value={columnFilter}
                     onChange={e => setColumnFilter(e.target.value)}
-                    className={`rounded-xl px-4 py-3 sm:py-4 text-xs font-semibold outline-none cursor-pointer border ${t.select}`}
+                    className={`rounded-xl px-3 py-2 text-xs font-semibold outline-none cursor-pointer border ${t.select}`}
                   >
                     <option value="all">All Columns</option>
                     <option value="name">Name</option>
@@ -1743,7 +1743,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                       return (
                         <div
                           key={lead.id}
-                          className={`rounded-xl p-5 sm:p-5 border shadow-sm transition-all group flex flex-col justify-between cursor-pointer h-full ${isLost ? t.cardLost : isClosing ? t.cardClosing : isNGD ? t.cardNGD : t.card}`}
+                          className={`rounded-xl p-3 sm:p-3 border shadow-sm transition-all group flex flex-col justify-between cursor-pointer h-full ${isLost ? t.cardLost : isClosing ? t.cardClosing : isNGD ? t.cardNGD : t.card}`}
                           style={t.cardGlass}
                           onClick={() => { setSelectedLead(lead); setMainView("detail"); setSubView("detail"); }}
                         >
@@ -1759,7 +1759,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                                 }`}>{isLost ? "LOST LEAD" : isNGD ? "NGD" : isClosing ? "CLOSING" : (lead.status || "Assigned")}</span>
                             </div>
                             {isLost && (
-                              <div className={`mb-4 flex items-center justify-between gap-2 rounded-lg px-4 py-3 sm:py-4 border ${t.statusLost}`}>
+                              <div className={`mb-4 flex items-center justify-between gap-2 rounded-lg px-3 py-2 border ${t.statusLost}`}>
                                 <span className="text-[10px] font-black uppercase tracking-wider flex items-center gap-2"><Ghost className="w-3.5 h-3.5" /> Lost Lead</span>
                                 <span className="text-[10px] font-semibold normal-case truncate">{lead.lost_lead_reason || "Unresponsive"}</span>
                               </div>
@@ -1768,7 +1768,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                               <div className="flex justify-between items-start gap-2">
                                 <div>
                                   <p className={`text-xs font-medium ${t.textFaint}`}>Budget</p>
-                                  <p className={`text-xs font-semibold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget}</p>
+                                  <p className={`text-sm font-semibold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget}</p>
                                 </div>
                                 <div className="flex flex-col items-end gap-1 text-right">
                                   {loanSt ? <LoanStatusBadge status={loanSt} /> : lead.loanPlanned === "Yes" && (
@@ -1779,10 +1779,10 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                               {((lead.propType && lead.propType !== "Pending") || (lead.configuration && lead.configuration !== "Pending")) && (
                                 <div>
                                   <p className={`text-xs font-medium ${t.textFaint}`}>Property</p>
-                                  <p className={`text-xs font-medium ${t.text}`}>{(lead.propType && lead.propType !== "Pending") ? lead.propType : lead.configuration}</p>
+                                  <p className={`text-sm font-medium ${t.text}`}>{(lead.propType && lead.propType !== "Pending") ? lead.propType : lead.configuration}</p>
                                 </div>
                               )}
-                              <div className={`p-2 rounded-lg border flex flex-col gap-1 ${t.settingsBg}`} style={t.settingsBgGl}>
+                              <div className={`p-3 rounded-lg border flex flex-col gap-1.5 ${t.settingsBg}`} style={t.settingsBgGl}>
                                 <p className={`text-xs flex items-center gap-2 ${t.textMuted}`}><FaPhoneAlt className="w-3 h-3 flex-shrink-0" /><span>Ph:</span><span className={`font-mono ${t.text} truncate`}>{maskPhone(lead.phone)}</span></p>
                                 <p className={`text-xs flex items-center gap-2 ${t.textMuted}`}><FaPhoneAlt className="w-3 h-3 flex-shrink-0" /><span>Alt:</span><span className={`font-mono ${t.text} truncate`}>{maskPhone(lead.altPhone)}</span></p>
                               </div>
@@ -1838,7 +1838,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
             </div>
 
             <div className={`rounded-xl border overflow-hidden ${t.tableWrap}`} style={t.tableGlass}>
-              <div className={`p-5 border-b flex justify-between items-center ${t.tableBorder}`}>
+              <div className={`p-3 border-b flex justify-between items-center ${t.tableBorder}`}>
                 <p className={`text-sm font-semibold ${t.text}`}>{filteredClosedLeads.length} closed leads</p>
               </div>
               <div className="overflow-x-auto w-full custom-scrollbar">
@@ -1858,19 +1858,19 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                       ) : filteredClosedLeads.map((lead: any) => (
                         <tr key={lead.id} className={`transition-colors cursor-pointer ${t.tableRow}`} onClick={() => { setSelectedLead(lead); setMainView("detail"); setSubView("detail"); prefillSalesForm(lead); setShowSalesForm(true); setShowLoanForm(false); }}>
                           <td className={`px-4 sm:px-3 py-3 sm:py-2.5 font-bold ${t.accentText}`}>#{lead.id}</td>
-                          <td className={`px-4 py-3 sm:py-4 sm:py-2.5 font-semibold ${t.text}`}>{lead.name}</td>
-                          <td className={`px-4 py-3 sm:py-4 sm:py-2.5 font-bold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget || lead.budget}</td>
-                          <td className={`px-4 py-3 sm:py-4 sm:py-2.5 ${t.textMuted}`}>{lead.propType || lead.configuration || "N/A"}</td>
-                          <td className="px-4 py-3 sm:py-4 sm:py-2.5">
+                          <td className={`px-4 py-3 sm:py-2.5 font-semibold ${t.text}`}>{lead.name}</td>
+                          <td className={`px-4 py-3 sm:py-2.5 font-bold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget || lead.budget}</td>
+                          <td className={`px-4 py-3 sm:py-2.5 ${t.textMuted}`}>{lead.propType || lead.configuration || "N/A"}</td>
+                          <td className="px-4 py-3 sm:py-2.5">
                             <span className={`px-2 py-1 rounded-full text-[9px] sm:text-[10px] font-bold uppercase border ${t.statusClosing}`}>{lead.status}</span>
                           </td>
-                          <td className={`px-4 py-3 sm:py-4 sm:py-2.5 text-[10px] sm:text-xs ${lead.mongoVisitDate ? "text-orange-400" : t.textFaint}`}>
+                          <td className={`px-4 py-3 sm:py-2.5 text-[10px] sm:text-xs ${lead.mongoVisitDate ? "text-orange-400" : t.textFaint}`}>
                             {lead.mongoVisitDate ? formatDate(lead.mongoVisitDate).split(",")[0] : "—"}
                           </td>
-                          <td className={`px-4 py-3 sm:py-4 sm:py-2.5 text-[10px] sm:text-xs ${t.textFaint}`}>
+                          <td className={`px-4 py-3 sm:py-2.5 text-[10px] sm:text-xs ${t.textFaint}`}>
                             {lead.closingDate ? formatDate(lead.closingDate).split(",")[0] : "—"}
                           </td>
-                          <td className="px-4 py-3 sm:py-4 sm:py-2.5">
+                          <td className="px-4 py-3 sm:py-2.5">
                             <button className={`text-xs font-bold px-3 py-1.5 rounded-lg w-full sm:w-auto ${t.btnWarning}`}>View History</button>
                           </td>
                         </tr>
@@ -1886,7 +1886,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
         {subView === "detail" && selectedLead && (
           <div className="animate-fadeIn w-full flex flex-col gap-2 pb-4">
             {/* Detail header */}
-            <div className={`flex flex-col md:flex-row md:items-center justify-between gap-2 rounded-xl border p-5 shadow-sm flex-shrink-0 ${selectedLead.is_lost_lead ? t.cardLost : t.card}`} style={t.cardGlass}>
+            <div className={`flex flex-col md:flex-row md:items-center justify-between gap-2 rounded-xl border p-3 shadow-sm flex-shrink-0 ${selectedLead.is_lost_lead ? t.cardLost : t.card}`} style={t.cardGlass}>
               <div className="flex items-center gap-3 sm:gap-2 min-w-0">
                 <button onClick={() => { setMainView("forms"); setSubView("cards"); }} className={`w-9 h-9 sm:w-10 sm:h-10 flex flex-shrink-0 items-center justify-center border rounded-xl transition-colors cursor-pointer shadow-sm ${t.textMuted} ${t.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}><FaChevronLeft className="text-sm" /></button>
                 <h1 className={`text-lg sm:text-lg md:text-2xl font-bold flex items-center gap-2 sm:gap-3 flex-wrap min-w-0 ${t.text}`}>
@@ -1952,7 +1952,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
               {/* LEFT PANEL */}
               <div className="flex flex-col gap-3">
                 {showSalesForm ? (
-                  <div className={`rounded-xl border p-5 sm:p-5 shadow-xl overflow-y-auto custom-scrollbar flex flex-col max-h-[80vh] lg:max-h-[calc(100vh-260px)] ${t.modalCard}`} style={t.modalGlass}>
+                  <div className={`rounded-xl border p-3 sm:p-3 shadow-xl overflow-y-auto custom-scrollbar flex flex-col max-h-[80vh] lg:max-h-[calc(100vh-260px)] ${t.modalCard}`} style={t.modalGlass}>
                     <div className={`flex justify-between items-center mb-4 border-b pb-3 ${t.tableBorder}`}>
                       <div>
                         <h3 className={`text-base sm:text-lg font-bold ${t.text}`}>Sales Data Form</h3>
@@ -1985,7 +1985,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                     </form>
                   </div>
                 ) : showLoanForm ? (
-                  <div className={`rounded-xl border p-5 sm:p-5 shadow-xl overflow-y-auto custom-scrollbar flex flex-col animate-fadeIn max-h-[80vh] lg:max-h-[calc(100vh-260px)] ${t.modalCard}`} style={t.modalGlass}>
+                  <div className={`rounded-xl border p-3 sm:p-3 shadow-xl overflow-y-auto custom-scrollbar flex flex-col animate-fadeIn max-h-[80vh] lg:max-h-[calc(100vh-260px)] ${t.modalCard}`} style={t.modalGlass}>
                     <div className={`flex justify-between items-center mb-4 border-b pb-3 flex-shrink-0 ${t.tableBorder}`}>
                       <div>
                         <h3 className={`text-base sm:text-lg font-bold flex items-center gap-2 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}><FaUniversity /> Loan Tracking Workflow</h3>
@@ -2023,7 +2023,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                       </div>
                       <div className={`border-t pt-3 sm:pt-4 ${t.tableBorder}`}>
                         <h4 className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-2 sm:mb-3 flex items-center gap-1 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}><FaFileAlt /> 4. Document Checklist</h4>
-                        <div className={`grid grid-cols-1 sm:grid-cols-2 gap-3 p-5 rounded-lg border ${t.settingsBg}`} style={t.settingsBgGl}>
+                        <div className={`grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-lg border ${t.settingsBg}`} style={t.settingsBgGl}>
                           {["docPan", "docAadhaar", "docSalary", "docBank", "docProperty"].map(docKey => {
                             const label = docKey === "docPan" ? "PAN Card" : docKey === "docAadhaar" ? "Aadhaar Card" : docKey === "docSalary" ? "Salary Slips / ITR" : docKey === "docBank" ? "Bank Statements" : "Property Documents";
                             return (
@@ -2050,7 +2050,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                       <button onClick={() => setDetailTab("loan")} className={`flex-1 py-2 text-xs sm:text-sm font-bold rounded-lg transition-colors cursor-pointer ${detailTab === "loan" ? t.btnSecondary : `${t.textMuted} ${isDark ? "hover:text-white hover:bg-[#222]" : "hover:text-[#1A1A1A] hover:bg-[#F1F5F9]"}`}`}>Loan Tracking</button>
                     </div>
 
-                    <div className={`overflow-y-auto custom-scrollbar rounded-xl p-5 sm:p-6 shadow-lg border max-h-[60vh] lg:max-h-[calc(100vh-380px)] ${t.chatPanel}`} style={t.chatPanelGl}>
+                    <div className={`overflow-y-auto custom-scrollbar rounded-xl p-3 sm:p-6 shadow-lg border max-h-[60vh] lg:max-h-[calc(100vh-380px)] ${t.chatPanel}`} style={t.chatPanelGl}>
                       {detailTab === "personal" ? (
                         <div>
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 sm:gap-y-4 gap-x-4 text-xs sm:text-sm">
@@ -2071,13 +2071,13 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                             <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Planning to Buy?</p><p className={`font-semibold ${t.text}`}>{selectedLead.planningPurchase || "Pending"}</p></div>
                             <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Loan Required?</p><p className={`font-semibold ${t.text}`}>{getLatestLoanDetails()?.loanRequired}</p></div>
                             <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Status</p><span className={`text-xs sm:text-sm font-bold ${getStatusStyle(selectedLead.status)}`}>{selectedLead.status || "Assigned"}</span></div>
-                            {/* <div className={`p-5 sm:p-5 rounded-xl border ${t.settingsBg}`} style={t.settingsBgGl}>
+                            {/* <div className={`col-span-1 sm:col-span-2 p-3 sm:p-3 rounded-xl border ${t.settingsBg}`} style={t.settingsBgGl}>
                               <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-0.5 sm:mb-1 ${isDark?"text-[#00AEEF]":"text-[#00AEEF]"}`}>📍 Site Visit Date</p>
                               <p className={`text-sm sm:text-base font-black ${t.text}`}>{selectedLead.mongoVisitDate?formatDate(selectedLead.mongoVisitDate):"Not Scheduled"}</p>
                             </div> */}
                           </div>
                           {selectedLead.is_lost_lead && (
-                            <div className={`mt-4 border rounded-xl p-5 sm:p-5 ${t.statusLost}`}>
+                            <div className={`mt-4 border rounded-xl p-3 sm:p-3 ${t.statusLost}`}>
                               <h3 className="text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-2">
                                 <Ghost className="w-3.5 h-3.5" /> Lost Lead Record
                               </h3>
@@ -2087,7 +2087,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                               </p>
                             </div>
                           )}
-                          <div className={`mt-4 border rounded-xl p-5 sm:p-5 ${t.settingsBg}`} style={t.settingsBgGl}>
+                          <div className={`mt-4 border rounded-xl p-3 sm:p-3 ${t.settingsBg}`} style={t.settingsBgGl}>
                             <h3 className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-2 sm:mb-3 border-b pb-2 ${t.sectionTitle} ${t.sectionBorder}`}>
                               {selectedLead.source && selectedLead.source !== "N/A" ? `${selectedLead.source} Data` : "Source Data"}
                             </h3>
@@ -2143,7 +2143,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                             return (
                               <>
                                 <h3 className={`text-xs sm:text-sm font-bold border-b pb-2 mb-4 sm:mb-6 uppercase flex items-center justify-between ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"} ${t.tableBorder}`}><span className="flex items-center gap-2"><FaUniversity /> Deal Loan Overview</span></h3>
-                                {isHighProb && <div className="mb-4 sm:mb-6 bg-gradient-to-r from-orange-500/20 to-red-500/20 border border-orange-500/50 p-2 sm:p-5 rounded-lg flex items-center justify-center gap-2 text-orange-400 text-xs sm:text-sm font-bold tracking-wide shadow-md text-center">🚀 HIGH PROBABILITY DEAL</div>}
+                                {isHighProb && <div className="mb-4 sm:mb-6 bg-gradient-to-r from-orange-500/20 to-red-500/20 border border-orange-500/50 p-2 sm:p-3 rounded-lg flex items-center justify-center gap-2 text-orange-400 text-xs sm:text-sm font-bold tracking-wide shadow-md text-center">🚀 HIGH PROBABILITY DEAL</div>}
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-4 text-xs sm:text-sm">
                                   <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Loan Required?</p><p className={`font-semibold ${t.text}`}>{curLoan?.loanRequired}</p></div>
                                   <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Current Status</p><p className={`font-bold px-2 py-0.5 rounded inline-block border ${sColor}`}>{curLoan?.status}</p></div>
@@ -2152,7 +2152,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                                   {[{ label: "Bank Name", val: curLoan?.bankName }, { label: "CIBIL Score", val: curLoan?.cibil }, { label: "Agent Name", val: curLoan?.agent }, { label: "Agent Contact", val: curLoan?.agentContact }, { label: "Emp Type", val: curLoan?.empType }, { label: "Monthly Income", val: curLoan?.income }, { label: "Existing EMIs", val: curLoan?.emi }].map(f => (
                                     <div key={f.label}><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>{f.label}</p><p className={`font-semibold ${t.text}`}>{f.val}</p></div>
                                   ))}
-                                  <div className="mb-1 sm:mb-2 mt-2"><p className={`text-[10px] sm:text-xs font-bold uppercase tracking-widest ${t.textMuted}`}>Document Status</p></div>
+                                  <div className="col-span-1 sm:col-span-2 mb-1 sm:mb-2 mt-2"><p className={`text-[10px] sm:text-xs font-bold uppercase tracking-widest ${t.textMuted}`}>Document Status</p></div>
                                   {[{ label: "PAN Card", val: curLoan?.docPan }, { label: "Aadhaar", val: curLoan?.docAadhaar }, { label: "Salary/ITR", val: curLoan?.docSalary }, { label: "Bank Stmt", val: curLoan?.docBank }, { label: "Property Docs", val: curLoan?.docProperty }].map((doc, i) => (
                                     <div key={i} className={`flex items-center justify-between p-2 rounded-lg col-span-1 border ${t.innerBlock}`}>
                                       <span className={`text-[10px] sm:text-xs ${t.textMuted}`}>{doc.label}</span>
@@ -2208,10 +2208,10 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
 
               {/* RIGHT PANEL: FOLLOW-UPS */}
               <div className={`flex flex-col rounded-xl overflow-hidden shadow-2xl border h-[500px] lg:h-[calc(100vh-260px)] lg:sticky lg:top-4 ${t.chatPanel}`} style={t.chatPanelGl}>
-                <div className={`flex-1 p-5 sm:p-6 overflow-y-auto custom-scrollbar flex flex-col gap-2 sm:gap-3 ${t.chatArea}`}>
+                <div className={`flex-1 p-3 sm:p-6 overflow-y-auto custom-scrollbar flex flex-col gap-2 sm:gap-3 ${t.chatArea}`}>
                   {/* System message */}
                   <div className="flex justify-start">
-                    <div className={`rounded-xl rounded-tl-none p-5 sm:p-5 max-w-[90%] sm:max-w-[85%] shadow-md ${t.fupSalesform}`}>
+                    <div className={`rounded-xl rounded-tl-none p-3 sm:p-3 max-w-[90%] sm:max-w-[85%] shadow-md ${t.fupSalesform}`}>
                       <div className={`flex justify-between items-start sm:items-center mb-2 gap-2 sm:gap-3 flex-col sm:flex-row`}>
                         <span className={`font-bold text-xs sm:text-sm ${t.accentText}`}>System (Front Desk)</span>
                         <span className={`text-[9px] sm:text-[10px] ${t.textFaint}`}>{formatDate(selectedLead.created_at)}</span>
@@ -2227,7 +2227,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                     const bubbleCls = isLoan ? t.fupLoan : isSF ? t.fupSalesform : isClosing ? t.fupClosing : t.fupDefault;
                     return (
                       <div key={idx} className="flex justify-start">
-                        <div className={`rounded-xl rounded-tl-none p-5 sm:p-5 max-w-[90%] sm:max-w-[85%] shadow-lg ${bubbleCls}`}>
+                        <div className={`rounded-xl rounded-tl-none p-3 sm:p-3 max-w-[90%] sm:max-w-[85%] shadow-lg ${bubbleCls}`}>
                           <div className="flex justify-between items-start sm:items-center mb-2 sm:mb-3 gap-2 sm:gap-3 flex-col sm:flex-row">
                             <span className={`font-bold text-xs sm:text-sm ${t.text}`}>{msg.createdBy === "admin" ? `${msg.salesManagerName || "Admin"} (Admin)` : msg.salesManagerName}</span>
                             <span className={`text-[9px] sm:text-[10px] ${t.textFaint}`}>{formatDate(msg.createdAt)}</span>
@@ -2252,7 +2252,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                   })}
                   <div ref={followUpEndRef} />
                 </div>
-                <form onSubmit={handleSendCustomNote} className={`p-5 sm:p-5 border-t flex gap-2 sm:gap-3 items-center flex-shrink-0 ${t.header} ${t.tableBorder}`} style={t.headerGlass}>
+                <form onSubmit={handleSendCustomNote} className={`p-3 sm:p-3 border-t flex gap-2 sm:gap-3 items-center flex-shrink-0 ${t.header} ${t.tableBorder}`} style={t.headerGlass}>
                   <input
                     ref={inputRef}
                     type="text" value={customNote} onChange={e => setCustomNote(e.target.value)}
@@ -2350,13 +2350,13 @@ function WaModalWithPicker({ lead, adminUser, waMessage, setWaMessage, isSending
   const [selectedPhone, setSelectedPhone] = useState(phoneOptions[0]?.value || "");
 
   return (
-    <div className="fixed inset-0 bg-black/75 z-[200] flex justify-center items-center p-5 animate-fadeIn"
+    <div className="fixed inset-0 bg-black/75 z-[200] flex justify-center items-center p-3 animate-fadeIn"
       style={{ backdropFilter: "blur(8px)" }}>
       <div className={`rounded-xl w-full max-w-lg shadow-2xl border overflow-hidden ${t.modalCard}`}
         style={t.modalGlass}>
 
         {/* Header */}
-        <div className="p-5 border-b border-green-500/20 bg-green-500/10 flex justify-between items-center">
+        <div className="p-3 border-b border-green-500/20 bg-green-500/10 flex justify-between items-center">
           <div>
             <h2 className="text-lg font-bold flex items-center gap-2 text-green-500">
               <FaWhatsapp /> Send WhatsApp
@@ -2380,7 +2380,7 @@ function WaModalWithPicker({ lead, adminUser, waMessage, setWaMessage, isSending
               {phoneOptions.length === 0 ? (
                 <p className="text-xs text-red-400">No phone number on this lead.</p>
               ) : phoneOptions.length === 1 ? (
-                <div className={`flex items-center gap-3 px-4 py-3 sm:py-4 rounded-xl border font-mono text-sm ${isDark
+                <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border font-mono text-sm ${isDark
                   ? "bg-green-500/10 border-green-500/30 text-green-300"
                   : "bg-green-50 border-green-200 text-green-700"
                   }`}>
@@ -2390,7 +2390,7 @@ function WaModalWithPicker({ lead, adminUser, waMessage, setWaMessage, isSending
                 <div className="flex flex-col gap-2">
                   {phoneOptions.map(opt => (
                     <label key={opt.value}
-                      className={`flex items-center gap-3 px-4 py-3 sm:py-4 rounded-xl border cursor-pointer transition-all ${selectedPhone === opt.value
+                      className={`flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-all ${selectedPhone === opt.value
                         ? (isDark
                           ? "bg-green-500/15 border-green-500/50 text-green-300"
                           : "bg-green-50 border-green-400 text-green-700")
@@ -2425,7 +2425,7 @@ function WaModalWithPicker({ lead, adminUser, waMessage, setWaMessage, isSending
                 onChange={e => setWaMessage(e.target.value)}
                 rows={6}
                 placeholder="Type your message here..."
-                className={`w-full rounded-xl px-4 py-3 sm:py-4 text-sm outline-none resize-none leading-relaxed border-2 transition-colors custom-scrollbar ${isDark
+                className={`w-full rounded-xl px-4 py-3 text-sm outline-none resize-none leading-relaxed border-2 transition-colors custom-scrollbar ${isDark
                   ? "bg-[#14141B] border-green-500/30 text-white focus:border-green-500"
                   : "bg-white border-green-200 text-[#1A1A1A] focus:border-green-500"
                   }`}
@@ -2434,9 +2434,9 @@ function WaModalWithPicker({ lead, adminUser, waMessage, setWaMessage, isSending
           </div>
 
           {/* Footer */}
-          <div className={`p-5 border-t flex justify-end gap-3 ${t.modalHeader} ${t.tableBorder}`}>
+          <div className={`p-3 border-t flex justify-end gap-3 ${t.modalHeader} ${t.tableBorder}`}>
             <button type="button" onClick={onClose}
-              className={`px-4 py-3 sm:py-4.5 rounded-lg font-bold cursor-pointer ${t.textMuted} hover:text-red-500`}>
+              className={`px-3 py-2.5 rounded-lg font-bold cursor-pointer ${t.textMuted} hover:text-red-500`}>
               Cancel
             </button>
             <button type="submit"
@@ -2537,7 +2537,7 @@ function AssistantView({ allLeads, isDark, t }: { allLeads: any[]; isDark: boole
             <p className={`text-xs sm:text-sm text-center mb-8 sm:mb-10 max-w-md ${t.textMuted}`}>Ask me about your leads, stats, loan tracking, or type a client name for a full AI analysis.</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-2 w-full max-w-2xl px-4 sm:px-0">
               {suggestions.map(s => (
-                <button key={s.prompt} onClick={() => sendMessage(s.prompt)} className={`group flex items-center gap-3 border rounded-xl p-5 sm:p-5 text-left transition-all cursor-pointer ${t.card}`} style={t.cardGlass}>
+                <button key={s.prompt} onClick={() => sendMessage(s.prompt)} className={`group flex items-center gap-3 border rounded-xl p-3 sm:p-3 text-left transition-all cursor-pointer ${t.card}`} style={t.cardGlass}>
                   <div className={`w-8 h-8 rounded-lg border flex items-center justify-center flex-shrink-0 ${s.color} ${t.settingsBg}`}>
                     {s.prompt === "high priority leads" && (<span className="absolute -top-1 -right-1 flex h-2.5 w-2.5 relative"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" /><span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500" /></span>)}
                     {s.icon}
@@ -2558,7 +2558,7 @@ function AssistantView({ allLeads, isDark, t }: { allLeads: any[]; isDark: boole
                   }
                 </div>
                 <div className={`flex flex-col gap-1 ${msg.sender === "user" ? "items-end max-w-[75%] sm:max-w-[65%]" : "items-start max-w-[85%] sm:max-w-[80%]"}`}>
-                  <div className={`px-4 py-3 sm:py-4.5 sm:px-4 sm:py-3 rounded-xl text-xs sm:text-sm leading-relaxed sm:leading-7 ${msg.sender === "user" ? t.chatBubbleUser + " rounded-tr-sm" : t.chatBubbleAi + " rounded-tl-sm"}`}>
+                  <div className={`px-3 py-2.5 sm:px-4 sm:py-3 rounded-xl text-xs sm:text-sm leading-relaxed sm:leading-7 ${msg.sender === "user" ? t.chatBubbleUser + " rounded-tr-sm" : t.chatBubbleAi + " rounded-tl-sm"}`}>
                     {msg.typing ? (
                       <div className="flex items-center gap-2 sm:gap-3 py-0.5">
                         <div className="flex items-end gap-[3px] h-3 sm:h-4">
@@ -2720,7 +2720,7 @@ function SiteVisitScheduler({
   };
 
   return (
-    <div className={`rounded-xl border p-5 ${isDark ? "bg-[#1a1a1a] border-[#2a2a2a]" : "bg-white border-indigo-200"}`}>
+    <div className={`rounded-xl border p-3 ${isDark ? "bg-[#1a1a1a] border-[#2a2a2a]" : "bg-white border-indigo-200"}`}>
       {/* Toast */}
       {toast && (
         <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[200] px-5 py-3 rounded-xl shadow-lg text-sm font-bold text-white bg-green-600 animate-fadeIn border border-green-400">
@@ -2770,7 +2770,7 @@ function SiteVisitScheduler({
                     "bg-yellow-500 border-yellow-400"
                   }`} />
 
-                <div className={`rounded-xl p-5 border ${isDark ? "bg-[#222] border-[#333]" : "bg-[#F8FAFC] border-indigo-100"}`}>
+                <div className={`rounded-xl p-3 border ${isDark ? "bg-[#222] border-[#333]" : "bg-[#F8FAFC] border-indigo-100"}`}>
                   <div className="flex items-start justify-between gap-2 mb-1.5">
                     <div>
                       <p className={`text-xs font-bold ${t.text}`}>
@@ -2812,9 +2812,9 @@ function SiteVisitScheduler({
 
       {/* Schedule Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/75 z-[200] flex items-center justify-center p-5 animate-fadeIn" style={{ backdropFilter: "blur(8px)" }}>
+        <div className="fixed inset-0 bg-black/75 z-[200] flex items-center justify-center p-3 animate-fadeIn" style={{ backdropFilter: "blur(8px)" }}>
           <div className={`rounded-xl w-full max-w-md shadow-2xl border overflow-hidden ${isDark ? "bg-[#1a1a1a] border-[#2a2a2a]" : "bg-white border-indigo-200"}`}>
-            <div className={`p-5 border-b flex items-center justify-between ${isDark ? "bg-orange-900/20 border-orange-500/20" : "bg-orange-50 border-orange-200"}`}>
+            <div className={`p-3 border-b flex items-center justify-between ${isDark ? "bg-orange-900/20 border-orange-500/20" : "bg-orange-50 border-orange-200"}`}>
               <div>
                 <h2 className={`font-bold flex items-center gap-2 ${isDark ? "text-orange-400" : "text-orange-700"}`}>
                   <FaCalendarAlt /> {editVisit ? "Reschedule Visit" : visits.length === 0 ? "Schedule Site Visit" : "Schedule Re-Site Visit"}
@@ -2823,7 +2823,7 @@ function SiteVisitScheduler({
               </div>
               <button onClick={() => { setShowModal(false); setEditVisit(null); }} className={`p-2 ${t.textMuted} hover:text-red-500`}><FaTimes /></button>
             </div>
-            <form onSubmit={handleSchedule} className={`p-5 space-y-4 ${isDark ? "bg-[#121212]" : "bg-[#F8FAFC]"}`}>
+            <form onSubmit={handleSchedule} className={`p-3 space-y-4 ${isDark ? "bg-[#121212]" : "bg-[#F8FAFC]"}`}>
               <div>
                 <label className={`block text-xs font-bold mb-1.5 ${isDark ? "text-orange-400" : "text-orange-700"}`}>
                   Visit Date & Time *
@@ -2834,7 +2834,7 @@ function SiteVisitScheduler({
                   min={new Date().toISOString().slice(0, 16)}
                   onChange={e => setVisitDate(e.target.value)}
                   onClick={() => inputRef.current?.showPicker()}
-                  className={`w-full rounded-xl px-4 py-3 sm:py-4 text-sm outline-none border-2 transition-colors ${isDark ? "bg-[#1a1a1a] border-orange-500/40 text-white focus:border-orange-500" : "bg-white border-orange-300 text-[#1A1A1A] focus:border-orange-500"
+                  className={`w-full rounded-xl px-4 py-3 text-sm outline-none border-2 transition-colors ${isDark ? "bg-[#1a1a1a] border-orange-500/40 text-white focus:border-orange-500" : "bg-white border-orange-300 text-[#1A1A1A] focus:border-orange-500"
                     }`}
                 />
               </div>
@@ -2845,7 +2845,7 @@ function SiteVisitScheduler({
                 <textarea
                   value={visitNotes} onChange={e => setVisitNotes(e.target.value)} rows={3}
                   placeholder={visits.length > 0 ? "e.g. Customer needs to see the 3BHK units again..." : "e.g. First visit scheduled with customer..."}
-                  className={`w-full rounded-xl px-4 py-3 sm:py-4 text-sm outline-none resize-none border-2 transition-colors ${isDark ? "bg-[#1a1a1a] border-orange-500/30 text-white focus:border-orange-500" : "bg-white border-orange-200 text-[#1A1A1A] focus:border-orange-500"
+                  className={`w-full rounded-xl px-4 py-3 text-sm outline-none resize-none border-2 transition-colors ${isDark ? "bg-[#1a1a1a] border-orange-500/30 text-white focus:border-orange-500" : "bg-white border-orange-200 text-[#1A1A1A] focus:border-orange-500"
                     }`}
                 />
               </div>
@@ -2952,7 +2952,7 @@ function SettingsView({ adminUser, isDark, t, onSaved }: {
           <form onSubmit={handleSave} className="space-y-4">
 
             {/* Who is saving */}
-            <div className={`flex items-center justify-between p-5 rounded-xl border ${t.settingsBg}`}>
+            <div className={`flex items-center justify-between p-3 rounded-xl border ${t.settingsBg}`}>
               <span className={`text-xs ${t.textFaint}`}>Saving for</span>
               <span className={`text-xs font-bold ${t.text}`}>{adminUser.name}</span>
             </div>
@@ -2979,7 +2979,7 @@ function SettingsView({ adminUser, isDark, t, onSaved }: {
 
             {/* Live Preview */}
             {whatsappNumber.length >= 10 && (
-              <div className="p-5 rounded-xl border border-green-500/20 bg-green-500/5 text-xs">
+              <div className="p-3 rounded-xl border border-green-500/20 bg-green-500/5 text-xs">
                 <p className="text-green-500 font-bold mb-1">📱 Preview — WhatsApp will open as:</p>
                 <p className={`font-mono break-all ${t.textMuted}`}>
                   https://wa.me/{whatsappNumber}?text=...
@@ -2989,7 +2989,7 @@ function SettingsView({ adminUser, isDark, t, onSaved }: {
 
             {/* Current saved number */}
             {adminUser.whatsapp_number && (
-              <div className={`p-5 rounded-xl border border-green-500/20 text-xs flex items-center justify-between ${t.settingsBg}`}>
+              <div className={`p-3 rounded-xl border border-green-500/20 text-xs flex items-center justify-between ${t.settingsBg}`}>
                 <span className={t.textFaint}>Currently saved:</span>
                 <span className="font-mono font-bold text-green-500">+{adminUser.whatsapp_number}</span>
               </div>
@@ -3011,7 +3011,7 @@ function SettingsView({ adminUser, isDark, t, onSaved }: {
       </div>
 
       {/* Info Box */}
-      <div className={`rounded-xl border p-5 text-xs space-y-2 ${t.settingsBg}`}>
+      <div className={`rounded-xl border p-3 text-xs space-y-2 ${t.settingsBg}`}>
         <p className={`font-bold ${t.textMuted}`}>ℹ️ How this works</p>
         <p className={t.textFaint}>
           When you click "Send WhatsApp" on a lead, it opens WhatsApp Web/App
