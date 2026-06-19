@@ -1,61 +1,157 @@
 // app/api/walkin_enquiries/[id]/route.ts
 import { NextResponse } from "next/server";
-import { getPool } from "@/lib/db";
+import { getPool, transaction } from "@/lib/db";
+
+const jsonFields = new Set([
+  "site_visit_history",
+  "loan_tracking_info",
+  "referral_info",
+]);
+
+const contactStatuses = new Set([
+  "Contacted",
+  "Interested",
+  "Visit Scheduled",
+  "Completed",
+  "Closing",
+  "Closed",
+]);
 
 export async function PUT(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
+
   try {
-    const pool = getPool();
-    const { id } = await params;
+    const leadId = Number(id);
+    if (Number.isNaN(leadId)) {
+      return NextResponse.json(
+        { success: false, message: "Invalid lead ID" },
+        { status: 400 }
+      );
+    }
+
     const body = await req.json();
 
-    const {
-      name, status, alt_phone, loan_planned,
-      source_other, cp_name, cp_company, cp_phone,
-      assigned_to, // for transfer flow
-      is_lost_lead, lost_lead_reason, lost_lead_marked_at, lost_lead_marked_by,
-      enquiry_date, // backdated enquiry date support
-      // assigned_receptionist is intentionally NEVER accepted here
-    } = body;
+    const allowedFields = [
+      "name",
+      "status",
+      "alt_phone",
+      "loan_planned",
+      "source_other",
+      "cp_name",
+      "cp_company",
+      "cp_phone",
+      "assigned_to",
+      "is_lost_lead",
+      "lost_lead_reason",
+      "lost_lead_marked_at",
+      "lost_lead_marked_by",
+      "enquiry_date",
+      "assigned_at",
+      "first_contact_at",
+      "last_activity_at",
+      "site_visit_history",
+      "loan_tracking_info",
+      "referral_info",
+    ];
 
-    const fields: string[] = [];
-    const values: any[]    = [];
-    let i = 1;
+    const result = await transaction(async (client) => {
+      const existingRows = await client.query(
+        "SELECT id, assigned_to FROM walkin_enquiries WHERE id = $1",
+        [leadId]
+      );
 
-    if (name         !== undefined) { fields.push(`name = $${i++}`);         values.push(name); }
-    if (status       !== undefined) { fields.push(`status = $${i++}`);       values.push(status); }
-    if (alt_phone    !== undefined) { fields.push(`alt_phone = $${i++}`);    values.push(alt_phone); }
-    if (loan_planned !== undefined) { fields.push(`loan_planned = $${i++}`); values.push(loan_planned); }
-    if (source_other !== undefined) { fields.push(`source_other = $${i++}`); values.push(source_other); }
-    if (cp_name      !== undefined) { fields.push(`cp_name = $${i++}`);      values.push(cp_name); }
-    if (cp_company   !== undefined) { fields.push(`cp_company = $${i++}`);   values.push(cp_company); }
-    if (cp_phone     !== undefined) { fields.push(`cp_phone = $${i++}`);     values.push(cp_phone); }
-    if (assigned_to  !== undefined) { fields.push(`assigned_to = $${i++}`);  values.push(assigned_to); }
-    if (is_lost_lead !== undefined) { fields.push(`is_lost_lead = $${i++}`); values.push(is_lost_lead); }
-    if (lost_lead_reason    !== undefined) { fields.push(`lost_lead_reason = $${i++}`);    values.push(lost_lead_reason); }
-    if (lost_lead_marked_at !== undefined) { fields.push(`lost_lead_marked_at = $${i++}`); values.push(lost_lead_marked_at); }
-    if (lost_lead_marked_by !== undefined) { fields.push(`lost_lead_marked_by = $${i++}`); values.push(lost_lead_marked_by); }
-    if (enquiry_date !== undefined) { fields.push(`enquiry_date = $${i++}`); values.push(enquiry_date); }
+      if (existingRows.rows.length === 0) {
+        return null;
+      }
 
-    if (fields.length === 0) {
-      return NextResponse.json({ success: false, message: "No fields to update" }, { status: 400 });
+      const previousAssignee = existingRows.rows[0].assigned_to;
+      const assignmentChanged =
+        typeof body.assigned_to === "string" &&
+        body.assigned_to.trim().length > 0 &&
+        body.assigned_to !== previousAssignee;
+
+      const fields: string[] = [];
+      const values: any[] = [];
+
+      for (const field of allowedFields) {
+        if (field in body && body[field] !== undefined) {
+          let value = body[field];
+          if (jsonFields.has(field)) {
+            value = typeof value === "string" ? value : JSON.stringify(value ?? {});
+          }
+          values.push(value);
+          fields.push(`${field} = $${values.length}`);
+        }
+      }
+
+      if (assignmentChanged && !("assigned_at" in body)) {
+        fields.push("assigned_at = NOW()");
+      }
+
+      if (
+        body.status &&
+        contactStatuses.has(body.status) &&
+        !("first_contact_at" in body)
+      ) {
+        fields.push("first_contact_at = COALESCE(first_contact_at, NOW())");
+      }
+
+      if (!("last_activity_at" in body)) {
+        fields.push("last_activity_at = NOW()");
+      }
+
+      if (fields.length === 0) {
+        return { noFields: true };
+      }
+
+      values.push(leadId);
+      const updateRows = await client.query(
+        `UPDATE walkin_enquiries SET ${fields.join(", ")} WHERE id = $${values.length} RETURNING *`,
+        values
+      );
+
+      if (assignmentChanged) {
+        await client.query(
+          `
+            INSERT INTO lead_assignment_logs (lead_id, assigned_to, assigned_by, reason)
+            VALUES ($1, $2, $3, $4)
+          `,
+          [
+            leadId,
+            body.assigned_to,
+            body.assigned_by || body.transferred_by || body.updated_by || "System/API",
+            body.assignment_reason || body.transfer_note || "Lead Assigned",
+          ]
+        );
+      }
+
+      return { data: updateRows.rows[0] };
+    });
+
+    if (!result) {
+      return NextResponse.json(
+        { success: false, message: "Lead not found" },
+        { status: 404 }
+      );
     }
 
-    values.push(id);
-    const query = `UPDATE walkin_enquiries SET ${fields.join(", ")} WHERE id = $${i} RETURNING *`;
-    const result = await pool.query(query, values);
-
-    if (result.rows.length === 0) {
-      return NextResponse.json({ success: false, message: "Lead not found" }, { status: 404 });
+    if ("noFields" in result) {
+      return NextResponse.json(
+        { success: false, message: "No fields to update" },
+        { status: 400 }
+      );
     }
 
-    return NextResponse.json({ success: true, data: result.rows[0] }, { status: 200 });
-
+    return NextResponse.json({ success: true, data: result.data }, { status: 200 });
   } catch (error: any) {
     console.error("PUT walkin_enquiries error:", error);
-    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
+    return NextResponse.json(
+      { success: false, message: error.message },
+      { status: 500 }
+    );
   }
 }
 
@@ -66,10 +162,13 @@ export async function DELETE(
   try {
     const pool = getPool();
     const { id } = await params;
-    await pool.query(`DELETE FROM walkin_enquiries WHERE id = $1`, [id]);
+    await pool.query("DELETE FROM walkin_enquiries WHERE id = $1", [id]);
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (error: any) {
     console.error("DELETE walkin_enquiries error:", error);
-    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
+    return NextResponse.json(
+      { success: false, message: error.message },
+      { status: 500 }
+    );
   }
 }

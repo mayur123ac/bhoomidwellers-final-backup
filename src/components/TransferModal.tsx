@@ -20,6 +20,7 @@
 
 import { useState } from "react";
 import { FaExchangeAlt, FaTimes, FaUserTie, FaExclamationTriangle, FaCheckCircle } from "react-icons/fa";
+import ActivityTimeline from "@/components/ActivityTimeline";
 
 interface Assignee {
   name: string;
@@ -151,6 +152,13 @@ export default function TransferModal({
 
         {/* ── Body ── */}
         <div className={`p-6 space-y-5 ${t.modalInner}`}>
+          <ActivityTimeline
+            lead={selectedLead}
+            isDark={isDark}
+            theme={t}
+            compact
+            maxAuditItems={3}
+          />
 
           {/* Current Manager Badge */}
           <div className={`flex items-center gap-3 p-3 rounded-xl border ${

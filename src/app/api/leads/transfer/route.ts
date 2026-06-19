@@ -83,7 +83,9 @@ export async function POST(req: Request) {
     // ── 5. Update assigned_to ─────────────────────────────────────────
     const updatedRows = await query(
       `UPDATE walkin_enquiries
-       SET assigned_to = $1
+       SET assigned_to = $1,
+           assigned_at = NOW(),
+           last_activity_at = NOW()
        WHERE id = $2
        RETURNING *`,
       [transfer_to, lead_id]
@@ -97,6 +99,17 @@ export async function POST(req: Request) {
     }
 
     // ── 6. Map follow-up to frontend shape ────────────────────────────
+    await query(
+      `INSERT INTO lead_assignment_logs (lead_id, assigned_to, assigned_by, reason)
+       VALUES ($1, $2, $3, $4)`,
+      [
+        Number(lead_id),
+        transfer_to,
+        transferred_by,
+        transfer_note?.trim() || `Transferred from ${currentManager || "Unassigned"}`,
+      ]
+    );
+
     const mappedFollowUp = followUpRow
       ? {
           _id:              String(followUpRow.id),

@@ -79,6 +79,16 @@ export async function GET() {
       )
     `);
 
+    await query(`
+      CREATE INDEX IF NOT EXISTS idx_lead_assignment_logs_lead_id
+      ON lead_assignment_logs(lead_id)
+    `);
+
+    await query(`
+      CREATE INDEX IF NOT EXISTS idx_lead_assignment_logs_assigned_at
+      ON lead_assignment_logs(assigned_at DESC)
+    `);
+
     // 7. Update existing status from Routed to Assigned
     await query(`
       UPDATE walkin_enquiries
@@ -90,6 +100,22 @@ export async function GET() {
       UPDATE leads
       SET status = 'Assigned'
       WHERE status = 'Routed' OR status = 'ROUTED'
+    `);
+
+    await query(`
+      UPDATE walkin_enquiries
+      SET assigned_at = COALESCE(assigned_at, created_at, NOW())
+      WHERE assigned_at IS NULL
+        AND assigned_to IS NOT NULL
+        AND assigned_to <> ''
+    `);
+
+    await query(`
+      UPDATE leads
+      SET assigned_at = COALESCE(assigned_at, created_at, NOW())
+      WHERE assigned_at IS NULL
+        AND assign_manager IS NOT NULL
+        AND assign_manager <> ''
     `);
 
     return NextResponse.json({ message: "Migration successful!" }, { status: 200 });
