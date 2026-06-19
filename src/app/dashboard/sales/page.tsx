@@ -1884,7 +1884,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
 
         {/* ── DETAIL ── */}
         {subView === "detail" && selectedLead && (
-          <div className="animate-fadeIn w-full flex flex-col gap-2 pb-4">
+          <div className="animate-fadeIn w-full flex flex-col gap-2 pb-1">
             {/* Detail header */}
             <div className={`flex flex-col md:flex-row md:items-center justify-between gap-2 rounded-xl border p-3 shadow-sm flex-shrink-0 ${selectedLead.is_lost_lead ? t.cardLost : t.card}`} style={t.cardGlass}>
               <div className="flex items-center gap-3 sm:gap-2 min-w-0">
@@ -1952,7 +1952,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
               {/* LEFT PANEL */}
               <div className="flex flex-col gap-3">
                 {showSalesForm ? (
-                  <div className={`rounded-xl border p-3 sm:p-3 shadow-xl overflow-y-auto custom-scrollbar flex flex-col max-h-[80vh] lg:max-h-[calc(100vh-260px)] ${t.modalCard}`} style={t.modalGlass}>
+                  <div className={`rounded-xl border p-3 sm:p-3 shadow-xl overflow-y-auto custom-scrollbar flex flex-col max-h-[85vh] lg:max-h-[calc(100vh-180px)] ${t.modalCard}`} style={t.modalGlass}>
                     <div className={`flex justify-between items-center mb-4 border-b pb-3 ${t.tableBorder}`}>
                       <div>
                         <h3 className={`text-base sm:text-lg font-bold ${t.text}`}>Sales Data Form</h3>
@@ -2050,7 +2050,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                       <button onClick={() => setDetailTab("loan")} className={`flex-1 py-2 text-xs sm:text-sm font-bold rounded-lg transition-colors cursor-pointer ${detailTab === "loan" ? t.btnSecondary : `${t.textMuted} ${isDark ? "hover:text-white hover:bg-[#222]" : "hover:text-[#1A1A1A] hover:bg-[#F1F5F9]"}`}`}>Loan Tracking</button>
                     </div>
 
-                    <div className={`overflow-y-auto custom-scrollbar rounded-xl p-3 sm:p-6 shadow-lg border max-h-[60vh] lg:max-h-[calc(100vh-380px)] ${t.chatPanel}`} style={t.chatPanelGl}>
+                    <div className={`overflow-y-auto custom-scrollbar rounded-xl p-3 sm:p-6 shadow-lg border max-h-[100vh] lg:max-h-[calc(100vh-325px)] ${t.chatPanel}`} style={t.chatPanelGl}>
                       {detailTab === "personal" ? (
                         <div>
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 sm:gap-y-4 gap-x-4 text-xs sm:text-sm">
@@ -2207,7 +2207,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
               </div>
 
               {/* RIGHT PANEL: FOLLOW-UPS */}
-              <div className={`flex flex-col rounded-xl overflow-hidden shadow-2xl border h-[500px] lg:h-[calc(100vh-260px)] lg:sticky lg:top-4 ${t.chatPanel}`} style={t.chatPanelGl}>
+              <div className={`flex flex-col rounded-xl overflow-hidden shadow-2xl border h-[540px] lg:h-[calc(100vh-185px)] lg:sticky lg:top-4 ${t.chatPanel}`} style={t.chatPanelGl}>
                 <div className={`flex-1 p-3 sm:p-6 overflow-y-auto custom-scrollbar flex flex-col gap-2 sm:gap-3 ${t.chatArea}`}>
                   {/* System message */}
                   <div className="flex justify-start">
