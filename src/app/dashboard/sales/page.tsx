@@ -32,7 +32,7 @@ import CallModal from "@/components/CallModal";
 import OnCallBadge from "@/components/OnCallBadge";
 import LostLeadModal from "@/components/LostLeadModal";
 import MarkClosingModal from "@/components/MarkClosingModal";
-import ActivityTimeline from "@/components/ActivityTimeline";
+// import ActivityTimeline from "@/components/ActivityTimeline";
 import { handleMarkLostLead as markLostLeadApi, restoreLostLead, updateLeadLostState, useLostLeadEvents } from "@/lib/lostLeadSync";
 
 import AttendanceTimerWidget from "@/components/AttendanceTimerWidget";
@@ -2177,12 +2177,12 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                           onSuccess={refetch}
                         />
                       </div>
-                      <ActivityTimeline
+                      {/* <ActivityTimeline
                         lead={selectedLead}
                         isDark={isDark}
                         theme={t}
                         className="mt-3"
-                      />
+                      /> */}
 
                     </div>
 

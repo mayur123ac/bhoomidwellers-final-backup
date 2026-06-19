@@ -19,7 +19,7 @@ import {
 import LostLeadModal from "@/components/LostLeadModal";
 import MarkClosingModal from "@/components/MarkClosingModal";
 import CrmUpdatesNotification from "@/components/CrmUpdatesNotification";
-import ActivityTimeline from "@/components/ActivityTimeline";
+// import ActivityTimeline from "@/components/ActivityTimeline";
 import {
   handleMarkLostLead as markLostLeadApi,
   handleRestoreLead as restoreLeadApi,
@@ -241,8 +241,8 @@ function useAdminData() {
           closingDate,
           status: lead.status === "Closing" || lead.status === "Closed" || !!closingDate
             ? (lead.status === "Closing" || lead.status === "Closed" ? lead.status : "Closing")
-            : latestVisitDate ? "Visit Scheduled" 
-            : (lead.status === "Routed" || lead.status === "ROUTED" ? "Assigned" : lead.status),
+            : latestVisitDate ? "Visit Scheduled"
+              : (lead.status === "Routed" || lead.status === "ROUTED" ? "Assigned" : lead.status),
 
         };
       });
@@ -2495,14 +2495,14 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
               <button onClick={() => { setIsReassignModalOpen(false); setReassignNote(""); setReassignTarget(""); }} className={`p-2 ${theme.textMuted} hover:text-red-500 transition-colors`}><FaTimes /></button>
             </div>
             <div className={`p-6 ${theme.modalInner}`}>
-              <ActivityTimeline
+              {/* <ActivityTimeline
                 lead={reassignLead}
                 isDark={isDark}
                 theme={theme}
                 compact
                 maxAuditItems={3}
                 className="mb-5"
-              />
+              /> */}
               <div className="mb-5">
                 <label className={`block text-sm font-bold mb-2 ${isDark ? "text-orange-400" : "text-orange-700"}`}>Assign to *</label>
                 <select required value={reassignTarget} onChange={e => setReassignTarget(e.target.value)}
@@ -3599,12 +3599,12 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                                     onSuccess={refetch}
                                   />
                                 </div>
-                                <ActivityTimeline
+                                {/* <ActivityTimeline
                                   lead={selectedLead}
                                   isDark={isDark}
                                   theme={theme}
                                   className="mt-3"
-                                />
+                                /> */}
                               </div>
                             ) : (
                               <div>
@@ -3741,14 +3741,14 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                     <button onClick={() => { setIsTransferModalOpen(false); setTransferNote(""); setTransferTarget(""); }} className={`p-2 ${theme.textMuted} hover:text-red-500 transition-colors`}><FaTimes /></button>
                   </div>
                   <div className={`p-6 ${theme.modalInner}`}>
-                    <ActivityTimeline
+                    {/* <ActivityTimeline
                       lead={selectedLead}
                       isDark={isDark}
                       theme={theme}
                       compact
                       maxAuditItems={3}
                       className="mb-5"
-                    />
+                    /> */}
                     <div className="mb-5">
                       <label className={`block text-sm font-bold mb-2 ${isDark ? "text-purple-400" : "text-purple-700"}`}>Transfer to Manager *</label>
                       <select required value={transferTarget} onChange={e => setTransferTarget(e.target.value)}
@@ -4668,12 +4668,12 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                                     onSuccess={refetch}
                                   />
                                 </div>
-                                <ActivityTimeline
+                                {/* <ActivityTimeline
                                   lead={selectedLead}
                                   isDark={isDark}
                                   theme={theme}
                                   className="mt-3"
-                                />
+                                /> */}
                               </div>
                             ) : (
                               <div>
@@ -4789,14 +4789,14 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                     <button onClick={() => { setIsTransferModalOpen(false); setTransferNote(""); setTransferTarget(""); }} className={`p-2 ${theme.textMuted} hover:text-red-500 transition-colors`}><FaTimes /></button>
                   </div>
                   <div className={`p-6 ${theme.modalInner}`}>
-                    <ActivityTimeline
+                    {/* <ActivityTimeline
                       lead={selectedLead}
                       isDark={isDark}
                       theme={theme}
                       compact
                       maxAuditItems={3}
                       className="mb-5"
-                    />
+                    /> */}
                     <div className="mb-5">
                       <label className={`block text-sm font-bold mb-2 ${isDark ? "text-purple-400" : "text-purple-700"}`}>Transfer to Manager *</label>
                       <select required value={transferTarget} onChange={e => setTransferTarget(e.target.value)}

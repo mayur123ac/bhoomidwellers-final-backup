@@ -20,7 +20,7 @@
 
 import { useState } from "react";
 import { FaExchangeAlt, FaTimes, FaUserTie, FaExclamationTriangle, FaCheckCircle } from "react-icons/fa";
-import ActivityTimeline from "@/components/ActivityTimeline";
+// import ActivityTimeline from "@/components/ActivityTimeline";
 
 interface Assignee {
   name: string;
@@ -36,16 +36,16 @@ interface Lead {
 }
 
 interface TransferModalProps {
-  isOpen:              boolean;
-  onClose:             () => void;
-  selectedLead:        Lead | null;
-  assignees:           Assignee[];
-  isFetchingManagers:  boolean;
-  transferredBy:       string;
-  isDark:              boolean;
-  theme:               Record<string, any>;
-  onSuccess:           (updatedLead: any, followUp: any) => void;
-  showToast:           (msg: string, color?: string) => void;
+  isOpen: boolean;
+  onClose: () => void;
+  selectedLead: Lead | null;
+  assignees: Assignee[];
+  isFetchingManagers: boolean;
+  transferredBy: string;
+  isDark: boolean;
+  theme: Record<string, any>;
+  onSuccess: (updatedLead: any, followUp: any) => void;
+  showToast: (msg: string, color?: string) => void;
 }
 
 export default function TransferModal({
@@ -61,15 +61,15 @@ export default function TransferModal({
   showToast,
 }: TransferModalProps) {
   const [transferTarget, setTransferTarget] = useState("");
-  const [transferNote,   setTransferNote]   = useState("");
+  const [transferNote, setTransferNote] = useState("");
   const [isTransferring, setIsTransferring] = useState(false);
-  const [error,          setError]          = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const currentManager = selectedLead?.assignedTo || selectedLead?.assigned_to || "Unassigned";
-  const noteLength     = transferNote.trim().length;
-  const noteValid      = noteLength >= 50;
-  const isSameManager  = transferTarget === currentManager;
-  const canSubmit      = transferTarget && noteValid && !isSameManager && !isTransferring;
+  const noteLength = transferNote.trim().length;
+  const noteValid = noteLength >= 50;
+  const isSameManager = transferTarget === currentManager;
+  const canSubmit = transferTarget && noteValid && !isSameManager && !isTransferring;
 
   const handleClose = () => {
     if (isTransferring) return;
@@ -86,12 +86,12 @@ export default function TransferModal({
 
     try {
       const res = await fetch("/api/leads/transfer", {
-        method:  "POST",
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          lead_id:        selectedLead.id,
-          transfer_to:    transferTarget,
-          transfer_note:  transferNote,
+          lead_id: selectedLead.id,
+          transfer_to: transferTarget,
+          transfer_note: transferNote,
           transferred_by: transferredBy,
         }),
       });
@@ -128,11 +128,10 @@ export default function TransferModal({
         style={t.modalGlass}
       >
         {/* ── Header ── */}
-        <div className={`p-5 border-b flex justify-between items-start ${
-          isDark
+        <div className={`p-5 border-b flex justify-between items-start ${isDark
             ? "bg-gradient-to-r from-purple-900/30 to-purple-800/10 border-purple-500/20"
             : "bg-gradient-to-r from-purple-50 to-indigo-50 border-purple-200"
-        }`}>
+          }`}>
           <div>
             <h2 className={`text-lg font-bold flex items-center gap-2 ${isDark ? "text-purple-400" : "text-purple-700"}`}>
               <FaExchangeAlt /> Re-assign Lead
@@ -161,12 +160,10 @@ export default function TransferModal({
           />
 
           {/* Current Manager Badge */}
-          <div className={`flex items-center gap-3 p-3 rounded-xl border ${
-            isDark ? "bg-white/5 border-white/10" : "bg-gray-50 border-gray-200"
-          }`}>
-            <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm text-white ${
-              isDark ? "bg-purple-600" : "bg-purple-500"
+          <div className={`flex items-center gap-3 p-3 rounded-xl border ${isDark ? "bg-white/5 border-white/10" : "bg-gray-50 border-gray-200"
             }`}>
+            <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm text-white ${isDark ? "bg-purple-600" : "bg-purple-500"
+              }`}>
               {String(currentManager).charAt(0).toUpperCase()}
             </div>
             <div>
@@ -174,10 +171,9 @@ export default function TransferModal({
               <p className={`text-sm font-bold ${t.text}`}>{currentManager}</p>
             </div>
             <div className="ml-auto">
-              <span className={`text-[10px] px-2 py-1 rounded-full font-bold border ${
-                selectedLead.status === "Closing"   ? t.statusClosing :
-                selectedLead.status === "Visit Scheduled" ? t.statusVisit : (t.statusAssigned || t.statusRouted)
-              }`}>{(selectedLead.status === "Routed" || selectedLead.status === "ROUTED" ? "Assigned" : selectedLead.status) || "Assigned"}</span>
+              <span className={`text-[10px] px-2 py-1 rounded-full font-bold border ${selectedLead.status === "Closing" ? t.statusClosing :
+                  selectedLead.status === "Visit Scheduled" ? t.statusVisit : (t.statusAssigned || t.statusRouted)
+                }`}>{(selectedLead.status === "Routed" || selectedLead.status === "ROUTED" ? "Assigned" : selectedLead.status) || "Assigned"}</span>
             </div>
           </div>
 
@@ -198,11 +194,10 @@ export default function TransferModal({
               <select
                 value={transferTarget}
                 onChange={e => { setTransferTarget(e.target.value); setError(null); }}
-                className={`w-full rounded-xl pl-9 pr-4 py-3 text-sm outline-none transition-colors border-2 cursor-pointer appearance-none ${
-                  isDark
+                className={`w-full rounded-xl pl-9 pr-4 py-3 text-sm outline-none transition-colors border-2 cursor-pointer appearance-none ${isDark
                     ? "bg-[#14141B] border-purple-500/40 text-white focus:border-purple-400"
                     : "bg-white border-purple-300 text-[#1A1A1A] focus:border-purple-500"
-                }`}
+                  }`}
               >
                 <option value="" disabled>— Select new manager —</option>
                 {isFetchingManagers ? (
@@ -234,11 +229,10 @@ export default function TransferModal({
               <label className={`text-sm font-bold ${isDark ? "text-purple-400" : "text-purple-700"}`}>
                 Handover Summary *
               </label>
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full transition-colors ${
-                noteValid
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full transition-colors ${noteValid
                   ? isDark ? "text-green-400 bg-green-500/10" : "text-green-600 bg-green-50"
-                  : isDark ? "text-gray-500 bg-white/5"       : "text-gray-400 bg-gray-100"
-              }`}>
+                  : isDark ? "text-gray-500 bg-white/5" : "text-gray-400 bg-gray-100"
+                }`}>
                 {noteLength}/50 min
                 {noteValid && " ✓"}
               </span>
@@ -251,24 +245,20 @@ export default function TransferModal({
               onChange={e => { setTransferNote(e.target.value); setError(null); }}
               placeholder="e.g. Client was contacted twice and showed interest in a 2BHK under 80L. Site visit is pending. HDFC pre-approval in progress. Next step: schedule site visit and share brochure."
               rows={5}
-              className={`w-full rounded-xl px-4 py-3 text-sm outline-none resize-none leading-relaxed border-2 transition-all custom-scrollbar ${
-                isDark
-                  ? `bg-[#14141B] text-white placeholder:text-gray-600 ${
-                      noteValid ? "border-green-500/50" : "border-purple-500/30 focus:border-purple-400"
-                    }`
-                  : `bg-white text-[#1A1A1A] placeholder:text-gray-400 ${
-                      noteValid ? "border-green-400" : "border-purple-200 focus:border-purple-500"
-                    }`
-              }`}
+              className={`w-full rounded-xl px-4 py-3 text-sm outline-none resize-none leading-relaxed border-2 transition-all custom-scrollbar ${isDark
+                  ? `bg-[#14141B] text-white placeholder:text-gray-600 ${noteValid ? "border-green-500/50" : "border-purple-500/30 focus:border-purple-400"
+                  }`
+                  : `bg-white text-[#1A1A1A] placeholder:text-gray-400 ${noteValid ? "border-green-400" : "border-purple-200 focus:border-purple-500"
+                  }`
+                }`}
             />
           </div>
 
           {/* Warning Banner */}
-          <div className={`p-3 rounded-xl border text-xs flex items-start gap-2 ${
-            isDark
+          <div className={`p-3 rounded-xl border text-xs flex items-start gap-2 ${isDark
               ? "bg-amber-900/10 border-amber-500/20 text-amber-400"
               : "bg-amber-50 border-amber-200 text-amber-700"
-          }`}>
+            }`}>
             <FaExclamationTriangle className="mt-0.5 flex-shrink-0" />
             <div>
               <p className="font-bold mb-0.5">This action will notify the new manager.</p>
@@ -277,11 +267,10 @@ export default function TransferModal({
           </div>
 
           {/* What happens info */}
-          <div className={`p-3 rounded-xl border text-xs space-y-1 ${
-            isDark
+          <div className={`p-3 rounded-xl border text-xs space-y-1 ${isDark
               ? "bg-blue-900/10 border-blue-500/20 text-blue-400"
               : "bg-blue-50 border-blue-200 text-blue-700"
-          }`}>
+            }`}>
             <p className="font-bold mb-1.5 flex items-center gap-1.5"><FaCheckCircle /> After transfer:</p>
             <p>• Lead is immediately reassigned to the selected manager</p>
             <p>• Transfer is logged in the follow-up history</p>
@@ -291,11 +280,10 @@ export default function TransferModal({
 
           {/* Error message */}
           {error && (
-            <div className={`p-3 rounded-xl border text-xs font-medium flex items-center gap-2 ${
-              isDark
+            <div className={`p-3 rounded-xl border text-xs font-medium flex items-center gap-2 ${isDark
                 ? "bg-red-900/20 border-red-500/30 text-red-400"
                 : "bg-red-50 border-red-200 text-red-600"
-            }`}>
+              }`}>
               <FaExclamationTriangle className="flex-shrink-0" />
               {error}
             </div>
@@ -307,22 +295,20 @@ export default function TransferModal({
           <button
             onClick={handleClose}
             disabled={isTransferring}
-            className={`px-6 py-2.5 rounded-xl font-bold cursor-pointer transition-colors text-sm ${
-              isDark
+            className={`px-6 py-2.5 rounded-xl font-bold cursor-pointer transition-colors text-sm ${isDark
                 ? "text-gray-400 hover:text-white hover:bg-white/10"
                 : "text-gray-500 hover:text-gray-800 hover:bg-gray-100"
-            }`}
+              }`}
           >
             Cancel
           </button>
           <button
             onClick={handleTransfer}
             disabled={!canSubmit}
-            className={`px-8 py-2.5 rounded-xl font-bold transition-all text-sm flex items-center gap-2 ${
-              canSubmit
+            className={`px-8 py-2.5 rounded-xl font-bold transition-all text-sm flex items-center gap-2 ${canSubmit
                 ? "bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-600/25 hover:shadow-purple-500/30 hover:-translate-y-0.5 cursor-pointer"
                 : "opacity-40 cursor-not-allowed bg-purple-400 text-white"
-            }`}
+              }`}
           >
             {isTransferring ? (
               <>
