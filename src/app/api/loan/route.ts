@@ -30,6 +30,26 @@ export async function POST(req: Request) {
       );
     }
 
+    // 🔒 Final-state lock guard
+    const leadRows = await query(
+      `SELECT status, is_lost_lead FROM walkin_enquiries WHERE id = $1`,
+      [body.leadId]
+    );
+    const lead = leadRows[0];
+    if (!lead) {
+      return NextResponse.json(
+        { success: false, message: "Lead not found" },
+        { status: 404 }
+      );
+    }
+    if (lead.status === "Closing" || lead.is_lost_lead) {
+      return NextResponse.json(
+        { success: false, message: "Closed or Lost leads cannot be modified." },
+        { status: 403 }
+      );
+    }
+
+
     // 1. Save structured loan data to PostgreSQL
     const rows = await query(
       `INSERT INTO loan_updates (
@@ -50,41 +70,41 @@ export async function POST(req: Request) {
       ) RETURNING *`,
       [
         String(body.leadId),
-        body.salesManagerName   || null,
-        body.createdBy          || "sales",
-        body.status             || "Pending",
-        body.loanType           || null,
-        body.amountReq          || null,
-        body.amountApp          || null,
-        body.processingAmt      || null,
-        body.roi                || null,
-        body.tenure             || null,
-        body.bank               || null,
-        body.officer            || null,
-        body.agent              || null,
-        body.agentContact       || null,
-        body.empType            || null,
-        body.income             || null,
-        body.emi                || null,
-        body.cibil              || null,
-        body.propType           || null,
-        body.propValue          || null,
-        body.project            || null,
-        body.builder            || null,
-        body.phone              || null,
-        body.altPhone           || null,
-        body.email              || null,
-        body.address            || null,
-        body.docPan             || "Pending",
-        body.docAadhaar         || "Pending",
-        body.docSalary          || "Pending",
-        body.docBank            || "Pending",
-        body.docProperty        || "Pending",
-        body.appDate            || null,
-        body.apprvDate          || null,
-        body.expDisbDate        || null,
-        body.disbDate           || null,
-        body.notes              || null,
+        body.salesManagerName || null,
+        body.createdBy || "sales",
+        body.status || "Pending",
+        body.loanType || null,
+        body.amountReq || null,
+        body.amountApp || null,
+        body.processingAmt || null,
+        body.roi || null,
+        body.tenure || null,
+        body.bank || null,
+        body.officer || null,
+        body.agent || null,
+        body.agentContact || null,
+        body.empType || null,
+        body.income || null,
+        body.emi || null,
+        body.cibil || null,
+        body.propType || null,
+        body.propValue || null,
+        body.project || null,
+        body.builder || null,
+        body.phone || null,
+        body.altPhone || null,
+        body.email || null,
+        body.address || null,
+        body.docPan || "Pending",
+        body.docAadhaar || "Pending",
+        body.docSalary || "Pending",
+        body.docBank || "Pending",
+        body.docProperty || "Pending",
+        body.appDate || null,
+        body.apprvDate || null,
+        body.expDisbDate || null,
+        body.disbDate || null,
+        body.notes || null,
       ]
     );
 

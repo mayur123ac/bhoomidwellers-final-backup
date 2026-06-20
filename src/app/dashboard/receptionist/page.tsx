@@ -18,6 +18,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
 } from "recharts";
 import { Ghost, AlertTriangle } from "lucide-react";
+import LoginTimerWidget from "@/components/LoginTimerWidget";
 import LostLeadModal from "@/components/LostLeadModal";
 import MarkClosingModal from "@/components/MarkClosingModal";
 import AttendanceTimerWidget from "@/components/AttendanceTimerWidget";
@@ -370,6 +371,7 @@ export default function ReceptionistDashboard() {
   const [lostReason, setLostReason] = useState("");
   const [lostError, setLostError] = useState("");
   const [isSavingLost, setIsSavingLost] = useState(false);
+  const [isReopening, setIsReopening] = useState(false);
   // ── Data ──
   const [salesManagers, setSalesManagers] = useState<any[]>([]);
 
@@ -828,7 +830,10 @@ export default function ReceptionistDashboard() {
       const visitsWithDate = lf.filter((f: any) => f.siteVisitDate?.trim());
       const mongoVisitDate = visitsWithDate.length > 0 ? visitsWithDate[visitsWithDate.length - 1].siteVisitDate : null;
       const closingFups = lf.filter((f: any) => f.message?.includes("✅ Lead Marked as Closing"));
-      const closingDate = closingFups.length > 0 ? closingFups[closingFups.length - 1].createdAt : null;
+      const reopenFups = lf.filter((f: any) => f.message?.includes("↩️ Lead Reopened"));
+      const lastReopenAt = reopenFups.length > 0 ? new Date(reopenFups[reopenFups.length - 1].createdAt).getTime() : 0;
+      const closingFupsSinceReopen = closingFups.filter((f: any) => new Date(f.createdAt).getTime() > lastReopenAt);
+      const closingDate = closingFupsSinceReopen.length > 0 ? closingFupsSinceReopen[closingFupsSinceReopen.length - 1].createdAt : null;
       const sfBudget = g("Budget");
       const activeBudget = (sfBudget !== "Pending" && sfBudget !== "N/A")
         ? sfBudget
@@ -866,6 +871,10 @@ export default function ReceptionistDashboard() {
   const currentLeadFollowUps = useMemo(() =>
     followUps.filter((f: any) => String(f.leadId) === String(selectedLead?.id))
     , [followUps, selectedLead]);
+
+  const isLeadLocked = !!selectedLead && (
+    selectedLead.status === "Closing" || !!selectedLead.closingDate || selectedLead.is_lost_lead
+  );
 
   // ─────────────────────────────────────────────────────────────────────────
   // CSV EXPORT
@@ -1106,6 +1115,20 @@ export default function ReceptionistDashboard() {
     } catch { showToast("Network error while restoring", "red"); }
     finally { setIsSavingLost(false); }
   };
+
+  const handleReopenLead = async () => {
+    if (!selectedLead || selectedLead.status !== "Closing") return;
+    setIsReopening(true);
+    try {
+      await fetch(`/api/walkin_enquiries/${selectedLead.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: selectedLead.name, status: "Interested" }) });
+      const nm = { leadId: String(selectedLead.id), salesManagerName: user.name, createdBy: "receptionist", message: `↩️ Lead Reopened by ${user.name} (Receptionist)`, siteVisitDate: null, createdAt: new Date().toISOString() };
+      await fetch("/api/followups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(nm) });
+      showToast(`${selectedLead.name} reopened`);
+      refetchAll();
+    } catch { showToast("Error reopening lead", "red"); }
+    finally { setIsReopening(false); }
+  };
+
   // ─────────────────────────────────────────────────────────────────────────
   // TRANSFER LEAD
   // ─────────────────────────────────────────────────────────────────────────
@@ -1342,15 +1365,11 @@ export default function ReceptionistDashboard() {
         }}
       >
         <div className="flex items-center px-3 mb-6 mt-1 overflow-hidden">
-          <div
-            className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg font-black text-white flex-shrink-0 cursor-pointer ${t.logoBg}`}
-            style={{
-              background: "linear-gradient(135deg, #9E217B 0%, #c7299a 50%, #7B2FF7 100%)",
-              boxShadow: "0 4px 16px rgba(158,33,123,0.5), 0 0 0 1px rgba(199,41,154,0.3)",
-            }}
-          >
-            B
-          </div>
+          <img
+            src="/assets/logobrowser.png"
+            alt="Logo"
+            className={`w-10 h-10 rounded-xl object-cover flex-shrink-0 cursor-pointer transition-all duration-300 ${t.logoBg}`}
+          />
           <div
             className="ml-3 overflow-hidden transition-all duration-300"
             style={{
@@ -1526,7 +1545,7 @@ export default function ReceptionistDashboard() {
         <header className={`h-16 border-b flex items-center justify-between px-6 flex-shrink-0 z-30 ${t.header}`} style={t.headerGlass}>
           <h1 className={`font-bold flex items-center text-sm md:text-base tracking-wide ${t.text}`}>BhoomiDwellersCRM</h1>
           <div className="flex items-center space-x-4 relative" ref={topbarRef}>
-            {/* <AttendanceTimerWidget /> */}
+            <LoginTimerWidget isDark={isDark} />
             <button onClick={() => setIsDark(!isDark)} aria-label="Toggle theme"
               className={`w-9 h-9 rounded-xl border flex items-center justify-center transition-all duration-200 hover:scale-105 active:scale-95 shadow-sm ${t.toggleWrap}`}>
               {isDark ? <SunIcon /> : <MoonIcon />}
@@ -2659,35 +2678,47 @@ export default function ReceptionistDashboard() {
                       </h1>
                     </div>
                     <div className="flex gap-3 flex-wrap justify-end">
-                      {!showSalesForm && !showLoanForm && (
-                        <>
-                          <button onClick={() => { prefillSalesForm(); setShowSalesForm(true); setShowLoanForm(false); }}
-                            className={`font-bold px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer ${t.btnPrimary}`}>
-                            <FaFileInvoice /> Fill Salesform
-                          </button>
-                          <button onClick={() => { prefillLoanForm(); setShowLoanForm(true); setShowSalesForm(false); }}
-                            className={`font-bold px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer ${t.btnSecondary}`}>
-                            <FaUniversity /> Track Loan
-                          </button>
-                          {selectedLead.mongoVisitDate && selectedLead.status !== "Closing" && !selectedLead.is_lost_lead && (
-                            <button onClick={() => setIsClosingModalOpen(true)} className={`font-bold px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer ${t.btnWarning}`}>
-                              <FaHandshake /> Mark Closing
-                            </button>
-                          )}
-                          {!selectedLead.is_lost_lead && (
-                            <button onClick={openLostLeadModal}
-                              className={`font-bold px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer ${t.btnDanger}`}>
-                              <AlertTriangle className="w-4 h-4" /> Mark Lost
-                            </button>
-                          )}
-                          {selectedLead.is_lost_lead && (
+                      {isLeadLocked ? (
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <span className={`text-xs font-bold px-3 py-1.5 rounded-full border flex items-center gap-2 ${selectedLead.is_lost_lead ? "bg-red-500/10 border-red-500/40 text-red-400" : "bg-yellow-500/10 border-yellow-500/40 text-yellow-400"}`}>
+                            {selectedLead.is_lost_lead ? "❌ Lost Lead • Read Only" : "✅ Lead Closed • Read Only"}
+                          </span>
+                          {selectedLead.is_lost_lead ? (
                             <button onClick={handleRestoreLead} disabled={isSavingLost}
                               className={`font-bold px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-60 ${t.btnPrimary}`}>
-                              <FaCheckCircle /> Restore Lead
+                              {isSavingLost ? "Restoring…" : <><FaCheckCircle /> ↩️ Restore Lead</>}
+                            </button>
+                          ) : (
+                            <button onClick={handleReopenLead} disabled={isReopening}
+                              className={`font-bold px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-60 ${isDark ? "bg-blue-600 hover:bg-blue-700 text-white" : "bg-blue-500 hover:bg-blue-600 text-white"}`}>
+                              {isReopening ? "Reopening…" : "↩️ Reopen Lead"}
                             </button>
                           )}
-                        </>
-                      )}
+                        </div>
+                      ) : (
+                        !showSalesForm && !showLoanForm && (
+                          <>
+                            <button onClick={() => { prefillSalesForm(); setShowSalesForm(true); setShowLoanForm(false); }}
+                              className={`font-bold px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer ${t.btnPrimary}`}>
+                              <FaFileInvoice /> Fill Salesform
+                            </button>
+                            <button onClick={() => { prefillLoanForm(); setShowLoanForm(true); setShowSalesForm(false); }}
+                              className={`font-bold px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer ${t.btnSecondary}`}>
+                              <FaUniversity /> Track Loan
+                            </button>
+                            {selectedLead.mongoVisitDate && selectedLead.status !== "Closing" && !selectedLead.is_lost_lead && (
+                              <button onClick={() => setIsClosingModalOpen(true)} className={`font-bold px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer ${t.btnWarning}`}>
+                                <FaHandshake /> Mark Closing
+                              </button>
+                            )}
+                            {!selectedLead.is_lost_lead && (
+                              <button onClick={openLostLeadModal}
+                                className={`font-bold px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer ${t.btnDanger}`}>
+                                <AlertTriangle className="w-4 h-4" /> Mark Lost
+                              </button>
+                            )}
+                          </>
+                        ))}
                     </div>
                   </div>
 
@@ -2919,14 +2950,22 @@ export default function ReceptionistDashboard() {
                         })}
                         <div ref={followUpEndRef} />
                       </div>
-                      <form onSubmit={handleSendCustomNote} className={`p-4 border-t flex gap-3 items-center flex-shrink-0 ${t.header} ${t.tableBorder}`} style={t.headerGlass}>
-                        <input
-                          type="text" value={customNote} onChange={e => setCustomNote(e.target.value)}
-                          placeholder="Add follow-up note..."
-                          className={`flex-1 rounded-xl px-4 py-3 text-sm outline-none transition-colors border ${t.inputBg} ${t.text} ${t.inputFocus}`}
-                        />
-                        <button type="submit" className={`w-12 h-12 text-white rounded-xl flex items-center justify-center cursor-pointer transition-colors shadow-lg ${isDark ? "bg-purple-600 hover:bg-purple-500" : "bg-[#00AEEF] hover:bg-[#0099d4]"}`}><FaPaperPlane className="text-sm ml-[-2px]" /></button>
-                      </form>
+                      {isLeadLocked ? (
+                        <div className={`p-5 border-t flex items-center justify-center flex-shrink-0 ${t.header} ${t.tableBorder}`} style={t.headerGlass}>
+                          <span className={`text-xs font-semibold ${t.textFaint}`}>
+                            {selectedLead.is_lost_lead ? "❌ Lost Lead • Read Only — follow-ups disabled" : "✅ Lead Closed • Read Only — follow-ups disabled"}
+                          </span>
+                        </div>
+                      ) : (
+                        <form onSubmit={handleSendCustomNote} className={`p-4 border-t flex gap-3 items-center flex-shrink-0 ${t.header} ${t.tableBorder}`} style={t.headerGlass}>
+                          <input
+                            type="text" value={customNote} onChange={e => setCustomNote(e.target.value)}
+                            placeholder="Add follow-up note..."
+                            className={`flex-1 rounded-xl px-4 py-3 text-sm outline-none transition-colors border ${t.inputBg} ${t.text} ${t.inputFocus}`}
+                          />
+                          <button type="submit" className={`w-12 h-12 text-white rounded-xl flex items-center justify-center cursor-pointer transition-colors shadow-lg ${isDark ? "bg-purple-600 hover:bg-purple-500" : "bg-[#00AEEF] hover:bg-[#0099d4]"}`}><FaPaperPlane className="text-sm ml-[-2px]" /></button>
+                        </form>
+                      )}
                     </div>
                   </div>
                 </div>

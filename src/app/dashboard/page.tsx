@@ -16,6 +16,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, Cell,
   CartesianGrid, PieChart, Pie,
 } from "recharts";
+import LoginTimerWidget from "@/components/LoginTimerWidget";
 import LostLeadModal from "@/components/LostLeadModal";
 import MarkClosingModal from "@/components/MarkClosingModal";
 import CrmUpdatesNotification from "@/components/CrmUpdatesNotification";
@@ -213,7 +214,10 @@ function useAdminData() {
         const fupsWithDate = leadFups.filter((f: any) => f.siteVisitDate && f.siteVisitDate.trim() !== "");
         const latestVisitDate = fupsWithDate.length > 0 ? fupsWithDate[fupsWithDate.length - 1].siteVisitDate : null;
         const closingFups = leadFups.filter((f: any) => f.message?.includes("✅ Lead Marked as Closing"));
-        const closingDate = closingFups.length > 0 ? closingFups[closingFups.length - 1].createdAt : null;
+        const reopenFups = leadFups.filter((f: any) => f.message?.includes("↩️ Lead Reopened"));
+        const lastReopenAt = reopenFups.length > 0 ? new Date(reopenFups[reopenFups.length - 1].createdAt).getTime() : 0;
+        const closingFupsSinceReopen = closingFups.filter((f: any) => new Date(f.createdAt).getTime() > lastReopenAt);
+        const closingDate = closingFupsSinceReopen.length > 0 ? closingFupsSinceReopen[closingFupsSinceReopen.length - 1].createdAt : null;
         const activeBudget = extractField("Budget") !== "Pending" ? extractField("Budget") : lead.budget;
 
 
@@ -408,13 +412,14 @@ export default function AdminAtlasDashboard() {
   }, []);
 
   const [showPassword, setShowPassword] = useState(false);
-  const [isDark, setIsDark] = useState(() => {
+  const [isDark, setIsDark] = useState(false);
+
+  // Sync theme from localStorage after hydration (avoids SSR/client mismatch)
+  useEffect(() => {
     try {
-      return localStorage.getItem("crm_theme") === "dark";
-    } catch {
-      return false;
-    }
-  });
+      if (localStorage.getItem("crm_theme") === "dark") setIsDark(true);
+    } catch { }
+  }, []);
 
   type CrmNotif = { id: string; line1: string; line2: string; type: "lead" | "visit" };
 
@@ -706,13 +711,11 @@ export default function AdminAtlasDashboard() {
         }}
       >
         <div className="flex items-center px-4 py-5 mb-2 whitespace-nowrap flex-shrink-0">
-          <div
-            className="w-10 h-10 min-w-[40px] rounded-xl flex items-center justify-center text-base font-black text-white flex-shrink-0"
-            style={{
-              background: "linear-gradient(135deg, #9E217B 0%, #c7299a 50%, #7B2FF7 100%)",
-              boxShadow: "0 4px 16px rgba(158,33,123,0.5), 0 0 0 1px rgba(199,41,154,0.3)",
-            }}
-          >B</div>
+          <img
+            src="/assets/logobrowser.png"
+            alt="Logo"
+            className="w-10 h-10 min-w-[40px] rounded-xl object-cover flex-shrink-0"
+          />
           <motion.div
             initial={{ opacity: 0, x: -8 }}
             animate={{ opacity: isSidebarHovered ? 1 : 0, x: isSidebarHovered ? 0 : -8 }}
@@ -878,6 +881,7 @@ export default function AdminAtlasDashboard() {
           </h1>
 
           <div className="flex items-center gap-3 relative z-[50]" ref={topbarRef}>
+            <LoginTimerWidget isDark={isDark} />
             <button onClick={() => {
               const next = !isDark;
               setIsDark(next);
@@ -2750,6 +2754,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
   const [lostError, setLostError] = useState("");
   const [isSavingLost, setIsSavingLost] = useState(false);
   const [optimisticLeadOverrides, setOptimisticLeadOverrides] = useState<Record<string, any>>({});
+  const [isReopening, setIsReopening] = useState(false);
 
   // Transfer States
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
@@ -2805,7 +2810,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
   const currentLeadFollowUps = useMemo(() =>
     (followUps || []).filter((f: any) => String(f.leadId) === String(selectedLead?.id)),
     [followUps, selectedLead]);
-
+  const isLeadLocked = !!selectedLead && (selectedLead.status === "Closing" || selectedLead.status === "Closed" || !!selectedLead.closingDate || !!selectedLead.is_lost_lead);
   useEffect(() => {
     if (subView === "detail") followUpEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [currentLeadFollowUps, subView, detailTab]);
@@ -2834,7 +2839,10 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
       const visitsWithDate = lf.filter((f: any) => f.siteVisitDate?.trim());
       const mongoVisitDate = visitsWithDate.length > 0 ? visitsWithDate[visitsWithDate.length - 1].siteVisitDate : null;
       const closingFups = lf.filter((f: any) => f.message?.includes("✅ Lead Marked as Closing"));
-      const closingDate = closingFups.length > 0 ? closingFups[closingFups.length - 1].createdAt : null;
+      const reopenFups = lf.filter((f: any) => f.message?.includes("↩️ Lead Reopened"));
+      const lastReopenAt = reopenFups.length > 0 ? new Date(reopenFups[reopenFups.length - 1].createdAt).getTime() : 0;
+      const closingFupsSinceReopen = closingFups.filter((f: any) => new Date(f.createdAt).getTime() > lastReopenAt);
+      const closingDate = closingFupsSinceReopen.length > 0 ? closingFupsSinceReopen[closingFupsSinceReopen.length - 1].createdAt : null;
       const sfBudget = g("Budget");
       const activeBudget = sfBudget !== "Pending" && sfBudget !== "N/A" ? sfBudget : (lead.budget || "Pending");
 
@@ -3018,7 +3026,19 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
       refetch();
     } catch { }
   };
-
+  const handleReopenLead = async () => {
+    if (!selectedLead || selectedLead.status !== "Closing") return;
+    setIsReopening(true);
+    try {
+      await fetch(`/api/walkin_enquiries/${selectedLead.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: selectedLead.name, status: "Interested" }) });
+      const nm = { leadId: String(selectedLead.id), salesManagerName: adminUser.name, createdBy: "admin", message: `↩️ Lead Reopened by ${adminUser.name} (Admin)`, siteVisitDate: null, createdAt: new Date().toISOString() };
+      await fetch("/api/followups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(nm) });
+      setToastMsg({ title: `${selectedLead.name} reopened`, icon: <FaCheckCircle />, color: "blue" });
+      setTimeout(() => setToastMsg(null), 3000);
+      refetch();
+    } catch { }
+    finally { setIsReopening(false); }
+  };
   const openLostLeadModal = (lead = selectedLead) => {
     if (!lead || lead.is_lost_lead) return;
     setSelectedLead(lead);
@@ -3155,7 +3175,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
               <th className="px-4 py-2.5">Interest</th>
               <th className="px-4 py-2.5">Site Visit</th>
               <th className="px-4 py-2.5">Date</th>
-              <th className="px-4 py-2.5">Action</th>
+
             </tr>
           </thead>
           <tbody className={`divide-y ${theme.tableDivide}`}>
@@ -3189,7 +3209,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                   <td className={`px-4 py-2.5 text-xs whitespace-normal min-w-[120px] ${theme.textFaint}`}>
                     {formatDate(lead.created_at)}
                   </td>
-                  <td className="px-4 py-2.5">
+                  {/* <td className="px-4 py-2.5">
                     {isLost ? (
                       <button
                         onClick={(e) => { e.stopPropagation(); handleRestoreLead(lead); }}
@@ -3206,7 +3226,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                         Lost Lead
                       </button>
                     )}
-                  </td>
+                  </td> */}
                 </tr>
               );
             })}
@@ -3392,33 +3412,41 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                       </h1>
                     </div>
                     <div className="flex gap-2 flex-wrap justify-end">
-                      {!showSalesForm && !showLoanForm && (
+                      {isLeadLocked ? (
                         <>
-                          <button onClick={() => { prefillSalesForm(); setShowSalesForm(true); setShowLoanForm(false); }} className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${theme.btnPrimary}`}>
-                            <FaFileInvoice /> Fill Salesform
-                          </button>
-                          <button onClick={() => { prefillLoanForm(); setShowLoanForm(true); setShowSalesForm(false); }} className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${theme.btnSecondary}`}>
-                            <FaUsers /> Track Loan
-                          </button>
-                          {selectedLead.status !== "Closing" && !selectedLead.is_lost_lead && (
-                            <button onClick={() => setIsClosingModalOpen(true)} className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${theme.btnWarning}`}>
-                              <FaHandshake /> Mark Closing
-                            </button>
-                          )}
-                          {!selectedLead.is_lost_lead && selectedLead.status !== "Closing" && (
-                            <button onClick={() => openLostLeadModal()} className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${theme.btnDanger}`}>
-                              <FaEyeSlash /> Lost Lead
-                            </button>
-                          )}
-                          {selectedLead.is_lost_lead && (
+                          <span className={`text-[11px] font-bold px-3 py-1 rounded-full border flex items-center gap-1.5 ${selectedLead.is_lost_lead ? theme.statusLost : theme.statusClosing}`}>
+                            {selectedLead.is_lost_lead ? <><FaEyeSlash className="text-xs" /> Lost Lead • Read Only</> : <><FaCheckCircle className="text-xs" /> Lead Closed • Read Only</>}
+                          </span>
+                          {selectedLead.is_lost_lead ? (
                             <button onClick={() => handleRestoreLead()} disabled={isSavingLost} className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${theme.btnPrimary} disabled:opacity-60`}>
                               <FaCheckCircle /> Restore Lead
                             </button>
+                          ) : (
+                            <button onClick={handleReopenLead} disabled={isReopening} className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${theme.btnPrimary} disabled:opacity-60`}>
+                              ↩️ Reopen Lead
+                            </button>
                           )}
-                          <button onClick={() => { setTransferTarget(""); setTransferNote(""); setIsTransferModalOpen(true); }} className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${isDark ? "bg-purple-600 hover:bg-purple-500 text-white" : "bg-purple-600 hover:bg-purple-700 text-white"}`}>
-                            <FaExchangeAlt /> Transfer
-                          </button>
                         </>
+                      ) : (
+                        !showSalesForm && !showLoanForm && (
+                          <>
+                            <button onClick={() => { prefillSalesForm(); setShowSalesForm(true); setShowLoanForm(false); }} className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${theme.btnPrimary}`}>
+                              <FaFileInvoice /> Fill Salesform
+                            </button>
+                            <button onClick={() => { prefillLoanForm(); setShowLoanForm(true); setShowSalesForm(false); }} className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${theme.btnSecondary}`}>
+                              <FaUsers /> Track Loan
+                            </button>
+                            <button onClick={() => setIsClosingModalOpen(true)} className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${theme.btnWarning}`}>
+                              <FaHandshake /> Mark Closing
+                            </button>
+                            <button onClick={() => openLostLeadModal()} className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${theme.btnDanger}`}>
+                              <FaEyeSlash /> Lost Lead
+                            </button>
+                            <button onClick={() => { setTransferTarget(""); setTransferNote(""); setIsTransferModalOpen(true); }} className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${isDark ? "bg-purple-600 hover:bg-purple-500 text-white" : "bg-purple-600 hover:bg-purple-700 text-white"}`}>
+                              <FaExchangeAlt /> Transfer
+                            </button>
+                          </>
+                        )
                       )}
                     </div>
                   </div>
@@ -3681,13 +3709,21 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                         })}
                         <div ref={followUpEndRef} />
                       </div>
-                      <form onSubmit={handleSendCustomNote} className={`p-3 border-t flex gap-2 items-center flex-shrink-0 ${theme.header} ${theme.tableBorder}`} style={theme.headerGlass}>
-                        <input type="text" value={customNote} onChange={e => setCustomNote(e.target.value)} placeholder="Add admin note..."
-                          className={`flex-1 rounded-xl px-3 py-2 sm:py-2.5 text-sm outline-none transition-colors border ${theme.inputInner} ${theme.text} ${theme.inputFocus}`} />
-                        <button type="submit" className={`w-9 h-9 flex-shrink-0 text-white rounded-xl flex items-center justify-center cursor-pointer transition-colors shadow-lg ${isDark ? "bg-[#9E217B] hover:bg-[#b8268f]" : "bg-[#9E217B] hover:bg-[#8a1d6b]"}`}>
-                          <FaPaperPlane className="text-xs ml-[-1px]" />
-                        </button>
-                      </form>
+                      {isLeadLocked ? (
+                        <div className={`p-3 border-t flex items-center justify-center flex-shrink-0 ${theme.header} ${theme.tableBorder} ${theme.textFaint}`} style={theme.headerGlass}>
+                          <span className="text-xs font-semibold">
+                            {selectedLead.is_lost_lead ? "❌ Lost Lead • Read Only — follow-ups disabled" : "✅ Lead Closed • Read Only — follow-ups disabled"}
+                          </span>
+                        </div>
+                      ) : (
+                        <form onSubmit={handleSendCustomNote} className={`p-3 border-t flex gap-2 items-center flex-shrink-0 ${theme.header} ${theme.tableBorder}`} style={theme.headerGlass}>
+                          <input type="text" value={customNote} onChange={e => setCustomNote(e.target.value)} placeholder="Add admin note..."
+                            className={`flex-1 rounded-xl px-3 py-2 sm:py-2.5 text-sm outline-none transition-colors border ${theme.inputInner} ${theme.text} ${theme.inputFocus}`} />
+                          <button type="submit" className={`w-9 h-9 flex-shrink-0 text-white rounded-xl flex items-center justify-center cursor-pointer transition-colors shadow-lg ${isDark ? "bg-[#9E217B] hover:bg-[#b8268f]" : "bg-[#9E217B] hover:bg-[#8a1d6b]"}`}>
+                            <FaPaperPlane className="text-xs ml-[-1px]" />
+                          </button>
+                        </form>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -3822,6 +3858,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
   const [lostError, setLostError] = useState("");
   const [isSavingLost, setIsSavingLost] = useState(false);
   const [optimisticLeadOverrides, setOptimisticLeadOverrides] = useState<Record<string, any>>({});
+  const [isReopening, setIsReopening] = useState(false);
 
   // Transfer States
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
@@ -3878,6 +3915,8 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
     (followUps || []).filter((f: any) => String(f.leadId) === String(selectedLead?.id)),
     [followUps, selectedLead]);
 
+  const isLeadLocked = !!selectedLead && (selectedLead.status === "Closing" || selectedLead.status === "Closed" || !!selectedLead.closingDate || !!selectedLead.is_lost_lead);
+
   useEffect(() => {
     if (subView === "detail") followUpEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [currentLeadFollowUps, subView, detailTab]);
@@ -3906,7 +3945,10 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
       const visitsWithDate = lf.filter((f: any) => f.siteVisitDate?.trim());
       const mongoVisitDate = visitsWithDate.length > 0 ? visitsWithDate[visitsWithDate.length - 1].siteVisitDate : null;
       const closingFups = lf.filter((f: any) => f.message?.includes("✅ Lead Marked as Closing"));
-      const closingDate = closingFups.length > 0 ? closingFups[closingFups.length - 1].createdAt : null;
+      const reopenFups = lf.filter((f: any) => f.message?.includes("↩️ Lead Reopened"));
+      const lastReopenAt = reopenFups.length > 0 ? new Date(reopenFups[reopenFups.length - 1].createdAt).getTime() : 0;
+      const closingFupsSinceReopen = closingFups.filter((f: any) => new Date(f.createdAt).getTime() > lastReopenAt);
+      const closingDate = closingFupsSinceReopen.length > 0 ? closingFupsSinceReopen[closingFupsSinceReopen.length - 1].createdAt : null;
       const sfBudget = g("Budget");
       const activeBudget = sfBudget !== "Pending" && sfBudget !== "N/A" ? sfBudget : (lead.budget || "Pending");
 
@@ -4085,6 +4127,20 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
     } catch { }
   };
 
+  const handleReopenLead = async () => {
+    if (!selectedLead || selectedLead.status !== "Closing") return;
+    setIsReopening(true);
+    try {
+      await fetch(`/api/walkin_enquiries/${selectedLead.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: selectedLead.name, status: "Interested" }) });
+      const nm = { leadId: String(selectedLead.id), salesManagerName: adminUser.name, createdBy: "admin", message: `↩️ Lead Reopened by ${adminUser.name} (Admin)`, siteVisitDate: null, createdAt: new Date().toISOString() };
+      await fetch("/api/followups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(nm) });
+      setToastMsg({ title: `${selectedLead.name} reopened`, icon: <FaCheckCircle />, color: "blue" });
+      setTimeout(() => setToastMsg(null), 3000);
+      refetch();
+    } catch { }
+    finally { setIsReopening(false); }
+  };
+
   const openLostLeadModal = (lead = selectedLead) => {
     if (!lead || lead.is_lost_lead) return;
     setSelectedLead(lead);
@@ -4221,7 +4277,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
               <th className="px-4 py-2.5">Interest</th>
               <th className="px-4 py-2.5">Site Visit</th>
               <th className="px-4 py-2.5">Date</th>
-              <th className="px-4 py-2.5">Action</th>
+
             </tr>
           </thead>
           <tbody className={`divide-y ${theme.tableDivide}`}>
@@ -4255,7 +4311,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                   <td className={`px-4 py-2.5 text-xs whitespace-normal min-w-[120px] ${theme.textFaint}`}>
                     {formatDate(lead.created_at)}
                   </td>
-                  <td className="px-4 py-2.5">
+                  {/* <td className="px-4 py-2.5">
                     {isLost ? (
                       <button
                         onClick={(e) => { e.stopPropagation(); handleRestoreLead(lead); }}
@@ -4272,7 +4328,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                         Lost Lead
                       </button>
                     )}
-                  </td>
+                  </td> */}
                 </tr>
               );
             })}
@@ -4464,33 +4520,41 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                       </h1>
                     </div>
                     <div className="flex gap-3 flex-wrap justify-end">
-                      {!showSalesForm && !showLoanForm && (
+                      {isLeadLocked ? (
                         <>
-                          <button onClick={() => { prefillSalesForm(); setShowSalesForm(true); setShowLoanForm(false); }} className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${theme.btnPrimary}`}>
-                            <FaFileInvoice /> Fill Salesform
-                          </button>
-                          <button onClick={() => { prefillLoanForm(); setShowLoanForm(true); setShowSalesForm(false); }} className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${theme.btnSecondary}`}>
-                            <FaUniversity /> Track Loan
-                          </button>
-                          {selectedLead.status !== "Closing" && !selectedLead.is_lost_lead && (
-                            <button onClick={() => setIsClosingModalOpen(true)} className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${theme.btnWarning}`}>
-                              <FaHandshake /> Mark Closing
-                            </button>
-                          )}
-                          {!selectedLead.is_lost_lead && selectedLead.status !== "Closing" && (
-                            <button onClick={() => openLostLeadModal()} className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${theme.btnDanger}`}>
-                              <FaEyeSlash /> Lost Lead
-                            </button>
-                          )}
-                          {selectedLead.is_lost_lead && (
+                          <span className={`text-[11px] font-bold px-3 py-1 rounded-full border flex items-center gap-1.5 ${selectedLead.is_lost_lead ? theme.statusLost : theme.statusClosing}`}>
+                            {selectedLead.is_lost_lead ? <><FaEyeSlash className="text-xs" /> Lost Lead • Read Only</> : <><FaCheckCircle className="text-xs" /> Lead Closed • Read Only</>}
+                          </span>
+                          {selectedLead.is_lost_lead ? (
                             <button onClick={() => handleRestoreLead()} disabled={isSavingLost} className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${theme.btnPrimary} disabled:opacity-60`}>
                               <FaCheckCircle /> Restore Lead
                             </button>
+                          ) : (
+                            <button onClick={handleReopenLead} disabled={isReopening} className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${theme.btnPrimary} disabled:opacity-60`}>
+                              ↩️ Reopen Lead
+                            </button>
                           )}
-                          <button onClick={() => { setTransferTarget(""); setTransferNote(""); setIsTransferModalOpen(true); }} className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${isDark ? "bg-purple-600 hover:bg-purple-500 text-white" : "bg-purple-600 hover:bg-purple-700 text-white"}`}>
-                            <FaExchangeAlt /> Transfer
-                          </button>
                         </>
+                      ) : (
+                        !showSalesForm && !showLoanForm && (
+                          <>
+                            <button onClick={() => { prefillSalesForm(); setShowSalesForm(true); setShowLoanForm(false); }} className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${theme.btnPrimary}`}>
+                              <FaFileInvoice /> Fill Salesform
+                            </button>
+                            <button onClick={() => { prefillLoanForm(); setShowLoanForm(true); setShowSalesForm(false); }} className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${theme.btnSecondary}`}>
+                              <FaUniversity /> Track Loan
+                            </button>
+                            <button onClick={() => setIsClosingModalOpen(true)} className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${theme.btnWarning}`}>
+                              <FaHandshake /> Mark Closing
+                            </button>
+                            <button onClick={() => openLostLeadModal()} className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${theme.btnDanger}`}>
+                              <FaEyeSlash /> Lost Lead
+                            </button>
+                            <button onClick={() => { setTransferTarget(""); setTransferNote(""); setIsTransferModalOpen(true); }} className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${isDark ? "bg-purple-600 hover:bg-purple-500 text-white" : "bg-purple-600 hover:bg-purple-700 text-white"}`}>
+                              <FaExchangeAlt /> Transfer
+                            </button>
+                          </>
+                        )
                       )}
                     </div>
                   </div>
@@ -4750,13 +4814,21 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                         })}
                         <div ref={followUpEndRef} />
                       </div>
-                      <form onSubmit={handleSendCustomNote} className={`p-5 border-t flex gap-3 items-center flex-shrink-0 ${theme.header} ${theme.tableBorder}`} style={theme.headerGlass}>
-                        <input type="text" value={customNote} onChange={e => setCustomNote(e.target.value)} placeholder="Add admin note..."
-                          className={`flex-1 rounded-xl px-4 py-3 sm:py-4 text-sm outline-none transition-colors border ${theme.inputInner} ${theme.text} ${theme.inputFocus}`} />
-                        <button type="submit" className={`w-12 h-12 text-white rounded-xl flex items-center justify-center cursor-pointer transition-colors shadow-lg ${isDark ? "bg-[#9E217B] hover:bg-[#b8268f]" : "bg-[#9E217B] hover:bg-[#8a1d6b]"}`}>
-                          <FaPaperPlane className="text-sm ml-[-2px]" />
-                        </button>
-                      </form>
+                      {isLeadLocked ? (
+                        <div className={`p-5 border-t flex items-center justify-center flex-shrink-0 ${theme.header} ${theme.tableBorder} ${theme.textFaint}`} style={theme.headerGlass}>
+                          <span className="text-xs font-semibold">
+                            {selectedLead.is_lost_lead ? "❌ Lost Lead • Read Only — follow-ups disabled" : "✅ Lead Closed • Read Only — follow-ups disabled"}
+                          </span>
+                        </div>
+                      ) : (
+                        <form onSubmit={handleSendCustomNote} className={`p-5 border-t flex gap-3 items-center flex-shrink-0 ${theme.header} ${theme.tableBorder}`} style={theme.headerGlass}>
+                          <input type="text" value={customNote} onChange={e => setCustomNote(e.target.value)} placeholder="Add admin note..."
+                            className={`flex-1 rounded-xl px-4 py-3 sm:py-4 text-sm outline-none transition-colors border ${theme.inputInner} ${theme.text} ${theme.inputFocus}`} />
+                          <button type="submit" className={`w-12 h-12 text-white rounded-xl flex items-center justify-center cursor-pointer transition-colors shadow-lg ${isDark ? "bg-[#9E217B] hover:bg-[#b8268f]" : "bg-[#9E217B] hover:bg-[#8a1d6b]"}`}>
+                            <FaPaperPlane className="text-sm ml-[-2px]" />
+                          </button>
+                        </form>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -4865,6 +4937,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
   const [siteHeads, setSiteHeads] = useState<any[]>([]);
   const [isFetchingManagers, setIsFetchingManagers] = useState(true);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [isReopening, setIsReopening] = useState(false);
   const [isWaModalOpen, setIsWaModalOpen] = useState(false);
   const [waMessage, setWaMessage] = useState("");
   const [isSendingWa, setIsSendingWa] = useState(false);
@@ -4922,6 +4995,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
     () => (followUps || []).filter((f: any) => String(f.leadId) === String(selectedLead?.id)),
     [followUps, selectedLead]
   );
+  const isLeadLocked = !!selectedLead && (selectedLead.status === "Closing" || selectedLead.status === "Closed" || !!selectedLead.closingDate || !!selectedLead.is_lost_lead);
 
   const getLatestLoanDetails = () => {
     if (!selectedLead) return null;
@@ -5022,6 +5096,19 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
     } catch { }
   };
 
+  const handleReopenLead = async () => {
+    if (!selectedLead || selectedLead.status !== "Closing") return;
+    setIsReopening(true);
+    try {
+      await fetch(`/api/walkin_enquiries/${selectedLead.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: selectedLead.name, status: "Interested" }) });
+      const nm = { leadId: String(selectedLead.id), salesManagerName: actorName, createdBy: "admin", message: `↩️ Lead Reopened by ${actorName} (Admin)`, siteVisitDate: null, createdAt: new Date().toISOString() };
+      await fetch("/api/followups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(nm) });
+      showToast(`${selectedLead.name} reopened`);
+      refetch();
+    } catch { }
+    finally { setIsReopening(false); }
+  };
+
   const handleTransferLead = async () => {
     if (!selectedLead || !transferTarget || !transferNote.trim()) return;
     setIsTransferring(true);
@@ -5116,7 +5203,10 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
       const visitsWithDate = lf.filter((f: any) => f.siteVisitDate?.trim());
       const mongoVisitDate = visitsWithDate.length > 0 ? visitsWithDate[visitsWithDate.length - 1].siteVisitDate : null;
       const closingFups = lf.filter((f: any) => f.message?.includes("✅ Lead Marked as Closing"));
-      const closingDate = closingFups.length > 0 ? closingFups[closingFups.length - 1].createdAt : null;
+      const reopenFups = lf.filter((f: any) => f.message?.includes("↩️ Lead Reopened"));
+      const lastReopenAt = reopenFups.length > 0 ? new Date(reopenFups[reopenFups.length - 1].createdAt).getTime() : 0;
+      const closingFupsSinceReopen = closingFups.filter((f: any) => new Date(f.createdAt).getTime() > lastReopenAt);
+      const closingDate = closingFupsSinceReopen.length > 0 ? closingFupsSinceReopen[closingFupsSinceReopen.length - 1].createdAt : null;
       const sfBudget = g("Budget");
       const activeBudget = sfBudget !== "Pending" && sfBudget !== "N/A" ? sfBudget : (lead.budget || "Pending");
 
@@ -5580,27 +5670,39 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                           </h1>
                         </div>
                         <div className="flex gap-3 flex-wrap justify-end">
-                          {!showSalesForm && !showLoanForm && (
+                          {isLeadLocked ? (
                             <>
-                              <button onClick={() => { prefillSalesForm(); setShowSalesForm(true); setShowLoanForm(false); }}
-                                className={`${theme.btnPrimary} px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer`}>
-                                <FaFileInvoice /> Fill Salesform
-                              </button>
-                              <button onClick={() => { prefillLoanForm(); setShowLoanForm(true); setShowSalesForm(false); }}
-                                className={`${theme.btnSecondary} px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer`}>
-                                <FaUniversity /> Track Loan
-                              </button>
-                              {selectedLead.mongoVisitDate && selectedLead.status !== "Closing" && (
-                                <button onClick={() => setIsClosingModalOpen(true)}
-                                  className={`${theme.btnWarning} px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer`}>
-                                  <FaHandshake /> Mark Closing
-                                </button>
-                              )}
-                              <button onClick={() => { setTransferTarget(""); setTransferNote(""); setIsTransferModalOpen(true); }}
-                                className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${isDark ? "bg-purple-600 hover:bg-purple-500 text-white" : "bg-purple-600 hover:bg-purple-700 text-white"}`}>
-                                <FaExchangeAlt /> Transfer
+                              <span className={`text-[11px] font-bold px-3 py-1 rounded-full border flex items-center gap-1.5 ${theme.statusClosing}`}>
+                                <FaCheckCircle className="text-xs" /> Lead Closed • Read Only
+                              </span>
+                              <button onClick={handleReopenLead} disabled={isReopening}
+                                className={`${theme.btnPrimary} px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-60`}>
+                                ↩️ Reopen Lead
                               </button>
                             </>
+                          ) : (
+                            !showSalesForm && !showLoanForm && (
+                              <>
+                                <button onClick={() => { prefillSalesForm(); setShowSalesForm(true); setShowLoanForm(false); }}
+                                  className={`${theme.btnPrimary} px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer`}>
+                                  <FaFileInvoice /> Fill Salesform
+                                </button>
+                                <button onClick={() => { prefillLoanForm(); setShowLoanForm(true); setShowSalesForm(false); }}
+                                  className={`${theme.btnSecondary} px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer`}>
+                                  <FaUniversity /> Track Loan
+                                </button>
+                                {selectedLead.mongoVisitDate && (
+                                  <button onClick={() => setIsClosingModalOpen(true)}
+                                    className={`${theme.btnWarning} px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer`}>
+                                    <FaHandshake /> Mark Closing
+                                  </button>
+                                )}
+                                <button onClick={() => { setTransferTarget(""); setTransferNote(""); setIsTransferModalOpen(true); }}
+                                  className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${isDark ? "bg-purple-600 hover:bg-purple-500 text-white" : "bg-purple-600 hover:bg-purple-700 text-white"}`}>
+                                  <FaExchangeAlt /> Transfer
+                                </button>
+                              </>
+                            )
                           )}
                         </div>
                       </div>
@@ -5868,13 +5970,19 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                           })}
                         <div ref={followUpEndRef} />
                       </div>
-                      <form onSubmit={handleSendCustomNote} className={`p-5 border-t flex gap-3 items-center flex-shrink-0 ${theme.chatInputInner}`}>
-                        <input type="text" value={customNote} onChange={e => setCustomNote(e.target.value)} placeholder="Add admin note..."
-                          className={`flex-1 border rounded-xl px-4 py-3 sm:py-4 text-sm outline-none transition-colors shadow-inner ${theme.inputInner} ${theme.text} ${theme.inputFocus}`} />
-                        <button type="submit" className={`w-12 h-12 text-white rounded-xl flex items-center justify-center cursor-pointer transition-colors shadow-lg ${isDark ? "bg-[#9E217B] hover:bg-[#b8268f]" : "bg-[#9E217B] hover:bg-[#8a1d6b]"}`}>
-                          <FaPaperPlane className="text-sm ml-[-2px]" />
-                        </button>
-                      </form>
+                      {isLeadLocked ? (
+                        <div className={`p-5 border-t flex items-center justify-center flex-shrink-0 ${theme.chatInputInner} ${theme.textFaint}`}>
+                          <span className="text-xs font-semibold">✅ Lead Closed • Read Only — follow-ups disabled</span>
+                        </div>
+                      ) : (
+                        <form onSubmit={handleSendCustomNote} className={`p-5 border-t flex gap-3 items-center flex-shrink-0 ${theme.chatInputInner}`}>
+                          <input type="text" value={customNote} onChange={e => setCustomNote(e.target.value)} placeholder="Add admin note..."
+                            className={`flex-1 border rounded-xl px-4 py-3 sm:py-4 text-sm outline-none transition-colors shadow-inner ${theme.inputInner} ${theme.text} ${theme.inputFocus}`} />
+                          <button type="submit" className={`w-12 h-12 text-white rounded-xl flex items-center justify-center cursor-pointer transition-colors shadow-lg ${isDark ? "bg-[#9E217B] hover:bg-[#b8268f]" : "bg-[#9E217B] hover:bg-[#8a1d6b]"}`}>
+                            <FaPaperPlane className="text-sm ml-[-2px]" />
+                          </button>
+                        </form>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -7285,7 +7393,7 @@ function SiteVisitScheduler({
                   </div>
                   {v.notes && <p className={`text-[11px] italic ${theme.textMuted}`}>{v.notes}</p>}
 
-                  {v.status === "scheduled" && (
+                  {v.status === "scheduled" && !isClosing && (
                     <div className="flex gap-2 mt-2 flex-wrap">
                       {adminUser?.role?.toLowerCase() !== "receptionist" && (
                         <button onClick={() => handleStatusChange(v.id, "completed")}

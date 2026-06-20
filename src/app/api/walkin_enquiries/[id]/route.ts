@@ -59,7 +59,7 @@ export async function PUT(
 
     const result = await transaction(async (client) => {
       const existingRows = await client.query(
-        "SELECT id, assigned_to FROM walkin_enquiries WHERE id = $1",
+        "SELECT id, assigned_to, status, is_lost_lead FROM walkin_enquiries WHERE id = $1",
         [leadId]
       );
 
@@ -67,11 +67,28 @@ export async function PUT(
         return null;
       }
 
-      const previousAssignee = existingRows.rows[0].assigned_to;
+      const existingLead = existingRows.rows[0];
+      const previousAssignee = existingLead.assigned_to;
       const assignmentChanged =
         typeof body.assigned_to === "string" &&
         body.assigned_to.trim().length > 0 &&
         body.assigned_to !== previousAssignee;
+
+      // 🔒 Final-state lock guard — Closed/Lost leads are read-only,
+      // except for the explicit Reopen (status away from "Closing")
+      // or Restore (is_lost_lead → false) transitions that unlock them.
+      const isCurrentlyLocked =
+        existingLead.status === "Closing" || existingLead.is_lost_lead === true;
+      const isReopenAttempt =
+        existingLead.status === "Closing" &&
+        typeof body.status === "string" &&
+        body.status !== "Closing";
+      const isRestoreAttempt =
+        existingLead.is_lost_lead === true && body.is_lost_lead === false;
+
+      if (isCurrentlyLocked && !isReopenAttempt && !isRestoreAttempt) {
+        return { locked: true };
+      }
 
       const fields: string[] = [];
       const values: any[] = [];

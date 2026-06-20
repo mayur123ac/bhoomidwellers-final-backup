@@ -23,6 +23,7 @@ import CrmUpdatesNotification from "@/components/CrmUpdatesNotification";
 import { label } from "framer-motion/client";
 
 import AttendanceTimerWidget from "@/components/AttendanceTimerWidget";
+import LoginTimerWidget from "@/components/LoginTimerWidget";
 
 type RoleType = { _id: string; name: string };
 type EmployeeType = {
@@ -829,13 +830,11 @@ export default function EmployeesPage() {
       >
         {/* Logo */}
         <div className="flex items-center px-4 py-5 mb-2 whitespace-nowrap flex-shrink-0">
-          <div
-            className="w-10 h-10 min-w-[40px] rounded-2xl flex items-center justify-center text-base font-black text-white flex-shrink-0"
-            style={{
-              background: "linear-gradient(135deg, #9E217B 0%, #c7299a 50%, #7B2FF7 100%)",
-              boxShadow: "0 4px 16px rgba(158,33,123,0.5), 0 0 0 1px rgba(199,41,154,0.3)",
-            }}
-          >B</div>
+          <img
+            src="/assets/logobrowser.png"
+            alt="Logo"
+            className="w-10 h-10 min-w-[40px] rounded-xl object-cover flex-shrink-0"
+          />
           <motion.div
             initial={{ opacity: 0, x: -8 }}
             animate={{ opacity: isSidebarHovered ? 1 : 0, x: isSidebarHovered ? 0 : -8 }}
@@ -1028,6 +1027,7 @@ export default function EmployeesPage() {
             </span>
           </h1>
           <div className="flex items-center gap-6">
+            <LoginTimerWidget isDark={isDark} />
             <button onClick={() => {
               const next = !isDark;
               setIsDark(next);

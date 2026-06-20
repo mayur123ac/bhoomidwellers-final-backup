@@ -25,7 +25,7 @@ export async function GET(req: Request) {
 
     // Store as UTC bounds covering the full IST day
     const svStart = new Date(todayStr + "T00:00:00.000+05:30");
-    const svEnd   = new Date(todayStr + "T23:59:59.999+05:30");
+    const svEnd = new Date(todayStr + "T23:59:59.999+05:30");
 
     const rows = await query(
       `SELECT sv.*, we.name as lead_name, we.assigned_to
@@ -45,11 +45,29 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const { lead_id, visit_date, created_by, role, notes } = await req.json();
-
     if (!lead_id || !visit_date || !created_by) {
       return NextResponse.json(
         { success: false, message: "Missing required fields" },
         { status: 400 }
+      );
+    }
+
+    // 🔒 Final-state lock guard
+    const leadRows = await query(
+      `SELECT status, is_lost_lead FROM public.walkin_enquiries WHERE id = $1`,
+      [lead_id]
+    );
+    const lead = leadRows[0];
+    if (!lead) {
+      return NextResponse.json(
+        { success: false, message: "Lead not found" },
+        { status: 404 }
+      );
+    }
+    if (lead.status === "Closing" || lead.is_lost_lead) {
+      return NextResponse.json(
+        { success: false, message: "Closed or Lost leads cannot be modified." },
+        { status: 403 }
       );
     }
 
