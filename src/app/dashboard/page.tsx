@@ -712,7 +712,7 @@ export default function AdminAtlasDashboard() {
       >
         <div className="flex items-center px-4 py-5 mb-2 whitespace-nowrap flex-shrink-0">
           <img
-            src="/assets/logobrowser.png"
+            src="/assets/logobrowser_trans.png"
             alt="Logo"
             className="w-10 h-10 min-w-[40px] rounded-xl object-cover flex-shrink-0"
           />
@@ -869,7 +869,8 @@ export default function AdminAtlasDashboard() {
           }}
         >
           <h1 className={`font-bold text-lg capitalize tracking-wide flex items-center gap-3 ${theme.text}`}>
-            {activeView.replace("_", " ")}
+            <img src="/assets/bhoomidwellersLogo_trans.png" alt="Bhoomi CRM" className="h-20 md:h-18 w-auto object-contain -ml-2" />
+            <span className={`text-xs sm:text-sm font-normal ${theme.textFaint}`}>— {activeView.replace("_", " ")}</span>
             <span
               className="text-xs font-semibold px-2.5 py-1 rounded-full capitalize"
               style={{

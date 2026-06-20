@@ -831,7 +831,7 @@ export default function EmployeesPage() {
         {/* Logo */}
         <div className="flex items-center px-4 py-5 mb-2 whitespace-nowrap flex-shrink-0">
           <img
-            src="/assets/logobrowser.png"
+            src="/assets/logobrowser_trans.png"
             alt="Logo"
             className="w-10 h-10 min-w-[40px] rounded-xl object-cover flex-shrink-0"
           />
@@ -1013,9 +1013,10 @@ export default function EmployeesPage() {
           }}
         >
           <h1 className={`font-bold text-lg tracking-wide flex items-center gap-3 ${t.headerTitle}`}>
-            {activeSection === "callers"
+            <img src="/assets/bhoomidwellersLogo_trans.png" alt="Bhoomi CRM" className="h-20 md:h-18 w-auto object-contain -ml-2" />
+            <span className={`text-xs sm:text-sm font-normal ${t.textFaint}`}>— {activeSection === "callers"
               ? callerSubView === "control" ? "Caller Control Mode" : "Caller Panel"
-              : activeSection === "ai" ? "Bhoomi AI" : "Add Employee"}
+              : activeSection === "ai" ? "Bhoomi AI" : "Add Employee"}</span>
             <span
               className="text-xs font-semibold px-2.5 py-0.5 rounded-full"
               style={callerSubView === "control"

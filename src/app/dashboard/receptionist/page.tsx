@@ -1366,9 +1366,9 @@ export default function ReceptionistDashboard() {
       >
         <div className="flex items-center px-3 mb-6 mt-1 overflow-hidden">
           <img
-            src="/assets/logobrowser.png"
+            src="/assets/logobrowser_trans.png"
             alt="Logo"
-            className={`w-10 h-10 rounded-xl object-cover flex-shrink-0 cursor-pointer transition-all duration-300 ${t.logoBg}`}
+            className={`w-10 h-10 rounded-xl object-cover flex-shrink-0 cursor-pointer transition-all duration-300`}
           />
           <div
             className="ml-3 overflow-hidden transition-all duration-300"
@@ -1543,7 +1543,7 @@ export default function ReceptionistDashboard() {
 
         {/* HEADER */}
         <header className={`h-16 border-b flex items-center justify-between px-6 flex-shrink-0 z-30 ${t.header}`} style={t.headerGlass}>
-          <h1 className={`font-bold flex items-center text-sm md:text-base tracking-wide ${t.text}`}>BhoomiDwellersCRM</h1>
+          <img src="/assets/bhoomidwellersLogo_trans.png" alt="Bhoomi CRM" className="h-20 md:h-18 w-auto object-contain" />
           <div className="flex items-center space-x-4 relative" ref={topbarRef}>
             <LoginTimerWidget isDark={isDark} />
             <button onClick={() => setIsDark(!isDark)} aria-label="Toggle theme"

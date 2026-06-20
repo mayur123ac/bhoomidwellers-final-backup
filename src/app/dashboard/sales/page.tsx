@@ -449,9 +449,9 @@ export default function SalesDashboard() {
         />
         <div className="flex items-center px-3 mb-6 mt-1 overflow-hidden">
           <img
-            src="/assets/logobrowser.png"
+            src="/assets/logobrowser_trans.png"
             alt="Logo"
-            className={`w-10 h-10 rounded-xl object-cover flex-shrink-0 cursor-pointer transition-all duration-300 ${t.logoBg}`}
+            className={`w-10 h-10 rounded-xl object-cover flex-shrink-0 cursor-pointer transition-all duration-300`}
           />
           <div
             className="ml-3 overflow-hidden transition-all duration-300"
@@ -642,7 +642,7 @@ export default function SalesDashboard() {
           style={t.headerGlass}
         >
           <h1 className={`font-semibold flex items-center flex-wrap gap-1 sm:gap-2 text-sm sm:text-base lg:text-lg tracking-wide ${t.text}`}>
-            <span className="truncate max-w-[140px] sm:max-w-none">Bhoomi Dwellers</span>
+            <img src="/assets/bhoomidwellersLogo_trans.png" alt="Bhoomi CRM" className="h-20 md:h-18 w-auto object-contain" />
             <span className={`text-xs sm:text-sm font-normal ${t.textFaint}`}>— Sales Manager</span>
           </h1>
 
