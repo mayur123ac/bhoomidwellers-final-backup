@@ -341,6 +341,7 @@ export default function ReceptionistDashboard() {
   // ── Enquiry (new-entry) modal ──
   const [isEnquiryModalOpen, setIsEnquiryModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
   const getTodayString = () => new Date().toISOString().split("T")[0];
   const [enquiryForm, setEnquiryForm] = useState({
     fullName: "", mobile: "", altMobile: "", email: "", address: "",
@@ -3721,7 +3722,7 @@ export default function ReceptionistDashboard() {
                 className={`px-6 py-2.5 rounded-lg font-bold cursor-pointer transition-colors ${t.textMuted} ${isDark ? "hover:bg-red-500/10 hover:text-red-500" : "hover:bg-[#9E217B]/10 hover:text-[#9E217B]"}`}>Cancel</button>
               <button form="enquiryForm" type="submit" disabled={isSubmitting}
                 className={`px-8 py-2.5 rounded-lg font-bold transition-colors ${isSubmitting ? "opacity-50 cursor-not-allowed" : "cursor-pointer"} ${t.btnPrimary}`}>
-                {isSubmitting ? "Submitting..." : "Submit"}
+                {isSubmitting ? "⏳ Submitting..." : "Submit"}
               </button>
             </div>
           </div>

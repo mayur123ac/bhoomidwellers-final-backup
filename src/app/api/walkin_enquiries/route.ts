@@ -51,6 +51,20 @@ export async function POST(req: Request) {
       );
     }
 
+    // Server-side duplicate prevention (idempotency check)
+    // Reject if the same phone number was submitted within the last 15 seconds
+    const duplicateCheck = await query(
+      `SELECT id FROM walkin_enquiries WHERE phone = $1 AND created_at >= NOW() - INTERVAL '15 seconds'`,
+      [phone]
+    );
+
+    if (duplicateCheck.length > 0) {
+      return NextResponse.json(
+        { success: false, message: "Enquiry has already been submitted." },
+        { status: 409 }
+      );
+    }
+
     const rows = await query(
       `INSERT INTO walkin_enquiries (
         name, phone, email, address, occupation, organization,
