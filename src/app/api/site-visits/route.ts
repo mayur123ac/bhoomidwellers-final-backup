@@ -71,13 +71,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // ✅ Compare against current UTC time — visit_date should come in as ISO string
-    if (new Date(visit_date) < new Date()) {
-      return NextResponse.json(
-        { success: false, message: "Cannot schedule a visit in the past" },
-        { status: 400 }
-      );
-    }
+    // Note: We allow scheduling in the past so admins can log visits that already occurred.
 
     // Prevent duplicate on same datetime
     const existing = await query(
@@ -99,7 +93,29 @@ export async function POST(req: Request) {
       [lead_id, visit_date, created_by, role || "Sales Manager", notes || ""]
     );
 
-    return NextResponse.json({ success: true, data: result[0] });
+    const newVisit = result[0];
+
+    // Log the scheduling as a follow-up
+    await query(
+      `INSERT INTO follow_ups (lead_id, message, created_by_name) VALUES ($1, $2, $3)`,
+      [lead_id, `Site Visit Scheduled for ${new Date(visit_date).toLocaleString("en-IN")}`, created_by]
+    );
+
+    return NextResponse.json({ success: true, data: newVisit });
+  } catch (err: any) {
+    return NextResponse.json({ success: false, message: err.message }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: Request) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get("id");
+    if (!id) {
+      return NextResponse.json({ success: false, message: "Missing id" }, { status: 400 });
+    }
+    await query(`DELETE FROM public.site_visits WHERE id = $1`, [id]);
+    return NextResponse.json({ success: true });
   } catch (err: any) {
     return NextResponse.json({ success: false, message: err.message }, { status: 500 });
   }
@@ -125,12 +141,6 @@ export async function PATCH(req: Request) {
       values.push(notes);
     }
     if (visit_date !== undefined) {
-      if (new Date(visit_date) < new Date()) {
-        return NextResponse.json(
-          { success: false, message: "Cannot reschedule to a past date" },
-          { status: 400 }
-        );
-      }
       fields.push(`visit_date = $${idx++}`);
       values.push(visit_date);
     }
@@ -145,7 +155,31 @@ export async function PATCH(req: Request) {
       values
     );
 
-    return NextResponse.json({ success: true, data: result[0] });
+    const updatedVisit = result[0];
+
+    if (!updatedVisit) {
+      return NextResponse.json(
+        { success: false, message: "Site visit not found. It may be a legacy record; please reschedule it to create a proper entry." },
+        { status: 404 }
+      );
+    }
+
+    if (status && ["completed", "cancelled", "rescheduled"].includes(status)) {
+      const message = `Site Visit marked as ${status.charAt(0).toUpperCase() + status.slice(1)}`;
+      await query(
+        `INSERT INTO follow_ups (lead_id, message, created_by_name) VALUES ($1, $2, $3)`,
+        [updatedVisit.lead_id, message, "Admin"]
+      );
+      
+      if (status === "completed") {
+        await query(
+          `UPDATE public.walkin_enquiries SET status = 'Site Visit Done' WHERE id = $1 AND status != 'Closing' AND is_lost_lead = false`,
+          [updatedVisit.lead_id]
+        );
+      }
+    }
+
+    return NextResponse.json({ success: true, data: updatedVisit });
   } catch (err: any) {
     return NextResponse.json({ success: false, message: err.message }, { status: 500 });
   }

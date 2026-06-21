@@ -789,14 +789,15 @@ export default function EmployeesPage() {
 
   const menuItems = [
     { id: "dashboard", icon: FaThLarge, label: "Overview", link: "/dashboard", section: null },
-    { id: "receptionist", icon: FaClipboardList, label: "Receptionist", link: "/dashboard", section: null },
-    { id: "sales", icon: FaUsers, label: "Sales Managers", link: "/dashboard", section: null },
-    { id: "site_head", icon: FaUniversity, label: "Site Heads", link: "/dashboard", section: null },
+    { id: "receptionist", icon: FaClipboardList, label: "Receptionist", link: "/dashboard?tab=receptionist", section: null },
+    { id: "sales", icon: FaUsers, label: "Sales Managers", link: "/dashboard?tab=sales", section: null },
+    { id: "site_head", icon: FaUniversity, label: "Site Heads", link: "/dashboard?tab=site_head", section: null },
+    { id: "site_visit_overview", icon: FaCalendarAlt, label: "Site Visit Overview", link: "/dashboard?tab=site_visit_overview", section: null },
     // ADD THESE THREE — they navigate back to dashboard with the right tab
-    { id: "attendance", icon: FaUserClock, label: "My Attendance", link: "/dashboard", section: null },
-    { id: "monitoring", icon: FaChartPie, label: "Daily Monitor", link: "/dashboard", section: null },
-    { id: "live_activity", icon: FaSignal, label: "Attendance Tracker", link: "/dashboard", section: null },
-    { id: "geo", icon: FaMapMarkerAlt, label: "Geo Analytics", link: "/dashboard", section: null },
+    { id: "attendance", icon: FaUserClock, label: "My Attendance", link: "/dashboard?tab=attendance", section: null },
+    { id: "monitoring", icon: FaChartPie, label: "Daily Monitor", link: "/dashboard?tab=monitoring", section: null },
+    { id: "live_activity", icon: FaSignal, label: "Attendance Tracker", link: "/dashboard?tab=live_activity", section: null },
+    { id: "geo", icon: FaMapMarkerAlt, label: "Geo Analytics", link: "/dashboard?tab=geo", section: null },
     { id: "callers", icon: FaPhoneAlt, label: "Caller Panel", link: "/dashboard/employees", section: "callers" as const },
     { id: "employees", icon: FaIdCard, label: "Add Employee", link: "/dashboard/employees", section: "employees" as const },
     { id: "ai", icon: FaWandMagicSparkles, label: "Bhoomi AI", link: "/dashboard/employees", section: "ai" as const },

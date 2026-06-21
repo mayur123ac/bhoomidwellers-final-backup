@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { clearCrmSession, getStoredCrmUser, installLoggedOutBackGuard } from "@/lib/authSession";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -32,6 +32,7 @@ import dynamic from "next/dynamic";
 import AttendanceView from "@/components/AttendanceView";
 const GeoAnalyticsView = dynamic(() => import("./GeoAnalyticsView"), { ssr: false });
 const LiveActivityView = dynamic(() => import("./LiveActivityView"), { ssr: false });
+const SiteVisitOverview = dynamic(() => import("./SiteVisitOverview"), { ssr: false });
 
 // ─── SUN/MOON ICONS ───────────────────────────────────────────────────────────
 const SunIcon = () => (
@@ -389,7 +390,16 @@ const maskPhone = (phone: any, userRole: string = "admin", isOwner: boolean = tr
 // ============================================================================
 export default function AdminAtlasDashboard() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [activeView, setActiveView] = useState("dashboard");
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab) {
+      setActiveView(tab);
+    }
+  }, [searchParams]);
+
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
   const [dismissedNotifIds, setDismissedNotifIds] = useState<Set<string>>(new Set());
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -646,6 +656,7 @@ export default function AdminAtlasDashboard() {
     { id: "receptionist", icon: FaClipboardList, label: "Receptionist" },
     { id: "sales", icon: FaUsers, label: "Sales Managers" },
     { id: "site_head", icon: FaUniversity, label: "Site Heads" },
+    { id: "site_visit_overview", icon: FaCalendarAlt, label: "Site Visit Overview" },
     { id: "attendance", icon: FaUserClock, label: "My Attendance" },
     { id: "monitoring", icon: FaChartPie, label: "Daily Monitor" },
     { id: "live_activity", icon: FaSignal, label: "Attendance Tracker" },
@@ -1041,6 +1052,7 @@ export default function AdminAtlasDashboard() {
           }} />}
           {activeView === "sales" && <AdminSalesView managers={managers} allLeads={allLeads} followUps={followUps} isLoading={isLoading} adminUser={user} refetch={refetch} theme={theme} isDark={isDark} />}
           {activeView === "site_head" && <AdminSiteHeadView siteHeads={siteHeads} allLeads={allLeads} followUps={followUps} isLoading={isLoading} adminUser={user} refetch={refetch} theme={theme} isDark={isDark} />}
+          {activeView === "site_visit_overview" && <SiteVisitOverview managers={managers} receptionists={receptionists} allLeads={allLeads} siteHeads={siteHeads} adminUser={user} theme={theme} isDark={isDark} />}
           {activeView === "receptionist" && (
             <ReceptionistView
               receptionists={receptionists}
