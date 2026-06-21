@@ -1,7 +1,7 @@
 //dashboard/page.tsx
 "use client";
 
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { clearCrmSession, getStoredCrmUser, installLoggedOutBackGuard } from "@/lib/authSession";
 import { motion, AnimatePresence } from "framer-motion";
@@ -388,7 +388,7 @@ const maskPhone = (phone: any, userRole: string = "admin", isOwner: boolean = tr
 // ============================================================================
 // MAIN LAYOUT SHELL
 // ============================================================================
-export default function AdminAtlasDashboard() {
+function AdminAtlasDashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [activeView, setActiveView] = useState("dashboard");
@@ -7597,5 +7597,13 @@ function FaEye({ className }: { className?: string }) {
     <svg className={className} viewBox="0 0 576 512" fill="currentColor" width="1em" height="1em">
       <path d="M572.52 241.4C518.29 135.59 410.93 64 288 64S57.68 135.64 3.48 241.41a32.35 32.35 0 0 0 0 29.19C57.71 376.41 165.07 448 288 448s230.32-71.64 284.52-177.41a32.35 32.35 0 0 0 0-29.19zM288 400a144 144 0 1 1 144-144 143.93 143.93 0 0 1-144 144zm0-240a95.31 95.31 0 0 0-25.31 3.79 47.85 47.85 0 0 1-66.9 66.9A95.78 95.78 0 1 0 288 160z" />
     </svg>
+  );
+}
+
+export default function AdminAtlasDashboard() {
+  return (
+    <Suspense fallback={<div>Loading Dashboard...</div>}>
+      <AdminAtlasDashboardContent />
+    </Suspense>
   );
 }
