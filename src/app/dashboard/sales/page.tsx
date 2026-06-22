@@ -16,7 +16,7 @@ import {
   Lightbulb, ClipboardList, Wifi, CheckCircle, XCircle, HelpCircle,
   Clock, MapPin, Zap, TrendingUp, Home, Building2, Globe, Star,
   Share2, Image, Banknote, Users, BadgeCheck, CalendarCheck, Ghost,
-  ArrowRight, Target, BrainCircuit, Flame
+  ArrowRight, Target, BrainCircuit, Flame, ChevronLeft, ChevronRight, ChevronDown
 } from "lucide-react";
 
 import {
@@ -1127,6 +1127,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
   const [columnFilter, setColumnFilter] = useState<string>("all");
   const [detailTab, setDetailTab] = useState<"personal" | "loan">("personal");
   const [isClosingModalOpen, setIsClosingModalOpen] = useState(false);
+  const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [showSalesForm, setShowSalesForm] = useState(false);
   const [salesForm, setSalesForm] = useState({ propertyType: "", location: "", budget: "", useType: "", purchaseDate: "", loanPlanned: "", siteVisit: "", leadStatus: "" });
   const inputRef = useRef<HTMLInputElement>(null);
@@ -1155,6 +1156,8 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
   const cardsSentinelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { setSubView(initialView === "overview" ? "overview" : initialView === "detail" && selectedLead ? "detail" : initialView === "closed-leads" ? "closed-leads" : "cards"); }, [initialView]);
+  // Collapse the AI Assistant panel whenever a different lead is opened
+  useEffect(() => { setAiPanelOpen(false); }, [selectedLead?.id]);
   useEffect(() => {
     if (selectedLead) {
       const u = allLeads.find((l: any) => String(l.id) === String(selectedLead.id));
@@ -2004,10 +2007,11 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
             </div>
 
             {/* TWO-COLUMN BODY */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 lg:gap-3 items-start">
+            {/* THREE-PART BODY: Lead Info · Follow-ups · AI Assistant (collapsible) */}
+            <div className="flex flex-col lg:flex-row gap-2 lg:gap-3 items-start lg:items-stretch">
 
               {/* LEFT PANEL */}
-              <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-3 w-full lg:w-0 lg:flex-1 lg:min-w-0">
                 {showSalesForm ? (
                   <div className={`rounded-xl border p-3 sm:p-3 shadow-xl overflow-y-auto custom-scrollbar flex flex-col max-h-[85vh] lg:max-h-[calc(100vh-180px)] ${t.modalCard}`} style={t.modalGlass}>
                     <div className={`flex justify-between items-center mb-4 border-b pb-3 ${t.tableBorder}`}>
@@ -2264,7 +2268,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
               </div>
 
               {/* RIGHT PANEL: FOLLOW-UPS */}
-              <div className={`flex flex-col rounded-xl overflow-hidden shadow-2xl border h-[540px] lg:h-[calc(100vh-185px)] lg:sticky lg:top-4 ${t.chatPanel}`} style={t.chatPanelGl}>
+              <div className={`flex flex-col rounded-xl overflow-hidden shadow-2xl border h-[540px] lg:h-[calc(100vh-185px)] lg:sticky lg:top-4 w-full lg:w-0 lg:flex-1 ${t.chatPanel}`} style={t.chatPanelGl}>
                 <div className={`flex-1 p-3 sm:p-6 overflow-y-auto custom-scrollbar flex flex-col gap-2 sm:gap-3 ${t.chatArea}`}>
                   {/* System message */}
                   <div className="flex justify-start">
@@ -2328,7 +2332,17 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                 )}
               </div>
 
-            </div>{/* end grid */}
+              {/* RIGHT PANEL: AI ASSISTANT (collapsible, lead-scoped) */}
+              <LeadAiAssistantPanel
+                lead={selectedLead}
+                followUps={currentLeadFollowUps}
+                isDark={isDark}
+                t={t}
+                isOpen={aiPanelOpen}
+                onToggle={() => setAiPanelOpen(o => !o)}
+              />
+
+            </div>{/* end three-part body */}
           </div>
         )}
         {/* ── CALL MODAL ── */}
@@ -2391,6 +2405,221 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
         })()}
       </main>
     </div>
+  );
+}
+
+// ============================================================================
+// LEAD AI ASSISTANT PANEL — collapsible, lead-scoped AI helper
+// ============================================================================
+function LeadAiAssistantPanel({
+  lead, followUps, isDark, t, isOpen, onToggle
+}: {
+  lead: any; followUps: any[]; isDark: boolean;
+  t: ReturnType<typeof buildTheme>; isOpen: boolean; onToggle: () => void;
+}) {
+  const [messages, setMessages] = useState<{ sender: string; text: string; ts?: string; typing?: boolean }[]>([]);
+  const [input, setInput] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Fresh chat thread whenever the selected lead changes
+  useEffect(() => { setMessages([]); setInput(""); }, [lead?.id]);
+  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, isLoading]);
+
+  const getTime = () => new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+
+  const sendMessage = async (text: string) => {
+    if (!text.trim() || isLoading || !lead) return;
+    setInput("");
+    setMessages(prev => [...prev, { sender: "user", text, ts: getTime() }]);
+    setIsLoading(true);
+    setMessages(prev => [...prev, { sender: "ai", text: "", ts: getTime(), typing: true }]);
+    try {
+      const res = await fetch("/api/ai-assistant/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // Scoped to this single lead — not the manager's whole portfolio
+        body: JSON.stringify({ query: text, leads: [lead], followUps }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setMessages(prev => prev.map((m, i) => i === prev.length - 1 && m.typing ? { sender: "ai", text: data.response, ts: getTime(), typing: false } : m));
+    } catch (err) {
+      setMessages(prev => prev.map((m, i) => i === prev.length - 1 && m.typing ? { sender: "ai", text: `Something went wrong: ${err instanceof Error ? err.message : String(err)}`, ts: getTime(), typing: false } : m));
+    } finally {
+      setIsLoading(false);
+      inputRef.current?.focus();
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); sendMessage(input); };
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(input); }
+  };
+
+  const quickActions = lead ? [
+    { label: "Summarize this lead", prompt: `Summarize lead #${lead.id} — ${lead.name}, including status, budget and interest level.` },
+    { label: "Suggest next follow-up", prompt: `What should be my next follow-up step for ${lead.name}?` },
+    { label: "Draft a WhatsApp reply", prompt: `Draft a short, friendly WhatsApp message for ${lead.name} based on their current status.` },
+    { label: "What to ask next call?", prompt: `What should I ask ${lead.name} on the next call?` },
+    { label: "Loan check-in message", prompt: `Draft a short loan status check-in message for ${lead.name}.` },
+  ] : [];
+
+  if (!isOpen) {
+    return (
+      <>
+        {/* Mobile — collapsed full-width bar */}
+        <button
+          type="button"
+          onClick={onToggle}
+          className={`flex lg:hidden items-center justify-between gap-2 w-full rounded-xl border px-3 py-2.5 shadow-sm cursor-pointer transition-colors ${t.chatPanel}`}
+          style={t.chatPanelGl}
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${isDark ? "bg-gradient-to-br from-purple-600 to-blue-600" : "bg-gradient-to-br from-[#00AEEF] to-[#9E217B]"}`}>
+              <Bot className="text-white w-3.5 h-3.5" />
+            </div>
+            <span className={`text-xs font-bold ${t.text}`}>AI Assistant</span>
+            <span className={`text-[10px] truncate ${t.textFaint}`}>· tap to ask about {lead?.name || "this lead"}</span>
+          </div>
+          <ChevronDown className={`w-4 h-4 flex-shrink-0 ${t.textFaint}`} />
+        </button>
+
+        {/* Desktop — collapsed vertical strip */}
+        <button
+          type="button"
+          onClick={onToggle}
+          title="Open AI Assistant"
+          className={`hidden lg:flex flex-col items-center justify-between gap-3 w-12 flex-shrink-0 rounded-xl border shadow-sm cursor-pointer transition-colors h-[calc(100vh-185px)] sticky top-4 py-4 ${t.chatPanel} hover:opacity-90`}
+          style={t.chatPanelGl}
+        >
+          <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${isDark ? "bg-gradient-to-br from-purple-600 to-blue-600" : "bg-gradient-to-br from-[#00AEEF] to-[#9E217B]"}`}>
+            <Bot className="text-white w-4 h-4" />
+          </div>
+          <span
+            className={`text-[11px] font-bold uppercase tracking-wider ${t.accentText}`}
+            style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
+          >
+            AI Assistant
+          </span>
+          <ChevronLeft className={`w-3.5 h-3.5 flex-shrink-0 ${t.textFaint}`} />
+        </button>
+      </>
+    );
+  }
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.97 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+        className={`flex flex-col rounded-xl overflow-hidden shadow-2xl border w-full lg:w-0 lg:flex-1 flex-shrink-0 h-[540px]  lg:h-[calc(100vh-185px)] lg:sticky lg:top-4 ${t.chatPanel}`}
+        style={t.chatPanelGl}
+      >
+        {/* Header */}
+        <div className={`flex items-center justify-between gap-2 px-3 py-3 border-b flex-shrink-0 ${t.tableBorder} ${t.header}`} style={t.headerGlass}>
+          <div className="flex items-center gap-2 min-w-0">
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${isDark ? "bg-gradient-to-br from-purple-600 to-blue-600" : "bg-gradient-to-br from-[#00AEEF] to-[#9E217B]"}`}>
+              <Bot className="text-white w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <h3 className={`font-bold text-sm leading-tight ${t.text}`}>AI Assistant</h3>
+              <p className={`text-[10px] truncate ${t.textFaint}`}>
+                {lead ? `Helping with ${lead.name} — #${lead.id}` : "No lead selected"}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onToggle}
+            title="Collapse"
+            className={`w-7 h-7 flex-shrink-0 rounded-lg flex items-center justify-center cursor-pointer transition-colors ${t.textMuted} ${isDark ? "hover:bg-[#222]" : "hover:bg-[#F1F5F9]"}`}
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Quick action chips */}
+        <div className={`flex gap-1.5 px-3 py-2 overflow-x-auto flex-shrink-0 border-b custom-scrollbar ${t.tableBorder}`}>
+          {quickActions.map(qa => (
+            <button
+              key={qa.label}
+              type="button"
+              onClick={() => sendMessage(qa.prompt)}
+              disabled={isLoading}
+              className={`flex-shrink-0 text-[10px] font-semibold px-2.5 py-1.5 rounded-full border whitespace-nowrap transition-all cursor-pointer disabled:opacity-40 ${t.textFaint} ${t.tableBorder} ${isDark ? "bg-[#111] hover:bg-[#1a1a1a] hover:text-white" : "bg-white hover:bg-[#F8FAFC] hover:text-[#1A1A1A]"}`}
+            >
+              {qa.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Chat thread */}
+        <div className={`flex-1 p-3 overflow-y-auto custom-scrollbar flex flex-col gap-2 ${t.chatArea}`}>
+          {messages.length === 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-center gap-2 py-6">
+              <Bot className={`w-8 h-8 ${t.textFaint}`} />
+              <p className={`text-xs max-w-[220px] ${t.textFaint}`}>
+                Ask me anything about {lead?.name || "this lead"} — I can draft messages, suggest next steps, or summarize their status.
+              </p>
+            </div>
+          ) : (
+            messages.map((msg, idx) => (
+              <div key={idx} className={`flex gap-2 ${msg.sender === "user" ? "flex-row-reverse" : "flex-row"}`}>
+                <div className="flex-shrink-0 mt-0.5">
+                  {msg.sender === "ai"
+                    ? <div className={`w-6 h-6 rounded-lg flex items-center justify-center ${isDark ? "bg-gradient-to-br from-purple-600 to-blue-600" : "bg-gradient-to-br from-[#00AEEF] to-[#9E217B]"}`}><Bot className="text-white w-3 h-3" /></div>
+                    : <div className={`w-6 h-6 rounded-lg border flex items-center justify-center ${t.settingsBg} ${t.tableBorder}`}><User className={`w-3 h-3 ${t.textMuted}`} /></div>
+                  }
+                </div>
+                <div className={`flex flex-col gap-1 ${msg.sender === "user" ? "items-end max-w-[80%]" : "items-start max-w-[85%]"}`}>
+                  <div className={`px-2.5 py-2 rounded-lg text-[11px] leading-relaxed ${msg.sender === "user" ? t.chatBubbleUser + " rounded-tr-sm" : t.chatBubbleAi + " rounded-tl-sm"}`}>
+                    {msg.typing ? (
+                      <div className="flex items-center gap-1.5 py-0.5">
+                        <div className="flex items-end gap-[2px] h-3">
+                          {[0, 100, 200, 100, 0].map((delay, i) => (
+                            <div key={i} className={`w-[2px] rounded-full animate-pulse ${isDark ? "bg-purple-400" : "bg-[#00AEEF]"}`} style={{ height: `${[5, 8, 11, 8, 5][i]}px`, animationDelay: `${delay}ms`, animationDuration: "0.8s" }} />
+                          ))}
+                        </div>
+                        <span className={`text-[9px] italic ${t.textFaint}`}>thinking...</span>
+                      </div>
+                    ) : <p className="whitespace-pre-wrap break-words">{msg.text}</p>}
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+          <div ref={chatEndRef} />
+        </div>
+
+        {/* Input */}
+        <form onSubmit={handleSubmit} className={`p-2 border-t flex gap-1.5 items-end flex-shrink-0 ${t.header} ${t.tableBorder}`} style={t.headerGlass}>
+          <textarea
+            ref={inputRef}
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Ask about this lead..."
+            disabled={isLoading || !lead}
+            rows={1}
+            className={`flex-1 rounded-lg px-2.5 py-2 text-[11px] outline-none resize-none transition-colors border ${t.inputBg} ${t.text} ${t.inputFocus} disabled:opacity-50`}
+            style={{ maxHeight: "80px" }}
+          />
+          <button
+            type="submit"
+            disabled={isLoading || !input.trim() || !lead}
+            className={`w-8 h-8 flex-shrink-0 rounded-lg flex items-center justify-center transition-all cursor-pointer ${input.trim() && !isLoading ? (isDark ? "bg-purple-600 hover:bg-purple-500 text-white" : "bg-[#00AEEF] hover:bg-[#0099d4] text-white") : `${t.settingsBg} ${t.textFaint} cursor-not-allowed`}`}
+          >
+            <Send className="w-3.5 h-3.5" />
+          </button>
+        </form>
+        <p className={`text-center text-[9px] px-3 pb-2 leading-relaxed ${t.textFaint}`}>
+          AI may make mistakes. Always verify lead info independently.
+        </p>
+      </motion.div>
+    </AnimatePresence>
   );
 }
 

@@ -18,7 +18,16 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
   const [now, setNow] = useState(Date.now());
   const [expandedRows, setExpandedRows] = useState<Record<number, boolean>>({});
   const [historyCache, setHistoryCache] = useState<Record<string, any[]>>({});
-
+  const [visibleColumns, setVisibleColumns] = useState({
+    activeLead: true,
+    loginDate: true,
+    loginTime: true,
+    punctuality: true,
+    logoutTime: true,
+    liveTimer: true,
+    workingHours: true,
+    risk: true,
+  });
   // NEW STATES
   const [selectedDate, setSelectedDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
   const [showHoursConfig, setShowHoursConfig] = useState(false);
@@ -572,6 +581,33 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
               )}
             </div>
           </div>
+          <div className={`flex items-center gap-2 flex-wrap mb-3 px-3 py-2.5 rounded-xl border ${theme.tableWrap}`}>
+            <span className={`text-[10px] font-black uppercase tracking-wider mr-1 ${theme.textFaint}`}>Columns:</span>
+            {([
+              { key: "activeLead", label: "Active Lead" },
+              { key: "loginDate", label: "Login Date" },
+              { key: "loginTime", label: "Login Time" },
+              { key: "punctuality", label: "Punctuality" },
+              { key: "logoutTime", label: "Logout Time" },
+              { key: "liveTimer", label: "Live Timer" },
+              { key: "workingHours", label: "Working Hours" },
+              { key: "risk", label: "Risk" },
+            ] as const).map(col => (
+              <button
+                key={col.key}
+                onClick={() => setVisibleColumns(prev => ({ ...prev, [col.key]: !prev[col.key] }))}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer ${visibleColumns[col.key]
+                  ? "bg-[#9E217B]/10 border-[#9E217B]/40 text-[#9E217B]"
+                  : isDark
+                    ? "bg-[#1a1a1a] border-[#333] text-gray-500"
+                    : "bg-gray-100 border-gray-200 text-gray-400"
+                  }`}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${visibleColumns[col.key] ? "bg-[#9E217B]" : "bg-gray-500"}`} />
+                {col.label}
+              </button>
+            ))}
+          </div>
 
           <div className="flex gap-4 h-[calc(100vh-200px)] overflow-hidden">
             {/* Left Pane - Dense Tracking Grid */}
@@ -583,19 +619,26 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
                       <th className="px-3 py-2 font-bold">Status</th>
                       <th className="px-3 py-2 font-bold">Employee</th>
 
-                      <th className="px-3 py-2 font-bold">Active Lead</th>
-                      {/* <th className="px-3 py-2 font-bold">Current Action</th> */}
-                      <th className="px-3 py-2 font-bold">Login Date</th>
-                      <th className="px-3 py-2 font-bold">Login Time</th>
-                      <th className="px-3 py-2 font-bold">Punctuality</th>
-                      <th className="px-3 py-2 font-bold">Logout Time</th>
-                      <th className="px-3 py-2 font-bold">Live Timer</th>
-                      <th className="px-3 py-2 font-bold">Working Hours</th>
-                      <th className="px-3 py-2 font-bold">Risk</th>
+                      {/* Replace each optional th like this: */}
+                      {visibleColumns.activeLead && <th className="px-3 py-2 font-bold">Active Lead</th>}
+                      {visibleColumns.loginDate && <th className="px-3 py-2 font-bold">Login Date</th>}
+                      {visibleColumns.loginTime && <th className="px-3 py-2 font-bold">Login Time</th>}
+                      {visibleColumns.punctuality && <th className="px-3 py-2 font-bold">Punctuality</th>}
+                      {visibleColumns.logoutTime && <th className="px-3 py-2 font-bold">Logout Time</th>}
+                      {visibleColumns.liveTimer && <th className="px-3 py-2 font-bold">Live Timer</th>}
+                      {visibleColumns.workingHours && <th className="px-3 py-2 font-bold">Working Hours</th>}
+                      {visibleColumns.risk && <th className="px-3 py-2 font-bold">Risk</th>}
                       <th className="px-3 py-2 font-bold">Attendance</th>
                     </tr>
+
                   </thead>
+
+                  {/* COLUMN TOGGLE CONTROLS */}
+
                   <tbody>
+                    <tr>
+
+                    </tr>
                     {isFutureDate ? (
                       <tr>
                         <td colSpan={12} className="py-16 text-center">
@@ -628,36 +671,53 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
                             </td>
                             <td className={`px-3 py-2.5 border-b font-bold ${theme.text} ${theme.tableBorder}`}>{s.name}</td>
 
-                            <td className={`px-3 py-2.5 border-b font-medium text-[#9E217B] ${theme.tableBorder}`}>{s.active_lead_id ? `${s.active_lead_name || 'Lead'} (${s.active_lead_id})` : '-'}</td>
-                            {/* <td className={`px-3 py-2.5 border-b ${theme.textMuted} ${theme.tableBorder}`}>{s.current_action || '-'}</td> */}
-                            <td className={`px-3 py-2.5 border-b ${theme.textMuted} ${theme.tableBorder}`}>{s.session_start ? new Date(s.session_start).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }) : '-'}</td>
-                            <td className={`px-3 py-2.5 border-b ${theme.textMuted} ${theme.tableBorder}`}>{s.session_start ? new Date(s.session_start).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '-'}</td>
-                            <td className={`px-3 py-2.5 border-b ${theme.tableBorder}`}>
-                              {s.session_start ? getPunctualityBadge(s.session_start) : <span className={theme.textFaint}>-</span>}
-                            </td>
-                            <td className={`px-3 py-2.5 border-b font-bold ${s.session_is_active ? 'text-green-500' : theme.textMuted} ${theme.tableBorder}`}>
-                              {s.session_start ? (s.session_is_active ? "User Active" : (s.session_end ? new Date(s.session_end).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : "N/A")) : "-"}
-                            </td>
-                            <td className={`px-3 py-2.5 border-b ${theme.tableBorder}`}>
-                              <button
-                                className="w-full text-left"
-                                onClick={(e) => toggleAccordion(e, s)}
-                                disabled={!s.session_start}
-                              >
-                                <div className={`flex items-center gap-1.5 font-bold ${s.session_start ? 'text-[#00AEEF]' : theme.textFaint}`}>
-                                  {s.session_start ? (s.status === 'OFFLINE' ? "Frozen" : getLiveTimer(s.session_start, s.session_end, s.session_is_active)) : "-"}
-                                  {s.session_start && <span className={`text-[8px] transition-transform ${expandedRows[s.user_id] ? 'rotate-180' : ''}`}>▼</span>}
-                                </div>
-                              </button>
-                            </td>
-                            <td className={`px-3 py-2.5 border-b font-mono font-bold ${theme.text} ${theme.tableBorder}`}>
-                              {s.session_start ? getWorkingHours(s.session_start, s.session_end, s.session_is_active) : "-"}
-                            </td>
-                            <td className={`px-3 py-2.5 border-b ${theme.tableBorder}`}>
-                              {s.idle_duration_seconds > 1800 ? (
-                                <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-red-500/10 text-red-500 border border-red-500/20">⚠ Long Idle</span>
-                              ) : <span className={theme.textFaint}>-</span>}
-                            </td>
+                            {visibleColumns.activeLead && (
+                              <td className={`px-3 py-2.5 border-b font-medium text-[#9E217B] ${theme.tableBorder}`}>
+                                {s.active_lead_id ? `${s.active_lead_name || 'Lead'} (${s.active_lead_id})` : '-'}
+                              </td>
+                            )}
+                            {visibleColumns.loginDate && (
+                              <td className={`px-3 py-2.5 border-b ${theme.textMuted} ${theme.tableBorder}`}>
+                                {s.session_start ? new Date(s.session_start).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }) : '-'}
+                              </td>
+                            )}
+                            {visibleColumns.loginTime && (
+                              <td className={`px-3 py-2.5 border-b ${theme.textMuted} ${theme.tableBorder}`}>
+                                {s.session_start ? new Date(s.session_start).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '-'}
+                              </td>
+                            )}
+                            {visibleColumns.punctuality && (
+                              <td className={`px-3 py-2.5 border-b ${theme.tableBorder}`}>
+                                {s.session_start ? getPunctualityBadge(s.session_start) : <span className={theme.textFaint}>-</span>}
+                              </td>
+                            )}
+                            {visibleColumns.logoutTime && (
+                              <td className={`px-3 py-2.5 border-b font-bold ${s.session_is_active ? 'text-green-500' : theme.textMuted} ${theme.tableBorder}`}>
+                                {s.session_start ? (s.session_is_active ? "User Active" : (s.session_end ? new Date(s.session_end).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : "N/A")) : "-"}
+                              </td>
+                            )}
+                            {visibleColumns.liveTimer && (
+                              <td className={`px-3 py-2.5 border-b ${theme.tableBorder}`}>
+                                <button className="w-full text-left" onClick={(e) => toggleAccordion(e, s)} disabled={!s.session_start}>
+                                  <div className={`flex items-center gap-1.5 font-bold ${s.session_start ? 'text-[#00AEEF]' : theme.textFaint}`}>
+                                    {s.session_start ? (s.status === 'OFFLINE' ? "Frozen" : getLiveTimer(s.session_start, s.session_end, s.session_is_active)) : "-"}
+                                    {s.session_start && <span className={`text-[8px] transition-transform ${expandedRows[s.user_id] ? 'rotate-180' : ''}`}>▼</span>}
+                                  </div>
+                                </button>
+                              </td>
+                            )}
+                            {visibleColumns.workingHours && (
+                              <td className={`px-3 py-2.5 border-b font-mono font-bold ${theme.text} ${theme.tableBorder}`}>
+                                {s.session_start ? getWorkingHours(s.session_start, s.session_end, s.session_is_active) : "-"}
+                              </td>
+                            )}
+                            {visibleColumns.risk && (
+                              <td className={`px-3 py-2.5 border-b ${theme.tableBorder}`}>
+                                {s.idle_duration_seconds > 1800
+                                  ? <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-red-500/10 text-red-500 border border-red-500/20">⚠ Long Idle</span>
+                                  : <span className={theme.textFaint}>-</span>}
+                              </td>
+                            )}
                             <td className={`px-3 py-2.5 border-b ${theme.tableBorder}`}>
                               {s.attendance_status === 'Present' && <span className="text-green-500 font-bold whitespace-nowrap">Present ✅</span>}
                               {s.attendance_status === 'Absent' && <span className="text-red-500 font-bold whitespace-nowrap">Absent ❌</span>}
@@ -666,7 +726,7 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
                           </tr>
                           {expandedRows[s.user_id] && (
                             <tr>
-                              <td colSpan={12} className={`p-4 border-b ${theme.tableBorder} bg-black/5 dark:bg-white/5`}>
+                              <td colSpan={3 + Object.values(visibleColumns).filter(Boolean).length} className={`p-4 border-b ${theme.tableBorder} bg-black/5 dark:bg-white/5`}>
                                 <div className="mb-2 flex items-center gap-2">
                                   <span className={`text-xs font-black uppercase ${theme.text}`}>▼ Login History — {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}</span>
                                 </div>
