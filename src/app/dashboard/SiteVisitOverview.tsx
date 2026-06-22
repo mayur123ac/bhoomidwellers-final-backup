@@ -40,6 +40,15 @@ const STATUS_CONFIG = {
 };
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+// ─── Calendar grid tokens (light-mode visibility fix) ──────────────────────
+// Centralized so the whole calendar (header row + day grid + week view)
+// shares one consistent, clearly visible grid-line / surface treatment.
+const GRID_LINE_LIGHT = "#CBD5E1";       // slate-300 — visible grout/border color
+const GRID_LINE_DARK = "rgba(255,255,255,0.08)";
+const GRID_HEADER_BG_LIGHT = "#F1F5F9";  // slate-100 — distinguishes header strip from cells
+const GRID_HEADER_BG_DARK = "#1a1a1a";
+const GRID_CELL_BG_LIGHT = "#ffffff";    // cells are bright white "tiles" against the grout
+const GRID_CELL_BG_DARK = "#151515";
 // ─── Helpers ───────────────────────────────────────────────────────────────
 function formatDateTime(iso: string) {
   try {
@@ -465,7 +474,13 @@ export default function SiteVisitOverview({
       const res = await fetch("/api/site-visits/all");
       const json = await res.json();
       if (json.success) {
-        setVisits(json.data || []);
+        // Scope visits to only the leads passed in via `allLeads`.
+        // Admin passes the full lead set (no behavior change).
+        // Sales Manager / Site Head pass their own leads only, so this
+        // naturally restricts the calendar to "my site visits" only.
+        const ownLeadIds = new Set(allLeads.map((l: any) => l.id));
+        const scopedVisits = (json.data || []).filter((v: SiteVisit) => ownLeadIds.has(v.lead_id));
+        setVisits(scopedVisits);
       } else {
         // Fallback: fetch per-lead visits from existing leads data
         const leadsWithVisits = allLeads.filter(l => l.mongoVisitDate);
@@ -668,6 +683,14 @@ export default function SiteVisitOverview({
   };
   const inputClass = `rounded-xl px-3 py-2 text-xs outline-none transition-colors ${isDark ? "bg-[#222] border border-[#333] text-white" : "bg-white border border-indigo-200 text-[#1A1A1A]"}`;
   const selectClass = `${inputClass} cursor-pointer`;
+  // ── Calendar grid surface helpers (light-mode visibility fix) ───────────
+  const gridLineColor = isDark ? GRID_LINE_DARK : GRID_LINE_LIGHT;
+  const gridHeaderBg = isDark ? GRID_HEADER_BG_DARK : GRID_HEADER_BG_LIGHT;
+  const gridCellBg = isDark ? GRID_CELL_BG_DARK : GRID_CELL_BG_LIGHT;
+  const gridHeaderText = isDark ? "rgba(255,255,255,0.35)" : "#64748B";
+  const todayCellBg = isDark ? "rgba(158,33,123,0.12)" : "rgba(158,33,123,0.06)";
+  const todayCellBgHover = isDark ? "rgba(158,33,123,0.18)" : "rgba(158,33,123,0.1)";
+  const cellHoverBg = isDark ? "rgba(255,255,255,0.04)" : "#F8FAFC";
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Toast */}
@@ -729,9 +752,9 @@ export default function SiteVisitOverview({
             <StatCard label="Employees Today" value={stats.empToday} color="#00AEEF" bg="rgba(0,174,239,0.15)" icon={FaUsers} isDark={isDark} />
           </div>
           {/* Calendar Controls */}
-          <div className="rounded-2xl overflow-hidden" style={{ background: isDark ? "rgba(255,255,255,0.03)" : "rgba(255,255,255,0.9)", border: isDark ? "1px solid rgba(158,33,123,0.15)" : "1px solid #E5E7EB", boxShadow: isDark ? "0 8px 32px rgba(0,0,0,0.3)" : "0 8px 32px rgba(0,0,0,0.06)", backdropFilter: "blur(12px)" }}>
+          <div className="rounded-2xl overflow-hidden" style={{ background: isDark ? "rgba(255,255,255,0.03)" : "rgba(255,255,255,0.9)", border: isDark ? "1px solid rgba(158,33,123,0.15)" : `1px solid ${GRID_LINE_LIGHT}`, boxShadow: isDark ? "0 8px 32px rgba(0,0,0,0.3)" : "0 8px 32px rgba(0,0,0,0.06)", backdropFilter: "blur(12px)" }}>
             {/* Calendar Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-6 py-4" style={{ borderBottom: isDark ? "1px solid rgba(255,255,255,0.06)" : "1px solid #E5E7EB" }}>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-6 py-4" style={{ borderBottom: isDark ? "1px solid rgba(255,255,255,0.06)" : `1px solid ${GRID_LINE_LIGHT}` }}>
               <div className="flex items-center gap-3">
                 <button onClick={() => setCurrentDate(new Date())} className="px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all hover:brightness-110"
                   style={{ background: "rgba(158,33,123,0.12)", color: "#d946a8", border: "1px solid rgba(158,33,123,0.3)" }}>
@@ -786,7 +809,7 @@ export default function SiteVisitOverview({
             <AnimatePresence>
               {showFilters && (
                 <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}
-                  className="overflow-hidden" style={{ borderBottom: isDark ? "1px solid rgba(255,255,255,0.06)" : "1px solid #E5E7EB" }}>
+                  className="overflow-hidden" style={{ borderBottom: isDark ? "1px solid rgba(255,255,255,0.06)" : `1px solid ${GRID_LINE_LIGHT}` }}>
                   <div className="p-4 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
                     <select className={selectClass} value={filterEmployee} onChange={e => setFilterEmployee(e.target.value)}>
                       <option value="">All Employees</option>
@@ -824,24 +847,33 @@ export default function SiteVisitOverview({
                 {/* ── Month View ── */}
                 {calView === "month" && (
                   <div>
-                    {/* Day headers */}
-                    <div className="grid grid-cols-7 border-b" style={{ borderColor: isDark ? "rgba(255,255,255,0.06)" : "#E5E7EB" }}>
+                    {/* Day headers — separated from the body by a clear border and a distinct
+                        background, with thin "grout" lines between each day name */}
+                    <div
+                      className="grid grid-cols-7 gap-px"
+                      style={{ background: gridLineColor, borderBottom: `1px solid ${gridLineColor}` }}
+                    >
                       {DAYS.map(d => (
-                        <div key={d} className="py-3 text-center text-[11px] font-bold uppercase tracking-wider" style={{ color: isDark ? "rgba(255,255,255,0.3)" : "#9CA3AF" }}>{d}</div>
+                        <div key={d} className="py-3 text-center text-[11px] font-bold uppercase tracking-wider"
+                          style={{ color: gridHeaderText, background: gridHeaderBg }}>
+                          {d}
+                        </div>
                       ))}
                     </div>
-                    {/* Day cells */}
-                    <div className="grid grid-cols-7">
+                    {/* Day cells — rendered as bright tiles separated by a visible 1px grout
+                        line (the grid container's own background shows through the gaps),
+                        which reads far more clearly than a faint border in light mode */}
+                    <div className="grid grid-cols-7 gap-px" style={{ background: gridLineColor }}>
                       {calendarDays.map((day, idx) => (
                         <div key={idx}
-                          className="border-r border-b min-h-[120px] p-2 relative transition-colors duration-150 cursor-pointer"
+                          className="min-h-[120px] p-2 relative transition-colors duration-150 cursor-pointer"
                           style={{
-                            borderColor: isDark ? "rgba(255,255,255,0.04)" : "#E5E7EB",
-                            background: day.isToday ? isDark ? "rgba(158,33,123,0.08)" : "rgba(158,33,123,0.04)" : "transparent",
+                            background: day.isToday ? todayCellBg : gridCellBg,
+                            boxShadow: isDark ? "none" : "inset 0 1px 0 rgba(255,255,255,0.8)",
                           }}
                           onClick={() => { setCurrentDate(day.date); setCalView("day"); }}
-                          onMouseEnter={e => e.currentTarget.style.background = isDark ? "rgba(255,255,255,0.025)" : "rgba(158,33,123,0.02)"}
-                          onMouseLeave={e => e.currentTarget.style.background = day.isToday ? isDark ? "rgba(158,33,123,0.08)" : "rgba(158,33,123,0.04)" : "transparent"}
+                          onMouseEnter={e => e.currentTarget.style.background = day.isToday ? todayCellBgHover : cellHoverBg}
+                          onMouseLeave={e => e.currentTarget.style.background = day.isToday ? todayCellBg : gridCellBg}
                         >
                           <span
                             className={`text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full mb-1.5 ${day.isToday ? "text-white" : ""}`}
@@ -866,12 +898,15 @@ export default function SiteVisitOverview({
                 {/* ── Week View ── */}
                 {calView === "week" && (
                   <div>
-                    <div className="grid grid-cols-7 border-b" style={{ borderColor: isDark ? "rgba(255,255,255,0.06)" : "#E5E7EB" }}>
+                    <div
+                      className="grid grid-cols-7 gap-px"
+                      style={{ background: gridLineColor, borderBottom: `1px solid ${gridLineColor}` }}
+                    >
                       {weekDays.map(({ date }) => {
                         const isToday = new Date(date).setHours(0, 0, 0, 0) === new Date().setHours(0, 0, 0, 0);
                         return (
-                          <div key={date.toISOString()} className="py-3 px-2 text-center">
-                            <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: isDark ? "rgba(255,255,255,0.35)" : "#9CA3AF" }}>
+                          <div key={date.toISOString()} className="py-3 px-2 text-center" style={{ background: gridHeaderBg }}>
+                            <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: gridHeaderText }}>
                               {DAYS[date.getDay()]}
                             </p>
                             <p className={`text-lg font-black mt-0.5 w-9 h-9 mx-auto flex items-center justify-center rounded-full ${isToday ? "text-white" : ""}`}
@@ -885,9 +920,10 @@ export default function SiteVisitOverview({
                         );
                       })}
                     </div>
-                    <div className="grid grid-cols-7 divide-x" style={{ borderColor: isDark ? "rgba(255,255,255,0.04)" : "#E5E7EB" }}>
+                    <div className="grid grid-cols-7 gap-px" style={{ background: gridLineColor }}>
                       {weekDays.map(({ date, visits: dayVisits }) => (
-                        <div key={date.toISOString()} className="p-2 min-h-[300px] space-y-1.5" style={{ borderRight: isDark ? "1px solid rgba(255,255,255,0.04)" : "1px solid #E5E7EB" }}>
+                        <div key={date.toISOString()} className="p-2 min-h-[300px] space-y-1.5"
+                          style={{ background: gridCellBg, boxShadow: isDark ? "none" : "inset 0 1px 0 rgba(255,255,255,0.8)" }}>
                           {dayVisits.length === 0 ? (
                             <p className="text-[10px] text-center mt-8" style={{ color: isDark ? "rgba(255,255,255,0.15)" : "#D1D5DB" }}>—</p>
                           ) : dayVisits.map(v => (
@@ -959,7 +995,7 @@ export default function SiteVisitOverview({
               </motion.div>
             </AnimatePresence>
             {/* Legend */}
-            <div className="flex items-center gap-5 px-6 py-4 flex-wrap" style={{ borderTop: isDark ? "1px solid rgba(255,255,255,0.05)" : "1px solid #E5E7EB" }}>
+            <div className="flex items-center gap-5 px-6 py-4 flex-wrap" style={{ borderTop: isDark ? "1px solid rgba(255,255,255,0.05)" : `1px solid ${GRID_LINE_LIGHT}` }}>
               {Object.entries(STATUS_CONFIG).map(([key, cfg]) => (
                 <div key={key} className="flex items-center gap-2">
                   <div className="w-3 h-3 rounded-full" style={{ background: cfg.color }} />

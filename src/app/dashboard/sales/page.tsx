@@ -1,10 +1,13 @@
 // sales manager
+
 "use client";
 
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { useActivityTracker, emitActivity } from "@/hooks/useActivityTracker";
 import { useRouter } from "next/navigation";
 import AttendanceView from "@/components/AttendanceView";
+import dynamic from "next/dynamic";
+
 import { clearCrmSession, getStoredCrmUser, installLoggedOutBackGuard } from "@/lib/authSession";
 import { useShiftTiming } from "@/hooks/useShiftTiming";
 import { motion, AnimatePresence } from "framer-motion";
@@ -38,7 +41,7 @@ import { handleMarkLostLead as markLostLeadApi, restoreLostLead, updateLeadLostS
 
 import AttendanceTimerWidget from "@/components/AttendanceTimerWidget";
 
-
+const SiteVisitOverview = dynamic(() => import("../../dashboard/SiteVisitOverview"), { ssr: false });
 const CARDS_PER_PAGE = 20;
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -344,6 +347,15 @@ export default function SalesDashboard() {
 
   const { managers, receptionists, allLeads, followUps, isLoading, refetch } = useAdminData();
 
+  // Leads scoped to the logged-in user — Admin sees everything,
+  // Sales Manager / Site Head only see leads assigned to them.
+  // Used to scope the "Site Visits" tab to the logged-in manager's own visits.
+  const myOwnLeads = useMemo(() => {
+    const role = (user.role || "").toLowerCase().replace("_", " ");
+    const isUnrestricted = role === "admin" || role === "site head";
+    return isUnrestricted ? allLeads : allLeads.filter((l: any) => l.assigned_to === user.name);
+  }, [allLeads, user]);
+
   const followUpLeads = useMemo(() => {
     const now = new Date();
     const myLeads = user.role === "admin" ? allLeads : allLeads.filter((l: any) => l.assigned_to === user.name);
@@ -476,11 +488,14 @@ export default function SalesDashboard() {
           {/* Main nav items */}
           <div className="flex flex-col gap-2 flex-1">
             {[
+
               { view: "overview", icon: <FaThLarge className="w-[18px] h-[18px] flex-shrink-0" />, title: "Dashboard" },
               { view: "forms", icon: <FaFileInvoice className="w-[18px] h-[18px] flex-shrink-0" />, title: "Assigned Leads" },
               { view: "closed-leads", icon: <FaCheckCircle className="w-[18px] h-[18px] flex-shrink-0" />, title: "Closed Leads" },
+              { view: "site_visits", icon: <FaCalendarAlt className="w-[18px] h-[18px] flex-shrink-0" />, title: "Site Visits" },
               { view: "attendance", icon: <FaClock className="w-[18px] h-[18px] flex-shrink-0" />, title: "My Attendance" },
               { view: "assistant", icon: <FaRobot className="w-[18px] h-[18px] flex-shrink-0" />, title: "Bhoomi AI" },
+
             ].map(({ view, icon, title }) => {
               const isActive = activeView === view || (view === "forms" && activeView === "detail");
               return (
@@ -837,6 +852,16 @@ export default function SalesDashboard() {
               allLeads={user.role === "admin" ? allLeads : allLeads.filter((l: any) => l.assigned_to === user.name)}
               isDark={isDark} t={t}
             />
+          ) : activeView === "site_visits" ? (
+            <SiteVisitOverview
+              allLeads={myOwnLeads}
+              receptionists={receptionists}
+              managers={managers}
+              siteHeads={[]}
+              adminUser={user}
+              theme={t}
+              isDark={isDark}
+            />
           ) : activeView === "attendance" ? (
             <AttendanceView
               adminUser={user}
@@ -863,6 +888,7 @@ export default function SalesDashboard() {
           { view: "overview", icon: <FaThLarge className="w-5 h-5 sm:w-6 sm:h-6" />, title: "Dashboard" },
           { view: "forms", icon: <FaFileInvoice className="w-5 h-5 sm:w-6 sm:h-6" />, title: "Assigned" },
           { view: "closed-leads", icon: <FaCheckCircle className="w-5 h-5 sm:w-6 sm:h-6" />, title: "Closed" },
+          { view: "site_visits", icon: <FaCalendarAlt className="w-5 h-5 sm:w-6 sm:h-6" />, title: "Visits" },
           { view: "attendance", icon: <FaClock className="w-5 h-5" />, title: "My Attendance" },
           { view: "assistant", icon: <FaRobot className="w-5 h-5 sm:w-6 sm:h-6" />, title: "AI" },
         ].map(({ view, icon, title }) => (
