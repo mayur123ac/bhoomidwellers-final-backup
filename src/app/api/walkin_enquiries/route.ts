@@ -15,7 +15,7 @@ export async function GET(req: Request) {
     // Because this uses SELECT *, the new Site Head columns will be fetched automatically
     const [rows, countRows] = await Promise.all([
       query(
-        "SELECT * FROM walkin_enquiries ORDER BY created_at DESC LIMIT $1 OFFSET $2",
+        "SELECT * FROM walkin_enquiries ORDER BY sr_no DESC NULLS LAST LIMIT $1 OFFSET $2",
         [limit, offset]
       ),
       query("SELECT COUNT(*)::int AS total FROM walkin_enquiries"),

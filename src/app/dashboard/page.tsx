@@ -1610,6 +1610,8 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
         return !isNGD;
       });
     }
+    // Sort numerically by sr_no descending so Lead No. order is always correct (#119, #118 ... #2, #1)
+    leads = [...leads].sort((a: any, b: any) => (Number(b.sr_no) || 0) - (Number(a.sr_no) || 0));
     return leads;
   }, [allLeads, overviewSearch, overviewSearchColumn, lostLeadFilter, showLostLeads, showNGDLeads, deletedLeadIds]);
 
