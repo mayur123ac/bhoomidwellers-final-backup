@@ -68,7 +68,7 @@ export async function recalculateSrNos(client?: PoolClient) {
     backdatedMode = false;
   }
 
-  // OFF mode: sort by enquiry_date (legacy compatible)
+  // OFF mode: purely chronological by creation date (ignore backdated entry)
   // ON mode: backdated entry takes priority, date_created is fallback
   const orderClause = backdatedMode
     ? `CASE
@@ -76,7 +76,7 @@ export async function recalculateSrNos(client?: PoolClient) {
          THEN enquiry_date
          ELSE created_at
        END ASC, created_at ASC, id ASC`
-    : `enquiry_date ASC, created_at ASC, id ASC`;
+    : `created_at ASC, id ASC`;
 
   const queryText = `
     WITH sorted_leads AS (

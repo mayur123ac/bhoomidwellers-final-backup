@@ -1195,11 +1195,13 @@ export default function ReceptionistDashboard() {
   // ─────────────────────────────────────────────────────────────────────────
   // FILTERED SETS
   // ─────────────────────────────────────────────────────────────────────────
-  const receptionistLeads = mergedLeads.filter((e: any) =>
-    (e.name || "").toLowerCase().includes(searchRecep.toLowerCase()) ||
-    String(e.id).includes(searchRecep) ||
-    (e.phone || "").includes(searchRecep)
-  );
+  const receptionistLeads = mergedLeads
+    .filter((e: any) =>
+      (e.name || "").toLowerCase().includes(searchRecep.toLowerCase()) ||
+      String(e.sr_no || e.id).includes(searchRecep) ||
+      (e.phone || "").includes(searchRecep)
+    )
+    .sort((a: any, b: any) => (Number(b.sr_no) || 0) - (Number(a.sr_no) || 0));
 
   const filteredAssigned = myAssignedLeads.filter((l: any) =>
     (l.name || "").toLowerCase().includes(searchAssigned.toLowerCase()) ||
@@ -2287,7 +2289,7 @@ export default function ReceptionistDashboard() {
                         <tr><td colSpan={11} className={`p-8 text-center text-sm ${t.textMuted}`}>No leads found.</td></tr>
                       ) : receptionistLeads.map((enquiry: any) => (
                         <tr key={enquiry.id} className={`transition-colors cursor-pointer ${t.tableRow}`} onClick={() => { setSelectedLead(enquiry); setActiveTab("detail"); }}>
-                          <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-bold ${t.accentText}`}>#{enquiry.id}</td>
+                          <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-bold ${t.accentText}`}>#{enquiry.sr_no || enquiry.id}</td>
                           <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-semibold ${t.text}`}>{enquiry.name}</td>
 
                           <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm ${t.textMuted}`}>
