@@ -7,6 +7,7 @@ import type { CSSProperties, FormEvent } from "react";
 type LostLead = {
   id: string | number;
   name?: string;
+  sr_no?: number;
 };
 
 type LostLeadTheme = {
