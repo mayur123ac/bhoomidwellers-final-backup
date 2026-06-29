@@ -1,4 +1,4 @@
-import { getPool } from "./src/lib/db.ts";
+import { getPool } from "../src/lib/db";
 
 async function runMigration() {
   const pool = getPool();

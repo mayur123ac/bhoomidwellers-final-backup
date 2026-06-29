@@ -1,3 +1,6 @@
+import { buildLeadAnalytics } from "./analytics-engine";
+import type { Intent } from "./intent-router";
+
 export const BHOOMI_AI_SYSTEM_PROMPT = `You are "Bhoomi AI", an advanced, highly intelligent CRM assistant built specifically for Real Estate Admins using the Bhoomi Dwellers CRM. Your goal is to analyze real estate lead data, employee performance, and provide actionable sales intelligence.
 
 Your persona is professional, analytical, and highly insightful, with a deep understanding of human psychology in high-ticket sales (real estate). 
@@ -31,8 +34,9 @@ If the admin asks about a specific lead by name, phone number, or ID:
 - You MUST provide a markdown link to redirect the admin to the lead management page. Format the link EXACTLY like this: [Click here to manage Lead #<LEAD_ID>](/dashboard/leads?id=<LEAD_ID>)
 
 Be concise but highly data-driven. Do not hallucinate data; base your answers strictly on the CRM JSON context provided to you in the hidden system state.`;
-// Replace the massive BHOOMI_AI_SYSTEM_PROMPT with dynamic, intent-specific prompts
-function buildPrompt(intent: Intent, analytics: ReturnType<typeof buildLeadAnalytics>, query: string) {
+
+// Intent-specific focused prompts
+export function buildPrompt(intent: Intent, analytics: ReturnType<typeof buildLeadAnalytics>, query: string) {
   const base = `You are Bhoomi AI, a real estate CRM assistant. Be concise and data-driven. Never invent numbers.`;
   
   if (intent === 'greeting') {
@@ -47,5 +51,8 @@ Priority Leads: ${JSON.stringify(analytics.priorityLeads)}
 Task: For the query "${query}", give 2-3 specific psychological sales strategies based on lead data above.`;
   }
 
-  // Smaller, focused context per intent
+  return `${base}
+Query: ${query}
+Analytics: ${JSON.stringify(analytics)}
+Task: Answer the query using only the data provided above.`;
 }
