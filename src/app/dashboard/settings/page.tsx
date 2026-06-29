@@ -12,6 +12,11 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  // Lead Number Sorting toggle (admin only)
+  const [leadSortEnabled, setLeadSortEnabled] = useState(false);
+  const [leadSortSaving, setLeadSortSaving] = useState(false);
+  const [leadSortSaved, setLeadSortSaved] = useState(false);
+
   useEffect(() => {
     const p = getStoredCrmUser();
     if (!p) {
@@ -26,6 +31,14 @@ export default function SettingsPage() {
           }
         })
         .catch(() => { });
+
+      // Load lead sorting setting for admin
+      if (p.role?.toLowerCase() === "admin") {
+        fetch("/api/settings/lead-sorting", { cache: "no-store" })
+          .then(r => r.json())
+          .then(data => setLeadSortEnabled(data.enabled === true))
+          .catch(() => {});
+      }
     }
   }, [router]);
 
@@ -118,6 +131,78 @@ export default function SettingsPage() {
           Admin System Updates Broadcast
           {user?.role?.toLowerCase() === "admin" && (
             <>
+              <hr className="border-[#333]" />
+
+              {/* ── Lead Number Sorting Toggle ── */}
+              <div className="bg-[#1a1a1a] border border-[#333] rounded-xl p-6">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <h2 className="text-lg font-bold mb-1 flex items-center gap-2">
+                      <span className="text-[#9E217B] text-xl">🔢</span> Lead Number Sorting
+                    </h2>
+                    <p className="text-xs text-gray-400 mb-1">
+                      Controls how Lead Numbers are assigned across the entire CRM.
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      <span className="font-semibold text-gray-300">OFF</span> — Leads are numbered by Enquiry Date (current behavior).<br />
+                      <span className="font-semibold text-gray-300">ON</span> — Backdated Entry takes highest priority. Leads with a Backdated Entry date are sorted by that date; others use Date Created.
+                    </p>
+                  </div>
+
+                  {/* Toggle Switch */}
+                  <button
+                    role="switch"
+                    aria-checked={leadSortEnabled}
+                    onClick={() => setLeadSortEnabled(v => !v)}
+                    className={`relative flex-shrink-0 mt-1 w-14 h-7 rounded-full transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-[#9E217B] focus:ring-offset-2 focus:ring-offset-[#1a1a1a] ${
+                      leadSortEnabled ? "bg-[#9E217B]" : "bg-[#333]"
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full shadow transition-transform duration-300 ${
+                        leadSortEnabled ? "translate-x-7" : "translate-x-0"
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-3 mt-5">
+                  <span className={`text-xs font-bold px-3 py-1 rounded-full border ${
+                    leadSortEnabled
+                      ? "text-[#9E217B] border-[#9E217B]/40 bg-[#9E217B]/10"
+                      : "text-gray-400 border-gray-700 bg-[#222]"
+                  }`}>
+                    {leadSortEnabled ? "ON — Backdated-Priority Mode" : "OFF — Default Mode"}
+                  </span>
+                  <button
+                    onClick={async () => {
+                      setLeadSortSaving(true);
+                      try {
+                        const res = await fetch("/api/settings/lead-sorting", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ enabled: leadSortEnabled }),
+                        });
+                        const json = await res.json();
+                        if (json.success) {
+                          setLeadSortSaved(true);
+                          setTimeout(() => setLeadSortSaved(false), 3000);
+                        }
+                      } catch {}
+                      finally { setLeadSortSaving(false); }
+                    }}
+                    disabled={leadSortSaving}
+                    className={`px-5 py-2 rounded-lg text-sm font-bold transition-all disabled:opacity-50 ${
+                      leadSortSaved
+                        ? "bg-green-600 text-white"
+                        : "bg-[#9E217B] hover:bg-[#b8268f] text-white"
+                    }`}
+                  >
+                    {leadSortSaved ? "✓ Saved & Recalculated" : leadSortSaving ? "Applying..." : "Save Setting"}
+                  </button>
+                </div>
+              </div>
+
               <hr className="border-[#333]" />
               <AdminUpdatesManager user={user} />
             </>
