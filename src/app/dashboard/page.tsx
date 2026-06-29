@@ -9,7 +9,7 @@ import {
   FaThLarge, FaClipboardList, FaUsers, FaIdCard,
   FaSearch, FaBell, FaChevronLeft, FaPhoneAlt, FaComments,
   FaCheckCircle, FaCalendarAlt, FaTimes,
-  FaFileInvoice, FaPaperPlane, FaMicrophone, FaWhatsapp, FaTable, FaChartPie, FaEyeSlash, FaUniversity, FaFileAlt, FaCheck, FaClock, FaHandshake, FaExchangeAlt, FaBriefcase, FaDownload, FaCog, FaMapMarkerAlt, FaSignal, FaUserClock
+  FaFileInvoice, FaPaperPlane, FaMicrophone, FaWhatsapp, FaTable, FaChartPie, FaEyeSlash, FaUniversity, FaFileAlt, FaCheck, FaClock, FaHandshake, FaExchangeAlt, FaBriefcase, FaDownload, FaCog, FaMapMarkerAlt, FaSignal, FaUserClock, FaTrashAlt
 } from "react-icons/fa";
 import { FaWandMagicSparkles } from "react-icons/fa6";
 import {
@@ -180,7 +180,7 @@ function useAdminData() {
       }
 
       let pgLeads: any[] = [];
-      const resLeads = await fetch("/api/walkin_enquiries?limit=10000&offset=0");
+      const resLeads = await fetch("/api/walkin_enquiries?limit=10000&offset=0", { cache: "no-store" });
       if (resLeads.ok) {
         const j = await resLeads.json();
         pgLeads = Array.isArray(j.data) ? j.data : [];
@@ -346,7 +346,7 @@ const downloadCSV = (data: any[], filename: string) => {
 };
 
 const formatLeadForExport = (l: any) => ({
-  "Lead ID": l.id,
+  "Lead No.": l.sr_no || l.id,
   "Client Name": l.name,
   "Budget": l.salesBudget || l.budget || "N/A",
   "Configuration": l.propType || l.configuration || "N/A",
@@ -1355,6 +1355,7 @@ function DashboardAnalytics({ leads, theme, isDark }: { leads: any[]; theme: any
 // import { downloadCSV, formatLeadForExport } from "./your-utils";
 
 function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, theme, isDark, receptionists, followUps, onNavigateToSales, refetch }: any) {
+  const isAdmin = (user?.role || "").toLowerCase() === "admin";
   const [visibleCount, setVisibleCount] = useState(20);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const loadLessRef = useRef<HTMLDivElement>(null);
@@ -1366,6 +1367,9 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
   const [combinedAssignees, setCombinedAssignees] = useState<any[]>([]);
   const [isFetchingManagers, setIsFetchingManagers] = useState(true);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [deleteConfirmLead, setDeleteConfirmLead] = useState<any>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deletedLeadIds, setDeletedLeadIds] = useState<Set<number | string>>(new Set());
 
   // ── Enhanced Reassign Logic ────────────────────────────────────────────────
   const handleReassignLead = async () => {
@@ -1405,6 +1409,28 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
       alert(e.message ?? "Reassign failed. Try again.");
     } finally {
       setIsReassigning(false);
+    }
+  };
+
+  const handleDeleteLead = async () => {
+    if (!deleteConfirmLead) return;
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`/api/walkin_enquiries/${deleteConfirmLead.id}`, { method: "DELETE" });
+      const json = await res.json();
+      if (!json.success) {
+        alert(json.message || "Failed to delete lead.");
+        return;
+      }
+      setToastMsg(`🗑️ Lead #${deleteConfirmLead.id} (${deleteConfirmLead.name}) deleted.`);
+      setDeletedLeadIds(prev => new Set([...prev, deleteConfirmLead.id]));
+      setTimeout(() => setToastMsg(null), 3000);
+      setDeleteConfirmLead(null);
+      refetch();
+    } catch (e: any) {
+      alert(e.message ?? "Network error while deleting lead.");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -1569,7 +1595,8 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
   };
 
   const filteredOverviewLeads = useMemo(() => {
-    let leads = filterLeads(allLeads, overviewSearch, overviewSearchColumn);
+    const activeAllLeads = allLeads.filter((l: any) => !deletedLeadIds.has(l.id));
+    let leads = filterLeads(activeAllLeads, overviewSearch, overviewSearchColumn);
     if (lostLeadFilter === "active") {
       leads = leads.filter((l: any) => !l.is_lost_lead);
     } else if (lostLeadFilter === "lost") {
@@ -1584,7 +1611,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
       });
     }
     return leads;
-  }, [allLeads, overviewSearch, overviewSearchColumn, lostLeadFilter, showLostLeads, showNGDLeads]);
+  }, [allLeads, overviewSearch, overviewSearchColumn, lostLeadFilter, showLostLeads, showNGDLeads, deletedLeadIds]);
 
   const formatDate = (ds: string) => {
     if (!ds) return "—";
@@ -1862,6 +1889,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                       { label: "BACKDATED ENTRY", width: "min-w-[110px]" },
                       { label: "ASSIGNED TO", width: "min-w-[140px]" },
                       { label: "REASSIGN", width: "min-w-[110px]" },
+                      { label: "ACTION", width: "min-w-[70px]" },
                     ].map(({ label, width }) => (
                       <th key={label} className={`px-2 py-3 whitespace-nowrap ${width}`}>{label}</th>
                     ))}
@@ -1869,9 +1897,9 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                 </thead>
                 <tbody className={`divide-y ${theme.tableDivide}`}>
                   {isLoading ? (
-                    <tr><td colSpan={14} className={`text-center py-8 ${theme.textMuted}`}>Syncing...</td></tr>
+                    <tr><td colSpan={17} className={`text-center py-8 ${theme.textMuted}`}>Syncing...</td></tr>
                   ) : filteredOverviewLeads.length === 0 ? (
-                    <tr><td colSpan={14} className={`text-center py-8 ${theme.textMuted}`}>No leads match your search.</td></tr>
+                    <tr><td colSpan={17} className={`text-center py-8 ${theme.textMuted}`}>No leads match your search.</td></tr>
                   ) : filteredOverviewLeads.slice(0, visibleCount).map((lead: any) => {
                     let assignedRole = "Unassigned";
                     let assignedName = lead.assigned_receptionist || lead.assigned_to || "";
@@ -1881,7 +1909,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
 
                     return (
                       <tr key={lead.id} className={`transition-colors cursor-pointer whitespace-nowrap ${theme.tableRow}`} style={lead.is_lost_lead ? { opacity: 0.5, filter: "grayscale(0.5)" } : {}} onClick={() => onNavigateToSales && onNavigateToSales(lead)}>
-                        <td className={`px-4 py-3 sm:py-4.5 font-bold ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>#{lead.id}</td>
+                        <td className={`px-4 py-3 sm:py-4.5 font-bold ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>#{lead.sr_no || lead.id}</td>
                         <td className={`px-4 py-2.5 font-medium ${theme.text}`}>
                           {(lead.assigned_to || lead.assign2d_receptionist) ? (
                             <span
@@ -1951,6 +1979,19 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                               onClick={e => { e.stopPropagation(); setReassignLead(lead); setReassignTarget(""); setReassignNote(""); setIsReassignModalOpen(true); }}>
                               <FaExchangeAlt /> Reassign
                             </button>
+                          )}
+                        </td>
+                        <td className="px-2 py-2" onClick={e => e.stopPropagation()}>
+                          {isAdmin ? (
+                            <button
+                              onClick={() => setDeleteConfirmLead(lead)}
+                              title="Delete duplicate / double-entered lead"
+                              className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors cursor-pointer ${isDark ? "bg-red-900/20 hover:bg-red-600 text-red-400 hover:text-white" : "bg-red-50 hover:bg-red-500 text-red-500 hover:text-white"}`}
+                            >
+                              <FaTrashAlt className="text-xs" />
+                            </button>
+                          ) : (
+                            <span className={`text-xs italic ${theme.textFaint}`}>—</span>
                           )}
                         </td>
                       </tr>
@@ -2072,7 +2113,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
 
                     return (
                       <tr key={lead.id} className={`transition-colors cursor-pointer ${theme.tableRow}`} onClick={() => onNavigateToSales && onNavigateToSales(lead)}>
-                        <td className={`px-4 py-3 sm:py-4.5 font-bold ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>#{lead.id}</td>
+                        <td className={`px-4 py-3 sm:py-4.5 font-bold ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>#{lead.sr_no || lead.id}</td>
                         <td className={`px-4 py-2.5 font-medium ${theme.text}`}>
                           {(lead.assigned_to || lead.assigned_receptionist) ? (
                             <span
@@ -2247,7 +2288,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
 
                     return (
                       <tr key={lead.id} className={`transition-colors cursor-pointer ${theme.tableRow}`} onClick={() => onNavigateToSales && onNavigateToSales(lead)}>
-                        <td className={`px-4 py-3 sm:py-4.5 font-bold ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>#{lead.id}</td>
+                        <td className={`px-4 py-3 sm:py-4.5 font-bold ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>#{lead.sr_no || lead.id}</td>
                         <td className={`px-4 py-2.5 font-medium ${theme.text}`}>
                           {(lead.assigned_to || lead.assigned_receptionist) ? (
                             <span
@@ -2410,7 +2451,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
 
                     return (
                       <tr key={lead.id} className={`transition-colors cursor-pointer ${theme.tableRow}`} onClick={() => onNavigateToSales && onNavigateToSales(lead)}>
-                        <td className={`px-4 py-3 sm:py-4.5 font-bold ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>#{lead.id}</td>
+                        <td className={`px-4 py-3 sm:py-4.5 font-bold ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>#{lead.sr_no || lead.id}</td>
                         <td className={`px-4 py-2.5 font-medium ${theme.text}`}>
                           {(lead.assigned_to || lead.assigned_receptionist) ? (
                             <span
@@ -2544,6 +2585,36 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
               <button onClick={handleReassignLead} disabled={isReassigning || !reassignTarget || !reassignNote.trim()}
                 className={`px-8 py-2.5 rounded-lg font-bold transition-colors flex items-center gap-2 ${isReassigning || !reassignTarget || !reassignNote.trim() ? "opacity-50 cursor-not-allowed bg-orange-400 text-white" : "cursor-pointer bg-orange-500 hover:bg-orange-400 text-white shadow-lg shadow-orange-500/20"}`}>
                 {isReassigning ? "Reassigning…" : <><FaExchangeAlt /> Confirm Re-assign</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── DELETE CONFIRMATION MODAL ── */}
+      {deleteConfirmLead && (
+        <div className="fixed inset-0 bg-black/75 z-[200] flex justify-center items-center p-5 sm:p-6 animate-fadeIn" style={{ backdropFilter: "blur(8px)" }}>
+          <div className={`rounded-xl w-full max-w-md shadow-2xl border overflow-hidden ${theme.modalCard}`} style={theme.modalGlass}>
+            <div className={`p-5 border-b flex justify-between items-center ${isDark ? "bg-red-900/20 border-red-500/20" : "bg-red-50 border-red-200"}`}>
+              <div>
+                <h2 className={`text-lg font-bold flex items-center gap-2 ${isDark ? "text-red-400" : "text-red-700"}`}>
+                  <FaTrashAlt /> Delete Lead #{deleteConfirmLead.id}
+                </h2>
+                <p className={`text-xs mt-1 ${theme.textMuted}`}>This action is permanent and cannot be undone.</p>
+              </div>
+              <button onClick={() => setDeleteConfirmLead(null)} className={`p-2 ${theme.textMuted} hover:text-red-500 transition-colors`}><FaTimes /></button>
+            </div>
+            <div className={`p-6 ${theme.modalInner}`}>
+              <p className={`text-sm ${theme.text}`}>
+                Are you sure you want to permanently delete <strong>{deleteConfirmLead.name}</strong> (Lead #{deleteConfirmLead.id})? Use this only to remove duplicate / double-entered leads.
+              </p>
+            </div>
+            <div className={`p-5 border-t flex justify-end gap-3 ${theme.modalHeader} ${theme.tableBorder}`}>
+              <button onClick={() => setDeleteConfirmLead(null)}
+                className={`px-4 py-3 sm:py-4.5 rounded-lg font-bold cursor-pointer transition-colors ${theme.textMuted} hover:text-red-500`}>Cancel</button>
+              <button onClick={handleDeleteLead} disabled={isDeleting}
+                className={`px-8 py-2.5 rounded-lg font-bold transition-colors flex items-center gap-2 ${isDeleting ? "opacity-50 cursor-not-allowed bg-red-400 text-white" : "cursor-pointer bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/20"}`}>
+                {isDeleting ? "Deleting…" : <><FaTrashAlt /> Confirm Delete</>}
               </button>
             </div>
           </div>
@@ -3201,7 +3272,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
               const isNGD = lead.status === "NON GENUINE DEMAND (NGD)" || lead.leadStatus === "NON GENUINE DEMAND (NGD)" || lead.leadInterestStatus === "NON GENUINE DEMAND (NGD)";
               return (
                 <tr key={lead.id} className={`transition-colors cursor-pointer ${isLost ? theme.rowLost : isNGD ? theme.rowNGD : theme.tableRow}`} onClick={() => { setSelectedLead(lead); setSubView("detail"); prefillSalesForm(lead); setShowSalesForm(false); setShowLoanForm(false); }}>
-                  <td className={`px-4 py-2.5 font-black text-sm ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>#{lead.id}</td>
+                  <td className={`px-4 py-2.5 font-black text-sm ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>#{lead.sr_no || lead.id}</td>
                   <td className={`px-4 py-2.5 font-semibold ${theme.text}`}>{lead.name}</td>
                   <td className={`px-4 py-2.5 font-semibold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget || lead.budget || "N/A"}</td>
                   <td className={`px-4 py-2.5 font-mono text-xs ${theme.textMuted}`}>{maskPhone(lead.phone, adminUser?.role, lead.assigned_to === adminUser?.name)}</td>
@@ -4303,7 +4374,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
               const isNGD = lead.status === "NON GENUINE DEMAND (NGD)" || lead.leadStatus === "NON GENUINE DEMAND (NGD)" || lead.leadInterestStatus === "NON GENUINE DEMAND (NGD)";
               return (
                 <tr key={lead.id} className={`transition-colors cursor-pointer ${isLost ? theme.rowLost : isNGD ? theme.rowNGD : theme.tableRow}`} onClick={() => { setSelectedLead(lead); setSubView("detail"); prefillSalesForm(lead); setShowSalesForm(false); setShowLoanForm(false); }}>
-                  <td className={`px-4 py-2.5 font-black text-sm ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>#{lead.id}</td>
+                  <td className={`px-4 py-2.5 font-black text-sm ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>#{lead.sr_no || lead.id}</td>
                   <td className={`px-4 py-2.5 font-semibold ${theme.text}`}>{lead.name}</td>
                   <td className={`px-4 py-2.5 font-semibold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget || lead.budget || "N/A"}</td>
                   <td className={`px-4 py-2.5 font-mono text-xs ${theme.textMuted}`}>{maskPhone(lead.phone, adminUser?.role, lead.assigned_to === adminUser?.name)}</td>
@@ -5343,7 +5414,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                 className={`transition-colors ${theme.tableRow} ${!isEnquiryTable ? "cursor-pointer" : ""}`}
                 onClick={!isEnquiryTable ? () => { setIsEnquiryView(false); setSelectedLead(lead); setSubView("detail"); prefillSalesForm(lead); setShowSalesForm(false); setShowLoanForm(false); } : undefined}
               >
-                <td className={`px-4 py-3 sm:py-4 font-black text-sm ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>#{lead.id}</td>
+                <td className={`px-4 py-3 sm:py-4 font-black text-sm ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>#{lead.sr_no || lead.id}</td>
 
                 {/* CLIENT NAME */}
                 <td className={`px-4 py-3 sm:py-4 font-semibold whitespace-nowrap ${theme.text}`}>
@@ -7439,7 +7510,7 @@ function SiteVisitScheduler({
                 <h2 className={`font-bold flex items-center gap-2 ${isDark ? "text-orange-400" : "text-orange-700"}`}>
                   <FaCalendarAlt /> {editVisit ? "Reschedule Visit" : visits.length === 0 ? "Schedule Site Visit" : "Schedule Re-Site Visit"}
                 </h2>
-                <p className={`text-xs mt-0.5 ${theme.textMuted}`}>Lead #{lead.id} - {lead.name}</p>
+                <p className={`text-xs mt-0.5 ${theme.textMuted}`}>Lead #{lead.sr_no || lead.id} - {lead.name}</p>
               </div>
               <button onClick={() => { setShowModal(false); setEditVisit(null); }} className={`p-2 ${theme.textMuted} hover:text-red-500`}><FaTimes /></button>
             </div>

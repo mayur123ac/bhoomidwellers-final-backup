@@ -57,7 +57,7 @@ export default function LostLeadModal({
         </div>
         <form onSubmit={onSubmit} className={`p-5 space-y-4 ${isDark ? "bg-[#121212]" : "bg-[#F8FAFC]"}`}>
           <div className={`rounded-xl border p-3 ${theme.settingsBg}`}>
-            <p className={`text-xs font-bold ${theme.text}`}>#{lead.id} - {lead.name}</p>
+            <p className={`text-xs font-bold ${theme.text}`}>#{lead.sr_no || lead.id} - {lead.name}</p>
             <p className={`text-[10px] mt-1 ${theme.textFaint}`}>The lead stays visible for history and reporting.</p>
           </div>
           <div>

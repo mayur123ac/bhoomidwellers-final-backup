@@ -1,6 +1,6 @@
 // app/api/walkin_enquiries/[id]/route.ts
 import { NextResponse } from "next/server";
-import { getPool, transaction } from "@/lib/db";
+import { getPool, transaction, recalculateSrNos } from "@/lib/db";
 
 const jsonFields = new Set([
   "site_visit_history",
@@ -145,13 +145,32 @@ export async function PUT(
         );
       }
 
+      if ("enquiry_date" in body) {
+        await recalculateSrNos(client);
+        const finalRes = await client.query(
+          "SELECT * FROM walkin_enquiries WHERE id = $1",
+          [leadId]
+        );
+        return { data: finalRes.rows[0] };
+      }
+
       return { data: updateRows.rows[0] };
     });
 
-    if (!result) {
+   if (!result) {
       return NextResponse.json(
         { success: false, message: "Lead not found" },
         { status: 404 }
+      );
+    }
+
+    if ("locked" in result) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "This lead is Closed or marked as Lost and cannot be modified. Reopen/Restore it first.",
+        },
+        { status: 403 }
       );
     }
 
@@ -177,9 +196,11 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const pool = getPool();
     const { id } = await params;
-    await pool.query("DELETE FROM walkin_enquiries WHERE id = $1", [id]);
+    await transaction(async (client) => {
+      await client.query("DELETE FROM walkin_enquiries WHERE id = $1", [id]);
+      await recalculateSrNos(client);
+    });
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (error: any) {
     console.error("DELETE walkin_enquiries error:", error);

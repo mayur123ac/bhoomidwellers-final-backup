@@ -1,6 +1,6 @@
 //api/leads/restore/route.ts
 import { NextResponse } from "next/server";
-import { query } from "@/lib/db";
+import { query, recalculateSrNos } from "@/lib/db";
 import { broadcastLeadUpdate } from "@/lib/lostLeadEvents";
 
 type RestorePayload = {
@@ -52,6 +52,7 @@ export async function PATCH(req: Request) {
     );
 
     const updatedLead = updatedRows[0];
+    await recalculateSrNos();
     const responseLead = {
       ...updatedLead,
       lost_reason: updatedLead.lost_lead_reason,

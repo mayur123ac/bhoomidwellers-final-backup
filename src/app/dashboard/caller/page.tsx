@@ -204,7 +204,7 @@ function TicketPopup({ lead, onClose, onSave, alreadySaved, isLocked, lockedBy, 
           {lead.assignManager && <div className="bg-[#222] rounded-xl p-3 border border-[#333]"><p className="text-[10px] text-gray-500 mb-1">Assign Manager</p><p className="text-white font-semibold text-sm">{lead.assignManager}</p></div>}
           <div className="col-span-2 flex items-center justify-between bg-[#222] rounded-xl p-3 border border-[#333]">
             <div><p className="text-[10px] text-gray-500 mb-1">Source</p>{sourceBadge(lead.source)}</div>
-            <div className="text-right"><p className="text-[10px] text-gray-500 mb-1">Lead ID</p><p className="text-purple-400 font-bold font-mono">#{lead.id}</p></div>
+            <div className="text-right"><p className="text-[10px] text-gray-500 mb-1">Lead ID</p><p className="text-purple-400 font-bold font-mono">#{lead.sr_no || lead.id}</p></div>
           </div>
           <div className="col-span-2 bg-[#222] rounded-xl p-3 border border-[#333]">
             <p className="text-[10px] text-gray-500 mb-2 flex items-center gap-1"><FaCommentAlt className="text-[9px]" />Feedback</p>
@@ -1045,7 +1045,7 @@ export default function PresalesCallerPanel() {
                               key={lead.id}
                               onClick={() => setTicketLead(lead)}
                               className={`transition-colors cursor-pointer group ${lockedByOther ? "bg-[#1a1010] hover:bg-[#1e1212] opacity-70" : "hover:bg-[#1a1a1a]"}`}>
-                              <td className="px-4 py-3 font-mono text-purple-400 font-bold">#{lead.id}</td>
+                              <td className="px-4 py-3 font-mono text-purple-400 font-bold">#{lead.sr_no || lead.id}</td>
                               <td className="px-4 py-3 font-semibold whitespace-nowrap">
                                 <div className="flex items-center gap-2">
                                   {lockedByOther && <FaLock className="text-red-500 text-[10px] flex-shrink-0" title={`Locked by ${lockedBy}`} />}
@@ -1094,7 +1094,7 @@ export default function PresalesCallerPanel() {
                     <div key={lead.id} onClick={() => setDetailLead(lead)} className="bg-[#1a1a1a] border border-[#2a2a2a] hover:border-purple-500/50 rounded-2xl p-5 cursor-pointer transition-all group">
                       <div className="flex justify-between items-start mb-4 pb-3 border-b border-[#2a2a2a]">
                         <div>
-                          <p className="text-[10px] text-purple-400 font-bold mb-1">#{lead.id}{lead.dbId && <span className="ml-2 text-green-600 font-mono"><FaDatabase className="inline text-[8px]" />{lead.dbId}</span>}</p>
+                          <p className="text-[10px] text-purple-400 font-bold mb-1">#{lead.sr_no || lead.id}{lead.dbId && <span className="ml-2 text-green-600 font-mono"><FaDatabase className="inline text-[8px]" />{lead.dbId}</span>}</p>
                           <h3 className="text-white font-bold group-hover:text-purple-300">{lead.name}</h3>
                         </div>
                         {lead.interestStatus ? interestBadge(lead.interestStatus) : <span className="text-[10px] font-bold text-gray-500 bg-[#222] border border-[#333] px-2 py-0.5 rounded-full">Pending</span>}
@@ -1130,7 +1130,7 @@ export default function PresalesCallerPanel() {
                     <tbody className="divide-y divide-[#1a1a1a]">
                       {notIntLeads.map(lead => (
                         <tr key={lead.id} className="hover:bg-[#1a1a1a] transition-colors group">
-                          <td className="px-5 py-3 font-mono text-red-400 font-bold">#{lead.id}</td>
+                          <td className="px-5 py-3 font-mono text-red-400 font-bold">#{lead.sr_no || lead.id}</td>
                           <td className="px-5 py-3 text-white font-semibold">{lead.name}</td>
                           <td className="px-5 py-3 font-mono">{maskPhone(lead.phone)}</td>
                           <td className="px-5 py-3">{sourceBadge(lead.source)}</td>

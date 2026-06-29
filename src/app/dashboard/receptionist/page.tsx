@@ -2163,7 +2163,7 @@ export default function ReceptionistDashboard() {
                         else if (card2Mode === "3months") f = mergedLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= threeMonthsAgo);
                         else if (card2Mode === "6months") f = mergedLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= sixMonthsAgo);
                         else if (card2Mode === "yearly") f = mergedLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= yearStart);
-                        downloadCSV(f.map((e: any) => ({ "Lead No": e.id, "Client Name": e.name, "Budget": e.salesBudget || "N/A", "Configuration": e.configuration || "N/A", "Purpose": e.purpose || "N/A", "Source": e.source || "N/A", "Date": e.date, "Assigned To": e.assignedTo || "Unassigned" })), `Enquiries_${card2Mode}.csv`);
+                        downloadCSV(f.map((e: any) => ({ "Lead No.": e.sr_no || e.id, "Client Name": e.name, "Budget": e.salesBudget || "N/A", "Configuration": e.configuration || "N/A", "Purpose": e.purpose || "N/A", "Source": e.source || "N/A", "Date": e.date, "Assigned To": e.assignedTo || "Unassigned" })), `Enquiries_${card2Mode}.csv`);
                       }} className={`p-1.5 border rounded-md transition-colors ${isDark ? "border-[#9E217B]/30 text-[#d4006e]" : "border-[#9E217B]/30 text-[#9E217B]"}`} title="Export CSV"><FaDownload size={12} /></button>
                       <select value={card2Mode} onChange={e => setCard2Mode(e.target.value as any)} className={`text-xs rounded-lg px-2 py-1.5 outline-none cursor-pointer border ${t.selectSmall}`}>
                         <option value="today">Today</option><option value="monthly">Monthly</option>
@@ -2276,7 +2276,7 @@ export default function ReceptionistDashboard() {
                 <div className="overflow-x-auto custom-scrollbar">
                   <table className="w-full text-left border-collapse whitespace-nowrap">
                     <thead><tr className={t.tableHead}>
-                      {["Lead No.", "Client Name", "CP Name", "CP Company", "CP Phone", "Budget", "Phone", "Alt. Phone", "Date Created", "Backdated Entry", "Sales Manager"].map(h => (
+                      {["Lead No.", "Client Name", "Source", "CP Name", "CP Company", "CP Phone", "Budget", "Phone", "Alt. Phone", "Date Created", "Backdated Entry", "Sales Manager"].map(h => (
                         <th key={h} className={`px-3 py-3 md:p-4 font-bold uppercase tracking-wider border-b ${t.textHeader} ${t.tableBorder}`}>{h}</th>
                       ))}
                     </tr></thead>
@@ -2289,6 +2289,10 @@ export default function ReceptionistDashboard() {
                         <tr key={enquiry.id} className={`transition-colors cursor-pointer ${t.tableRow}`} onClick={() => { setSelectedLead(enquiry); setActiveTab("detail"); }}>
                           <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-bold ${t.accentText}`}>#{enquiry.id}</td>
                           <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-semibold ${t.text}`}>{enquiry.name}</td>
+
+                          <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm ${t.textMuted}`}>
+                            {enquiry.source || <span className="italic text-[10px]">—</span>}
+                          </td>
                           <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm truncate max-w-[100px] ${t.textMuted}`}>{enquiry.cp_name || <span className="italic text-[10px]">—</span>}</td>
                           <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm truncate max-w-[100px] ${t.textMuted}`}>{enquiry.cp_company || <span className="italic text-[10px]">—</span>}</td>
                           <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm truncate max-w-[100px] ${t.textMuted}`}>{enquiry.cp_phone || <span className="italic text-[10px]">—</span>}</td>
@@ -2605,7 +2609,7 @@ export default function ReceptionistDashboard() {
                             <div>
                               <div className={`flex justify-between items-start mb-5 pb-4 border-b ${t.tableBorder}`}>
                                 <h3 className={`text-xl font-bold transition-colors line-clamp-1 pr-2 ${t.text} ${isDark ? "group-hover:text-[#d4006e]" : "group-hover:text-[#9E217B]"}`}>
-                                  <span className={`mr-2 transition-colors ${isDark ? "text-[#d4006e]" : "text-[#00AEEF] group-hover:text-[#9E217B]"}`}>#{lead.id}</span>{lead.name}
+                                  <span className={`mr-2 transition-colors ${isDark ? "text-[#d4006e]" : "text-[#00AEEF] group-hover:text-[#9E217B]"}`}>#{lead.sr_no || lead.id}</span>{lead.name}
                                 </h3>
                                 <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border flex-shrink-0 ${isLost ? t.statusLost :
                                   isNGD ? t.statusNGD : getStatusStyle(lead.status)}`}>{isLost ? "LOST LEAD" : isNGD ? "NON GENUINE DEMAND" : (lead.status || "Assigned")}</span>
@@ -3019,7 +3023,7 @@ export default function ReceptionistDashboard() {
                     <input type="checkbox" checked={showNGDLeads} onChange={e => setShowNGDLeads(e.target.checked)} disabled={leadStatusFilter !== "all"} className="accent-[#F97316]" />
                     Show NGD
                   </label>
-                  <button onClick={() => downloadCSV(filteredRecepLeads.map((l: any) => ({ "Lead No": l.id, "Client Name": l.name, "CP Company": l.cp_company || "N/A", "Budget": l.salesBudget || l.budget || "N/A", "Phone": l.phone || "N/A", "Alt Phone": l.altPhone || "N/A", "Date Created": l.date, "Assigned to Receptionist": l.assignedReceptionist || user.name, "Status": l.status || "Assigned" })), "Receptionist_Leads.csv")} className={`p-2 border rounded-lg ${t.exportBtn}`} title="Export CSV"><FaDownload size={12} /></button>
+                  <button onClick={() => downloadCSV(filteredRecepLeads.map((l: any) => ({ "Lead No.": l.sr_no || l.id, "Client Name": l.name, "CP Company": l.cp_company || "N/A", "Budget": l.salesBudget || l.budget || "N/A", "Phone": l.phone || "N/A", "Alt Phone": l.altPhone || "N/A", "Date Created": l.date, "Assigned to Receptionist": l.assignedReceptionist || user.name, "Status": l.status || "Assigned" })), "Receptionist_Leads.csv")} className={`p-2 border rounded-lg ${t.exportBtn}`} title="Export CSV"><FaDownload size={12} /></button>
                   <button onClick={refetchAll} className={`text-sm font-semibold flex items-center gap-2 px-4 py-2 rounded-lg ${t.btnPrimary}`}>↻ Refresh</button>
                 </div>
               </div>
@@ -3053,7 +3057,7 @@ export default function ReceptionistDashboard() {
                             className={`transition-colors ${isLost ? t.rowLost : isNGD ? t.rowNGD : t.tableRow}`}>
 
                             {/* 1. Lead No. */}
-                            <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-bold ${t.accentText}`}>#{lead.id}</td>
+                            <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-bold ${t.accentText}`}>#{lead.sr_no || lead.id}</td>
 
                             {/* 2. Client Name */}
                             <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-semibold ${t.text}`}>{lead.name}</td>
@@ -3150,7 +3154,7 @@ export default function ReceptionistDashboard() {
                           className={`rounded-lg pl-9 pr-4 py-2 text-sm outline-none w-52 transition-colors border ${t.inputBg} ${t.text}`} />
                       </div>
                       <button onClick={() => downloadCSV(filteredClosedLeads.map((l: any) => ({
-                        "Lead No": l.id,
+                        "Lead No.": l.sr_no || l.id,
                         "Client Name": l.name,
                         "Budget": l.salesBudget || l.budget || "N/A",
                         "Status": l.status,
@@ -3191,7 +3195,7 @@ export default function ReceptionistDashboard() {
                           ) : filteredClosedLeads.map((lead: any) => (
                             <tr key={lead.id} className={`transition-colors cursor-pointer ${t.tableRow}`}
                               onClick={() => { setSelectedClosedLead(lead); setClosedLeadView("detail"); }}>
-                              <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-bold ${t.accentText}`}>#{lead.id}</td>
+                              <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-bold ${t.accentText}`}>#{lead.sr_no || lead.id}</td>
                               <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-semibold ${t.text}`}>{lead.name}</td>
                               <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-bold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget || lead.budget}</td>
                               <td className={`px-3 py-3 md:p-4 text-xs ${t.textMuted}`}>{(lead.propType && lead.propType !== "Pending" && lead.propType !== "N/A" ? lead.propType : lead.configuration && lead.configuration !== "Pending" && lead.configuration !== "N/A" ? lead.configuration : "N/A")}</td>
@@ -4067,7 +4071,7 @@ function SiteVisitScheduler({
                 <h2 className={`font-bold flex items-center gap-2 ${isDark ? "text-orange-400" : "text-orange-700"}`}>
                   <FaCalendarAlt /> {editVisit ? "Reschedule Visit" : visits.length === 0 ? "Schedule Site Visit" : "Schedule Re-Site Visit"}
                 </h2>
-                <p className={`text-xs mt-0.5 ${t.textMuted}`}>Lead #{lead.id} — {lead.name}</p>
+                <p className={`text-xs mt-0.5 ${t.textMuted}`}>Lead #{lead.sr_no || lead.id} — {lead.name}</p>
               </div>
               <button onClick={() => { setShowModal(false); setEditVisit(null); }} className={`p-2 ${t.textMuted} hover:text-red-500`}><FaTimes /></button>
             </div>

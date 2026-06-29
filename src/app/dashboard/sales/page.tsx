@@ -712,7 +712,7 @@ export default function SalesDashboard() {
                               <button onClick={e => { e.stopPropagation(); setDismissedVisits(prev => new Set([...prev, String(lead.id)])); }} className={`absolute top-3 right-3 cursor-pointer opacity-0 group-hover:opacity-100 ${t.textFaint} hover:text-red-500`}><FaTimes className="text-xs" /></button>
                               <div className="flex items-start justify-between gap-3 pr-4">
                                 <div className="flex-1 min-w-0">
-                                  <p className={`font-bold text-xs group-hover:text-orange-400 truncate ${t.text}`}>#{lead.id} — {lead.name}</p>
+                                  <p className={`font-bold text-xs group-hover:text-orange-400 truncate ${t.text}`}>#{lead.sr_no || lead.id} — {lead.name}</p>
                                   <p className={`text-[10px] mt-0.5 truncate ${t.textFaint}`}>{(lead.propType && lead.propType !== "Pending") ? lead.propType : lead.configuration ? lead.configuration : "Property TBD"} · {lead.salesBudget}</p>
                                   <p className={`text-[10px] mt-1 ${t.textMuted}`}>📅 {new Date(lead.mongoVisitDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</p>
                                 </div>
@@ -770,7 +770,7 @@ export default function SalesDashboard() {
                             <button onClick={e => { e.stopPropagation(); setDismissedFollowUps(prev => new Set([...prev, String(lead.id)])); }} className={`absolute top-3 right-3 cursor-pointer opacity-0 group-hover:opacity-100 ${t.textFaint} hover:text-red-500`}><FaTimes className="text-xs" /></button>
                             <div className="flex items-start justify-between gap-3 pr-4">
                               <div className="flex-1 min-w-0">
-                                <p className={`font-bold text-xs group-hover:text-purple-400 truncate ${t.text}`}>#{lead.id} — {lead.name}</p>
+                                <p className={`font-bold text-xs group-hover:text-purple-400 truncate ${t.text}`}>#{lead.sr_no || lead.id} — {lead.name}</p>
                                 <p className={`text-[10px] mt-0.5 truncate ${t.textFaint}`}>{(lead.propType && lead.propType !== "Pending") ? lead.propType : lead.configuration ? lead.configuration : "No property set"} · {lead.salesBudget}</p>
                                 {lead.leadInterestStatus && lead.leadInterestStatus !== "Pending" && (
                                   <span className={`inline-block mt-1 text-[9px] font-bold uppercase px-2 py-0.5 rounded-full border ${lead.leadInterestStatus === "Interested" ? "text-green-400 border-green-500/30 bg-green-500/10" : "text-yellow-400 border-yellow-500/30 bg-yellow-500/10"}`}>{lead.leadInterestStatus}</span>
@@ -1661,7 +1661,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                               const locked = !!lead.is_lost_lead || lead.status === "Closing" || !!lead.closingDate;
                               if (!locked) { prefillSalesForm(lead); setShowSalesForm(true); setShowLoanForm(false); }
                             }}>
-                              <td className={`px-4 sm:px-3 py-3 sm:py-2.5 font-bold ${t.accentText}`}>#{lead.id}</td>
+                              <td className={`px-4 sm:px-3 py-3 sm:py-2.5 font-bold ${t.accentText}`}>#{lead.sr_no || lead.id}</td>
                               <td className={`px-4 py-3 sm:py-2.5 font-medium ${t.text}`}>{lead.name}</td>
                               <td className={`px-4 py-3 sm:py-2.5 ${t.textMuted}`}>{lead.propType || lead.configuration || "Pending"}</td>
                               <td className={`px-4 py-3 sm:py-2.5 font-semibold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget}</td>
@@ -1801,7 +1801,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                           <div>
                             <div className={`flex flex-col sm:flex-row sm:justify-between items-start mb-4 pb-3 sm:mb-5 sm:pb-4 border-b gap-2 ${t.tableBorder}`}>
                               <h3 className={`text-lg sm:text-lg font-bold transition-colors line-clamp-2 pr-2 ${t.text} ${isClosing ? "group-hover:text-amber-500" : isDark ? "group-hover:text-[#d946a8]" : "group-hover:text-[#9E217B]"}`}>
-                                <span className={`mr-2 ${t.accentText}`}>#{lead.id}</span>{lead.name}
+                                <span className={`mr-2 ${t.accentText}`}>#{lead.sr_no || lead.id}</span>{lead.name}
                               </h3>
                               <span className={`px-2 sm:px-3 py-1 rounded-full text-[9px] sm:text-[10px] font-bold uppercase tracking-wider border flex-shrink-0 whitespace-nowrap ${isLost ? t.statusLost :
                                 isNGD ? t.statusNGD :
@@ -1914,7 +1914,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                           const locked = !!lead.is_lost_lead || lead.status === "Closing" || !!lead.closingDate;
                           if (!locked) { prefillSalesForm(lead); setShowSalesForm(true); setShowLoanForm(false); }
                         }}>
-                          <td className={`px-4 sm:px-3 py-3 sm:py-2.5 font-bold ${t.accentText}`}>#{lead.id}</td>
+                          <td className={`px-4 sm:px-3 py-3 sm:py-2.5 font-bold ${t.accentText}`}>#{lead.sr_no || lead.id}</td>
                           <td className={`px-4 py-3 sm:py-2.5 font-semibold ${t.text}`}>{lead.name}</td>
                           <td className={`px-4 py-3 sm:py-2.5 font-bold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget || lead.budget}</td>
                           <td className={`px-4 py-3 sm:py-2.5 ${t.textMuted}`}>{lead.propType || lead.configuration || "N/A"}</td>
@@ -3114,7 +3114,7 @@ function SiteVisitScheduler({
                 <h2 className={`font-bold flex items-center gap-2 ${isDark ? "text-orange-400" : "text-orange-700"}`}>
                   <FaCalendarAlt /> {editVisit ? "Reschedule Visit" : visits.length === 0 ? "Schedule Site Visit" : "Schedule Re-Site Visit"}
                 </h2>
-                <p className={`text-xs mt-0.5 ${t.textMuted}`}>Lead #{lead.id} — {lead.name}</p>
+                <p className={`text-xs mt-0.5 ${t.textMuted}`}>Lead #{lead.sr_no || lead.id} — {lead.name}</p>
               </div>
               <button onClick={() => { setShowModal(false); setEditVisit(null); }} className={`p-2 ${t.textMuted} hover:text-red-500`}><FaTimes /></button>
             </div>

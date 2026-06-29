@@ -1807,7 +1807,7 @@ export default function EmployeesPage() {
                                   </td></tr>
                                   : callerSavedFormLeads.map((lead: any) => (
                                     <tr key={lead.id} className={`transition-colors group align-middle ${t.tableRow}`}>
-                                      <td className={`px-4 py-3 font-mono font-bold ${t.accentText}`}>#{lead.id}</td>
+                                      <td className={`px-4 py-3 font-mono font-bold ${t.accentText}`}>#{lead.sr_no || lead.id}</td>
                                       <td className={`px-4 py-3 font-semibold whitespace-nowrap ${t.text}`}>{lead.name}</td>
                                       <td className={`px-4 py-3 font-mono text-sm ${t.textLight}`}>{maskPhone(lead.contact_no)}</td>
                                       <td className={`px-4 py-3 ${t.textLight}`}>{lead.source || "—"}</td>
@@ -1885,7 +1885,7 @@ export default function EmployeesPage() {
                               : filteredCallerLeads.length === 0 ? <tr><td colSpan={12} className={`px-4 py-8 text-center ${t.textMuted}`}>No caller leads yet.</td></tr>
                                 : filteredCallerLeads.map((lead: any) => (
                                   <tr key={lead.id} className={`transition-colors group align-middle ${t.tableRow}`}>
-                                    <td className={`px-4 py-3 font-mono font-bold ${t.accentText}`}>#{lead.id}</td>
+                                    <td className={`px-4 py-3 font-mono font-bold ${t.accentText}`}>#{lead.sr_no || lead.id}</td>
                                     <td className={`px-4 py-3 font-semibold whitespace-nowrap ${t.text}`}>{lead.name}</td>
                                     <td className={`px-4 py-3 font-mono text-sm ${t.textLight}`}>{maskPhone(lead.contact_no)}</td>
                                     <td className={`px-4 py-3 ${t.textLight}`}>{lead.source || "—"}</td>
@@ -2345,7 +2345,7 @@ function CallerControlMode({ leads, savedLeads, setSavedLeads, adminName, onExit
                           const sl = savedLeads.find(l => l.id === lead.id);
                           return (
                             <tr key={lead.id} onClick={() => setTicketLead(lead)} className="hover:bg-[#1a1a1a] transition-colors cursor-pointer group align-middle">
-                              <td className="px-4 py-3 font-mono text-orange-400 font-bold">#{lead.id}</td>
+                              <td className="px-4 py-3 font-mono text-orange-400 font-bold">#{lead.sr_no || lead.id}</td>
                               <td className="px-4 py-3 text-white font-semibold group-hover:text-orange-300 whitespace-nowrap">{lead.name}</td>
                               <td className="px-4 py-3 font-mono text-sm">{mPhone(lead.contact_no || lead.phone)}</td>
                               <td className="px-4 py-3 text-gray-300">{lead.source || "—"}</td>
@@ -2406,7 +2406,7 @@ function CallerControlMode({ leads, savedLeads, setSavedLeads, adminName, onExit
                         className="bg-[#1a1a1a] border border-[#2a2a2a] hover:border-orange-500/50 rounded-2xl p-5 cursor-pointer transition-all group">
                         <div className="flex justify-between items-start mb-4 pb-3 border-b border-[#2a2a2a]">
                           <div>
-                            <p className="text-[10px] text-orange-400 font-bold mb-1">#{lead.id}</p>
+                            <p className="text-[10px] text-orange-400 font-bold mb-1">#{lead.sr_no || lead.id}</p>
                             <h3 className="text-white font-bold group-hover:text-orange-300 transition-colors">{lead.name}</h3>
                           </div>
                           {lead.interestStatus ? iBadge(lead.interestStatus) : <span className="text-[10px] font-bold text-gray-500 bg-[#222] border border-[#333] px-2 py-0.5 rounded-full">Pending</span>}
@@ -2467,7 +2467,7 @@ function CallerControlMode({ leads, savedLeads, setSavedLeads, adminName, onExit
                       <tbody className="divide-y divide-[#1a1a1a]">
                         {interestedLeads.slice(0, visibleCount).map((lead: any) => (
                           <tr key={lead.id} className="hover:bg-[#1a1a1a] transition-colors group align-middle">
-                            <td className="px-4 py-3 font-mono text-green-400 font-bold">#{lead.id}</td>
+                            <td className="px-4 py-3 font-mono text-green-400 font-bold">#{lead.sr_no || lead.id}</td>
                             <td className="px-4 py-3 text-white font-semibold whitespace-nowrap">{lead.name}</td>
                             <td className="px-4 py-3 font-mono text-sm">{mPhone(lead.contact_no || lead.phone)}</td>
                             <td className="px-4 py-3 text-gray-300">{lead.source || "—"}</td>
@@ -2532,7 +2532,7 @@ function CallerControlMode({ leads, savedLeads, setSavedLeads, adminName, onExit
                       <tbody className="divide-y divide-[#1a1a1a]">
                         {notIntLeads.slice(0, visibleCount).map((lead: any) => (
                           <tr key={lead.id} className="hover:bg-[#1a1a1a] transition-colors group">
-                            <td className="px-5 py-3 font-mono text-red-400 font-bold">#{lead.id}</td>
+                            <td className="px-5 py-3 font-mono text-red-400 font-bold">#{lead.sr_no || lead.id}</td>
                             <td className="px-5 py-3 text-white font-semibold whitespace-nowrap">{lead.name}</td>
                             <td className="px-5 py-3 font-mono text-sm">{mPhone(lead.contact_no || lead.phone)}</td>
                             <td className="px-5 py-3 text-gray-300">{lead.source || "—"}</td>
@@ -2590,7 +2590,7 @@ function CallerControlMode({ leads, savedLeads, setSavedLeads, adminName, onExit
                       className="bg-[#1a1a1a] border border-[#2a2a2a] hover:border-orange-500/50 rounded-2xl p-5 cursor-pointer transition-all group">
                       <div className="flex justify-between items-start mb-4 pb-3 border-b border-[#2a2a2a]">
                         <div>
-                          <p className="text-[10px] text-orange-400 font-bold mb-1">#{lead.id}</p>
+                          <p className="text-[10px] text-orange-400 font-bold mb-1">#{lead.sr_no || lead.id}</p>
                           <h3 className="text-white font-bold group-hover:text-orange-300 transition-colors">{lead.name}</h3>
                         </div>
                         {lead.interestStatus ? iBadge(lead.interestStatus) : <span className="text-[10px] font-bold text-gray-500 bg-[#222] border border-[#333] px-2 py-0.5 rounded-full">Pending</span>}
@@ -2633,7 +2633,7 @@ function CallerControlMode({ leads, savedLeads, setSavedLeads, adminName, onExit
                       <tbody className="divide-y divide-[#1a1a1a]">
                         {interestedLeads.map((lead: any) => (
                           <tr key={lead.id} className="hover:bg-[#1a1a1a] transition-colors group align-middle">
-                            <td className="px-4 py-3 font-mono text-green-400 font-bold">#{lead.id}</td>
+                            <td className="px-4 py-3 font-mono text-green-400 font-bold">#{lead.sr_no || lead.id}</td>
                             <td className="px-4 py-3 text-white font-semibold whitespace-nowrap">{lead.name}</td>
                             <td className="px-4 py-3 font-mono text-sm">{mPhone(lead.contact_no || lead.phone)}</td>
                             <td className="px-4 py-3 text-gray-300">{lead.source || "—"}</td>
@@ -2680,7 +2680,7 @@ function CallerControlMode({ leads, savedLeads, setSavedLeads, adminName, onExit
                       <tbody className="divide-y divide-[#1a1a1a]">
                         {notIntLeads.map((lead: any) => (
                           <tr key={lead.id} className="hover:bg-[#1a1a1a] transition-colors group">
-                            <td className="px-5 py-3 font-mono text-red-400 font-bold">#{lead.id}</td>
+                            <td className="px-5 py-3 font-mono text-red-400 font-bold">#{lead.sr_no || lead.id}</td>
                             <td className="px-5 py-3 text-white font-semibold whitespace-nowrap">{lead.name}</td>
                             <td className="px-5 py-3 font-mono text-sm">{mPhone(lead.contact_no || lead.phone)}</td>
                             <td className="px-5 py-3 text-gray-300">{lead.source || "—"}</td>

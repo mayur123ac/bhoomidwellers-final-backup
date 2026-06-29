@@ -47,6 +47,25 @@ export async function transaction<T>(
   }
 }
 
+export async function recalculateSrNos(client?: PoolClient) {
+  const queryText = `
+    WITH sorted_leads AS (
+      SELECT id, ROW_NUMBER() OVER (ORDER BY enquiry_date ASC, created_at ASC, id ASC) as new_sr_no 
+      FROM walkin_enquiries
+    )
+    UPDATE walkin_enquiries
+    SET sr_no = sorted_leads.new_sr_no
+    FROM sorted_leads
+    WHERE walkin_enquiries.id = sorted_leads.id
+    AND walkin_enquiries.sr_no IS DISTINCT FROM sorted_leads.new_sr_no;
+  `;
+  if (client) {
+    await client.query(queryText);
+  } else {
+    await query(queryText);
+  }
+}
+
 if (typeof window === "undefined") {
   setInterval(async () => {
     try {
