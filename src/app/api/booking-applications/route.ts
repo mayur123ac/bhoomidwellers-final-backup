@@ -2,7 +2,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
 import { uploadBufferToR2 } from "@/lib/r2";
-import { generatePdfBuffer } from "@/lib/pdfGenerator";
 
 export const dynamic = "force-dynamic";
 
@@ -311,23 +310,15 @@ export async function POST(req: NextRequest) {
         WHERE id = $6
       `, [updatesForDb.primary_pan_url || null, updatesForDb.primary_aadhaar_front_url || null, updatesForDb.primary_aadhaar_back_url || null, JSON.stringify(joint_applicants), updatesForDb.signature_data || null, newId]);
 
-      // PDF Generation
-      const fetchLead = await client.query(`SELECT * FROM walkin_enquiries WHERE id = $1`, [lead_id]);
-      const leadData = fetchLead.rows[0];
-      
+      // Return the saved booking row — PDF generation is intentionally decoupled and done on-demand
       const fetchBooking = await client.query(`SELECT * FROM booking_applications WHERE id = $1`, [newId]);
-      let bookingData = fetchBooking.rows[0];
-      if (sigData) { bookingData.signature_data = sigData; }
-      
-      const pdfBuffer = await generatePdfBuffer(bookingData, leadData, imagesForPdf);
-      const pdfKey = `bookings/${bookingNumber}/documents/booking_application.pdf`;
-      await uploadBufferToR2(pdfKey, pdfBuffer, "application/pdf");
-      await client.query(`INSERT INTO booking_documents (booking_id, lead_id, booking_number, document_type, applicant_type, file_name, object_key, mime_type, file_size, uploaded_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`, [newId, lead_id, bookingNumber, "BOOKING_FORM", "SYSTEM", "booking_application.pdf", pdfKey, "application/pdf", pdfBuffer.length, created_by]);
-
       return fetchBooking.rows[0];
     });
 
-    return NextResponse.json({ success: true, data: result }, { status: 201 });
+    // Mark booking as Confirmed now that the full transaction succeeded
+    await query(`UPDATE booking_applications SET booking_status = 'Confirmed' WHERE id = $1`, [result.id]);
+
+    return NextResponse.json({ success: true, data: { ...result, booking_status: 'Confirmed' } }, { status: 201 });
   } catch (err: any) {
     console.error("[POST /api/booking-applications]", err);
     return NextResponse.json({ success: false, message: err.message }, { status: 500 });

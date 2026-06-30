@@ -11,7 +11,7 @@ async function getBase64Image(url: string | null) {
     const data = await fs.readFile(filePath);
     let ext = path.extname(filePath).substring(1).toLowerCase() || 'png';
     if (ext === 'jpg') ext = 'jpeg';
-    
+
     // For PDFs, we might just want to show a placeholder since we can't easily embed a PDF inside an image tag in a PDF
     if (ext === 'pdf') {
       return null;
@@ -37,15 +37,15 @@ export async function POST(req: Request) {
     let jointApplicants: any[] = [];
     if (booking.joint_applicants) {
       try {
-        jointApplicants = typeof booking.joint_applicants === 'string' 
-          ? JSON.parse(booking.joint_applicants) 
+        jointApplicants = typeof booking.joint_applicants === 'string'
+          ? JSON.parse(booking.joint_applicants)
           : booking.joint_applicants;
       } catch (e) { }
     }
     if (jointApplicants.length === 0 && booking.joint_name) {
       jointApplicants = [{
         name: booking.joint_name, email: booking.joint_email, mobile: booking.joint_mobile,
-        pan: booking.joint_pan, aadhaar: booking.joint_aadhaar, 
+        pan: booking.joint_pan, aadhaar: booking.joint_aadhaar,
         occupation: booking.joint_occupation, nationality: booking.joint_nationality
       }];
     }
@@ -53,14 +53,14 @@ export async function POST(req: Request) {
     // Load images
     const primaryPanBase64 = await getBase64Image(booking.primary_pan_url);
     const primaryAadhaarBase64 = await getBase64Image(booking.primary_aadhaar_front_url);
-    
+
     // Convert logo
     let logoBase64 = null;
     try {
       const logoPath = path.join(process.cwd(), 'public', 'assets', 'bhoomidwellersLogo.png');
       const logoData = await fs.readFile(logoPath);
       logoBase64 = `data:image/png;base64,${logoData.toString('base64')}`;
-    } catch(e) {}
+    } catch (e) { }
 
     const parseVal = (val: any) => {
       if (!val) return 0;
@@ -69,13 +69,13 @@ export async function POST(req: Request) {
       if (str.includes("cr")) return (parseFloat(str) || 0) * 10000000;
       return parseFloat(str) || 0;
     };
-    
+
     let paymentRowsHtml = '';
     let totalReceived = 0;
     let paymentDetailsArr = [];
     try {
       paymentDetailsArr = typeof booking.payment_details === 'string' ? JSON.parse(booking.payment_details) : (booking.payment_details || []);
-    } catch (e) {}
+    } catch (e) { }
 
     if (paymentDetailsArr.length > 0) {
       paymentDetailsArr.forEach((p: any, idx: number) => {

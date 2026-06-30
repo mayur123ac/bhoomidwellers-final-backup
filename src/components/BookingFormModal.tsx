@@ -141,6 +141,10 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
   const [form, setForm] = useState<BookingFormData>(() => defaultForm(lead));
   const [errors, setErrors] = useState<Partial<Record<keyof BookingFormData, string>>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // ── Confirmation screen state (fully isolated from form/submit lifecycle) ──
+  const [confirmedBooking, setConfirmedBooking] = useState<any | null>(null);
+  const [isPdfGenerating, setIsPdfGenerating] = useState(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
   const [termsScrolled, setTermsScrolled] = useState(false);
   const [sigMode, setSigMode] = useState<"draw" | "upload">("draw");
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -260,14 +264,13 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
   const nextStep = () => { if (validate(step)) setStep(s => Math.min(s + 1, 5)); };
   const prevStep = () => setStep(s => Math.max(s - 1, 1));
 
-  // ── Submit ──
+  // ── Submit — saves booking only, NO PDF generation ──
   const handleSubmit = async () => {
     if (!validate(4)) { setStep(4); return; }
     setIsSubmitting(true);
     try {
       const formData = new FormData();
       
-      // Basic fields
       formData.append("lead_id", lead.id.toString());
       formData.append("primary_name", form.primary_name);
       formData.append("primary_email", form.primary_email);
@@ -276,12 +279,10 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
       formData.append("primary_aadhaar", form.primary_aadhaar);
       formData.append("primary_occupation", form.primary_occupation);
       formData.append("primary_nationality", form.primary_nationality);
-      
       formData.append("address", form.address);
       formData.append("pin", form.pin);
       formData.append("state", form.state);
       formData.append("country", form.country);
-      
       formData.append("property_type", form.property_type);
       formData.append("floor_number", form.floor_number);
       formData.append("flat_number", form.flat_number);
@@ -289,65 +290,53 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
       formData.append("consideration_value", form.consideration_value);
       formData.append("consideration_value_words", form.consideration_value_words);
       formData.append("parking_details", form.parking_details);
-      
       formData.append("witness_name", form.witness_name);
       formData.append("witness_aadhaar", form.witness_aadhaar);
-      
       formData.append("booking_source", form.booking_source);
       formData.append("direct_source", form.direct_source);
       formData.append("channel_partner_name", form.channel_partner_name);
       formData.append("channel_partner_contact", form.channel_partner_contact);
-      
-      // Assuming these properties exist on the form or are derived
       formData.append("unit_cost", (form as any).unit_cost || "");
       formData.append("sdr", (form as any).sdr || "");
       formData.append("gst", (form as any).gst || "");
-      
       formData.append("declaration_accepted", form.declaration_accepted ? 'true' : 'false');
       formData.append("terms_accepted", form.terms_accepted ? 'true' : 'false');
       formData.append("consent_accepted", form.consent_accepted ? 'true' : 'false');
-      
       formData.append("signature_data", form.signature_data);
       formData.append("application_date", form.application_date);
-      
       formData.append("created_by", user.name);
       formData.append("created_role", user.role);
-
-      // JSON fields
       formData.append("payment_details", JSON.stringify(form.payment_details));
       formData.append("joint_applicants", JSON.stringify(form.joint_applicants.map(ja => ({
         name: ja.name, email: ja.email, mobile: ja.mobile,
         pan: ja.pan?.toUpperCase(), aadhaar: ja.aadhaar, occupation: ja.occupation, nationality: ja.nationality
       }))));
 
-      // Files
       if (form.primary_pan_file) formData.append("primary_pan_file", form.primary_pan_file);
       if (form.primary_aadhaar_front_file) formData.append("primary_aadhaar_front_file", form.primary_aadhaar_front_file);
       if (form.primary_aadhaar_back_file) formData.append("primary_aadhaar_back_file", form.primary_aadhaar_back_file);
-      
       form.joint_applicants.forEach((ja, i) => {
         if (ja.pan_file) formData.append(`joint_${i}_pan_file`, ja.pan_file);
         if (ja.aadhaar_front_file) formData.append(`joint_${i}_aadhaar_front_file`, ja.aadhaar_front_file);
         if (ja.aadhaar_back_file) formData.append(`joint_${i}_aadhaar_back_file`, ja.aadhaar_back_file);
       });
 
-      const res = await fetch("/api/booking-applications", {
-        method: "POST",
-        body: formData,
-      });
+      const res = await fetch("/api/booking-applications", { method: "POST", body: formData });
       const json = await res.json();
       if (!json.success) throw new Error(json.message || "Failed to save booking");
       const booking = json.data;
 
-      // 2. Update lead status to Closing
-      await fetch(`/api/walkin_enquiries/${lead.id}`, {
+      // Clear draft immediately
+      if (lead?.id) sessionStorage.removeItem(`booking_draft_${lead.id}`);
+
+      // Fire-and-forget side effects — must NOT block confirmation screen
+      fetch(`/api/walkin_enquiries/${lead.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: lead.name, status: "Closing" }),
-      });
+      }).catch(() => {});
 
-      // 3. Add timeline entry
-      await fetch("/api/followups", {
+      fetch("/api/followups", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -358,18 +347,63 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
           siteVisitDate: null,
           createdAt: new Date().toISOString(),
         }),
-      });
+      }).catch(() => {});
 
-      // 4. Clear draft
-      if (lead?.id) sessionStorage.removeItem(`booking_draft_${lead.id}`);
-      onSuccess(booking);
-      onClose();
+      // Show confirmation screen — modal stays open, step irrelevant
+      setConfirmedBooking(booking);
     } catch (err: any) {
       alert(`Error: ${err.message}`);
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  // ── Download PDF — fully isolated; a Puppeteer failure cannot affect modal ──
+  const downloadPdf = async () => {
+    if (!confirmedBooking) return;
+    setIsPdfGenerating(true);
+    setPdfError(null);
+    try {
+      const res = await fetch("/api/generate-booking-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ booking: confirmedBooking, lead }),
+      });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.message || "PDF generation failed");
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${confirmedBooking.booking_number || "Booking_Form"}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      // Non-blocking error: keep confirmation screen open, booking unchanged
+      setPdfError("Booking saved successfully. PDF generation failed. Please try downloading again later.");
+    } finally {
+      setIsPdfGenerating(false);
+    }
+  };
+
+  // ── Close modal — notifies parent exactly once, resets state after animation ──
+  const handleClose = useCallback(() => {
+    if (confirmedBooking) {
+      onSuccess(confirmedBooking);
+    }
+    onClose();
+    setTimeout(() => {
+      setConfirmedBooking(null);
+      setPdfError(null);
+      setStep(1);
+    }, 300);
+  }, [confirmedBooking, onSuccess, onClose]);
+
+
 
   // ── Theme helpers ──
   const bg = isDark ? "bg-[#0A0A0F]" : "bg-white";
@@ -407,13 +441,116 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
             {/* ── Header ── */}
             <div className={`flex items-center justify-between px-6 py-4 border-b flex-shrink-0 ${isDark ? "bg-[#121218] border-[#2A2A35]" : "bg-[#F8FAFC] border-[#E5E7EB]"}`}>
               <div>
-                <h2 className={`text-lg font-bold ${textMain}`}>Booking Application Form</h2>
-                <p className={`text-xs mt-0.5 ${textMuted}`}>Lead #{lead?.id} — {lead?.name}</p>
+                {confirmedBooking ? (
+                  <h2 className={`text-lg font-bold ${textMain}`}>Booking Confirmed</h2>
+                ) : (
+                  <>
+                    <h2 className={`text-lg font-bold ${textMain}`}>Booking Application Form</h2>
+                    <p className={`text-xs mt-0.5 ${textMuted}`}>Lead #{lead?.id} — {lead?.name}</p>
+                  </>
+                )}
               </div>
-              <button onClick={onClose} className={`p-2 rounded-xl transition-colors cursor-pointer ${isDark ? "text-[#888899] hover:bg-[#1C1C2A] hover:text-white" : "text-[#6B7280] hover:bg-[#F1F5F9]"}`}>
+              <button onClick={handleClose} className={`p-2 rounded-xl transition-colors cursor-pointer ${isDark ? "text-[#888899] hover:bg-[#1C1C2A] hover:text-white" : "text-[#6B7280] hover:bg-[#F1F5F9]"}`}>
                 <FaTimes />
               </button>
             </div>
+
+            {/* ── Confirmation Screen (replaces stepper + body when booking is saved) ── */}
+            {confirmedBooking ? (
+              <div className={`flex-1 overflow-y-auto p-8 flex flex-col items-center justify-center ${bg}`}>
+                <AnimatePresence>
+                  <motion.div
+                    initial={{ scale: 0.8, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ type: "spring", stiffness: 260, damping: 20 }}
+                    className="w-full max-w-md flex flex-col items-center text-center"
+                  >
+                    {/* Animated success icon */}
+                    <motion.div
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{ delay: 0.1, type: "spring", stiffness: 300, damping: 18 }}
+                      className="w-20 h-20 rounded-full flex items-center justify-center mb-6 shadow-lg"
+                      style={{ background: isDark ? "linear-gradient(135deg,#9E217B,#d4006e)" : "linear-gradient(135deg,#00AEEF,#0077c2)" }}
+                    >
+                      <FaCheckCircle className="text-white text-4xl" />
+                    </motion.div>
+
+                    <h3 className={`text-2xl font-bold mb-1 ${textMain}`}>Booking Confirmed!</h3>
+                    <p className={`text-sm mb-6 ${textMuted}`}>The booking has been saved to the database.</p>
+
+                    {/* Booking details card */}
+                    <div className={`w-full rounded-2xl border p-5 mb-6 text-left ${isDark ? "bg-[#121218] border-[#2A2A35]" : "bg-[#F8FAFC] border-[#E5E7EB]"}`}>
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        {[
+                          { label: "Booking No.", val: confirmedBooking.booking_number },
+                          { label: "Applicant", val: confirmedBooking.primary_name },
+                          { label: "Flat", val: confirmedBooking.flat_number },
+                          { label: "Floor", val: confirmedBooking.floor_number },
+                          { label: "Type", val: confirmedBooking.property_type },
+                          { label: "Amount", val: confirmedBooking.consideration_value ? `₹${confirmedBooking.consideration_value}` : "—" },
+                          { label: "Status", val: confirmedBooking.booking_status },
+                          { label: "Date", val: confirmedBooking.application_date },
+                        ].map(({ label, val }) => (
+                          <div key={label}>
+                            <p className={`text-[10px] font-semibold uppercase tracking-wide mb-0.5 ${textMuted}`}>{label}</p>
+                            <p className={`font-bold text-sm ${textMain}`}>{val || "—"}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Non-blocking PDF error banner */}
+                    {pdfError && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="w-full mb-4 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 flex items-start gap-3"
+                      >
+                        <span className="text-amber-400 text-lg flex-shrink-0 mt-0.5">⚠</span>
+                        <div className="flex-1 text-left">
+                          <p className="text-xs text-amber-300 font-medium">{pdfError}</p>
+                        </div>
+                        <button onClick={() => setPdfError(null)} className="text-amber-400 hover:text-amber-200 text-xs flex-shrink-0">✕</button>
+                      </motion.div>
+                    )}
+
+                    {/* Action buttons */}
+                    <div className="w-full flex flex-col sm:flex-row gap-3">
+                      {/* View Booking — opens read-only view, closes modal */}
+                      <button
+                        onClick={handleClose}
+                        className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold transition-colors border cursor-pointer ${btnSecondary}`}
+                      >
+                        <FaFileAlt className="text-xs" /> View Booking
+                      </button>
+
+                      {/* Download PDF — fully isolated, cannot break booking state */}
+                      <button
+                        onClick={downloadPdf}
+                        disabled={isPdfGenerating}
+                        className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed shadow-md ${btnPrimary}`}
+                      >
+                        {isPdfGenerating ? (
+                          <><span className="animate-spin text-sm">⟳</span> Generating...</>
+                        ) : (
+                          <><FaDownload className="text-xs" /> Download PDF</>
+                        )}
+                      </button>
+
+                      {/* Close — dismisses modal cleanly */}
+                      <button
+                        onClick={handleClose}
+                        className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold transition-colors border cursor-pointer ${isDark ? "border-[#2A2A35] text-[#888899] hover:bg-[#1C1C2A]" : "border-[#E5E7EB] text-[#6B7280] hover:bg-[#F1F5F9]"}`}
+                      >
+                        <FaTimes className="text-xs" /> Close
+                      </button>
+                    </div>
+                  </motion.div>
+                </AnimatePresence>
+              </div>
+            ) : (
+              <>
 
             {/* ── Stepper ── */}
             <div className={`flex items-center gap-0 px-6 py-3 border-b flex-shrink-0 overflow-x-auto ${isDark ? "bg-[#0D0D12] border-[#2A2A35]" : "bg-white border-[#F1F5F9]"}`}>
@@ -445,6 +582,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
 
                   {/* ══════════ STEP 1: Applicant Details ══════════ */}
                   {step === 1 && (
+
                     <div className="space-y-6">
                       {/* Primary Applicant */}
                       <div>
@@ -936,6 +1074,8 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                 </button>
               )}
             </div>
+            </>
+            )}
           </motion.div>
         </motion.div>
       )}

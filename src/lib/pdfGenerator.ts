@@ -10,15 +10,15 @@ export async function generatePdfBuffer(booking: any, lead: any, images: Record<
     let jointApplicants: any[] = [];
     if (booking.joint_applicants) {
       try {
-        jointApplicants = typeof booking.joint_applicants === 'string' 
-          ? JSON.parse(booking.joint_applicants) 
+        jointApplicants = typeof booking.joint_applicants === 'string'
+          ? JSON.parse(booking.joint_applicants)
           : booking.joint_applicants;
       } catch (e) { }
     }
     if (jointApplicants.length === 0 && booking.joint_name) {
       jointApplicants = [{
         name: booking.joint_name, email: booking.joint_email, mobile: booking.joint_mobile,
-        pan: booking.joint_pan, aadhaar: booking.joint_aadhaar, 
+        pan: booking.joint_pan, aadhaar: booking.joint_aadhaar,
         occupation: booking.joint_occupation, nationality: booking.joint_nationality
       }];
     }
@@ -26,14 +26,14 @@ export async function generatePdfBuffer(booking: any, lead: any, images: Record<
     // Load images
     const primaryPanBase64 = images['primary_pan'] || null;
     const primaryAadhaarBase64 = images['primary_aadhaar_front'] || null;
-    
+
     // Convert logo
     let logoBase64 = null;
     try {
       const logoPath = path.join(process.cwd(), 'public', 'assets', 'bhoomidwellersLogo.png');
       const logoData = await fs.readFile(logoPath);
       logoBase64 = `data:image/png;base64,${logoData.toString('base64')}`;
-    } catch(e) {}
+    } catch (e) { }
 
     const parseVal = (val: any) => {
       if (!val) return 0;
@@ -42,13 +42,13 @@ export async function generatePdfBuffer(booking: any, lead: any, images: Record<
       if (str.includes("cr")) return (parseFloat(str) || 0) * 10000000;
       return parseFloat(str) || 0;
     };
-    
+
     let paymentRowsHtml = '';
     let totalReceived = 0;
     let paymentDetailsArr = [];
     try {
       paymentDetailsArr = typeof booking.payment_details === 'string' ? JSON.parse(booking.payment_details) : (booking.payment_details || []);
-    } catch (e) {}
+    } catch (e) { }
 
     if (paymentDetailsArr.length > 0) {
       paymentDetailsArr.forEach((p: any, idx: number) => {
