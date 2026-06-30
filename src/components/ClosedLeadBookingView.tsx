@@ -34,23 +34,36 @@ export default function ClosedLeadBookingView({
   const handleDownloadPdf = async () => {
     try {
       setIsGeneratingPdf(true);
-      const res = await fetch(`/api/booking-documents/${booking?.id}`);
-      const json = await res.json();
-      if (!json.success) throw new Error("Failed to fetch documents");
-      
-      const pdfDoc = json.data.find((d: any) => d.document_type === 'BOOKING_FORM');
-      if (pdfDoc && pdfDoc.url) {
-        window.open(pdfDoc.url, "_blank");
-      } else {
-        alert("PDF document not found in Cloudflare R2.");
+
+      // Generate PDF on-demand — no longer stored in R2 at save time
+      const res = await fetch("/api/generate-booking-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ booking, lead }),
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.message || "PDF generation failed");
       }
-    } catch (error) {
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${booking?.booking_number || "Booking_Form"}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error: any) {
       console.error(error);
-      alert("Error fetching PDF");
+      alert(`PDF generation failed: ${error.message || "Please try again later."}`);
     } finally {
       setIsGeneratingPdf(false);
     }
   };
+
 
   const formatDate = (d: string) => {
     if (!d) return "—";

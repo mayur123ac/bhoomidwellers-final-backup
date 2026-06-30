@@ -3,23 +3,28 @@ import chromium from '@sparticuz/chromium-min';
 import puppeteer from 'puppeteer-core';
 import fs from 'fs/promises';
 import path from 'path';
+import { generatePresignedUrl } from '@/lib/r2';
 
-async function getBase64Image(url: string | null) {
-  if (!url) return null;
+/**
+ * Fetch an image from Cloudflare R2 by object key and return a base64 data URI.
+ * Falls back gracefully to null so the PDF still generates without the image.
+ */
+async function getBase64FromR2(objectKey: string | null): Promise<string | null> {
+  if (!objectKey) return null;
+  // Skip keys that look like local paths (legacy data)
+  if (objectKey.startsWith('data:')) return objectKey;
   try {
-    const filePath = path.join(process.cwd(), 'public', url);
-    const data = await fs.readFile(filePath);
-    let ext = path.extname(filePath).substring(1).toLowerCase() || 'png';
-    if (ext === 'jpg') ext = 'jpeg';
-
-    // For PDFs, we might just want to show a placeholder since we can't easily embed a PDF inside an image tag in a PDF
-    if (ext === 'pdf') {
-      return null;
-    }
-
-    return `data:image/${ext};base64,${data.toString('base64')}`;
-  } catch (err) {
-    console.error("Failed to read image:", url);
+    const url = await generatePresignedUrl(objectKey, 60);
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const arrayBuffer = await res.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const contentType = res.headers.get('content-type') || 'image/jpeg';
+    // Skip PDFs — can't embed inline
+    if (contentType.includes('pdf')) return null;
+    const ext = contentType.split('/')[1]?.replace('jpeg', 'jpeg') || 'jpeg';
+    return `data:image/${ext};base64,${buffer.toString('base64')}`;
+  } catch {
     return null;
   }
 }
@@ -50,13 +55,17 @@ export async function POST(req: Request) {
       }];
     }
 
-    // Load images
-    const primaryPanBase64 = await getBase64Image(booking.primary_pan_url);
-    const primaryAadhaarBase64 = await getBase64Image(booking.primary_aadhaar_front_url);
+    // Load applicant document images from R2
+    const primaryPanBase64 = await getBase64FromR2(booking.primary_pan_url);
+    const primaryAadhaarBase64 = await getBase64FromR2(booking.primary_aadhaar_front_url);
 
-    // Convert logo
+    // Load signature from R2 (stored as object key after save)
+    const signatureBase64 = await getBase64FromR2(booking.signature_data);
+
+    // Convert logo from local public directory
     let logoBase64 = null;
     try {
+
       const logoPath = path.join(process.cwd(), 'public', 'assets', 'bhoomidwellersLogo.png');
       const logoData = await fs.readFile(logoPath);
       logoBase64 = `data:image/png;base64,${logoData.toString('base64')}`;
@@ -98,8 +107,8 @@ export async function POST(req: Request) {
     let jointApplicantsHtml = '';
     for (let i = 0; i < jointApplicants.length; i++) {
       const ja = jointApplicants[i];
-      const jaPanBase64 = await getBase64Image(ja.pan_url);
-      const jaAadhaarBase64 = await getBase64Image(ja.aadhaar_front_url);
+      const jaPanBase64 = await getBase64FromR2(ja.pan_url);
+      const jaAadhaarBase64 = await getBase64FromR2(ja.aadhaar_front_url);
 
       jointApplicantsHtml += `
       <div class="section-title">2.${i + 1} JOINT APPLICANT DETAILS - ${i + 1}</div>
@@ -448,7 +457,7 @@ export async function POST(req: Request) {
           <div><strong>Place:</strong> Mumbai</div>
         </div>
         <div class="sign-area">
-          ${booking.signature_data ? `<img src="${booking.signature_data}" style="max-width: 200px; max-height: 60px; display: block; margin: 0 auto 5px auto;" />` : `<div class="sign-line"></div>`}
+          ${signatureBase64 ? `<img src="${signatureBase64}" style="max-width: 200px; max-height: 60px; display: block; margin: 0 auto 5px auto;" />` : `<div class="sign-line"></div>`}
           <div style="border-top: 1px solid #000; width: 200px; margin: 0 auto; padding-top: 5px;">Signature of Primary Applicant</div>
         </div>
       </div>
