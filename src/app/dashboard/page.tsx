@@ -17,8 +17,10 @@ import {
   CartesianGrid, PieChart, Pie,
 } from "recharts";
 import LoginTimerWidget from "@/components/LoginTimerWidget";
+import BookingFormModal from "@/components/BookingFormModal";
+import BookingApplicationView from "@/components/BookingApplicationView";
+import ClosedLeadBookingView from "@/components/ClosedLeadBookingView";
 import LostLeadModal from "@/components/LostLeadModal";
-import MarkClosingModal from "@/components/MarkClosingModal";
 import CrmUpdatesNotification from "@/components/CrmUpdatesNotification";
 // import ActivityTimeline from "@/components/ActivityTimeline";
 import {
@@ -3101,17 +3103,34 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
     } catch { }
   };
 
-  const handleMarkAsClosing = async () => {
-    if (!selectedLead || selectedLead.status === "Closing") return;
-    const nm = { leadId: String(selectedLead.id), salesManagerName: adminUser.name, createdBy: "admin", message: `✅ Lead Marked as Closing by ${adminUser.name} (Admin)`, siteVisitDate: null, createdAt: new Date().toISOString() };
-    try {
-      await fetch("/api/followups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(nm) });
-      await fetch(`/api/walkin_enquiries/${selectedLead.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: selectedLead.name, status: "Closing" }) });
-      setToastMsg({ title: `🎉 ${selectedLead.name} marked as Closing!`, icon: <FaCheckCircle />, color: "green" });
-      setTimeout(() => setToastMsg(null), 3000);
-      refetch();
-    } catch { }
+  const [bookingData, setBookingData] = useState<any>(null);
+  const [bookingDetailTab, setBookingDetailTab] = useState<"personal" | "loan" | "booking">("personal");
+
+  const handleBookingSuccess = (booking: any) => {
+    setBookingData(booking);
+    setBookingDetailTab("booking");
+    setToastMsg({ title: `🎉 Booking ${booking.booking_number} created for ${selectedLead?.name}!`, icon: <FaCheckCircle />, color: "green" });
+    setTimeout(() => setToastMsg(null), 4000);
+    refetch();
   };
+
+  const fetchBookingForLead = async (leadId: string | number) => {
+    try {
+      const res = await fetch(`/api/booking-applications?lead_id=${leadId}`);
+      const json = await res.json();
+      if (json.success && json.data?.length > 0) setBookingData(json.data[0]);
+      else setBookingData(null);
+    } catch { setBookingData(null); }
+  };
+
+  useEffect(() => {
+    if (selectedLead && (selectedLead.status === "Closing" || selectedLead.status === "Closed" || selectedLead.booking_id)) {
+      fetchBookingForLead(selectedLead.id);
+    } else {
+      setBookingData(null);
+    }
+  }, [selectedLead]);
+
   const handleReopenLead = async () => {
     if (!selectedLead || selectedLead.status !== "Closing") return;
     setIsReopening(true);
@@ -3478,6 +3497,16 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
   900px, 24px padding, 80vh max, internal scroll) inside those files directly.
 */}
             {subView === "detail" && selectedLead && (
+              bookingData ? (
+                <div className="animate-fadeIn w-full h-[calc(100vh-130px)] overflow-hidden bg-transparent">
+                  <ClosedLeadBookingView
+                    booking={bookingData}
+                    lead={selectedLead}
+                    isDark={isDark}
+                    userRole={adminUser?.role?.toLowerCase() || "admin"}
+                  />
+                </div>
+              ) : (
               <div className={`flex-1 overflow-y-auto p-3 ${theme.scroll}`}>
                 <div className="animate-fadeIn max-w-[1600px] mx-auto flex flex-col h-[calc(100vh-130px)]">
                   {/* Detail header — sticky compact action bar */}
@@ -3814,6 +3843,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                   </div>
                 </div>
               </div>
+              )
             )}
 
             {isWaModalOpen && selectedLead && (
@@ -3844,11 +3874,13 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
               />
             )}
 
-            <MarkClosingModal
+            <BookingFormModal
               isOpen={isClosingModalOpen}
               onClose={() => setIsClosingModalOpen(false)}
-              onConfirm={handleMarkAsClosing}
+              lead={selectedLead}
+              user={adminUser}
               isDark={isDark}
+              onSuccess={handleBookingSuccess}
             />
 
             {/* ── TRANSFER MODAL ── */}
@@ -3946,6 +3978,25 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
   const [optimisticLeadOverrides, setOptimisticLeadOverrides] = useState<Record<string, any>>({});
   const [isReopening, setIsReopening] = useState(false);
 
+  const [bookingData, setBookingData] = useState<any>(null);
+
+  const fetchBookingForLead = async (leadId: string | number) => {
+    try {
+      const res = await fetch(`/api/booking-applications?lead_id=${leadId}`);
+      const json = await res.json();
+      if (json.success && json.data?.length > 0) setBookingData(json.data[0]);
+      else setBookingData(null);
+    } catch { setBookingData(null); }
+  };
+
+  useEffect(() => {
+    if (selectedLead && (selectedLead.status === "Closing" || selectedLead.status === "Closed" || selectedLead.booking_id)) {
+      fetchBookingForLead(selectedLead.id);
+    } else {
+      setBookingData(null);
+    }
+  }, [selectedLead]);
+
   // Transfer States
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [transferNote, setTransferNote] = useState("");
@@ -3977,6 +4028,18 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
   const showToast = (title: string, color = "green") => {
     setToastMsg({ title, icon: <FaCheckCircle />, color });
     setTimeout(() => setToastMsg(null), 3000);
+  };
+
+  const handleBookingSuccess = async (booking: any) => {
+    setIsClosingModalOpen(false);
+    showToast(`Booking ${booking.booking_number} confirmed successfully!`, "green");
+    if (selectedLead) {
+      setOptimisticLeadOverrides(prev => ({
+        ...prev,
+        [selectedLead.id]: { ...selectedLead, status: "Closing" }
+      }));
+    }
+    await refetch();
   };
 
 
@@ -4201,17 +4264,8 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
     } catch { }
   };
 
-  const handleMarkAsClosing = async () => {
-    if (!selectedLead || selectedLead.status === "Closing") return;
-    const nm = { leadId: String(selectedLead.id), salesManagerName: adminUser.name, createdBy: "admin", message: `✅ Lead Marked as Closing by ${adminUser.name} (Admin)`, siteVisitDate: null, createdAt: new Date().toISOString() };
-    try {
-      await fetch("/api/followups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(nm) });
-      await fetch(`/api/walkin_enquiries/${selectedLead.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: selectedLead.name, status: "Closing" }) });
-      setToastMsg({ title: `🎉 ${selectedLead.name} marked as Closing!`, icon: <FaCheckCircle />, color: "green" });
-      setTimeout(() => setToastMsg(null), 3000);
-      refetch();
-    } catch { }
-  };
+  // handleBookingSuccess and fetchBookingForLead are defined in the admin panel block above
+
 
   const handleReopenLead = async () => {
     if (!selectedLead || selectedLead.status !== "Closing") return;
@@ -4462,11 +4516,13 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
         />
       )}
 
-      <MarkClosingModal
+      <BookingFormModal
         isOpen={isClosingModalOpen}
         onClose={() => setIsClosingModalOpen(false)}
-        onConfirm={handleMarkAsClosing}
+        lead={selectedLead}
+        user={adminUser}
         isDark={isDark}
+        onSuccess={handleBookingSuccess}
       />
 
       {/* Sidebar for Site Heads */}
@@ -4586,6 +4642,16 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
 
             {/* ── DETAIL VIEW (Full Panel) ── */}
             {subView === "detail" && selectedLead && (
+              bookingData ? (
+                <div className="animate-fadeIn w-full h-[calc(100vh-130px)] overflow-hidden bg-transparent">
+                  <ClosedLeadBookingView
+                    booking={bookingData}
+                    lead={selectedLead}
+                    isDark={isDark}
+                    userRole={adminUser?.role?.toLowerCase() || "admin"}
+                  />
+                </div>
+              ) : (
               <div className={`flex-1 overflow-y-auto p-6 ${theme.scroll}`}>
                 <div className="animate-fadeIn max-w-[1600px] mx-auto flex flex-col h-[calc(100vh-130px)]">
                   {/* Detail header */}
@@ -4919,6 +4985,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                   </div>
                 </div>
               </div>
+              )
             )}
 
             {isWaModalOpen && selectedLead && (
@@ -5027,6 +5094,31 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
   const [isWaModalOpen, setIsWaModalOpen] = useState(false);
   const [waMessage, setWaMessage] = useState("");
   const [isSendingWa, setIsSendingWa] = useState(false);
+
+  const [bookingData, setBookingData] = useState<any>(null);
+
+  const fetchBookingForLead = async (leadId: string | number) => {
+    try {
+      const res = await fetch(`/api/booking-applications?lead_id=${leadId}`);
+      const json = await res.json();
+      if (json.success && json.data?.length > 0) setBookingData(json.data[0]);
+      else setBookingData(null);
+    } catch { setBookingData(null); }
+  };
+
+  const handleBookingSuccess = async (booking: any) => {
+    setIsClosingModalOpen(false);
+    showToast(`Booking ${booking.booking_number} confirmed successfully!`);
+    await refetch();
+  };
+
+  useEffect(() => {
+    if (selectedLead && (selectedLead.status === "Closing" || selectedLead.status === "Closed" || selectedLead.booking_id)) {
+      fetchBookingForLead(selectedLead.id);
+    } else {
+      setBookingData(null);
+    }
+  }, [selectedLead]);
 
   // ── Auto-drill into a lead when navigated from Enquiry Overview ──
   useEffect(() => {
@@ -5171,16 +5263,10 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
     try { await fetch("/api/followups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(nm) }); refetch(); } catch { }
   };
 
-  const handleMarkAsClosing = async () => {
-    if (!selectedLead || selectedLead.status === "Closing") return;
-    const nm = { leadId: String(selectedLead.id), salesManagerName: actorName, createdBy: "admin", message: `✅ Lead Marked as Closing by ${actorName} (Admin)`, siteVisitDate: null, createdAt: new Date().toISOString() };
-    try {
-      await fetch("/api/followups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(nm) });
-      await fetch(`/api/walkin_enquiries/${selectedLead.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: selectedLead.name, status: "Closing" }) });
-      showToast(`🎉 ${selectedLead.name} marked as Closing!`);
-      refetch();
-    } catch { }
-  };
+
+  // handleBookingSuccess and fetchBookingForLead are defined in the admin panel block above
+
+
 
   const handleReopenLead = async () => {
     if (!selectedLead || selectedLead.status !== "Closing") return;
@@ -5725,6 +5811,16 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
 
             {/* ── DETAIL VIEW (full panel with follow-ups, mirrors Sales Manager) ── */}
             {subView === "detail" && selectedLead && !isEnquiryView && (
+              bookingData ? (
+                <div className="animate-fadeIn w-full h-[calc(100vh-130px)] overflow-hidden bg-transparent">
+                  <ClosedLeadBookingView
+                    booking={bookingData}
+                    lead={selectedLead}
+                    isDark={isDark}
+                    userRole={adminUser?.role?.toLowerCase() || "admin"}
+                  />
+                </div>
+              ) : (
               <div className={`flex-1 overflow-y-auto p-6 ${theme.scroll}`}>
                 <div className="animate-fadeIn max-w-[1200px] mx-auto flex flex-col" style={{ minHeight: "500px" }}>
                   {(() => {
@@ -6073,6 +6169,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                   </div>
                 </div>
               </div>
+              )
             )}
 
             {/* ── LIST VIEW (sections, stats, tables) ── */}
@@ -6291,11 +6388,13 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
         </div>
       )}
 
-      <MarkClosingModal
+      <BookingFormModal
         isOpen={isClosingModalOpen}
         onClose={() => setIsClosingModalOpen(false)}
-        onConfirm={handleMarkAsClosing}
+        lead={selectedLead}
+        user={adminUser}
         isDark={isDark}
+        onSuccess={handleBookingSuccess}
       />
 
     </div>

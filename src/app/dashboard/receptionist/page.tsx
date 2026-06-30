@@ -19,8 +19,11 @@ import {
 } from "recharts";
 import { Ghost, AlertTriangle } from "lucide-react";
 import LoginTimerWidget from "@/components/LoginTimerWidget";
+import CrmUpdatesNotification from "@/components/CrmUpdatesNotification";
 import LostLeadModal from "@/components/LostLeadModal";
-import MarkClosingModal from "@/components/MarkClosingModal";
+import BookingFormModal from "@/components/BookingFormModal";
+import BookingApplicationView from "@/components/BookingApplicationView";
+import ClosedLeadBookingView from "@/components/ClosedLeadBookingView";
 import AttendanceTimerWidget from "@/components/AttendanceTimerWidget";
 import AttendanceView from "@/components/AttendanceView";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
@@ -38,8 +41,7 @@ const MONTH_NAMES = [
 
 const NAV_ITEMS = [
   { id: "overview", icon: <FaThLarge className="w-5 h-5" />, title: "Dashboard" },
-  { id: "forms", icon: <FaClipboardList className="w-5 h-5" />, title: "Forms List" },
-  { id: "assigned", icon: <FaFileInvoice className="w-5 h-5" />, title: "Assigned Forms" },
+  // { id: "assigned", icon: <FaFileInvoice className="w-5 h-5" />, title: "Assigned Forms" },
   { id: "recep-leads", icon: <FaUsers className="w-5 h-5" />, title: "Receptionist Leads" },
   { id: "closed-leads", icon: <FaCheckCircle className="w-5 h-5" />, title: "Closed Leads" },
   { id: "attendance", icon: <FaClock className="w-5 h-5" />, title: "My Attendance" },
@@ -317,6 +319,8 @@ export default function ReceptionistDashboard() {
     return () => clearInterval(interval);
   }, []);
   const [isClosingModalOpen, setIsClosingModalOpen] = useState(false);
+  const [bookingData, setBookingData] = useState<any>(null);
+  const [bookingDetailTab, setBookingDetailTab] = useState<"personal" | "loan" | "booking">("personal");
   const [toastMsg, setToastMsg] = useState<{ title: string; color: string } | null>(null);
 
   const [activePopup, setActivePopup] = useState<"notifications" | "profile" | null>(null);
@@ -479,7 +483,6 @@ export default function ReceptionistDashboard() {
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   const tableSentinelRef = useRef<HTMLDivElement>(null);
-  const cardsSentinelRef = useRef<HTMLDivElement>(null);
 
   // ─────────────────────────────────────────────────────────────────────────
   // DATE CONSTANTS
@@ -605,18 +608,6 @@ export default function ReceptionistDashboard() {
     obs.observe(sentinel);
     return () => obs.disconnect();
   }, [hasMore, isLoadingMore, isFetchingEnquiries, offset]);
-
-  // Infinite scroll: cards
-  useEffect(() => {
-    const sentinel = cardsSentinelRef.current;
-    if (!sentinel) return;
-    const obs = new IntersectionObserver(entries => {
-      if (entries[0].isIntersecting && hasMore && !isLoadingMore && !isFetchingEnquiries) loadMore();
-    }, { threshold: 0.1 });
-    obs.observe(sentinel);
-    return () => obs.disconnect();
-  }, [hasMore, isLoadingMore, isFetchingEnquiries, offset]);
-
   // Assigned forms cards pagination
   useEffect(() => {
     const sentinel = assignedSentinelRef.current;
@@ -640,6 +631,15 @@ export default function ReceptionistDashboard() {
       if (updated) setSelectedLead(updated);
     }
   }, [enquiries, followUps]);
+
+  // Fetch booking data when a lead is selected
+  useEffect(() => {
+    if (selectedLead?.id) {
+      fetchBookingForLead(selectedLead.id);
+      setBookingDetailTab("personal");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedLead?.id]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // DATA FETCHING
@@ -1052,16 +1052,22 @@ export default function ReceptionistDashboard() {
     } catch (e) { console.error(e); }
   };
 
-  const handleMarkAsClosing = async () => {
-    if (!selectedLead || selectedLead.status === "Closing") return;
-    const nm = { leadId: String(selectedLead.id), salesManagerName: user.name, createdBy: "receptionist", message: `✅ Lead Marked as Closing by ${user.name} (Receptionist)`, siteVisitDate: null, createdAt: new Date().toISOString() };
-    try {
-      await fetch("/api/followups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(nm) });
-      await fetch(`/api/walkin_enquiries/${selectedLead.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: selectedLead.name, status: "Closing" }) });
-      showToast(`🎉 ${selectedLead.name} marked as Closing!`);
-      refetchAll();
-    } catch (e) { console.error(e); }
+  const handleBookingSuccess = (booking: any) => {
+    setBookingData(booking);
+    setBookingDetailTab("booking");
+    showToast(`🎉 Booking ${booking.booking_number} created for ${selectedLead?.name}!`);
+    refetchAll();
   };
+
+  const fetchBookingForLead = async (leadId: string | number) => {
+    try {
+      const res = await fetch(`/api/booking-applications?lead_id=${leadId}`);
+      const json = await res.json();
+      if (json.success && json.data?.length > 0) setBookingData(json.data[0]);
+      else setBookingData(null);
+    } catch { setBookingData(null); }
+  };
+
   const openLostLeadModal = () => {
     setLostReason("");
     setLostError("");
@@ -1395,7 +1401,7 @@ export default function ReceptionistDashboard() {
         <nav className="flex flex-col gap-2 w-full px-2 flex-1">
           <div className="flex flex-col gap-2 flex-1">
             {NAV_ITEMS.map(({ id, icon, title }) => {
-              const isActive = activeTab === id || (id === "forms" && activeTab === "detail");
+              const isActive = activeTab === id || (id === "overview" && activeTab === "detail");
               return (
                 <div
                   key={id}
@@ -2323,149 +2329,12 @@ export default function ReceptionistDashboard() {
           )}
 
           {/* ════════════════════════════════════════════════════
-              FORMS TAB (card grid)
-          ════════════════════════════════════════════════════ */}
-          {activeTab === "forms" && (
-            <div className="animate-fadeIn">
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-                <div>
-                  <h2 className={`text-xl font-bold ${t.text}`}>Recent Enquiries</h2>
-                  {hasMore && <p className={`text-xs mt-0.5 ${t.accentText}`}>· scroll for more</p>}
-                </div>
-                <div className="flex gap-4 items-center">
-                  <div className="relative">
-                    <FaSearch className={`absolute left-3 top-1/2 -translate-y-1/2 text-xs ${t.textFaint}`} />
-                    <input type="text" placeholder="Search..." value={searchRecep} onChange={e => setSearchRecep(e.target.value)} className={`rounded-lg pl-9 pr-4 py-2 text-sm outline-none w-48 transition-colors border ${t.inputBg} ${t.text}`} />
-                  </div>
-                  <button
-                    onClick={() => setIsEnquiryModalOpen(true)}
-                    className={`
-                      flex items-center justify-center gap-2
-                      font-medium rounded-lg
-                      transition-all duration-200
-                      cursor-pointer whitespace-nowrap
-
-                      /* Mobile */
-                      h-10 px-3 text-sm
-
-                      /* Desktop */
-                      sm:h-11 sm:px-5 sm:text-sm
-
-                      /* Colors */
-                      ${t.btnPrimary}
-
-                      /* Effects */
-                      hover:shadow-md active:scale-95
-                    `}
-                  >
-                    <FaClipboardList className="text-base" />
-
-                    <span className="hidden sm:inline">
-                      Add New Form
-                    </span>
-                  </button>
-                </div>
-              </div>
-              {isFetchingEnquiries ? (
-                <div className={`text-center py-10 ${t.textMuted}`}>Fetching live database forms...</div>
-              ) : receptionistLeads.length === 0 ? (
-                <div className={`text-center py-10 ${t.textMuted}`}>No matching forms found.</div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {receptionistLeads.map((enquiry: any, index: number) => (
-                    <div
-                      key={enquiry.id ?? index}
-                      className={`rounded-2xl p-6 border cursor-pointer group flex flex-col justify-between transition-all ${t.card}`}
-                      style={t.cardGlass}
-                      onClick={() => { setSelectedLead(enquiry); setActiveTab("detail"); }}
-                    >
-                      <div>
-                        {/* ── Card Header ── */}
-                        <div className={`flex justify-between items-start mb-6 border-b pb-4 ${t.tableBorder}`}>
-                          <h3 className={`text-xl font-bold transition-colors flex items-center gap-2 ${t.text} ${isDark ? "group-hover:text-[#d4006e]" : "group-hover:text-[#9E217B]"}`}>
-                            <span className={`flex-shrink-0 ${t.accentText}`}>#{enquiry.id}</span>
-                            <span className="line-clamp-1">{enquiry.name}</span>
-                          </h3>
-                          <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider flex-shrink-0 border ${getStatusStyle(enquiry.status)}`}>{enquiry.status || "Assigned"}</span>
-                        </div>
-
-                        {/* ── Card Body ── */}
-                        <div className="space-y-4 mb-6">
-                          <div>
-                            <p className={`text-xs font-medium ${t.textFaint}`}>Budget</p>
-                            <p className={`text-sm font-semibold ${isDark ? "text-green-400" : "text-emerald-600"}`}>
-                              {enquiry.salesBudget || enquiry.budget}
-                            </p>
-                          </div>
-                          <div>
-                            <p className={`text-xs font-medium ${t.textFaint}`}>Configuration</p>
-                            <p className={`text-sm font-semibold ${t.text}`}>
-                              {enquiry.propType || enquiry.configuration || "N/A"}
-                            </p>
-                          </div>
-                          <div className={`p-3 rounded-lg border flex flex-col gap-2 ${t.settingsBg}`} style={t.settingsBgGl}>
-                            <p className={`text-xs flex items-center gap-2 ${t.textMuted}`}>
-                              <FaPhoneAlt className="w-3 h-3" />
-                              Primary: <span className={`font-mono ${t.text}`}>{maskPhone(enquiry.phone)}</span>
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* ── Card Footer ── */}
-                      <div
-                        className={`pt-4 border-t flex flex-col gap-3 mt-auto ${t.tableBorder}`}
-                        onClick={e => e.stopPropagation()} // prevent card click when clicking footer
-                      >
-                        {/* Assigned Manager Row */}
-                        <div className="flex justify-between items-center">
-                          <div className="flex items-center gap-2">
-                            <div className={`w-6 h-6 rounded-full text-white flex items-center justify-center text-xs font-bold ${isDark
-                              ? "bg-gradient-to-tr from-[#9E217B] to-[#d4006e]"
-                              : "bg-gradient-to-tr from-[#00AEEF] to-[#9E217B]"
-                              }`}>
-                              {String(enquiry.assignedTo || "U").charAt(0).toUpperCase()}
-                            </div>
-                            <div>
-                              <p className={`text-[9px] uppercase tracking-wider font-bold ${t.textFaint}`}>Assigned To</p>
-                              <p className={`text-xs font-semibold ${t.text}`}>{enquiry.assignedTo || "Unassigned"}</p>
-                            </div>
-                          </div>
-                          <p className={`text-xs ${t.textFaint}`}>{enquiry.date}</p>
-                        </div>
-
-                        {/* Transfer Button Row */}
-                        <div className="flex gap-2">
-                          {/* View Details */}
-                          <button
-                            onClick={() => { setSelectedLead(enquiry); setActiveTab("detail"); }}
-                            className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all border ${isDark
-                              ? "border-[#2A2A35] text-[#888899] hover:border-[#9E217B] hover:text-[#d4006e] hover:bg-[#9E217B]/10"
-                              : "border-[#D1D5DB] text-[#6B7280] hover:border-[#9E217B] hover:text-[#9E217B] hover:bg-[#9E217B]/5"
-                              }`}
-                          >
-                            View Details →
-                          </button>
-
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-
-                  {isLoadingMore && <div className={`col-span-full text-center py-4 ${t.textMuted}`}>Loading more…</div>}
-                </div>
-              )}
-              <div ref={cardsSentinelRef} className="h-1 w-full mt-4" aria-hidden="true" />
-            </div>
-          )}
-
-          {/* ════════════════════════════════════════════════════
               DETAIL VIEW (from Forms tab)
           ════════════════════════════════════════════════════ */}
           {activeTab === "detail" && selectedLead && (
             <div className="animate-fadeIn max-w-5xl mx-auto">
               <div className={`flex flex-col sm:flex-row sm:items-center gap-4 mb-8 rounded-2xl border p-6 md:p-8 ${t.card}`} style={t.cardGlass}>
-                <button onClick={() => setActiveTab("forms")} className={`w-10 h-10 flex items-center justify-center border hover:border-current rounded-xl transition-colors cursor-pointer shadow-sm ${t.textMuted} ${t.tableBorder}`}><FaChevronLeft className="text-sm" /></button>
+                <button onClick={() => setActiveTab("overview")} className={`w-10 h-10 flex items-center justify-center border hover:border-current rounded-xl transition-colors cursor-pointer shadow-sm ${t.textMuted} ${t.tableBorder}`}><FaChevronLeft className="text-sm" /></button>
                 <h1 className={`text-xl md:text-3xl font-bold flex flex-wrap items-center gap-3 ${t.text}`}>
                   <span className={t.accentText}>#{selectedLead.id}</span>
                   <span>{selectedLead.name}</span>
@@ -2671,6 +2540,16 @@ export default function ReceptionistDashboard() {
 
               {/* ── DETAIL VIEW (Assigned Forms) ── */}
               {assignedSubView === "detail" && selectedLead && (
+                bookingData ? (
+                  <div className="animate-fadeIn max-w-[1600px] mx-auto flex flex-col h-[calc(100vh-130px)]">
+                    <ClosedLeadBookingView
+                      booking={bookingData}
+                      lead={selectedLead}
+                      isDark={isDark}
+                      userRole={user?.role?.toLowerCase() || "receptionist"}
+                    />
+                  </div>
+                ) : (
                 <div className="animate-fadeIn max-w-[1600px] mx-auto flex flex-col h-[calc(100vh-130px)]">
                   {/* Detail header */}
                   <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 rounded-2xl border p-4 sm:p-5 shadow-sm flex-shrink-0 ${t.card}`} style={t.cardGlass}>
@@ -2828,9 +2707,23 @@ export default function ReceptionistDashboard() {
                           <div className={`flex items-center gap-2 mb-4 border p-1.5 rounded-xl flex-shrink-0 ${t.tableWrap}`}>
                             <button onClick={() => setDetailTab("personal")} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-colors cursor-pointer ${detailTab === "personal" ? t.btnPrimary : `${t.textMuted} ${isDark ? "hover:text-white hover:bg-[#222]" : "hover:text-[#1A1A1A] hover:bg-[#F1F5F9]"}`}`}>Personal Information</button>
                             <button onClick={() => setDetailTab("loan")} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-colors cursor-pointer ${detailTab === "loan" ? t.btnSecondary : `${t.textMuted} ${isDark ? "hover:text-white hover:bg-[#222]" : "hover:text-[#1A1A1A] hover:bg-[#F1F5F9]"}`}`}>Loan Tracking</button>
+                            {bookingData && (
+                              <button onClick={() => { setDetailTab("loan" as any); setBookingDetailTab("booking"); }} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-colors cursor-pointer flex items-center justify-center gap-1 ${ bookingDetailTab === "booking" && detailTab === "loan" ? (isDark ? "bg-yellow-600 text-white" : "bg-amber-500 text-white") : `${t.textMuted} ${isDark ? "hover:text-white hover:bg-[#222]" : "hover:text-[#1A1A1A] hover:bg-[#F1F5F9]"}`}`}>
+                                📋 Booking Application
+                              </button>
+                            )}
                           </div>
                           <div className={`flex-1 overflow-y-auto custom-scrollbar rounded-xl p-6 pt-4 pb-4 shadow-lg border ${t.chatPanel}`} style={t.chatPanelGl}>
-                            {detailTab === "personal" ? (
+                            {bookingData && bookingDetailTab === "booking" ? (
+                              <BookingApplicationView
+                                booking={bookingData}
+                                lead={selectedLead}
+                                isDark={isDark}
+                                userRole={user.role?.toLowerCase() || "receptionist"}
+                                onApprove={undefined}
+                                onCancel={undefined}
+                              />
+                            ) : detailTab === "personal" ? (
                               <div>
                                 <div className="grid grid-cols-2 gap-y-3 gap-x-4 text-sm">
                                   {[
@@ -2892,14 +2785,7 @@ export default function ReceptionistDashboard() {
                                     <>
                                       <h3 className={`text-sm font-bold border-b pb-2 mb-6 uppercase flex items-center justify-between ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"} ${t.tableBorder}`}><span className="flex items-center gap-2"><FaUniversity /> Deal Loan Overview</span></h3>
                                       {isHighProb && <div className="mb-6 bg-gradient-to-r from-orange-500/20 to-red-500/20 border border-orange-500/50 p-3 rounded-lg flex items-center justify-center gap-2 text-orange-400 font-bold tracking-wide shadow-md">🚀 HIGH PROBABILITY DEAL (Visit Done + Loan Approved)</div>}
-                                      <div className="grid grid-cols-2 gap-y-5 gap-x-4 text-sm">
-                                        <div><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Loan Required?</p><p className={`font-semibold ${t.text}`}>{curLoan?.loanRequired}</p></div>
-                                        <div><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Current Status</p><p className={`font-bold px-2 py-0.5 rounded inline-block border ${sColor}`}>{curLoan?.status}</p></div>
-                                        <div><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Amount Requested</p><p className="text-orange-400 font-semibold">{curLoan?.amountReq}</p></div>
-                                        <div><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Amount Approved</p><p className={`font-semibold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{curLoan?.amountApp}</p></div>
-                                        {[{ label: "Bank Name", val: curLoan?.bankName }, { label: "CIBIL Score", val: curLoan?.cibil }, { label: "Agent Name", val: curLoan?.agent }, { label: "Agent Contact", val: curLoan?.agentContact }, { label: "Emp Type", val: curLoan?.empType }, { label: "Monthly Income", val: curLoan?.income }, { label: "Existing EMIs", val: curLoan?.emi }].map(f => (
-                                          <div key={f.label}><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>{f.label}</p><p className={`font-semibold ${t.text}`}>{f.val}</p></div>
-                                        ))}
+                                      <div className="grid grid-cols-2 gap-2 mt-4">
                                         <div className="col-span-2 mb-2"><p className={`text-xs font-bold uppercase tracking-widest ${t.textMuted}`}>Document Status</p></div>
                                         {[{ label: "PAN Card", val: curLoan?.docPan }, { label: "Aadhaar", val: curLoan?.docAadhaar }, { label: "Salary/ITR", val: curLoan?.docSalary }, { label: "Bank Stmt", val: curLoan?.docBank }, { label: "Property Docs", val: curLoan?.docProperty }].map((doc, i) => (
                                           <div key={i} className={`flex items-center justify-between p-2 rounded-lg col-span-1 border ${t.innerBlock}`}>
@@ -2976,6 +2862,7 @@ export default function ReceptionistDashboard() {
                     </div>
                   </div>
                 </div>
+                )
               )}
             </div>
           )}
@@ -2994,11 +2881,13 @@ export default function ReceptionistDashboard() {
             />
           )}
 
-          <MarkClosingModal
+          <BookingFormModal
             isOpen={isClosingModalOpen}
             onClose={() => setIsClosingModalOpen(false)}
-            onConfirm={handleMarkAsClosing}
+            lead={selectedLead}
+            user={user}
             isDark={isDark}
+            onSuccess={handleBookingSuccess}
           />
 
           {/* ════════════════════════════════════════════════════
@@ -3359,7 +3248,7 @@ export default function ReceptionistDashboard() {
       ════════════════════════════════════════════════════ */}
       <nav className={`md:hidden flex w-full h-16 border-t items-center justify-around flex-shrink-0 z-40 ${t.sidebar}`}>
         {NAV_ITEMS.map(({ id, icon, title }) => {
-          const active = activeTab === id || (id === "forms" && activeTab === "detail");
+          const active = activeTab === id || (id === "overview" && activeTab === "detail");
           return (
             <div key={id} onClick={() => setActiveTab(id)} className="relative flex justify-center items-center h-full flex-1 cursor-pointer" title={title}>
               {active && <div className={`absolute top-0 left-1/2 -translate-x-1/2 h-1 w-8 rounded-b ${t.navIndicator}`} />}

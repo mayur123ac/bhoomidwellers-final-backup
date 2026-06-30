@@ -34,8 +34,10 @@ import CallButton from "@/components/CallButton";
 import CallModal from "@/components/CallModal";
 import OnCallBadge from "@/components/OnCallBadge";
 import LoginTimerWidget from "@/components/LoginTimerWidget";
+import BookingFormModal from "@/components/BookingFormModal";
+import BookingApplicationView from "@/components/BookingApplicationView";
+import ClosedLeadBookingView from "@/components/ClosedLeadBookingView";
 import LostLeadModal from "@/components/LostLeadModal";
-import MarkClosingModal from "@/components/MarkClosingModal";
 // import ActivityTimeline from "@/components/ActivityTimeline";
 import { handleMarkLostLead as markLostLeadApi, restoreLostLead, updateLeadLostState, useLostLeadEvents } from "@/lib/lostLeadSync";
 
@@ -1127,6 +1129,8 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
   const [columnFilter, setColumnFilter] = useState<string>("all");
   const [detailTab, setDetailTab] = useState<"personal" | "loan">("personal");
   const [isClosingModalOpen, setIsClosingModalOpen] = useState(false);
+  const [bookingData, setBookingData] = useState<any>(null);
+  const [bookingDetailTab, setBookingDetailTab] = useState<"personal" | "loan" | "booking">("personal");
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [showSalesForm, setShowSalesForm] = useState(false);
   const [salesForm, setSalesForm] = useState({ propertyType: "", location: "", budget: "", useType: "", purchaseDate: "", loanPlanned: "", siteVisit: "", leadStatus: "" });
@@ -1297,16 +1301,21 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
   const formatDate = (ds: string) => { if (!ds || ds === "Pending" || ds === "N/A") return "-"; try { return new Date(ds).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }); } catch { return ds; } };
   const maskPhone = (phone: any) => { if (!phone || phone === "N/A") return "N/A"; const c = String(phone).replace(/[^a-zA-Z0-9]/g, ""); if (c.length <= 5) return c; return `${c.slice(0, 2)}*****${c.slice(-3)}`; };
 
-  const handleMarkAsClosing = async () => {
-    if (!selectedLead || selectedLead.status === "Closing") return;
-    const closingNote = { leadId: String(selectedLead.id), salesManagerName: adminUser.name, createdBy: adminUser.role === "admin" ? "admin" : "sales", message: `✅ Lead Marked as Closing by ${adminUser.name}`, siteVisitDate: null, createdAt: new Date().toISOString() };
+  const handleBookingSuccess = (booking: any) => {
+    setBookingData(booking);
+    setBookingDetailTab("booking");
+    setToastMsg({ title: `🎉 Booking ${booking.booking_number} created for ${selectedLead?.name}!`, icon: <FaHandshake />, color: "green" });
+    setTimeout(() => setToastMsg(null), 4000);
+    refetch();
+  };
+
+  const fetchBookingForLead = async (leadId: string | number) => {
     try {
-      await fetch("/api/followups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(closingNote) });
-      await fetch(`/api/walkin_enquiries/${selectedLead.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: selectedLead.name, status: "Closing" }) });
-      setToastMsg({ title: `🎉 ${selectedLead.name} marked as Closing!`, icon: <FaHandshake />, color: "green" });
-      setTimeout(() => setToastMsg(null), 3500);
-      refetch();
-    } catch (e) { console.error("[Mark Closing]", e); }
+      const res = await fetch(`/api/booking-applications?lead_id=${leadId}`);
+      const json = await res.json();
+      if (json.success && json.data?.length > 0) setBookingData(json.data[0]);
+      else setBookingData(null);
+    } catch { setBookingData(null); }
   };
   const handleReopenLead = async () => {
     if (!selectedLead || selectedLead.status !== "Closing") return;
@@ -1941,6 +1950,16 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
 
         {/* ── DETAIL ── */}
         {subView === "detail" && selectedLead && (
+          bookingData ? (
+            <div className="animate-fadeIn w-full h-[calc(100vh-130px)] overflow-hidden bg-transparent">
+              <ClosedLeadBookingView
+                booking={bookingData}
+                lead={selectedLead}
+                isDark={isDark}
+                userRole="sales"
+              />
+            </div>
+          ) : (
           <div className="animate-fadeIn w-full flex flex-col gap-2 pb-1">
             {/* Detail header */}
             <div className={`flex flex-col md:flex-row md:items-center justify-between gap-2 rounded-xl border p-3 shadow-sm flex-shrink-0 ${selectedLead.is_lost_lead ? t.cardLost : t.card}`} style={t.cardGlass}>
@@ -2344,6 +2363,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
 
             </div>{/* end three-part body */}
           </div>
+          )
         )}
         {/* ── CALL MODAL ── */}
         {showLostModal && selectedLead && (
@@ -2360,11 +2380,13 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
           />
         )}
 
-        <MarkClosingModal
+        <BookingFormModal
           isOpen={isClosingModalOpen}
           onClose={() => setIsClosingModalOpen(false)}
-          onConfirm={handleMarkAsClosing}
+          lead={selectedLead}
+          user={adminUser}
           isDark={isDark}
+          onSuccess={handleBookingSuccess}
         />
 
         {selectedLead && (
