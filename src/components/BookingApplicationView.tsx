@@ -44,8 +44,42 @@ export default function BookingApplicationView({
     try { return new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }); } catch { return d; }
   };
 
+  const [isGeneratingPdf, setIsGeneratingPdf] = React.useState(false);
+
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleDownloadPdf = async () => {
+    try {
+      setIsGeneratingPdf(true);
+
+      const res = await fetch("/api/generate-booking-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ booking, lead }),
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.message || "PDF generation failed");
+      }
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${booking?.booking_number || "Booking_Form"}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error: any) {
+      console.error(error);
+      alert(`PDF generation failed: ${error.message || "Please try again later."}`);
+    } finally {
+      setIsGeneratingPdf(false);
+    }
   };
 
   const bookingStatus = booking.booking_status || "Pending";
@@ -84,8 +118,8 @@ export default function BookingApplicationView({
             <button onClick={handlePrint} className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer border transition-colors ${isDark ? "border-[#2A2A35] text-[#888899] hover:border-[#9E217B] hover:text-[#d4006e]" : "border-[#9CA3AF] text-[#6B7280] hover:border-[#9E217B] hover:text-[#9E217B]"}`}>
               <FaPrint className="text-[10px]" /> Print
             </button>
-            <button onClick={handlePrint} className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer border transition-colors ${isDark ? "border-[#2A2A35] text-[#888899] hover:border-[#9E217B] hover:text-[#d4006e]" : "border-[#9CA3AF] text-[#6B7280] hover:border-[#9E217B] hover:text-[#9E217B]"}`}>
-              <FaDownload className="text-[10px]" /> Download PDF
+            <button onClick={handleDownloadPdf} disabled={isGeneratingPdf} className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer border transition-colors ${isDark ? "border-[#2A2A35] text-[#888899] hover:border-[#9E217B] hover:text-[#d4006e]" : "border-[#9CA3AF] text-[#6B7280] hover:border-[#9E217B] hover:text-[#9E217B]"}`}>
+              {isGeneratingPdf ? <span className="animate-pulse">Generating...</span> : <><FaDownload className="text-[10px]" /> Download PDF</>}
             </button>
           </div>
         </div>
