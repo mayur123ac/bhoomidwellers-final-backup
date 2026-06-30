@@ -315,8 +315,9 @@ export async function POST(req: NextRequest) {
       return fetchBooking.rows[0];
     });
 
-    // Mark booking as Confirmed now that the full transaction succeeded
+    // Mark booking as Confirmed and Lead as Closed now that the full transaction succeeded
     await query(`UPDATE booking_applications SET booking_status = 'Confirmed' WHERE id = $1`, [result.id]);
+    await query(`UPDATE walkin_enquiries SET status = 'Closed' WHERE id = $1`, [lead_id]);
 
     return NextResponse.json({ success: true, data: { ...result, booking_status: 'Confirmed' } }, { status: 201 });
   } catch (err: any) {
