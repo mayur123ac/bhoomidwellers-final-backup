@@ -1,4 +1,4 @@
-import chromium from '@sparticuz/chromium';
+import chromium from '@sparticuz/chromium-min';
 import puppeteer from 'puppeteer-core';
 import fs from 'fs/promises';
 import path from 'path';
@@ -430,11 +430,13 @@ export async function generatePdfBuffer(booking: any, lead: any, images: Record<
     </html>
     `;
 
-    // Launch puppeteer (Vercel-compatible using @sparticuz/chromium)
+    // Launch puppeteer (Vercel-compatible using @sparticuz/chromium-min)
     const browser = await puppeteer.launch({
       args: chromium.args,
-      executablePath: await chromium.executablePath(),
-      headless: true,
+      executablePath: await chromium.executablePath(
+        'https://github.com/Sparticuz/chromium/releases/download/v131.0.0/chromium-v131.0.0-pack.tar'
+      ),
+      headless: chromium.headless,
     });
 
     const page = await browser.newPage();
