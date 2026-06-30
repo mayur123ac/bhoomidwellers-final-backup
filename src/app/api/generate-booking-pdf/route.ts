@@ -466,14 +466,51 @@ export async function POST(req: Request) {
     </html>
     `;
 
-    // Launch puppeteer (Vercel-compatible using @sparticuz/chromium-min)
-    const browser = await puppeteer.launch({
-      args: chromium.args,
-      executablePath: await chromium.executablePath(
-        'https://github.com/Sparticuz/chromium/releases/download/v131.0.0/chromium-v131.0.0-pack.tar'
-      ),
-      headless: true,
-    });
+    // ── Environment-aware browser launch ──────────────────────────────────
+    // Local dev: use CHROME_EXECUTABLE_PATH env var or auto-detect installed Chrome.
+    // Production (Vercel): download chromium-min at runtime.
+    let browser;
+    const isDevMode = process.env.NODE_ENV === 'development';
+
+    if (isDevMode) {
+      // Find local Chrome installation
+      const localPaths = [
+        process.env.CHROME_EXECUTABLE_PATH,
+        'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+        'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+        '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+        '/usr/bin/google-chrome',
+        '/usr/bin/chromium-browser',
+        '/usr/bin/chromium',
+      ].filter(Boolean) as string[];
+
+      let executablePath: string | undefined;
+      for (const p of localPaths) {
+        try { await fs.access(p); executablePath = p; break; } catch { }
+      }
+
+      if (!executablePath) {
+        throw new Error(
+          'Could not find Chrome. Add CHROME_EXECUTABLE_PATH to your .env.local pointing to your Chrome executable.'
+        );
+      }
+
+      browser = await puppeteer.launch({
+        executablePath,
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+      });
+    } else {
+      // Production: use @sparticuz/chromium-min (downloads at runtime)
+      browser = await puppeteer.launch({
+        args: chromium.args,
+        executablePath: await chromium.executablePath(
+          'https://github.com/Sparticuz/chromium/releases/download/v131.0.0/chromium-v131.0.0-pack.tar'
+        ),
+        headless: true,
+      });
+    }
+
 
     const page = await browser.newPage();
     await page.setContent(htmlContent, { waitUntil: 'load' });
