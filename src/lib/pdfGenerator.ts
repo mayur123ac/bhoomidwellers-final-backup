@@ -1,4 +1,5 @@
-import puppeteer from 'puppeteer';
+import chromium from '@sparticuz/chromium';
+import puppeteer from 'puppeteer-core';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -429,10 +430,11 @@ export async function generatePdfBuffer(booking: any, lead: any, images: Record<
     </html>
     `;
 
-    // Launch puppeteer
+    // Launch puppeteer (Vercel-compatible using @sparticuz/chromium)
     const browser = await puppeteer.launch({
+      args: chromium.args,
+      executablePath: await chromium.executablePath(),
       headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
     });
 
     const page = await browser.newPage();
