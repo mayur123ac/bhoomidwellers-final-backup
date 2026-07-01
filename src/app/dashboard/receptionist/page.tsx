@@ -638,7 +638,7 @@ export default function ReceptionistDashboard() {
       fetchBookingForLead(selectedLead.id);
       setBookingDetailTab("personal");
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedLead?.id]);
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -1375,7 +1375,7 @@ export default function ReceptionistDashboard() {
       >
         <div className="flex items-center px-3 mb-6 mt-1 overflow-hidden">
           <img
-            src="/assets/logobrowser_trans.png"
+            src="/assets/logobrowser_trans.svg"
             alt="Logo"
             className={`w-10 h-10 rounded-xl object-cover flex-shrink-0 cursor-pointer transition-all duration-300`}
           />
@@ -2550,318 +2550,318 @@ export default function ReceptionistDashboard() {
                     />
                   </div>
                 ) : (
-                <div className="animate-fadeIn max-w-[1600px] mx-auto flex flex-col h-[calc(100vh-130px)]">
-                  {/* Detail header */}
-                  <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 rounded-2xl border p-4 sm:p-5 shadow-sm flex-shrink-0 ${t.card}`} style={t.cardGlass}>
-                    <div className="flex items-center gap-4">
-                      <button onClick={() => { setAssignedSubView("cards"); }} className={`w-10 h-10 flex items-center justify-center border rounded-xl transition-colors cursor-pointer shadow-sm ${t.textMuted} ${t.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}><FaChevronLeft className="text-sm" /></button>
-                      <h1 className={`text-xl md:text-2xl font-bold flex items-center gap-3 ${t.text}`}>
-                        <span className={t.accentText}>#{selectedLead.id}</span>
-                        <span>{selectedLead.name}</span>
-                        {selectedLead.status === "Closing" && (
-                          <span className={`text-[11px] font-bold px-3 py-1 rounded-full border flex items-center gap-1.5 ${t.statusClosing}`}><FaHandshake className="text-xs" /> Closing</span>
-                        )}
-                      </h1>
-                    </div>
-                    <div className="flex gap-3 flex-wrap justify-end">
-                      {isLeadLocked ? (
-                        <div className="flex items-center gap-3 flex-wrap">
-                          <span className={`text-xs font-bold px-3 py-1.5 rounded-full border flex items-center gap-2 ${selectedLead.is_lost_lead ? "bg-red-500/10 border-red-500/40 text-red-400" : "bg-yellow-500/10 border-yellow-500/40 text-yellow-400"}`}>
-                            {selectedLead.is_lost_lead ? "❌ Lost Lead • Read Only" : "✅ Lead Closed • Read Only"}
-                          </span>
-                          {selectedLead.is_lost_lead ? (
-                            <button onClick={handleRestoreLead} disabled={isSavingLost}
-                              className={`font-bold px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-60 ${t.btnPrimary}`}>
-                              {isSavingLost ? "Restoring…" : <><FaCheckCircle /> ↩️ Restore Lead</>}
-                            </button>
-                          ) : (
-                            <button onClick={handleReopenLead} disabled={isReopening}
-                              className={`font-bold px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-60 ${isDark ? "bg-blue-600 hover:bg-blue-700 text-white" : "bg-blue-500 hover:bg-blue-600 text-white"}`}>
-                              {isReopening ? "Reopening…" : "↩️ Reopen Lead"}
-                            </button>
+                  <div className="animate-fadeIn max-w-[1600px] mx-auto flex flex-col h-[calc(100vh-130px)]">
+                    {/* Detail header */}
+                    <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 rounded-2xl border p-4 sm:p-5 shadow-sm flex-shrink-0 ${t.card}`} style={t.cardGlass}>
+                      <div className="flex items-center gap-4">
+                        <button onClick={() => { setAssignedSubView("cards"); }} className={`w-10 h-10 flex items-center justify-center border rounded-xl transition-colors cursor-pointer shadow-sm ${t.textMuted} ${t.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}><FaChevronLeft className="text-sm" /></button>
+                        <h1 className={`text-xl md:text-2xl font-bold flex items-center gap-3 ${t.text}`}>
+                          <span className={t.accentText}>#{selectedLead.id}</span>
+                          <span>{selectedLead.name}</span>
+                          {selectedLead.status === "Closing" && (
+                            <span className={`text-[11px] font-bold px-3 py-1 rounded-full border flex items-center gap-1.5 ${t.statusClosing}`}><FaHandshake className="text-xs" /> Closing</span>
                           )}
-                        </div>
-                      ) : (
-                        !showSalesForm && !showLoanForm && (
-                          <>
-                            <button onClick={() => { prefillSalesForm(); setShowSalesForm(true); setShowLoanForm(false); }}
-                              className={`font-bold px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer ${t.btnPrimary}`}>
-                              <FaFileInvoice /> Fill Salesform
-                            </button>
-                            <button onClick={() => { prefillLoanForm(); setShowLoanForm(true); setShowSalesForm(false); }}
-                              className={`font-bold px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer ${t.btnSecondary}`}>
-                              <FaUniversity /> Track Loan
-                            </button>
-                            {selectedLead.mongoVisitDate && selectedLead.status !== "Closing" && !selectedLead.is_lost_lead && (
-                              <button onClick={() => setIsClosingModalOpen(true)} className={`font-bold px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer ${t.btnWarning}`}>
-                                <FaHandshake /> Mark Closing
+                        </h1>
+                      </div>
+                      <div className="flex gap-3 flex-wrap justify-end">
+                        {isLeadLocked ? (
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <span className={`text-xs font-bold px-3 py-1.5 rounded-full border flex items-center gap-2 ${selectedLead.is_lost_lead ? "bg-red-500/10 border-red-500/40 text-red-400" : "bg-yellow-500/10 border-yellow-500/40 text-yellow-400"}`}>
+                              {selectedLead.is_lost_lead ? "❌ Lost Lead • Read Only" : "✅ Lead Closed • Read Only"}
+                            </span>
+                            {selectedLead.is_lost_lead ? (
+                              <button onClick={handleRestoreLead} disabled={isSavingLost}
+                                className={`font-bold px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-60 ${t.btnPrimary}`}>
+                                {isSavingLost ? "Restoring…" : <><FaCheckCircle /> ↩️ Restore Lead</>}
                               </button>
-                            )}
-                            {!selectedLead.is_lost_lead && (
-                              <button onClick={openLostLeadModal}
-                                className={`font-bold px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer ${t.btnDanger}`}>
-                                <AlertTriangle className="w-4 h-4" /> Mark Lost
-                              </button>
-                            )}
-                          </>
-                        ))}
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col lg:flex-row gap-4 flex-1 min-h-0 pb-2">
-                    {/* LEFT PANEL */}
-                    <div className="w-full lg:w-[50%] flex flex-col gap-3 h-full pb-2">
-                      {showSalesForm ? (
-                        <div className={`rounded-xl border p-5 shadow-xl flex-1 overflow-y-auto custom-scrollbar flex flex-col ${t.modalCard}`} style={t.modalGlass}>
-                          <div className={`flex justify-between items-center mb-4 border-b pb-3 ${t.tableBorder}`}>
-                            <div>
-                              <h3 className={`text-lg font-bold ${t.text}`}>Sales Data Form</h3>
-                              <p className={`text-xs mt-0.5 ${t.accentText}`}>For Lead #{selectedLead.id}</p>
-                            </div>
-                            <button type="button" onClick={() => setShowSalesForm(false)} className={`p-1 ${t.textMuted} hover:text-red-500`}><FaTimes /></button>
-                          </div>
-                          <form onSubmit={handleSalesFormSubmit} className="flex flex-col gap-4 flex-1">
-                            <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Property Type?</label><input type="text" placeholder="e.g. 1BHK, 2BHK" value={salesForm.propertyType} onChange={e => setSalesForm({ ...salesForm, propertyType: e.target.value })} className={formInput} /></div>
-                            <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Preferred Location?</label><input type="text" placeholder="e.g. Dombivali, Kalyan" value={salesForm.location} onChange={e => setSalesForm({ ...salesForm, location: e.target.value })} className={formInput} /></div>
-                            <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Approximate Budget?</label><input type="text" placeholder="e.g. 5 cr" value={salesForm.budget} onChange={e => setSalesForm({ ...salesForm, budget: e.target.value })} className={formInput} /></div>
-                            <div className="grid grid-cols-2 gap-3">
-                              <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Self-use or Investment?</label><select value={salesForm.useType} onChange={e => setSalesForm({ ...salesForm, useType: e.target.value })} className={formSelect}><option value="">Select</option><option>Self Use</option><option>Investment</option></select></div>
-                              <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Planning to Purchase?</label><select value={salesForm.purchaseDate} onChange={e => setSalesForm({ ...salesForm, purchaseDate: e.target.value })} className={formSelect}><option value="">Select</option><option>Immediate</option><option>Next 3 Months</option></select></div>
-                            </div>
-                            <div className={`border-t pt-3 mt-1 ${t.tableBorder}`}>
-                              <label className={`block text-xs font-bold mb-1.5 ${t.accentText}`}>Lead Interest Status *</label>
-                              <select required value={salesForm.leadStatus} onChange={e => setSalesForm({ ...salesForm, leadStatus: e.target.value })} className={formSelect}><option value="" disabled>Select Status</option><option>Interested</option><option>Not Interested</option><option>NON GENUINE DEMAND (NGD)</option></select>
-                            </div>
-                            <div className={`border-t pt-3 mt-1 ${t.tableBorder}`}>
-                              <label className={`block text-xs font-bold mb-1.5 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}>Loan Planned?</label>
-                              <select required value={salesForm.loanPlanned} onChange={e => setSalesForm({ ...salesForm, loanPlanned: e.target.value })} className={formSelect}><option value="" disabled>Select Option</option><option>Yes</option><option>No</option><option>Not Sure</option></select>
-                            </div>
-                            <div className={`mt-2 border-t pt-3 ${t.tableBorder}`}>
-                              <label className="text-xs text-orange-400 font-bold mb-1.5 block">Schedule a Site Visit?</label>
-                              <input ref={inputRef} type="datetime-local" value={salesForm.siteVisit} onChange={e => setSalesForm({ ...salesForm, siteVisit: e.target.value })} onClick={() => inputRef.current?.showPicker()} className={`${formInput} focus:border-orange-500`} />
-                            </div>
-                            <button type="submit" className={`mt-auto w-full font-bold py-3.5 rounded-xl shadow-md transition-colors flex-shrink-0 ${t.btnPrimary}`}>Submit Salesform</button>
-                          </form>
-                        </div>
-                      ) : showLoanForm ? (
-                        <div className={`rounded-xl border p-5 shadow-xl flex-1 overflow-y-auto custom-scrollbar flex flex-col animate-fadeIn ${t.modalCard}`} style={t.modalGlass}>
-                          <div className={`flex justify-between items-center mb-4 border-b pb-3 flex-shrink-0 ${t.tableBorder}`}>
-                            <div>
-                              <h3 className={`text-lg font-bold flex items-center gap-2 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}><FaUniversity /> Loan Tracking Workflow</h3>
-                              <p className={`text-xs mt-0.5 ${t.textFaint}`}>For Lead #{selectedLead.id}</p>
-                            </div>
-                            <button type="button" onClick={() => setShowLoanForm(false)} className={`p-1 ${t.textMuted} hover:text-red-500`}><FaTimes /></button>
-                          </div>
-                          <form onSubmit={handleLoanFormSubmit} className="flex flex-col gap-6 flex-1">
-                            <div>
-                              <h4 className={`text-xs font-bold uppercase tracking-wider mb-3 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}>1. Loan Decision</h4>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Loan Required? *</label><select required value={loanForm.loanRequired} onChange={e => setLoanForm({ ...loanForm, loanRequired: e.target.value })} className={formSelect}><option value="">Select</option><option>Yes</option><option>No</option><option>Not Sure</option></select></div>
-                                <div>
-                                  <label className={`text-xs mb-1 block ${t.textMuted}`}>Loan Status *</label>
-                                  <select required value={loanForm.status} onChange={e => setLoanForm({ ...loanForm, status: e.target.value })} className={formSelect}><option value="">Select Status</option><option>Approved</option><option>In Progress</option><option>Rejected</option></select>
-                                  {loanForm.status && (<p className={`text-[10px] mt-1.5 font-semibold ${loanForm.status === "Approved" ? "text-green-400" : loanForm.status === "Rejected" ? "text-red-400" : "text-yellow-400"}`}>{loanForm.status === "Approved" && "✅ Loan cleared — schedule closing meeting"}{loanForm.status === "In Progress" && "📄 Follow up on pending documents"}{loanForm.status === "Rejected" && "❌ Loan rejected — suggest co-applicant or other bank"}</p>)}
-                                </div>
-                              </div>
-                            </div>
-                            <div className={`border-t pt-4 ${t.tableBorder}`}>
-                              <h4 className={`text-xs font-bold uppercase tracking-wider mb-3 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}>2. Bank & Loan Details</h4>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                {[{ label: "Bank Name", k: "bank", ph: "e.g. HDFC" }, { label: "Amount Required", k: "amountReq", ph: "e.g. 60L" }, { label: "Amount Approved", k: "amountApp", ph: "e.g. 55L" }, { label: "CIBIL Score", k: "cibil", ph: "e.g. 750" }, { label: "Agent Name", k: "agent", ph: "Agent Name" }, { label: "Agent Contact", k: "agentContact", ph: "Agent Phone", tel: true }].map(f => (
-                                  <div key={f.k}><label className={`text-xs mb-1 block ${t.textMuted}`}>{f.label}</label><input type={f.tel ? "tel" : "text"} value={(loanForm as any)[f.k]} onChange={e => setLoanForm({ ...loanForm, [f.k]: e.target.value })} className={formInput} placeholder={f.ph} /></div>
-                                ))}
-                              </div>
-                            </div>
-                            <div className={`border-t pt-4 ${t.tableBorder}`}>
-                              <h4 className={`text-xs font-bold uppercase tracking-wider mb-3 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}>3. Financial Qualification</h4>
-                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Employment</label><select value={loanForm.empType} onChange={e => setLoanForm({ ...loanForm, empType: e.target.value })} className={formSelect}><option value="">Select</option><option>Salaried</option><option>Self-employed</option></select></div>
-                                <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Monthly Income</label><input type="text" value={loanForm.income} onChange={e => setLoanForm({ ...loanForm, income: e.target.value })} className={formInput} placeholder="e.g. 1L" /></div>
-                                <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Existing EMIs</label><input type="text" value={loanForm.emi} onChange={e => setLoanForm({ ...loanForm, emi: e.target.value })} className={formInput} placeholder="e.g. 15k" /></div>
-                              </div>
-                            </div>
-                            <div className={`border-t pt-4 ${t.tableBorder}`}>
-                              <h4 className={`text-xs font-bold uppercase tracking-wider mb-3 flex items-center gap-1 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}><FaFileAlt /> 4. Document Checklist</h4>
-                              <div className={`grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-lg border ${t.settingsBg}`} style={t.settingsBgGl}>
-                                {["docPan", "docAadhaar", "docSalary", "docBank", "docProperty"].map(docKey => {
-                                  const label = docKey === "docPan" ? "PAN Card" : docKey === "docAadhaar" ? "Aadhaar Card" : docKey === "docSalary" ? "Salary Slips / ITR" : docKey === "docBank" ? "Bank Statements" : "Property Documents";
-                                  return (
-                                    <div key={docKey} className={`flex items-center justify-between border p-2 rounded-lg ${t.innerBlock}`}>
-                                      <span className={`text-xs font-medium ${t.text}`}>{label}</span>
-                                      <select value={(loanForm as any)[docKey]} onChange={e => setLoanForm({ ...loanForm, [docKey]: e.target.value })} className={`text-xs font-bold bg-transparent outline-none cursor-pointer ${(loanForm as any)[docKey] === "Uploaded" ? "text-green-400" : "text-gray-500"}`}><option>Pending</option><option>Uploaded</option></select>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                            <div className={`border-t pt-4 ${t.tableBorder}`}>
-                              <h4 className={`text-xs font-bold uppercase tracking-wider mb-3 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}>5. Notes / Remarks</h4>
-                              <textarea value={loanForm.notes} onChange={e => setLoanForm({ ...loanForm, notes: e.target.value })} className={`w-full rounded-lg px-4 py-2.5 text-sm outline-none resize-none h-20 custom-scrollbar border ${t.inputInner} ${t.text} ${t.inputFocus}`} placeholder="Bank feedback, CIBIL issues, Internal notes..." />
-                            </div>
-                            <button type="submit" className={`mt-4 flex-shrink-0 w-full font-bold py-3.5 rounded-xl shadow-md transition-colors cursor-pointer ${t.btnSecondary}`}>Save Loan Tracker Update</button>
-                          </form>
-                        </div>
-                      ) : (
-                        <div className="flex flex-col h-full animate-fadeIn">
-                          {/* Tab switcher */}
-                          <div className={`flex items-center gap-2 mb-4 border p-1.5 rounded-xl flex-shrink-0 ${t.tableWrap}`}>
-                            <button onClick={() => setDetailTab("personal")} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-colors cursor-pointer ${detailTab === "personal" ? t.btnPrimary : `${t.textMuted} ${isDark ? "hover:text-white hover:bg-[#222]" : "hover:text-[#1A1A1A] hover:bg-[#F1F5F9]"}`}`}>Personal Information</button>
-                            <button onClick={() => setDetailTab("loan")} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-colors cursor-pointer ${detailTab === "loan" ? t.btnSecondary : `${t.textMuted} ${isDark ? "hover:text-white hover:bg-[#222]" : "hover:text-[#1A1A1A] hover:bg-[#F1F5F9]"}`}`}>Loan Tracking</button>
-                            {bookingData && (
-                              <button onClick={() => { setDetailTab("loan" as any); setBookingDetailTab("booking"); }} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-colors cursor-pointer flex items-center justify-center gap-1 ${ bookingDetailTab === "booking" && detailTab === "loan" ? (isDark ? "bg-yellow-600 text-white" : "bg-amber-500 text-white") : `${t.textMuted} ${isDark ? "hover:text-white hover:bg-[#222]" : "hover:text-[#1A1A1A] hover:bg-[#F1F5F9]"}`}`}>
-                                📋 Booking Application
-                              </button>
-                            )}
-                          </div>
-                          <div className={`flex-1 overflow-y-auto custom-scrollbar rounded-xl p-6 pt-4 pb-4 shadow-lg border ${t.chatPanel}`} style={t.chatPanelGl}>
-                            {bookingData && bookingDetailTab === "booking" ? (
-                              <BookingApplicationView
-                                booking={bookingData}
-                                lead={selectedLead}
-                                isDark={isDark}
-                                userRole={user.role?.toLowerCase() || "receptionist"}
-                                onApprove={undefined}
-                                onCancel={undefined}
-                              />
-                            ) : detailTab === "personal" ? (
-                              <div>
-                                <div className="grid grid-cols-2 gap-y-3 gap-x-4 text-sm">
-                                  {[
-                                    { label: "Email", val: selectedLead.email !== "N/A" ? selectedLead.email : "Not Provided" },
-                                    { label: "Phone", val: selectedLead.phone, mono: true },
-                                    { label: "Alt Phone", val: selectedLead.altPhone && selectedLead.altPhone !== "N/A" ? selectedLead.altPhone : "Not Provided", mono: true },
-                                  ].map(f => (
-                                    <div key={f.label}><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>{f.label}</p><p className={`font-semibold ${f.mono ? "font-mono" : ""} ${t.text}`}>{f.val}</p></div>
-                                  ))}
-                                  <div><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Lead Interest</p>{selectedLead.leadInterestStatus && selectedLead.leadInterestStatus !== "Pending" ? <InterestBadge status={selectedLead.leadInterestStatus} /> : <p className={`font-semibold ${t.text}`}>Pending</p>}</div>
-                                  <div className="col-span-1"><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Loan Status</p>{selectedLead.loanStatus && selectedLead.loanStatus !== "N/A" ? <div className="w-fit"><LoanStatusBadge status={selectedLead.loanStatus} /></div> : <p className={`font-semibold ${t.text}`}>N/A</p>}</div>
-                                  <div className="col-span-1"><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Backdated Entry</p><p className={`font-semibold ${t.text}`}>{selectedLead.auto_date_enabled === false && selectedLead.enquiry_date ? formatDate(selectedLead.enquiry_date).split(",")[0] : "Null"}</p></div>
-                                  <div className="col-span-2"><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Residential Address</p><p className={`font-semibold ${t.text}`}>{selectedLead.address && selectedLead.address !== "N/A" ? selectedLead.address : "Not Provided"}</p></div>
-                                  <div><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Budget</p><p className={`font-bold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{selectedLead.salesBudget !== "Pending" ? selectedLead.salesBudget : selectedLead.budget}</p></div>
-                                  <div><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Property Type</p><p className={`font-semibold ${t.text}`}>{selectedLead.propType || "Pending"}</p></div>
-                                  <div><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Type of Use</p><p className={`font-semibold ${t.text}`}>{selectedLead.useType !== "Pending" ? selectedLead.useType : (selectedLead.purpose || "N/A")}</p></div>
-                                  <div><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Planning to Buy?</p><p className={`font-semibold ${t.text}`}>{selectedLead.planningPurchase || "Pending"}</p></div>
-                                  <div><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Loan Required?</p><p className={`font-semibold ${t.text}`}>{getLatestLoanDetails()?.loanRequired}</p></div>
-                                  <div><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Status</p><span className={`text-sm font-bold ${selectedLead.status === "Closing" ? "text-amber-500" : selectedLead.status === "Visit Scheduled" ? "text-orange-400" : t.accentText}`}>{selectedLead.status || "Assigned"}</span></div>
-                                  <div className={`col-span-2 p-3 rounded-xl border ${t.settingsBg}`} style={t.settingsBgGl}>
-                                    <p className={`text-xs font-bold uppercase tracking-wider mb-0.5 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}>📍 Site Visit Date</p>
-                                    <p className={`text-base font-black ${t.text}`}>{selectedLead.mongoVisitDate ? formatDate(selectedLead.mongoVisitDate) : "Not Scheduled"}</p>
-                                  </div>
-                                  {/* ── Lost Lead Record ── */}
-                                  {selectedLead.is_lost_lead && (
-                                    <div className="col-span-2 mt-1 border rounded-xl p-3 text-red-300 border-red-500/30 bg-red-950/30">
-                                      <h3 className="text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-2">
-                                        <Ghost className="w-3.5 h-3.5" /> Lost Lead Record
-                                      </h3>
-                                      <p className="text-xs leading-relaxed">{selectedLead.lost_lead_reason || "No reason recorded."}</p>
-                                      <p className="text-[10px] mt-2 text-gray-500">
-                                        Marked by {selectedLead.lost_lead_marked_by || "Unknown"} on {selectedLead.lost_lead_marked_at ? formatDate(selectedLead.lost_lead_marked_at) : "-"}
-                                      </p>
-                                    </div>
-                                  )}
-                                </div>
-                                <div className={`mt-3 border rounded-xl p-3 ${t.settingsBg}`} style={t.settingsBgGl}>
-                                  <h3 className={`text-xs font-bold uppercase tracking-wider mb-2 border-b pb-2 ${t.sectionTitle} ${t.sectionBorder}`}>Channel Partner Data</h3>
-                                  <div className="grid grid-cols-2 gap-2">
-                                    <div><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Primary Source</p><p className={`font-medium text-sm ${t.text}`}>{selectedLead.source || "N/A"}</p></div>
-                                    {selectedLead.source === "Others" && (<div><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Specified Name</p><p className={`font-medium text-sm ${t.text}`}>{selectedLead.sourceOther}</p></div>)}
-                                  </div>
-                                  {selectedLead.source === "Channel Partner" && (
-                                    <div className={`mt-2 pt-2 border-t grid grid-cols-1 sm:grid-cols-2 gap-3 ${t.tableBorder}`}>
-                                      {[{ label: "CP Company", val: selectedLead.cp_company || selectedLead.cpCompany }, { label: "CP Phone", val: selectedLead.cp_phone || selectedLead.cpPhone }].map(({ label, val }) => (
-                                        <div key={label}><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>{label}</p><p className={`font-medium text-sm ${t.text}`}>{val || "N/A"}</p></div>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
                             ) : (
+                              <button onClick={handleReopenLead} disabled={isReopening}
+                                className={`font-bold px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-60 ${isDark ? "bg-blue-600 hover:bg-blue-700 text-white" : "bg-blue-500 hover:bg-blue-600 text-white"}`}>
+                                {isReopening ? "Reopening…" : "↩️ Reopen Lead"}
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          !showSalesForm && !showLoanForm && (
+                            <>
+                              <button onClick={() => { prefillSalesForm(); setShowSalesForm(true); setShowLoanForm(false); }}
+                                className={`font-bold px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer ${t.btnPrimary}`}>
+                                <FaFileInvoice /> Fill Salesform
+                              </button>
+                              <button onClick={() => { prefillLoanForm(); setShowLoanForm(true); setShowSalesForm(false); }}
+                                className={`font-bold px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer ${t.btnSecondary}`}>
+                                <FaUniversity /> Track Loan
+                              </button>
+                              {selectedLead.mongoVisitDate && selectedLead.status !== "Closing" && !selectedLead.is_lost_lead && (
+                                <button onClick={() => setIsClosingModalOpen(true)} className={`font-bold px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer ${t.btnWarning}`}>
+                                  <FaHandshake /> Mark Closing
+                                </button>
+                              )}
+                              {!selectedLead.is_lost_lead && (
+                                <button onClick={openLostLeadModal}
+                                  className={`font-bold px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer ${t.btnDanger}`}>
+                                  <AlertTriangle className="w-4 h-4" /> Mark Lost
+                                </button>
+                              )}
+                            </>
+                          ))}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col lg:flex-row gap-4 flex-1 min-h-0 pb-2">
+                      {/* LEFT PANEL */}
+                      <div className="w-full lg:w-[50%] flex flex-col gap-3 h-full pb-2">
+                        {showSalesForm ? (
+                          <div className={`rounded-xl border p-5 shadow-xl flex-1 overflow-y-auto custom-scrollbar flex flex-col ${t.modalCard}`} style={t.modalGlass}>
+                            <div className={`flex justify-between items-center mb-4 border-b pb-3 ${t.tableBorder}`}>
                               <div>
-                                {(() => {
-                                  const curLoan: any = getLatestLoanDetails() || {};
-                                  const sColor = getLoanStatusColor(curLoan?.status || "");
-                                  const isHighProb = curLoan?.status?.toLowerCase() === "approved" && selectedLead.mongoVisitDate;
-                                  return (
-                                    <>
-                                      <h3 className={`text-sm font-bold border-b pb-2 mb-6 uppercase flex items-center justify-between ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"} ${t.tableBorder}`}><span className="flex items-center gap-2"><FaUniversity /> Deal Loan Overview</span></h3>
-                                      {isHighProb && <div className="mb-6 bg-gradient-to-r from-orange-500/20 to-red-500/20 border border-orange-500/50 p-3 rounded-lg flex items-center justify-center gap-2 text-orange-400 font-bold tracking-wide shadow-md">🚀 HIGH PROBABILITY DEAL (Visit Done + Loan Approved)</div>}
-                                      <div className="grid grid-cols-2 gap-2 mt-4">
-                                        <div className="col-span-2 mb-2"><p className={`text-xs font-bold uppercase tracking-widest ${t.textMuted}`}>Document Status</p></div>
-                                        {[{ label: "PAN Card", val: curLoan?.docPan }, { label: "Aadhaar", val: curLoan?.docAadhaar }, { label: "Salary/ITR", val: curLoan?.docSalary }, { label: "Bank Stmt", val: curLoan?.docBank }, { label: "Property Docs", val: curLoan?.docProperty }].map((doc, i) => (
-                                          <div key={i} className={`flex items-center justify-between p-2 rounded-lg col-span-1 border ${t.innerBlock}`}>
-                                            <span className={`text-xs ${t.textMuted}`}>{doc.label}</span>
-                                            {doc.val === "Uploaded" ? <FaCheck className="text-green-500 text-xs" /> : <FaClock className={`text-xs ${t.textFaint}`} />}
-                                          </div>
+                                <h3 className={`text-lg font-bold ${t.text}`}>Sales Data Form</h3>
+                                <p className={`text-xs mt-0.5 ${t.accentText}`}>For Lead #{selectedLead.id}</p>
+                              </div>
+                              <button type="button" onClick={() => setShowSalesForm(false)} className={`p-1 ${t.textMuted} hover:text-red-500`}><FaTimes /></button>
+                            </div>
+                            <form onSubmit={handleSalesFormSubmit} className="flex flex-col gap-4 flex-1">
+                              <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Property Type?</label><input type="text" placeholder="e.g. 1BHK, 2BHK" value={salesForm.propertyType} onChange={e => setSalesForm({ ...salesForm, propertyType: e.target.value })} className={formInput} /></div>
+                              <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Preferred Location?</label><input type="text" placeholder="e.g. Dombivali, Kalyan" value={salesForm.location} onChange={e => setSalesForm({ ...salesForm, location: e.target.value })} className={formInput} /></div>
+                              <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Approximate Budget?</label><input type="text" placeholder="e.g. 5 cr" value={salesForm.budget} onChange={e => setSalesForm({ ...salesForm, budget: e.target.value })} className={formInput} /></div>
+                              <div className="grid grid-cols-2 gap-3">
+                                <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Self-use or Investment?</label><select value={salesForm.useType} onChange={e => setSalesForm({ ...salesForm, useType: e.target.value })} className={formSelect}><option value="">Select</option><option>Self Use</option><option>Investment</option></select></div>
+                                <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Planning to Purchase?</label><select value={salesForm.purchaseDate} onChange={e => setSalesForm({ ...salesForm, purchaseDate: e.target.value })} className={formSelect}><option value="">Select</option><option>Immediate</option><option>Next 3 Months</option></select></div>
+                              </div>
+                              <div className={`border-t pt-3 mt-1 ${t.tableBorder}`}>
+                                <label className={`block text-xs font-bold mb-1.5 ${t.accentText}`}>Lead Interest Status *</label>
+                                <select required value={salesForm.leadStatus} onChange={e => setSalesForm({ ...salesForm, leadStatus: e.target.value })} className={formSelect}><option value="" disabled>Select Status</option><option>Interested</option><option>Not Interested</option><option>NON GENUINE DEMAND (NGD)</option></select>
+                              </div>
+                              <div className={`border-t pt-3 mt-1 ${t.tableBorder}`}>
+                                <label className={`block text-xs font-bold mb-1.5 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}>Loan Planned?</label>
+                                <select required value={salesForm.loanPlanned} onChange={e => setSalesForm({ ...salesForm, loanPlanned: e.target.value })} className={formSelect}><option value="" disabled>Select Option</option><option>Yes</option><option>No</option><option>Not Sure</option></select>
+                              </div>
+                              <div className={`mt-2 border-t pt-3 ${t.tableBorder}`}>
+                                <label className="text-xs text-orange-400 font-bold mb-1.5 block">Schedule a Site Visit?</label>
+                                <input ref={inputRef} type="datetime-local" value={salesForm.siteVisit} onChange={e => setSalesForm({ ...salesForm, siteVisit: e.target.value })} onClick={() => inputRef.current?.showPicker()} className={`${formInput} focus:border-orange-500`} />
+                              </div>
+                              <button type="submit" className={`mt-auto w-full font-bold py-3.5 rounded-xl shadow-md transition-colors flex-shrink-0 ${t.btnPrimary}`}>Submit Salesform</button>
+                            </form>
+                          </div>
+                        ) : showLoanForm ? (
+                          <div className={`rounded-xl border p-5 shadow-xl flex-1 overflow-y-auto custom-scrollbar flex flex-col animate-fadeIn ${t.modalCard}`} style={t.modalGlass}>
+                            <div className={`flex justify-between items-center mb-4 border-b pb-3 flex-shrink-0 ${t.tableBorder}`}>
+                              <div>
+                                <h3 className={`text-lg font-bold flex items-center gap-2 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}><FaUniversity /> Loan Tracking Workflow</h3>
+                                <p className={`text-xs mt-0.5 ${t.textFaint}`}>For Lead #{selectedLead.id}</p>
+                              </div>
+                              <button type="button" onClick={() => setShowLoanForm(false)} className={`p-1 ${t.textMuted} hover:text-red-500`}><FaTimes /></button>
+                            </div>
+                            <form onSubmit={handleLoanFormSubmit} className="flex flex-col gap-6 flex-1">
+                              <div>
+                                <h4 className={`text-xs font-bold uppercase tracking-wider mb-3 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}>1. Loan Decision</h4>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                  <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Loan Required? *</label><select required value={loanForm.loanRequired} onChange={e => setLoanForm({ ...loanForm, loanRequired: e.target.value })} className={formSelect}><option value="">Select</option><option>Yes</option><option>No</option><option>Not Sure</option></select></div>
+                                  <div>
+                                    <label className={`text-xs mb-1 block ${t.textMuted}`}>Loan Status *</label>
+                                    <select required value={loanForm.status} onChange={e => setLoanForm({ ...loanForm, status: e.target.value })} className={formSelect}><option value="">Select Status</option><option>Approved</option><option>In Progress</option><option>Rejected</option></select>
+                                    {loanForm.status && (<p className={`text-[10px] mt-1.5 font-semibold ${loanForm.status === "Approved" ? "text-green-400" : loanForm.status === "Rejected" ? "text-red-400" : "text-yellow-400"}`}>{loanForm.status === "Approved" && "✅ Loan cleared — schedule closing meeting"}{loanForm.status === "In Progress" && "📄 Follow up on pending documents"}{loanForm.status === "Rejected" && "❌ Loan rejected — suggest co-applicant or other bank"}</p>)}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className={`border-t pt-4 ${t.tableBorder}`}>
+                                <h4 className={`text-xs font-bold uppercase tracking-wider mb-3 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}>2. Bank & Loan Details</h4>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                  {[{ label: "Bank Name", k: "bank", ph: "e.g. HDFC" }, { label: "Amount Required", k: "amountReq", ph: "e.g. 60L" }, { label: "Amount Approved", k: "amountApp", ph: "e.g. 55L" }, { label: "CIBIL Score", k: "cibil", ph: "e.g. 750" }, { label: "Agent Name", k: "agent", ph: "Agent Name" }, { label: "Agent Contact", k: "agentContact", ph: "Agent Phone", tel: true }].map(f => (
+                                    <div key={f.k}><label className={`text-xs mb-1 block ${t.textMuted}`}>{f.label}</label><input type={f.tel ? "tel" : "text"} value={(loanForm as any)[f.k]} onChange={e => setLoanForm({ ...loanForm, [f.k]: e.target.value })} className={formInput} placeholder={f.ph} /></div>
+                                  ))}
+                                </div>
+                              </div>
+                              <div className={`border-t pt-4 ${t.tableBorder}`}>
+                                <h4 className={`text-xs font-bold uppercase tracking-wider mb-3 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}>3. Financial Qualification</h4>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                  <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Employment</label><select value={loanForm.empType} onChange={e => setLoanForm({ ...loanForm, empType: e.target.value })} className={formSelect}><option value="">Select</option><option>Salaried</option><option>Self-employed</option></select></div>
+                                  <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Monthly Income</label><input type="text" value={loanForm.income} onChange={e => setLoanForm({ ...loanForm, income: e.target.value })} className={formInput} placeholder="e.g. 1L" /></div>
+                                  <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Existing EMIs</label><input type="text" value={loanForm.emi} onChange={e => setLoanForm({ ...loanForm, emi: e.target.value })} className={formInput} placeholder="e.g. 15k" /></div>
+                                </div>
+                              </div>
+                              <div className={`border-t pt-4 ${t.tableBorder}`}>
+                                <h4 className={`text-xs font-bold uppercase tracking-wider mb-3 flex items-center gap-1 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}><FaFileAlt /> 4. Document Checklist</h4>
+                                <div className={`grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-lg border ${t.settingsBg}`} style={t.settingsBgGl}>
+                                  {["docPan", "docAadhaar", "docSalary", "docBank", "docProperty"].map(docKey => {
+                                    const label = docKey === "docPan" ? "PAN Card" : docKey === "docAadhaar" ? "Aadhaar Card" : docKey === "docSalary" ? "Salary Slips / ITR" : docKey === "docBank" ? "Bank Statements" : "Property Documents";
+                                    return (
+                                      <div key={docKey} className={`flex items-center justify-between border p-2 rounded-lg ${t.innerBlock}`}>
+                                        <span className={`text-xs font-medium ${t.text}`}>{label}</span>
+                                        <select value={(loanForm as any)[docKey]} onChange={e => setLoanForm({ ...loanForm, [docKey]: e.target.value })} className={`text-xs font-bold bg-transparent outline-none cursor-pointer ${(loanForm as any)[docKey] === "Uploaded" ? "text-green-400" : "text-gray-500"}`}><option>Pending</option><option>Uploaded</option></select>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                              <div className={`border-t pt-4 ${t.tableBorder}`}>
+                                <h4 className={`text-xs font-bold uppercase tracking-wider mb-3 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}>5. Notes / Remarks</h4>
+                                <textarea value={loanForm.notes} onChange={e => setLoanForm({ ...loanForm, notes: e.target.value })} className={`w-full rounded-lg px-4 py-2.5 text-sm outline-none resize-none h-20 custom-scrollbar border ${t.inputInner} ${t.text} ${t.inputFocus}`} placeholder="Bank feedback, CIBIL issues, Internal notes..." />
+                              </div>
+                              <button type="submit" className={`mt-4 flex-shrink-0 w-full font-bold py-3.5 rounded-xl shadow-md transition-colors cursor-pointer ${t.btnSecondary}`}>Save Loan Tracker Update</button>
+                            </form>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col h-full animate-fadeIn">
+                            {/* Tab switcher */}
+                            <div className={`flex items-center gap-2 mb-4 border p-1.5 rounded-xl flex-shrink-0 ${t.tableWrap}`}>
+                              <button onClick={() => setDetailTab("personal")} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-colors cursor-pointer ${detailTab === "personal" ? t.btnPrimary : `${t.textMuted} ${isDark ? "hover:text-white hover:bg-[#222]" : "hover:text-[#1A1A1A] hover:bg-[#F1F5F9]"}`}`}>Personal Information</button>
+                              <button onClick={() => setDetailTab("loan")} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-colors cursor-pointer ${detailTab === "loan" ? t.btnSecondary : `${t.textMuted} ${isDark ? "hover:text-white hover:bg-[#222]" : "hover:text-[#1A1A1A] hover:bg-[#F1F5F9]"}`}`}>Loan Tracking</button>
+                              {bookingData && (
+                                <button onClick={() => { setDetailTab("loan" as any); setBookingDetailTab("booking"); }} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-colors cursor-pointer flex items-center justify-center gap-1 ${bookingDetailTab === "booking" && detailTab === "loan" ? (isDark ? "bg-yellow-600 text-white" : "bg-amber-500 text-white") : `${t.textMuted} ${isDark ? "hover:text-white hover:bg-[#222]" : "hover:text-[#1A1A1A] hover:bg-[#F1F5F9]"}`}`}>
+                                  📋 Booking Application
+                                </button>
+                              )}
+                            </div>
+                            <div className={`flex-1 overflow-y-auto custom-scrollbar rounded-xl p-6 pt-4 pb-4 shadow-lg border ${t.chatPanel}`} style={t.chatPanelGl}>
+                              {bookingData && bookingDetailTab === "booking" ? (
+                                <BookingApplicationView
+                                  booking={bookingData}
+                                  lead={selectedLead}
+                                  isDark={isDark}
+                                  userRole={user.role?.toLowerCase() || "receptionist"}
+                                  onApprove={undefined}
+                                  onCancel={undefined}
+                                />
+                              ) : detailTab === "personal" ? (
+                                <div>
+                                  <div className="grid grid-cols-2 gap-y-3 gap-x-4 text-sm">
+                                    {[
+                                      { label: "Email", val: selectedLead.email !== "N/A" ? selectedLead.email : "Not Provided" },
+                                      { label: "Phone", val: selectedLead.phone, mono: true },
+                                      { label: "Alt Phone", val: selectedLead.altPhone && selectedLead.altPhone !== "N/A" ? selectedLead.altPhone : "Not Provided", mono: true },
+                                    ].map(f => (
+                                      <div key={f.label}><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>{f.label}</p><p className={`font-semibold ${f.mono ? "font-mono" : ""} ${t.text}`}>{f.val}</p></div>
+                                    ))}
+                                    <div><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Lead Interest</p>{selectedLead.leadInterestStatus && selectedLead.leadInterestStatus !== "Pending" ? <InterestBadge status={selectedLead.leadInterestStatus} /> : <p className={`font-semibold ${t.text}`}>Pending</p>}</div>
+                                    <div className="col-span-1"><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Loan Status</p>{selectedLead.loanStatus && selectedLead.loanStatus !== "N/A" ? <div className="w-fit"><LoanStatusBadge status={selectedLead.loanStatus} /></div> : <p className={`font-semibold ${t.text}`}>N/A</p>}</div>
+                                    <div className="col-span-1"><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Backdated Entry</p><p className={`font-semibold ${t.text}`}>{selectedLead.auto_date_enabled === false && selectedLead.enquiry_date ? formatDate(selectedLead.enquiry_date).split(",")[0] : "Null"}</p></div>
+                                    <div className="col-span-2"><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Residential Address</p><p className={`font-semibold ${t.text}`}>{selectedLead.address && selectedLead.address !== "N/A" ? selectedLead.address : "Not Provided"}</p></div>
+                                    <div><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Budget</p><p className={`font-bold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{selectedLead.salesBudget !== "Pending" ? selectedLead.salesBudget : selectedLead.budget}</p></div>
+                                    <div><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Property Type</p><p className={`font-semibold ${t.text}`}>{selectedLead.propType || "Pending"}</p></div>
+                                    <div><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Type of Use</p><p className={`font-semibold ${t.text}`}>{selectedLead.useType !== "Pending" ? selectedLead.useType : (selectedLead.purpose || "N/A")}</p></div>
+                                    <div><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Planning to Buy?</p><p className={`font-semibold ${t.text}`}>{selectedLead.planningPurchase || "Pending"}</p></div>
+                                    <div><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Loan Required?</p><p className={`font-semibold ${t.text}`}>{getLatestLoanDetails()?.loanRequired}</p></div>
+                                    <div><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Status</p><span className={`text-sm font-bold ${selectedLead.status === "Closing" ? "text-amber-500" : selectedLead.status === "Visit Scheduled" ? "text-orange-400" : t.accentText}`}>{selectedLead.status || "Assigned"}</span></div>
+                                    <div className={`col-span-2 p-3 rounded-xl border ${t.settingsBg}`} style={t.settingsBgGl}>
+                                      <p className={`text-xs font-bold uppercase tracking-wider mb-0.5 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}>📍 Site Visit Date</p>
+                                      <p className={`text-base font-black ${t.text}`}>{selectedLead.mongoVisitDate ? formatDate(selectedLead.mongoVisitDate) : "Not Scheduled"}</p>
+                                    </div>
+                                    {/* ── Lost Lead Record ── */}
+                                    {selectedLead.is_lost_lead && (
+                                      <div className="col-span-2 mt-1 border rounded-xl p-3 text-red-300 border-red-500/30 bg-red-950/30">
+                                        <h3 className="text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-2">
+                                          <Ghost className="w-3.5 h-3.5" /> Lost Lead Record
+                                        </h3>
+                                        <p className="text-xs leading-relaxed">{selectedLead.lost_lead_reason || "No reason recorded."}</p>
+                                        <p className="text-[10px] mt-2 text-gray-500">
+                                          Marked by {selectedLead.lost_lead_marked_by || "Unknown"} on {selectedLead.lost_lead_marked_at ? formatDate(selectedLead.lost_lead_marked_at) : "-"}
+                                        </p>
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className={`mt-3 border rounded-xl p-3 ${t.settingsBg}`} style={t.settingsBgGl}>
+                                    <h3 className={`text-xs font-bold uppercase tracking-wider mb-2 border-b pb-2 ${t.sectionTitle} ${t.sectionBorder}`}>Channel Partner Data</h3>
+                                    <div className="grid grid-cols-2 gap-2">
+                                      <div><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Primary Source</p><p className={`font-medium text-sm ${t.text}`}>{selectedLead.source || "N/A"}</p></div>
+                                      {selectedLead.source === "Others" && (<div><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Specified Name</p><p className={`font-medium text-sm ${t.text}`}>{selectedLead.sourceOther}</p></div>)}
+                                    </div>
+                                    {selectedLead.source === "Channel Partner" && (
+                                      <div className={`mt-2 pt-2 border-t grid grid-cols-1 sm:grid-cols-2 gap-3 ${t.tableBorder}`}>
+                                        {[{ label: "CP Company", val: selectedLead.cp_company || selectedLead.cpCompany }, { label: "CP Phone", val: selectedLead.cp_phone || selectedLead.cpPhone }].map(({ label, val }) => (
+                                          <div key={label}><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>{label}</p><p className={`font-medium text-sm ${t.text}`}>{val || "N/A"}</p></div>
                                         ))}
                                       </div>
-                                    </>
-                                  );
-                                })()}
-                              </div>
-                            )}
-                          </div>
-
-
-
-                          <div className="grid grid-cols-2 gap-3 mt-4 flex-shrink-0">
-                            <button className={`border flex flex-col items-center justify-center py-3 rounded-xl transition-all cursor-pointer gap-1 ${isDark ? "bg-[#00AEEF]/10 border-[#00AEEF]/30 hover:bg-[#00AEEF] text-[#00AEEF] hover:text-white" : "bg-[#00AEEF]/10 border-[#00AEEF]/30 hover:bg-[#00AEEF] text-[#00AEEF] hover:text-white"}`}><FaMicrophone className="text-lg" /><span className="font-bold text-[10px]">Browser Call</span></button>
-                            <button onClick={() => setIsWaModalOpen(true)} className="bg-green-600/10 border border-green-500/30 hover:bg-green-600 text-green-400 hover:text-white flex flex-col items-center justify-center py-3 rounded-xl transition-all cursor-pointer gap-1"><FaWhatsapp className="text-xl" /><span className="font-bold text-[10px]">WhatsApp</span></button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* RIGHT PANEL: FOLLOW-UPS */}
-                    <div className={`w-full lg:w-[50%] flex flex-col rounded-2xl overflow-hidden shadow-2xl h-full min-h-0 border ${t.chatPanel}`} style={t.chatPanelGl}>
-                      <div className={`flex-1 p-6 overflow-y-auto custom-scrollbar flex flex-col gap-6 ${t.chatArea}`}>
-                        {/* System message */}
-                        <div className="flex justify-start">
-                          <div className={`rounded-2xl rounded-tl-none p-4 max-w-[85%] shadow-md ${t.fupSalesform}`}>
-                            <div className={`flex justify-between items-center mb-2 gap-6`}>
-                              <span className={`font-bold text-sm ${t.accentText}`}>System (Front Desk)</span>
-                              <span className={`text-[10px] ${t.textFaint}`}>{formatDate(selectedLead.created_at)}</span>
-                            </div>
-                            <p className={`text-sm leading-relaxed ${t.textMuted}`}>Lead assigned to {selectedLead.assigned_to}. Action required.</p>
-                          </div>
-                        </div>
-                        {currentLeadFollowUps.map((msg: any, idx: number) => {
-                          const isLoan = msg.message.includes("🏦 Loan Update");
-                          const isSF = msg.message.includes("📝 Detailed Salesform Submitted");
-                          const isClosing = msg.message.includes("✅ Lead Marked as Closing");
-                          const bubbleCls = isLoan ? t.fupLoan : isSF ? t.fupSalesform : isClosing ? t.fupClosing : t.fupDefault;
-                          return (
-                            <div key={idx} className="flex justify-start">
-                              <div className={`rounded-2xl rounded-tl-none p-4 max-w-[85%] shadow-lg ${bubbleCls}`}>
-                                <div className="flex justify-between items-center mb-3 gap-6">
-                                  <span className={`font-bold text-sm ${t.text}`}>{msg.createdBy === "admin" ? `${msg.salesManagerName || "Admin"} (Admin)` : msg.salesManagerName}</span>
-                                  <span className={`text-[10px] ${t.textFaint}`}>{formatDate(msg.createdAt)}</span>
+                                    )}
+                                  </div>
                                 </div>
-                                <p className={`text-sm whitespace-pre-wrap leading-relaxed ${t.textMuted}`}>{msg.message}</p>
-                              </div>
+                              ) : (
+                                <div>
+                                  {(() => {
+                                    const curLoan: any = getLatestLoanDetails() || {};
+                                    const sColor = getLoanStatusColor(curLoan?.status || "");
+                                    const isHighProb = curLoan?.status?.toLowerCase() === "approved" && selectedLead.mongoVisitDate;
+                                    return (
+                                      <>
+                                        <h3 className={`text-sm font-bold border-b pb-2 mb-6 uppercase flex items-center justify-between ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"} ${t.tableBorder}`}><span className="flex items-center gap-2"><FaUniversity /> Deal Loan Overview</span></h3>
+                                        {isHighProb && <div className="mb-6 bg-gradient-to-r from-orange-500/20 to-red-500/20 border border-orange-500/50 p-3 rounded-lg flex items-center justify-center gap-2 text-orange-400 font-bold tracking-wide shadow-md">🚀 HIGH PROBABILITY DEAL (Visit Done + Loan Approved)</div>}
+                                        <div className="grid grid-cols-2 gap-2 mt-4">
+                                          <div className="col-span-2 mb-2"><p className={`text-xs font-bold uppercase tracking-widest ${t.textMuted}`}>Document Status</p></div>
+                                          {[{ label: "PAN Card", val: curLoan?.docPan }, { label: "Aadhaar", val: curLoan?.docAadhaar }, { label: "Salary/ITR", val: curLoan?.docSalary }, { label: "Bank Stmt", val: curLoan?.docBank }, { label: "Property Docs", val: curLoan?.docProperty }].map((doc, i) => (
+                                            <div key={i} className={`flex items-center justify-between p-2 rounded-lg col-span-1 border ${t.innerBlock}`}>
+                                              <span className={`text-xs ${t.textMuted}`}>{doc.label}</span>
+                                              {doc.val === "Uploaded" ? <FaCheck className="text-green-500 text-xs" /> : <FaClock className={`text-xs ${t.textFaint}`} />}
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </>
+                                    );
+                                  })()}
+                                </div>
+                              )}
                             </div>
-                          );
-                        })}
-                        <div ref={followUpEndRef} />
+
+
+
+                            <div className="grid grid-cols-2 gap-3 mt-4 flex-shrink-0">
+                              <button className={`border flex flex-col items-center justify-center py-3 rounded-xl transition-all cursor-pointer gap-1 ${isDark ? "bg-[#00AEEF]/10 border-[#00AEEF]/30 hover:bg-[#00AEEF] text-[#00AEEF] hover:text-white" : "bg-[#00AEEF]/10 border-[#00AEEF]/30 hover:bg-[#00AEEF] text-[#00AEEF] hover:text-white"}`}><FaMicrophone className="text-lg" /><span className="font-bold text-[10px]">Browser Call</span></button>
+                              <button onClick={() => setIsWaModalOpen(true)} className="bg-green-600/10 border border-green-500/30 hover:bg-green-600 text-green-400 hover:text-white flex flex-col items-center justify-center py-3 rounded-xl transition-all cursor-pointer gap-1"><FaWhatsapp className="text-xl" /><span className="font-bold text-[10px]">WhatsApp</span></button>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      {isLeadLocked ? (
-                        <div className={`p-5 border-t flex items-center justify-center flex-shrink-0 ${t.header} ${t.tableBorder}`} style={t.headerGlass}>
-                          <span className={`text-xs font-semibold ${t.textFaint}`}>
-                            {selectedLead.is_lost_lead ? "❌ Lost Lead • Read Only — follow-ups disabled" : "✅ Lead Closed • Read Only — follow-ups disabled"}
-                          </span>
+
+                      {/* RIGHT PANEL: FOLLOW-UPS */}
+                      <div className={`w-full lg:w-[50%] flex flex-col rounded-2xl overflow-hidden shadow-2xl h-full min-h-0 border ${t.chatPanel}`} style={t.chatPanelGl}>
+                        <div className={`flex-1 p-6 overflow-y-auto custom-scrollbar flex flex-col gap-6 ${t.chatArea}`}>
+                          {/* System message */}
+                          <div className="flex justify-start">
+                            <div className={`rounded-2xl rounded-tl-none p-4 max-w-[85%] shadow-md ${t.fupSalesform}`}>
+                              <div className={`flex justify-between items-center mb-2 gap-6`}>
+                                <span className={`font-bold text-sm ${t.accentText}`}>System (Front Desk)</span>
+                                <span className={`text-[10px] ${t.textFaint}`}>{formatDate(selectedLead.created_at)}</span>
+                              </div>
+                              <p className={`text-sm leading-relaxed ${t.textMuted}`}>Lead assigned to {selectedLead.assigned_to}. Action required.</p>
+                            </div>
+                          </div>
+                          {currentLeadFollowUps.map((msg: any, idx: number) => {
+                            const isLoan = msg.message.includes("🏦 Loan Update");
+                            const isSF = msg.message.includes("📝 Detailed Salesform Submitted");
+                            const isClosing = msg.message.includes("✅ Lead Marked as Closing");
+                            const bubbleCls = isLoan ? t.fupLoan : isSF ? t.fupSalesform : isClosing ? t.fupClosing : t.fupDefault;
+                            return (
+                              <div key={idx} className="flex justify-start">
+                                <div className={`rounded-2xl rounded-tl-none p-4 max-w-[85%] shadow-lg ${bubbleCls}`}>
+                                  <div className="flex justify-between items-center mb-3 gap-6">
+                                    <span className={`font-bold text-sm ${t.text}`}>{msg.createdBy === "admin" ? `${msg.salesManagerName || "Admin"} (Admin)` : msg.salesManagerName}</span>
+                                    <span className={`text-[10px] ${t.textFaint}`}>{formatDate(msg.createdAt)}</span>
+                                  </div>
+                                  <p className={`text-sm whitespace-pre-wrap leading-relaxed ${t.textMuted}`}>{msg.message}</p>
+                                </div>
+                              </div>
+                            );
+                          })}
+                          <div ref={followUpEndRef} />
                         </div>
-                      ) : (
-                        <form onSubmit={handleSendCustomNote} className={`p-4 border-t flex gap-3 items-center flex-shrink-0 ${t.header} ${t.tableBorder}`} style={t.headerGlass}>
-                          <input
-                            type="text" value={customNote} onChange={e => setCustomNote(e.target.value)}
-                            placeholder="Add follow-up note..."
-                            className={`flex-1 rounded-xl px-4 py-3 text-sm outline-none transition-colors border ${t.inputBg} ${t.text} ${t.inputFocus}`}
-                          />
-                          <button type="submit" className={`w-12 h-12 text-white rounded-xl flex items-center justify-center cursor-pointer transition-colors shadow-lg ${isDark ? "bg-purple-600 hover:bg-purple-500" : "bg-[#00AEEF] hover:bg-[#0099d4]"}`}><FaPaperPlane className="text-sm ml-[-2px]" /></button>
-                        </form>
-                      )}
+                        {isLeadLocked ? (
+                          <div className={`p-5 border-t flex items-center justify-center flex-shrink-0 ${t.header} ${t.tableBorder}`} style={t.headerGlass}>
+                            <span className={`text-xs font-semibold ${t.textFaint}`}>
+                              {selectedLead.is_lost_lead ? "❌ Lost Lead • Read Only — follow-ups disabled" : "✅ Lead Closed • Read Only — follow-ups disabled"}
+                            </span>
+                          </div>
+                        ) : (
+                          <form onSubmit={handleSendCustomNote} className={`p-4 border-t flex gap-3 items-center flex-shrink-0 ${t.header} ${t.tableBorder}`} style={t.headerGlass}>
+                            <input
+                              type="text" value={customNote} onChange={e => setCustomNote(e.target.value)}
+                              placeholder="Add follow-up note..."
+                              className={`flex-1 rounded-xl px-4 py-3 text-sm outline-none transition-colors border ${t.inputBg} ${t.text} ${t.inputFocus}`}
+                            />
+                            <button type="submit" className={`w-12 h-12 text-white rounded-xl flex items-center justify-center cursor-pointer transition-colors shadow-lg ${isDark ? "bg-purple-600 hover:bg-purple-500" : "bg-[#00AEEF] hover:bg-[#0099d4]"}`}><FaPaperPlane className="text-sm ml-[-2px]" /></button>
+                          </form>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
                 )
               )}
             </div>

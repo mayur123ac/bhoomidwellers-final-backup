@@ -16,7 +16,7 @@ import {
   Lightbulb, ClipboardList, Wifi, CheckCircle, XCircle, HelpCircle,
   Clock, MapPin, Zap, TrendingUp, Home, Building2, Globe, Star,
   Share2, Image, Banknote, Users, BadgeCheck, CalendarCheck, Ghost,
-  ArrowRight, Target, BrainCircuit, Flame, ChevronLeft, ChevronRight, ChevronDown
+  ArrowRight, Target, BrainCircuit, Flame, ChevronLeft, ChevronRight, ChevronDown, Trash2
 } from "lucide-react";
 
 import {
@@ -38,6 +38,7 @@ import BookingFormModal from "@/components/BookingFormModal";
 import BookingApplicationView from "@/components/BookingApplicationView";
 import ClosedLeadBookingView from "@/components/ClosedLeadBookingView";
 import LostLeadModal from "@/components/LostLeadModal";
+import PermanentLeadDeleteDialog from "@/components/PermanentLeadDeleteDialog";
 // import ActivityTimeline from "@/components/ActivityTimeline";
 import { handleMarkLostLead as markLostLeadApi, restoreLostLead, updateLeadLostState, useLostLeadEvents } from "@/lib/lostLeadSync";
 
@@ -463,7 +464,7 @@ export default function SalesDashboard() {
         />
         <div className="flex items-center px-3 mb-6 mt-1 overflow-hidden">
           <img
-            src="/assets/logobrowser_trans.png"
+            src="/assets/logobrowser_trans.svg"
             alt="Logo"
             className={`w-10 h-10 rounded-xl object-cover flex-shrink-0 cursor-pointer transition-all duration-300`}
           />
@@ -1152,12 +1153,16 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
   const [isSendingWa, setIsSendingWa] = useState(false);
   const followUpEndRef = useRef<HTMLDivElement>(null);
   const [toastMsg, setToastMsg] = useState<{ title: string; icon: any; color: string } | null>(null);
+  const [deleteConfirmLead, setDeleteConfirmLead] = useState<any>(null);
+  const [isDeletingLead, setIsDeletingLead] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const selectedYear = new Date().getFullYear();
 
   const [cardsPage, setCardsPage] = useState(1);
   const cardsSentinelRef = useRef<HTMLDivElement>(null);
+  const isAdmin = String(adminUser?.role || "").toLowerCase() === "admin";
 
   useEffect(() => { setSubView(initialView === "overview" ? "overview" : initialView === "detail" && selectedLead ? "detail" : initialView === "closed-leads" ? "closed-leads" : "cards"); }, [initialView]);
   // Collapse the AI Assistant panel whenever a different lead is opened
@@ -1384,6 +1389,43 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
       setTimeout(() => setToastMsg(null), 3500);
     } finally {
       setIsSavingLost(false);
+    }
+  };
+
+  const openPermanentDeleteDialog = (lead = selectedLead) => {
+    if (!isAdmin || !lead) return;
+    setDeleteError(null);
+    setDeleteConfirmLead(lead);
+  };
+
+  const handlePermanentDeleteLead = async (reason?: string) => {
+    if (!deleteConfirmLead) return;
+    setIsDeletingLead(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/walkin_enquiries/${deleteConfirmLead.id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmation: "DELETE", reason }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        setDeleteError(json.message || "Lead deletion failed. No data has been permanently removed.");
+        return;
+      }
+
+      setToastMsg({ title: "Lead permanently deleted successfully.", icon: <FaCheckCircle />, color: "green" });
+      setTimeout(() => setToastMsg(null), 3500);
+      setDeleteConfirmLead(null);
+      setSelectedLead(null);
+      setBookingData(null);
+      setSubView("cards");
+      setMainView("forms");
+      await refetch();
+    } catch (error: any) {
+      setDeleteError(error?.message || "Lead deletion failed. No data has been permanently removed.");
+    } finally {
+      setIsDeletingLead(false);
     }
   };
 
@@ -1648,16 +1690,16 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                 <table className="w-full text-left text-sm whitespace-nowrap">
                   <thead className={t.tableHead}>
                     <tr>
-                      {["LEAD NO.", "NAME", "PROP. TYPE", "BUDGET", "SOURCE", "CP NAME", "CP COMPANY", "CP PHONE", "STATUS", "LOST STATUS", "INTEREST", "DATE CREATED", "BACKDATED ENTRY", "SITE VISIT"].map(h => (
+                      {["LEAD NO.", "NAME", "PROP. TYPE", "BUDGET", "SOURCE", "CP NAME", "CP COMPANY", "CP PHONE", "STATUS", "LOST STATUS", "INTEREST", "DATE CREATED", "BACKDATED ENTRY", "SITE VISIT", ...(isAdmin ? ["ACTIONS"] : [])].map(h => (
                         <th key={h} className={`px-4 sm:px-3 py-3 sm:py-2.5 font-bold tracking-wider border-b ${t.textHeader} ${t.tableBorder}`}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody className={`divide-y ${t.tableDivide}`}>
                     {isLoading
-                      ? <tr><td colSpan={14} className={`text-center py-8 ${t.textMuted}`}>Loading...</td></tr>
+                      ? <tr><td colSpan={isAdmin ? 15 : 14} className={`text-center py-8 ${t.textMuted}`}>Loading...</td></tr>
                       : filteredDatabaseLeads.length === 0
-                        ? <tr><td colSpan={14} className={`text-center py-8 ${t.textMuted}`}>No leads found.</td></tr>
+                        ? <tr><td colSpan={isAdmin ? 15 : 14} className={`text-center py-8 ${t.textMuted}`}>No leads found.</td></tr>
                         : filteredDatabaseLeads.map((lead: any) => {
                           const isClosed = lead.status === "Closing" || lead.status === "Completed" || lead.status === "Closed" || lead.closingDate;
                           const isLost = !!lead.is_lost_lead;
@@ -1705,6 +1747,22 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                                 {lead.auto_date_enabled === false && lead.enquiry_date ? formatDate(lead.enquiry_date).split(",")[0] : "-"}
                               </td>
                               <td className="px-4 sm:px-3 py-3 sm:py-2.5">{lead.mongoVisitDate ? <span className="text-orange-400 font-medium whitespace-nowrap text-xs sm:text-sm">{formatDate(lead.mongoVisitDate).split(",")[0]}</span> : <span className={`text-xs italic ${t.textFaint}`}>Pending</span>}</td>
+                              {isAdmin && (
+                                <td className="px-4 sm:px-3 py-3 sm:py-2.5" onClick={e => e.stopPropagation()}>
+                                  <button
+                                    type="button"
+                                    onClick={() => openPermanentDeleteDialog(lead)}
+                                    title="Delete Permanently"
+                                    className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors cursor-pointer ${
+                                      isDark
+                                        ? "bg-red-900/20 text-red-300 hover:bg-red-600 hover:text-white"
+                                        : "bg-red-50 text-red-600 hover:bg-red-600 hover:text-white"
+                                    }`}
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </td>
+                              )}
                             </tr>
                           )
                         })
@@ -1960,409 +2018,422 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
               />
             </div>
           ) : (
-          <div className="animate-fadeIn w-full flex flex-col gap-2 pb-1">
-            {/* Detail header */}
-            <div className={`flex flex-col md:flex-row md:items-center justify-between gap-2 rounded-xl border p-3 shadow-sm flex-shrink-0 ${selectedLead.is_lost_lead ? t.cardLost : t.card}`} style={t.cardGlass}>
-              <div className="flex items-center gap-3 sm:gap-2 min-w-0">
-                <button onClick={() => { setMainView("forms"); setSubView("cards"); }} className={`w-9 h-9 sm:w-10 sm:h-10 flex flex-shrink-0 items-center justify-center border rounded-xl transition-colors cursor-pointer shadow-sm ${t.textMuted} ${t.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}><FaChevronLeft className="text-sm" /></button>
-                <h1 className={`text-lg sm:text-lg md:text-2xl font-bold flex items-center gap-2 sm:gap-3 flex-wrap min-w-0 ${t.text}`}>
-                  <span className={t.accentText}>#{selectedLead.id}</span>
-                  <span className="truncate max-w-[200px] sm:max-w-none">{selectedLead.name}</span>
-                  {selectedLead.status === "Closing" && (
-                    <span className={`text-[10px] sm:text-[11px] font-bold px-2 sm:px-3 py-1 rounded-full border flex items-center gap-1.5 flex-shrink-0 ${t.statusClosing}`}>
-                      <FaHandshake className="text-xs" /> Closing
-                    </span>
-                  )}
-                  {selectedLead.is_lost_lead && (
-                    <span className={`text-[10px] sm:text-[11px] font-bold px-2 sm:px-3 py-1 rounded-full border flex items-center gap-1.5 flex-shrink-0 ${t.statusLost}`}>
-                      <Ghost className="w-3 h-3" /> Lost Lead
-                    </span>
-                  )}
-                  {callHidden && (
-                    <OnCallBadge
-                      leadName={selectedLead.name}
-                      onClick={() => { setCallHidden(false); setCallOpen(true); }}
-                    />
-                  )}
-                </h1>
-              </div>
-              <div className="flex gap-2 sm:gap-3 flex-wrap justify-start md:justify-end flex-shrink-0">
-                {isLeadLocked ? (
-                  <>
-                    <span className={`text-[10px] sm:text-[11px] font-bold px-3 py-1.5 rounded-full border flex items-center gap-1.5 ${selectedLead.is_lost_lead ? t.statusLost : t.statusClosing}`}>
-                      {selectedLead.is_lost_lead ? <><Ghost className="w-3 h-3" /> Lost Lead • Read Only</> : <><FaCheckCircle className="text-xs" /> Lead Closed • Read Only</>}
-                    </span>
-                    {selectedLead.is_lost_lead ? (
-                      <button onClick={handleRestoreLead} disabled={isSavingLost} className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md flex-1 sm:flex-none justify-center ${t.btnPrimary} disabled:opacity-60`}>
-                        <FaCheckCircle className="text-xs" /> Restore Lead
-                      </button>
-                    ) : (
-                      <button onClick={handleReopenLead} disabled={isReopening} className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md flex-1 sm:flex-none justify-center ${t.btnPrimary} disabled:opacity-60`}>
-                        ↩️ Reopen Lead
-                      </button>
+            <div className="animate-fadeIn w-full flex flex-col gap-2 pb-1">
+              {/* Detail header */}
+              <div className={`flex flex-col md:flex-row md:items-center justify-between gap-2 rounded-xl border p-3 shadow-sm flex-shrink-0 ${selectedLead.is_lost_lead ? t.cardLost : t.card}`} style={t.cardGlass}>
+                <div className="flex items-center gap-3 sm:gap-2 min-w-0">
+                  <button onClick={() => { setMainView("forms"); setSubView("cards"); }} className={`w-9 h-9 sm:w-10 sm:h-10 flex flex-shrink-0 items-center justify-center border rounded-xl transition-colors cursor-pointer shadow-sm ${t.textMuted} ${t.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}><FaChevronLeft className="text-sm" /></button>
+                  <h1 className={`text-lg sm:text-lg md:text-2xl font-bold flex items-center gap-2 sm:gap-3 flex-wrap min-w-0 ${t.text}`}>
+                    <span className={t.accentText}>#{selectedLead.id}</span>
+                    <span className="truncate max-w-[200px] sm:max-w-none">{selectedLead.name}</span>
+                    {selectedLead.status === "Closing" && (
+                      <span className={`text-[10px] sm:text-[11px] font-bold px-2 sm:px-3 py-1 rounded-full border flex items-center gap-1.5 flex-shrink-0 ${t.statusClosing}`}>
+                        <FaHandshake className="text-xs" /> Closing
+                      </span>
                     )}
-                  </>
-                ) : (
-                  !showSalesForm && !showLoanForm && (
+                    {selectedLead.is_lost_lead && (
+                      <span className={`text-[10px] sm:text-[11px] font-bold px-2 sm:px-3 py-1 rounded-full border flex items-center gap-1.5 flex-shrink-0 ${t.statusLost}`}>
+                        <Ghost className="w-3 h-3" /> Lost Lead
+                      </span>
+                    )}
+                    {callHidden && (
+                      <OnCallBadge
+                        leadName={selectedLead.name}
+                        onClick={() => { setCallHidden(false); setCallOpen(true); }}
+                      />
+                    )}
+                  </h1>
+                </div>
+                <div className="flex gap-2 sm:gap-3 flex-wrap justify-start md:justify-end flex-shrink-0">
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => openPermanentDeleteDialog()}
+                      className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md flex-1 sm:flex-none justify-center ${
+                        isDark
+                          ? "bg-red-950/50 text-red-200 border border-red-900/50 hover:bg-red-600 hover:text-white"
+                          : "bg-red-50 text-red-700 border border-red-200 hover:bg-red-600 hover:text-white"
+                      }`}
+                    >
+                      <Trash2 className="w-4 h-4" /> Delete Permanently
+                    </button>
+                  )}
+                  {isLeadLocked ? (
                     <>
-                      <button onClick={() => { prefillSalesForm(); setShowSalesForm(true); setShowLoanForm(false); emitActivity({ type: 'LEAD_INTERACTION', action: 'Editing Closing Form', leadId: selectedLead?.id, leadName: selectedLead?.name, module: 'Sales Form' }); }}
-                        className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md flex-1 sm:flex-none justify-center ${t.btnPrimary} ${isDark ? "shadow-purple-600/20" : "shadow-[#00AEEF]/20"}`}>
-                        <FaFileInvoice /> <span className="hidden sm:inline">Fill</span> Salesform
-                      </button>
-                      <button onClick={() => { prefillLoanForm(); setShowLoanForm(true); setShowSalesForm(false); emitActivity({ type: 'LEAD_INTERACTION', action: 'Editing Loan Form', leadId: selectedLead?.id, leadName: selectedLead?.name, module: 'Loan Form' }); }}
-                        className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md flex-1 sm:flex-none justify-center ${t.btnSecondary} ${isDark ? "shadow-blue-600/20" : "shadow-[#00AEEF]/20"}`}>
-                        <FaUniversity /> <span className="hidden sm:inline">Track</span> Loan
-                      </button>
-                      <button onClick={openLostLeadModal} className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md flex-1 sm:flex-none justify-center ${t.btnDanger}`}>
-                        <AlertTriangle className="w-4 h-4" /> Mark <span className="hidden sm:inline">as</span> Lost Lead
-                      </button>
-                      <button onClick={() => setIsClosingModalOpen(true)} className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md flex-1 sm:flex-none justify-center ${t.btnWarning} shadow-amber-600/20`}>
-                        <FaHandshake /> Mark <span className="hidden sm:inline">as</span> Closing
-                      </button>
+                      <span className={`text-[10px] sm:text-[11px] font-bold px-3 py-1.5 rounded-full border flex items-center gap-1.5 ${selectedLead.is_lost_lead ? t.statusLost : t.statusClosing}`}>
+                        {selectedLead.is_lost_lead ? <><Ghost className="w-3 h-3" /> Lost Lead • Read Only</> : <><FaCheckCircle className="text-xs" /> Lead Closed • Read Only</>}
+                      </span>
+                      {selectedLead.is_lost_lead ? (
+                        <button onClick={handleRestoreLead} disabled={isSavingLost} className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md flex-1 sm:flex-none justify-center ${t.btnPrimary} disabled:opacity-60`}>
+                          <FaCheckCircle className="text-xs" /> Restore Lead
+                        </button>
+                      ) : (
+                        <button onClick={handleReopenLead} disabled={isReopening} className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md flex-1 sm:flex-none justify-center ${t.btnPrimary} disabled:opacity-60`}>
+                          ↩️ Reopen Lead
+                        </button>
+                      )}
                     </>
-                  )
-                )}
+                  ) : (
+                    !showSalesForm && !showLoanForm && (
+                      <>
+                        <button onClick={() => { prefillSalesForm(); setShowSalesForm(true); setShowLoanForm(false); emitActivity({ type: 'LEAD_INTERACTION', action: 'Editing Closing Form', leadId: selectedLead?.id, leadName: selectedLead?.name, module: 'Sales Form' }); }}
+                          className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md flex-1 sm:flex-none justify-center ${t.btnPrimary} ${isDark ? "shadow-purple-600/20" : "shadow-[#00AEEF]/20"}`}>
+                          <FaFileInvoice /> <span className="hidden sm:inline">Fill</span> Salesform
+                        </button>
+                        <button onClick={() => { prefillLoanForm(); setShowLoanForm(true); setShowSalesForm(false); emitActivity({ type: 'LEAD_INTERACTION', action: 'Editing Loan Form', leadId: selectedLead?.id, leadName: selectedLead?.name, module: 'Loan Form' }); }}
+                          className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md flex-1 sm:flex-none justify-center ${t.btnSecondary} ${isDark ? "shadow-blue-600/20" : "shadow-[#00AEEF]/20"}`}>
+                          <FaUniversity /> <span className="hidden sm:inline">Track</span> Loan
+                        </button>
+                        <button onClick={openLostLeadModal} className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md flex-1 sm:flex-none justify-center ${t.btnDanger}`}>
+                          <AlertTriangle className="w-4 h-4" /> Mark <span className="hidden sm:inline">as</span> Lost Lead
+                        </button>
+                        <button onClick={() => setIsClosingModalOpen(true)} className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md flex-1 sm:flex-none justify-center ${t.btnWarning} shadow-amber-600/20`}>
+                          <FaHandshake /> Mark <span className="hidden sm:inline">as</span> Closing
+                        </button>
+                      </>
+                    )
+                  )}
+                </div>
               </div>
-            </div>
 
-            {/* TWO-COLUMN BODY */}
-            {/* THREE-PART BODY: Lead Info · Follow-ups · AI Assistant (collapsible) */}
-            <div className="flex flex-col lg:flex-row gap-2 lg:gap-3 items-start lg:items-stretch">
+              {/* TWO-COLUMN BODY */}
+              {/* THREE-PART BODY: Lead Info · Follow-ups · AI Assistant (collapsible) */}
+              <div className="flex flex-col lg:flex-row gap-2 lg:gap-3 items-start lg:items-stretch">
 
-              {/* LEFT PANEL */}
-              <div className="flex flex-col gap-3 w-full lg:w-0 lg:flex-1 lg:min-w-0">
-                {showSalesForm ? (
-                  <div className={`rounded-xl border p-3 sm:p-3 shadow-xl overflow-y-auto custom-scrollbar flex flex-col max-h-[85vh] lg:max-h-[calc(100vh-180px)] ${t.modalCard}`} style={t.modalGlass}>
-                    <div className={`flex justify-between items-center mb-4 border-b pb-3 ${t.tableBorder}`}>
-                      <div>
-                        <h3 className={`text-base sm:text-lg font-bold ${t.text}`}>Sales Data Form</h3>
-                        <p className={`text-xs mt-0.5 ${t.accentText}`}>For Lead #{selectedLead.id}</p>
+                {/* LEFT PANEL */}
+                <div className="flex flex-col gap-3 w-full lg:w-0 lg:flex-1 lg:min-w-0">
+                  {showSalesForm ? (
+                    <div className={`rounded-xl border p-3 sm:p-3 shadow-xl overflow-y-auto custom-scrollbar flex flex-col max-h-[85vh] lg:max-h-[calc(100vh-180px)] ${t.modalCard}`} style={t.modalGlass}>
+                      <div className={`flex justify-between items-center mb-4 border-b pb-3 ${t.tableBorder}`}>
+                        <div>
+                          <h3 className={`text-base sm:text-lg font-bold ${t.text}`}>Sales Data Form</h3>
+                          <p className={`text-xs mt-0.5 ${t.accentText}`}>For Lead #{selectedLead.id}</p>
+                        </div>
+                        <button type="button" onClick={() => setShowSalesForm(false)} className={`p-2 ${t.textMuted} hover:text-red-500`}><FaTimes /></button>
                       </div>
-                      <button type="button" onClick={() => setShowSalesForm(false)} className={`p-2 ${t.textMuted} hover:text-red-500`}><FaTimes /></button>
-                    </div>
-                    <form onSubmit={handleSalesFormSubmit} className="flex flex-col gap-2 flex-1">
-                      <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Property Type?</label><input type="text" placeholder="e.g. 1BHK, 2BHK" value={salesForm.propertyType} onChange={e => setSalesForm({ ...salesForm, propertyType: e.target.value })} className={formInput} /></div>
-                      <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Preferred Location?</label><input type="text" placeholder="e.g. Dombivali, Kalyan" value={salesForm.location} onChange={e => setSalesForm({ ...salesForm, location: e.target.value })} className={formInput} /></div>
-                      <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Approximate Budget?</label><input type="text" placeholder="e.g. 5 cr" value={salesForm.budget} onChange={e => setSalesForm({ ...salesForm, budget: e.target.value })} className={formInput} /></div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Self-use or Investment?</label><select value={salesForm.useType} onChange={e => setSalesForm({ ...salesForm, useType: e.target.value })} className={formSelect}><option value="">Select</option><option>Self Use</option><option>Investment</option></select></div>
-                        <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Planning to Purchase?</label><select value={salesForm.purchaseDate} onChange={e => setSalesForm({ ...salesForm, purchaseDate: e.target.value })} className={formSelect}><option value="">Select</option><option>Immediate</option><option>Next 3 Months</option></select></div>
-                      </div>
-                      <div className={`border-t pt-3 mt-1 ${t.tableBorder}`}>
-                        <label className={`block text-xs font-bold mb-1.5 ${t.accentText}`}>Lead Interest Status *</label>
-                        <select required value={salesForm.leadStatus} onChange={e => setSalesForm({ ...salesForm, leadStatus: e.target.value })} className={formSelect}><option value="" disabled>Select Status</option><option>Interested</option><option>Not Interested</option><option>NON GENUINE DEMAND (NGD)</option></select>
-                      </div>
-                      <div className={`border-t pt-3 mt-1 ${t.tableBorder}`}>
-                        <label className={`block text-xs font-bold mb-1.5 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}>Loan Planned?</label>
-                        <select required value={salesForm.loanPlanned} onChange={e => setSalesForm({ ...salesForm, loanPlanned: e.target.value })} className={formSelect}><option value="" disabled>Select Option</option><option>Yes</option><option>No</option><option>Not Sure</option></select>
-                      </div>
-                      <div className={`mt-2 border-t pt-3 ${t.tableBorder}`}>
-                        <label className="text-xs text-orange-400 font-bold mb-1.5 block">Schedule a Site Visit?</label>
-                        <input ref={inputRef} type="datetime-local" value={salesForm.siteVisit} onChange={e => setSalesForm({ ...salesForm, siteVisit: e.target.value })} onClick={() => inputRef.current?.showPicker()} className={`${formInput} focus:border-orange-500`} />
-
-                      </div>
-                      <button type="submit" className={`mt-auto w-full font-bold py-3 sm:py-3.5 rounded-xl shadow-md transition-colors flex-shrink-0 ${t.btnPrimary}`}>Submit Salesform</button>
-                    </form>
-                  </div>
-                ) : showLoanForm ? (
-                  <div className={`rounded-xl border p-3 sm:p-3 shadow-xl overflow-y-auto custom-scrollbar flex flex-col animate-fadeIn max-h-[80vh] lg:max-h-[calc(100vh-260px)] ${t.modalCard}`} style={t.modalGlass}>
-                    <div className={`flex justify-between items-center mb-4 border-b pb-3 flex-shrink-0 ${t.tableBorder}`}>
-                      <div>
-                        <h3 className={`text-base sm:text-lg font-bold flex items-center gap-2 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}><FaUniversity /> Loan Tracking Workflow</h3>
-                        <p className={`text-xs mt-0.5 ${t.textFaint}`}>For Lead #{selectedLead.id}</p>
-                      </div>
-                      <button type="button" onClick={() => setShowLoanForm(false)} className={`p-2 ${t.textMuted} hover:text-red-500`}><FaTimes /></button>
-                    </div>
-                    <form onSubmit={handleLoanFormSubmit} className="flex flex-col gap-3 sm:gap-3 flex-1">
-                      <div>
-                        <h4 className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-2 sm:mb-3 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}>1. Loan Decision</h4>
+                      <form onSubmit={handleSalesFormSubmit} className="flex flex-col gap-2 flex-1">
+                        <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Property Type?</label><input type="text" placeholder="e.g. 1BHK, 2BHK" value={salesForm.propertyType} onChange={e => setSalesForm({ ...salesForm, propertyType: e.target.value })} className={formInput} /></div>
+                        <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Preferred Location?</label><input type="text" placeholder="e.g. Dombivali, Kalyan" value={salesForm.location} onChange={e => setSalesForm({ ...salesForm, location: e.target.value })} className={formInput} /></div>
+                        <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Approximate Budget?</label><input type="text" placeholder="e.g. 5 cr" value={salesForm.budget} onChange={e => setSalesForm({ ...salesForm, budget: e.target.value })} className={formInput} /></div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Loan Required? *</label><select required value={loanForm.loanRequired} onChange={e => setLoanForm({ ...loanForm, loanRequired: e.target.value })} className={formSelect}><option value="">Select</option><option>Yes</option><option>No</option><option>Not Sure</option></select></div>
-                          <div>
-                            <label className={`text-xs mb-1 block ${t.textMuted}`}>Loan Status *</label>
-                            <select required value={loanForm.status} onChange={e => setLoanForm({ ...loanForm, status: e.target.value })} className={formSelect}><option value="">Select Status</option><option>Approved</option><option>In Progress</option><option>Rejected</option></select>
-                            {loanForm.status && (<p className={`text-[10px] mt-1.5 font-semibold ${loanForm.status === "Approved" ? "text-green-400" : loanForm.status === "Rejected" ? "text-red-400" : "text-yellow-400"}`}>{loanForm.status === "Approved" && "✅ Loan cleared — schedule closing meeting"}{loanForm.status === "In Progress" && "📄 Follow up on pending documents"}{loanForm.status === "Rejected" && "❌ Loan rejected — suggest co-applicant or other bank"}</p>)}
+                          <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Self-use or Investment?</label><select value={salesForm.useType} onChange={e => setSalesForm({ ...salesForm, useType: e.target.value })} className={formSelect}><option value="">Select</option><option>Self Use</option><option>Investment</option></select></div>
+                          <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Planning to Purchase?</label><select value={salesForm.purchaseDate} onChange={e => setSalesForm({ ...salesForm, purchaseDate: e.target.value })} className={formSelect}><option value="">Select</option><option>Immediate</option><option>Next 3 Months</option></select></div>
+                        </div>
+                        <div className={`border-t pt-3 mt-1 ${t.tableBorder}`}>
+                          <label className={`block text-xs font-bold mb-1.5 ${t.accentText}`}>Lead Interest Status *</label>
+                          <select required value={salesForm.leadStatus} onChange={e => setSalesForm({ ...salesForm, leadStatus: e.target.value })} className={formSelect}><option value="" disabled>Select Status</option><option>Interested</option><option>Not Interested</option><option>NON GENUINE DEMAND (NGD)</option></select>
+                        </div>
+                        <div className={`border-t pt-3 mt-1 ${t.tableBorder}`}>
+                          <label className={`block text-xs font-bold mb-1.5 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}>Loan Planned?</label>
+                          <select required value={salesForm.loanPlanned} onChange={e => setSalesForm({ ...salesForm, loanPlanned: e.target.value })} className={formSelect}><option value="" disabled>Select Option</option><option>Yes</option><option>No</option><option>Not Sure</option></select>
+                        </div>
+                        <div className={`mt-2 border-t pt-3 ${t.tableBorder}`}>
+                          <label className="text-xs text-orange-400 font-bold mb-1.5 block">Schedule a Site Visit?</label>
+                          <input ref={inputRef} type="datetime-local" value={salesForm.siteVisit} onChange={e => setSalesForm({ ...salesForm, siteVisit: e.target.value })} onClick={() => inputRef.current?.showPicker()} className={`${formInput} focus:border-orange-500`} />
+
+                        </div>
+                        <button type="submit" className={`mt-auto w-full font-bold py-3 sm:py-3.5 rounded-xl shadow-md transition-colors flex-shrink-0 ${t.btnPrimary}`}>Submit Salesform</button>
+                      </form>
+                    </div>
+                  ) : showLoanForm ? (
+                    <div className={`rounded-xl border p-3 sm:p-3 shadow-xl overflow-y-auto custom-scrollbar flex flex-col animate-fadeIn max-h-[80vh] lg:max-h-[calc(100vh-260px)] ${t.modalCard}`} style={t.modalGlass}>
+                      <div className={`flex justify-between items-center mb-4 border-b pb-3 flex-shrink-0 ${t.tableBorder}`}>
+                        <div>
+                          <h3 className={`text-base sm:text-lg font-bold flex items-center gap-2 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}><FaUniversity /> Loan Tracking Workflow</h3>
+                          <p className={`text-xs mt-0.5 ${t.textFaint}`}>For Lead #{selectedLead.id}</p>
+                        </div>
+                        <button type="button" onClick={() => setShowLoanForm(false)} className={`p-2 ${t.textMuted} hover:text-red-500`}><FaTimes /></button>
+                      </div>
+                      <form onSubmit={handleLoanFormSubmit} className="flex flex-col gap-3 sm:gap-3 flex-1">
+                        <div>
+                          <h4 className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-2 sm:mb-3 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}>1. Loan Decision</h4>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Loan Required? *</label><select required value={loanForm.loanRequired} onChange={e => setLoanForm({ ...loanForm, loanRequired: e.target.value })} className={formSelect}><option value="">Select</option><option>Yes</option><option>No</option><option>Not Sure</option></select></div>
+                            <div>
+                              <label className={`text-xs mb-1 block ${t.textMuted}`}>Loan Status *</label>
+                              <select required value={loanForm.status} onChange={e => setLoanForm({ ...loanForm, status: e.target.value })} className={formSelect}><option value="">Select Status</option><option>Approved</option><option>In Progress</option><option>Rejected</option></select>
+                              {loanForm.status && (<p className={`text-[10px] mt-1.5 font-semibold ${loanForm.status === "Approved" ? "text-green-400" : loanForm.status === "Rejected" ? "text-red-400" : "text-yellow-400"}`}>{loanForm.status === "Approved" && "✅ Loan cleared — schedule closing meeting"}{loanForm.status === "In Progress" && "📄 Follow up on pending documents"}{loanForm.status === "Rejected" && "❌ Loan rejected — suggest co-applicant or other bank"}</p>)}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                      <div className={`border-t pt-3 sm:pt-4 ${t.tableBorder}`}>
-                        <h4 className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-2 sm:mb-3 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}>2. Bank & Loan Details</h4>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          {[{ label: "Bank Name", k: "bank", ph: "e.g. HDFC" }, { label: "Amount Required", k: "amountReq", ph: "e.g. 60L" }, { label: "Amount Approved", k: "amountApp", ph: "e.g. 55L" }, { label: "CIBIL Score", k: "cibil", ph: "e.g. 750" }, { label: "Agent Name", k: "agent", ph: "Agent Name" }, { label: "Agent Contact", k: "agentContact", ph: "Agent Phone", tel: true }].map(f => (
-                            <div key={f.k}><label className={`text-xs mb-1 block ${t.textMuted}`}>{f.label}</label><input type={f.tel ? "tel" : "text"} value={(loanForm as any)[f.k]} onChange={e => setLoanForm({ ...loanForm, [f.k]: e.target.value })} className={formInput} placeholder={f.ph} /></div>
-                          ))}
-                        </div>
-                      </div>
-                      <div className={`border-t pt-3 sm:pt-4 ${t.tableBorder}`}>
-                        <h4 className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-2 sm:mb-3 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}>3. Financial Qualification</h4>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                          <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Employment</label><select value={loanForm.empType} onChange={e => setLoanForm({ ...loanForm, empType: e.target.value })} className={formSelect}><option value="">Select</option><option>Salaried</option><option>Self-employed</option></select></div>
-                          <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Monthly Income</label><input type="text" value={loanForm.income} onChange={e => setLoanForm({ ...loanForm, income: e.target.value })} className={formInput} placeholder="e.g. 1L" /></div>
-                          <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Existing EMIs</label><input type="text" value={loanForm.emi} onChange={e => setLoanForm({ ...loanForm, emi: e.target.value })} className={formInput} placeholder="e.g. 15k" /></div>
-                        </div>
-                      </div>
-                      <div className={`border-t pt-3 sm:pt-4 ${t.tableBorder}`}>
-                        <h4 className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-2 sm:mb-3 flex items-center gap-1 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}><FaFileAlt /> 4. Document Checklist</h4>
-                        <div className={`grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-lg border ${t.settingsBg}`} style={t.settingsBgGl}>
-                          {["docPan", "docAadhaar", "docSalary", "docBank", "docProperty"].map(docKey => {
-                            const label = docKey === "docPan" ? "PAN Card" : docKey === "docAadhaar" ? "Aadhaar Card" : docKey === "docSalary" ? "Salary Slips / ITR" : docKey === "docBank" ? "Bank Statements" : "Property Documents";
-                            return (
-                              <div key={docKey} className={`flex items-center justify-between border p-2 rounded-lg ${t.innerBlock}`}>
-                                <span className={`text-[11px] sm:text-xs font-medium ${t.text}`}>{label}</span>
-                                <select value={(loanForm as any)[docKey]} onChange={e => setLoanForm({ ...loanForm, [docKey]: e.target.value })} className={`text-[11px] sm:text-xs font-bold bg-transparent outline-none cursor-pointer ${(loanForm as any)[docKey] === "Uploaded" ? "text-green-400" : "text-gray-500"}`}><option>Pending</option><option>Uploaded</option></select>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                      <div className={`border-t pt-3 sm:pt-4 ${t.tableBorder}`}>
-                        <h4 className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-2 sm:mb-3 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}>5. Notes / Remarks</h4>
-                        <textarea value={loanForm.notes} onChange={e => setLoanForm({ ...loanForm, notes: e.target.value })} className={`w-full rounded-lg px-4 py-2.5 text-sm outline-none resize-none h-20 custom-scrollbar border ${t.inputInner} ${t.text} ${t.inputFocus}`} placeholder="Bank feedback, CIBIL issues, Internal notes..." />
-                      </div>
-                      <button type="submit" className={`mt-4 flex-shrink-0 w-full font-bold py-3 sm:py-3.5 rounded-xl shadow-md transition-colors cursor-pointer ${t.btnSecondary}`}>Save Loan Tracker Update</button>
-                    </form>
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-3 animate-fadeIn">
-                    {/* Tab switcher */}
-                    <div className={`flex items-center gap-2 border p-1.5 rounded-xl flex-shrink-0 ${t.tableWrap}`}>
-                      <button onClick={() => setDetailTab("personal")} className={`flex-1 py-2 text-xs sm:text-sm font-bold rounded-lg transition-colors cursor-pointer ${detailTab === "personal" ? t.btnPrimary : `${t.textMuted} ${isDark ? "hover:text-white hover:bg-[#222]" : "hover:text-[#1A1A1A] hover:bg-[#F1F5F9]"}`}`}>Personal Info</button>
-                      <button onClick={() => setDetailTab("loan")} className={`flex-1 py-2 text-xs sm:text-sm font-bold rounded-lg transition-colors cursor-pointer ${detailTab === "loan" ? t.btnSecondary : `${t.textMuted} ${isDark ? "hover:text-white hover:bg-[#222]" : "hover:text-[#1A1A1A] hover:bg-[#F1F5F9]"}`}`}>Loan Tracking</button>
-                    </div>
-
-                    <div className={`overflow-y-auto custom-scrollbar rounded-xl p-3 sm:p-6 shadow-lg border max-h-[100vh] lg:max-h-[calc(100vh-325px)] ${t.chatPanel}`} style={t.chatPanelGl}>
-                      {detailTab === "personal" ? (
-                        <div>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 sm:gap-y-4 gap-x-4 text-xs sm:text-sm">
-                            {[
-                              { label: "Email", val: selectedLead.email !== "N/A" ? selectedLead.email : "Not Provided" },
-                              { label: "Phone", val: selectedLead.phone, mono: true },
-                              { label: "Alt Phone", val: selectedLead.altPhone && selectedLead.altPhone !== "N/A" ? selectedLead.altPhone : "Not Provided", mono: true },
-                            ].map(f => (
-                              <div key={f.label}><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>{f.label}</p><p className={`font-semibold ${f.mono ? "font-mono" : ""} break-all ${t.text}`}>{f.val}</p></div>
+                        <div className={`border-t pt-3 sm:pt-4 ${t.tableBorder}`}>
+                          <h4 className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-2 sm:mb-3 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}>2. Bank & Loan Details</h4>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {[{ label: "Bank Name", k: "bank", ph: "e.g. HDFC" }, { label: "Amount Required", k: "amountReq", ph: "e.g. 60L" }, { label: "Amount Approved", k: "amountApp", ph: "e.g. 55L" }, { label: "CIBIL Score", k: "cibil", ph: "e.g. 750" }, { label: "Agent Name", k: "agent", ph: "Agent Name" }, { label: "Agent Contact", k: "agentContact", ph: "Agent Phone", tel: true }].map(f => (
+                              <div key={f.k}><label className={`text-xs mb-1 block ${t.textMuted}`}>{f.label}</label><input type={f.tel ? "tel" : "text"} value={(loanForm as any)[f.k]} onChange={e => setLoanForm({ ...loanForm, [f.k]: e.target.value })} className={formInput} placeholder={f.ph} /></div>
                             ))}
-                            <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Lead Interest</p>{selectedLead.leadInterestStatus && selectedLead.leadInterestStatus !== "Pending" ? <InterestBadge status={selectedLead.leadInterestStatus} /> : <p className={`font-semibold ${t.text}`}>Pending</p>}</div>
-                            <div className="col-span-1"><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Loan Status</p>{selectedLead.loanStatus && selectedLead.loanStatus !== "N/A" ? <div className="w-fit"><LoanStatusBadge status={selectedLead.loanStatus} /></div> : <p className={`font-semibold ${t.text}`}>N/A</p>}</div>
-                            <div className="col-span-1"><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Backdated Entry</p><p className={`font-semibold ${t.text}`}>{selectedLead.auto_date_enabled === false && selectedLead.enquiry_date ? formatDate(selectedLead.enquiry_date).split(",")[0] : "Null"}</p></div>
-                            <div className="col-span-1 sm:col-span-2"><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Residential Address</p><p className={`font-semibold ${t.text}`}>{selectedLead.address && selectedLead.address !== "N/A" ? selectedLead.address : "Not Provided"}</p></div>
-                            <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Budget</p><p className={`font-bold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{selectedLead.salesBudget !== "Pending" ? selectedLead.salesBudget : selectedLead.budget}</p></div>
-                            <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Property Type</p><p className={`font-semibold ${t.text}`}>{selectedLead.propType || selectedLead.configuration || "Pending"}</p></div>
-                            <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Type of Use</p><p className={`font-semibold ${t.text}`}>{selectedLead.useType !== "Pending" ? selectedLead.useType : (selectedLead.purpose || "N/A")}</p></div>
-                            <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Planning to Buy?</p><p className={`font-semibold ${t.text}`}>{selectedLead.planningPurchase || "Pending"}</p></div>
-                            <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Loan Required?</p><p className={`font-semibold ${t.text}`}>{getLatestLoanDetails()?.loanRequired}</p></div>
-                            <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Status</p><span className={`text-xs sm:text-sm font-bold ${getStatusStyle(selectedLead.status)}`}>{selectedLead.status || "Assigned"}</span></div>
-                            {/* <div className={`col-span-1 sm:col-span-2 p-3 sm:p-3 rounded-xl border ${t.settingsBg}`} style={t.settingsBgGl}>
+                          </div>
+                        </div>
+                        <div className={`border-t pt-3 sm:pt-4 ${t.tableBorder}`}>
+                          <h4 className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-2 sm:mb-3 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}>3. Financial Qualification</h4>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Employment</label><select value={loanForm.empType} onChange={e => setLoanForm({ ...loanForm, empType: e.target.value })} className={formSelect}><option value="">Select</option><option>Salaried</option><option>Self-employed</option></select></div>
+                            <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Monthly Income</label><input type="text" value={loanForm.income} onChange={e => setLoanForm({ ...loanForm, income: e.target.value })} className={formInput} placeholder="e.g. 1L" /></div>
+                            <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Existing EMIs</label><input type="text" value={loanForm.emi} onChange={e => setLoanForm({ ...loanForm, emi: e.target.value })} className={formInput} placeholder="e.g. 15k" /></div>
+                          </div>
+                        </div>
+                        <div className={`border-t pt-3 sm:pt-4 ${t.tableBorder}`}>
+                          <h4 className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-2 sm:mb-3 flex items-center gap-1 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}><FaFileAlt /> 4. Document Checklist</h4>
+                          <div className={`grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-lg border ${t.settingsBg}`} style={t.settingsBgGl}>
+                            {["docPan", "docAadhaar", "docSalary", "docBank", "docProperty"].map(docKey => {
+                              const label = docKey === "docPan" ? "PAN Card" : docKey === "docAadhaar" ? "Aadhaar Card" : docKey === "docSalary" ? "Salary Slips / ITR" : docKey === "docBank" ? "Bank Statements" : "Property Documents";
+                              return (
+                                <div key={docKey} className={`flex items-center justify-between border p-2 rounded-lg ${t.innerBlock}`}>
+                                  <span className={`text-[11px] sm:text-xs font-medium ${t.text}`}>{label}</span>
+                                  <select value={(loanForm as any)[docKey]} onChange={e => setLoanForm({ ...loanForm, [docKey]: e.target.value })} className={`text-[11px] sm:text-xs font-bold bg-transparent outline-none cursor-pointer ${(loanForm as any)[docKey] === "Uploaded" ? "text-green-400" : "text-gray-500"}`}><option>Pending</option><option>Uploaded</option></select>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        <div className={`border-t pt-3 sm:pt-4 ${t.tableBorder}`}>
+                          <h4 className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-2 sm:mb-3 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}>5. Notes / Remarks</h4>
+                          <textarea value={loanForm.notes} onChange={e => setLoanForm({ ...loanForm, notes: e.target.value })} className={`w-full rounded-lg px-4 py-2.5 text-sm outline-none resize-none h-20 custom-scrollbar border ${t.inputInner} ${t.text} ${t.inputFocus}`} placeholder="Bank feedback, CIBIL issues, Internal notes..." />
+                        </div>
+                        <button type="submit" className={`mt-4 flex-shrink-0 w-full font-bold py-3 sm:py-3.5 rounded-xl shadow-md transition-colors cursor-pointer ${t.btnSecondary}`}>Save Loan Tracker Update</button>
+                      </form>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-3 animate-fadeIn">
+                      {/* Tab switcher */}
+                      <div className={`flex items-center gap-2 border p-1.5 rounded-xl flex-shrink-0 ${t.tableWrap}`}>
+                        <button onClick={() => setDetailTab("personal")} className={`flex-1 py-2 text-xs sm:text-sm font-bold rounded-lg transition-colors cursor-pointer ${detailTab === "personal" ? t.btnPrimary : `${t.textMuted} ${isDark ? "hover:text-white hover:bg-[#222]" : "hover:text-[#1A1A1A] hover:bg-[#F1F5F9]"}`}`}>Personal Info</button>
+                        <button onClick={() => setDetailTab("loan")} className={`flex-1 py-2 text-xs sm:text-sm font-bold rounded-lg transition-colors cursor-pointer ${detailTab === "loan" ? t.btnSecondary : `${t.textMuted} ${isDark ? "hover:text-white hover:bg-[#222]" : "hover:text-[#1A1A1A] hover:bg-[#F1F5F9]"}`}`}>Loan Tracking</button>
+                      </div>
+
+                      <div className={`overflow-y-auto custom-scrollbar rounded-xl p-3 sm:p-6 shadow-lg border max-h-[100vh] lg:max-h-[calc(100vh-325px)] ${t.chatPanel}`} style={t.chatPanelGl}>
+                        {detailTab === "personal" ? (
+                          <div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 sm:gap-y-4 gap-x-4 text-xs sm:text-sm">
+                              {[
+                                { label: "Email", val: selectedLead.email !== "N/A" ? selectedLead.email : "Not Provided" },
+                                { label: "Phone", val: selectedLead.phone, mono: true },
+                                { label: "Alt Phone", val: selectedLead.altPhone && selectedLead.altPhone !== "N/A" ? selectedLead.altPhone : "Not Provided", mono: true },
+                              ].map(f => (
+                                <div key={f.label}><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>{f.label}</p><p className={`font-semibold ${f.mono ? "font-mono" : ""} break-all ${t.text}`}>{f.val}</p></div>
+                              ))}
+                              <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Lead Interest</p>{selectedLead.leadInterestStatus && selectedLead.leadInterestStatus !== "Pending" ? <InterestBadge status={selectedLead.leadInterestStatus} /> : <p className={`font-semibold ${t.text}`}>Pending</p>}</div>
+                              <div className="col-span-1"><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Loan Status</p>{selectedLead.loanStatus && selectedLead.loanStatus !== "N/A" ? <div className="w-fit"><LoanStatusBadge status={selectedLead.loanStatus} /></div> : <p className={`font-semibold ${t.text}`}>N/A</p>}</div>
+                              <div className="col-span-1"><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Backdated Entry</p><p className={`font-semibold ${t.text}`}>{selectedLead.auto_date_enabled === false && selectedLead.enquiry_date ? formatDate(selectedLead.enquiry_date).split(",")[0] : "Null"}</p></div>
+                              <div className="col-span-1 sm:col-span-2"><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Residential Address</p><p className={`font-semibold ${t.text}`}>{selectedLead.address && selectedLead.address !== "N/A" ? selectedLead.address : "Not Provided"}</p></div>
+                              <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Budget</p><p className={`font-bold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{selectedLead.salesBudget !== "Pending" ? selectedLead.salesBudget : selectedLead.budget}</p></div>
+                              <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Property Type</p><p className={`font-semibold ${t.text}`}>{selectedLead.propType || selectedLead.configuration || "Pending"}</p></div>
+                              <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Type of Use</p><p className={`font-semibold ${t.text}`}>{selectedLead.useType !== "Pending" ? selectedLead.useType : (selectedLead.purpose || "N/A")}</p></div>
+                              <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Planning to Buy?</p><p className={`font-semibold ${t.text}`}>{selectedLead.planningPurchase || "Pending"}</p></div>
+                              <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Loan Required?</p><p className={`font-semibold ${t.text}`}>{getLatestLoanDetails()?.loanRequired}</p></div>
+                              <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Status</p><span className={`text-xs sm:text-sm font-bold ${getStatusStyle(selectedLead.status)}`}>{selectedLead.status || "Assigned"}</span></div>
+                              {/* <div className={`col-span-1 sm:col-span-2 p-3 sm:p-3 rounded-xl border ${t.settingsBg}`} style={t.settingsBgGl}>
                               <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-0.5 sm:mb-1 ${isDark?"text-[#00AEEF]":"text-[#00AEEF]"}`}>📍 Site Visit Date</p>
                               <p className={`text-sm sm:text-base font-black ${t.text}`}>{selectedLead.mongoVisitDate?formatDate(selectedLead.mongoVisitDate):"Not Scheduled"}</p>
                             </div> */}
-                          </div>
-                          {selectedLead.is_lost_lead && (
-                            <div className={`mt-4 border rounded-xl p-3 sm:p-3 ${t.statusLost}`}>
-                              <h3 className="text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-2">
-                                <Ghost className="w-3.5 h-3.5" /> Lost Lead Record
+                            </div>
+                            {selectedLead.is_lost_lead && (
+                              <div className={`mt-4 border rounded-xl p-3 sm:p-3 ${t.statusLost}`}>
+                                <h3 className="text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-2">
+                                  <Ghost className="w-3.5 h-3.5" /> Lost Lead Record
+                                </h3>
+                                <p className={`text-xs sm:text-sm leading-relaxed ${t.textMuted}`}>{selectedLead.lost_lead_reason || "No reason recorded."}</p>
+                                <p className={`text-[10px] mt-2 ${t.textFaint}`}>
+                                  Marked by {selectedLead.lost_lead_marked_by || "Unknown"} on {selectedLead.lost_lead_marked_at ? formatDate(selectedLead.lost_lead_marked_at) : "-"}
+                                </p>
+                              </div>
+                            )}
+                            <div className={`mt-4 border rounded-xl p-3 sm:p-3 ${t.settingsBg}`} style={t.settingsBgGl}>
+                              <h3 className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-2 sm:mb-3 border-b pb-2 ${t.sectionTitle} ${t.sectionBorder}`}>
+                                {selectedLead.source && selectedLead.source !== "N/A" ? `${selectedLead.source} Data` : "Source Data"}
                               </h3>
-                              <p className={`text-xs sm:text-sm leading-relaxed ${t.textMuted}`}>{selectedLead.lost_lead_reason || "No reason recorded."}</p>
-                              <p className={`text-[10px] mt-2 ${t.textFaint}`}>
-                                Marked by {selectedLead.lost_lead_marked_by || "Unknown"} on {selectedLead.lost_lead_marked_at ? formatDate(selectedLead.lost_lead_marked_at) : "-"}
-                              </p>
-                            </div>
-                          )}
-                          <div className={`mt-4 border rounded-xl p-3 sm:p-3 ${t.settingsBg}`} style={t.settingsBgGl}>
-                            <h3 className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-2 sm:mb-3 border-b pb-2 ${t.sectionTitle} ${t.sectionBorder}`}>
-                              {selectedLead.source && selectedLead.source !== "N/A" ? `${selectedLead.source} Data` : "Source Data"}
-                            </h3>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                              <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Primary Source</p><p className={`font-medium text-xs sm:text-sm ${t.text}`}>{selectedLead.source || "N/A"}</p></div>
-                              {selectedLead.source === "Others" && (<div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Specified Name</p><p className={`font-medium text-xs sm:text-sm ${t.text}`}>{selectedLead.sourceOther}</p></div>)}
-                            </div>
-                            {selectedLead.source === "Channel Partner" ? (
-                              <div className={`mt-3 pt-3 border-t grid grid-cols-1 sm:grid-cols-3 gap-3 ${t.tableBorder}`}>
-                                {[
-                                  { label: "CP Name", val: selectedLead.cpName },
-                                  { label: "CP Company", val: selectedLead.cpCompany },
-                                  { label: "CP Phone", val: selectedLead.cpPhone }
-                                ].map(({ label, val }) => (
-                                  <div key={label}>
-                                    <p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>
-                                      {label}
-                                    </p>
-                                    <p className={`font-medium text-xs sm:text-sm break-all ${t.text}`}>
-                                      {val || "N/A"}
-                                    </p>
-                                  </div>
-                                ))}
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Primary Source</p><p className={`font-medium text-xs sm:text-sm ${t.text}`}>{selectedLead.source || "N/A"}</p></div>
+                                {selectedLead.source === "Others" && (<div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Specified Name</p><p className={`font-medium text-xs sm:text-sm ${t.text}`}>{selectedLead.sourceOther}</p></div>)}
                               </div>
-                            ) : selectedLead.source === "Referral" && selectedLead.referral_name ? (
-                              <div className={`mt-3 pt-3 border-t grid grid-cols-1 sm:grid-cols-3 gap-3 ${t.tableBorder}`}>
-                                <div>
-                                  <p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>
-                                    Referred By
-                                  </p>
-                                  <p className={`font-medium text-xs sm:text-sm break-all ${t.text}`}>
-                                    {selectedLead.referral_name}
-                                  </p>
-                                </div>
-                              </div>
-                            ) : (selectedLead.status === "NON GENUINE DEMAND (NGD)" || selectedLead.leadStatus === "NON GENUINE DEMAND (NGD)" || selectedLead.leadInterestStatus === "NON GENUINE DEMAND (NGD)") ? (
-                              <span className={`text-[10px] sm:text-[11px] font-bold px-2 sm:px-3 py-1 rounded-full border flex items-center gap-1.5 flex-shrink-0 ${t.statusNGD}`}>
-                                NON GENUINE DEMAND
-                              </span>
-                            ) : null}
-                          </div>
-                        </div>
-                      ) : (selectedLead.status === "NON GENUINE DEMAND (NGD)" || selectedLead.leadStatus === "NON GENUINE DEMAND (NGD)" || selectedLead.leadInterestStatus === "NON GENUINE DEMAND (NGD)") ? (
-                        <span className={`text-[10px] sm:text-[11px] font-bold px-2 sm:px-3 py-1 rounded-full border flex items-center gap-1.5 flex-shrink-0 ${t.statusNGD}`}>
-                          NON GENUINE DEMAND
-                        </span>
-                      ) : (
-                        <div>
-                          {(() => {
-                            const curLoan: any = getLatestLoanDetails() || {};
-                            const sColor = getLoanStatusColor(curLoan?.status || "");
-                            const isHighProb = curLoan?.status?.toLowerCase() === "approved" && selectedLead.mongoVisitDate;
-                            return (
-                              <>
-                                <h3 className={`text-xs sm:text-sm font-bold border-b pb-2 mb-4 sm:mb-6 uppercase flex items-center justify-between ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"} ${t.tableBorder}`}><span className="flex items-center gap-2"><FaUniversity /> Deal Loan Overview</span></h3>
-                                {isHighProb && <div className="mb-4 sm:mb-6 bg-gradient-to-r from-orange-500/20 to-red-500/20 border border-orange-500/50 p-2 sm:p-3 rounded-lg flex items-center justify-center gap-2 text-orange-400 text-xs sm:text-sm font-bold tracking-wide shadow-md text-center">🚀 HIGH PROBABILITY DEAL</div>}
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-4 text-xs sm:text-sm">
-                                  <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Loan Required?</p><p className={`font-semibold ${t.text}`}>{curLoan?.loanRequired}</p></div>
-                                  <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Current Status</p><p className={`font-bold px-2 py-0.5 rounded inline-block border ${sColor}`}>{curLoan?.status}</p></div>
-                                  <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Amount Requested</p><p className="text-orange-400 font-semibold">{curLoan?.amountReq}</p></div>
-                                  <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Amount Approved</p><p className={`font-semibold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{curLoan?.amountApp}</p></div>
-                                  {[{ label: "Bank Name", val: curLoan?.bankName }, { label: "CIBIL Score", val: curLoan?.cibil }, { label: "Agent Name", val: curLoan?.agent }, { label: "Agent Contact", val: curLoan?.agentContact }, { label: "Emp Type", val: curLoan?.empType }, { label: "Monthly Income", val: curLoan?.income }, { label: "Existing EMIs", val: curLoan?.emi }].map(f => (
-                                    <div key={f.label}><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>{f.label}</p><p className={`font-semibold ${t.text}`}>{f.val}</p></div>
-                                  ))}
-                                  <div className="col-span-1 sm:col-span-2 mb-1 sm:mb-2 mt-2"><p className={`text-[10px] sm:text-xs font-bold uppercase tracking-widest ${t.textMuted}`}>Document Status</p></div>
-                                  {[{ label: "PAN Card", val: curLoan?.docPan }, { label: "Aadhaar", val: curLoan?.docAadhaar }, { label: "Salary/ITR", val: curLoan?.docSalary }, { label: "Bank Stmt", val: curLoan?.docBank }, { label: "Property Docs", val: curLoan?.docProperty }].map((doc, i) => (
-                                    <div key={i} className={`flex items-center justify-between p-2 rounded-lg col-span-1 border ${t.innerBlock}`}>
-                                      <span className={`text-[10px] sm:text-xs ${t.textMuted}`}>{doc.label}</span>
-                                      {doc.val === "Uploaded" ? <FaCheck className="text-green-500 text-xs" /> : <FaClock className={`text-xs ${t.textFaint}`} />}
+                              {selectedLead.source === "Channel Partner" ? (
+                                <div className={`mt-3 pt-3 border-t grid grid-cols-1 sm:grid-cols-3 gap-3 ${t.tableBorder}`}>
+                                  {[
+                                    { label: "CP Name", val: selectedLead.cpName },
+                                    { label: "CP Company", val: selectedLead.cpCompany },
+                                    { label: "CP Phone", val: selectedLead.cpPhone }
+                                  ].map(({ label, val }) => (
+                                    <div key={label}>
+                                      <p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>
+                                        {label}
+                                      </p>
+                                      <p className={`font-medium text-xs sm:text-sm break-all ${t.text}`}>
+                                        {val || "N/A"}
+                                      </p>
                                     </div>
                                   ))}
                                 </div>
-                              </>
-                            );
-                          })()}
+                              ) : selectedLead.source === "Referral" && selectedLead.referral_name ? (
+                                <div className={`mt-3 pt-3 border-t grid grid-cols-1 sm:grid-cols-3 gap-3 ${t.tableBorder}`}>
+                                  <div>
+                                    <p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>
+                                      Referred By
+                                    </p>
+                                    <p className={`font-medium text-xs sm:text-sm break-all ${t.text}`}>
+                                      {selectedLead.referral_name}
+                                    </p>
+                                  </div>
+                                </div>
+                              ) : (selectedLead.status === "NON GENUINE DEMAND (NGD)" || selectedLead.leadStatus === "NON GENUINE DEMAND (NGD)" || selectedLead.leadInterestStatus === "NON GENUINE DEMAND (NGD)") ? (
+                                <span className={`text-[10px] sm:text-[11px] font-bold px-2 sm:px-3 py-1 rounded-full border flex items-center gap-1.5 flex-shrink-0 ${t.statusNGD}`}>
+                                  NON GENUINE DEMAND
+                                </span>
+                              ) : null}
+                            </div>
+                          </div>
+                        ) : (selectedLead.status === "NON GENUINE DEMAND (NGD)" || selectedLead.leadStatus === "NON GENUINE DEMAND (NGD)" || selectedLead.leadInterestStatus === "NON GENUINE DEMAND (NGD)") ? (
+                          <span className={`text-[10px] sm:text-[11px] font-bold px-2 sm:px-3 py-1 rounded-full border flex items-center gap-1.5 flex-shrink-0 ${t.statusNGD}`}>
+                            NON GENUINE DEMAND
+                          </span>
+                        ) : (
+                          <div>
+                            {(() => {
+                              const curLoan: any = getLatestLoanDetails() || {};
+                              const sColor = getLoanStatusColor(curLoan?.status || "");
+                              const isHighProb = curLoan?.status?.toLowerCase() === "approved" && selectedLead.mongoVisitDate;
+                              return (
+                                <>
+                                  <h3 className={`text-xs sm:text-sm font-bold border-b pb-2 mb-4 sm:mb-6 uppercase flex items-center justify-between ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"} ${t.tableBorder}`}><span className="flex items-center gap-2"><FaUniversity /> Deal Loan Overview</span></h3>
+                                  {isHighProb && <div className="mb-4 sm:mb-6 bg-gradient-to-r from-orange-500/20 to-red-500/20 border border-orange-500/50 p-2 sm:p-3 rounded-lg flex items-center justify-center gap-2 text-orange-400 text-xs sm:text-sm font-bold tracking-wide shadow-md text-center">🚀 HIGH PROBABILITY DEAL</div>}
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-4 text-xs sm:text-sm">
+                                    <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Loan Required?</p><p className={`font-semibold ${t.text}`}>{curLoan?.loanRequired}</p></div>
+                                    <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Current Status</p><p className={`font-bold px-2 py-0.5 rounded inline-block border ${sColor}`}>{curLoan?.status}</p></div>
+                                    <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Amount Requested</p><p className="text-orange-400 font-semibold">{curLoan?.amountReq}</p></div>
+                                    <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Amount Approved</p><p className={`font-semibold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{curLoan?.amountApp}</p></div>
+                                    {[{ label: "Bank Name", val: curLoan?.bankName }, { label: "CIBIL Score", val: curLoan?.cibil }, { label: "Agent Name", val: curLoan?.agent }, { label: "Agent Contact", val: curLoan?.agentContact }, { label: "Emp Type", val: curLoan?.empType }, { label: "Monthly Income", val: curLoan?.income }, { label: "Existing EMIs", val: curLoan?.emi }].map(f => (
+                                      <div key={f.label}><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>{f.label}</p><p className={`font-semibold ${t.text}`}>{f.val}</p></div>
+                                    ))}
+                                    <div className="col-span-1 sm:col-span-2 mb-1 sm:mb-2 mt-2"><p className={`text-[10px] sm:text-xs font-bold uppercase tracking-widest ${t.textMuted}`}>Document Status</p></div>
+                                    {[{ label: "PAN Card", val: curLoan?.docPan }, { label: "Aadhaar", val: curLoan?.docAadhaar }, { label: "Salary/ITR", val: curLoan?.docSalary }, { label: "Bank Stmt", val: curLoan?.docBank }, { label: "Property Docs", val: curLoan?.docProperty }].map((doc, i) => (
+                                      <div key={i} className={`flex items-center justify-between p-2 rounded-lg col-span-1 border ${t.innerBlock}`}>
+                                        <span className={`text-[10px] sm:text-xs ${t.textMuted}`}>{doc.label}</span>
+                                        {doc.val === "Uploaded" ? <FaCheck className="text-green-500 text-xs" /> : <FaClock className={`text-xs ${t.textFaint}`} />}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </>
+                              );
+                            })()}
+                          </div>
+
+
+                        )}
+                        {/* Site Visit History — outside with gap */}
+                        <div className="mt-3">
+                          <SiteVisitScheduler
+                            lead={selectedLead}
+                            adminUser={adminUser}
+                            isDark={isDark}
+                            t={t}
+                            onSuccess={refetch}
+                          />
                         </div>
-
-
-                      )}
-                      {/* Site Visit History — outside with gap */}
-                      <div className="mt-3">
-                        <SiteVisitScheduler
-                          lead={selectedLead}
-                          adminUser={adminUser}
-                          isDark={isDark}
-                          t={t}
-                          onSuccess={refetch}
-                        />
-                      </div>
-                      {/* <ActivityTimeline
+                        {/* <ActivityTimeline
                         lead={selectedLead}
                         isDark={isDark}
                         theme={t}
                         className="mt-3"
                       /> */}
 
-                    </div>
-
-                    {/* Call / WhatsApp buttons */}
-                    <div className="grid grid-cols-2 gap-3 flex-shrink-0">
-
-                      <button
-                        onClick={() => { setCallOpen(true); setCallHidden(false); }}
-                        className={`border flex flex-col items-center justify-center py-2 sm:py-3 rounded-xl transition-all cursor-pointer gap-1 min-h-[48px] ${isDark ? "bg-[#00AEEF]/10 border-[#00AEEF]/30 hover:bg-[#00AEEF] text-[#00AEEF] hover:text-white" : "bg-[#00AEEF]/10 border-[#00AEEF]/30 hover:bg-[#00AEEF] text-[#00AEEF] hover:text-white"}`}>
-                        <FaMicrophone className="text-base sm:text-lg" />
-                        <span className="font-bold text-[10px]">Browser Call</span>
-                      </button>
-                      <button
-                        onClick={() => setIsWaModalOpen(true)}
-                        className="bg-green-600/10 border border-green-500/30 hover:bg-green-600 text-green-400 hover:text-white flex flex-col items-center justify-center py-2 sm:py-3 rounded-xl transition-all cursor-pointer gap-1 min-h-[48px]">
-                        <FaWhatsapp className="text-lg sm:text-lg" />
-                        <span className="font-bold text-[10px]">WhatsApp</span>
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* RIGHT PANEL: FOLLOW-UPS */}
-              <div className={`flex flex-col rounded-xl overflow-hidden shadow-2xl border h-[540px] lg:h-[calc(100vh-185px)] lg:sticky lg:top-4 w-full lg:w-0 lg:flex-1 ${t.chatPanel}`} style={t.chatPanelGl}>
-                <div className={`flex-1 p-3 sm:p-6 overflow-y-auto custom-scrollbar flex flex-col gap-2 sm:gap-3 ${t.chatArea}`}>
-                  {/* System message */}
-                  <div className="flex justify-start">
-                    <div className={`rounded-xl rounded-tl-none p-3 sm:p-3 max-w-[90%] sm:max-w-[85%] shadow-md ${t.fupSalesform}`}>
-                      <div className={`flex justify-between items-start sm:items-center mb-2 gap-2 sm:gap-3 flex-col sm:flex-row`}>
-                        <span className={`font-bold text-xs sm:text-sm ${t.accentText}`}>System (Front Desk)</span>
-                        <span className={`text-[9px] sm:text-[10px] ${t.textFaint}`}>{formatDate(selectedLead.created_at)}</span>
                       </div>
-                      <p className={`text-xs sm:text-sm leading-relaxed ${t.textMuted}`}>Lead assigned to {selectedLead.assigned_to}. Action required.</p>
-                    </div>
-                  </div>
-                  {currentLeadFollowUps.map((msg: any, idx: number) => {
-                    const isLoan = msg.message.includes("🏦 Loan Update");
-                    const isSF = msg.message.includes("📝 Detailed Salesform Submitted");
-                    const isClosing = msg.message.includes("✅ Lead Marked as Closing");
-                    const isWA = msg.message.includes("📱 WhatsApp sent by");
-                    const bubbleCls = isLoan ? t.fupLoan : isSF ? t.fupSalesform : isClosing ? t.fupClosing : t.fupDefault;
-                    return (
-                      <div key={idx} className="flex justify-start">
-                        <div className={`rounded-xl rounded-tl-none p-3 sm:p-3 max-w-[90%] sm:max-w-[85%] shadow-lg ${bubbleCls}`}>
-                          <div className="flex justify-between items-start sm:items-center mb-2 sm:mb-3 gap-2 sm:gap-3 flex-col sm:flex-row">
-                            <span className={`font-bold text-xs sm:text-sm ${t.text}`}>{msg.createdBy === "admin" ? `${msg.salesManagerName || "Admin"} (Admin)` : msg.salesManagerName}</span>
-                            <span className={`text-[9px] sm:text-[10px] ${t.textFaint}`}>{formatDate(msg.createdAt)}</span>
-                          </div>
-                          <p className={`text-xs sm:text-sm whitespace-pre-wrap leading-relaxed break-words ${t.textMuted}`}>{msg.message}</p>
 
-                          {/* Log Reply button — only on WhatsApp messages */}
-                          {isWA && (
-                            <button
-                              onClick={() => {
-                                setCustomNote(`📲 WhatsApp Reply from ${selectedLead.name}: `);
-                                setTimeout(() => inputRef.current?.focus(), 50);
-                              }}
-                              className="mt-2 text-[10px] font-bold text-green-500 hover:text-green-400 border border-green-500/30 hover:border-green-400/50 bg-green-500/5 hover:bg-green-500/10 px-3 py-1 rounded-full transition-all flex items-center gap-1"
-                            >
-                              <FaWhatsapp className="text-[9px]" /> Log their reply
-                            </button>
-                          )}
-                        </div>
+                      {/* Call / WhatsApp buttons */}
+                      <div className="grid grid-cols-2 gap-3 flex-shrink-0">
+
+                        <button
+                          onClick={() => { setCallOpen(true); setCallHidden(false); }}
+                          className={`border flex flex-col items-center justify-center py-2 sm:py-3 rounded-xl transition-all cursor-pointer gap-1 min-h-[48px] ${isDark ? "bg-[#00AEEF]/10 border-[#00AEEF]/30 hover:bg-[#00AEEF] text-[#00AEEF] hover:text-white" : "bg-[#00AEEF]/10 border-[#00AEEF]/30 hover:bg-[#00AEEF] text-[#00AEEF] hover:text-white"}`}>
+                          <FaMicrophone className="text-base sm:text-lg" />
+                          <span className="font-bold text-[10px]">Browser Call</span>
+                        </button>
+                        <button
+                          onClick={() => setIsWaModalOpen(true)}
+                          className="bg-green-600/10 border border-green-500/30 hover:bg-green-600 text-green-400 hover:text-white flex flex-col items-center justify-center py-2 sm:py-3 rounded-xl transition-all cursor-pointer gap-1 min-h-[48px]">
+                          <FaWhatsapp className="text-lg sm:text-lg" />
+                          <span className="font-bold text-[10px]">WhatsApp</span>
+                        </button>
                       </div>
-                    );
-                  })}
-                  <div ref={followUpEndRef} />
+                    </div>
+                  )}
                 </div>
-                {isLeadLocked ? (
-                  <div className={`p-3 sm:p-3 border-t flex items-center justify-center flex-shrink-0 ${t.header} ${t.tableBorder} ${t.textFaint}`} style={t.headerGlass}>
-                    <span className="text-xs font-semibold">
-                      {selectedLead.is_lost_lead ? "❌ Lost Lead • Read Only — follow-ups disabled" : "✅ Lead Closed • Read Only — follow-ups disabled"}
-                    </span>
+
+                {/* RIGHT PANEL: FOLLOW-UPS */}
+                <div className={`flex flex-col rounded-xl overflow-hidden shadow-2xl border h-[540px] lg:h-[calc(100vh-185px)] lg:sticky lg:top-4 w-full lg:w-0 lg:flex-1 ${t.chatPanel}`} style={t.chatPanelGl}>
+                  <div className={`flex-1 p-3 sm:p-6 overflow-y-auto custom-scrollbar flex flex-col gap-2 sm:gap-3 ${t.chatArea}`}>
+                    {/* System message */}
+                    <div className="flex justify-start">
+                      <div className={`rounded-xl rounded-tl-none p-3 sm:p-3 max-w-[90%] sm:max-w-[85%] shadow-md ${t.fupSalesform}`}>
+                        <div className={`flex justify-between items-start sm:items-center mb-2 gap-2 sm:gap-3 flex-col sm:flex-row`}>
+                          <span className={`font-bold text-xs sm:text-sm ${t.accentText}`}>System (Front Desk)</span>
+                          <span className={`text-[9px] sm:text-[10px] ${t.textFaint}`}>{formatDate(selectedLead.created_at)}</span>
+                        </div>
+                        <p className={`text-xs sm:text-sm leading-relaxed ${t.textMuted}`}>Lead assigned to {selectedLead.assigned_to}. Action required.</p>
+                      </div>
+                    </div>
+                    {currentLeadFollowUps.map((msg: any, idx: number) => {
+                      const isLoan = msg.message.includes("🏦 Loan Update");
+                      const isSF = msg.message.includes("📝 Detailed Salesform Submitted");
+                      const isClosing = msg.message.includes("✅ Lead Marked as Closing");
+                      const isWA = msg.message.includes("📱 WhatsApp sent by");
+                      const bubbleCls = isLoan ? t.fupLoan : isSF ? t.fupSalesform : isClosing ? t.fupClosing : t.fupDefault;
+                      return (
+                        <div key={idx} className="flex justify-start">
+                          <div className={`rounded-xl rounded-tl-none p-3 sm:p-3 max-w-[90%] sm:max-w-[85%] shadow-lg ${bubbleCls}`}>
+                            <div className="flex justify-between items-start sm:items-center mb-2 sm:mb-3 gap-2 sm:gap-3 flex-col sm:flex-row">
+                              <span className={`font-bold text-xs sm:text-sm ${t.text}`}>{msg.createdBy === "admin" ? `${msg.salesManagerName || "Admin"} (Admin)` : msg.salesManagerName}</span>
+                              <span className={`text-[9px] sm:text-[10px] ${t.textFaint}`}>{formatDate(msg.createdAt)}</span>
+                            </div>
+                            <p className={`text-xs sm:text-sm whitespace-pre-wrap leading-relaxed break-words ${t.textMuted}`}>{msg.message}</p>
+
+                            {/* Log Reply button — only on WhatsApp messages */}
+                            {isWA && (
+                              <button
+                                onClick={() => {
+                                  setCustomNote(`📲 WhatsApp Reply from ${selectedLead.name}: `);
+                                  setTimeout(() => inputRef.current?.focus(), 50);
+                                }}
+                                className="mt-2 text-[10px] font-bold text-green-500 hover:text-green-400 border border-green-500/30 hover:border-green-400/50 bg-green-500/5 hover:bg-green-500/10 px-3 py-1 rounded-full transition-all flex items-center gap-1"
+                              >
+                                <FaWhatsapp className="text-[9px]" /> Log their reply
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <div ref={followUpEndRef} />
                   </div>
-                ) : (
-                  <form onSubmit={handleSendCustomNote} className={`p-3 sm:p-3 border-t flex gap-2 sm:gap-3 items-center flex-shrink-0 ${t.header} ${t.tableBorder}`} style={t.headerGlass}>
-                    <input
-                      ref={inputRef}
-                      type="text" value={customNote} onChange={e => setCustomNote(e.target.value)}
-                      placeholder="Add follow-up note..."
-                      className={`flex-1 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm outline-none transition-colors border ${t.inputBg} ${t.text} ${t.inputFocus}`}
-                    />
-                    <button type="submit" className={`w-10 h-10 sm:w-12 sm:h-12 text-white rounded-xl flex items-center justify-center cursor-pointer transition-colors shadow-lg flex-shrink-0 ${isDark ? "bg-purple-600 hover:bg-purple-500" : "bg-[#00AEEF] hover:bg-[#0099d4]"}`}><FaPaperPlane className="text-sm ml-[-2px]" /></button>
-                  </form>
-                )}
-              </div>
+                  {isLeadLocked ? (
+                    <div className={`p-3 sm:p-3 border-t flex items-center justify-center flex-shrink-0 ${t.header} ${t.tableBorder} ${t.textFaint}`} style={t.headerGlass}>
+                      <span className="text-xs font-semibold">
+                        {selectedLead.is_lost_lead ? "❌ Lost Lead • Read Only — follow-ups disabled" : "✅ Lead Closed • Read Only — follow-ups disabled"}
+                      </span>
+                    </div>
+                  ) : (
+                    <form onSubmit={handleSendCustomNote} className={`p-3 sm:p-3 border-t flex gap-2 sm:gap-3 items-center flex-shrink-0 ${t.header} ${t.tableBorder}`} style={t.headerGlass}>
+                      <input
+                        ref={inputRef}
+                        type="text" value={customNote} onChange={e => setCustomNote(e.target.value)}
+                        placeholder="Add follow-up note..."
+                        className={`flex-1 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm outline-none transition-colors border ${t.inputBg} ${t.text} ${t.inputFocus}`}
+                      />
+                      <button type="submit" className={`w-10 h-10 sm:w-12 sm:h-12 text-white rounded-xl flex items-center justify-center cursor-pointer transition-colors shadow-lg flex-shrink-0 ${isDark ? "bg-purple-600 hover:bg-purple-500" : "bg-[#00AEEF] hover:bg-[#0099d4]"}`}><FaPaperPlane className="text-sm ml-[-2px]" /></button>
+                    </form>
+                  )}
+                </div>
 
-              {/* RIGHT PANEL: AI ASSISTANT (collapsible, lead-scoped) */}
-              <LeadAiAssistantPanel
-                lead={selectedLead}
-                followUps={currentLeadFollowUps}
-                isDark={isDark}
-                t={t}
-                isOpen={aiPanelOpen}
-                onToggle={() => setAiPanelOpen(o => !o)}
-              />
+                {/* RIGHT PANEL: AI ASSISTANT (collapsible, lead-scoped) */}
+                <LeadAiAssistantPanel
+                  lead={selectedLead}
+                  followUps={currentLeadFollowUps}
+                  isDark={isDark}
+                  t={t}
+                  isOpen={aiPanelOpen}
+                  onToggle={() => setAiPanelOpen(o => !o)}
+                />
 
-            </div>{/* end three-part body */}
-          </div>
+              </div>{/* end three-part body */}
+            </div>
           )
         )}
         {/* ── CALL MODAL ── */}
@@ -2425,6 +2496,19 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
             />
           );
         })()}
+        <PermanentLeadDeleteDialog
+          open={!!deleteConfirmLead}
+          lead={deleteConfirmLead}
+          isDark={isDark}
+          isDeleting={isDeletingLead}
+          error={deleteError}
+          onClose={() => {
+            if (isDeletingLead) return;
+            setDeleteConfirmLead(null);
+            setDeleteError(null);
+          }}
+          onConfirm={handlePermanentDeleteLead}
+        />
       </main>
     </div>
   );

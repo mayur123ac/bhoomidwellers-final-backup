@@ -1,4 +1,10 @@
-import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  ListObjectsV2Command,
+  PutObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 const accountId = process.env.R2_ACCOUNT_ID;
@@ -52,4 +58,50 @@ export async function generatePresignedUrl(key: string, expiresIn = 300): Promis
   });
 
   return await getSignedUrl(s3Client, command, { expiresIn });
+}
+
+export async function deleteObjectFromR2(key: string): Promise<void> {
+  if (!s3Client) throw new Error("R2 Client is not configured");
+  if (!bucketName) throw new Error("R2 Bucket Name is not configured");
+
+  try {
+    await s3Client.send(
+      new DeleteObjectCommand({
+        Bucket: bucketName,
+        Key: key,
+      })
+    );
+  } catch (error: any) {
+    if (error?.name === "NoSuchKey" || error?.$metadata?.httpStatusCode === 404) {
+      console.warn(`[R2] Object already missing: ${key}`);
+      return;
+    }
+    throw error;
+  }
+}
+
+export async function listR2KeysByPrefix(prefix: string): Promise<string[]> {
+  if (!s3Client) throw new Error("R2 Client is not configured");
+  if (!bucketName) throw new Error("R2 Bucket Name is not configured");
+
+  const keys: string[] = [];
+  let continuationToken: string | undefined;
+
+  do {
+    const result = await s3Client.send(
+      new ListObjectsV2Command({
+        Bucket: bucketName,
+        Prefix: prefix,
+        ContinuationToken: continuationToken,
+      })
+    );
+
+    for (const object of result.Contents || []) {
+      if (object.Key) keys.push(object.Key);
+    }
+
+    continuationToken = result.IsTruncated ? result.NextContinuationToken : undefined;
+  } while (continuationToken);
+
+  return keys;
 }

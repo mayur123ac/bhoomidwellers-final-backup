@@ -832,7 +832,7 @@ export default function EmployeesPage() {
         {/* Logo */}
         <div className="flex items-center px-4 py-5 mb-2 whitespace-nowrap flex-shrink-0">
           <img
-            src="/assets/logobrowser_trans.png"
+            src="/assets/logobrowser_trans.svg"
             alt="Logo"
             className="w-10 h-10 min-w-[40px] rounded-xl object-cover flex-shrink-0"
           />

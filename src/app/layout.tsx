@@ -16,7 +16,7 @@ export const metadata: Metadata = {
   title: "Bhoomi CRM",
   description: "Real Estate CRM Portal",
   icons: {
-    icon: "/assets/logobrowser.png",
+    icon: "/assets/logobrowser_trans.png",
   },
 };
 

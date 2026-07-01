@@ -1,6 +1,14 @@
 // app/api/walkin_enquiries/[id]/route.ts
 import { NextResponse } from "next/server";
-import { getPool, transaction, recalculateSrNos } from "@/lib/db";
+import { transaction, recalculateSrNos } from "@/lib/db";
+import { requireRole } from "@/lib/serverAuth";
+import {
+  deleteLeadAssets,
+  deleteLeadDatabaseRecords,
+  deleteLeadLocalUploads,
+  getExistingColumns,
+  insertLeadDeletionAudit,
+} from "@/lib/leadDeletion";
 
 const jsonFields = new Set([
   "site_visit_history",
@@ -195,17 +203,148 @@ export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
+
   try {
-    const { id } = await params;
-    await transaction(async (client) => {
-      await client.query("DELETE FROM walkin_enquiries WHERE id = $1", [id]);
-      await recalculateSrNos(client);
+    const auth = await requireRole(["admin"]);
+    if (!auth.isAuthorized || !auth.session) {
+      return NextResponse.json(
+        { success: false, message: auth.error || "Unauthorized" },
+        { status: auth.status || 401 }
+      );
+    }
+
+    const leadId = Number(id);
+    if (!Number.isInteger(leadId) || leadId <= 0) {
+      return NextResponse.json(
+        { success: false, message: "Invalid lead ID" },
+        { status: 400 }
+      );
+    }
+
+    let body: any = {};
+    try {
+      body = await req.json();
+    } catch {
+      body = {};
+    }
+
+    if (body?.confirmation !== "DELETE") {
+      return NextResponse.json(
+        { success: false, message: "Type DELETE to confirm permanent deletion." },
+        { status: 400 }
+      );
+    }
+
+    const reason =
+      typeof body.reason === "string" && body.reason.trim()
+        ? body.reason.trim().slice(0, 500)
+        : null;
+
+    const result = await transaction(async (client) => {
+      const leadRows = await client.query(
+        "SELECT * FROM walkin_enquiries WHERE id = $1 FOR UPDATE",
+        [leadId]
+      );
+
+      if (leadRows.rows.length === 0) {
+        return { status: "not-found" as const };
+      }
+
+      const lead = leadRows.rows[0];
+      const leadColumns = await getExistingColumns(client, "walkin_enquiries");
+      const tenantColumn = ["organization_id", "tenant_id", "org_id"].find((column) =>
+        leadColumns.has(column)
+      );
+      const sessionOrgId =
+        auth.session.organization_id ??
+        auth.session.organizationId ??
+        auth.session.tenant_id ??
+        auth.session.tenantId ??
+        1;
+
+      if (tenantColumn && String(lead[tenantColumn]) !== String(sessionOrgId)) {
+        return { status: "forbidden" as const };
+      }
+
+      const assetResult = await deleteLeadAssets(client, leadId);
+      if (assetResult.failures.length > 0) {
+        return {
+          status: "asset-failed" as const,
+          failures: assetResult.failures,
+        };
+      }
+
+      const localAssetResult = await deleteLeadLocalUploads(leadId);
+      const databaseResult = await deleteLeadDatabaseRecords(client, leadId);
+
+      const leadNumber = lead.sr_no ? String(lead.sr_no) : String(lead.id);
+      await insertLeadDeletionAudit(client, {
+        adminId: String(auth.session._id || auth.session.id || ""),
+        adminName: auth.session.name || "Admin",
+        leadId,
+        leadNumber,
+        customerName: lead.name || null,
+        reason,
+        deletedFileCount: assetResult.deletedKeys.length,
+        deletedLocalFileCount: localAssetResult.deletedFiles,
+        deletedRecords: databaseResult.deletedRecords,
+      });
+
+      return {
+        status: "deleted" as const,
+        leadId,
+        leadNumber,
+        customerName: lead.name || null,
+        deletedFiles: assetResult.deletedKeys.length,
+        deletedLocalFiles: localAssetResult.deletedFiles,
+        deletedRecords: databaseResult.deletedRecords,
+        clearedLiveStateRows: databaseResult.clearedLiveStateRows,
+      };
     });
-    return NextResponse.json({ success: true }, { status: 200 });
+
+    if (result.status === "not-found") {
+      return NextResponse.json(
+        { success: false, message: "Lead not found" },
+        { status: 404 }
+      );
+    }
+
+    if (result.status === "forbidden") {
+      return NextResponse.json(
+        { success: false, message: "Lead belongs to another organization." },
+        { status: 403 }
+      );
+    }
+
+    if (result.status === "asset-failed") {
+      console.error("[DELETE walkin_enquiries] R2 cleanup failed", result.failures);
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Lead deletion failed. No data has been permanently removed.",
+          failures: result.failures,
+        },
+        { status: 502 }
+      );
+    }
+
+    return NextResponse.json(
+      {
+        success: true,
+        message: "Lead permanently deleted successfully.",
+        data: result,
+      },
+      { status: 200 }
+    );
   } catch (error: any) {
     console.error("DELETE walkin_enquiries error:", error);
     return NextResponse.json(
-      { success: false, message: error.message },
+      {
+        success: false,
+        message: "Lead deletion failed. No data has been permanently removed.",
+        detail: error.message,
+      },
       { status: 500 }
     );
   }

@@ -22,6 +22,7 @@ import BookingApplicationView from "@/components/BookingApplicationView";
 import ClosedLeadBookingView from "@/components/ClosedLeadBookingView";
 import LostLeadModal from "@/components/LostLeadModal";
 import CrmUpdatesNotification from "@/components/CrmUpdatesNotification";
+import PermanentLeadDeleteDialog from "@/components/PermanentLeadDeleteDialog";
 // import ActivityTimeline from "@/components/ActivityTimeline";
 import {
   handleMarkLostLead as markLostLeadApi,
@@ -1371,6 +1372,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [deleteConfirmLead, setDeleteConfirmLead] = useState<any>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deletedLeadIds, setDeletedLeadIds] = useState<Set<number | string>>(new Set());
 
   // ── Enhanced Reassign Logic ────────────────────────────────────────────────
@@ -1414,23 +1416,28 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
     }
   };
 
-  const handleDeleteLead = async () => {
+  const handleDeleteLead = async (reason?: string) => {
     if (!deleteConfirmLead) return;
     setIsDeleting(true);
+    setDeleteError(null);
     try {
-      const res = await fetch(`/api/walkin_enquiries/${deleteConfirmLead.id}`, { method: "DELETE" });
+      const res = await fetch(`/api/walkin_enquiries/${deleteConfirmLead.id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmation: "DELETE", reason }),
+      });
       const json = await res.json();
-      if (!json.success) {
-        alert(json.message || "Failed to delete lead.");
+      if (!res.ok || !json.success) {
+        setDeleteError(json.message || "Lead deletion failed. No data has been permanently removed.");
         return;
       }
-      setToastMsg(`🗑️ Lead #${deleteConfirmLead.id} (${deleteConfirmLead.name}) deleted.`);
+      setToastMsg("Lead permanently deleted successfully.");
       setDeletedLeadIds(prev => new Set([...prev, deleteConfirmLead.id]));
       setTimeout(() => setToastMsg(null), 3000);
       setDeleteConfirmLead(null);
       refetch();
     } catch (e: any) {
-      alert(e.message ?? "Network error while deleting lead.");
+      setDeleteError(e.message ?? "Lead deletion failed. No data has been permanently removed.");
     } finally {
       setIsDeleting(false);
     }
@@ -1988,8 +1995,8 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                         <td className="px-2 py-2" onClick={e => e.stopPropagation()}>
                           {isAdmin ? (
                             <button
-                              onClick={() => setDeleteConfirmLead(lead)}
-                              title="Delete duplicate / double-entered lead"
+                              onClick={() => { setDeleteError(null); setDeleteConfirmLead(lead); }}
+                              title="Delete Permanently"
                               className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors cursor-pointer ${isDark ? "bg-red-900/20 hover:bg-red-600 text-red-400 hover:text-white" : "bg-red-50 hover:bg-red-500 text-red-500 hover:text-white"}`}
                             >
                               <FaTrashAlt className="text-xs" />
@@ -2596,7 +2603,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
       )}
 
       {/* ── DELETE CONFIRMATION MODAL ── */}
-      {deleteConfirmLead && (
+      {false && deleteConfirmLead && (
         <div className="fixed inset-0 bg-black/75 z-[200] flex justify-center items-center p-5 sm:p-6 animate-fadeIn" style={{ backdropFilter: "blur(8px)" }}>
           <div className={`rounded-xl w-full max-w-md shadow-2xl border overflow-hidden ${theme.modalCard}`} style={theme.modalGlass}>
             <div className={`p-5 border-b flex justify-between items-center ${isDark ? "bg-red-900/20 border-red-500/20" : "bg-red-50 border-red-200"}`}>
@@ -2616,7 +2623,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
             <div className={`p-5 border-t flex justify-end gap-3 ${theme.modalHeader} ${theme.tableBorder}`}>
               <button onClick={() => setDeleteConfirmLead(null)}
                 className={`px-4 py-3 sm:py-4.5 rounded-lg font-bold cursor-pointer transition-colors ${theme.textMuted} hover:text-red-500`}>Cancel</button>
-              <button onClick={handleDeleteLead} disabled={isDeleting}
+              <button onClick={() => handleDeleteLead()} disabled={isDeleting}
                 className={`px-8 py-2.5 rounded-lg font-bold transition-colors flex items-center gap-2 ${isDeleting ? "opacity-50 cursor-not-allowed bg-red-400 text-white" : "cursor-pointer bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/20"}`}>
                 {isDeleting ? "Deleting…" : <><FaTrashAlt /> Confirm Delete</>}
               </button>
@@ -2624,6 +2631,19 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
           </div>
         </div>
       )}
+      <PermanentLeadDeleteDialog
+        open={!!deleteConfirmLead}
+        lead={deleteConfirmLead}
+        isDark={isDark}
+        isDeleting={isDeleting}
+        error={deleteError}
+        onClose={() => {
+          if (isDeleting) return;
+          setDeleteConfirmLead(null);
+          setDeleteError(null);
+        }}
+        onConfirm={handleDeleteLead}
+      />
     </div>
   );
 }

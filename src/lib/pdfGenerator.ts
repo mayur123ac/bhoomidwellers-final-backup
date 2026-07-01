@@ -28,12 +28,12 @@ export async function generatePdfBuffer(booking: any, lead: any, images: Record<
     const primaryAadhaarBase64 = images['primary_aadhaar_front'] || null;
 
     // Convert logo
-    let logoBase64 = null;
-    try {
-      const logoPath = path.join(process.cwd(), 'public', 'assets', 'bhoomidwellersLogo.png');
-      const logoData = await fs.readFile(logoPath);
-      logoBase64 = `data:image/png;base64,${logoData.toString('base64')}`;
-    } catch (e) { }
+    // let logoBase64 = null;
+    // try {
+    //   const logoPath = path.join(process.cwd(), 'public', 'assets', 'bhoomidwellersLogo.png');
+    //   const logoData = await fs.readFile(logoPath);
+    //   logoBase64 = `data:image/png;base64,${logoData.toString('base64')}`;
+    // } catch (e) { }
 
     const parseVal = (val: any) => {
       if (!val) return 0;
@@ -312,9 +312,7 @@ export async function generatePdfBuffer(booking: any, lead: any, images: Record<
     <body>
       
       <div class="header">
-        <div>
-          ${logoBase64 ? `<img src="${logoBase64}" class="header-logo" />` : `<h2 style="color:#9E217B; margin:0;">Bhoomi CRM</h2>`}
-        </div>
+      
         <div class="header-title">BOOKING APPLICATION FORM</div>
         <div class="header-info">
           <div><strong>Booking No:</strong> ${booking.booking_number || 'N/A'}</div>
