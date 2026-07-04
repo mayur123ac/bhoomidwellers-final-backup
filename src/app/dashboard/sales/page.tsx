@@ -1134,6 +1134,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
   const [bookingDetailTab, setBookingDetailTab] = useState<"personal" | "loan" | "booking">("personal");
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [showSalesForm, setShowSalesForm] = useState(false);
+  const [isSubmittingSalesForm, setIsSubmittingSalesForm] = useState(false);
   const [salesForm, setSalesForm] = useState({ propertyType: "", location: "", budget: "", useType: "", purchaseDate: "", loanPlanned: "", siteVisit: "", leadStatus: "" });
   const inputRef = useRef<HTMLInputElement>(null);
   const [showLoanForm, setShowLoanForm] = useState(false);
@@ -1432,7 +1433,8 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
   const handleSendCustomNote = async (e: React.FormEvent<HTMLFormElement>) => { e.preventDefault(); if (!customNote.trim() || !selectedLead) return; const nm = { leadId: String(selectedLead.id), salesManagerName: adminUser.name, createdBy: adminUser.role === "admin" ? "admin" : "sales", message: customNote, siteVisitDate: null, createdAt: new Date().toISOString() }; setCustomNote(""); try { await fetch("/api/followups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(nm) }); refetch(); } catch (e) { console.log(e); } };
   const handleSalesFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!selectedLead) return;
+    if (!selectedLead || isSubmittingSalesForm) return;
+    setIsSubmittingSalesForm(true);
 
     const msg =
       "📝 Detailed Salesform Submitted:\n" +
@@ -1491,6 +1493,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
       }
 
       // 4️⃣ Reset UI (after everything succeeds)
+      // 4️⃣ Reset UI (after everything succeeds)
       setShowSalesForm(false);
       setSalesForm({
         propertyType: "",
@@ -1507,6 +1510,8 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
 
     } catch (e) {
       console.log(e);
+    } finally {
+      setIsSubmittingSalesForm(false);
     }
   };
   const handleLoanFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => { e.preventDefault(); if (!selectedLead) return; const msg = "🏦 Loan Update:\n• Loan Required: " + (loanForm.loanRequired || "N/A") + "\n• Status: " + (loanForm.status || "N/A") + "\n• Bank Name: " + (loanForm.bank || "N/A") + "\n• Amount Requested: " + (loanForm.amountReq || "N/A") + "\n• Amount Approved: " + (loanForm.amountApp || "N/A") + "\n• CIBIL Score: " + (loanForm.cibil || "N/A") + "\n• Agent Name: " + (loanForm.agent || "N/A") + "\n• Agent Contact: " + (loanForm.agentContact || "N/A") + "\n• Employment Type: " + (loanForm.empType || "N/A") + "\n• Monthly Income: " + (loanForm.income || "N/A") + "\n• Existing EMIs: " + (loanForm.emi || "N/A") + "\n• PAN Card: " + (loanForm.docPan || "Pending") + "\n• Aadhaar Card: " + (loanForm.docAadhaar || "Pending") + "\n• Salary Slips: " + (loanForm.docSalary || "Pending") + "\n• Bank Statements: " + (loanForm.docBank || "Pending") + "\n• Property Docs: " + (loanForm.docProperty || "Pending") + "\n• Notes: " + (loanForm.notes || "N/A"); const nm = { leadId: String(selectedLead.id), salesManagerName: adminUser.name, createdBy: adminUser.role === "admin" ? "admin" : "sales", message: msg, siteVisitDate: null, createdAt: new Date().toISOString() }; const dbp = { leadId: String(selectedLead.id), salesManagerName: adminUser.name, ...loanForm }; setShowLoanForm(false); setToastMsg({ title: `Loan Data Logged for ${selectedLead.name}`, icon: <FaCheckCircle />, color: "blue" }); setTimeout(() => setToastMsg(null), 3000); try { await fetch("/api/followups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(nm) }); await fetch("/api/loan/update", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(dbp) }).catch(() => { }); refetch(); } catch (e) { console.log(e); } };
@@ -1753,11 +1758,10 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                                     type="button"
                                     onClick={() => openPermanentDeleteDialog(lead)}
                                     title="Delete Permanently"
-                                    className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors cursor-pointer ${
-                                      isDark
-                                        ? "bg-red-900/20 text-red-300 hover:bg-red-600 hover:text-white"
-                                        : "bg-red-50 text-red-600 hover:bg-red-600 hover:text-white"
-                                    }`}
+                                    className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors cursor-pointer ${isDark
+                                      ? "bg-red-900/20 text-red-300 hover:bg-red-600 hover:text-white"
+                                      : "bg-red-50 text-red-600 hover:bg-red-600 hover:text-white"
+                                      }`}
                                   >
                                     <Trash2 className="w-4 h-4" />
                                   </button>
@@ -2024,7 +2028,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                 <div className="flex items-center gap-3 sm:gap-2 min-w-0">
                   <button onClick={() => { setMainView("forms"); setSubView("cards"); }} className={`w-9 h-9 sm:w-10 sm:h-10 flex flex-shrink-0 items-center justify-center border rounded-xl transition-colors cursor-pointer shadow-sm ${t.textMuted} ${t.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}><FaChevronLeft className="text-sm" /></button>
                   <h1 className={`text-lg sm:text-lg md:text-2xl font-bold flex items-center gap-2 sm:gap-3 flex-wrap min-w-0 ${t.text}`}>
-                    <span className={t.accentText}>#{selectedLead.id}</span>
+                    <span className={t.accentText}>#{selectedLead.sr_no || selectedLead.id}</span>
                     <span className="truncate max-w-[200px] sm:max-w-none">{selectedLead.name}</span>
                     {selectedLead.status === "Closing" && (
                       <span className={`text-[10px] sm:text-[11px] font-bold px-2 sm:px-3 py-1 rounded-full border flex items-center gap-1.5 flex-shrink-0 ${t.statusClosing}`}>
@@ -2049,11 +2053,10 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                     <button
                       type="button"
                       onClick={() => openPermanentDeleteDialog()}
-                      className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md flex-1 sm:flex-none justify-center ${
-                        isDark
-                          ? "bg-red-950/50 text-red-200 border border-red-900/50 hover:bg-red-600 hover:text-white"
-                          : "bg-red-50 text-red-700 border border-red-200 hover:bg-red-600 hover:text-white"
-                      }`}
+                      className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md flex-1 sm:flex-none justify-center ${isDark
+                        ? "bg-red-950/50 text-red-200 border border-red-900/50 hover:bg-red-600 hover:text-white"
+                        : "bg-red-50 text-red-700 border border-red-200 hover:bg-red-600 hover:text-white"
+                        }`}
                     >
                       <Trash2 className="w-4 h-4" /> Delete Permanently
                     </button>
@@ -2107,7 +2110,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                       <div className={`flex justify-between items-center mb-4 border-b pb-3 ${t.tableBorder}`}>
                         <div>
                           <h3 className={`text-base sm:text-lg font-bold ${t.text}`}>Sales Data Form</h3>
-                          <p className={`text-xs mt-0.5 ${t.accentText}`}>For Lead #{selectedLead.id}</p>
+                          <p className={`text-xs mt-0.5 ${t.accentText}`}>For Lead #{selectedLead.sr_no || selectedLead.id}</p>
                         </div>
                         <button type="button" onClick={() => setShowSalesForm(false)} className={`p-2 ${t.textMuted} hover:text-red-500`}><FaTimes /></button>
                       </div>
@@ -2132,7 +2135,9 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                           <input ref={inputRef} type="datetime-local" value={salesForm.siteVisit} onChange={e => setSalesForm({ ...salesForm, siteVisit: e.target.value })} onClick={() => inputRef.current?.showPicker()} className={`${formInput} focus:border-orange-500`} />
 
                         </div>
-                        <button type="submit" className={`mt-auto w-full font-bold py-3 sm:py-3.5 rounded-xl shadow-md transition-colors flex-shrink-0 ${t.btnPrimary}`}>Submit Salesform</button>
+                        <button type="submit" disabled={isSubmittingSalesForm} className={`mt-auto w-full font-bold py-3 sm:py-3.5 rounded-xl shadow-md transition-colors flex-shrink-0 disabled:opacity-60 disabled:cursor-not-allowed ${t.btnPrimary}`}>
+                          {isSubmittingSalesForm ? "Submitting..." : "Submit Salesform"}
+                        </button>
                       </form>
                     </div>
                   ) : showLoanForm ? (
@@ -2140,7 +2145,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                       <div className={`flex justify-between items-center mb-4 border-b pb-3 flex-shrink-0 ${t.tableBorder}`}>
                         <div>
                           <h3 className={`text-base sm:text-lg font-bold flex items-center gap-2 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}><FaUniversity /> Loan Tracking Workflow</h3>
-                          <p className={`text-xs mt-0.5 ${t.textFaint}`}>For Lead #{selectedLead.id}</p>
+                          <p className={`text-xs mt-0.5 ${t.textFaint}`}>For Lead #{selectedLead.sr_no || selectedLead.id}</p>
                         </div>
                         <button type="button" onClick={() => setShowLoanForm(false)} className={`p-2 ${t.textMuted} hover:text-red-500`}><FaTimes /></button>
                       </div>

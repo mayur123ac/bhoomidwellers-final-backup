@@ -3,7 +3,7 @@ import React, { useState } from "react";
 import {
   FaFileInvoice, FaMoneyBillWave, FaFolderOpen, FaHistory, FaIdCard,
   FaCheckCircle, FaPrint, FaDownload, FaEdit, FaChevronDown, FaChevronRight,
-  FaMapMarkerAlt
+  FaMapMarkerAlt, FaUpload, FaSpinner, FaCalendarAlt
 } from "react-icons/fa";
 import BookingApplicationView from "./BookingApplicationView";
 
@@ -23,6 +23,19 @@ export default function ClosedLeadBookingView({
   const [activeTab, setActiveTab] = useState<"summary" | "payments" | "documents" | "timeline" | "crm">("summary");
   const [crmOpen, setCrmOpen] = useState(false);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [extendedDetails, setExtendedDetails] = useState<any>(null);
+  const [isUploading, setIsUploading] = useState(false);
+
+  React.useEffect(() => {
+    if (booking?.id) {
+      fetch(`/api/booking-details/${booking.id}`)
+        .then(res => res.json())
+        .then(json => {
+          if (json.success) setExtendedDetails(json.data);
+        })
+        .catch(console.error);
+    }
+  }, [booking?.id]);
 
   const textMain = isDark ? "text-white" : "text-[#1A1A1A]";
   const textMuted = isDark ? "text-[#888899]" : "text-[#6B7280]";
@@ -148,6 +161,33 @@ export default function ClosedLeadBookingView({
     </div>
   );
 
+  const handleUploadDocument = async (e: React.ChangeEvent<HTMLInputElement>, docType: string) => {
+    if (!e.target.files || !e.target.files[0]) return;
+    const file = e.target.files[0];
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("document_type", docType);
+      formData.append("uploaded_by", userRole); // using userRole or pass real name if available
+
+      const res = await fetch(`/api/booking-documents/${booking.id}`, { method: "POST", body: formData });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.message || "Failed to upload document");
+
+      // Refresh extended details
+      const detailRes = await fetch(`/api/booking-details/${booking.id}`);
+      const detailJson = await detailRes.json();
+      if (detailJson.success) setExtendedDetails(detailJson.data);
+      
+    } catch (err: any) {
+      alert(`Upload Failed: ${err.message}`);
+    } finally {
+      setIsUploading(false);
+      e.target.value = "";
+    }
+  };
+
   const renderDocuments = () => {
     let parsedJointApplicants: any[] = [];
     if (booking?.joint_applicants) {
@@ -160,33 +200,55 @@ export default function ClosedLeadBookingView({
       }
     }
 
-    const docs = [
-      { name: "Booking Application Form", type: "PDF", status: "Generated", url: null },
-      { name: "Primary Applicant PAN Card", type: "Image/PDF", status: booking?.primary_pan_url ? "Available" : "Pending", url: booking?.primary_pan_url },
-      { name: "Primary Applicant Aadhaar (Front)", type: "Image/PDF", status: booking?.primary_aadhaar_front_url ? "Available" : "Pending", url: booking?.primary_aadhaar_front_url },
-      ...(booking?.primary_aadhaar_back_url ? [{ name: "Primary Applicant Aadhaar (Back)", type: "Image/PDF", status: "Available", url: booking.primary_aadhaar_back_url }] : []),
+    const fetchedDocs = extendedDetails?.documents || [];
+    const findDoc = (type: string) => fetchedDocs.find((d: any) => d.document_type === type);
+
+    const baseDocs: any[] = [
+      { name: "Booking Application Form", type: "PDF", isBase: true, status: "Generated", url: null },
+      { name: "Primary Applicant PAN Card", type: "Image/PDF", isBase: true, status: booking?.primary_pan_url ? "Available" : "Pending", url: booking?.primary_pan_url },
+      { name: "Primary Applicant Aadhaar (Front)", type: "Image/PDF", isBase: true, status: booking?.primary_aadhaar_front_url ? "Available" : "Pending", url: booking?.primary_aadhaar_front_url },
+      ...(booking?.primary_aadhaar_back_url ? [{ name: "Primary Applicant Aadhaar (Back)", type: "Image/PDF", isBase: true, status: "Available", url: booking.primary_aadhaar_back_url }] : []),
       ...parsedJointApplicants.flatMap((ja, i) => [
-        { name: `Joint Applicant ${i+1} PAN Card`, type: "Image/PDF", status: ja.pan_url ? "Available" : "Pending", url: ja.pan_url },
-        { name: `Joint Applicant ${i+1} Aadhaar (Front)`, type: "Image/PDF", status: ja.aadhaar_front_url ? "Available" : "Pending", url: ja.aadhaar_front_url },
-        ...(ja.aadhaar_back_url ? [{ name: `Joint Applicant ${i+1} Aadhaar (Back)`, type: "Image/PDF", status: "Available", url: ja.aadhaar_back_url }] : [])
+        { name: `Joint Applicant ${i+1} PAN Card`, type: "Image/PDF", isBase: true, status: ja.pan_url ? "Available" : "Pending", url: ja.pan_url },
+        { name: `Joint Applicant ${i+1} Aadhaar (Front)`, type: "Image/PDF", isBase: true, status: ja.aadhaar_front_url ? "Available" : "Pending", url: ja.aadhaar_front_url },
+        ...(ja.aadhaar_back_url ? [{ name: `Joint Applicant ${i+1} Aadhaar (Back)`, type: "Image/PDF", isBase: true, status: "Available", url: ja.aadhaar_back_url }] : [])
       ]),
-      { name: "Payment Receipts", type: "PDF", status: "Generated", url: null },
-      { name: "Allotment Letter", type: "PDF", status: "Pending", url: null },
-      { name: "Agreement to Sale", type: "PDF", status: "Pending", url: null },
     ];
+
+    const extendedDocTypes = ["Payment Receipts", "OCR Receipt", "SDR Receipt", "Loan Sanction Letter", "Agreement Copy", "Registration Copy", "Other Documents"];
+    const extDocs = extendedDocTypes.map(name => {
+      const dbDoc = findDoc(name);
+      return {
+        name,
+        type: "Any",
+        isBase: false,
+        status: dbDoc ? "Available" : "Pending",
+        url: dbDoc ? `/api/documents/proxy?key=${encodeURIComponent(dbDoc.object_key)}` : null,
+        dbDoc
+      };
+    });
+
+    const docs = [...baseDocs, ...extDocs];
+
     return (
       <div className={`rounded-2xl border p-5 ${bgCard} animate-fadeIn`}>
-        <h3 className={`text-lg font-bold mb-4 ${accent}`}>Document Repository</h3>
+        <div className="flex justify-between items-center mb-4">
+          <h3 className={`text-lg font-bold ${accent}`}>Document Repository</h3>
+          {isUploading && <span className="flex items-center gap-2 text-xs text-[#00AEEF]"><FaSpinner className="animate-spin" /> Uploading...</span>}
+        </div>
         <div className="grid gap-3">
           {docs.map((doc, i) => (
-            <div key={i} className={`flex items-center justify-between p-4 rounded-xl border ${isDark ? "border-[#2A2A35] bg-[#14141B]" : "border-[#E5E7EB] bg-[#F8FAFC]"}`}>
+            <div key={i} className={`flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl border gap-4 ${isDark ? "border-[#2A2A35] bg-[#14141B]" : "border-[#E5E7EB] bg-[#F8FAFC]"}`}>
               <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-xl ${isDark ? "bg-[#2A2A35] text-[#888899]" : "bg-white border text-gray-400"}`}>
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-xl flex-shrink-0 ${isDark ? "bg-[#2A2A35] text-[#888899]" : "bg-white border text-gray-400"}`}>
                   <FaFolderOpen />
                 </div>
                 <div>
                   <p className={`font-bold text-sm ${textMain}`}>{doc.name}</p>
-                  <p className={`text-xs ${textMuted}`}>{doc.type} • {doc.status}</p>
+                  <p className={`text-xs ${textMuted}`}>
+                    {doc.type} • {doc.status}
+                    {doc.dbDoc?.uploaded_at && ` • Uploaded: ${formatDate(doc.dbDoc.uploaded_at)}`}
+                  </p>
                 </div>
               </div>
               <div className="flex gap-2">
@@ -202,16 +264,35 @@ export default function ClosedLeadBookingView({
                     >
                       View
                     </button>
-                    <button 
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${isDark ? "bg-[#9E217B] text-white hover:bg-[#7a1960]" : "bg-[#9E217B] text-white hover:bg-[#7a1960]"}`} 
-                      onClick={handleDownloadPdf}
-                      disabled={isGeneratingPdf}
-                    >
-                      {isGeneratingPdf && doc.name === "Booking Application Form" ? "Generating..." : "Download"}
-                    </button>
+                    {!doc.url && doc.name === "Booking Application Form" ? (
+                      <button 
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${isDark ? "bg-[#9E217B] text-white hover:bg-[#7a1960]" : "bg-[#9E217B] text-white hover:bg-[#7a1960]"}`} 
+                        onClick={handleDownloadPdf}
+                        disabled={isGeneratingPdf}
+                      >
+                        {isGeneratingPdf ? "Generating..." : "Download"}
+                      </button>
+                    ) : doc.url ? (
+                      <button 
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${isDark ? "bg-[#9E217B] text-white hover:bg-[#7a1960]" : "bg-[#9E217B] text-white hover:bg-[#7a1960]"}`} 
+                        onClick={() => window.open(doc.url as string, "_blank")}
+                      >
+                        Download
+                      </button>
+                    ) : null}
                   </>
                 ) : (
-                  <button className={`px-3 py-1.5 rounded-lg text-xs font-bold border cursor-not-allowed ${isDark ? "border-[#2A2A35] text-[#555]" : "border-[#E5E7EB] text-gray-300"}`} disabled>Unavailable</button>
+                  <>
+                    {!doc.isBase && (
+                      <label className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-colors bg-[#9E217B] text-white hover:bg-[#7a1960]`}>
+                        <FaUpload className="text-[10px]" /> Upload
+                        <input type="file" className="hidden" onChange={e => handleUploadDocument(e, doc.name)} />
+                      </label>
+                    )}
+                    {doc.isBase && (
+                      <button className={`px-3 py-1.5 rounded-lg text-xs font-bold border cursor-not-allowed ${isDark ? "border-[#2A2A35] text-[#555]" : "border-[#E5E7EB] text-gray-300"}`} disabled>Unavailable</button>
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -221,26 +302,85 @@ export default function ClosedLeadBookingView({
     );
   };
 
+  const calculateDays = (start: string, end: string) => {
+    if (!start || !end) return null;
+    const d1 = new Date(start).getTime();
+    const d2 = new Date(end).getTime();
+    return Math.max(0, Math.floor((d2 - d1) / (1000 * 60 * 60 * 24)));
+  };
+
   const renderTimeline = () => {
+    const bDate = booking?.booking_date || booking?.application_date;
+    const f = extendedDetails?.financials || {};
+    const l = extendedDetails?.loan || {};
+    const r = extendedDetails?.registration || {};
+
     const steps = [
-      { title: "Lead Created", date: lead?.created_at ? formatDate(lead.created_at) : "—", done: true },
-      { title: "Assigned to Sales", date: lead?.assigned_to ? "Completed" : "—", done: !!lead?.assigned_to },
-      { title: "Site Visit Conducted", date: lead?.mongoVisitDate ? formatDate(lead.mongoVisitDate) : "—", done: !!lead?.mongoVisitDate },
-      { title: "Lead Interested", date: lead?.leadInterestStatus ? "Completed" : "—", done: lead?.leadInterestStatus === "Interested" || lead?.leadInterestStatus === "Highly Interested" || true },
-      { title: "Booking Form Submitted", date: booking?.application_date ? formatDate(booking.application_date) : "—", done: !!booking },
-      { title: "Booking Confirmed", date: booking?.booking_status === "Approved" ? "Approved" : "Pending", done: booking?.booking_status === "Approved" },
-      { title: "Lead Closed", date: booking?.booking_status === "Approved" ? "Completed" : "Pending", done: booking?.booking_status === "Approved" },
+      { title: "Booking Confirmation", date: bDate ? formatDate(bDate) : "—", done: !!bDate, info: "" },
+      { 
+        title: "Token Stage", 
+        date: f.token_amount ? "Completed" : "Pending", 
+        done: !!f.token_amount, 
+        info: f.token_amount ? `₹${f.token_amount}` : "" 
+      },
+      { 
+        title: "OCR Stage", 
+        date: f.ocr_received_date ? formatDate(f.ocr_received_date) : "Pending", 
+        done: !!f.ocr_received_date, 
+        info: f.ocr_amount ? `₹${f.ocr_amount}${bDate && f.ocr_received_date ? ` (${calculateDays(bDate, f.ocr_received_date)} days from booking)` : ""}` : "" 
+      },
+      { 
+        title: "SDR Stage", 
+        date: f.sdr_payment_date ? formatDate(f.sdr_payment_date) : "Pending", 
+        done: !!f.sdr_payment_date, 
+        info: f.sdr_amount ? `₹${f.sdr_amount}${f.ocr_received_date && f.sdr_payment_date ? ` (${calculateDays(f.ocr_received_date, f.sdr_payment_date)} days from OCR)` : ""}` : "" 
+      },
+      { 
+        title: "Agreement Stage", 
+        date: booking?.agreement_value ? "Completed" : "Pending", 
+        done: !!booking?.agreement_value, 
+        info: booking?.agreement_value ? `Value: ₹${booking.agreement_value}` : "" 
+      },
+      { 
+        title: "Loan Sanction", 
+        date: l.sanction_date ? formatDate(l.sanction_date) : (l.loan_status || "Pending"), 
+        done: !!l.sanction_date || l.loan_status === "Sanctioned", 
+        info: l.sanction_amount ? `₹${l.sanction_amount}` : "" 
+      },
+      { 
+        title: "Registration", 
+        date: r.actual_registration_date ? formatDate(r.actual_registration_date) : (r.expected_registration_date ? `Expected: ${formatDate(r.expected_registration_date)}` : "Pending"), 
+        done: !!r.actual_registration_date, 
+        info: r.registration_number ? `Reg No: ${r.registration_number}` : "" 
+      },
+      { 
+        title: "Disbursement", 
+        date: l.actual_disbursement_date ? formatDate(l.actual_disbursement_date) : "Pending", 
+        done: !!l.actual_disbursement_date, 
+        info: l.disbursement_amount ? `₹${l.disbursement_amount}` : "" 
+      }
     ];
 
     return (
       <div className={`rounded-2xl border p-5 ${bgCard} animate-fadeIn`}>
-        <h3 className={`text-lg font-bold mb-6 ${accent}`}>Booking Pipeline</h3>
+        <div className="flex items-center justify-between mb-6">
+          <h3 className={`text-lg font-bold ${accent}`}>Financial & Booking Milestones</h3>
+        </div>
         <div className="relative pl-6 border-l-2 border-[#9E217B]/20 space-y-6">
           {steps.map((s, i) => (
             <div key={i} className="relative">
               <div className={`absolute -left-[31px] top-1 w-4 h-4 rounded-full border-2 ${isDark ? "bg-[#121218]" : "bg-white"} ${s.done ? "border-[#9E217B] bg-[#9E217B]" : isDark ? "border-[#2A2A35]" : "border-gray-300"}`} />
-              <p className={`font-bold text-sm ${s.done ? textMain : textMuted}`}>{s.title}</p>
-              <p className={`text-xs mt-0.5 ${textMuted}`}>{s.date}</p>
+              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-1">
+                <div>
+                  <p className={`font-bold text-sm ${s.done ? textMain : textMuted}`}>{s.title}</p>
+                  <p className={`text-xs mt-0.5 flex items-center gap-1 ${textMuted}`}><FaCalendarAlt className="text-[10px]" /> {s.date}</p>
+                </div>
+                {s.info && (
+                  <div className={`text-xs font-semibold px-2 py-1 rounded bg-black/5 dark:bg-white/5 ${textMain}`}>
+                    {s.info}
+                  </div>
+                )}
+              </div>
             </div>
           ))}
         </div>

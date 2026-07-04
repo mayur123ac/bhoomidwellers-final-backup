@@ -316,7 +316,7 @@ export async function generatePdfBuffer(booking: any, lead: any, images: Record<
         <div class="header-title">BOOKING APPLICATION FORM</div>
         <div class="header-info">
           <div><strong>Booking No:</strong> ${booking.booking_number || 'N/A'}</div>
-          <div><strong>Lead No:</strong> #${booking.lead_id || 'N/A'}</div>
+          <div><strong>Lead No:</strong> #${booking.lead_sr_no || lead?.sr_no || booking.lead_id || 'N/A'}</div>
         </div>
       </div>
 

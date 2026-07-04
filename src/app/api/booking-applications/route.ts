@@ -86,6 +86,120 @@ async function ensureTable() {
       updated_at                TIMESTAMPTZ DEFAULT NOW()
     );
   `);
+
+  // Alter booking_applications for new fields
+  await query(`
+    ALTER TABLE booking_applications 
+    ADD COLUMN IF NOT EXISTS booking_date DATE,
+    ADD COLUMN IF NOT EXISTS agreement_value NUMERIC,
+    ADD COLUMN IF NOT EXISTS booking_amount NUMERIC,
+    ADD COLUMN IF NOT EXISTS booking_remarks TEXT,
+    ADD COLUMN IF NOT EXISTS internal_notes TEXT;
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS booking_financials (
+      id SERIAL PRIMARY KEY,
+      booking_id INTEGER REFERENCES booking_applications(id) ON DELETE CASCADE,
+      token_amount NUMERIC,
+      ocr_amount NUMERIC,
+      ocr_received_date DATE,
+      sdr_amount NUMERIC,
+      sdr_payment_date DATE,
+      cash_component NUMERIC,
+      cash_component_remarks TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+  `);
+
+  await query(`
+    ALTER TABLE booking_financials
+      ADD COLUMN IF NOT EXISTS ocr_payment_mode TEXT,
+      ADD COLUMN IF NOT EXISTS ocr_remarks TEXT,
+      ADD COLUMN IF NOT EXISTS sdr_status TEXT DEFAULT 'Pending',
+      ADD COLUMN IF NOT EXISTS sdr_remarks TEXT,
+      ADD COLUMN IF NOT EXISTS cash_component_date DATE;
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS booking_loan_details (
+      id SERIAL PRIMARY KEY,
+      booking_id INTEGER REFERENCES booking_applications(id) ON DELETE CASCADE,
+      loan_required BOOLEAN DEFAULT false,
+      bank_name TEXT,
+      loan_executive TEXT,
+      loan_amount NUMERIC,
+      sanction_amount NUMERIC,
+      sanction_date DATE,
+      loan_status TEXT DEFAULT 'Pending',
+      expected_disbursement_date DATE,
+      actual_disbursement_date DATE,
+      expected_disbursement_amount NUMERIC,
+      disbursement_amount NUMERIC,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+  `);
+
+  await query(`
+    ALTER TABLE booking_loan_details
+      ADD COLUMN IF NOT EXISTS loan_type TEXT,
+      ADD COLUMN IF NOT EXISTS loan_reference_no TEXT,
+      ADD COLUMN IF NOT EXISTS sanction_status TEXT DEFAULT 'Pending',
+      ADD COLUMN IF NOT EXISTS disbursement_status TEXT DEFAULT 'Pending';
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS booking_registration_details (
+      id SERIAL PRIMARY KEY,
+      booking_id INTEGER REFERENCES booking_applications(id) ON DELETE CASCADE,
+      expected_registration_date DATE,
+      actual_registration_date DATE,
+      registration_number TEXT,
+      registration_remarks TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+  `);
+
+  await query(`
+    ALTER TABLE booking_registration_details
+      ADD COLUMN IF NOT EXISTS registration_status TEXT DEFAULT 'Pending';
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS booking_custom_charges (
+      id SERIAL PRIMARY KEY,
+      booking_id INTEGER REFERENCES booking_applications(id) ON DELETE CASCADE,
+      charge_name TEXT,
+      amount NUMERIC,
+      remarks TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS booking_pipeline (
+      id SERIAL PRIMARY KEY,
+      booking_id INTEGER UNIQUE REFERENCES booking_applications(id) ON DELETE CASCADE,
+      current_stage TEXT DEFAULT 'Booking',
+      status TEXT DEFAULT 'Active',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS booking_stage_history (
+      id SERIAL PRIMARY KEY,
+      booking_id INTEGER REFERENCES booking_applications(id) ON DELETE CASCADE,
+      stage_name TEXT,
+      employee_name TEXT,
+      remarks TEXT,
+      logged_at TIMESTAMPTZ DEFAULT NOW()
+    );
+  `);
 }
 
 // ─── GET — fetch bookings ─────────────────────────────────────────────────────
@@ -105,9 +219,28 @@ export async function GET(req: NextRequest) {
              w.assigned_receptionist AS lead_receptionist,
              w.overseeing_site_head AS lead_site_head,
              w.created_at AS lead_created_at, w.enquiry_date AS lead_enquiry_date,
-             w.alt_phone AS lead_alt_phone, w.sr_no AS lead_sr_no
+             w.alt_phone AS lead_alt_phone, w.sr_no AS lead_sr_no,
+             f.token_amount, f.ocr_amount, f.ocr_received_date, f.ocr_payment_mode, f.ocr_remarks,
+             f.sdr_amount, f.sdr_payment_date, f.sdr_status, f.sdr_remarks,
+             f.cash_component, f.cash_component_date, f.cash_component_remarks,
+             l.loan_required, l.bank_name, l.loan_executive, l.loan_type, l.loan_reference_no,
+             l.loan_amount, l.sanction_amount, l.sanction_date, l.sanction_status, l.loan_status,
+             l.expected_disbursement_date, l.actual_disbursement_date,
+             l.expected_disbursement_amount, l.disbursement_amount, l.disbursement_status,
+             r.expected_registration_date, r.actual_registration_date, r.registration_status,
+             r.registration_number, r.registration_remarks,
+             COALESCE(
+               (SELECT json_agg(json_build_object('charge_name', cc.charge_name, 'amount', cc.amount, 'remarks', cc.remarks))
+                FROM booking_custom_charges cc WHERE cc.booking_id = b.id),
+               '[]'
+             ) AS custom_charges,
+             (COALESCE(f.ocr_amount,0) + COALESCE(f.cash_component,0) + COALESCE(l.disbursement_amount,0) + COALESCE(f.sdr_amount,0)) AS total_received,
+             (COALESCE(b.agreement_value,0) - (COALESCE(f.ocr_amount,0) + COALESCE(f.cash_component,0) + COALESCE(l.disbursement_amount,0) + COALESCE(f.sdr_amount,0))) AS balance_receivable
       FROM booking_applications b
       LEFT JOIN walkin_enquiries w ON w.id = b.lead_id
+      LEFT JOIN booking_financials f ON f.booking_id = b.id
+      LEFT JOIN booking_loan_details l ON l.booking_id = b.id
+      LEFT JOIN booking_registration_details r ON r.booking_id = b.id
     `;
     const params: any[] = [];
     if (leadId) {
@@ -135,6 +268,13 @@ export async function POST(req: NextRequest) {
 
     const lead_id = getStr("lead_id");
     if (!lead_id) return NextResponse.json({ success: false, message: "lead_id is required" }, { status: 400 });
+
+    // Strip commas/₹ before inserting into NUMERIC columns (form sends "50,00,000" style strings)
+    const cleanNum = (val: string | null): number => {
+      if (!val) return 0;
+      const n = parseFloat(val.replace(/[₹,\s]/g, ""));
+      return isNaN(n) ? 0 : n;
+    };
 
     const primary_name = getStr("primary_name");
     const primary_email = getStr("primary_email");
@@ -176,13 +316,58 @@ export async function POST(req: NextRequest) {
     const application_date = getStr("application_date") || new Date().toISOString().split("T")[0];
     const created_by = getStr("created_by");
     const created_role = getStr("created_role");
-    
+
+    // New Fields
+    const booking_date = getStr("booking_date");
+    const agreement_value = getStr("agreement_value");
+    const booking_amount = getStr("booking_amount");
+    const booking_remarks = getStr("booking_remarks");
+    const internal_notes = getStr("internal_notes");
+
+    const token_amount = getStr("token_amount");
+    const ocr_amount = getStr("ocr_amount");
+    const ocr_received_date = getStr("ocr_received_date");
+    const ocr_payment_mode = getStr("ocr_payment_mode");
+    const ocr_remarks = getStr("ocr_remarks");
+    const sdr_amount = getStr("sdr_amount");
+    const sdr_payment_date = getStr("sdr_payment_date");
+    const sdr_status = getStr("sdr_status");
+    const sdr_remarks = getStr("sdr_remarks");
+    const cash_component = getStr("cash_component");
+    const cash_component_date = getStr("cash_component_date");
+    const cash_component_remarks = getStr("cash_component_remarks");
+
+    const expected_registration_date = getStr("expected_registration_date");
+    const actual_registration_date = getStr("actual_registration_date");
+    const registration_status = getStr("registration_status");
+    const registration_number = getStr("registration_number");
+    const registration_remarks = getStr("registration_remarks");
+
+    const loan_required = getStr("loan_required") === "true";
+    const bank_name = getStr("bank_name");
+    const loan_executive = getStr("loan_executive");
+    const loan_type = getStr("loan_type");
+    const loan_reference_no = getStr("loan_reference_no");
+    const loan_amount = getStr("loan_amount");
+    const sanction_amount = getStr("sanction_amount");
+    const sanction_date = getStr("sanction_date");
+    const sanction_status = getStr("sanction_status");
+    const loan_status = getStr("loan_status");
+    const expected_disbursement_date = getStr("expected_disbursement_date");
+    const actual_disbursement_date = getStr("actual_disbursement_date");
+    const expected_disbursement_amount = getStr("expected_disbursement_amount");
+    const disbursement_amount = getStr("disbursement_amount");
+    const disbursement_status = getStr("disbursement_status");
+
+    let custom_charges: any[] = [];
+    try { custom_charges = JSON.parse(getStr("custom_charges") || "[]"); } catch { }
+
     // Parse JSON arrays
     let joint_applicants: any[] = [];
-    try { joint_applicants = JSON.parse(getStr("joint_applicants") || "[]"); } catch {}
-    
+    try { joint_applicants = JSON.parse(getStr("joint_applicants") || "[]"); } catch { }
+
     let payment_details: any[] = [];
-    try { payment_details = JSON.parse(getStr("payment_details") || "[]"); } catch {}
+    try { payment_details = JSON.parse(getStr("payment_details") || "[]"); } catch { }
 
     // We will do everything inside a transaction
     const result = await transaction(async (client) => {
@@ -198,9 +383,11 @@ export async function POST(req: NextRequest) {
           payment_details, witness_name, witness_aadhaar,
           booking_source, direct_source, channel_partner_name, channel_partner_contact,
           unit_cost, sdr, gst, declaration_accepted, terms_accepted, consent_accepted,
-          application_date, created_by, created_role, booking_status
+          application_date, created_by, created_role, booking_status,
+          booking_date, agreement_value, booking_amount, booking_remarks, internal_notes
         ) VALUES (
-          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,'Pending'
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,'Pending',
+          $37,$38,$39,$40,$41
         ) RETURNING id`,
         [
           lead_id, primary_name, primary_email, primary_mobile, primary_pan, primary_aadhaar,
@@ -212,15 +399,54 @@ export async function POST(req: NextRequest) {
           JSON.stringify(payment_details), witness_name, witness_aadhaar,
           booking_source || "Direct", direct_source, channel_partner_name, channel_partner_contact,
           unit_cost, sdr, gst, declaration_accepted, terms_accepted, consent_accepted,
-          application_date, created_by, created_role
+          application_date, created_by, created_role,
+          booking_date || null, cleanNum(agreement_value), cleanNum(booking_amount), booking_remarks, internal_notes
         ]
       );
       const newId = insertRes.rows[0].id;
-      
+
       const dateParts = application_date.split("-");
       const bookingNumber = `BK-${dateParts[0]}-${dateParts[1]}-${dateParts[2]}-${String(newId).padStart(5, "0")}`;
 
       await client.query(`UPDATE booking_applications SET booking_number = $1 WHERE id = $2`, [bookingNumber, newId]);
+
+      // 1b. Insert Financials
+      await client.query(`
+        INSERT INTO booking_financials (booking_id, token_amount, ocr_amount, ocr_received_date, ocr_payment_mode, ocr_remarks, sdr_amount, sdr_payment_date, sdr_status, sdr_remarks, cash_component, cash_component_date, cash_component_remarks)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      `, [newId, cleanNum(token_amount), cleanNum(ocr_amount), ocr_received_date || null, ocr_payment_mode, ocr_remarks, cleanNum(sdr_amount), sdr_payment_date || null, sdr_status || 'Pending', sdr_remarks, cleanNum(cash_component), cash_component_date || null, cash_component_remarks]);
+
+      // 1c. Insert Loan Details
+      await client.query(`
+        INSERT INTO booking_loan_details (booking_id, loan_required, bank_name, loan_executive, loan_type, loan_reference_no, loan_amount, sanction_amount, sanction_date, sanction_status, loan_status, expected_disbursement_date, actual_disbursement_date, expected_disbursement_amount, disbursement_amount, disbursement_status)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+      `, [newId, loan_required, bank_name, loan_executive, loan_type, loan_reference_no, cleanNum(loan_amount), cleanNum(sanction_amount), sanction_date || null, sanction_status || 'Pending', loan_status || 'Pending', expected_disbursement_date || null, actual_disbursement_date || null, cleanNum(expected_disbursement_amount), cleanNum(disbursement_amount), disbursement_status || 'Pending']);
+
+      // 1d. Insert Registration Details
+      await client.query(`
+        INSERT INTO booking_registration_details (booking_id, expected_registration_date, actual_registration_date, registration_status, registration_number, registration_remarks)
+        VALUES ($1, $2, $3, $4, $5, $6)
+      `, [newId, expected_registration_date || null, actual_registration_date || null, registration_status || 'Pending', registration_number, registration_remarks]);
+
+      // 1e. Insert Custom Charges
+      for (const charge of custom_charges) {
+        await client.query(`
+          INSERT INTO booking_custom_charges (booking_id, charge_name, amount, remarks)
+          VALUES ($1, $2, $3, $4)
+        `, [newId, charge.charge_name, charge.amount || 0, charge.remarks]);
+      }
+
+      // 1f. Insert into Revenue Pipeline
+      await client.query(`
+        INSERT INTO booking_pipeline (booking_id, current_stage, status)
+        VALUES ($1, 'Booking', 'Active')
+      `, [newId]);
+
+      // 1g. Insert initial stage history
+      await client.query(`
+        INSERT INTO booking_stage_history (booking_id, stage_name, employee_name, remarks)
+        VALUES ($1, 'Booking Submitted', $2, 'Initial booking form submitted.')
+      `, [newId, created_by || 'System']);
 
       // 2. Upload Files to R2
 
@@ -244,15 +470,15 @@ export async function POST(req: NextRequest) {
         if (file.name.lastIndexOf(".") !== -1) {
           ext = file.name.substring(file.name.lastIndexOf("."));
         } else if (file.type === "application/pdf") ext = ".pdf";
-        
+
         const key = `bookings/${bookingNumber}/${pathSegment}/${docType}${ext}`;
         await uploadBufferToR2(key, await fileToBuffer(file), file.type);
-        
+
         await client.query(`
           INSERT INTO booking_documents (booking_id, lead_id, booking_number, document_type, applicant_type, file_name, object_key, mime_type, file_size, uploaded_by)
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         `, [newId, lead_id, bookingNumber, docType, appType, file.name, key, file.type, file.size, created_by]);
-        
+
         return key;
       };
 
@@ -276,17 +502,17 @@ export async function POST(req: NextRequest) {
       for (let i = 0; i < joint_applicants.length; i++) {
         const jPan = getFile(`joint_${i}_pan_file`);
         if (jPan) {
-          joint_applicants[i].pan_url = await uploadDoc(jPan, "PAN_CARD", `JOINT_${i+1}`, `joint_${i+1}`);
+          joint_applicants[i].pan_url = await uploadDoc(jPan, "PAN_CARD", `JOINT_${i + 1}`, `joint_${i + 1}`);
           imagesForPdf[`joint_${i}_pan`] = await toBase64(jPan);
         }
         const jAFront = getFile(`joint_${i}_aadhaar_front_file`);
         if (jAFront) {
-          joint_applicants[i].aadhaar_front_url = await uploadDoc(jAFront, "AADHAAR_FRONT", `JOINT_${i+1}`, `joint_${i+1}`);
+          joint_applicants[i].aadhaar_front_url = await uploadDoc(jAFront, "AADHAAR_FRONT", `JOINT_${i + 1}`, `joint_${i + 1}`);
           imagesForPdf[`joint_${i}_aadhaar_front`] = await toBase64(jAFront);
         }
         const jABack = getFile(`joint_${i}_aadhaar_back_file`);
         if (jABack) {
-          joint_applicants[i].aadhaar_back_url = await uploadDoc(jABack, "AADHAAR_BACK", `JOINT_${i+1}`, `joint_${i+1}`);
+          joint_applicants[i].aadhaar_back_url = await uploadDoc(jABack, "AADHAAR_BACK", `JOINT_${i + 1}`, `joint_${i + 1}`);
         }
       }
 
@@ -297,8 +523,8 @@ export async function POST(req: NextRequest) {
         const buffer = Buffer.from(base64Data, "base64");
         const key = `bookings/${bookingNumber}/primary/signature.png`;
         await uploadBufferToR2(key, buffer, "image/png");
-        updatesForDb.signature_data = key; 
-        
+        updatesForDb.signature_data = key;
+
         await client.query(`INSERT INTO booking_documents (booking_id, lead_id, booking_number, document_type, applicant_type, file_name, object_key, mime_type, file_size, uploaded_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`, [newId, lead_id, bookingNumber, "SIGNATURE", "PRIMARY", "signature.png", key, "image/png", buffer.length, created_by]);
       }
 

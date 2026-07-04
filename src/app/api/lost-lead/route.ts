@@ -34,7 +34,7 @@ export async function POST(req: Request) {
 
     // Check lead exists
     const existing = await query(
-      `SELECT id, name, is_lost_lead FROM walkin_enquiries WHERE id = $1`,
+      `SELECT id, name, sr_no, is_lost_lead FROM walkin_enquiries WHERE id = $1`,
       [lead_id]
     );
 
@@ -65,10 +65,8 @@ export async function POST(req: Request) {
     );
 
     // Create activity log entry via follow_ups
-    const logMessage =
-      `👻 Lead marked as Lost\n` +
-      `Reason: ${reason.trim()}\n` +
-      `By: ${marked_by}`;
+    const leadNo = existing[0].sr_no || lead_id;
+    const logMessage = `🚨 Marked as Lost Lead\nReason: ${reason.trim()}\nBy: ${marked_by}`;
 
     try {
       await query(
@@ -83,7 +81,7 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         success: true,
-        message: `Lead #${lead_id} marked as lost.`,
+        message: `Lead #${leadNo} marked as lost.`,
         data: updatedRows[0],
       },
       { status: 200 }
@@ -115,7 +113,7 @@ export async function PUT(req: Request) {
 
     // Check lead exists and is actually lost
     const existing = await query(
-      `SELECT id, name, is_lost_lead FROM walkin_enquiries WHERE id = $1`,
+      `SELECT id, name, sr_no, is_lost_lead FROM walkin_enquiries WHERE id = $1`,
       [lead_id]
     );
 
@@ -146,7 +144,8 @@ export async function PUT(req: Request) {
     );
 
     // Create activity log entry
-    const logMessage = `🔄 Lead Restored to Active\nBy: ${restored_by}`;
+    const leadNo = existing[0].sr_no || lead_id;
+    const logMessage = `✅ Restored from Lost Lead to Active Pipeline\nBy: ${restored_by}`;
 
     try {
       await query(
@@ -161,7 +160,7 @@ export async function PUT(req: Request) {
     return NextResponse.json(
       {
         success: true,
-        message: `Lead #${lead_id} restored to active.`,
+        message: `Lead #${leadNo} restored to active.`,
         data: updatedRows[0],
       },
       { status: 200 }

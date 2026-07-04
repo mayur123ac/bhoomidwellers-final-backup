@@ -2,11 +2,14 @@
 // BookingFormModal.tsx — Multi-step Booking Application Form
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import IndianCurrencyInput from "@/components/IndianCurrencyInput";
+import { cleanCurrencyValue, formatIndianNumber } from "@/lib/currency";
 import {
   FaTimes, FaChevronRight, FaChevronLeft, FaUser, FaHome, FaBuilding,
   FaMoneyBillWave, FaHandshake, FaFileAlt, FaCheck, FaPlus, FaTrash,
   FaPen, FaUpload, FaCheckCircle, FaPrint, FaDownload,
 } from "react-icons/fa";
+import { formatCurrencyDisplay, toStorageValue } from "@/lib/currency";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface PaymentRow { date: string; transaction_type: string; amount: string; }
@@ -33,7 +36,7 @@ interface BookingFormData {
   primary_aadhaar_back_file: File | null;
 
   joint_applicants: JointApplicant[];
-  
+
   address: string; pin: string; state: string; country: string;
   // Step 2 — Unit
   property_type: string; floor_number: string; flat_number: string;
@@ -43,6 +46,24 @@ interface BookingFormData {
   // Step 3 — Source
   booking_source: "Direct" | "Channel Partner";
   direct_source: string; channel_partner_name: string; channel_partner_contact: string;
+  // Booking Info
+  booking_date: string; agreement_value: string; booking_amount: string; booking_remarks: string;
+  // Financial Details
+  token_amount: string; ocr_amount: string; ocr_received_date: string; ocr_payment_mode: string; ocr_remarks: string;
+  sdr_amount: string; sdr_payment_date: string; sdr_status: string; sdr_remarks: string;
+  cash_component: string; cash_component_date: string; cash_component_remarks: string;
+  // Registration Details
+  expected_registration_date: string; actual_registration_date: string;
+  registration_status: string; registration_number: string; registration_remarks: string;
+  // Loan Details
+  loan_required: boolean; bank_name: string; loan_executive: string; loan_type: string; loan_reference_no: string; loan_amount: string;
+  sanction_amount: string; sanction_date: string; sanction_status: string; loan_status: string;
+  expected_disbursement_date: string; actual_disbursement_date: string;
+  expected_disbursement_amount: string; disbursement_amount: string; disbursement_status: string;
+  // Custom Charges
+  custom_charges: { charge_name: string; amount: string; remarks: string; }[];
+  internal_notes: string;
+
   // Step 4 — Declaration
   declaration_accepted: boolean; terms_accepted: boolean; consent_accepted: boolean;
   signature_data: string; application_date: string;
@@ -80,9 +101,10 @@ function numberToWords(num: string): string {
 const STEPS = [
   { id: 1, label: "Applicant", icon: <FaUser /> },
   { id: 2, label: "Unit Details", icon: <FaBuilding /> },
-  { id: 3, label: "Booking Source", icon: <FaHandshake /> },
-  { id: 4, label: "Declaration", icon: <FaFileAlt /> },
-  { id: 5, label: "Review", icon: <FaCheckCircle /> },
+  { id: 3, label: "Financials & Registration", icon: <FaMoneyBillWave /> },
+  { id: 4, label: "Source & Notes", icon: <FaHandshake /> },
+  { id: 5, label: "Declaration", icon: <FaFileAlt /> },
+  { id: 6, label: "Review", icon: <FaCheckCircle /> },
 ];
 
 const TERMS = [
@@ -94,6 +116,19 @@ const TERMS = [
   "Late payment interest plus additional handling charges applicable in case of late payment.",
   "If any tax imposed by Government at any time the same will be borne by the purchaser. (e.g., GST, Stamp duty)",
 ];
+
+
+function toNumber(val: string): number {
+  const n = parseFloat(toStorageValue(val));
+  return isNaN(n) ? 0 : n;
+}
+
+function formatINR(n: number): string {
+  return formatCurrencyDisplay(String(n));
+}
+
+
+
 
 function parseIndianAmount(val: string): string {
   if (!val) return "";
@@ -125,11 +160,25 @@ function defaultForm(lead: any): BookingFormData {
     payment_details: [{ date: today, transaction_type: "Cheque", amount: "" }],
     witness_name: "", witness_aadhaar: "",
     booking_source: lead?.source === "Channel Partner" ? "Channel Partner" : "Direct",
-    direct_source: lead?.source !== "Channel Partner" 
-        ? (lead?.source === "Referral" && (lead?.referral_name || lead?.referralName) ? `Referral (${lead?.referral_name || lead?.referralName})` : (lead?.source || "")) 
-        : "",
-    channel_partner_name: lead?.cpName || lead?.cp_name || "", 
+    direct_source: lead?.source !== "Channel Partner"
+      ? (lead?.source === "Referral" && (lead?.referral_name || lead?.referralName) ? `Referral (${lead?.referral_name || lead?.referralName})` : (lead?.source || ""))
+      : "",
+    channel_partner_name: lead?.cpName || lead?.cp_name || "",
     channel_partner_contact: lead?.cpPhone || lead?.cp_phone || "",
+
+    booking_date: today, agreement_value: "", booking_amount: "", booking_remarks: "",
+    token_amount: "", ocr_amount: "", ocr_received_date: "", ocr_payment_mode: "Cheque", ocr_remarks: "",
+    sdr_amount: "", sdr_payment_date: "", sdr_status: "Pending", sdr_remarks: "",
+    cash_component: "", cash_component_date: "", cash_component_remarks: "",
+    expected_registration_date: "", actual_registration_date: "",
+    registration_status: "Pending", registration_number: "", registration_remarks: "",
+    loan_required: false, bank_name: "", loan_executive: "", loan_type: "", loan_reference_no: "", loan_amount: "",
+    sanction_amount: "", sanction_date: "", sanction_status: "Pending", loan_status: "Pending",
+    expected_disbursement_date: "", actual_disbursement_date: "",
+    expected_disbursement_amount: "", disbursement_amount: "", disbursement_status: "Pending",
+    custom_charges: [],
+    internal_notes: "",
+
     declaration_accepted: false, terms_accepted: false, consent_accepted: false,
     signature_data: "", application_date: today,
   };
@@ -202,7 +251,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
   const endDraw = () => {
     isDrawing.current = false;
     const canvas = canvasRef.current; if (!canvas) return;
-    
+
     // Create a temporary canvas with white background for export
     const tempCanvas = document.createElement("canvas");
     tempCanvas.width = canvas.width;
@@ -239,7 +288,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
       if (!form.primary_mobile.trim()) e.primary_mobile = "Mobile is required";
       if (form.primary_aadhaar && !/^\d{12}$/.test(form.primary_aadhaar)) e.primary_aadhaar = "Aadhaar must be exactly 12 digits";
       if (form.primary_pan && !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(form.primary_pan.toUpperCase())) e.primary_pan = "Invalid PAN format (e.g. ABCDE1234F)";
-      
+
       // Validate joint applicants
       form.joint_applicants.forEach((ja, idx) => {
         if (ja.aadhaar && !/^\d{12}$/.test(ja.aadhaar)) (e as any)[`joint_aadhaar_${idx}`] = `Invalid Aadhaar`;
@@ -250,8 +299,11 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
       if (!form.property_type.trim()) e.property_type = "Property type is required";
       if (!form.flat_number.trim()) e.flat_number = "Flat number is required";
       if (!form.consideration_value.trim()) e.consideration_value = "Consideration value is required";
+      if (!form.booking_date) e.booking_date = "Booking date is required";
+      if (!form.agreement_value) e.agreement_value = "Agreement value is required";
+      if (!form.booking_amount) e.booking_amount = "Booking amount is required";
     }
-    if (s === 4) {
+    if (s === 5) {
       if (!form.declaration_accepted) e.declaration_accepted = "Required";
       if (!form.terms_accepted) e.terms_accepted = "Required";
       if (!form.consent_accepted) e.consent_accepted = "Required";
@@ -261,16 +313,16 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
     return Object.keys(e).length === 0;
   };
 
-  const nextStep = () => { if (validate(step)) setStep(s => Math.min(s + 1, 5)); };
+  const nextStep = () => { if (validate(step)) setStep(s => Math.min(s + 1, 6)); };
   const prevStep = () => setStep(s => Math.max(s - 1, 1));
 
   // ── Submit — saves booking only, NO PDF generation ──
   const handleSubmit = async () => {
-    if (!validate(4)) { setStep(4); return; }
+    if (!validate(5)) { setStep(5); return; }
     setIsSubmitting(true);
     try {
       const formData = new FormData();
-      
+
       formData.append("lead_id", lead.id.toString());
       formData.append("primary_name", form.primary_name);
       formData.append("primary_email", form.primary_email);
@@ -299,6 +351,47 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
       formData.append("unit_cost", (form as any).unit_cost || "");
       formData.append("sdr", (form as any).sdr || "");
       formData.append("gst", (form as any).gst || "");
+
+      // New fields
+      formData.append("booking_date", form.booking_date);
+      formData.append("agreement_value", form.agreement_value);
+      formData.append("booking_amount", form.booking_amount);
+      formData.append("booking_remarks", form.booking_remarks);
+      formData.append("token_amount", form.token_amount);
+      formData.append("ocr_amount", form.ocr_amount);
+      formData.append("ocr_received_date", form.ocr_received_date);
+      formData.append("ocr_payment_mode", form.ocr_payment_mode);
+      formData.append("ocr_remarks", form.ocr_remarks);
+      formData.append("sdr_amount", form.sdr_amount);
+      formData.append("sdr_payment_date", form.sdr_payment_date);
+      formData.append("sdr_status", form.sdr_status);
+      formData.append("sdr_remarks", form.sdr_remarks);
+      formData.append("cash_component", form.cash_component);
+      formData.append("cash_component_date", form.cash_component_date);
+      formData.append("cash_component_remarks", form.cash_component_remarks);
+      formData.append("expected_registration_date", form.expected_registration_date);
+      formData.append("actual_registration_date", form.actual_registration_date);
+      formData.append("registration_status", form.registration_status);
+      formData.append("registration_number", form.registration_number);
+      formData.append("registration_remarks", form.registration_remarks);
+      formData.append("loan_required", form.loan_required ? 'true' : 'false');
+      formData.append("bank_name", form.bank_name);
+      formData.append("loan_executive", form.loan_executive);
+      formData.append("loan_type", form.loan_type);
+      formData.append("loan_reference_no", form.loan_reference_no);
+      formData.append("loan_amount", form.loan_amount);
+      formData.append("sanction_amount", form.sanction_amount);
+      formData.append("sanction_date", form.sanction_date);
+      formData.append("sanction_status", form.sanction_status);
+      formData.append("loan_status", form.loan_status);
+      formData.append("expected_disbursement_date", form.expected_disbursement_date);
+      formData.append("actual_disbursement_date", form.actual_disbursement_date);
+      formData.append("expected_disbursement_amount", form.expected_disbursement_amount);
+      formData.append("disbursement_amount", form.disbursement_amount);
+      formData.append("disbursement_status", form.disbursement_status);
+      formData.append("custom_charges", JSON.stringify(form.custom_charges));
+      formData.append("internal_notes", form.internal_notes);
+
       formData.append("declaration_accepted", form.declaration_accepted ? 'true' : 'false');
       formData.append("terms_accepted", form.terms_accepted ? 'true' : 'false');
       formData.append("consent_accepted", form.consent_accepted ? 'true' : 'false');
@@ -334,7 +427,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: lead.name, status: "Closing" }),
-      }).catch(() => {});
+      }).catch(() => { });
 
       fetch("/api/followups", {
         method: "POST",
@@ -347,7 +440,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
           siteVisitDate: null,
           createdAt: new Date().toISOString(),
         }),
-      }).catch(() => {});
+      }).catch(() => { });
 
       // Show confirmation screen — modal stays open, step irrelevant
       setConfirmedBooking(booking);
@@ -446,7 +539,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                 ) : (
                   <>
                     <h2 className={`text-lg font-bold ${textMain}`}>Booking Application Form</h2>
-                    <p className={`text-xs mt-0.5 ${textMuted}`}>Lead #{lead?.id} — {lead?.name}</p>
+                    <p className={`text-xs mt-0.5 ${textMuted}`}>Lead #{lead?.sr_no || lead?.id} — {lead?.name}</p>
                   </>
                 )}
               </div>
@@ -552,529 +645,858 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
             ) : (
               <>
 
-            {/* ── Stepper ── */}
-            <div className={`flex items-center gap-0 px-6 py-3 border-b flex-shrink-0 overflow-x-auto ${isDark ? "bg-[#0D0D12] border-[#2A2A35]" : "bg-white border-[#F1F5F9]"}`}>
-              {STEPS.map((s, i) => (
-                <React.Fragment key={s.id}>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${step > s.id ? (isDark ? "bg-green-600 text-white" : "bg-green-500 text-white") : step === s.id ? (isDark ? "bg-[#9E217B] text-white" : "bg-[#00AEEF] text-white") : (isDark ? "bg-[#1C1C2A] text-[#555568]" : "bg-[#F1F5F9] text-[#9CA3AF]")}`}>
-                      {step > s.id ? <FaCheck className="text-[10px]" /> : s.icon}
-                    </div>
-                    <span className={`text-xs font-semibold hidden sm:block ${step === s.id ? accent : textMuted}`}>{s.label}</span>
-                  </div>
-                  {i < STEPS.length - 1 && (
-                    <div className={`flex-1 h-px mx-2 min-w-[16px] ${step > s.id ? (isDark ? "bg-green-600" : "bg-green-500") : (isDark ? "bg-[#2A2A35]" : "bg-[#E5E7EB]")}`} />
-                  )}
-                </React.Fragment>
-              ))}
-            </div>
-
-            {/* ── Body ── */}
-            <div className={`flex-1 overflow-y-auto p-6 custom-scrollbar ${bg}`}>
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={step}
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -20 }}
-                  transition={{ duration: 0.18 }}
-                >
-
-                  {/* ══════════ STEP 1: Applicant Details ══════════ */}
-                  {step === 1 && (
-
-                    <div className="space-y-6">
-                      {/* Primary Applicant */}
-                      <div>
-                        <p className={sectionTitle}><FaUser className="inline mr-2" />Primary Applicant</p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          {[
-                            { key: "primary_name", label: "Full Name (Mr./Mrs./Ms.)", placeholder: "Enter full name" },
-                            { key: "primary_email", label: "Email ID", placeholder: "email@example.com" },
-                            { key: "primary_mobile", label: "Mobile Number", placeholder: "10-digit mobile" },
-                            { key: "primary_pan", label: "PAN Number", placeholder: "ABCDE1234F" },
-                            { key: "primary_aadhaar", label: "Aadhaar Number", placeholder: "12-digit Aadhaar" },
-                            { key: "primary_occupation", label: "Occupation", placeholder: "e.g. Business" },
-                            { key: "primary_nationality", label: "Nationality", placeholder: "Indian" },
-                          ].map(({ key, label, placeholder }) => (
-                            <div key={key}>
-                              <label className={labelCls}>{label}</label>
-                              <input value={(form as any)[key]} onChange={e => set(key as keyof BookingFormData, e.target.value as any)} placeholder={placeholder} className={`${inputCls} ${errors[key as keyof BookingFormData] ? "!border-red-500" : ""}`} />
-                              {errors[key as keyof BookingFormData] && <p className={errCls}>{errors[key as keyof BookingFormData]}</p>}
-                            </div>
-                          ))}
+                {/* ── Stepper ── */}
+                <div className={`flex items-center gap-0 px-6 py-3 border-b flex-shrink-0 overflow-x-auto ${isDark ? "bg-[#0D0D12] border-[#2A2A35]" : "bg-white border-[#F1F5F9]"}`}>
+                  {STEPS.map((s, i) => (
+                    <React.Fragment key={s.id}>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${step > s.id ? (isDark ? "bg-green-600 text-white" : "bg-green-500 text-white") : step === s.id ? (isDark ? "bg-[#9E217B] text-white" : "bg-[#00AEEF] text-white") : (isDark ? "bg-[#1C1C2A] text-[#555568]" : "bg-[#F1F5F9] text-[#9CA3AF]")}`}>
+                          {step > s.id ? <FaCheck className="text-[10px]" /> : s.icon}
                         </div>
-                        <div className="mt-4 p-4 border rounded-xl bg-black/5 dark:bg-white/5 border-dashed">
-                          <p className={`text-xs font-bold mb-3 ${textMain}`}>Applicant Documents (Max 10MB each)</p>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div>
-                              <label className={labelCls}>Upload PAN Card (Front)</label>
-                              <input type="file" accept=".jpg,.jpeg,.png,.pdf" onChange={e => set("primary_pan_file", e.target.files?.[0] || null)} className="w-full text-xs" />
-                            </div>
-                            <div>
-                              <label className={labelCls}>Upload Aadhaar Card (Front)</label>
-                              <input type="file" accept=".jpg,.jpeg,.png,.pdf" onChange={e => set("primary_aadhaar_front_file", e.target.files?.[0] || null)} className="w-full text-xs" />
-                            </div>
-                            <div>
-                              <label className={labelCls}>Upload Aadhaar Card (Back) <span className="opacity-60 font-normal">(Optional)</span></label>
-                              <input type="file" accept=".jpg,.jpeg,.png,.pdf" onChange={e => set("primary_aadhaar_back_file", e.target.files?.[0] || null)} className="w-full text-xs" />
-                            </div>
-                          </div>
-                        </div>
+                        <span className={`text-xs font-semibold hidden sm:block ${step === s.id ? accent : textMuted}`}>{s.label}</span>
                       </div>
+                      {i < STEPS.length - 1 && (
+                        <div className={`flex-1 h-px mx-2 min-w-[16px] ${step > s.id ? (isDark ? "bg-green-600" : "bg-green-500") : (isDark ? "bg-[#2A2A35]" : "bg-[#E5E7EB]")}`} />
+                      )}
+                    </React.Fragment>
+                  ))}
+                </div>
 
-                      {/* Dynamic Joint Applicants */}
-                      <div className={`border-t pt-6 ${divider}`}>
-                        <div className="flex items-center justify-between mb-4">
-                          <p className={sectionTitle} style={{ marginBottom: 0 }}><FaUser className="inline mr-2 opacity-60" />Joint Applicants</p>
-                          <button
-                            onClick={() => set("joint_applicants", [...form.joint_applicants, { name: "", email: "", mobile: "", pan: "", aadhaar: "", occupation: "", nationality: "Indian", pan_file: null, aadhaar_front_file: null, aadhaar_back_file: null }])}
-                            className="text-xs px-3 py-1.5 rounded bg-black/10 dark:bg-white/10 hover:bg-black/20 dark:hover:bg-white/20 transition"
-                          >
-                            + Add Joint Applicant
-                          </button>
-                        </div>
-                        
-                        {form.joint_applicants.length === 0 && (
-                          <p className={`text-xs ${textMuted} italic mb-2`}>No joint applicants added.</p>
-                        )}
-                        
+                {/* ── Body ── */}
+                <div className={`flex-1 overflow-y-auto p-6 custom-scrollbar ${bg}`}>
+                  <AnimatePresence mode="wait">
+                    <motion.div
+                      key={step}
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -20 }}
+                      transition={{ duration: 0.18 }}
+                    >
+
+                      {/* ══════════ STEP 1: Applicant Details ══════════ */}
+                      {step === 1 && (
+
                         <div className="space-y-6">
-                          {form.joint_applicants.map((ja, idx) => (
-                            <div key={idx} className="p-4 border border-dashed rounded-xl relative">
-                              <button
-                                onClick={() => set("joint_applicants", form.joint_applicants.filter((_, i) => i !== idx))}
-                                className="absolute top-2 right-2 text-red-500 hover:text-red-700 text-xs p-1"
-                              >
-                                <FaTimes />
-                              </button>
-                              <p className={`text-xs font-bold mb-3 ${textMain}`}>Joint Applicant {idx + 1}</p>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                                {[
-                                  { k: "name", label: "Full Name", ph: "Enter full name" },
-                                  { k: "email", label: "Email ID", ph: "email@example.com" },
-                                  { k: "mobile", label: "Mobile Number", ph: "10-digit mobile" },
-                                  { k: "pan", label: "PAN Number", ph: "ABCDE1234F" },
-                                  { k: "aadhaar", label: "Aadhaar Number", ph: "12-digit Aadhaar" },
-                                  { k: "occupation", label: "Occupation", ph: "e.g. Service" },
-                                  { k: "nationality", label: "Nationality", ph: "Indian" }
-                                ].map(f => (
-                                  <div key={f.k}>
-                                    <label className={labelCls}>{f.label}</label>
-                                    <input 
-                                      value={(ja as any)[f.k]} 
-                                      onChange={e => {
-                                        const arr = [...form.joint_applicants];
-                                        (arr[idx] as any)[f.k] = e.target.value;
-                                        set("joint_applicants", arr);
-                                      }}
-                                      placeholder={f.ph} className={inputCls} 
-                                    />
-                                  </div>
-                                ))}
-                              </div>
-                              <div className="mt-2 pt-3 border-t border-dashed border-gray-300 dark:border-gray-700">
-                                <p className={`text-[11px] font-semibold mb-2 ${textMuted}`}>Documents (Max 10MB each)</p>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                  <div>
-                                    <label className={labelCls}>Upload PAN Card (Front)</label>
-                                    <input type="file" accept=".jpg,.jpeg,.png,.pdf" onChange={e => {
-                                      const arr = [...form.joint_applicants];
-                                      arr[idx].pan_file = e.target.files?.[0] || null;
-                                      set("joint_applicants", arr);
-                                    }} className="w-full text-xs" />
-                                  </div>
-                                  <div>
-                                    <label className={labelCls}>Upload Aadhaar (Front)</label>
-                                    <input type="file" accept=".jpg,.jpeg,.png,.pdf" onChange={e => {
-                                      const arr = [...form.joint_applicants];
-                                      arr[idx].aadhaar_front_file = e.target.files?.[0] || null;
-                                      set("joint_applicants", arr);
-                                    }} className="w-full text-xs" />
-                                  </div>
+                          {/* Primary Applicant */}
+                          <div>
+                            <p className={sectionTitle}><FaUser className="inline mr-2" />Primary Applicant</p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              {[
+                                { key: "primary_name", label: "Full Name (Mr./Mrs./Ms.)", placeholder: "Enter full name" },
+                                { key: "primary_email", label: "Email ID", placeholder: "email@example.com" },
+                                { key: "primary_mobile", label: "Mobile Number", placeholder: "10-digit mobile" },
+                                { key: "primary_pan", label: "PAN Number", placeholder: "ABCDE1234F" },
+                                { key: "primary_aadhaar", label: "Aadhaar Number", placeholder: "12-digit Aadhaar" },
+                                { key: "primary_occupation", label: "Occupation", placeholder: "e.g. Business" },
+                                { key: "primary_nationality", label: "Nationality", placeholder: "Indian" },
+                              ].map(({ key, label, placeholder }) => (
+                                <div key={key}>
+                                  <label className={labelCls}>{label}</label>
+                                  <input
+                                    value={(form as any)[key]}
+                                    onChange={e => {
+                                      let val = e.target.value;
+                                      if (key === "primary_pan") val = val.toUpperCase();
+                                      set(key as keyof BookingFormData, val as any);
+                                    }}
+                                    placeholder={placeholder}
+                                    className={`${inputCls} ${errors[key as keyof BookingFormData] ? "!border-red-500" : ""}`}
+                                  />
+                                  {errors[key as keyof BookingFormData] && <p className={errCls}>{errors[key as keyof BookingFormData]}</p>}
+                                </div>
+                              ))}
+                            </div>
+                            <div className="mt-4 p-4 border rounded-xl bg-black/5 dark:bg-white/5 border-dashed">
+                              <p className={`text-xs font-bold mb-3 ${textMain}`}>Applicant Documents (Max 10MB each)</p>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                  <label className={labelCls}>Upload PAN Card (Front)</label>
+                                  <input type="file" accept=".jpg,.jpeg,.png,.pdf" onChange={e => set("primary_pan_file", e.target.files?.[0] || null)} className="w-full text-xs" />
+                                </div>
+                                <div>
+                                  <label className={labelCls}>Upload Aadhaar Card (Front)</label>
+                                  <input type="file" accept=".jpg,.jpeg,.png,.pdf" onChange={e => set("primary_aadhaar_front_file", e.target.files?.[0] || null)} className="w-full text-xs" />
+                                </div>
+                                <div>
+                                  <label className={labelCls}>Upload Aadhaar Card (Back) <span className="opacity-60 font-normal">(Optional)</span></label>
+                                  <input type="file" accept=".jpg,.jpeg,.png,.pdf" onChange={e => set("primary_aadhaar_back_file", e.target.files?.[0] || null)} className="w-full text-xs" />
                                 </div>
                               </div>
                             </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Residence */}
-                      <div className={`border-t pt-6 ${divider}`}>
-                        <p className={sectionTitle}><FaHome className="inline mr-2" />Residential Address</p>
-                        <div className="space-y-4">
-                          <div>
-                            <label className={labelCls}>Address</label>
-                            <textarea value={form.address} onChange={e => set("address", e.target.value)} placeholder="Full residential address" rows={2} className={`${inputCls} resize-none`} />
                           </div>
-                          <div className="grid grid-cols-3 gap-4">
-                            {[
-                              { key: "pin", label: "PIN Code", placeholder: "400001" },
-                              { key: "state", label: "State", placeholder: "Maharashtra" },
-                              { key: "country", label: "Country", placeholder: "India" },
-                            ].map(({ key, label, placeholder }) => (
-                              <div key={key}>
-                                <label className={labelCls}>{label}</label>
-                                <input value={(form as any)[key]} onChange={e => set(key as keyof BookingFormData, e.target.value as any)} placeholder={placeholder} className={inputCls} />
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
 
-                  {/* ══════════ STEP 2: Unit Details ══════════ */}
-                  {step === 2 && (
-                    <div className="space-y-6">
-                      <div>
-                        <p className={sectionTitle}><FaBuilding className="inline mr-2" />Details of Unit Applied For</p>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                          {[
-                            { key: "property_type", label: "Type", placeholder: "2 BHK" },
-                            { key: "floor_number", label: "Floor", placeholder: "12" },
-                            { key: "flat_number", label: "Flat No.", placeholder: "A-1201" },
-                            { key: "carpet_area", label: "Carpet Area (sq.ft.)", placeholder: "1050" },
-                          ].map(({ key, label, placeholder }) => (
-                            <div key={key}>
-                              <label className={labelCls}>{label}</label>
-                              <input value={(form as any)[key]} onChange={e => set(key as keyof BookingFormData, e.target.value as any)} placeholder={placeholder} className={`${inputCls} ${errors[key as keyof BookingFormData] ? "!border-red-500" : ""}`} />
-                              {errors[key as keyof BookingFormData] && <p className={errCls}>{errors[key as keyof BookingFormData]}</p>}
+                          {/* Dynamic Joint Applicants */}
+                          <div className={`border-t pt-6 ${divider}`}>
+                            <div className="flex items-center justify-between mb-4">
+                              <p className={sectionTitle} style={{ marginBottom: 0 }}><FaUser className="inline mr-2 opacity-60" />Joint Applicants</p>
+                              <button
+                                onClick={() => set("joint_applicants", [...form.joint_applicants, { name: "", email: "", mobile: "", pan: "", aadhaar: "", occupation: "", nationality: "Indian", pan_file: null, aadhaar_front_file: null, aadhaar_back_file: null }])}
+                                className="text-xs px-3 py-1.5 rounded bg-black/10 dark:bg-white/10 hover:bg-black/20 dark:hover:bg-white/20 transition"
+                              >
+                                + Add Joint Applicant
+                              </button>
                             </div>
-                          ))}
-                        </div>
-                        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          <div>
-                            <label className={labelCls}>Consideration Value (₹)</label>
-                            <input value={form.consideration_value} onChange={e => set("consideration_value", e.target.value.replace(/[^0-9,]/g, ""))} placeholder="e.g. 52,00,000" className={`${inputCls} ${errors.consideration_value ? "!border-red-500" : ""}`} />
-                            {errors.consideration_value && <p className={errCls}>{errors.consideration_value}</p>}
-                          </div>
-                          <div>
-                            <label className={labelCls}>Value In Words</label>
-                            <input value={form.consideration_value_words} onChange={e => set("consideration_value_words", e.target.value)} placeholder="Auto-generated" className={inputCls} />
-                          </div>
-                        </div>
-                        <div className="mt-4">
-                          <label className={labelCls}>Parking Details</label>
-                          <input value={form.parking_details} onChange={e => set("parking_details", e.target.value)} placeholder="e.g. 1 covered parking" className={inputCls} />
-                        </div>
-                      </div>
 
-                      {/* Payment Table */}
-                      <div className={`border-t pt-6 ${divider}`}>
-                        <div className="flex items-center justify-between mb-3">
-                          <p className={sectionTitle}><FaMoneyBillWave className="inline mr-2" />Payment Details</p>
-                          <button onClick={addPayment} className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${btnPrimary}`}>
-                            <FaPlus className="text-[10px]" /> Add Row
-                          </button>
-                        </div>
-                        <div className={`rounded-xl border overflow-hidden ${isDark ? "border-[#2A2A35]" : "border-[#E5E7EB]"}`}>
-                          <table className="w-full text-sm">
-                            <thead>
-                              <tr className={isDark ? "bg-[#1A1A28]" : "bg-[#F1F5F9]"}>
-                                <th className={`text-left px-3 py-2 text-xs font-bold w-8 ${textMuted}`}>Sr.</th>
-                                <th className={`text-left px-3 py-2 text-xs font-bold ${textMuted}`}>Date</th>
-                                <th className={`text-left px-3 py-2 text-xs font-bold ${textMuted}`}>Transaction Detail</th>
-                                <th className={`text-left px-3 py-2 text-xs font-bold ${textMuted}`}>Amount (₹)</th>
-                                <th className="w-8" />
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {form.payment_details.map((row, i) => (
-                                <tr key={i} className={`border-t ${isDark ? "border-[#2A2A35]" : "border-[#F1F5F9]"}`}>
-                                  <td className={`px-3 py-2 text-xs ${textMuted}`}>{i + 1}.</td>
-                                  <td className="px-2 py-1.5"><input type="date" value={row.date} onChange={e => updatePayment(i, "date", e.target.value)} className={`${inputCls} text-xs py-1.5`} /></td>
-                                  <td className="px-2 py-1.5">
-                                    <select value={row.transaction_type} onChange={e => updatePayment(i, "transaction_type", e.target.value)} className={`${inputCls} text-xs py-1.5`}>
-                                      {["Cheque", "NEFT/RTGS", "Cash", "UPI", "Demand Draft", "Other"].map(v => <option key={v} value={v}>{v}</option>)}
-                                    </select>
-                                  </td>
-                                  <td className="px-2 py-1.5"><input value={row.amount} onChange={e => updatePayment(i, "amount", e.target.value.replace(/[^0-9]/g, ""))} placeholder="0" className={`${inputCls} text-xs py-1.5`} /></td>
-                                  <td className="px-2">
-                                    <button onClick={() => removePayment(i)} className="text-red-400 hover:text-red-300 cursor-pointer"><FaTrash className="text-xs" /></button>
-                                  </td>
-                                </tr>
+                            {form.joint_applicants.length === 0 && (
+                              <p className={`text-xs ${textMuted} italic mb-2`}>No joint applicants added.</p>
+                            )}
+
+                            <div className="space-y-6">
+                              {form.joint_applicants.map((ja, idx) => (
+                                <div key={idx} className="p-4 border border-dashed rounded-xl relative">
+                                  <button
+                                    onClick={() => set("joint_applicants", form.joint_applicants.filter((_, i) => i !== idx))}
+                                    className="absolute top-2 right-2 text-red-500 hover:text-red-700 text-xs p-1"
+                                  >
+                                    <FaTimes />
+                                  </button>
+                                  <p className={`text-xs font-bold mb-3 ${textMain}`}>Joint Applicant {idx + 1}</p>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                                    {[
+                                      { k: "name", label: "Full Name", ph: "Enter full name" },
+                                      { k: "email", label: "Email ID", ph: "email@example.com" },
+                                      { k: "mobile", label: "Mobile Number", ph: "10-digit mobile" },
+                                      { k: "pan", label: "PAN Number", ph: "ABCDE1234F" },
+                                      { k: "aadhaar", label: "Aadhaar Number", ph: "12-digit Aadhaar" },
+                                      { k: "occupation", label: "Occupation", ph: "e.g. Service" },
+                                      { k: "nationality", label: "Nationality", ph: "Indian" }
+                                    ].map(f => (
+                                      <div key={f.k}>
+                                        <label className={labelCls}>{f.label}</label>
+                                        <input
+                                          value={(ja as any)[f.k]}
+                                          onChange={e => {
+                                            let val = e.target.value;
+                                            if (f.k === "pan") val = val.toUpperCase();
+                                            const arr = [...form.joint_applicants];
+                                            (arr[idx] as any)[f.k] = val;
+                                            set("joint_applicants", arr);
+                                          }}
+                                          placeholder={f.ph} className={inputCls}
+                                        />
+                                      </div>
+                                    ))}
+                                  </div>
+                                  <div className="mt-2 pt-3 border-t border-dashed border-gray-300 dark:border-gray-700">
+                                    <p className={`text-[11px] font-semibold mb-2 ${textMuted}`}>Documents (Max 10MB each)</p>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                      <div>
+                                        <label className={labelCls}>Upload PAN Card (Front)</label>
+                                        <input type="file" accept=".jpg,.jpeg,.png,.pdf" onChange={e => {
+                                          const arr = [...form.joint_applicants];
+                                          arr[idx].pan_file = e.target.files?.[0] || null;
+                                          set("joint_applicants", arr);
+                                        }} className="w-full text-xs" />
+                                      </div>
+                                      <div>
+                                        <label className={labelCls}>Upload Aadhaar (Front)</label>
+                                        <input type="file" accept=".jpg,.jpeg,.png,.pdf" onChange={e => {
+                                          const arr = [...form.joint_applicants];
+                                          arr[idx].aadhaar_front_file = e.target.files?.[0] || null;
+                                          set("joint_applicants", arr);
+                                        }} className="w-full text-xs" />
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
                               ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-
-                      {/* Witness */}
-                      <div className={`border-t pt-6 ${divider}`}>
-                        <p className={sectionTitle}>Witness Details</p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          <div>
-                            <label className={labelCls}>Witness Name</label>
-                            <input value={form.witness_name} onChange={e => set("witness_name", e.target.value)} placeholder="Full name" className={inputCls} />
-                          </div>
-                          <div>
-                            <label className={labelCls}>Aadhaar Number</label>
-                            <input value={form.witness_aadhaar} onChange={e => set("witness_aadhaar", e.target.value)} placeholder="12-digit Aadhaar" className={inputCls} />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* ══════════ STEP 3: Booking Source ══════════ */}
-                  {step === 3 && (
-                    <div className="space-y-6">
-                      <p className={sectionTitle}><FaHandshake className="inline mr-2" />Source of Booking</p>
-                      <p className={`text-xs ${textMuted}`}>(To be filled in by the sales manager prior to signature of customer)</p>
-                      <div className="flex gap-6">
-                        {(["Direct", "Channel Partner"] as const).map(src => (
-                          <label key={src} className="flex items-center gap-2 cursor-pointer">
-                            <div onClick={() => set("booking_source", src)} className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${form.booking_source === src ? (isDark ? "border-[#9E217B] bg-[#9E217B]" : "border-[#00AEEF] bg-[#00AEEF]") : (isDark ? "border-[#2A2A35]" : "border-[#9CA3AF]")}`}>
-                              {form.booking_source === src && <div className="w-2 h-2 rounded-full bg-white" />}
                             </div>
-                            <span className={`font-semibold text-sm ${textMain}`}>{src}</span>
-                          </label>
-                        ))}
-                      </div>
+                          </div>
 
-                      {form.booking_source === "Direct" && (
-                        <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}>
-                          <label className={labelCls}>Please Specify Source</label>
-                          <input value={form.direct_source} onChange={e => set("direct_source", e.target.value)} placeholder="e.g. Advertisement, Exhibition, Website..." className={inputCls} />
-                        </motion.div>
+                          {/* Residence */}
+                          <div className={`border-t pt-6 ${divider}`}>
+                            <p className={sectionTitle}><FaHome className="inline mr-2" />Residential Address</p>
+                            <div className="space-y-4">
+                              <div>
+                                <label className={labelCls}>Address</label>
+                                <textarea value={form.address} onChange={e => set("address", e.target.value)} placeholder="Full residential address" rows={2} className={`${inputCls} resize-none`} />
+                              </div>
+                              <div className="grid grid-cols-3 gap-4">
+                                {[
+                                  { key: "pin", label: "PIN Code", placeholder: "400001" },
+                                  { key: "state", label: "State", placeholder: "Maharashtra" },
+                                  { key: "country", label: "Country", placeholder: "India" },
+                                ].map(({ key, label, placeholder }) => (
+                                  <div key={key}>
+                                    <label className={labelCls}>{label}</label>
+                                    <input value={(form as any)[key]} onChange={e => set(key as keyof BookingFormData, e.target.value as any)} placeholder={placeholder} className={inputCls} />
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
                       )}
 
-                      {form.booking_source === "Channel Partner" && (
-                        <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div>
-                              <label className={labelCls}>Channel Partner Name</label>
-                              <input value={form.channel_partner_name} onChange={e => set("channel_partner_name", e.target.value)} placeholder="Partner firm / individual name" className={inputCls} />
+                      {/* ══════════ STEP 2: Unit Details ══════════ */}
+                      {step === 2 && (
+                        <div className="space-y-6">
+                          <div>
+                            <p className={sectionTitle}><FaBuilding className="inline mr-2" />Details of Unit Applied For</p>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                              {[
+                                { key: "property_type", label: "Type", placeholder: "2 BHK" },
+                                { key: "floor_number", label: "Floor", placeholder: "12" },
+                                { key: "flat_number", label: "Flat No.", placeholder: "A-1201" },
+                                { key: "carpet_area", label: "Carpet Area (sq.ft.)", placeholder: "1050" },
+                              ].map(({ key, label, placeholder }) => (
+                                <div key={key}>
+                                  <label className={labelCls}>{label}</label>
+                                  <input
+                                    value={(form as any)[key]}
+                                    onChange={e => {
+                                      let val = e.target.value;
+                                      if (key === "flat_number") val = val.toUpperCase();
+                                      set(key as keyof BookingFormData, val as any);
+                                    }}
+                                    placeholder={placeholder}
+                                    className={`${inputCls} ${errors[key as keyof BookingFormData] ? "!border-red-500" : ""}`}
+                                  />
+                                  {errors[key as keyof BookingFormData] && <p className={errCls}>{errors[key as keyof BookingFormData]}</p>}
+                                </div>
+                              ))}
                             </div>
-                            <div>
-                              <label className={labelCls}>Contact Number</label>
-                              <input value={form.channel_partner_contact} onChange={e => set("channel_partner_contact", e.target.value)} placeholder="10-digit mobile" className={inputCls} />
+                            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              <div>
+                                <label className={labelCls}>Consideration Value</label>
+                                <IndianCurrencyInput value={form.consideration_value} onChange={val => set("consideration_value", val)} placeholder="52,00,000" className={`${inputCls} ${errors.consideration_value ? "!border-red-500" : ""}`} />
+                                {errors.consideration_value && <p className={errCls}>{errors.consideration_value}</p>}
+                              </div>
+                              <div>
+                                <label className={labelCls}>Value In Words</label>
+                                <input value={form.consideration_value_words} onChange={e => set("consideration_value_words", e.target.value)} placeholder="Auto-generated" className={inputCls} />
+                              </div>
+                            </div>
+                            <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                              <div>
+                                <label className={labelCls}>Booking Date</label>
+                                <input type="date" value={form.booking_date} onChange={e => set("booking_date", e.target.value)} className={`${inputCls} ${errors.booking_date ? "!border-red-500" : ""}`} />
+                                {errors.booking_date && <p className={errCls}>{errors.booking_date}</p>}
+                              </div>
+                              <div>
+                                <label className={labelCls}>Agreement Value</label>
+                                <IndianCurrencyInput value={form.agreement_value} onChange={val => set("agreement_value", val)} placeholder="50,00,000" className={`${inputCls} ${errors.agreement_value ? "!border-red-500" : ""}`} />
+                                {errors.agreement_value && <p className={errCls}>{errors.agreement_value}</p>}
+                              </div>
+                              <div>
+                                <label className={labelCls}>Booking Amount</label>
+                                <IndianCurrencyInput value={form.booking_amount} onChange={val => set("booking_amount", val)} placeholder="1,00,000" className={`${inputCls} ${errors.booking_amount ? "!border-red-500" : ""}`} />
+                                {errors.booking_amount && <p className={errCls}>{errors.booking_amount}</p>}
+                              </div>
+                            </div>
+                            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              <div>
+                                <label className={labelCls}>Parking Details</label>
+                                <input value={form.parking_details} onChange={e => set("parking_details", e.target.value)} placeholder="e.g. 1 covered parking" className={inputCls} />
+                              </div>
+                              <div>
+                                <label className={labelCls}>Booking Remarks</label>
+                                <input value={form.booking_remarks} onChange={e => set("booking_remarks", e.target.value)} placeholder="Any initial remarks" className={inputCls} />
+                              </div>
                             </div>
                           </div>
-                        </motion.div>
+
+                          {/* Payment Table */}
+                          <div className={`border-t pt-6 ${divider}`}>
+                            <div className="flex items-center justify-between mb-3">
+                              <p className={sectionTitle}><FaMoneyBillWave className="inline mr-2" />Payment Details</p>
+                              <button onClick={addPayment} className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${btnPrimary}`}>
+                                <FaPlus className="text-[10px]" /> Add Row
+                              </button>
+                            </div>
+                            <div className={`rounded-xl border overflow-hidden ${isDark ? "border-[#2A2A35]" : "border-[#E5E7EB]"}`}>
+                              <table className="w-full text-sm">
+                                <thead>
+                                  <tr className={isDark ? "bg-[#1A1A28]" : "bg-[#F1F5F9]"}>
+                                    <th className={`text-left px-3 py-2 text-xs font-bold w-8 ${textMuted}`}>Sr.</th>
+                                    <th className={`text-left px-3 py-2 text-xs font-bold ${textMuted}`}>Date</th>
+                                    <th className={`text-left px-3 py-2 text-xs font-bold ${textMuted}`}>Transaction Detail</th>
+                                    <th className={`text-left px-3 py-2 text-xs font-bold ${textMuted}`}>Amount (₹)</th>
+                                    <th className="w-8" />
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {form.payment_details.map((row, i) => (
+                                    <tr key={i} className={`border-t ${isDark ? "border-[#2A2A35]" : "border-[#F1F5F9]"}`}>
+                                      <td className={`px-3 py-2 text-xs ${textMuted}`}>{i + 1}.</td>
+                                      <td className="px-2 py-1.5"><input type="date" value={row.date} onChange={e => updatePayment(i, "date", e.target.value)} className={`${inputCls} text-xs py-1.5`} /></td>
+                                      <td className="px-2 py-1.5">
+                                        <select value={row.transaction_type} onChange={e => updatePayment(i, "transaction_type", e.target.value)} className={`${inputCls} text-xs py-1.5`}>
+                                          {["Cheque", "NEFT/RTGS", "Cash", "UPI", "Demand Draft", "Other"].map(v => <option key={v} value={v}>{v}</option>)}
+                                        </select>
+                                      </td>
+                                      <td className="px-2 py-1.5"><IndianCurrencyInput value={row.amount} onChange={val => updatePayment(i, "amount", val)} placeholder="0" className={`${inputCls} text-xs py-1.5`} /></td>
+                                      <td className="px-2">
+                                        <button onClick={() => removePayment(i)} className="text-red-400 hover:text-red-300 cursor-pointer"><FaTrash className="text-xs" /></button>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+
+                          {/* Witness */}
+                          <div className={`border-t pt-6 ${divider}`}>
+                            <p className={sectionTitle}>Witness Details</p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              <div>
+                                <label className={labelCls}>Witness Name</label>
+                                <input value={form.witness_name} onChange={e => set("witness_name", e.target.value)} placeholder="Full name" className={inputCls} />
+                              </div>
+                              <div>
+                                <label className={labelCls}>Aadhaar Number</label>
+                                <input value={form.witness_aadhaar} onChange={e => set("witness_aadhaar", e.target.value)} placeholder="12-digit Aadhaar" className={inputCls} />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
                       )}
-                    </div>
-                  )}
 
-                  {/* ══════════ STEP 4: Declaration ══════════ */}
-                  {step === 4 && (
-                    <div className="space-y-6">
-                      <p className={sectionTitle}><FaFileAlt className="inline mr-2" />Declaration & Signature</p>
-
-                      {/* Declaration Text */}
-                      <div className={`rounded-xl border p-5 space-y-3 text-sm leading-relaxed ${isDark ? "bg-[#14141B] border-[#2A2A35]" : "bg-[#F8FAFC] border-[#E5E7EB]"}`}>
-                        <p className={textMain}><span className="font-bold">a.</span> I/We hereby solemnly declare that all the foregoing facts are true to the best of my/our knowledge and nothing relevant has been concealed or suppressed. I/We also undertake to Inform The Company of any future changes related to the information and details shown in this Application Form.</p>
-                        <p className={textMain}><span className="font-bold">b.</span> I/We hereby also declare I/We have read and understood the terms and conditions and all other information/conditions stated in the accompanying GENERAL TERMS & CONDITIONS including consideration of the units and price & payment schedules. By signing this Application form, I/We do hereby solemnly accept and agree to abide by the terms & conditions as stipulated in the accompanying GENERAL TERMS & CONDITIONS, which may be modified or amended by the Company.</p>
-                        <p className={textMain}><span className="font-bold">c.</span> I/We hereby give my/our irrevocable consent to become member of a body the owners to be formed in accordance with the applicable acts, rules and bye laws and execute necessary documents as and when required.</p>
-                        <p className={`font-semibold ${accent}`}>I hereby agree to all the information mentioned above and the subsequent Terms and Conditions.</p>
-                      </div>
-
-                      {/* Terms & Conditions */}
-                      <div>
-                        <p className={`font-bold text-sm mb-2 ${textMain}`}>Terms and Conditions: <span className={`text-xs font-normal ${textMuted}`}>(Scroll to bottom to enable checkboxes)</span></p>
-                        <div
-                          ref={termsRef}
-                          onScroll={() => {
-                            const el = termsRef.current;
-                            if (el && el.scrollTop + el.clientHeight >= el.scrollHeight - 10) setTermsScrolled(true);
-                          }}
-                          className={`h-40 overflow-y-auto rounded-xl border p-4 text-xs space-y-2 custom-scrollbar ${isDark ? "bg-[#14141B] border-[#2A2A35]" : "bg-[#F8FAFC] border-[#E5E7EB]"}`}
-                        >
-                          {TERMS.map((t, i) => (
-                            <p key={i} className={textMuted}><span className="font-bold">{i + 1}.</span> {t}</p>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Checkboxes */}
-                      <div className={`space-y-3 ${!termsScrolled ? "opacity-50 pointer-events-none" : ""}`}>
-                        {[
-                          { key: "declaration_accepted" as keyof BookingFormData, label: "All information provided is true and accurate to the best of my knowledge." },
-                          { key: "terms_accepted" as keyof BookingFormData, label: "I have read and accept all Terms & Conditions mentioned above." },
-                          { key: "consent_accepted" as keyof BookingFormData, label: "I give my irrevocable consent as stated in the declaration above." },
-                        ].map(({ key, label }) => (
-                          <label key={key} className="flex items-start gap-3 cursor-pointer">
-                            <div onClick={() => set(key, !form[key] as any)} className={`mt-0.5 w-5 h-5 rounded flex-shrink-0 border-2 flex items-center justify-center transition-colors ${(form[key] as boolean) ? (isDark ? "bg-[#9E217B] border-[#9E217B]" : "bg-[#00AEEF] border-[#00AEEF]") : (isDark ? "border-[#2A2A35]" : "border-[#9CA3AF]")}`}>
-                              {(form[key] as boolean) && <FaCheck className="text-white text-[9px]" />}
+                      {/* ══════════ STEP 3: Financials & Registration ══════════ */}
+                      {step === 3 && (
+                        <div className="space-y-6">
+                          {/* Financial Details */}
+                          <div>
+                            <p className={sectionTitle}><FaMoneyBillWave className="inline mr-2" />Financial Details</p>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                              <div>
+                                <label className={labelCls}>Token Amount</label>
+                                <IndianCurrencyInput value={form.token_amount} onChange={val => set("token_amount", val)} placeholder="50,000" className={inputCls} />
+                              </div>
+                              <div>
+                                <label className={labelCls}>OCR Amount</label>
+                                <IndianCurrencyInput value={form.ocr_amount} onChange={val => set("ocr_amount", val)} placeholder="5,00,000" className={inputCls} />
+                              </div>
+                              <div>
+                                <label className={labelCls}>OCR Received Date</label>
+                                <input type="date" value={form.ocr_received_date} onChange={e => set("ocr_received_date", e.target.value)} className={inputCls} />
+                              </div>
                             </div>
-                            <span className={`text-sm ${textMain}`}>{label}</span>
-                          </label>
-                        ))}
-                        {(errors.declaration_accepted || errors.terms_accepted || errors.consent_accepted) && (
-                          <p className={errCls}>Please accept all declarations.</p>
-                        )}
-                      </div>
-
-                      {/* Application Date */}
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className={labelCls}>Application Date</label>
-                          <input value={form.application_date} readOnly className={`${inputCls} opacity-70 cursor-not-allowed`} />
-                        </div>
-                      </div>
-
-                      {/* Signature Pad */}
-                      <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <label className={`${labelCls} mb-0`}>Signature of Primary Applicant</label>
-                          <div className="flex gap-2">
-                            <button onClick={() => setSigMode("draw")} className={`text-xs px-3 py-1 rounded-lg font-semibold cursor-pointer transition-colors flex items-center gap-1 ${sigMode === "draw" ? btnPrimary : btnSecondary}`}><FaPen className="text-[10px]" /> Draw</button>
-                            <button onClick={() => setSigMode("upload")} className={`text-xs px-3 py-1 rounded-lg font-semibold cursor-pointer transition-colors flex items-center gap-1 ${sigMode === "upload" ? btnPrimary : btnSecondary}`}><FaUpload className="text-[10px]" /> Upload</button>
-                            {form.signature_data && <button onClick={clearSig} className="text-xs px-3 py-1 rounded-lg font-semibold cursor-pointer text-red-400 hover:bg-red-500/10 border border-red-400/30">Clear</button>}
+                            <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                              <div>
+                                <label className={labelCls}>OCR Payment Mode</label>
+                                <select value={form.ocr_payment_mode} onChange={e => set("ocr_payment_mode", e.target.value)} className={inputCls}>
+                                  {["Cheque", "NEFT/RTGS", "Cash", "UPI", "Demand Draft", "Other"].map(v => <option key={v} value={v}>{v}</option>)}
+                                </select>
+                              </div>
+                              <div className="sm:col-span-2">
+                                <label className={labelCls}>OCR Remarks</label>
+                                <input value={form.ocr_remarks} onChange={e => set("ocr_remarks", e.target.value)} placeholder="Remarks" className={inputCls} />
+                              </div>
+                            </div>
+                            <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                              <div>
+                                <label className={labelCls}>SDR Amount</label>
+                                <IndianCurrencyInput value={form.sdr_amount} onChange={val => set("sdr_amount", val)} placeholder="3,50,000" className={inputCls} />
+                              </div>
+                              <div>
+                                <label className={labelCls}>SDR Payment Date</label>
+                                <input type="date" value={form.sdr_payment_date} onChange={e => set("sdr_payment_date", e.target.value)} className={inputCls} />
+                              </div>
+                              <div>
+                                <label className={labelCls}>SDR Status</label>
+                                <select value={form.sdr_status} onChange={e => set("sdr_status", e.target.value)} className={inputCls}>
+                                  <option value="Pending">Pending</option>
+                                  <option value="Paid">Paid</option>
+                                </select>
+                              </div>
+                            </div>
+                            <div className="mt-4">
+                              <label className={labelCls}>SDR Remarks</label>
+                              <input value={form.sdr_remarks} onChange={e => set("sdr_remarks", e.target.value)} placeholder="Remarks" className={inputCls} />
+                            </div>
+                            <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                              <div>
+                                <label className={labelCls}>Cash Component</label>
+                                <IndianCurrencyInput value={form.cash_component} onChange={val => set("cash_component", val)} placeholder="If applicable" className={inputCls} />
+                              </div>
+                              <div>
+                                <label className={labelCls}>Cash Payment Date</label>
+                                <input type="date" value={form.cash_component_date} onChange={e => set("cash_component_date", e.target.value)} className={inputCls} />
+                              </div>
+                              <div>
+                                <label className={labelCls}>Cash Remarks</label>
+                                <input value={form.cash_component_remarks} onChange={e => set("cash_component_remarks", e.target.value)} placeholder="Remarks" className={inputCls} />
+                              </div>
+                            </div>
                           </div>
-                        </div>
 
-                        {sigMode === "draw" ? (
-                          <canvas
-                            ref={canvasRef}
-                            width={600} height={140}
-                            onMouseDown={startDraw} onMouseMove={draw} onMouseUp={endDraw} onMouseLeave={endDraw}
-                            className={`w-full rounded-xl border cursor-crosshair bg-white ${isDark ? "border-[#2A2A35]" : "border-[#9CA3AF]"} ${errors.signature_data ? "!border-red-500" : ""}`}
-                            style={{ touchAction: "none" }}
-                          />
-                        ) : (
-                          <div className={`relative rounded-xl border-2 border-dashed p-8 text-center transition-colors ${errors.signature_data ? "!border-red-500" : (isDark ? "border-[#2A2A35]" : "border-[#9CA3AF]")}`}>
-                            <input
-                              type="file" accept="image/*" id="sig-upload"
-                              className="absolute inset-0 opacity-0 cursor-pointer"
-                              onChange={e => {
-                                const file = e.target.files?.[0];
-                                if (!file) return;
-                                const reader = new FileReader();
-                                reader.onload = ev => set("signature_data", ev.target?.result as string);
-                                reader.readAsDataURL(file);
-                              }}
-                            />
-                            {form.signature_data ? (
-                              <img src={form.signature_data} alt="Signature" className="max-h-20 mx-auto" />
-                            ) : (
-                              <>
-                                <FaUpload className={`mx-auto text-2xl mb-2 ${textMuted}`} />
-                                <p className={`text-sm ${textMuted}`}>Click to upload signature image</p>
-                              </>
+                          {/* Auto Calculated Financial Summary */}
+                          <div className={`border-t pt-6 ${divider}`}>
+                            <p className={sectionTitle}><FaMoneyBillWave className="inline mr-2" />Financial Summary (Auto-Calculated)</p>
+                            {(() => {
+                              const agreementValue = toNumber(form.agreement_value);
+                              const ocrReceived = toNumber(form.ocr_amount);
+                              const cashComponent = toNumber(form.cash_component);
+                              const loanSanction = toNumber(form.sanction_amount);
+                              const loanDisbursed = toNumber(form.disbursement_amount);
+                              const sdrPaid = toNumber(form.sdr_amount);
+                              const totalReceived = ocrReceived + cashComponent + loanDisbursed + sdrPaid;
+                              const balanceReceivable = agreementValue - totalReceived;
+                              const rows: [string, number][] = [
+                                ["Agreement Value", agreementValue],
+                                ["OCR Received", ocrReceived],
+                                ["Cash Component", cashComponent],
+                                ["Loan Sanction", loanSanction],
+                                ["Loan Disbursed", loanDisbursed],
+                                ["SDR Paid", sdrPaid],
+                                ["Total Received", totalReceived],
+                                ["Balance Receivable", balanceReceivable],
+                              ];
+                              return (
+                                <div className={`rounded-xl border p-4 grid grid-cols-2 sm:grid-cols-4 gap-4 ${isDark ? "bg-[#121218] border-[#2A2A35]" : "bg-[#F8FAFC] border-[#E5E7EB]"}`}>
+                                  {rows.map(([label, val]) => (
+                                    <div key={label}>
+                                      <p className={`text-[10px] font-semibold uppercase tracking-wide mb-0.5 ${textMuted}`}>{label}</p>
+                                      <p className={`font-bold text-sm ${label === "Balance Receivable" && val > 0 ? "text-amber-500" : label === "Total Received" ? "text-green-500" : textMain}`}>{formatINR(val)}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                              );
+                            })()}
+                          </div>
+
+                          {/* Registration Details */}
+                          <div className={`border-t pt-6 ${divider}`}>
+                            <p className={sectionTitle}>Registration Details</p>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                              <div>
+                                <label className={labelCls}>Expected Registration Date</label>
+                                <input type="date" value={form.expected_registration_date} onChange={e => set("expected_registration_date", e.target.value)} className={inputCls} />
+                              </div>
+                              <div>
+                                <label className={labelCls}>Actual Registration Date</label>
+                                <input type="date" value={form.actual_registration_date} onChange={e => set("actual_registration_date", e.target.value)} className={inputCls} />
+                              </div>
+                              <div>
+                                <label className={labelCls}>Registration Status</label>
+                                <select value={form.registration_status} onChange={e => set("registration_status", e.target.value)} className={inputCls}>
+                                  <option value="Pending">Pending</option>
+                                  <option value="Scheduled">Scheduled</option>
+                                  <option value="Completed">Completed</option>
+                                </select>
+                              </div>
+                            </div>
+                            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              <div>
+                                <label className={labelCls}>Registration Number</label>
+                                <input value={form.registration_number} onChange={e => set("registration_number", e.target.value)} placeholder="Registration No." className={inputCls} />
+                              </div>
+                              <div>
+                                <label className={labelCls}>Registration Remarks</label>
+                                <input value={form.registration_remarks} onChange={e => set("registration_remarks", e.target.value)} placeholder="Remarks" className={inputCls} />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Bank Loan Details */}
+                          <div className={`border-t pt-6 ${divider}`}>
+                            <div className="flex items-center justify-between mb-4">
+                              <p className={sectionTitle} style={{ marginBottom: 0 }}>Bank Loan Details</p>
+                              <label className="flex items-center gap-2 cursor-pointer">
+                                <span className={`text-sm font-semibold ${textMain}`}>Loan Required?</span>
+                                <input type="checkbox" checked={form.loan_required} onChange={e => set("loan_required", e.target.checked)} className="w-4 h-4 cursor-pointer" />
+                              </label>
+                            </div>
+                            {form.loan_required && (
+                              <div className="space-y-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                  <div>
+                                    <label className={labelCls}>Bank Name</label>
+                                    <input value={form.bank_name} onChange={e => set("bank_name", e.target.value)} placeholder="e.g. HDFC Bank" className={inputCls} />
+                                  </div>
+                                  <div>
+                                    <label className={labelCls}>Loan Executive (Officer)</label>
+                                    <input value={form.loan_executive} onChange={e => set("loan_executive", e.target.value)} placeholder="Name & Contact" className={inputCls} />
+                                  </div>
+                                  <div>
+                                    <label className={labelCls}>Loan Type</label>
+                                    <select value={form.loan_type} onChange={e => set("loan_type", e.target.value)} className={inputCls}>
+                                      <option value="">Select</option>
+                                      <option value="Home Loan">Home Loan</option>
+                                      <option value="Top-Up Loan">Top-Up Loan</option>
+                                      <option value="Balance Transfer">Balance Transfer</option>
+                                      <option value="Other">Other</option>
+                                    </select>
+                                  </div>
+                                </div>
+                                <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                  <div>
+                                    <label className={labelCls}>
+                                      Loan Amount
+                                      {form.consideration_value && <span className="ml-1 font-normal opacity-70">(Flat value - ₹{formatIndianNumber(form.consideration_value)})</span>}
+                                    </label>
+                                    <IndianCurrencyInput value={form.loan_amount} onChange={val => set("loan_amount", val)} placeholder="40,00,000" className={inputCls} />
+                                  </div>
+                                  <div>
+                                    <label className={labelCls}>Loan Reference No.</label>
+                                    <input value={form.loan_reference_no} onChange={e => set("loan_reference_no", e.target.value)} placeholder="Bank loan reference" className={inputCls} />
+                                  </div>
+                                </div>
+                                <div className="mt-4 grid grid-cols-1 sm:grid-cols-4 gap-4">
+                                  <div>
+                                    <label className={labelCls}>Sanction Amount</label>
+                                    <IndianCurrencyInput value={form.sanction_amount} onChange={val => set("sanction_amount", val)} placeholder="Amount" className={inputCls} />
+                                  </div>
+                                  <div>
+                                    <label className={labelCls}>Sanction Date</label>
+                                    <input type="date" value={form.sanction_date} onChange={e => set("sanction_date", e.target.value)} className={inputCls} />
+                                  </div>
+                                  <div>
+                                    <label className={labelCls}>Sanction Status</label>
+                                    <select value={form.sanction_status} onChange={e => set("sanction_status", e.target.value)} className={inputCls}>
+                                      <option value="Pending">Pending</option>
+                                      <option value="Approved">Approved</option>
+                                      <option value="Rejected">Rejected</option>
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className={labelCls}>Overall Loan Status</label>
+                                    <select value={form.loan_status} onChange={e => set("loan_status", e.target.value)} className={inputCls}>
+                                      <option value="Pending">Pending</option>
+                                      <option value="Sanctioned">Sanctioned</option>
+                                      <option value="Partially Disbursed">Partially Disbursed</option>
+                                      <option value="Fully Disbursed">Fully Disbursed</option>
+                                    </select>
+                                  </div>
+                                </div>
+
+                                {/* Disbursement */}
+                                <div className={`border-t pt-4 mt-2 ${divider}`}>
+                                  <p className={`text-xs font-bold uppercase tracking-wider mb-3 ${accent}`}>Disbursement</p>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div>
+                                      <label className={labelCls}>Expected Disbursement Date</label>
+                                      <input type="date" value={form.expected_disbursement_date} onChange={e => set("expected_disbursement_date", e.target.value)} className={inputCls} />
+                                    </div>
+                                    <div>
+                                      <label className={labelCls}>Expected Disbursement Amount</label>
+                                      <IndianCurrencyInput value={form.expected_disbursement_amount} onChange={val => set("expected_disbursement_amount", val)} placeholder="Amount" className={inputCls} />
+                                    </div>
+                                  </div>
+                                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                    <div>
+                                      <label className={labelCls}>Actual Disbursement Date</label>
+                                      <input type="date" value={form.actual_disbursement_date} onChange={e => set("actual_disbursement_date", e.target.value)} className={inputCls} />
+                                    </div>
+                                    <div>
+                                      <label className={labelCls}>Amount Disbursed</label>
+                                      <IndianCurrencyInput value={form.disbursement_amount} onChange={val => set("disbursement_amount", val)} placeholder="Amount received" className={inputCls} />
+                                    </div>
+                                    <div>
+                                      <label className={labelCls}>Disbursement Status</label>
+                                      <select value={form.disbursement_status} onChange={e => set("disbursement_status", e.target.value)} className={inputCls}>
+                                        <option value="Pending">Pending</option>
+                                        <option value="Partial">Partial</option>
+                                        <option value="Completed">Completed</option>
+                                      </select>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
                             )}
                           </div>
-                        )}
-                        {errors.signature_data && <p className={errCls}>{errors.signature_data}</p>}
-                      </div>
-                    </div>
-                  )}
 
-                  {/* ══════════ STEP 5: Review & Submit ══════════ */}
-                  {step === 5 && (
-                    <div className="space-y-5">
-                      <p className={sectionTitle}><FaCheckCircle className="inline mr-2" />Review & Confirm</p>
-
-                      {/* Booking Info Card */}
-                      <div className={`rounded-2xl border p-5 ${isDark ? "bg-[#121218] border-[#9E217B]/30 bg-gradient-to-r from-[#9E217B]/10 to-[#0A0A0F]" : "bg-gradient-to-r from-[#EBF5FB] to-[#F0E5F5] border-[#00AEEF]/30"}`}>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
-                          {[
-                            { label: "Lead No.", val: `#${lead?.id}` },
-                            { label: "Applicant", val: form.primary_name },
-                            { label: "Mobile", val: form.primary_mobile },
-                            { label: "Property", val: `${form.property_type}, Flat ${form.flat_number}` },
-                            { label: "Floor", val: form.floor_number },
-                            { label: "Carpet Area", val: form.carpet_area ? `${form.carpet_area} sq.ft.` : "-" },
-                            { label: "Booking Amount", val: form.consideration_value ? `₹${form.consideration_value}` : "-" },
-                            { label: "Booking Source", val: form.booking_source },
-                            { label: "Date", val: form.application_date },
-                          ].map(({ label, val }) => (
-                            <div key={label}>
-                              <p className={`text-xs font-semibold mb-0.5 ${textMuted}`}>{label}</p>
-                              <p className={`font-bold ${textMain}`}>{val || "-"}</p>
+                          {/* Custom Charges */}
+                          <div className={`border-t pt-6 ${divider}`}>
+                            <div className="flex items-center justify-between mb-4">
+                              <p className={sectionTitle} style={{ marginBottom: 0 }}>Custom Charges</p>
+                              <button
+                                onClick={() => set("custom_charges", [...form.custom_charges, { charge_name: "", amount: "", remarks: "" }])}
+                                className={`text-xs px-3 py-1.5 rounded transition-colors ${btnSecondary}`}
+                              >
+                                + Add Charge
+                              </button>
                             </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Summary sections */}
-                      {[
-                        { title: "Primary Applicant", rows: [["Name", form.primary_name], ["Mobile", form.primary_mobile], ["Email", form.primary_email], ["PAN", form.primary_pan], ["Aadhaar", form.primary_aadhaar], ["Occupation", form.primary_occupation], ["Nationality", form.primary_nationality]] },
-                        ...form.joint_applicants.map((ja, idx) => ({
-                          title: `Joint Applicant ${idx + 1}`,
-                          rows: [["Name", ja.name], ["Mobile", ja.mobile], ["Email", ja.email], ["PAN", ja.pan], ["Aadhaar", ja.aadhaar]]
-                        })),
-                        { title: "Residential Address", rows: [["Address", form.address], ["PIN", form.pin], ["State", form.state], ["Country", form.country]] },
-                        { title: "Unit Details", rows: [["Type", form.property_type], ["Floor", form.floor_number], ["Flat No.", form.flat_number], ["Carpet Area", `${form.carpet_area} sq.ft.`], ["Consideration Value", form.consideration_value], ["Parking", form.parking_details], ["Witness", form.witness_name]] },
-                      ].map(section => (
-                        <div key={section.title} className={`rounded-xl border p-4 ${isDark ? "border-[#2A2A35] bg-[#121218]" : "border-[#E5E7EB] bg-white"}`}>
-                          <p className={`text-xs font-bold uppercase tracking-wider mb-3 ${accent}`}>{section.title}</p>
-                          <div className="grid grid-cols-2 gap-2">
-                            {section.rows.filter(([, v]) => v).map(([k, v]) => (
-                              <div key={k}>
-                                <p className={`text-[10px] font-semibold ${textMuted}`}>{k}</p>
-                                <p className={`text-sm font-medium ${textMain}`}>{v || "-"}</p>
+                            {form.custom_charges.length === 0 ? (
+                              <p className={`text-xs ${textMuted} italic`}>No custom charges added.</p>
+                            ) : (
+                              <div className="space-y-3">
+                                {form.custom_charges.map((charge, idx) => (
+                                  <div key={idx} className="flex gap-2 items-center">
+                                    <input value={charge.charge_name} onChange={e => { const c = [...form.custom_charges]; c[idx].charge_name = e.target.value; set("custom_charges", c); }} placeholder="Charge Name" className={`${inputCls} flex-1`} />
+                                    <IndianCurrencyInput value={charge.amount} onChange={val => { const c = [...form.custom_charges]; c[idx].amount = val; set("custom_charges", c); }} placeholder="Amount" className={`${inputCls} w-1/4`} />
+                                    <input value={charge.remarks} onChange={e => { const c = [...form.custom_charges]; c[idx].remarks = e.target.value; set("custom_charges", c); }} placeholder="Remarks" className={`${inputCls} flex-1`} />
+                                    <button onClick={() => set("custom_charges", form.custom_charges.filter((_, i) => i !== idx))} className="text-red-500 hover:text-red-700 p-2"><FaTrash /></button>
+                                  </div>
+                                ))}
                               </div>
-                            ))}
+                            )}
                           </div>
-                        </div>
-                      ))}
-
-                      {/* Payment table summary */}
-                      {form.payment_details.some(r => r.amount) && (
-                        <div className={`rounded-xl border p-4 ${isDark ? "border-[#2A2A35] bg-[#121218]" : "border-[#E5E7EB] bg-white"}`}>
-                          <p className={`text-xs font-bold uppercase tracking-wider mb-3 ${accent}`}>Payment Details</p>
-                          <table className="w-full text-sm">
-                            <thead><tr className={isDark ? "text-[#888899]" : "text-[#6B7280]"}><th className="text-left text-xs py-1">Date</th><th className="text-left text-xs py-1">Transaction</th><th className="text-right text-xs py-1">Amount</th></tr></thead>
-                            <tbody>{form.payment_details.filter(r => r.amount).map((r, i) => (<tr key={i}><td className={`text-xs py-1 ${textMain}`}>{r.date}</td><td className={`text-xs py-1 ${textMain}`}>{r.transaction_type}</td><td className={`text-xs py-1 text-right font-bold ${textMain}`}>₹{r.amount}</td></tr>))}</tbody>
-                          </table>
                         </div>
                       )}
 
-                      {/* Declaration status */}
-                      <div className={`rounded-xl border p-4 ${isDark ? "border-[#2A2A35] bg-[#121218]" : "border-[#E5E7EB] bg-white"}`}>
-                        <p className={`text-xs font-bold uppercase tracking-wider mb-3 ${accent}`}>Declarations</p>
-                        {[["Information accurate", form.declaration_accepted], ["Terms & Conditions accepted", form.terms_accepted], ["Irrevocable consent given", form.consent_accepted]].map(([label, val]) => (
-                          <div key={label as string} className="flex items-center gap-2 mb-1.5">
-                            <div className={`w-4 h-4 rounded flex items-center justify-center text-[9px] ${val ? "bg-green-500 text-white" : "bg-red-500 text-white"}`}>{val ? "✓" : "✗"}</div>
-                            <span className={`text-sm ${textMain}`}>{label as string}</span>
+                      {/* ══════════ STEP 4: Booking Source ══════════ */}
+                      {step === 4 && (
+                        <div className="space-y-6">
+                          <p className={sectionTitle}><FaHandshake className="inline mr-2" />Source of Booking</p>
+                          <p className={`text-xs ${textMuted}`}>(To be filled in by the sales manager prior to signature of customer)</p>
+                          <div className="flex gap-6">
+                            {(["Direct", "Channel Partner"] as const).map(src => (
+                              <label key={src} className="flex items-center gap-2 cursor-pointer">
+                                <div onClick={() => set("booking_source", src)} className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${form.booking_source === src ? (isDark ? "border-[#9E217B] bg-[#9E217B]" : "border-[#00AEEF] bg-[#00AEEF]") : (isDark ? "border-[#2A2A35]" : "border-[#9CA3AF]")}`}>
+                                  {form.booking_source === src && <div className="w-2 h-2 rounded-full bg-white" />}
+                                </div>
+                                <span className={`font-semibold text-sm ${textMain}`}>{src}</span>
+                              </label>
+                            ))}
                           </div>
-                        ))}
-                        {form.signature_data && (
-                          <div className="mt-3">
-                            <p className={`text-xs font-semibold mb-1 ${textMuted}`}>Signature</p>
-                            <img src={form.signature_data} alt="Signature" className="max-h-16 border rounded-lg p-1" style={{ borderColor: isDark ? "#2A2A35" : "#E5E7EB" }} />
+
+                          {form.booking_source === "Direct" && (
+                            <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}>
+                              <label className={labelCls}>Please Specify Source</label>
+                              <input value={form.direct_source} onChange={e => set("direct_source", e.target.value)} placeholder="e.g. Advertisement, Exhibition, Website..." className={inputCls} />
+                            </motion.div>
+                          )}
+
+                          {form.booking_source === "Channel Partner" && (
+                            <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                  <label className={labelCls}>Channel Partner Name</label>
+                                  <input value={form.channel_partner_name} onChange={e => set("channel_partner_name", e.target.value)} placeholder="Partner firm / individual name" className={inputCls} />
+                                </div>
+                                <div>
+                                  <label className={labelCls}>Contact Number</label>
+                                  <input value={form.channel_partner_contact} onChange={e => set("channel_partner_contact", e.target.value)} placeholder="10-digit mobile" className={inputCls} />
+                                </div>
+                              </div>
+                            </motion.div>
+                          )}
+
+                          <div className={`border-t pt-6 ${divider}`}>
+                            <p className={sectionTitle}>Internal Notes</p>
+                            <p className={`text-xs ${textMuted} mb-2`}>These notes are for internal reference only and will not appear on the customer's PDF.</p>
+                            <textarea
+                              value={(form as any).internal_notes || ""}
+                              onChange={e => set("internal_notes" as any, e.target.value)}
+                              placeholder="Any internal remarks, approvals, or context..."
+                              rows={4}
+                              className={`${inputCls} resize-none`}
+                            />
                           </div>
-                        )}
-                      </div>
-                    </div>
+                        </div>
+                      )}
+
+                      {/* ══════════ STEP 5: Declaration ══════════ */}
+                      {step === 5 && (
+                        <div className="space-y-6">
+                          <p className={sectionTitle}><FaFileAlt className="inline mr-2" />Declaration & Signature</p>
+
+                          {/* Declaration Text */}
+                          <div className={`rounded-xl border p-5 space-y-3 text-sm leading-relaxed ${isDark ? "bg-[#14141B] border-[#2A2A35]" : "bg-[#F8FAFC] border-[#E5E7EB]"}`}>
+                            <p className={textMain}><span className="font-bold">a.</span> I/We hereby solemnly declare that all the foregoing facts are true to the best of my/our knowledge and nothing relevant has been concealed or suppressed. I/We also undertake to Inform The Company of any future changes related to the information and details shown in this Application Form.</p>
+                            <p className={textMain}><span className="font-bold">b.</span> I/We hereby also declare I/We have read and understood the terms and conditions and all other information/conditions stated in the accompanying GENERAL TERMS & CONDITIONS including consideration of the units and price & payment schedules. By signing this Application form, I/We do hereby solemnly accept and agree to abide by the terms & conditions as stipulated in the accompanying GENERAL TERMS & CONDITIONS, which may be modified or amended by the Company.</p>
+                            <p className={textMain}><span className="font-bold">c.</span> I/We hereby give my/our irrevocable consent to become member of a body the owners to be formed in accordance with the applicable acts, rules and bye laws and execute necessary documents as and when required.</p>
+                            <p className={`font-semibold ${accent}`}>I hereby agree to all the information mentioned above and the subsequent Terms and Conditions.</p>
+                          </div>
+
+                          {/* Terms & Conditions */}
+                          <div>
+                            <p className={`font-bold text-sm mb-2 ${textMain}`}>Terms and Conditions: <span className={`text-xs font-normal ${textMuted}`}>(Scroll to bottom to enable checkboxes)</span></p>
+                            <div
+                              ref={termsRef}
+                              onScroll={() => {
+                                const el = termsRef.current;
+                                if (el && el.scrollTop + el.clientHeight >= el.scrollHeight - 10) setTermsScrolled(true);
+                              }}
+                              className={`h-40 overflow-y-auto rounded-xl border p-4 text-xs space-y-2 custom-scrollbar ${isDark ? "bg-[#14141B] border-[#2A2A35]" : "bg-[#F8FAFC] border-[#E5E7EB]"}`}
+                            >
+                              {TERMS.map((t, i) => (
+                                <p key={i} className={textMuted}><span className="font-bold">{i + 1}.</span> {t}</p>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Checkboxes */}
+                          <div className={`space-y-3 ${!termsScrolled ? "opacity-50 pointer-events-none" : ""}`}>
+                            {[
+                              { key: "declaration_accepted" as keyof BookingFormData, label: "All information provided is true and accurate to the best of my knowledge." },
+                              { key: "terms_accepted" as keyof BookingFormData, label: "I have read and accept all Terms & Conditions mentioned above." },
+                              { key: "consent_accepted" as keyof BookingFormData, label: "I give my irrevocable consent as stated in the declaration above." },
+                            ].map(({ key, label }) => (
+                              <label key={key} className="flex items-start gap-3 cursor-pointer">
+                                <div onClick={() => set(key, !form[key] as any)} className={`mt-0.5 w-5 h-5 rounded flex-shrink-0 border-2 flex items-center justify-center transition-colors ${(form[key] as boolean) ? (isDark ? "bg-[#9E217B] border-[#9E217B]" : "bg-[#00AEEF] border-[#00AEEF]") : (isDark ? "border-[#2A2A35]" : "border-[#9CA3AF]")}`}>
+                                  {(form[key] as boolean) && <FaCheck className="text-white text-[9px]" />}
+                                </div>
+                                <span className={`text-sm ${textMain}`}>{label}</span>
+                              </label>
+                            ))}
+                            {(errors.declaration_accepted || errors.terms_accepted || errors.consent_accepted) && (
+                              <p className={errCls}>Please accept all declarations.</p>
+                            )}
+                          </div>
+
+                          {/* Application Date */}
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <label className={labelCls}>Application Date</label>
+                              <input value={form.application_date} readOnly className={`${inputCls} opacity-70 cursor-not-allowed`} />
+                            </div>
+                          </div>
+
+                          {/* Signature Pad */}
+                          <div>
+                            <div className="flex items-center justify-between mb-2">
+                              <label className={`${labelCls} mb-0`}>Signature of Primary Applicant</label>
+                              <div className="flex gap-2">
+                                <button onClick={() => setSigMode("draw")} className={`text-xs px-3 py-1 rounded-lg font-semibold cursor-pointer transition-colors flex items-center gap-1 ${sigMode === "draw" ? btnPrimary : btnSecondary}`}><FaPen className="text-[10px]" /> Draw</button>
+                                <button onClick={() => setSigMode("upload")} className={`text-xs px-3 py-1 rounded-lg font-semibold cursor-pointer transition-colors flex items-center gap-1 ${sigMode === "upload" ? btnPrimary : btnSecondary}`}><FaUpload className="text-[10px]" /> Upload</button>
+                                {form.signature_data && <button onClick={clearSig} className="text-xs px-3 py-1 rounded-lg font-semibold cursor-pointer text-red-400 hover:bg-red-500/10 border border-red-400/30">Clear</button>}
+                              </div>
+                            </div>
+
+                            {sigMode === "draw" ? (
+                              <canvas
+                                ref={canvasRef}
+                                width={600} height={140}
+                                onMouseDown={startDraw} onMouseMove={draw} onMouseUp={endDraw} onMouseLeave={endDraw}
+                                className={`w-full rounded-xl border cursor-crosshair bg-white ${isDark ? "border-[#2A2A35]" : "border-[#9CA3AF]"} ${errors.signature_data ? "!border-red-500" : ""}`}
+                                style={{ touchAction: "none" }}
+                              />
+                            ) : (
+                              <div className={`relative rounded-xl border-2 border-dashed p-8 text-center transition-colors ${errors.signature_data ? "!border-red-500" : (isDark ? "border-[#2A2A35]" : "border-[#9CA3AF]")}`}>
+                                <input
+                                  type="file" accept="image/*" id="sig-upload"
+                                  className="absolute inset-0 opacity-0 cursor-pointer"
+                                  onChange={e => {
+                                    const file = e.target.files?.[0];
+                                    if (!file) return;
+                                    const reader = new FileReader();
+                                    reader.onload = ev => set("signature_data", ev.target?.result as string);
+                                    reader.readAsDataURL(file);
+                                  }}
+                                />
+                                {form.signature_data ? (
+                                  <img src={form.signature_data} alt="Signature" className="max-h-20 mx-auto" />
+                                ) : (
+                                  <>
+                                    <FaUpload className={`mx-auto text-2xl mb-2 ${textMuted}`} />
+                                    <p className={`text-sm ${textMuted}`}>Click to upload signature image</p>
+                                  </>
+                                )}
+                              </div>
+                            )}
+                            {errors.signature_data && <p className={errCls}>{errors.signature_data}</p>}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ══════════ STEP 6: Review & Submit ══════════ */}
+                      {step === 6 && (
+                        <div className="space-y-5">
+                          <p className={sectionTitle}><FaCheckCircle className="inline mr-2" />Review & Confirm</p>
+
+                          {/* Booking Info Card */}
+                          <div className={`rounded-2xl border p-5 ${isDark ? "bg-[#121218] border-[#9E217B]/30 bg-gradient-to-r from-[#9E217B]/10 to-[#0A0A0F]" : "bg-gradient-to-r from-[#EBF5FB] to-[#F0E5F5] border-[#00AEEF]/30"}`}>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
+                              {[
+                                { label: "Lead No.", val: `#${lead?.sr_no || lead?.id}` },
+                                { label: "Applicant", val: form.primary_name },
+                                { label: "Mobile", val: form.primary_mobile },
+                                { label: "Property", val: `${form.property_type}, Flat ${form.flat_number}` },
+                                { label: "Floor", val: form.floor_number },
+                                { label: "Carpet Area", val: form.carpet_area ? `${form.carpet_area} sq.ft.` : "-" },
+                                { label: "Booking Amount", val: form.consideration_value ? `₹${form.consideration_value}` : "-" },
+                                { label: "Booking Source", val: form.booking_source },
+                                { label: "Date", val: form.application_date },
+                              ].map(({ label, val }) => (
+                                <div key={label}>
+                                  <p className={`text-xs font-semibold mb-0.5 ${textMuted}`}>{label}</p>
+                                  <p className={`font-bold ${textMain}`}>{val || "-"}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Summary sections */}
+                          {[
+                            { title: "Primary Applicant", rows: [["Name", form.primary_name], ["Mobile", form.primary_mobile], ["Email", form.primary_email], ["PAN", form.primary_pan], ["Aadhaar", form.primary_aadhaar], ["Occupation", form.primary_occupation], ["Nationality", form.primary_nationality]] },
+                            ...form.joint_applicants.map((ja, idx) => ({
+                              title: `Joint Applicant ${idx + 1}`,
+                              rows: [["Name", ja.name], ["Mobile", ja.mobile], ["Email", ja.email], ["PAN", ja.pan], ["Aadhaar", ja.aadhaar]]
+                            })),
+                            { title: "Residential Address", rows: [["Address", form.address], ["PIN", form.pin], ["State", form.state], ["Country", form.country]] },
+                            { title: "Unit Details", rows: [["Type", form.property_type], ["Floor", form.floor_number], ["Flat No.", form.flat_number], ["Carpet Area", `${form.carpet_area} sq.ft.`], ["Consideration Value", form.consideration_value], ["Parking", form.parking_details], ["Witness", form.witness_name]] },
+                          ].map(section => (
+                            <div key={section.title} className={`rounded-xl border p-4 ${isDark ? "border-[#2A2A35] bg-[#121218]" : "border-[#E5E7EB] bg-white"}`}>
+                              <p className={`text-xs font-bold uppercase tracking-wider mb-3 ${accent}`}>{section.title}</p>
+                              <div className="grid grid-cols-2 gap-2">
+                                {section.rows.filter(([, v]) => v).map(([k, v]) => (
+                                  <div key={k}>
+                                    <p className={`text-[10px] font-semibold ${textMuted}`}>{k}</p>
+                                    <p className={`text-sm font-medium ${textMain}`}>{v || "-"}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+
+                          {/* Payment table summary */}
+                          {form.payment_details.some(r => r.amount) && (
+                            <div className={`rounded-xl border p-4 ${isDark ? "border-[#2A2A35] bg-[#121218]" : "border-[#E5E7EB] bg-white"}`}>
+                              <p className={`text-xs font-bold uppercase tracking-wider mb-3 ${accent}`}>Payment Details</p>
+                              <table className="w-full text-sm">
+                                <thead><tr className={isDark ? "text-[#888899]" : "text-[#6B7280]"}><th className="text-left text-xs py-1">Date</th><th className="text-left text-xs py-1">Transaction</th><th className="text-right text-xs py-1">Amount</th></tr></thead>
+                                <tbody>{form.payment_details.filter(r => r.amount).map((r, i) => (<tr key={i}><td className={`text-xs py-1 ${textMain}`}>{r.date}</td><td className={`text-xs py-1 ${textMain}`}>{r.transaction_type}</td><td className={`text-xs py-1 text-right font-bold ${textMain}`}>₹{r.amount}</td></tr>))}</tbody>
+                              </table>
+                            </div>
+                          )}
+
+                          {/* Declaration status */}
+                          <div className={`rounded-xl border p-4 ${isDark ? "border-[#2A2A35] bg-[#121218]" : "border-[#E5E7EB] bg-white"}`}>
+                            <p className={`text-xs font-bold uppercase tracking-wider mb-3 ${accent}`}>Declarations</p>
+                            {[["Information accurate", form.declaration_accepted], ["Terms & Conditions accepted", form.terms_accepted], ["Irrevocable consent given", form.consent_accepted]].map(([label, val]) => (
+                              <div key={label as string} className="flex items-center gap-2 mb-1.5">
+                                <div className={`w-4 h-4 rounded flex items-center justify-center text-[9px] ${val ? "bg-green-500 text-white" : "bg-red-500 text-white"}`}>{val ? "✓" : "✗"}</div>
+                                <span className={`text-sm ${textMain}`}>{label as string}</span>
+                              </div>
+                            ))}
+                            {form.signature_data && (
+                              <div className="mt-3">
+                                <p className={`text-xs font-semibold mb-1 ${textMuted}`}>Signature</p>
+                                <img src={form.signature_data} alt="Signature" className="max-h-16 border rounded-lg p-1" style={{ borderColor: isDark ? "#2A2A35" : "#E5E7EB" }} />
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                    </motion.div>
+                  </AnimatePresence>
+                </div>
+
+                {/* ── Footer ── */}
+                <div className={`flex items-center justify-between px-6 py-4 border-t flex-shrink-0 ${isDark ? "bg-[#121218] border-[#2A2A35]" : "bg-[#F8FAFC] border-[#E5E7EB]"}`}>
+                  <button
+                    onClick={prevStep}
+                    disabled={step === 1}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${btnSecondary}`}
+                  >
+                    <FaChevronLeft className="text-xs" /> Back
+                  </button>
+
+                  <span className={`text-xs font-semibold ${textMuted}`}>Step {step} of 6</span>
+
+                  {step < 6 ? (
+                    <button
+                      onClick={nextStep}
+                      className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-colors cursor-pointer shadow-md ${btnPrimary}`}
+                    >
+                      Next <FaChevronRight className="text-xs" />
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleSubmit}
+                      disabled={isSubmitting}
+                      className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-colors cursor-pointer shadow-md disabled:opacity-60 disabled:cursor-not-allowed ${isDark ? "bg-green-600 hover:bg-green-500 text-white" : "bg-green-600 hover:bg-green-500 text-white"}`}
+                    >
+                      {isSubmitting ? "Saving..." : <><FaCheck className="text-xs" /> Save Booking</>}
+                    </button>
                   )}
-
-                </motion.div>
-              </AnimatePresence>
-            </div>
-
-            {/* ── Footer ── */}
-            <div className={`flex items-center justify-between px-6 py-4 border-t flex-shrink-0 ${isDark ? "bg-[#121218] border-[#2A2A35]" : "bg-[#F8FAFC] border-[#E5E7EB]"}`}>
-              <button
-                onClick={prevStep}
-                disabled={step === 1}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${btnSecondary}`}
-              >
-                <FaChevronLeft className="text-xs" /> Back
-              </button>
-
-              <span className={`text-xs font-semibold ${textMuted}`}>Step {step} of 5</span>
-
-              {step < 5 ? (
-                <button
-                  onClick={nextStep}
-                  className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-colors cursor-pointer shadow-md ${btnPrimary}`}
-                >
-                  Next <FaChevronRight className="text-xs" />
-                </button>
-              ) : (
-                <button
-                  onClick={handleSubmit}
-                  disabled={isSubmitting}
-                  className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-colors cursor-pointer shadow-md disabled:opacity-60 disabled:cursor-not-allowed ${isDark ? "bg-green-600 hover:bg-green-500 text-white" : "bg-green-600 hover:bg-green-500 text-white"}`}
-                >
-                  {isSubmitting ? "Saving..." : <><FaCheck className="text-xs" /> Save Booking</>}
-                </button>
-              )}
-            </div>
-            </>
+                </div>
+              </>
             )}
           </motion.div>
         </motion.div>

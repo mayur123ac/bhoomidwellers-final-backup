@@ -1163,7 +1163,7 @@ export default function ReceptionistDashboard() {
       setIsTransferModalOpen(false);
       setTransferNote("");
       setTransferTarget("");
-      showToast(`✅ Lead #${selectedLead.id} transferred to ${transferTarget}!`);
+      showToast(`✅ Lead #${selectedLead.sr_no || selectedLead.id} transferred to ${transferTarget}!`);
       setAssignedSubView("cards");
       refetchAll();
     } catch (e: any) {
@@ -2336,7 +2336,7 @@ export default function ReceptionistDashboard() {
               <div className={`flex flex-col sm:flex-row sm:items-center gap-4 mb-8 rounded-2xl border p-6 md:p-8 ${t.card}`} style={t.cardGlass}>
                 <button onClick={() => setActiveTab("overview")} className={`w-10 h-10 flex items-center justify-center border hover:border-current rounded-xl transition-colors cursor-pointer shadow-sm ${t.textMuted} ${t.tableBorder}`}><FaChevronLeft className="text-sm" /></button>
                 <h1 className={`text-xl md:text-3xl font-bold flex flex-wrap items-center gap-3 ${t.text}`}>
-                  <span className={t.accentText}>#{selectedLead.id}</span>
+                  <span className={t.accentText}>#{selectedLead.sr_no || selectedLead.id}</span>
                   <span>{selectedLead.name}</span>
                   <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${getStatusStyle(selectedLead.status)
                     }`}>{selectedLead.status || "Assigned"}</span>
@@ -2556,7 +2556,7 @@ export default function ReceptionistDashboard() {
                       <div className="flex items-center gap-4">
                         <button onClick={() => { setAssignedSubView("cards"); }} className={`w-10 h-10 flex items-center justify-center border rounded-xl transition-colors cursor-pointer shadow-sm ${t.textMuted} ${t.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}><FaChevronLeft className="text-sm" /></button>
                         <h1 className={`text-xl md:text-2xl font-bold flex items-center gap-3 ${t.text}`}>
-                          <span className={t.accentText}>#{selectedLead.id}</span>
+                          <span className={t.accentText}>#{selectedLead.sr_no || selectedLead.id}</span>
                           <span>{selectedLead.name}</span>
                           {selectedLead.status === "Closing" && (
                             <span className={`text-[11px] font-bold px-3 py-1 rounded-full border flex items-center gap-1.5 ${t.statusClosing}`}><FaHandshake className="text-xs" /> Closing</span>
@@ -2616,7 +2616,7 @@ export default function ReceptionistDashboard() {
                             <div className={`flex justify-between items-center mb-4 border-b pb-3 ${t.tableBorder}`}>
                               <div>
                                 <h3 className={`text-lg font-bold ${t.text}`}>Sales Data Form</h3>
-                                <p className={`text-xs mt-0.5 ${t.accentText}`}>For Lead #{selectedLead.id}</p>
+                                <p className={`text-xs mt-0.5 ${t.accentText}`}>For Lead #{selectedLead.sr_no || selectedLead.id}</p>
                               </div>
                               <button type="button" onClick={() => setShowSalesForm(false)} className={`p-1 ${t.textMuted} hover:text-red-500`}><FaTimes /></button>
                             </div>
@@ -2648,7 +2648,7 @@ export default function ReceptionistDashboard() {
                             <div className={`flex justify-between items-center mb-4 border-b pb-3 flex-shrink-0 ${t.tableBorder}`}>
                               <div>
                                 <h3 className={`text-lg font-bold flex items-center gap-2 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}><FaUniversity /> Loan Tracking Workflow</h3>
-                                <p className={`text-xs mt-0.5 ${t.textFaint}`}>For Lead #{selectedLead.id}</p>
+                                <p className={`text-xs mt-0.5 ${t.textFaint}`}>For Lead #{selectedLead.sr_no || selectedLead.id}</p>
                               </div>
                               <button type="button" onClick={() => setShowLoanForm(false)} className={`p-1 ${t.textMuted} hover:text-red-500`}><FaTimes /></button>
                             </div>
@@ -3671,7 +3671,7 @@ export default function ReceptionistDashboard() {
             <div className={`p-5 border-b flex justify-between items-center ${isDark ? "bg-purple-900/20 border-purple-500/20" : "bg-purple-50 border-purple-200"}`}>
               <div>
                 <h2 className={`text-lg font-bold flex items-center gap-2 ${isDark ? "text-purple-400" : "text-purple-700"}`}>
-                  <FaExchangeAlt /> Transfer Lead #{selectedLead.id}
+                  <FaExchangeAlt /> Transfer Lead #{selectedLead.sr_no || selectedLead.id}
                 </h2>
                 <p className={`text-xs mt-1 ${t.textMuted}`}>Transferring: <strong>{selectedLead.name}</strong></p>
               </div>

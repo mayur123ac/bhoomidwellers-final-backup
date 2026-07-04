@@ -1,10 +1,11 @@
 "use client";
 // BookingApplicationView.tsx — Read-only view of a submitted booking
 import React, { useRef } from "react";
+import { formatCurrencyDisplay } from "@/lib/currency";
 import {
   FaUser, FaBuilding, FaHandshake, FaFileAlt, FaCheck, FaMoneyBillWave,
   FaPrint, FaDownload, FaEdit, FaCheckCircle, FaTimesCircle, FaIdCard,
-  FaMapMarkerAlt, FaPhone, FaEnvelope
+  FaMapMarkerAlt, FaPhone, FaEnvelope, FaFolderOpen
 } from "react-icons/fa";
 
 interface BookingApplicationViewProps {
@@ -85,7 +86,7 @@ export default function BookingApplicationView({
   const bookingStatus = booking.booking_status || "Pending";
   const statusColor = bookingStatus === "Approved" ? (isDark ? "text-green-400 border-green-500/30 bg-green-500/10" : "text-green-700 border-green-300 bg-green-50")
     : bookingStatus === "Cancelled" ? (isDark ? "text-red-400 border-red-500/30 bg-red-500/10" : "text-red-700 border-red-300 bg-red-50")
-    : (isDark ? "text-yellow-400 border-yellow-500/30 bg-yellow-500/10" : "text-amber-700 border-amber-300 bg-amber-50");
+      : (isDark ? "text-yellow-400 border-yellow-500/30 bg-yellow-500/10" : "text-amber-700 border-amber-300 bg-amber-50");
 
   return (
     <div className="space-y-5" ref={printRef}>
@@ -126,14 +127,17 @@ export default function BookingApplicationView({
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
           {[
-            { label: "Lead No.", val: `#${booking.lead_id}` },
+            { label: "Lead No.", val: `#${booking.lead_sr_no || lead?.sr_no || booking.lead_id}` },
             { label: "Application Date", val: formatDate(booking.application_date) },
             { label: "Flat / Unit", val: `${safeVal(booking.flat_number)}, Floor ${safeVal(booking.floor_number)}` },
-            { label: "Booking Amount", val: booking.consideration_value ? `₹${booking.consideration_value}` : "—" },
+            { label: "Consideration Value", val: formatCurrencyDisplay(booking.consideration_value) },
             { label: "Sales Manager", val: safeVal(booking.lead_assigned_to || lead?.assigned_to) },
             { label: "Property Type", val: safeVal(booking.property_type) },
             { label: "Created By", val: `${safeVal(booking.created_by)} (${safeVal(booking.created_role)})` },
             { label: "Booking Source", val: safeVal(booking.booking_source) },
+            { label: "Booking Date", val: formatDate(booking.booking_date) },
+            { label: "Agreement Value", val: formatCurrencyDisplay(booking.agreement_value) },
+            { label: "Booking Amount", val: formatCurrencyDisplay(booking.booking_amount) },
           ].map(({ label, val }) => (
             <div key={label}>
               <p className={fieldLabel}>{label}</p>
@@ -141,6 +145,12 @@ export default function BookingApplicationView({
             </div>
           ))}
         </div>
+        {booking.booking_remarks && (
+          <div className="mt-4">
+            <p className={fieldLabel}>Booking Remarks</p>
+            <p className={fieldVal}>{booking.booking_remarks}</p>
+          </div>
+        )}
       </div>
 
       {/* ── CRM / Enquiry Information ── */}
@@ -148,7 +158,7 @@ export default function BookingApplicationView({
         <p className={sectionTitle}><FaIdCard className="inline mr-1.5" />CRM Enquiry Information</p>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
           {[
-            { label: "Lead Number", val: `#${booking.lead_id} (Sr. ${safeVal(booking.lead_sr_no)})` },
+            { label: "Lead Number", val: `#${booking.lead_sr_no || booking.lead_id}` },
             { label: "Lead Created", val: formatDate(booking.lead_created_at) },
             { label: "Customer Name", val: safeVal(booking.lead_name) },
             { label: "Phone", val: safeVal(booking.lead_phone) },
@@ -171,7 +181,105 @@ export default function BookingApplicationView({
           ))}
         </div>
       </div>
+      {/* ── Financial Details ── */}
+      <div className={`rounded-2xl border p-5 ${cardBg}`}>
+        <p className={sectionTitle}><FaMoneyBillWave className="inline mr-1.5" />Financial Details</p>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {[
+            { label: "Token Amount", val: formatCurrencyDisplay(booking.token_amount) },
+            { label: "OCR Amount", val: formatCurrencyDisplay(booking.ocr_amount) },
+            { label: "OCR Received Date", val: formatDate(booking.ocr_received_date) },
+            { label: "OCR Payment Mode", val: safeVal(booking.ocr_payment_mode) },
+            { label: "OCR Remarks", val: safeVal(booking.ocr_remarks) },
+            { label: "SDR Amount", val: formatCurrencyDisplay(booking.sdr_amount) },
+            { label: "SDR Payment Date", val: formatDate(booking.sdr_payment_date) },
+            { label: "SDR Status", val: safeVal(booking.sdr_status) },
+            { label: "SDR Remarks", val: safeVal(booking.sdr_remarks) },
+            { label: "Cash Component", val: formatCurrencyDisplay(booking.cash_component) },
+            { label: "Cash Payment Date", val: formatDate(booking.cash_component_date) },
+            { label: "Cash Remarks", val: safeVal(booking.cash_component_remarks) },
+            { label: "Total Received", val: formatCurrencyDisplay(booking.total_received) },
+            { label: "Balance Receivable", val: formatCurrencyDisplay(booking.balance_receivable) },
+          ].map(({ label, val }) => (
+            <div key={label}><p className={fieldLabel}>{label}</p><p className={fieldVal}>{val}</p></div>
+          ))}
+        </div>
+      </div>
 
+      {/* ── Registration Details ── */}
+      <div className={`rounded-2xl border p-5 ${cardBg}`}>
+        <p className={sectionTitle}>Registration Details</p>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {[
+            { label: "Expected Registration Date", val: formatDate(booking.expected_registration_date) },
+            { label: "Actual Registration Date", val: formatDate(booking.actual_registration_date) },
+            { label: "Registration Status", val: safeVal(booking.registration_status) },
+            { label: "Registration Number", val: safeVal(booking.registration_number) },
+            { label: "Registration Remarks", val: safeVal(booking.registration_remarks) },
+          ].map(({ label, val }) => (
+            <div key={label}><p className={fieldLabel}>{label}</p><p className={fieldVal}>{val}</p></div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Bank Loan Details ── */}
+      {booking.loan_required && (
+        <div className={`rounded-2xl border p-5 ${cardBg}`}>
+          <p className={sectionTitle}>Bank Loan Details</p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {[
+              { label: "Bank Name", val: safeVal(booking.bank_name) },
+              { label: "Loan Executive", val: safeVal(booking.loan_executive) },
+              { label: "Loan Type", val: safeVal(booking.loan_type) },
+              { label: "Loan Reference No.", val: safeVal(booking.loan_reference_no) },
+              { label: "Loan Amount", val: formatCurrencyDisplay(booking.loan_amount) },
+              { label: "Sanction Amount", val: formatCurrencyDisplay(booking.sanction_amount) },
+              { label: "Sanction Date", val: formatDate(booking.sanction_date) },
+              { label: "Sanction Status", val: safeVal(booking.sanction_status) },
+              { label: "Loan Status", val: safeVal(booking.loan_status) },
+              { label: "Expected Disbursement Date", val: formatDate(booking.expected_disbursement_date) },
+              { label: "Actual Disbursement Date", val: formatDate(booking.actual_disbursement_date) },
+              { label: "Expected Disbursement Amount", val: formatCurrencyDisplay(booking.expected_disbursement_amount) },
+              { label: "Amount Disbursed", val: formatCurrencyDisplay(booking.disbursement_amount) },
+              { label: "Disbursement Status", val: safeVal(booking.disbursement_status) },
+            ].map(({ label, val }) => (
+              <div key={label}><p className={fieldLabel}>{label}</p><p className={fieldVal}>{val}</p></div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Custom Charges ── */}
+      {(() => {
+        let charges: any[] = [];
+        try { charges = typeof booking.custom_charges === "string" ? JSON.parse(booking.custom_charges) : (booking.custom_charges || []); } catch { charges = []; }
+        if (!charges.length) return null;
+        return (
+          <div className={`rounded-2xl border p-5 ${cardBg}`}>
+            <p className={sectionTitle}>Custom Charges</p>
+            <div className={`rounded-xl border overflow-hidden ${isDark ? "border-[#2A2A35]" : "border-[#E5E7EB]"}`}>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className={isDark ? "bg-[#1A1A28]" : "bg-[#F8FAFC]"}>
+                    <th className={`text-left px-4 py-2 text-xs font-bold ${textMuted}`}>Charge</th>
+                    <th className={`text-right px-4 py-2 text-xs font-bold ${textMuted}`}>Amount</th>
+                    <th className={`text-left px-4 py-2 text-xs font-bold ${textMuted}`}>Remarks</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {charges.map((c, i) => (
+                    <tr key={i} className={`border-t ${isDark ? "border-[#2A2A35]" : "border-[#F1F5F9]"}`}>
+                      <td className={`px-4 py-2 text-xs ${textMain}`}>{safeVal(c.charge_name)}</td>
+                      <td className={`px-4 py-2 text-xs text-right font-bold ${textMain}`}>{formatCurrencyDisplay(c.amount)}</td>
+                      <td className={`px-4 py-2 text-xs ${textMain}`}>{safeVal(c.remarks)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })()}
       {/* 📄 Primary Applicant */}
       <div className={`rounded-2xl border p-5 ${cardBg}`}>
         <p className={sectionTitle}><FaUser className="inline mr-1.5" />Primary Applicant</p>
@@ -187,6 +295,18 @@ export default function BookingApplicationView({
           ].map(({ label, val }) => (
             <div key={label}><p className={fieldLabel}>{label}</p><p className={fieldVal}>{safeVal(val)}</p></div>
           ))}
+          {/* Primary Applicant Docs */}
+          <div className="col-span-2 sm:col-span-3 flex gap-4 mt-2">
+            {booking.primary_pan_url && (
+              <a href={`/api/r2-proxy?key=${booking.primary_pan_url}`} target="_blank" rel="noopener noreferrer" className="text-xs text-[#9E217B] hover:underline font-semibold bg-[#9E217B]/10 px-3 py-1.5 rounded-full inline-flex items-center gap-1"><FaFolderOpen /> PAN Card</a>
+            )}
+            {booking.primary_aadhaar_front_url && (
+              <a href={`/api/r2-proxy?key=${booking.primary_aadhaar_front_url}`} target="_blank" rel="noopener noreferrer" className="text-xs text-[#9E217B] hover:underline font-semibold bg-[#9E217B]/10 px-3 py-1.5 rounded-full inline-flex items-center gap-1"><FaFolderOpen /> Aadhaar (Front)</a>
+            )}
+            {booking.primary_aadhaar_back_url && (
+              <a href={`/api/r2-proxy?key=${booking.primary_aadhaar_back_url}`} target="_blank" rel="noopener noreferrer" className="text-xs text-[#9E217B] hover:underline font-semibold bg-[#9E217B]/10 px-3 py-1.5 rounded-full inline-flex items-center gap-1"><FaFolderOpen /> Aadhaar (Back)</a>
+            )}
+          </div>
         </div>
 
         {/* Joint Applicants */}
@@ -194,17 +314,17 @@ export default function BookingApplicationView({
           let jointApplicants: any[] = [];
           if (booking.joint_applicants) {
             try {
-              jointApplicants = typeof booking.joint_applicants === 'string' 
-                ? JSON.parse(booking.joint_applicants) 
+              jointApplicants = typeof booking.joint_applicants === 'string'
+                ? JSON.parse(booking.joint_applicants)
                 : booking.joint_applicants;
             } catch (e) { }
           }
           if (jointApplicants.length === 0 && booking.joint_name) {
-             // Legacy fallback
-             jointApplicants = [{
-               name: booking.joint_name, email: booking.joint_email, mobile: booking.joint_mobile,
-               pan: booking.joint_pan, occupation: booking.joint_occupation, nationality: booking.joint_nationality
-             }];
+            // Legacy fallback
+            jointApplicants = [{
+              name: booking.joint_name, email: booking.joint_email, mobile: booking.joint_mobile,
+              pan: booking.joint_pan, occupation: booking.joint_occupation, nationality: booking.joint_nationality
+            }];
           }
 
           return jointApplicants.map((ja, idx) => (
@@ -222,6 +342,17 @@ export default function BookingApplicationView({
                 ].map(({ label, val }) => (
                   <div key={label}><p className={fieldLabel}>{label}</p><p className={fieldVal}>{safeVal(val)}</p></div>
                 ))}
+                <div className="col-span-2 sm:col-span-3 flex gap-4 mt-2">
+                  {ja.pan_url && (
+                    <a href={`/api/r2-proxy?key=${ja.pan_url}`} target="_blank" rel="noopener noreferrer" className="text-xs text-[#9E217B] hover:underline font-semibold bg-[#9E217B]/10 px-3 py-1.5 rounded-full inline-flex items-center gap-1"><FaFolderOpen /> PAN Card</a>
+                  )}
+                  {ja.aadhaar_front_url && (
+                    <a href={`/api/r2-proxy?key=${ja.aadhaar_front_url}`} target="_blank" rel="noopener noreferrer" className="text-xs text-[#9E217B] hover:underline font-semibold bg-[#9E217B]/10 px-3 py-1.5 rounded-full inline-flex items-center gap-1"><FaFolderOpen /> Aadhaar (Front)</a>
+                  )}
+                  {ja.aadhaar_back_url && (
+                    <a href={`/api/r2-proxy?key=${ja.aadhaar_back_url}`} target="_blank" rel="noopener noreferrer" className="text-xs text-[#9E217B] hover:underline font-semibold bg-[#9E217B]/10 px-3 py-1.5 rounded-full inline-flex items-center gap-1"><FaFolderOpen /> Aadhaar (Back)</a>
+                  )}
+                </div>
               </div>
             </div>
           ));
@@ -248,7 +379,7 @@ export default function BookingApplicationView({
             { label: "Floor Number", val: booking.floor_number },
             { label: "Flat Number", val: booking.flat_number },
             { label: "Carpet Area", val: booking.carpet_area ? `${booking.carpet_area} sq.ft.` : "—" },
-            { label: "Consideration Value", val: booking.consideration_value ? `₹${booking.consideration_value}` : "—" },
+            { label: "Consideration Value", val: formatCurrencyDisplay(booking.consideration_value) },
             { label: "Value In Words", val: booking.consideration_value_words },
             { label: "Parking", val: booking.parking_details },
           ].map(({ label, val }) => (
@@ -299,13 +430,13 @@ export default function BookingApplicationView({
                     <td className={`px-4 py-2 text-xs ${textMuted}`}>{i + 1}.</td>
                     <td className={`px-4 py-2 text-xs ${textMain}`}>{row.date}</td>
                     <td className={`px-4 py-2 text-xs ${textMain}`}>{row.transaction_type}</td>
-                    <td className={`px-4 py-2 text-xs text-right font-bold ${textMain}`}>₹{row.amount}</td>
+                    <td className={`px-4 py-2 text-xs text-right font-bold ${textMain}`}>{formatCurrencyDisplay(row.amount)}</td>
                   </tr>
                 ))}
                 {totalAmount > 0 && (
                   <tr className={`border-t ${isDark ? "border-[#9E217B]/30 bg-[#9E217B]/10" : "border-[#9E217B]/20 bg-[#9E217B]/5"}`}>
                     <td colSpan={3} className={`px-4 py-2 text-xs font-bold text-right ${accent}`}>Total</td>
-                    <td className={`px-4 py-2 text-xs font-bold text-right ${accent}`}>₹{totalAmount.toLocaleString("en-IN")}</td>
+                    <td className={`px-4 py-2 text-xs font-bold text-right ${accent}`}>{formatCurrencyDisplay(totalAmount)}</td>
                   </tr>
                 )}
               </tbody>
@@ -363,6 +494,12 @@ export default function BookingApplicationView({
           <p className={fieldLabel}>Application Date</p>
           <p className={fieldVal}>{formatDate(booking.application_date)}</p>
         </div>
+        {booking.internal_notes && (userRole === "admin" || userRole === "sales") && (
+          <div className={`rounded-2xl border p-5 ${cardBg}`}>
+            <p className={sectionTitle}>Internal Notes</p>
+            <p className={`text-sm whitespace-pre-wrap ${textMain}`}>{booking.internal_notes}</p>
+          </div>
+        )}
 
         {/* Signature */}
         {booking.signature_data && (

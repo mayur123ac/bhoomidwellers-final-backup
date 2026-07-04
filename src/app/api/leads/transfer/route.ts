@@ -22,9 +22,8 @@ export async function POST(req: Request) {
 
    
 
-    // ── 1. Fetch existing lead ────────────────────────────────────────
     const existing = await query(
-      `SELECT id, assigned_to, assigned_receptionist FROM walkin_enquiries WHERE id = $1`,
+      `SELECT id, sr_no, assigned_to, assigned_receptionist FROM walkin_enquiries WHERE id = $1`,
       [lead_id]
     );
 
@@ -46,6 +45,7 @@ export async function POST(req: Request) {
     }
 
     // ── 3. Build follow-up message ────────────────────────────────────
+    const leadNo = existing[0].sr_no || lead_id;
     const transferMessage =
       `🔄 Lead Transferred by ${transferred_by} (Receptionist)\n` +
       `• From: ${currentManager || "Unassigned"}\n` +
@@ -125,7 +125,7 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         success: true,
-        message: `Lead #${lead_id} successfully transferred from ${currentManager} to ${transfer_to}.`,
+        message: `Lead #${leadNo} successfully transferred from ${currentManager} to ${transfer_to}.`,
         data: {
           lead:     updatedRows[0],
           followUp: mappedFollowUp,

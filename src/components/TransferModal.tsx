@@ -29,6 +29,7 @@ interface Assignee {
 
 interface Lead {
   id: number | string;
+  sr_no?: number | string;
   name: string;
   assignedTo?: string;
   assigned_to?: string;
@@ -102,7 +103,7 @@ export default function TransferModal({
         throw new Error(json.message ?? "Transfer failed. Please try again.");
       }
 
-      showToast(`✅ Lead #${selectedLead.id} transferred to ${transferTarget}!`, "green");
+      showToast(`✅ Lead #${selectedLead.sr_no || selectedLead.id} transferred to ${transferTarget}!`, "green");
       onSuccess(json.data?.lead, json.data?.followUp);
       handleClose();
     } catch (err: any) {
@@ -137,7 +138,7 @@ export default function TransferModal({
               <FaExchangeAlt /> Re-assign Lead
             </h2>
             <p className={`text-xs mt-1 ${t.textMuted}`}>
-              Lead <span className={`font-bold ${t.accentText}`}>#{selectedLead.id}</span> — {selectedLead.name}
+              Lead <span className={`font-bold ${t.accentText}`}>#{selectedLead.sr_no || selectedLead.id}</span> — {selectedLead.name}
             </p>
           </div>
           <button
