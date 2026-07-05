@@ -331,7 +331,7 @@ export default function EmployeesPage() {
   const [salesManagers, setSalesManagers] = useState<any[]>([]);
   const [siteHeads, setSiteHeads] = useState<any[]>([]);
 
-
+  const [navSearch, setNavSearch] = useState("");
   const [isFetchingManagers, setIsFetchingManagers] = useState(true);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
@@ -850,79 +850,114 @@ export default function EmployeesPage() {
         {/* Divider */}
         <div className="mx-4 mb-4 flex-shrink-0" style={{ height: "1px", background: "linear-gradient(90deg, transparent, rgba(158,33,123,0.3), transparent)" }} />
 
-        {/* Nav */}
-        {/* Nav */}
-        <nav className="flex flex-col gap-2 px-2 flex-1 overflow-hidden">
+        {isSidebarHovered && (
+          <div className="px-4 mb-2 flex-shrink-0 animate-fadeIn">
+            <input
+              type="text"
+              value={navSearch}
+              onChange={(e) => setNavSearch(e.target.value)}
+              placeholder="Quick jump..."
+              autoFocus
+              className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-gray-300 placeholder:text-gray-600 outline-none focus:border-[#9E217B]/50"
+            />
+          </div>
+        )}
+
+        <nav className="flex flex-col gap-2 px-2 flex-1 overflow-y-auto overflow-x-hidden sidebar-scroll">
           {/* Main nav items (all except last) */}
-          <div className="flex flex-col gap-2 flex-1">
-            {menuItems.slice(0, -1).map((item) => {
-              const isActive = item.section ? activeSection === item.section : false;
-              return (
-                <div
-                  key={item.id}
-                  title={!isSidebarHovered ? item.label : undefined}
-                  className="relative cursor-pointer group"
-                  onClick={() => {
-                    if (item.section) {
-                      setActiveSection(item.section!);
-                      setIsSidebarHovered(false);
-                      if (item.section === "callers" && callerSubView === "control") setCallerSubView("table");
-                    } else {
-                      localStorage.setItem("return_tab", item.id);
-                      router.push(item.link);
-                      setIsSidebarHovered(false);
-                    }
-                  }}
-                >
-                  {isActive && (
+          <div className="flex flex-col gap-2">
+            {(() => {
+              const groupOf: Record<string, string> = {
+                dashboard: "Workspace",
+                receptionist: "Team", sales: "Team", site_head: "Team",
+                site_visit_overview: "Insights", attendance: "Insights", monitoring: "Insights", live_activity: "Insights", geo: "Insights",
+                callers: "Admin", employees: "Admin",
+              };
+              const visibleItems = menuItems
+                .slice(0, -1)
+                .filter((i) => i.label.toLowerCase().includes(navSearch.toLowerCase()));
+
+              return visibleItems.map((item, idx) => {
+                const isActive = item.section ? activeSection === item.section : false;
+                const prevItem = visibleItems[idx - 1];
+                const showGroupLabel = groupOf[item.id] && groupOf[item.id] !== groupOf[prevItem?.id];
+                return (
+                  <div key={`wrap-${item.id}`}>
+                    {showGroupLabel && (
+                      <p
+                        className="text-[10px] font-bold uppercase tracking-wider text-gray-600 px-4 pt-3 pb-1 overflow-hidden whitespace-nowrap transition-opacity duration-200"
+                        style={{ opacity: isSidebarHovered ? 1 : 0 }}
+                      >
+                        {groupOf[item.id]}
+                      </p>
+                    )}
                     <div
-                      className="absolute inset-0 rounded-xl pointer-events-none"
-                      style={{
-                        background: "radial-gradient(ellipse at left center, rgba(217,70,168,0.12) 0%, transparent 70%)",
-                        animation: "sm-glow-pulse 3s ease-in-out infinite",
+                      key={item.id}
+                      title={!isSidebarHovered ? item.label : undefined}
+                      className="relative cursor-pointer group"
+                      onClick={() => {
+                        if (item.section) {
+                          setActiveSection(item.section!);
+                          setIsSidebarHovered(false);
+                          if (item.section === "callers" && callerSubView === "control") setCallerSubView("table");
+                        } else {
+                          localStorage.setItem("return_tab", item.id);
+                          router.push(item.link);
+                          setIsSidebarHovered(false);
+                        }
                       }}
-                    />
-                  )}
-                  <div
-                    className={`flex items-center gap-3 px-4.5 py-2.5 rounded-xl transition-all duration-200 relative overflow-hidden ${isActive ? "text-[#d946a8]" : "text-gray-500 hover:text-gray-200"
-                      }`}
-                    style={isActive ? {
-                      background: "linear-gradient(135deg, rgba(158,33,123,0.22) 0%, rgba(217,70,168,0.07) 100%)",
-                      boxShadow: "inset 0 0 0 1px rgba(217,70,168,0.28), 0 2px 16px rgba(158,33,123,0.12)",
-                    } : {}}
-                  >
-                    {isActive && (
+                    >
+                      {isActive && (
+                        <div
+                          className="absolute inset-0 rounded-xl pointer-events-none"
+                          style={{
+                            background: "radial-gradient(ellipse at left center, rgba(217,70,168,0.12) 0%, transparent 70%)",
+                            animation: "sm-glow-pulse 3s ease-in-out infinite",
+                          }}
+                        />
+                      )}
                       <div
-                        className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-[#d946a8]"
-                        style={{ boxShadow: "0 0 10px rgba(217,70,168,0.9), 0 0 4px rgba(217,70,168,0.6)" }}
-                      />
-                    )}
-                    {!isActive && (
-                      <div className="absolute inset-0 rounded-xl bg-white/0 group-hover:bg-white/[0.04] transition-colors duration-200" />
-                    )}
-                    <div
-                      className={`flex-shrink-0 transition-all duration-200 ${isActive ? "text-[#d946a8]" : "text-gray-600 group-hover:text-gray-300"
-                        }`}
-                      style={isActive ? { filter: "drop-shadow(0 0 5px rgba(217,70,168,0.65))" } : {}}
-                    >
-                      <item.icon style={{ width: "17px", height: "17px" }} />
+                        className={`flex items-center gap-3 px-4.5 py-2.5 rounded-xl transition-all duration-200 relative overflow-hidden ${isActive ? "text-[#d946a8]" : "text-gray-500 hover:text-gray-200"
+                          }`}
+                        style={isActive ? {
+                          background: "linear-gradient(135deg, rgba(158,33,123,0.22) 0%, rgba(217,70,168,0.07) 100%)",
+                          boxShadow: "inset 0 0 0 1px rgba(217,70,168,0.28), 0 2px 16px rgba(158,33,123,0.12)",
+                        } : {}}
+                      >
+                        {isActive && (
+                          <div
+                            className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-[#d946a8]"
+                            style={{ boxShadow: "0 0 10px rgba(217,70,168,0.9), 0 0 4px rgba(217,70,168,0.6)" }}
+                          />
+                        )}
+                        {!isActive && (
+                          <div className="absolute inset-0 rounded-xl bg-white/0 group-hover:bg-white/[0.04] transition-colors duration-200" />
+                        )}
+                        <div
+                          className={`flex-shrink-0 transition-all duration-200 ${isActive ? "text-[#d946a8]" : "text-gray-600 group-hover:text-gray-300"
+                            }`}
+                          style={isActive ? { filter: "drop-shadow(0 0 5px rgba(217,70,168,0.65))" } : {}}
+                        >
+                          <item.icon style={{ width: "17px", height: "17px" }} />
+                        </div>
+                        <span
+                          className={`text-[12.5px] font-semibold whitespace-nowrap overflow-hidden transition-all duration-300 ${isActive ? "text-[#d946a8]" : "text-gray-400 group-hover:text-gray-100"
+                            }`}
+                          style={{
+                            maxWidth: isSidebarHovered ? "140px" : "0px",
+                            opacity: isSidebarHovered ? 1 : 0,
+                            transform: isSidebarHovered ? "translateX(0)" : "translateX(-6px)",
+                            letterSpacing: "0.01em",
+                          }}
+                        >
+                          {item.label}
+                        </span>
+                      </div>
                     </div>
-                    <span
-                      className={`text-[12.5px] font-semibold whitespace-nowrap overflow-hidden transition-all duration-300 ${isActive ? "text-[#d946a8]" : "text-gray-400 group-hover:text-gray-100"
-                        }`}
-                      style={{
-                        maxWidth: isSidebarHovered ? "140px" : "0px",
-                        opacity: isSidebarHovered ? 1 : 0,
-                        transform: isSidebarHovered ? "translateX(0)" : "translateX(-6px)",
-                        letterSpacing: "0.01em",
-                      }}
-                    >
-                      {item.label}
-                    </span>
                   </div>
-                </div>
-              );
-            })}
+                );
+              });
+            })()}
           </div>
 
           {/* Last item (Bhoomi AI) pinned to bottom */}
@@ -2084,6 +2119,10 @@ export default function EmployeesPage() {
         .custom-scrollbar-light::-webkit-scrollbar-track{background:transparent}
         .custom-scrollbar-light::-webkit-scrollbar-thumb{background:rgba(0,0,0,0.1);border-radius:10px}
         .custom-scrollbar-light::-webkit-scrollbar-thumb:hover{background:rgba(0,0,0,0.2)}
+        .sidebar-scroll::-webkit-scrollbar{width:4px}
+        .sidebar-scroll::-webkit-scrollbar-track{background:transparent}
+        .sidebar-scroll::-webkit-scrollbar-thumb{background:rgba(217,70,168,0.25);border-radius:10px}
+        .sidebar-scroll::-webkit-scrollbar-thumb:hover{background:rgba(217,70,168,0.5)}
         @keyframes fadeIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
         .animate-fadeIn{animation:fadeIn 0.25s cubic-bezier(0.4,0,0.2,1)}
         @keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}

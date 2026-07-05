@@ -33,6 +33,7 @@ import {
 } from "@/lib/lostLeadSync";
 import dynamic from "next/dynamic";
 import AttendanceView from "@/components/AttendanceView";
+import { BHOOMI_AI_SYSTEM_PROMPT } from "../api/ai-assistant/prompt";
 const RevenueIntelligenceView = dynamic(() => import("./RevenueIntelligenceView"), { ssr: false });
 const GeoAnalyticsView = dynamic(() => import("./GeoAnalyticsView"), { ssr: false });
 const LiveActivityView = dynamic(() => import("./LiveActivityView"), { ssr: false });
@@ -440,7 +441,7 @@ function AdminAtlasDashboardContent() {
   const [notifQueue, setNotifQueue] = useState<CrmNotif[]>([]);
   const [activeNotif, setActiveNotif] = useState<CrmNotif | null>(null);
   const [notifCount, setNotifCount] = useState(0);
-
+  const [navSearch, setNavSearch] = useState("");
   const theme = useMemo(() => buildTheme(isDark), [isDark]);
   const { managers, receptionists, siteHeads, allLeads, followUps, isLoading, refetch } = useAdminData();
 
@@ -745,63 +746,95 @@ function AdminAtlasDashboardContent() {
 
         <div className="mx-4 mb-4 flex-shrink-0" style={{ height: "1px", background: "linear-gradient(90deg, transparent, rgba(158,33,123,0.3), transparent)" }} />
 
-        <nav className="flex flex-col gap-2 px-2 flex-1 overflow-hidden">
+        {isSidebarHovered && (
+          <div className="px-4 mb-2 flex-shrink-0 animate-fadeIn">
+            <input
+              type="text"
+              value={navSearch}
+              onChange={(e) => setNavSearch(e.target.value)}
+              placeholder="Quick jump..."
+              autoFocus
+              className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-gray-300 placeholder:text-gray-600 outline-none focus:border-[#9E217B]/50"
+            />
+          </div>
+        )}
+
+        <nav className="flex flex-col gap-2 px-2 flex-1 overflow-y-auto overflow-x-hidden sidebar-scroll">
           {/* Main nav items (all except last) */}
-          <div className="flex flex-col gap-2 flex-1">
-            {menuItems.slice(0, -1).map((item) => {
+          <div className="flex flex-col gap-2">
+            {menuItems.slice(0, -1).filter(i => i.label.toLowerCase().includes(navSearch.toLowerCase())).map((item, idx) => {
               const isActive = activeView === item.id;
+              const groupOf: Record<string, string> = {
+                dashboard: "Workspace", revenue_intelligence: "Workspace",
+                receptionist: "Team", sales: "Team", site_head: "Team",
+                site_visit_overview: "Insights", attendance: "Insights", monitoring: "Insights", live_activity: "Insights", geo: "Insights",
+                caller: "Admin", employees: "Admin",
+                ai: "Tool",
+              };
+              const prevItem = menuItems[idx - 1];
+              const showGroupLabel = groupOf[item.id] && groupOf[item.id] !== groupOf[prevItem?.id];
               return (
-                <div
-                  key={item.id}
-                  onClick={() => handleMenuClick(item.id)}
-                  title={!isSidebarHovered ? item.label : undefined}
-                  className="relative cursor-pointer group"
-                >
-                  {isActive && (
-                    <div
-                      className="absolute inset-0 rounded-xl pointer-events-none"
-                      style={{
-                        background: "radial-gradient(ellipse at left center, rgba(217,70,168,0.12) 0%, transparent 70%)",
-                        animation: "sm-glow-pulse 3s ease-in-out infinite",
-                      }}
-                    />
+                <div key={`wrap-${item.id}`}>
+                  {showGroupLabel && (
+                    <p
+                      className="text-[10px] font-bold uppercase tracking-wider text-gray-600 px-4 pt-3 pb-1 overflow-hidden whitespace-nowrap transition-opacity duration-200"
+                      style={{ opacity: isSidebarHovered ? 1 : 0 }}
+                    >
+                      {groupOf[item.id]}
+                    </p>
                   )}
                   <div
-                    className={`flex items-center gap-3 px-4.5 py-2.5 rounded-xl transition-all duration-200 relative overflow-hidden ${isActive ? "text-[#d946a8]" : "text-gray-500 hover:text-gray-200"
-                      }`}
-                    style={isActive ? {
-                      background: "linear-gradient(135deg, rgba(158,33,123,0.22) 0%, rgba(217,70,168,0.07) 100%)",
-                      boxShadow: "inset 0 0 0 1px rgba(217,70,168,0.28), 0 2px 16px rgba(158,33,123,0.12)",
-                    } : {}}
+                    key={item.id}
+                    onClick={() => handleMenuClick(item.id)}
+                    title={!isSidebarHovered ? item.label : undefined}
+                    className="relative cursor-pointer group"
                   >
                     {isActive && (
                       <div
-                        className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-[#d946a8]"
-                        style={{ boxShadow: "0 0 10px rgba(217,70,168,0.9), 0 0 4px rgba(217,70,168,0.6)" }}
+                        className="absolute inset-0 rounded-xl pointer-events-none"
+                        style={{
+                          background: "radial-gradient(ellipse at left center, rgba(217,70,168,0.12) 0%, transparent 70%)",
+                          animation: "sm-glow-pulse 3s ease-in-out infinite",
+                        }}
                       />
                     )}
-                    {!isActive && (
-                      <div className="absolute inset-0 rounded-xl bg-white/0 group-hover:bg-white/[0.04] transition-colors duration-200" />
-                    )}
                     <div
-                      className={`flex-shrink-0 transition-all duration-200 ${isActive ? "text-[#d946a8]" : "text-gray-600 group-hover:text-gray-300"
+                      className={`flex items-center gap-3 px-4.5 py-2.5 rounded-xl transition-all duration-200 relative overflow-hidden ${isActive ? "text-[#d946a8]" : "text-gray-500 hover:text-gray-200"
                         }`}
-                      style={isActive ? { filter: "drop-shadow(0 0 5px rgba(217,70,168,0.65))" } : {}}
+                      style={isActive ? {
+                        background: "linear-gradient(135deg, rgba(158,33,123,0.22) 0%, rgba(217,70,168,0.07) 100%)",
+                        boxShadow: "inset 0 0 0 1px rgba(217,70,168,0.28), 0 2px 16px rgba(158,33,123,0.12)",
+                      } : {}}
                     >
-                      <item.icon style={{ width: "17px", height: "17px" }} />
+                      {isActive && (
+                        <div
+                          className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-[#d946a8]"
+                          style={{ boxShadow: "0 0 10px rgba(217,70,168,0.9), 0 0 4px rgba(217,70,168,0.6)" }}
+                        />
+                      )}
+                      {!isActive && (
+                        <div className="absolute inset-0 rounded-xl bg-white/0 group-hover:bg-white/[0.04] transition-colors duration-200" />
+                      )}
+                      <div
+                        className={`flex-shrink-0 transition-all duration-200 ${isActive ? "text-[#d946a8]" : "text-gray-600 group-hover:text-gray-300"
+                          }`}
+                        style={isActive ? { filter: "drop-shadow(0 0 5px rgba(217,70,168,0.65))" } : {}}
+                      >
+                        <item.icon style={{ width: "17px", height: "17px" }} />
+                      </div>
+                      <span
+                        className={`text-[12.5px] font-semibold whitespace-nowrap overflow-hidden transition-all duration-300 ${isActive ? "text-[#d946a8]" : "text-gray-400 group-hover:text-gray-100"
+                          }`}
+                        style={{
+                          maxWidth: isSidebarHovered ? "140px" : "0px",
+                          opacity: isSidebarHovered ? 1 : 0,
+                          transform: isSidebarHovered ? "translateX(0)" : "translateX(-6px)",
+                          letterSpacing: "0.01em",
+                        }}
+                      >
+                        {item.label}
+                      </span>
                     </div>
-                    <span
-                      className={`text-[12.5px] font-semibold whitespace-nowrap overflow-hidden transition-all duration-300 ${isActive ? "text-[#d946a8]" : "text-gray-400 group-hover:text-gray-100"
-                        }`}
-                      style={{
-                        maxWidth: isSidebarHovered ? "140px" : "0px",
-                        opacity: isSidebarHovered ? 1 : 0,
-                        transform: isSidebarHovered ? "translateX(0)" : "translateX(-6px)",
-                        letterSpacing: "0.01em",
-                      }}
-                    >
-                      {item.label}
-                    </span>
                   </div>
                 </div>
               );
@@ -872,6 +905,14 @@ function AdminAtlasDashboardContent() {
 
         <div className="flex-shrink-0" style={{ height: "60px", background: "linear-gradient(0deg, #0f0f1a 0%, transparent 100%)" }} />
       </motion.aside>
+
+      <style dangerouslySetInnerHTML={{
+        __html: `
+        .sidebar-scroll::-webkit-scrollbar{width:4px}
+        .sidebar-scroll::-webkit-scrollbar-track{background:transparent}
+        .sidebar-scroll::-webkit-scrollbar-thumb{background:rgba(217,70,168,0.25);border-radius:10px}
+        .sidebar-scroll::-webkit-scrollbar-thumb:hover{background:rgba(217,70,168,0.5)}
+      `}} />
 
       <div className={`flex-1 flex flex-col pl-[72px] h-screen overflow-hidden ${theme.mainBg}`}>
         <header
@@ -1894,7 +1935,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
             <div className="overflow-x-auto">
               <div ref={loadLessRef} style={{ height: "1px", width: "100%" }} />
               <table className="w-full text-left text-sm">
-                <thead className={`text-xs uppercase ${theme.tableHead} ${theme.textHeader}`}>
+                <thead className={`text-xs uppercase sticky top-0 z-10 ${theme.tableHead} ${theme.textHeader}`}>
                   <tr>
                     {[
                       { label: "LEAD NO.", width: "min-w-[80px]" },
@@ -3540,13 +3581,13 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                     </button>
                   </div>
                   <div className="flex-1 overflow-hidden">
-                  <ClosedLeadBookingView
-                    booking={bookingData}
-                    lead={selectedLead}
-                    isDark={isDark}
-                    userRole={adminUser?.role?.toLowerCase() || "admin"}
-                    currentUser={adminUser}
-                    onRefetch={() => { if (selectedLead) fetchBookingForLead(selectedLead.id); }}
+                    <ClosedLeadBookingView
+                      booking={bookingData}
+                      lead={selectedLead}
+                      isDark={isDark}
+                      userRole={adminUser?.role?.toLowerCase() || "admin"}
+                      currentUser={adminUser}
+                      onRefetch={() => { if (selectedLead) fetchBookingForLead(selectedLead.id); }}
                     />
                   </div>
                 </div>
@@ -4705,13 +4746,13 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                     </button>
                   </div>
                   <div className="flex-1 overflow-hidden">
-                  <ClosedLeadBookingView
-                    booking={bookingData}
-                    lead={selectedLead}
-                    isDark={isDark}
-                    userRole={adminUser?.role?.toLowerCase() || "admin"}
-                    currentUser={adminUser}
-                    onRefetch={() => { if (selectedLead) fetchBookingForLead(selectedLead.id); }}
+                    <ClosedLeadBookingView
+                      booking={bookingData}
+                      lead={selectedLead}
+                      isDark={isDark}
+                      userRole={adminUser?.role?.toLowerCase() || "admin"}
+                      currentUser={adminUser}
+                      onRefetch={() => { if (selectedLead) fetchBookingForLead(selectedLead.id); }}
                     />
                   </div>
                 </div>
@@ -5894,13 +5935,13 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                     </button>
                   </div>
                   <div className="flex-1 overflow-hidden">
-                  <ClosedLeadBookingView
-                    booking={bookingData}
-                    lead={selectedLead}
-                    isDark={isDark}
-                    userRole={adminUser?.role?.toLowerCase() || "admin"}
-                    currentUser={adminUser}
-                    onRefetch={() => { if (selectedLead) fetchBookingForLead(selectedLead.id); }}
+                    <ClosedLeadBookingView
+                      booking={bookingData}
+                      lead={selectedLead}
+                      isDark={isDark}
+                      userRole={adminUser?.role?.toLowerCase() || "admin"}
+                      currentUser={adminUser}
+                      onRefetch={() => { if (selectedLead) fetchBookingForLead(selectedLead.id); }}
                     />
                   </div>
                 </div>
@@ -5936,16 +5977,16 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                             </h1>
                           </div>
                           <div className="flex gap-3 flex-wrap justify-end">
-                        {bookingData ? (
-                          <button onClick={() => setShowBookingView(true)} className="font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm">
-                            <FaEye /> View Booking Form
-                          </button>
-                        ) : (
-                          <button disabled title="Booking Form has not been submitted yet." className="font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors opacity-50 cursor-not-allowed bg-indigo-400 text-white shadow-sm">
-                            <FaEye /> View Booking Form
-                          </button>
-                        )}
-                        {isLeadLocked ? (
+                            {bookingData ? (
+                              <button onClick={() => setShowBookingView(true)} className="font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm">
+                                <FaEye /> View Booking Form
+                              </button>
+                            ) : (
+                              <button disabled title="Booking Form has not been submitted yet." className="font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors opacity-50 cursor-not-allowed bg-indigo-400 text-white shadow-sm">
+                                <FaEye /> View Booking Form
+                              </button>
+                            )}
+                            {isLeadLocked ? (
                               <>
                                 <span className={`text-[11px] font-bold px-3 py-1 rounded-full border flex items-center gap-1.5 ${theme.statusClosing}`}>
                                   <FaCheckCircle className="text-xs" /> Lead Closed • Read Only
