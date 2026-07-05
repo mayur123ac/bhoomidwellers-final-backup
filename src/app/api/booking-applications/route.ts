@@ -200,7 +200,69 @@ async function ensureTable() {
       logged_at TIMESTAMPTZ DEFAULT NOW()
     );
   `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS financial_accounts (
+      id SERIAL PRIMARY KEY,
+      booking_id INT UNIQUE REFERENCES booking_applications(id) ON DELETE CASCADE,
+      account_type VARCHAR(50) DEFAULT 'customer_receivable',
+      status VARCHAR(50) DEFAULT 'active',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS financial_ledger (
+      id SERIAL PRIMARY KEY,
+      account_id INT REFERENCES financial_accounts(id) ON DELETE CASCADE,
+      transaction_type VARCHAR(100),
+      transaction_direction VARCHAR(20),
+      amount NUMERIC,
+      transaction_date TIMESTAMP,
+      bank_name VARCHAR(255),
+      payment_mode VARCHAR(100),
+      reference_number VARCHAR(255),
+      status VARCHAR(50),
+      affects_revenue VARCHAR(10),
+      received_from VARCHAR(100),
+      transaction_source VARCHAR(100),
+      notes TEXT,
+      created_by VARCHAR(255),
+      updated_by VARCHAR(255),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE (account_id, transaction_type, transaction_source)
+    );
+  `);
+
+  await query(`
+    CREATE OR REPLACE VIEW customer_ledger_view AS
+    SELECT 
+      fa.booking_id,
+      fa.id as account_id,
+      ba.agreement_value::numeric AS agreement_value,
+      COALESCE(SUM(fl.amount) FILTER (WHERE fl.transaction_direction = 'CREDIT' AND fl.status = 'Received'), 0) AS gross_collection,
+      COALESCE(SUM(fl.amount) FILTER (WHERE fl.transaction_direction = 'CREDIT' AND fl.status = 'Received' AND fl.affects_revenue = 'YES'), 0) AS developer_revenue,
+      COALESCE(SUM(fl.amount) FILTER (WHERE fl.transaction_direction = 'CREDIT' AND fl.status = 'Received' AND fl.affects_revenue = 'NO'), 0) AS government_charges,
+      COALESCE(SUM(fl.amount) FILTER (WHERE fl.transaction_direction = 'DEBIT' AND fl.transaction_type = 'refund' AND fl.status = 'Refunded'), 0) AS refunds,
+      (
+        COALESCE(SUM(fl.amount) FILTER (WHERE fl.transaction_direction = 'CREDIT' AND fl.status = 'Received'), 0) 
+        - 
+        COALESCE(SUM(fl.amount) FILTER (WHERE fl.transaction_direction = 'DEBIT' AND fl.transaction_type = 'refund' AND fl.status = 'Refunded'), 0)
+      ) AS net_collection,
+      (
+        ba.agreement_value::numeric 
+        - 
+        COALESCE(SUM(fl.amount) FILTER (WHERE fl.transaction_direction = 'CREDIT' AND fl.status = 'Received' AND fl.affects_revenue = 'YES'), 0)
+      ) AS outstanding_balance
+    FROM financial_accounts fa
+    JOIN booking_applications ba ON ba.id = fa.booking_id
+    LEFT JOIN financial_ledger fl ON fl.account_id = fa.id
+    GROUP BY fa.booking_id, fa.id, ba.agreement_value;
+  `);
 }
+
 
 // ─── GET — fetch bookings ─────────────────────────────────────────────────────
 export async function GET(req: NextRequest) {

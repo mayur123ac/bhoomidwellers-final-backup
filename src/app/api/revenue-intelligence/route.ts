@@ -10,6 +10,9 @@ const REQUIRED_TABLES = [
   "booking_financials",
   "booking_loan_details",
   "booking_registration_details",
+  "financial_accounts",
+  "financial_ledger",
+  "customer_ledger_view",
 ];
 
 async function getExistingTables() {
