@@ -33,7 +33,7 @@ import {
 } from "@/lib/lostLeadSync";
 import dynamic from "next/dynamic";
 import AttendanceView from "@/components/AttendanceView";
-const RevenuePipelineView = dynamic(() => import("./RevenuePipelineView"), { ssr: false });
+const RevenueIntelligenceView = dynamic(() => import("./RevenueIntelligenceView"), { ssr: false });
 const GeoAnalyticsView = dynamic(() => import("./GeoAnalyticsView"), { ssr: false });
 const LiveActivityView = dynamic(() => import("./LiveActivityView"), { ssr: false });
 const SiteVisitOverview = dynamic(() => import("./SiteVisitOverview"), { ssr: false });
@@ -400,7 +400,7 @@ function AdminAtlasDashboardContent() {
   useEffect(() => {
     const tab = searchParams.get("tab");
     if (tab) {
-      setActiveView(tab);
+      setActiveView(tab === "revenue_pipeline" ? "revenue_intelligence" : tab);
     }
   }, [searchParams]);
 
@@ -552,7 +552,7 @@ function AdminAtlasDashboardContent() {
       router.replace("/");
     }
     const returnTab = localStorage.getItem("return_tab");
-    if (returnTab) { setActiveView(returnTab); localStorage.removeItem("return_tab"); }
+    if (returnTab) { setActiveView(returnTab === "revenue_pipeline" ? "revenue_intelligence" : returnTab); localStorage.removeItem("return_tab"); }
     return cleanupBackGuard;
   }, [router]);
 
@@ -657,7 +657,7 @@ function AdminAtlasDashboardContent() {
 
   const menuItems = [
     { id: "dashboard", icon: FaThLarge, label: "Overview" },
-    { id: "revenue_pipeline", icon: FaFileInvoiceDollar, label: "Revenue Pipeline" },
+    { id: "revenue_intelligence", icon: FaFileInvoiceDollar, label: "Revenue Intelligence" },
     { id: "receptionist", icon: FaClipboardList, label: "Receptionist" },
     { id: "sales", icon: FaUsers, label: "Sales Managers" },
     { id: "site_head", icon: FaUniversity, label: "Site Heads" },
@@ -674,7 +674,7 @@ function AdminAtlasDashboardContent() {
 
     // Non-admin roles should only see what's allowed.
     // Admin only panels:
-    if (item.id === "live_activity" || item.id === "geo") {
+    if (item.id === "revenue_intelligence" || item.id === "live_activity" || item.id === "geo") {
       return false;
     }
 
@@ -1055,7 +1055,17 @@ function AdminAtlasDashboardContent() {
             localStorage.setItem("crm_drill_lead", JSON.stringify({ ...lead, _drillTab: targetTab }));
             setActiveView(targetTab);
           }} />}
-          {activeView === "revenue_pipeline" && <RevenuePipelineView isDark={isDark} theme={theme} />}
+          {activeView === "revenue_intelligence" && (
+            isAdmin ? (
+              <RevenueIntelligenceView isDark={isDark} theme={theme} />
+            ) : (
+              <div className="flex items-center justify-center h-full flex-col gap-2">
+                <FaTimes className="text-red-500 w-16 h-16" />
+                <h2 className="text-2xl font-bold text-red-500">Access Denied</h2>
+                <p className={theme.textMuted}>You do not have permission to access this module.</p>
+              </div>
+            )
+          )}
           {activeView === "sales" && <AdminSalesView managers={managers} allLeads={allLeads} followUps={followUps} isLoading={isLoading} adminUser={user} refetch={refetch} theme={theme} isDark={isDark} />}
           {activeView === "site_head" && <AdminSiteHeadView siteHeads={siteHeads} allLeads={allLeads} followUps={followUps} isLoading={isLoading} adminUser={user} refetch={refetch} theme={theme} isDark={isDark} />}
           {activeView === "site_visit_overview" && <SiteVisitOverview managers={managers} receptionists={receptionists} allLeads={allLeads} siteHeads={siteHeads} adminUser={user} theme={theme} isDark={isDark} />}
@@ -3127,6 +3137,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
   };
 
   const [bookingData, setBookingData] = useState<any>(null);
+  const [showBookingView, setShowBookingView] = useState(false);
   const [bookingDetailTab, setBookingDetailTab] = useState<"personal" | "loan" | "booking">("personal");
 
   const handleBookingSuccess = (booking: any) => {
@@ -3147,10 +3158,11 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
   };
 
   useEffect(() => {
-    if (selectedLead && (selectedLead.status === "Closing" || selectedLead.status === "Closed" || selectedLead.booking_id)) {
+    if (selectedLead) {
       fetchBookingForLead(selectedLead.id);
     } else {
       setBookingData(null);
+      setShowBookingView(false);
     }
   }, [selectedLead]);
 
@@ -3520,14 +3532,23 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
   900px, 24px padding, 80vh max, internal scroll) inside those files directly.
 */}
             {subView === "detail" && selectedLead && (
-              bookingData ? (
-                <div className="animate-fadeIn w-full h-[calc(100vh-130px)] overflow-hidden bg-transparent">
+              bookingData && showBookingView ? (
+                <div className="animate-fadeIn w-full h-[calc(100vh-130px)] overflow-hidden bg-transparent flex flex-col">
+                  <div className="flex items-center p-2 shrink-0 border-b border-white/10 shadow-sm" style={theme.cardGlass}>
+                    <button onClick={() => setShowBookingView(false)} className={`px-4 py-1.5 text-xs font-bold flex items-center gap-1.5 border rounded-lg transition-colors cursor-pointer shadow-sm ${theme.textMuted} ${theme.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}>
+                      <FaChevronLeft /> Back to Lead Details
+                    </button>
+                  </div>
+                  <div className="flex-1 overflow-hidden">
                   <ClosedLeadBookingView
                     booking={bookingData}
                     lead={selectedLead}
                     isDark={isDark}
                     userRole={adminUser?.role?.toLowerCase() || "admin"}
-                  />
+                    currentUser={adminUser}
+                    onRefetch={() => { if (selectedLead) fetchBookingForLead(selectedLead.id); }}
+                    />
+                  </div>
                 </div>
               ) : (
                 <div className={`flex-1 overflow-y-auto p-3 ${theme.scroll}`}>
@@ -3550,6 +3571,15 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                         </h1>
                       </div>
                       <div className="flex gap-2 flex-wrap justify-end">
+                        {bookingData ? (
+                          <button onClick={() => setShowBookingView(true)} className="font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm">
+                            <FaEye /> View Booking Form
+                          </button>
+                        ) : (
+                          <button disabled title="Booking Form has not been submitted yet." className="font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors opacity-50 cursor-not-allowed bg-indigo-400 text-white shadow-sm">
+                            <FaEye /> View Booking Form
+                          </button>
+                        )}
                         {isLeadLocked ? (
                           <>
                             <span className={`text-[11px] font-bold px-3 py-1 rounded-full border flex items-center gap-1.5 ${selectedLead.is_lost_lead ? theme.statusLost : theme.statusClosing}`}>
@@ -4002,6 +4032,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
   const [isReopening, setIsReopening] = useState(false);
 
   const [bookingData, setBookingData] = useState<any>(null);
+  const [showBookingView, setShowBookingView] = useState(false);
 
   const fetchBookingForLead = async (leadId: string | number) => {
     try {
@@ -4013,10 +4044,11 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
   };
 
   useEffect(() => {
-    if (selectedLead && (selectedLead.status === "Closing" || selectedLead.status === "Closed" || selectedLead.booking_id)) {
+    if (selectedLead) {
       fetchBookingForLead(selectedLead.id);
     } else {
       setBookingData(null);
+      setShowBookingView(false);
     }
   }, [selectedLead]);
 
@@ -4665,14 +4697,23 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
 
             {/* ── DETAIL VIEW (Full Panel) ── */}
             {subView === "detail" && selectedLead && (
-              bookingData ? (
-                <div className="animate-fadeIn w-full h-[calc(100vh-130px)] overflow-hidden bg-transparent">
+              bookingData && showBookingView ? (
+                <div className="animate-fadeIn w-full h-[calc(100vh-130px)] overflow-hidden bg-transparent flex flex-col">
+                  <div className="flex items-center p-2 shrink-0 border-b border-white/10 shadow-sm" style={theme.cardGlass}>
+                    <button onClick={() => setShowBookingView(false)} className={`px-4 py-1.5 text-xs font-bold flex items-center gap-1.5 border rounded-lg transition-colors cursor-pointer shadow-sm ${theme.textMuted} ${theme.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}>
+                      <FaChevronLeft /> Back to Lead Details
+                    </button>
+                  </div>
+                  <div className="flex-1 overflow-hidden">
                   <ClosedLeadBookingView
                     booking={bookingData}
                     lead={selectedLead}
                     isDark={isDark}
                     userRole={adminUser?.role?.toLowerCase() || "admin"}
-                  />
+                    currentUser={adminUser}
+                    onRefetch={() => { if (selectedLead) fetchBookingForLead(selectedLead.id); }}
+                    />
+                  </div>
                 </div>
               ) : (
                 <div className={`flex-1 overflow-y-auto p-6 ${theme.scroll}`}>
@@ -4695,6 +4736,15 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                         </h1>
                       </div>
                       <div className="flex gap-3 flex-wrap justify-end">
+                        {bookingData ? (
+                          <button onClick={() => setShowBookingView(true)} className="font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm">
+                            <FaEye /> View Booking Form
+                          </button>
+                        ) : (
+                          <button disabled title="Booking Form has not been submitted yet." className="font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors opacity-50 cursor-not-allowed bg-indigo-400 text-white shadow-sm">
+                            <FaEye /> View Booking Form
+                          </button>
+                        )}
                         {isLeadLocked ? (
                           <>
                             <span className={`text-[11px] font-bold px-3 py-1 rounded-full border flex items-center gap-1.5 ${selectedLead.is_lost_lead ? theme.statusLost : theme.statusClosing}`}>
@@ -5119,6 +5169,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
   const [isSendingWa, setIsSendingWa] = useState(false);
 
   const [bookingData, setBookingData] = useState<any>(null);
+  const [showBookingView, setShowBookingView] = useState(false);
 
   const fetchBookingForLead = async (leadId: string | number) => {
     try {
@@ -5136,10 +5187,11 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
   };
 
   useEffect(() => {
-    if (selectedLead && (selectedLead.status === "Closing" || selectedLead.status === "Closed" || selectedLead.booking_id)) {
+    if (selectedLead) {
       fetchBookingForLead(selectedLead.id);
     } else {
       setBookingData(null);
+      setShowBookingView(false);
     }
   }, [selectedLead]);
 
@@ -5834,14 +5886,23 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
 
             {/* ── DETAIL VIEW (full panel with follow-ups, mirrors Sales Manager) ── */}
             {subView === "detail" && selectedLead && !isEnquiryView && (
-              bookingData ? (
-                <div className="animate-fadeIn w-full h-[calc(100vh-130px)] overflow-hidden bg-transparent">
+              bookingData && showBookingView ? (
+                <div className="animate-fadeIn w-full h-[calc(100vh-130px)] overflow-hidden bg-transparent flex flex-col">
+                  <div className="flex items-center p-2 shrink-0 border-b border-white/10 shadow-sm" style={theme.cardGlass}>
+                    <button onClick={() => setShowBookingView(false)} className={`px-4 py-1.5 text-xs font-bold flex items-center gap-1.5 border rounded-lg transition-colors cursor-pointer shadow-sm ${theme.textMuted} ${theme.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}>
+                      <FaChevronLeft /> Back to Lead Details
+                    </button>
+                  </div>
+                  <div className="flex-1 overflow-hidden">
                   <ClosedLeadBookingView
                     booking={bookingData}
                     lead={selectedLead}
                     isDark={isDark}
                     userRole={adminUser?.role?.toLowerCase() || "admin"}
-                  />
+                    currentUser={adminUser}
+                    onRefetch={() => { if (selectedLead) fetchBookingForLead(selectedLead.id); }}
+                    />
+                  </div>
                 </div>
               ) : (
                 <div className={`flex-1 overflow-y-auto p-6 ${theme.scroll}`}>
@@ -5875,7 +5936,16 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                             </h1>
                           </div>
                           <div className="flex gap-3 flex-wrap justify-end">
-                            {isLeadLocked ? (
+                        {bookingData ? (
+                          <button onClick={() => setShowBookingView(true)} className="font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm">
+                            <FaEye /> View Booking Form
+                          </button>
+                        ) : (
+                          <button disabled title="Booking Form has not been submitted yet." className="font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors opacity-50 cursor-not-allowed bg-indigo-400 text-white shadow-sm">
+                            <FaEye /> View Booking Form
+                          </button>
+                        )}
+                        {isLeadLocked ? (
                               <>
                                 <span className={`text-[11px] font-bold px-3 py-1 rounded-full border flex items-center gap-1.5 ${theme.statusClosing}`}>
                                   <FaCheckCircle className="text-xs" /> Lead Closed • Read Only

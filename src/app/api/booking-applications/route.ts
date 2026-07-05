@@ -234,13 +234,23 @@ export async function GET(req: NextRequest) {
                 FROM booking_custom_charges cc WHERE cc.booking_id = b.id),
                '[]'
              ) AS custom_charges,
-             (COALESCE(f.ocr_amount,0) + COALESCE(f.cash_component,0) + COALESCE(l.disbursement_amount,0) + COALESCE(f.sdr_amount,0)) AS total_received,
-             (COALESCE(b.agreement_value,0) - (COALESCE(f.ocr_amount,0) + COALESCE(f.cash_component,0) + COALESCE(l.disbursement_amount,0) + COALESCE(f.sdr_amount,0))) AS balance_receivable
+             clv.gross_collection AS total_received,
+             clv.outstanding_balance AS balance_receivable,
+             json_build_object(
+               'agreement_value', clv.agreement_value,
+               'gross_collection', clv.gross_collection,
+               'developer_revenue', clv.developer_revenue,
+               'government_charges', clv.government_charges,
+               'refunds', clv.refunds,
+               'net_collection', clv.net_collection,
+               'outstanding_balance', clv.outstanding_balance
+             ) AS financial_summary
       FROM booking_applications b
       LEFT JOIN walkin_enquiries w ON w.id = b.lead_id
       LEFT JOIN booking_financials f ON f.booking_id = b.id
       LEFT JOIN booking_loan_details l ON l.booking_id = b.id
       LEFT JOIN booking_registration_details r ON r.booking_id = b.id
+      LEFT JOIN customer_ledger_view clv ON clv.booking_id = b.id
     `;
     const params: any[] = [];
     if (leadId) {
@@ -441,6 +451,27 @@ export async function POST(req: NextRequest) {
         INSERT INTO booking_pipeline (booking_id, current_stage, status)
         VALUES ($1, 'Booking', 'Active')
       `, [newId]);
+
+      // 1f-2. Initialize Financial Account & Ledger
+      const accInsert = await client.query(`INSERT INTO financial_accounts (booking_id) VALUES ($1) RETURNING id`, [newId]);
+      const account_id = accInsert.rows[0].id;
+
+      const upsertLedger = async (type: string, direction: string, amount: number, date: any, affectsRevenue: string, receivedFrom: string, bankName: string | null = null, paymentMode: string | null = null, remarks: string | null = null) => {
+        if (amount > 0) {
+          await client.query(`
+            INSERT INTO financial_ledger (account_id, transaction_type, transaction_direction, amount, transaction_date, status, affects_revenue, received_from, transaction_source, bank_name, payment_mode, notes, created_by)
+            VALUES ($1, $2, $3, $4, $5, 'Received', $6, $7, 'UI_Update', $8, $9, $10, $11)
+            ON CONFLICT (account_id, transaction_type, transaction_source) DO UPDATE 
+            SET amount = EXCLUDED.amount, transaction_date = EXCLUDED.transaction_date, bank_name = EXCLUDED.bank_name, payment_mode = EXCLUDED.payment_mode, notes = EXCLUDED.notes
+          `, [account_id, type, direction, amount, date || new Date(), affectsRevenue, receivedFrom, bankName, paymentMode, remarks, created_by || 'System']);
+        }
+      };
+
+      await upsertLedger('booking_amount', 'CREDIT', cleanNum(booking_amount), booking_date, 'YES', 'Customer', null, null, booking_remarks);
+      await upsertLedger('ocr', 'CREDIT', cleanNum(ocr_amount), ocr_received_date, 'YES', 'Customer', null, ocr_payment_mode, ocr_remarks);
+      await upsertLedger('sdr', 'CREDIT', cleanNum(sdr_amount), sdr_payment_date, 'NO', 'Customer', null, null, sdr_remarks);
+      await upsertLedger('cash_component', 'CREDIT', cleanNum(cash_component), cash_component_date, 'YES', 'Customer', null, null, cash_component_remarks);
+      await upsertLedger('loan_disbursement', 'CREDIT', cleanNum(disbursement_amount), actual_disbursement_date, 'YES', 'Bank', bank_name, null, null);
 
       // 1g. Insert initial stage history
       await client.query(`

@@ -1,13 +1,17 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   FaFileInvoice, FaMoneyBillWave, FaFolderOpen, FaHistory, FaIdCard,
   FaCheckCircle, FaPrint, FaDownload, FaEdit, FaChevronDown, FaChevronRight,
   FaMapMarkerAlt, FaUpload, FaSpinner, FaCalendarAlt
 } from "react-icons/fa";
+import { formatCurrencyDisplay } from "@/lib/currency";
 import BookingApplicationView from "./BookingApplicationView";
+import BookingFormModal from "./BookingFormModal";
 
 interface ClosedLeadBookingViewProps {
+  currentUser?: any;
+  onRefetch?: () => void;
   booking: any;
   lead: any;
   userRole: string; // "receptionist" | "sales" | "site_head" | "admin"
@@ -18,9 +22,12 @@ interface ClosedLeadBookingViewProps {
 }
 
 export default function ClosedLeadBookingView({
-  booking, lead, userRole, isDark = false, onEdit, onApprove, onCancel
+  booking, lead, userRole, isDark = false, onEdit, onApprove, onCancel, currentUser, onRefetch
 }: ClosedLeadBookingViewProps) {
   const [activeTab, setActiveTab] = useState<"summary" | "payments" | "documents" | "timeline" | "crm">("summary");
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [history, setHistory] = useState<any[]>([]);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [crmOpen, setCrmOpen] = useState(false);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [extendedDetails, setExtendedDetails] = useState<any>(null);
@@ -309,81 +316,70 @@ export default function ClosedLeadBookingView({
     return Math.max(0, Math.floor((d2 - d1) / (1000 * 60 * 60 * 24)));
   };
 
+  const fetchHistory = async () => {
+    if (!booking?.id) return;
+    setIsHistoryLoading(true);
+    try {
+      const res = await fetch(`/api/booking-applications/${booking.id}/history`);
+      const json = await res.json();
+      if (json.success) setHistory(json.data);
+    } catch (e) {
+      console.error("Failed to load history", e);
+    }
+    setIsHistoryLoading(false);
+  };
+
+  useEffect(() => {
+    if (activeTab === "timeline") {
+      fetchHistory();
+    }
+  }, [activeTab, booking?.id]);
+
   const renderTimeline = () => {
-    const bDate = booking?.booking_date || booking?.application_date;
-    const f = extendedDetails?.financials || {};
-    const l = extendedDetails?.loan || {};
-    const r = extendedDetails?.registration || {};
-
-    const steps = [
-      { title: "Booking Confirmation", date: bDate ? formatDate(bDate) : "—", done: !!bDate, info: "" },
-      { 
-        title: "Token Stage", 
-        date: f.token_amount ? "Completed" : "Pending", 
-        done: !!f.token_amount, 
-        info: f.token_amount ? `₹${f.token_amount}` : "" 
-      },
-      { 
-        title: "OCR Stage", 
-        date: f.ocr_received_date ? formatDate(f.ocr_received_date) : "Pending", 
-        done: !!f.ocr_received_date, 
-        info: f.ocr_amount ? `₹${f.ocr_amount}${bDate && f.ocr_received_date ? ` (${calculateDays(bDate, f.ocr_received_date)} days from booking)` : ""}` : "" 
-      },
-      { 
-        title: "SDR Stage", 
-        date: f.sdr_payment_date ? formatDate(f.sdr_payment_date) : "Pending", 
-        done: !!f.sdr_payment_date, 
-        info: f.sdr_amount ? `₹${f.sdr_amount}${f.ocr_received_date && f.sdr_payment_date ? ` (${calculateDays(f.ocr_received_date, f.sdr_payment_date)} days from OCR)` : ""}` : "" 
-      },
-      { 
-        title: "Agreement Stage", 
-        date: booking?.agreement_value ? "Completed" : "Pending", 
-        done: !!booking?.agreement_value, 
-        info: booking?.agreement_value ? `Value: ₹${booking.agreement_value}` : "" 
-      },
-      { 
-        title: "Loan Sanction", 
-        date: l.sanction_date ? formatDate(l.sanction_date) : (l.loan_status || "Pending"), 
-        done: !!l.sanction_date || l.loan_status === "Sanctioned", 
-        info: l.sanction_amount ? `₹${l.sanction_amount}` : "" 
-      },
-      { 
-        title: "Registration", 
-        date: r.actual_registration_date ? formatDate(r.actual_registration_date) : (r.expected_registration_date ? `Expected: ${formatDate(r.expected_registration_date)}` : "Pending"), 
-        done: !!r.actual_registration_date, 
-        info: r.registration_number ? `Reg No: ${r.registration_number}` : "" 
-      },
-      { 
-        title: "Disbursement", 
-        date: l.actual_disbursement_date ? formatDate(l.actual_disbursement_date) : "Pending", 
-        done: !!l.actual_disbursement_date, 
-        info: l.disbursement_amount ? `₹${l.disbursement_amount}` : "" 
-      }
-    ];
-
     return (
-      <div className={`rounded-2xl border p-5 ${bgCard} animate-fadeIn`}>
-        <div className="flex items-center justify-between mb-6">
-          <h3 className={`text-lg font-bold ${accent}`}>Financial & Booking Milestones</h3>
-        </div>
-        <div className="relative pl-6 border-l-2 border-[#9E217B]/20 space-y-6">
-          {steps.map((s, i) => (
-            <div key={i} className="relative">
-              <div className={`absolute -left-[31px] top-1 w-4 h-4 rounded-full border-2 ${isDark ? "bg-[#121218]" : "bg-white"} ${s.done ? "border-[#9E217B] bg-[#9E217B]" : isDark ? "border-[#2A2A35]" : "border-gray-300"}`} />
-              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-1">
-                <div>
-                  <p className={`font-bold text-sm ${s.done ? textMain : textMuted}`}>{s.title}</p>
-                  <p className={`text-xs mt-0.5 flex items-center gap-1 ${textMuted}`}><FaCalendarAlt className="text-[10px]" /> {s.date}</p>
-                </div>
-                {s.info && (
-                  <div className={`text-xs font-semibold px-2 py-1 rounded bg-black/5 dark:bg-white/5 ${textMain}`}>
-                    {s.info}
+      <div className="space-y-6">
+        <h3 className={`text-lg font-bold mb-4 ${isDark ? "text-white" : "text-gray-800"}`}>Timeline & Audit Log</h3>
+        {isHistoryLoading ? (
+          <p className="text-sm text-gray-500">Loading history...</p>
+        ) : history.length === 0 ? (
+          <p className="text-sm text-gray-500">No modification history found.</p>
+        ) : (
+          <div className="space-y-4">
+            {history.map((entry, idx) => (
+              <div key={idx} className={`p-4 rounded-xl border ${isDark ? "bg-[#222] border-white/10" : "bg-gray-50 border-gray-200"}`}>
+                <div className="flex items-center justify-between mb-3 border-b pb-2 border-white/10">
+                  <div>
+                    <span className="font-bold text-sm block">{entry.updated_by}</span>
+                    <span className="text-xs text-gray-500 capitalize">{entry.user_role}</span>
                   </div>
-                )}
+                  <div className="text-right">
+                    <span className="text-sm font-semibold block">{new Date(entry.created_at).toLocaleDateString()}</span>
+                    <span className="text-xs text-gray-500">{new Date(entry.created_at).toLocaleTimeString()}</span>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  {Object.keys(entry.changed_fields).map(field => {
+                    const changes = entry.changed_fields[field];
+                    return (
+                      <div key={field} className="grid grid-cols-[120px_1fr] text-sm items-start gap-2">
+                        <span className="font-medium text-gray-500 capitalize truncate">{field.replace(/_/g, " ")}:</span>
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
+                          <span className={`px-2 py-0.5 rounded text-xs line-through ${isDark ? "bg-red-900/30 text-red-400" : "bg-red-100 text-red-600"}`}>
+                            {typeof changes.old_value === 'object' ? "Updated" : (changes.old_value || "None")}
+                          </span>
+                          <span className="text-gray-400 hidden sm:inline">→</span>
+                          <span className={`px-2 py-0.5 rounded text-xs ${isDark ? "bg-green-900/30 text-green-400" : "bg-green-100 text-green-700"}`}>
+                            {typeof changes.new_value === 'object' ? "Updated" : (changes.new_value || "None")}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     );
   };
@@ -430,15 +426,32 @@ export default function ClosedLeadBookingView({
       
       <div className="flex-1 overflow-y-auto custom-scrollbar pb-10">
         {activeTab === "summary" && (
+          <>
           <BookingApplicationView
             booking={booking}
             lead={lead}
             isDark={isDark}
             userRole={userRole}
-            onEdit={onEdit}
+            onEdit={() => setIsEditModalOpen(true)}
             onApprove={onApprove}
             onCancel={onCancel}
           />
+          {isEditModalOpen && (
+            <BookingFormModal
+              isOpen={isEditModalOpen}
+              onClose={() => setIsEditModalOpen(false)}
+              lead={lead}
+              user={currentUser}
+              isDark={isDark}
+              existingBooking={booking}
+              isEditMode={true}
+              onSuccess={() => {
+                setIsEditModalOpen(false);
+                if (onRefetch) onRefetch();
+              }}
+            />
+          )}
+          </>
         )}
         {activeTab === "payments" && renderPayments()}
         {activeTab === "documents" && renderDocuments()}

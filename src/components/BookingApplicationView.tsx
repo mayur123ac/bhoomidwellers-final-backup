@@ -9,6 +9,7 @@ import {
 } from "react-icons/fa";
 
 interface BookingApplicationViewProps {
+  currentUser?: any;
   booking: any;
   lead: any;
   isDark?: boolean;
@@ -19,7 +20,7 @@ interface BookingApplicationViewProps {
 }
 
 export default function BookingApplicationView({
-  booking, lead, isDark = false, userRole, onEdit, onApprove, onCancel,
+  booking, lead, isDark = false, userRole, currentUser, onEdit, onApprove, onCancel,
 }: BookingApplicationViewProps) {
   const printRef = useRef<HTMLDivElement>(null);
 
@@ -101,11 +102,27 @@ export default function BookingApplicationView({
             <span className={`text-xs font-bold px-3 py-1.5 rounded-full border ${statusColor}`}>{bookingStatus}</span>
 
             {/* Role-based action buttons */}
-            {(userRole === "admin" || (userRole === "sales" && bookingStatus !== "Approved")) && onEdit && (
-              <button onClick={onEdit} className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer transition-colors ${isDark ? "bg-[#9E217B] hover:bg-[#7a1960] text-white" : "bg-[#00AEEF] hover:bg-[#0088bb] text-white"}`}>
-                <FaEdit className="text-[10px]" /> Edit
-              </button>
-            )}
+            
+            {(() => {
+              let canEdit = false;
+              if (userRole === "admin" || userRole === "site_head") canEdit = true;
+              else if (userRole === "sales" && booking?.booking_status !== "Approved") {
+                // Check if current user is the owner
+                if (currentUser && lead?.assigned_to === currentUser.name) {
+                  canEdit = true;
+                }
+              }
+              
+              if (canEdit && onEdit) {
+                return (
+                  <button onClick={onEdit} className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer transition-colors ${isDark ? "bg-[#9E217B] hover:bg-[#7a1960] text-white" : "bg-[#00AEEF] hover:bg-[#0088bb] text-white"}`}>
+                    <FaEdit className="text-[10px]" /> Edit Booking Form
+                  </button>
+                );
+              }
+              return null;
+            })()}
+
             {userRole === "admin" && bookingStatus === "Pending" && onApprove && (
               <button onClick={onApprove} className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer bg-green-600 hover:bg-green-500 text-white transition-colors">
                 <FaCheckCircle className="text-[10px]" /> Approve

@@ -70,6 +70,8 @@ interface BookingFormData {
 }
 
 interface BookingFormModalProps {
+  existingBooking?: any;
+  isEditMode?: boolean;
   isOpen: boolean;
   onClose: () => void;
   lead: any;
@@ -185,7 +187,7 @@ function defaultForm(lead: any): BookingFormData {
 }
 
 // ─── Main Modal ───────────────────────────────────────────────────────────────
-export default function BookingFormModal({ isOpen, onClose, lead, user, isDark = false, onSuccess }: BookingFormModalProps) {
+export default function BookingFormModal({ isOpen, onClose, lead, user, isDark = false, onSuccess, existingBooking, isEditMode }: BookingFormModalProps) {
   const [step, setStep] = useState(1);
   const [form, setForm] = useState<BookingFormData>(() => defaultForm(lead));
   const [errors, setErrors] = useState<Partial<Record<keyof BookingFormData, string>>>({});
@@ -205,7 +207,23 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
     if (!isOpen || !lead?.id) return;
     const key = `booking_draft_${lead.id}`;
     const stored = sessionStorage.getItem(key);
-    if (stored) {
+    if (isEditMode && existingBooking) {
+      // Map existing DB fields to form state
+      const initialForm = defaultForm(lead);
+      const safeBooking: any = {};
+      // Remove null values so they don't override initialForm defaults
+      Object.keys(existingBooking).forEach(k => {
+        if (existingBooking[k] !== null && existingBooking[k] !== undefined) {
+          safeBooking[k] = existingBooking[k];
+        }
+      });
+      setForm({ 
+        ...initialForm, 
+        ...safeBooking, 
+        joint_applicants: typeof safeBooking.joint_applicants === 'string' ? JSON.parse(safeBooking.joint_applicants) : (safeBooking.joint_applicants || initialForm.joint_applicants),
+        payment_details: typeof safeBooking.payment_details === 'string' ? JSON.parse(safeBooking.payment_details) : (safeBooking.payment_details || initialForm.payment_details)
+      });
+    } else if (stored) {
       try { setForm(JSON.parse(stored)); } catch { setForm(defaultForm(lead)); }
     } else {
       setForm(defaultForm(lead));
@@ -399,6 +417,8 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
       formData.append("application_date", form.application_date);
       formData.append("created_by", user.name);
       formData.append("created_role", user.role);
+      formData.append("user_name", user.name);
+      formData.append("user_role", user.role);
       formData.append("payment_details", JSON.stringify(form.payment_details));
       formData.append("joint_applicants", JSON.stringify(form.joint_applicants.map(ja => ({
         name: ja.name, email: ja.email, mobile: ja.mobile,
@@ -414,7 +434,10 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
         if (ja.aadhaar_back_file) formData.append(`joint_${i}_aadhaar_back_file`, ja.aadhaar_back_file);
       });
 
-      const res = await fetch("/api/booking-applications", { method: "POST", body: formData });
+      const res = await fetch(isEditMode ? `/api/booking-applications/${existingBooking.id}` : "/api/booking-applications", { 
+        method: isEditMode ? "PUT" : "POST", 
+        body: formData 
+      });
       const json = await res.json();
       if (!json.success) throw new Error(json.message || "Failed to save booking");
       const booking = json.data;
