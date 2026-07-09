@@ -188,22 +188,28 @@ export function getSdrDueDate(record: Record<string, any>): string | null {
 }
 
 export function calculateExpectedRevenue(record: Record<string, any>): number {
-  const expectedDisbursement = parseRevenueAmount(record.expected_disbursement_amount);
-  if (expectedDisbursement > 0) return expectedDisbursement;
-
-  const sanctionAmount = parseRevenueAmount(record.sanction_amount);
-  if (sanctionAmount > 0) return sanctionAmount;
-
-  const loanAmount = parseRevenueAmount(record.loan_amount);
-  if (loanAmount > 0) return loanAmount;
-
-  const agreementValue = parseRevenueAmount(record.agreement_value);
-  const bookingAmount = parseRevenueAmount(record.booking_amount);
-  return Math.max(agreementValue - bookingAmount, 0);
+  return parseRevenueAmount(record.agreement_value);
 }
 
+/**
+ * Developer Revenue = OCR + Cash Component + Actual Loan Disbursement.
+ *
+ * EXCLUDES: token_amount, booking_amount, sdr_amount, loan_amount,
+ *           sanction_amount, expected_disbursement_amount.
+ *
+ * This is the SINGLE SOURCE OF TRUTH for revenue received.
+ * All KPI cards, tables, exports and charts must use this helper.
+ */
+export function calculateDeveloperRevenue(record: Record<string, any>): number {
+  const ocr = parseRevenueAmount(record.ocr_amount);
+  const cash = parseRevenueAmount(record.cash_component);
+  const disbursement = parseRevenueAmount(record.disbursement_amount);
+  return ocr + cash + disbursement;
+}
+
+/** @deprecated Use calculateDeveloperRevenue instead */
 export function calculateActualRevenue(record: Record<string, any>): number {
-  return parseRevenueAmount(record.disbursement_amount);
+  return calculateDeveloperRevenue(record);
 }
 
 export function recordReachesStage(record: Record<string, any>, stage: RevenueStageId): boolean {
@@ -270,15 +276,27 @@ export function deriveRevenueStage(record: Record<string, any>): RevenueStageId 
 export function enrichRevenueRecord(record: Record<string, any>, now = new Date()): RevenueRecord {
   const agreementValue = parseRevenueAmount(record.agreement_value);
   const expectedRevenue = calculateExpectedRevenue(record);
-  const actualRevenue = record.developer_revenue !== undefined ? parseRevenueAmount(record.developer_revenue) : calculateActualRevenue(record);
-  const pendingRevenue = record.outstanding_balance !== undefined ? parseRevenueAmount(record.outstanding_balance) : Math.max(expectedRevenue - actualRevenue, 0);
-  
+
+  // SINGLE SOURCE OF TRUTH: always use calculateDeveloperRevenue.
+  // Never rely on the ledger view's developer_revenue here — it may include
+  // booking_amount or other non-revenue items.
+  const actualRevenue = calculateDeveloperRevenue(record);
+  const pendingRevenue = Math.max(agreementValue - actualRevenue, 0);
+
+  // Overpayment validation
+  if (actualRevenue > agreementValue && agreementValue > 0) {
+    console.warn(
+      `[Revenue] Overpayment detected for booking ${record.booking_number || record.booking_id}: ` +
+      `received ₹${actualRevenue} exceeds agreement ₹${agreementValue}`
+    );
+  }
+
   const gross_collection = parseRevenueAmount(record.gross_collection);
   const developer_revenue = parseRevenueAmount(record.developer_revenue);
   const government_charges = parseRevenueAmount(record.government_charges);
   const net_collection = parseRevenueAmount(record.net_collection);
   const outstanding_balance = parseRevenueAmount(record.outstanding_balance);
-  
+
   const collectionEfficiency = agreementValue > 0 ? Math.round((actualRevenue / agreementValue) * 100) : 0;
   const reachedStages = REVENUE_STAGES.filter((stage) => recordReachesStage(record, stage.id)).length;
   const derivedStage = deriveRevenueStage(record);
@@ -357,11 +375,19 @@ export function buildRevenueAnalytics(rawRecords: Record<string, any>[], now = n
   const records = rawRecords.map((record) => enrichRevenueRecord(record, now));
 
   const totalAgreementValue = sum(records, (record) => record.agreement_value_number);
-  const recordsDueThisMonth = records.filter((record) => isThisMonth(record.expected_disbursement_date, now));
-  const expectedRevenue = sum(recordsDueThisMonth, (record) => record.expected_revenue);
-  const revenueReceived = sum(recordsDueThisMonth, (record) => record.actual_revenue);
-  const pendingRevenue = Math.max(expectedRevenue - revenueReceived, 0);
-  const collectionEfficiency = expectedRevenue > 0 ? Math.round((revenueReceived / expectedRevenue) * 100) : 0;
+  // Revenue Received and Pending are calculated across ALL bookings, not just this month.
+  // This ensures KPI cards show consistent totals against Total Agreement Value.
+  const revenueReceived = sum(records, (record) => record.actual_revenue);
+  const pendingRevenue = Math.max(totalAgreementValue - revenueReceived, 0);
+  const collectionEfficiency = totalAgreementValue > 0 ? Math.round((revenueReceived / totalAgreementValue) * 100) : 0;
+
+  // Overpayment validation at summary level
+  if (revenueReceived > totalAgreementValue && totalAgreementValue > 0) {
+    console.warn(
+      `[Revenue Summary] Revenue Received (${revenueReceived}) exceeds Total Agreement Value (${totalAgreementValue}). ` +
+      `Check individual bookings for overpayment.`
+    );
+  }
 
   const indicators = {
     booking: {
@@ -492,7 +518,7 @@ export function buildRevenueAnalytics(rawRecords: Record<string, any>[], now = n
     records,
     summary: {
       total_agreement_value: totalAgreementValue,
-      expected_revenue: expectedRevenue,
+      expected_revenue: totalAgreementValue,
       revenue_received: revenueReceived,
       pending_revenue: pendingRevenue,
       collection_efficiency: collectionEfficiency,

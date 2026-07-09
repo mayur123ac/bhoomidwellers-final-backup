@@ -529,7 +529,7 @@ export async function POST(req: NextRequest) {
         }
       };
 
-      await upsertLedger('booking_amount', 'CREDIT', cleanNum(booking_amount), booking_date, 'YES', 'Customer', null, null, booking_remarks);
+      await upsertLedger('booking_amount', 'CREDIT', cleanNum(booking_amount), booking_date, 'NO', 'Customer', null, null, booking_remarks);
       await upsertLedger('ocr', 'CREDIT', cleanNum(ocr_amount), ocr_received_date, 'YES', 'Customer', null, ocr_payment_mode, ocr_remarks);
       await upsertLedger('sdr', 'CREDIT', cleanNum(sdr_amount), sdr_payment_date, 'NO', 'Customer', null, null, sdr_remarks);
       await upsertLedger('cash_component', 'CREDIT', cleanNum(cash_component), cash_component_date, 'YES', 'Customer', null, null, cash_component_remarks);

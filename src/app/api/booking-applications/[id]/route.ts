@@ -377,7 +377,7 @@ export async function PUT(
         }
       };
 
-      await upsertLedger('booking_amount', 'CREDIT', fields.booking_amount, fields.booking_date, 'YES', 'Customer', null, null, fields.booking_remarks);
+      await upsertLedger('booking_amount', 'CREDIT', fields.booking_amount, fields.booking_date, 'NO', 'Customer', null, null, fields.booking_remarks);
       await upsertLedger('ocr', 'CREDIT', finFields.ocr_amount, finFields.ocr_received_date, 'YES', 'Customer', null, finFields.ocr_payment_mode, finFields.ocr_remarks);
       await upsertLedger('sdr', 'CREDIT', finFields.sdr_amount, finFields.sdr_payment_date, 'NO', 'Customer', null, null, finFields.sdr_remarks);
       await upsertLedger('cash_component', 'CREDIT', finFields.cash_component, finFields.cash_component_date, 'YES', 'Customer', null, null, finFields.cash_component_remarks);
