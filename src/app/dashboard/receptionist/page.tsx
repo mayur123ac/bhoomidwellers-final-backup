@@ -10,7 +10,11 @@ import {
   FaChevronLeft, FaRobot, FaPaperPlane, FaCalendarAlt, FaEye, FaEyeSlash,
   FaPhoneAlt, FaUserCircle, FaBriefcase, FaSearch, FaDownload,
   FaFileInvoice, FaHandshake, FaUniversity, FaUsers, FaFileAlt,
+<<<<<<< HEAD
   FaClock, FaMicrophone, FaWhatsapp, FaCheckCircle,
+=======
+  FaCheck, FaClock, FaMicrophone, FaWhatsapp, FaCheckCircle,
+>>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
   FaExchangeAlt, FaUserTie
 } from "react-icons/fa";
 import {
@@ -26,8 +30,11 @@ import BookingApplicationView from "@/components/BookingApplicationView";
 import ClosedLeadBookingView from "@/components/ClosedLeadBookingView";
 import AttendanceTimerWidget from "@/components/AttendanceTimerWidget";
 import AttendanceView from "@/components/AttendanceView";
+<<<<<<< HEAD
 import LoanDealForm from "@/components/LoanDealForm";
 import LoanDealView from "@/components/LoanDealView";
+=======
+>>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -416,6 +423,7 @@ export default function ReceptionistDashboard() {
   const [showSalesForm, setShowSalesForm] = useState(false);
   const [showLoanForm, setShowLoanForm] = useState(false);
   const [salesForm, setSalesForm] = useState({ propertyType: "", location: "", budget: "", useType: "", purchaseDate: "", loanPlanned: "", siteVisit: "", leadStatus: "" });
+<<<<<<< HEAD
   // Loan & Deal Tracking panel — independent of bookingData/fetchBookingForLead above,
   // which (when wired up) swaps the whole detail view to ClosedLeadBookingView.
   const [loanDealBooking, setLoanDealBooking] = useState<any>(null);
@@ -433,6 +441,9 @@ export default function ReceptionistDashboard() {
       setLoanDealLatest(rows.length > 0 ? rows[rows.length - 1] : null);
     } catch { setLoanDealLatest(null); }
   }, []);
+=======
+  const [loanForm, setLoanForm] = useState({ loanRequired: "", status: "", bank: "", amountReq: "", amountApp: "", cibil: "", agent: "", agentContact: "", empType: "", income: "", emi: "", docPan: "Pending", docAadhaar: "Pending", docSalary: "Pending", docBank: "Pending", docProperty: "Pending", notes: "" });
+>>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
   const [customNote, setCustomNote] = useState("");
   const followUpEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -659,11 +670,14 @@ export default function ReceptionistDashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedLead?.id]);
 
+<<<<<<< HEAD
   useEffect(() => {
     if (selectedLead?.id) fetchLoanDealData(selectedLead.id);
     else { setLoanDealBooking(null); setLoanDealLatest(null); }
   }, [selectedLead?.id, fetchLoanDealData]);
 
+=======
+>>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
   // ─────────────────────────────────────────────────────────────────────────
   // DATA FETCHING
   // ─────────────────────────────────────────────────────────────────────────
@@ -1003,6 +1017,29 @@ export default function ReceptionistDashboard() {
   // ─────────────────────────────────────────────────────────────────────────
   // SALES WORKFLOW ACTIONS
   // ─────────────────────────────────────────────────────────────────────────
+<<<<<<< HEAD
+=======
+  const getLatestLoanDetails = () => {
+    if (!selectedLead) return null;
+    let ex: Record<string, any> = { loanRequired: selectedLead.loanPlanned || "N/A", status: "Pending", bankName: "N/A", amountReq: "N/A", amountApp: "N/A", cibil: "N/A", agent: "N/A", agentContact: "N/A", empType: "N/A", income: "N/A", emi: "N/A", docPan: "Pending", docAadhaar: "Pending", docSalary: "Pending", docBank: "Pending", docProperty: "Pending", notes: "N/A" };
+    const lu = currentLeadFollowUps.filter((f: any) => f.message?.includes("🏦 Loan Update:"));
+    if (lu.length > 0) {
+      const msg = lu[lu.length - 1].message;
+      const g = (l: string) => { const m = msg.match(new RegExp(`• ${l}: (.*)`)); return m ? m[1].trim() : "N/A"; };
+      ex = { loanRequired: g("Loan Required"), status: g("Status"), bankName: g("Bank Name"), amountReq: g("Amount Requested"), amountApp: g("Amount Approved"), cibil: g("CIBIL Score"), agent: g("Agent Name"), agentContact: g("Agent Contact"), empType: g("Employment Type"), income: g("Monthly Income"), emi: g("Existing EMIs"), docPan: g("PAN Card"), docAadhaar: g("Aadhaar Card"), docSalary: g("Salary Slips"), docBank: g("Bank Statements"), docProperty: g("Property Docs"), notes: g("Notes") };
+    }
+    return ex;
+  };
+
+  const getLoanStatusColor = (s: string) => {
+    const sl = (s || "").toLowerCase();
+    if (sl === "approved") return isDark ? "bg-green-900/20 text-green-400 border-green-500/30" : "bg-green-50 text-green-700 border-green-300";
+    if (sl === "rejected") return isDark ? "bg-red-900/20 text-red-400 border-red-500/30" : "bg-red-50 text-red-700 border-red-300";
+    if (sl === "in progress") return isDark ? "bg-yellow-900/20 text-yellow-400 border-yellow-500/30" : "bg-yellow-50 text-yellow-700 border-yellow-300";
+    return isDark ? "bg-gray-900/20 text-gray-400 border-gray-500/30" : "bg-gray-50 text-gray-600 border-gray-300";
+  };
+
+>>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
   const prefillSalesForm = () => {
     if (!selectedLead) return;
     const sf = currentLeadFollowUps.filter((f: any) => f.message?.includes("Detailed Salesform Submitted"));
@@ -1012,6 +1049,16 @@ export default function ReceptionistDashboard() {
     setSalesForm({ propertyType: g("Property Type"), location: g("Location"), budget: g("Budget"), useType: g("Use Type"), purchaseDate: g("Planning to Purchase"), loanPlanned: g("Loan Planned"), leadStatus: g("Lead Status"), siteVisit: "" });
   };
 
+<<<<<<< HEAD
+=======
+  const prefillLoanForm = () => {
+    const cur = getLatestLoanDetails();
+    if (!cur) return;
+    const n = (v: string) => v !== "N/A" ? v : "";
+    setLoanForm({ loanRequired: n(cur.loanRequired), status: cur.status !== "Pending" ? cur.status : "", bank: n(cur.bankName), amountReq: n(cur.amountReq), amountApp: n(cur.amountApp), cibil: n(cur.cibil), agent: n(cur.agent), agentContact: n(cur.agentContact), empType: n(cur.empType), income: n(cur.income), emi: n(cur.emi), docPan: cur.docPan !== "N/A" ? cur.docPan : "Pending", docAadhaar: cur.docAadhaar !== "N/A" ? cur.docAadhaar : "Pending", docSalary: cur.docSalary !== "N/A" ? cur.docSalary : "Pending", docBank: cur.docBank !== "N/A" ? cur.docBank : "Pending", docProperty: cur.docProperty !== "N/A" ? cur.docProperty : "Pending", notes: n(cur.notes) });
+  };
+
+>>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
   const handleSendCustomNote = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customNote.trim() || !selectedLead) return;
@@ -1035,6 +1082,22 @@ export default function ReceptionistDashboard() {
     } catch (e) { console.error(e); }
   };
 
+<<<<<<< HEAD
+=======
+  const handleLoanFormSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedLead) return;
+    const msg = `🏦 Loan Update:\n• Loan Required: ${loanForm.loanRequired || "N/A"}\n• Status: ${loanForm.status || "N/A"}\n• Bank Name: ${loanForm.bank || "N/A"}\n• Amount Requested: ${loanForm.amountReq || "N/A"}\n• Amount Approved: ${loanForm.amountApp || "N/A"}\n• CIBIL Score: ${loanForm.cibil || "N/A"}\n• Agent Name: ${loanForm.agent || "N/A"}\n• Agent Contact: ${loanForm.agentContact || "N/A"}\n• Employment Type: ${loanForm.empType || "N/A"}\n• Monthly Income: ${loanForm.income || "N/A"}\n• Existing EMIs: ${loanForm.emi || "N/A"}\n• PAN Card: ${loanForm.docPan || "Pending"}\n• Aadhaar Card: ${loanForm.docAadhaar || "Pending"}\n• Salary Slips: ${loanForm.docSalary || "Pending"}\n• Bank Statements: ${loanForm.docBank || "Pending"}\n• Property Docs: ${loanForm.docProperty || "Pending"}\n• Notes: ${loanForm.notes || "N/A"}`;
+    const nm = { leadId: String(selectedLead.id), salesManagerName: user.name, createdBy: "receptionist", message: msg, siteVisitDate: null, createdAt: new Date().toISOString() };
+    setShowLoanForm(false);
+    showToast(`Loan Data Logged for ${selectedLead.name}`, "blue");
+    try {
+      await fetch("/api/followups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(nm) });
+      fetchFollowUps();
+    } catch (e) { console.error(e); }
+  };
+
+>>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
   const handleBookingSuccess = (booking: any) => {
     setBookingData(booking);
     setBookingDetailTab("booking");
@@ -2571,7 +2634,11 @@ export default function ReceptionistDashboard() {
                                 className={`font-bold px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer ${t.btnPrimary}`}>
                                 <FaFileInvoice /> Fill Salesform
                               </button>
+<<<<<<< HEAD
                               <button onClick={() => { setShowLoanForm(true); setShowSalesForm(false); }}
+=======
+                              <button onClick={() => { prefillLoanForm(); setShowLoanForm(true); setShowSalesForm(false); }}
+>>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
                                 className={`font-bold px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer ${t.btnSecondary}`}>
                                 <FaUniversity /> Track Loan
                               </button>
@@ -2627,6 +2694,7 @@ export default function ReceptionistDashboard() {
                             </form>
                           </div>
                         ) : showLoanForm ? (
+<<<<<<< HEAD
                           <LoanDealForm
                             lead={selectedLead}
                             booking={loanDealBooking}
@@ -2642,6 +2710,65 @@ export default function ReceptionistDashboard() {
                               refetchAll();
                             }}
                           />
+=======
+                          <div className={`rounded-xl border p-5 shadow-xl flex-1 overflow-y-auto custom-scrollbar flex flex-col animate-fadeIn ${t.modalCard}`} style={t.modalGlass}>
+                            <div className={`flex justify-between items-center mb-4 border-b pb-3 flex-shrink-0 ${t.tableBorder}`}>
+                              <div>
+                                <h3 className={`text-lg font-bold flex items-center gap-2 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}><FaUniversity /> Loan Tracking Workflow</h3>
+                                <p className={`text-xs mt-0.5 ${t.textFaint}`}>For Lead #{selectedLead.sr_no || selectedLead.id}</p>
+                              </div>
+                              <button type="button" onClick={() => setShowLoanForm(false)} className={`p-1 ${t.textMuted} hover:text-red-500`}><FaTimes /></button>
+                            </div>
+                            <form onSubmit={handleLoanFormSubmit} className="flex flex-col gap-6 flex-1">
+                              <div>
+                                <h4 className={`text-xs font-bold uppercase tracking-wider mb-3 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}>1. Loan Decision</h4>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                  <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Loan Required? *</label><select required value={loanForm.loanRequired} onChange={e => setLoanForm({ ...loanForm, loanRequired: e.target.value })} className={formSelect}><option value="">Select</option><option>Yes</option><option>No</option><option>Not Sure</option></select></div>
+                                  <div>
+                                    <label className={`text-xs mb-1 block ${t.textMuted}`}>Loan Status *</label>
+                                    <select required value={loanForm.status} onChange={e => setLoanForm({ ...loanForm, status: e.target.value })} className={formSelect}><option value="">Select Status</option><option>Approved</option><option>In Progress</option><option>Rejected</option></select>
+                                    {loanForm.status && (<p className={`text-[10px] mt-1.5 font-semibold ${loanForm.status === "Approved" ? "text-green-400" : loanForm.status === "Rejected" ? "text-red-400" : "text-yellow-400"}`}>{loanForm.status === "Approved" && "✅ Loan cleared — schedule closing meeting"}{loanForm.status === "In Progress" && "📄 Follow up on pending documents"}{loanForm.status === "Rejected" && "❌ Loan rejected — suggest co-applicant or other bank"}</p>)}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className={`border-t pt-4 ${t.tableBorder}`}>
+                                <h4 className={`text-xs font-bold uppercase tracking-wider mb-3 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}>2. Bank & Loan Details</h4>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                  {[{ label: "Bank Name", k: "bank", ph: "e.g. HDFC" }, { label: "Amount Required", k: "amountReq", ph: "e.g. 60L" }, { label: "Amount Approved", k: "amountApp", ph: "e.g. 55L" }, { label: "CIBIL Score", k: "cibil", ph: "e.g. 750" }, { label: "Agent Name", k: "agent", ph: "Agent Name" }, { label: "Agent Contact", k: "agentContact", ph: "Agent Phone", tel: true }].map(f => (
+                                    <div key={f.k}><label className={`text-xs mb-1 block ${t.textMuted}`}>{f.label}</label><input type={f.tel ? "tel" : "text"} value={(loanForm as any)[f.k]} onChange={e => setLoanForm({ ...loanForm, [f.k]: e.target.value })} className={formInput} placeholder={f.ph} /></div>
+                                  ))}
+                                </div>
+                              </div>
+                              <div className={`border-t pt-4 ${t.tableBorder}`}>
+                                <h4 className={`text-xs font-bold uppercase tracking-wider mb-3 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}>3. Financial Qualification</h4>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                  <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Employment</label><select value={loanForm.empType} onChange={e => setLoanForm({ ...loanForm, empType: e.target.value })} className={formSelect}><option value="">Select</option><option>Salaried</option><option>Self-employed</option></select></div>
+                                  <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Monthly Income</label><input type="text" value={loanForm.income} onChange={e => setLoanForm({ ...loanForm, income: e.target.value })} className={formInput} placeholder="e.g. 1L" /></div>
+                                  <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Existing EMIs</label><input type="text" value={loanForm.emi} onChange={e => setLoanForm({ ...loanForm, emi: e.target.value })} className={formInput} placeholder="e.g. 15k" /></div>
+                                </div>
+                              </div>
+                              <div className={`border-t pt-4 ${t.tableBorder}`}>
+                                <h4 className={`text-xs font-bold uppercase tracking-wider mb-3 flex items-center gap-1 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}><FaFileAlt /> 4. Document Checklist</h4>
+                                <div className={`grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-lg border ${t.settingsBg}`} style={t.settingsBgGl}>
+                                  {["docPan", "docAadhaar", "docSalary", "docBank", "docProperty"].map(docKey => {
+                                    const label = docKey === "docPan" ? "PAN Card" : docKey === "docAadhaar" ? "Aadhaar Card" : docKey === "docSalary" ? "Salary Slips / ITR" : docKey === "docBank" ? "Bank Statements" : "Property Documents";
+                                    return (
+                                      <div key={docKey} className={`flex items-center justify-between border p-2 rounded-lg ${t.innerBlock}`}>
+                                        <span className={`text-xs font-medium ${t.text}`}>{label}</span>
+                                        <select value={(loanForm as any)[docKey]} onChange={e => setLoanForm({ ...loanForm, [docKey]: e.target.value })} className={`text-xs font-bold bg-transparent outline-none cursor-pointer ${(loanForm as any)[docKey] === "Uploaded" ? "text-green-400" : "text-gray-500"}`}><option>Pending</option><option>Uploaded</option></select>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                              <div className={`border-t pt-4 ${t.tableBorder}`}>
+                                <h4 className={`text-xs font-bold uppercase tracking-wider mb-3 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}>5. Notes / Remarks</h4>
+                                <textarea value={loanForm.notes} onChange={e => setLoanForm({ ...loanForm, notes: e.target.value })} className={`w-full rounded-lg px-4 py-2.5 text-sm outline-none resize-none h-20 custom-scrollbar border ${t.inputInner} ${t.text} ${t.inputFocus}`} placeholder="Bank feedback, CIBIL issues, Internal notes..." />
+                              </div>
+                              <button type="submit" className={`mt-4 flex-shrink-0 w-full font-bold py-3.5 rounded-xl shadow-md transition-colors cursor-pointer ${t.btnSecondary}`}>Save Loan Tracker Update</button>
+                            </form>
+                          </div>
+>>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
                         ) : (
                           <div className="flex flex-col h-full animate-fadeIn">
                             {/* Tab switcher */}
@@ -2682,7 +2809,11 @@ export default function ReceptionistDashboard() {
                                     <div><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Property Type</p><p className={`font-semibold ${t.text}`}>{selectedLead.propType || "Pending"}</p></div>
                                     <div><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Type of Use</p><p className={`font-semibold ${t.text}`}>{selectedLead.useType !== "Pending" ? selectedLead.useType : (selectedLead.purpose || "N/A")}</p></div>
                                     <div><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Planning to Buy?</p><p className={`font-semibold ${t.text}`}>{selectedLead.planningPurchase || "Pending"}</p></div>
+<<<<<<< HEAD
                                     <div><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Loan Required?</p><p className={`font-semibold ${t.text}`}>{loanDealLatest?.loan_required || selectedLead.loanPlanned || "Pending"}</p></div>
+=======
+                                    <div><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Loan Required?</p><p className={`font-semibold ${t.text}`}>{getLatestLoanDetails()?.loanRequired}</p></div>
+>>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
                                     <div><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Status</p><span className={`text-sm font-bold ${selectedLead.status === "Closing" ? "text-amber-500" : selectedLead.status === "Visit Scheduled" ? "text-orange-400" : t.accentText}`}>{selectedLead.status || "Assigned"}</span></div>
                                     <div className={`col-span-2 p-3 rounded-xl border ${t.settingsBg}`} style={t.settingsBgGl}>
                                       <p className={`text-xs font-bold uppercase tracking-wider mb-0.5 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}>📍 Site Visit Date</p>
@@ -2717,7 +2848,32 @@ export default function ReceptionistDashboard() {
                                   </div>
                                 </div>
                               ) : (
+<<<<<<< HEAD
                                 <LoanDealView lead={selectedLead} booking={loanDealBooking} loanUpdate={loanDealLatest} isDark={isDark} t={t} />
+=======
+                                <div>
+                                  {(() => {
+                                    const curLoan: any = getLatestLoanDetails() || {};
+                                    const sColor = getLoanStatusColor(curLoan?.status || "");
+                                    const isHighProb = curLoan?.status?.toLowerCase() === "approved" && selectedLead.mongoVisitDate;
+                                    return (
+                                      <>
+                                        <h3 className={`text-sm font-bold border-b pb-2 mb-6 uppercase flex items-center justify-between ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"} ${t.tableBorder}`}><span className="flex items-center gap-2"><FaUniversity /> Deal Loan Overview</span></h3>
+                                        {isHighProb && <div className="mb-6 bg-gradient-to-r from-orange-500/20 to-red-500/20 border border-orange-500/50 p-3 rounded-lg flex items-center justify-center gap-2 text-orange-400 font-bold tracking-wide shadow-md">🚀 HIGH PROBABILITY DEAL (Visit Done + Loan Approved)</div>}
+                                        <div className="grid grid-cols-2 gap-2 mt-4">
+                                          <div className="col-span-2 mb-2"><p className={`text-xs font-bold uppercase tracking-widest ${t.textMuted}`}>Document Status</p></div>
+                                          {[{ label: "PAN Card", val: curLoan?.docPan }, { label: "Aadhaar", val: curLoan?.docAadhaar }, { label: "Salary/ITR", val: curLoan?.docSalary }, { label: "Bank Stmt", val: curLoan?.docBank }, { label: "Property Docs", val: curLoan?.docProperty }].map((doc, i) => (
+                                            <div key={i} className={`flex items-center justify-between p-2 rounded-lg col-span-1 border ${t.innerBlock}`}>
+                                              <span className={`text-xs ${t.textMuted}`}>{doc.label}</span>
+                                              {doc.val === "Uploaded" ? <FaCheck className="text-green-500 text-xs" /> : <FaClock className={`text-xs ${t.textFaint}`} />}
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </>
+                                    );
+                                  })()}
+                                </div>
+>>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
                               )}
                             </div>
 

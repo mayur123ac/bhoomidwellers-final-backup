@@ -86,7 +86,11 @@ export async function PUT(
   try {
     await ensureHistoryTable();
     const formData = await req.formData();
+<<<<<<< HEAD
 
+=======
+    
+>>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
     const getStr = (key: string) => (formData.get(key) as string) || "";
     const cleanNum = (val: string) => (val ? parseFloat(val.replace(/,/g, "")) : 0);
 
@@ -94,10 +98,17 @@ export async function PUT(
     const user_name = getStr("user_name");
 
     if (!user_role || !user_name) {
+<<<<<<< HEAD
       return NextResponse.json({ success: false, message: "user_role and user_name are required" }, { status: 400 });
     }
     if (user_role === "receptionist") {
       return NextResponse.json({ success: false, message: "Receptionists cannot edit bookings." }, { status: 403 });
+=======
+       return NextResponse.json({ success: false, message: "user_role and user_name are required" }, { status: 400 });
+    }
+    if (user_role === "receptionist") {
+       return NextResponse.json({ success: false, message: "Receptionists cannot edit bookings." }, { status: 403 });
+>>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
     }
 
     // Check current booking and ownership
@@ -128,7 +139,11 @@ export async function PUT(
 
     const currentData = existing[0];
     const currentStatus = currentData.booking_status;
+<<<<<<< HEAD
 
+=======
+    
+>>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
     if (user_role === "sales") {
       if (currentStatus === "Approved") {
         return NextResponse.json(
@@ -194,10 +209,13 @@ export async function PUT(
       pin: getStr("pin"),
       state: getStr("state"),
       country: getStr("country") || "India",
+<<<<<<< HEAD
       apartment_name: getStr("apartment_name"),
       project_name: getStr("project_name"),
       tower: getStr("tower"),
       wing: getStr("wing"),
+=======
+>>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
       property_type: getStr("property_type"),
       floor_number: getStr("floor_number"),
       flat_number: getStr("flat_number"),
@@ -274,9 +292,15 @@ export async function PUT(
         let oldVal = data[key];
         // handle date formatting to YYYY-MM-DD for comparison if it's a date string
         if (oldVal instanceof Date) {
+<<<<<<< HEAD
           oldVal = oldVal.toISOString().split('T')[0];
         } else if (typeof oldVal === 'string' && oldVal.match(/^\d{4}-\d{2}-\d{2}T/)) {
           oldVal = oldVal.split('T')[0];
+=======
+            oldVal = oldVal.toISOString().split('T')[0];
+        } else if (typeof oldVal === 'string' && oldVal.match(/^\d{4}-\d{2}-\d{2}T/)) {
+            oldVal = oldVal.split('T')[0];
+>>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
         }
 
         if (typeof newVal === 'object' && newVal !== null) {
