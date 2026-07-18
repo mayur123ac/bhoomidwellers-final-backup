@@ -39,10 +39,7 @@ interface BookingFormData {
 
   address: string; pin: string; state: string; country: string;
   // Step 2 — Unit
-<<<<<<< HEAD
   apartment_name: string; project_name: string; tower: string; wing: string;
-=======
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
   property_type: string; floor_number: string; flat_number: string;
   carpet_area: string; consideration_value: string; consideration_value_words: string;
   parking_details: string; payment_details: PaymentRow[];
@@ -150,7 +147,6 @@ function parseIndianAmount(val: string): string {
   return clean.replace(/[^0-9]/g, "");
 }
 
-<<<<<<< HEAD
 // Loan & Deal Tracking (LoanDealForm) drafts sections 6-7 onto the lead itself
 // (walkin_enquiries.loan_tracking_info) before a booking exists. When "Mark as
 // Closing" opens this modal fresh, that draft prefills the loan/financial fields.
@@ -166,10 +162,6 @@ function parseLoanTrackingDraft(lead: any): Record<string, any> {
 function defaultForm(lead: any): BookingFormData {
   const today = new Date().toISOString().split("T")[0];
   const draft = parseLoanTrackingDraft(lead);
-=======
-function defaultForm(lead: any): BookingFormData {
-  const today = new Date().toISOString().split("T")[0];
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
   return {
     primary_name: lead?.name || "", primary_email: lead?.email !== "N/A" ? (lead?.email || "") : "",
     primary_mobile: lead?.phone || "", primary_pan: "", primary_aadhaar: "", primary_occupation: lead?.occupation !== "N/A" ? (lead?.occupation || "") : "",
@@ -177,10 +169,7 @@ function defaultForm(lead: any): BookingFormData {
     primary_pan_file: null, primary_aadhaar_front_file: null, primary_aadhaar_back_file: null,
     joint_applicants: [],
     address: lead?.address !== "N/A" ? (lead?.address || "") : "", pin: "", state: "", country: "India",
-<<<<<<< HEAD
     apartment_name: "", project_name: "", tower: "", wing: "",
-=======
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
     property_type: lead?.propType && lead?.propType !== "Pending" ? lead.propType : (lead?.configuration !== "N/A" ? (lead?.configuration || "") : ""),
     floor_number: "", flat_number: "", carpet_area: "",
     consideration_value: parseIndianAmount(lead?.salesBudget && lead?.salesBudget !== "Pending" ? lead.salesBudget : (lead?.budget || "")),
@@ -195,7 +184,6 @@ function defaultForm(lead: any): BookingFormData {
     channel_partner_contact: lead?.cpPhone || lead?.cp_phone || "",
 
     booking_date: today, agreement_value: "", booking_amount: "", booking_remarks: "",
-<<<<<<< HEAD
     token_amount: draft.token_amount || "", ocr_amount: draft.ocr_amount || "", ocr_received_date: draft.ocr_received_date || "", ocr_payment_mode: draft.ocr_payment_mode || "Cheque", ocr_remarks: draft.ocr_remarks || "",
     sdr_amount: draft.sdr_amount || "", sdr_payment_date: draft.sdr_payment_date || "", sdr_status: draft.sdr_status || "Pending", sdr_remarks: draft.sdr_remarks || "",
     cash_component: draft.cash_component || "", cash_component_date: draft.cash_component_date || "", cash_component_remarks: draft.cash_component_remarks || "",
@@ -206,18 +194,6 @@ function defaultForm(lead: any): BookingFormData {
     expected_disbursement_date: draft.expected_disbursement_date || "", actual_disbursement_date: draft.actual_disbursement_date || "",
     expected_disbursement_amount: draft.expected_disbursement_amount || "", disbursement_amount: draft.disbursement_amount || "", disbursement_status: draft.disbursement_status || "Pending",
     custom_charges: Array.isArray(draft.custom_charges) ? draft.custom_charges : [],
-=======
-    token_amount: "", ocr_amount: "", ocr_received_date: "", ocr_payment_mode: "Cheque", ocr_remarks: "",
-    sdr_amount: "", sdr_payment_date: "", sdr_status: "Pending", sdr_remarks: "",
-    cash_component: "", cash_component_date: "", cash_component_remarks: "",
-    expected_registration_date: "", actual_registration_date: "",
-    registration_status: "Pending", registration_number: "", registration_remarks: "",
-    loan_required: false, bank_name: "", loan_executive: "", loan_type: "", loan_reference_no: "", loan_amount: "",
-    sanction_amount: "", sanction_date: "", sanction_status: "Pending", loan_status: "Pending",
-    expected_disbursement_date: "", actual_disbursement_date: "",
-    expected_disbursement_amount: "", disbursement_amount: "", disbursement_status: "Pending",
-    custom_charges: [],
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
     internal_notes: "",
 
     declaration_accepted: false, terms_accepted: false, consent_accepted: false,
@@ -392,13 +368,10 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
       formData.append("pin", form.pin);
       formData.append("state", form.state);
       formData.append("country", form.country);
-<<<<<<< HEAD
       formData.append("apartment_name", form.apartment_name);
       formData.append("project_name", form.project_name);
       formData.append("tower", form.tower);
       formData.append("wing", form.wing);
-=======
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
       formData.append("property_type", form.property_type);
       formData.append("floor_number", form.floor_number);
       formData.append("flat_number", form.flat_number);
@@ -904,7 +877,6 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                             <p className={sectionTitle}><FaBuilding className="inline mr-2" />Details of Unit Applied For</p>
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                               {[
-<<<<<<< HEAD
                                 { key: "apartment_name", label: "Apartment Name", placeholder: "Bhoomi Heights" },
                                 { key: "project_name", label: "Project Name", placeholder: "Bhoomi Dwellers" },
                                 { key: "tower", label: "Tower", placeholder: "A" },
@@ -924,8 +896,6 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                             </div>
                             <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-4">
                               {[
-=======
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
                                 { key: "property_type", label: "Type", placeholder: "2 BHK" },
                                 { key: "floor_number", label: "Floor", placeholder: "12" },
                                 { key: "flat_number", label: "Flat No.", placeholder: "A-1201" },
@@ -1509,11 +1479,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                               rows: [["Name", ja.name], ["Mobile", ja.mobile], ["Email", ja.email], ["PAN", ja.pan], ["Aadhaar", ja.aadhaar]]
                             })),
                             { title: "Residential Address", rows: [["Address", form.address], ["PIN", form.pin], ["State", form.state], ["Country", form.country]] },
-<<<<<<< HEAD
                             { title: "Unit Details", rows: [["Apartment Name", form.apartment_name], ["Project Name", form.project_name], ["Tower", form.tower], ["Wing", form.wing], ["Type", form.property_type], ["Floor", form.floor_number], ["Flat No.", form.flat_number], ["Carpet Area", `${form.carpet_area} sq.ft.`], ["Consideration Value", form.consideration_value], ["Parking", form.parking_details], ["Witness", form.witness_name]] },
-=======
-                            { title: "Unit Details", rows: [["Type", form.property_type], ["Floor", form.floor_number], ["Flat No.", form.flat_number], ["Carpet Area", `${form.carpet_area} sq.ft.`], ["Consideration Value", form.consideration_value], ["Parking", form.parking_details], ["Witness", form.witness_name]] },
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
                           ].map(section => (
                             <div key={section.title} className={`rounded-xl border p-4 ${isDark ? "border-[#2A2A35] bg-[#121218]" : "border-[#E5E7EB] bg-white"}`}>
                               <p className={`text-xs font-bold uppercase tracking-wider mb-3 ${accent}`}>{section.title}</p>

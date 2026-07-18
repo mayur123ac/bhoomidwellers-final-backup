@@ -102,11 +102,7 @@ export default function BookingApplicationView({
             <span className={`text-xs font-bold px-3 py-1.5 rounded-full border ${statusColor}`}>{bookingStatus}</span>
 
             {/* Role-based action buttons */}
-<<<<<<< HEAD
 
-=======
-            
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
             {(() => {
               let canEdit = false;
               if (userRole === "admin" || userRole === "site_head") canEdit = true;
@@ -116,11 +112,7 @@ export default function BookingApplicationView({
                   canEdit = true;
                 }
               }
-<<<<<<< HEAD
 
-=======
-              
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
               if (canEdit && onEdit) {
                 return (
                   <button onClick={onEdit} className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer transition-colors ${isDark ? "bg-[#9E217B] hover:bg-[#7a1960] text-white" : "bg-[#00AEEF] hover:bg-[#0088bb] text-white"}`}>
@@ -400,13 +392,10 @@ export default function BookingApplicationView({
         <p className={sectionTitle}><FaBuilding className="inline mr-1.5" />Unit Details</p>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
           {[
-<<<<<<< HEAD
             { label: "Apartment Name", val: booking.apartment_name },
             { label: "Project Name", val: booking.project_name },
             { label: "Tower", val: booking.tower },
             { label: "Wing", val: booking.wing },
-=======
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
             { label: "Property Type", val: booking.property_type },
             { label: "Floor Number", val: booking.floor_number },
             { label: "Flat Number", val: booking.flat_number },
@@ -424,24 +413,15 @@ export default function BookingApplicationView({
           <table className="w-full text-sm">
             <tbody>
               {[
-<<<<<<< HEAD
                 { label: "Apartment Name", val: booking.apartment_name },
                 { label: "Project Name", val: booking.project_name },
                 { label: "Tower", val: booking.tower },
                 { label: "Wing", val: booking.wing },
-=======
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
                 { label: "Type of Unit", val: booking.property_type },
                 { label: "Floor No", val: booking.floor_number },
                 { label: "Flat No", val: booking.flat_number },
                 { label: "Area in sq.ft.", val: booking.carpet_area },
-<<<<<<< HEAD
                 { label: "Cost of Unit", val: booking.unit_cost || booking.consideration_value }
-=======
-                { label: "Cost of Unit", val: booking.unit_cost || booking.consideration_value },
-                { label: "S.D.R", val: booking.sdr },
-                { label: "GST", val: booking.gst },
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
               ].map(({ label, val }, i) => (
                 <tr key={label} className={`border-t ${i === 0 ? "border-transparent" : (isDark ? "border-[#2A2A35]" : "border-[#F1F5F9]")}`}>
                   <td className={`px-4 py-2 text-xs font-bold w-1/2 ${isDark ? "bg-[#1A1A28]" : "bg-[#F8FAFC]"} ${textMuted}`}>{label}</td>

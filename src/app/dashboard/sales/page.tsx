@@ -23,11 +23,7 @@ import {
   FaThLarge, FaCog, FaFileInvoice,
   FaChevronLeft, FaCheckCircle, FaPaperPlane, FaTimes, FaPhoneAlt,
   FaCalendarAlt, FaUserCircle, FaMicrophone, FaWhatsapp, FaRobot,
-<<<<<<< HEAD
   FaEyeSlash, FaEye, FaSearch, FaUniversity, FaUsers, FaFileAlt, FaCheck,
-=======
-  FaEyeSlash, FaSearch, FaUniversity, FaUsers, FaFileAlt, FaCheck,
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
   FaClock, FaBell, FaHandshake, FaClipboardList
 } from "react-icons/fa";
 import {
@@ -43,11 +39,8 @@ import BookingApplicationView from "@/components/BookingApplicationView";
 import ClosedLeadBookingView from "@/components/ClosedLeadBookingView";
 import LostLeadModal from "@/components/LostLeadModal";
 import PermanentLeadDeleteDialog from "@/components/PermanentLeadDeleteDialog";
-<<<<<<< HEAD
 import LoanDealForm from "@/components/LoanDealForm";
 import LoanDealView from "@/components/LoanDealView";
-=======
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
 // import ActivityTimeline from "@/components/ActivityTimeline";
 import { handleMarkLostLead as markLostLeadApi, restoreLostLead, updateLeadLostState, useLostLeadEvents } from "@/lib/lostLeadSync";
 
@@ -1140,7 +1133,6 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
   const [detailTab, setDetailTab] = useState<"personal" | "loan">("personal");
   const [isClosingModalOpen, setIsClosingModalOpen] = useState(false);
   const [bookingData, setBookingData] = useState<any>(null);
-<<<<<<< HEAD
   const [showBookingView, setShowBookingView] = useState(false);
   const [bookingDetailTab, setBookingDetailTab] = useState<"personal" | "loan" | "booking">("personal");
   // Loan & Deal Tracking panel — independent of bookingData/fetchBookingForLead above,
@@ -1160,19 +1152,12 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
       setLoanDealLatest(rows.length > 0 ? rows[rows.length - 1] : null);
     } catch { setLoanDealLatest(null); }
   }, []);
-=======
-  const [bookingDetailTab, setBookingDetailTab] = useState<"personal" | "loan" | "booking">("personal");
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [showSalesForm, setShowSalesForm] = useState(false);
   const [isSubmittingSalesForm, setIsSubmittingSalesForm] = useState(false);
   const [salesForm, setSalesForm] = useState({ propertyType: "", location: "", budget: "", useType: "", purchaseDate: "", loanPlanned: "", siteVisit: "", leadStatus: "" });
   const inputRef = useRef<HTMLInputElement>(null);
   const [showLoanForm, setShowLoanForm] = useState(false);
-<<<<<<< HEAD
-=======
-  const [loanForm, setLoanForm] = useState({ loanRequired: "", status: "", bank: "", amountReq: "", amountApp: "", cibil: "", agent: "", agentContact: "", empType: "", income: "", emi: "", docPan: "Pending", docAadhaar: "Pending", docSalary: "Pending", docBank: "Pending", docProperty: "Pending", notes: "" });
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
   const [customNote, setCustomNote] = useState("");
   const [showLostModal, setShowLostModal] = useState(false);
   const [lostReason, setLostReason] = useState("");
@@ -1203,7 +1188,6 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
   // Collapse the AI Assistant panel whenever a different lead is opened
   useEffect(() => { setAiPanelOpen(false); }, [selectedLead?.id]);
   useEffect(() => {
-<<<<<<< HEAD
     if (selectedLead?.id) fetchLoanDealData(selectedLead.id);
     else { setLoanDealBooking(null); setLoanDealLatest(null); }
   }, [selectedLead?.id, fetchLoanDealData]);
@@ -1212,8 +1196,6 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
     else { setBookingData(null); setShowBookingView(false); }
   }, [selectedLead?.id]);
   useEffect(() => {
-=======
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
     if (selectedLead) {
       const u = allLeads.find((l: any) => String(l.id) === String(selectedLead.id));
       if (u && (adminUser.role === "admin" || u.assigned_to === adminUser.name)) {
@@ -1341,17 +1323,6 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
     return () => observer.disconnect();
   }, [hasMoreCards, subView, cardsPage]);
 
-<<<<<<< HEAD
-=======
-  const getLatestLoanDetails = () => {
-    if (!selectedLead) return null;
-    let ex: Record<string, any> = { loanRequired: selectedLead.loanPlanned || "N/A", status: "Pending", bankName: "N/A", amountReq: "N/A", amountApp: "N/A", cibil: "N/A", agent: "N/A", agentContact: "N/A", empType: "N/A", income: "N/A", emi: "N/A", docPan: "Pending", docAadhaar: "Pending", docSalary: "Pending", docBank: "Pending", docProperty: "Pending", notes: "N/A" };
-    const lu = currentLeadFollowUps.filter((f: any) => f.message?.includes("🏦 Loan Update:"));
-    if (lu.length > 0) { const msg = lu[lu.length - 1].message; const g = (l: string) => { const m = msg.match(new RegExp(`• ${l}: (.*)`)); return m ? m[1].trim() : "N/A"; }; ex = { loanRequired: g("Loan Required"), status: g("Status"), bankName: g("Bank Name"), amountReq: g("Amount Requested"), amountApp: g("Amount Approved"), cibil: g("CIBIL Score"), agent: g("Agent Name"), agentContact: g("Agent Contact"), empType: g("Employment Type"), income: g("Monthly Income"), emi: g("Existing EMIs"), docPan: g("PAN Card"), docAadhaar: g("Aadhaar Card"), docSalary: g("Salary Slips"), docBank: g("Bank Statements"), docProperty: g("Property Docs"), notes: g("Notes") }; }
-    return ex;
-  };
-  const getLoanStatusColor = (s: string) => { const sl = (s || "").toLowerCase(); if (sl === "approved") return isDark ? "bg-green-900/20 text-green-400 border-green-500/30" : "bg-green-50 text-green-700 border-green-300"; if (sl === "rejected") return isDark ? "bg-red-900/20 text-red-400 border-red-500/30" : "bg-red-50 text-red-700 border-red-300"; if (sl === "in progress") return isDark ? "bg-yellow-900/20 text-yellow-400 border-yellow-500/30" : "bg-yellow-50 text-yellow-700 border-yellow-300"; return isDark ? "bg-gray-900/20 text-gray-400 border-gray-500/30" : "bg-gray-50 text-gray-600 border-gray-300"; };
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
   const formatDate = (ds: string) => { if (!ds || ds === "Pending" || ds === "N/A") return "-"; try { return new Date(ds).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }); } catch { return ds; } };
   const maskPhone = (phone: any) => { if (!phone || phone === "N/A") return "N/A"; const c = String(phone).replace(/[^a-zA-Z0-9]/g, ""); if (c.length <= 5) return c; return `${c.slice(0, 2)}*****${c.slice(-3)}`; };
 
@@ -1484,7 +1455,6 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
     if (!selectedLead || isSubmittingSalesForm) return;
     setIsSubmittingSalesForm(true);
 
-<<<<<<< HEAD
     // Single atomic call — the server builds the follow-up message, writes the
     // normalized columns, updates the lead status, and (if scheduled) inserts the
     // site visit, all inside one transaction. No more partial writes.
@@ -1526,66 +1496,6 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
       }
 
       // Success — reset the form and resync.
-=======
-    const msg =
-      "📝 Detailed Salesform Submitted:\n" +
-      "• Property Type: " + (salesForm.propertyType || "N/A") + "\n" +
-      "• Location: " + (salesForm.location || "N/A") + "\n" +
-      "• Budget: " + (salesForm.budget || "N/A") + "\n" +
-      "• Use Type: " + (salesForm.useType || "N/A") + "\n" +
-      "• Planning to Purchase: " + (salesForm.purchaseDate || "N/A") + "\n" +
-      "• Loan Planned: " + (salesForm.loanPlanned || "N/A") + "\n" +
-      "• Lead Status: " + (salesForm.leadStatus || "N/A") + "\n" +
-      "• Site Visit Requested: " +
-      (salesForm.siteVisit ? formatDate(salesForm.siteVisit) : "No");
-
-    const nm = {
-      leadId: String(selectedLead.id),
-      salesManagerName: adminUser.name,
-      createdBy: adminUser.role === "admin" ? "admin" : "sales",
-      message: msg,
-      siteVisitDate: salesForm.siteVisit || null,
-      createdAt: new Date().toISOString(),
-    };
-
-    const ns = salesForm.siteVisit ? "Visit Scheduled" : selectedLead.status;
-
-    try {
-      // 1️⃣ Save follow-up
-      await fetch("/api/followups", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(nm),
-      });
-
-      // 2️⃣ Update lead status
-      await fetch(`/api/walkin_enquiries/${selectedLead.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: selectedLead.name,
-          status: ns,
-        }),
-      });
-
-      // ✅ 3️⃣ NEW: Save into site_visits table (IMPORTANT)
-      if (salesForm.siteVisit) {
-        await fetch("/api/site-visits", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            lead_id: selectedLead.id,
-            visit_date: salesForm.siteVisit,
-            created_by: adminUser.name, // (can switch to id later)
-            role: adminUser.role,
-            notes: "Scheduled via Salesform",
-          }),
-        }).catch(() => { }); // don't break flow if it fails
-      }
-
-      // 4️⃣ Reset UI (after everything succeeds)
-      // 4️⃣ Reset UI (after everything succeeds)
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
       setShowSalesForm(false);
       setSalesForm({
         propertyType: "",
@@ -1597,7 +1507,6 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
         siteVisit: "",
         leadStatus: "",
       });
-<<<<<<< HEAD
       refetch();
     } catch (err) {
       console.log(err);
@@ -1607,24 +1516,11 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
         color: "red",
       });
       setTimeout(() => setToastMsg(null), 4000);
-=======
-
-      refetch();
-
-    } catch (e) {
-      console.log(e);
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
     } finally {
       setIsSubmittingSalesForm(false);
     }
   };
-<<<<<<< HEAD
   const prefillSalesForm = (targetLead?: any) => { const l = targetLead || selectedLead; if (!l) return; const fups = followUps.filter((f: any) => String(f.leadId) === String(l.id)); const sf = fups.filter((f: any) => f.message?.includes("Detailed Salesform Submitted")); if (sf.length === 0) return; const msg = sf[sf.length - 1].message; const g = (label: string) => { const m = msg.match(new RegExp(`• ${label}: (.*)`)); return m && m[1].trim() !== "N/A" ? m[1].trim() : ""; }; setSalesForm({ propertyType: g("Property Type"), location: g("Location"), budget: g("Budget"), useType: g("Use Type"), purchaseDate: g("Planning to Purchase"), loanPlanned: g("Loan Planned"), leadStatus: g("Lead Status"), siteVisit: "" }); };
-=======
-  const handleLoanFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => { e.preventDefault(); if (!selectedLead) return; const msg = "🏦 Loan Update:\n• Loan Required: " + (loanForm.loanRequired || "N/A") + "\n• Status: " + (loanForm.status || "N/A") + "\n• Bank Name: " + (loanForm.bank || "N/A") + "\n• Amount Requested: " + (loanForm.amountReq || "N/A") + "\n• Amount Approved: " + (loanForm.amountApp || "N/A") + "\n• CIBIL Score: " + (loanForm.cibil || "N/A") + "\n• Agent Name: " + (loanForm.agent || "N/A") + "\n• Agent Contact: " + (loanForm.agentContact || "N/A") + "\n• Employment Type: " + (loanForm.empType || "N/A") + "\n• Monthly Income: " + (loanForm.income || "N/A") + "\n• Existing EMIs: " + (loanForm.emi || "N/A") + "\n• PAN Card: " + (loanForm.docPan || "Pending") + "\n• Aadhaar Card: " + (loanForm.docAadhaar || "Pending") + "\n• Salary Slips: " + (loanForm.docSalary || "Pending") + "\n• Bank Statements: " + (loanForm.docBank || "Pending") + "\n• Property Docs: " + (loanForm.docProperty || "Pending") + "\n• Notes: " + (loanForm.notes || "N/A"); const nm = { leadId: String(selectedLead.id), salesManagerName: adminUser.name, createdBy: adminUser.role === "admin" ? "admin" : "sales", message: msg, siteVisitDate: null, createdAt: new Date().toISOString() }; const dbp = { leadId: String(selectedLead.id), salesManagerName: adminUser.name, ...loanForm }; setShowLoanForm(false); setToastMsg({ title: `Loan Data Logged for ${selectedLead.name}`, icon: <FaCheckCircle />, color: "blue" }); setTimeout(() => setToastMsg(null), 3000); try { await fetch("/api/followups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(nm) }); await fetch("/api/loan/update", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(dbp) }).catch(() => { }); refetch(); } catch (e) { console.log(e); } };
-  const prefillSalesForm = (targetLead?: any) => { const l = targetLead || selectedLead; if (!l) return; const fups = followUps.filter((f: any) => String(f.leadId) === String(l.id)); const sf = fups.filter((f: any) => f.message?.includes("Detailed Salesform Submitted")); if (sf.length === 0) return; const msg = sf[sf.length - 1].message; const g = (label: string) => { const m = msg.match(new RegExp(`• ${label}: (.*)`)); return m && m[1].trim() !== "N/A" ? m[1].trim() : ""; }; setSalesForm({ propertyType: g("Property Type"), location: g("Location"), budget: g("Budget"), useType: g("Use Type"), purchaseDate: g("Planning to Purchase"), loanPlanned: g("Loan Planned"), leadStatus: g("Lead Status"), siteVisit: "" }); };
-  const prefillLoanForm = () => { const cur = getLatestLoanDetails(); if (!cur) return; setLoanForm({ loanRequired: cur.loanRequired !== "N/A" ? cur.loanRequired : "", status: cur.status !== "Pending" ? cur.status : "", bank: cur.bankName !== "N/A" ? cur.bankName : "", amountReq: cur.amountReq !== "N/A" ? cur.amountReq : "", amountApp: cur.amountApp !== "N/A" ? cur.amountApp : "", cibil: cur.cibil !== "N/A" ? cur.cibil : "", agent: cur.agent !== "N/A" ? cur.agent : "", agentContact: cur.agentContact !== "N/A" ? cur.agentContact : "", empType: cur.empType !== "N/A" ? cur.empType : "", income: cur.income !== "N/A" ? cur.income : "", emi: cur.emi !== "N/A" ? cur.emi : "", docPan: cur.docPan !== "N/A" ? cur.docPan : "Pending", docAadhaar: cur.docAadhaar !== "N/A" ? cur.docAadhaar : "Pending", docSalary: cur.docSalary !== "N/A" ? cur.docSalary : "Pending", docBank: cur.docBank !== "N/A" ? cur.docBank : "Pending", docProperty: cur.docProperty !== "N/A" ? cur.docProperty : "Pending", notes: cur.notes !== "N/A" ? cur.notes : "" }); };
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
 
 
   const CardsLoader = () => (
@@ -2120,7 +2016,6 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
 
         {/* ── DETAIL ── */}
         {subView === "detail" && selectedLead && (
-<<<<<<< HEAD
           bookingData && showBookingView ? (
             <div className="animate-fadeIn w-full h-[calc(100vh-130px)] overflow-hidden bg-transparent flex flex-col">
               <div className="flex items-center p-2 shrink-0 border-b border-white/10 shadow-sm" style={t.cardGlass}>
@@ -2138,16 +2033,6 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                   onRefetch={() => { if (selectedLead) fetchBookingForLead(selectedLead.id); }}
                 />
               </div>
-=======
-          bookingData ? (
-            <div className="animate-fadeIn w-full h-[calc(100vh-130px)] overflow-hidden bg-transparent">
-              <ClosedLeadBookingView
-                booking={bookingData}
-                lead={selectedLead}
-                isDark={isDark}
-                userRole="sales"
-              />
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
             </div>
           ) : (
             <div className="animate-fadeIn w-full flex flex-col gap-2 pb-1">
@@ -2177,7 +2062,6 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                   </h1>
                 </div>
                 <div className="flex gap-2 sm:gap-3 flex-wrap justify-start md:justify-end flex-shrink-0">
-<<<<<<< HEAD
                   {bookingData ? (
                     <button onClick={() => setShowBookingView(true)} className="font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm flex-1 sm:flex-none justify-center">
                       <FaEye /> View Booking Form
@@ -2187,8 +2071,6 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                       <FaEye /> View Booking Form
                     </button>
                   )}
-=======
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
                   {isAdmin && (
                     <button
                       type="button"
@@ -2223,11 +2105,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                           className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md flex-1 sm:flex-none justify-center ${t.btnPrimary} ${isDark ? "shadow-purple-600/20" : "shadow-[#00AEEF]/20"}`}>
                           <FaFileInvoice /> <span className="hidden sm:inline">Fill</span> Salesform
                         </button>
-<<<<<<< HEAD
                         <button onClick={() => { setShowLoanForm(true); setShowSalesForm(false); emitActivity({ type: 'LEAD_INTERACTION', action: 'Editing Loan Form', leadId: selectedLead?.id, leadName: selectedLead?.name, module: 'Loan Form' }); }}
-=======
-                        <button onClick={() => { prefillLoanForm(); setShowLoanForm(true); setShowSalesForm(false); emitActivity({ type: 'LEAD_INTERACTION', action: 'Editing Loan Form', leadId: selectedLead?.id, leadName: selectedLead?.name, module: 'Loan Form' }); }}
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
                           className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md flex-1 sm:flex-none justify-center ${t.btnSecondary} ${isDark ? "shadow-blue-600/20" : "shadow-[#00AEEF]/20"}`}>
                           <FaUniversity /> <span className="hidden sm:inline">Track</span> Loan
                         </button>
@@ -2250,11 +2128,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                 {/* LEFT PANEL */}
                 <div className="flex flex-col gap-3 w-full lg:w-0 lg:flex-1 lg:min-w-0">
                   {showSalesForm ? (
-<<<<<<< HEAD
                     <div className={`rounded-xl border p-3 sm:p-3 shadow-xl overflow-y-auto custom-scrollbar flex flex-col max-h-[85vh] lg:max-h-[calc(100vh-190px)] ${t.modalCard}`} style={t.modalGlass}>
-=======
-                    <div className={`rounded-xl border p-3 sm:p-3 shadow-xl overflow-y-auto custom-scrollbar flex flex-col max-h-[85vh] lg:max-h-[calc(100vh-180px)] ${t.modalCard}`} style={t.modalGlass}>
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
                       <div className={`flex justify-between items-center mb-4 border-b pb-3 ${t.tableBorder}`}>
                         <div>
                           <h3 className={`text-base sm:text-lg font-bold ${t.text}`}>Sales Data Form</h3>
@@ -2289,7 +2163,6 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                       </form>
                     </div>
                   ) : showLoanForm ? (
-<<<<<<< HEAD
                     <LoanDealForm
                       lead={selectedLead}
                       booking={loanDealBooking}
@@ -2306,65 +2179,6 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                         refetch();
                       }}
                     />
-=======
-                    <div className={`rounded-xl border p-3 sm:p-3 shadow-xl overflow-y-auto custom-scrollbar flex flex-col animate-fadeIn max-h-[80vh] lg:max-h-[calc(100vh-260px)] ${t.modalCard}`} style={t.modalGlass}>
-                      <div className={`flex justify-between items-center mb-4 border-b pb-3 flex-shrink-0 ${t.tableBorder}`}>
-                        <div>
-                          <h3 className={`text-base sm:text-lg font-bold flex items-center gap-2 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}><FaUniversity /> Loan Tracking Workflow</h3>
-                          <p className={`text-xs mt-0.5 ${t.textFaint}`}>For Lead #{selectedLead.sr_no || selectedLead.id}</p>
-                        </div>
-                        <button type="button" onClick={() => setShowLoanForm(false)} className={`p-2 ${t.textMuted} hover:text-red-500`}><FaTimes /></button>
-                      </div>
-                      <form onSubmit={handleLoanFormSubmit} className="flex flex-col gap-3 sm:gap-3 flex-1">
-                        <div>
-                          <h4 className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-2 sm:mb-3 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}>1. Loan Decision</h4>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Loan Required? *</label><select required value={loanForm.loanRequired} onChange={e => setLoanForm({ ...loanForm, loanRequired: e.target.value })} className={formSelect}><option value="">Select</option><option>Yes</option><option>No</option><option>Not Sure</option></select></div>
-                            <div>
-                              <label className={`text-xs mb-1 block ${t.textMuted}`}>Loan Status *</label>
-                              <select required value={loanForm.status} onChange={e => setLoanForm({ ...loanForm, status: e.target.value })} className={formSelect}><option value="">Select Status</option><option>Approved</option><option>In Progress</option><option>Rejected</option></select>
-                              {loanForm.status && (<p className={`text-[10px] mt-1.5 font-semibold ${loanForm.status === "Approved" ? "text-green-400" : loanForm.status === "Rejected" ? "text-red-400" : "text-yellow-400"}`}>{loanForm.status === "Approved" && "✅ Loan cleared — schedule closing meeting"}{loanForm.status === "In Progress" && "📄 Follow up on pending documents"}{loanForm.status === "Rejected" && "❌ Loan rejected — suggest co-applicant or other bank"}</p>)}
-                            </div>
-                          </div>
-                        </div>
-                        <div className={`border-t pt-3 sm:pt-4 ${t.tableBorder}`}>
-                          <h4 className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-2 sm:mb-3 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}>2. Bank & Loan Details</h4>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            {[{ label: "Bank Name", k: "bank", ph: "e.g. HDFC" }, { label: "Amount Required", k: "amountReq", ph: "e.g. 60L" }, { label: "Amount Approved", k: "amountApp", ph: "e.g. 55L" }, { label: "CIBIL Score", k: "cibil", ph: "e.g. 750" }, { label: "Agent Name", k: "agent", ph: "Agent Name" }, { label: "Agent Contact", k: "agentContact", ph: "Agent Phone", tel: true }].map(f => (
-                              <div key={f.k}><label className={`text-xs mb-1 block ${t.textMuted}`}>{f.label}</label><input type={f.tel ? "tel" : "text"} value={(loanForm as any)[f.k]} onChange={e => setLoanForm({ ...loanForm, [f.k]: e.target.value })} className={formInput} placeholder={f.ph} /></div>
-                            ))}
-                          </div>
-                        </div>
-                        <div className={`border-t pt-3 sm:pt-4 ${t.tableBorder}`}>
-                          <h4 className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-2 sm:mb-3 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}>3. Financial Qualification</h4>
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                            <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Employment</label><select value={loanForm.empType} onChange={e => setLoanForm({ ...loanForm, empType: e.target.value })} className={formSelect}><option value="">Select</option><option>Salaried</option><option>Self-employed</option></select></div>
-                            <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Monthly Income</label><input type="text" value={loanForm.income} onChange={e => setLoanForm({ ...loanForm, income: e.target.value })} className={formInput} placeholder="e.g. 1L" /></div>
-                            <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Existing EMIs</label><input type="text" value={loanForm.emi} onChange={e => setLoanForm({ ...loanForm, emi: e.target.value })} className={formInput} placeholder="e.g. 15k" /></div>
-                          </div>
-                        </div>
-                        <div className={`border-t pt-3 sm:pt-4 ${t.tableBorder}`}>
-                          <h4 className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-2 sm:mb-3 flex items-center gap-1 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}><FaFileAlt /> 4. Document Checklist</h4>
-                          <div className={`grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-lg border ${t.settingsBg}`} style={t.settingsBgGl}>
-                            {["docPan", "docAadhaar", "docSalary", "docBank", "docProperty"].map(docKey => {
-                              const label = docKey === "docPan" ? "PAN Card" : docKey === "docAadhaar" ? "Aadhaar Card" : docKey === "docSalary" ? "Salary Slips / ITR" : docKey === "docBank" ? "Bank Statements" : "Property Documents";
-                              return (
-                                <div key={docKey} className={`flex items-center justify-between border p-2 rounded-lg ${t.innerBlock}`}>
-                                  <span className={`text-[11px] sm:text-xs font-medium ${t.text}`}>{label}</span>
-                                  <select value={(loanForm as any)[docKey]} onChange={e => setLoanForm({ ...loanForm, [docKey]: e.target.value })} className={`text-[11px] sm:text-xs font-bold bg-transparent outline-none cursor-pointer ${(loanForm as any)[docKey] === "Uploaded" ? "text-green-400" : "text-gray-500"}`}><option>Pending</option><option>Uploaded</option></select>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                        <div className={`border-t pt-3 sm:pt-4 ${t.tableBorder}`}>
-                          <h4 className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-2 sm:mb-3 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}>5. Notes / Remarks</h4>
-                          <textarea value={loanForm.notes} onChange={e => setLoanForm({ ...loanForm, notes: e.target.value })} className={`w-full rounded-lg px-4 py-2.5 text-sm outline-none resize-none h-20 custom-scrollbar border ${t.inputInner} ${t.text} ${t.inputFocus}`} placeholder="Bank feedback, CIBIL issues, Internal notes..." />
-                        </div>
-                        <button type="submit" className={`mt-4 flex-shrink-0 w-full font-bold py-3 sm:py-3.5 rounded-xl shadow-md transition-colors cursor-pointer ${t.btnSecondary}`}>Save Loan Tracker Update</button>
-                      </form>
-                    </div>
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
                   ) : (
                     <div className="flex flex-col gap-3 animate-fadeIn">
                       {/* Tab switcher */}
@@ -2392,11 +2206,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                               <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Property Type</p><p className={`font-semibold ${t.text}`}>{selectedLead.propType || selectedLead.configuration || "Pending"}</p></div>
                               <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Type of Use</p><p className={`font-semibold ${t.text}`}>{selectedLead.useType !== "Pending" ? selectedLead.useType : (selectedLead.purpose || "N/A")}</p></div>
                               <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Planning to Buy?</p><p className={`font-semibold ${t.text}`}>{selectedLead.planningPurchase || "Pending"}</p></div>
-<<<<<<< HEAD
                               <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Loan Required?</p><p className={`font-semibold ${t.text}`}>{loanDealLatest?.loan_required || selectedLead.loanPlanned || "Pending"}</p></div>
-=======
-                              <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Loan Required?</p><p className={`font-semibold ${t.text}`}>{getLatestLoanDetails()?.loanRequired}</p></div>
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
                               <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Status</p><span className={`text-xs sm:text-sm font-bold ${getStatusStyle(selectedLead.status)}`}>{selectedLead.status || "Assigned"}</span></div>
                               {/* <div className={`col-span-1 sm:col-span-2 p-3 sm:p-3 rounded-xl border ${t.settingsBg}`} style={t.settingsBgGl}>
                               <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-0.5 sm:mb-1 ${isDark?"text-[#00AEEF]":"text-[#00AEEF]"}`}>📍 Site Visit Date</p>
@@ -2462,41 +2272,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
                             NON GENUINE DEMAND
                           </span>
                         ) : (
-<<<<<<< HEAD
                           <LoanDealView lead={selectedLead} booking={loanDealBooking} loanUpdate={loanDealLatest} isDark={isDark} t={t} />
-=======
-                          <div>
-                            {(() => {
-                              const curLoan: any = getLatestLoanDetails() || {};
-                              const sColor = getLoanStatusColor(curLoan?.status || "");
-                              const isHighProb = curLoan?.status?.toLowerCase() === "approved" && selectedLead.mongoVisitDate;
-                              return (
-                                <>
-                                  <h3 className={`text-xs sm:text-sm font-bold border-b pb-2 mb-4 sm:mb-6 uppercase flex items-center justify-between ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"} ${t.tableBorder}`}><span className="flex items-center gap-2"><FaUniversity /> Deal Loan Overview</span></h3>
-                                  {isHighProb && <div className="mb-4 sm:mb-6 bg-gradient-to-r from-orange-500/20 to-red-500/20 border border-orange-500/50 p-2 sm:p-3 rounded-lg flex items-center justify-center gap-2 text-orange-400 text-xs sm:text-sm font-bold tracking-wide shadow-md text-center">🚀 HIGH PROBABILITY DEAL</div>}
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-4 text-xs sm:text-sm">
-                                    <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Loan Required?</p><p className={`font-semibold ${t.text}`}>{curLoan?.loanRequired}</p></div>
-                                    <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Current Status</p><p className={`font-bold px-2 py-0.5 rounded inline-block border ${sColor}`}>{curLoan?.status}</p></div>
-                                    <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Amount Requested</p><p className="text-orange-400 font-semibold">{curLoan?.amountReq}</p></div>
-                                    <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Amount Approved</p><p className={`font-semibold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{curLoan?.amountApp}</p></div>
-                                    {[{ label: "Bank Name", val: curLoan?.bankName }, { label: "CIBIL Score", val: curLoan?.cibil }, { label: "Agent Name", val: curLoan?.agent }, { label: "Agent Contact", val: curLoan?.agentContact }, { label: "Emp Type", val: curLoan?.empType }, { label: "Monthly Income", val: curLoan?.income }, { label: "Existing EMIs", val: curLoan?.emi }].map(f => (
-                                      <div key={f.label}><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>{f.label}</p><p className={`font-semibold ${t.text}`}>{f.val}</p></div>
-                                    ))}
-                                    <div className="col-span-1 sm:col-span-2 mb-1 sm:mb-2 mt-2"><p className={`text-[10px] sm:text-xs font-bold uppercase tracking-widest ${t.textMuted}`}>Document Status</p></div>
-                                    {[{ label: "PAN Card", val: curLoan?.docPan }, { label: "Aadhaar", val: curLoan?.docAadhaar }, { label: "Salary/ITR", val: curLoan?.docSalary }, { label: "Bank Stmt", val: curLoan?.docBank }, { label: "Property Docs", val: curLoan?.docProperty }].map((doc, i) => (
-                                      <div key={i} className={`flex items-center justify-between p-2 rounded-lg col-span-1 border ${t.innerBlock}`}>
-                                        <span className={`text-[10px] sm:text-xs ${t.textMuted}`}>{doc.label}</span>
-                                        {doc.val === "Uploaded" ? <FaCheck className="text-green-500 text-xs" /> : <FaClock className={`text-xs ${t.textFaint}`} />}
-                                      </div>
-                                    ))}
-                                  </div>
-                                </>
-                              );
-                            })()}
-                          </div>
-
-
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
                         )}
                         {/* Site Visit History — outside with gap */}
                         <div className="mt-3">

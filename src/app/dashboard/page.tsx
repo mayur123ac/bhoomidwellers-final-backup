@@ -9,11 +9,7 @@ import {
   FaThLarge, FaClipboardList, FaUsers, FaIdCard,
   FaSearch, FaBell, FaChevronLeft, FaPhoneAlt, FaComments,
   FaCheckCircle, FaCalendarAlt, FaTimes,
-<<<<<<< HEAD
   FaFileInvoice, FaFileInvoiceDollar, FaPaperPlane, FaMicrophone, FaWhatsapp, FaTable, FaChartPie, FaEyeSlash, FaUniversity, FaHandshake, FaExchangeAlt, FaBriefcase, FaDownload, FaCog, FaMapMarkerAlt, FaSignal, FaUserClock, FaTrashAlt
-=======
-  FaFileInvoice, FaFileInvoiceDollar, FaPaperPlane, FaMicrophone, FaWhatsapp, FaTable, FaChartPie, FaEyeSlash, FaUniversity, FaFileAlt, FaCheck, FaClock, FaHandshake, FaExchangeAlt, FaBriefcase, FaDownload, FaCog, FaMapMarkerAlt, FaSignal, FaUserClock, FaTrashAlt
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
 } from "react-icons/fa";
 import { FaWandMagicSparkles } from "react-icons/fa6";
 import {
@@ -27,11 +23,8 @@ import ClosedLeadBookingView from "@/components/ClosedLeadBookingView";
 import LostLeadModal from "@/components/LostLeadModal";
 import CrmUpdatesNotification from "@/components/CrmUpdatesNotification";
 import PermanentLeadDeleteDialog from "@/components/PermanentLeadDeleteDialog";
-<<<<<<< HEAD
 import LoanDealForm from "@/components/LoanDealForm";
 import LoanDealView from "@/components/LoanDealView";
-=======
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
 // import ActivityTimeline from "@/components/ActivityTimeline";
 import {
   handleMarkLostLead as markLostLeadApi,
@@ -2911,10 +2904,6 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
   const [showSalesForm, setShowSalesForm] = useState(false);
   const [showLoanForm, setShowLoanForm] = useState(false);
   const [salesForm, setSalesForm] = useState({ propertyType: "", location: "", budget: "", useType: "", purchaseDate: "", loanPlanned: "", siteVisit: "", leadStatus: "" });
-<<<<<<< HEAD
-=======
-  const [loanForm, setLoanForm] = useState({ loanRequired: "", status: "", bank: "", amountReq: "", amountApp: "", cibil: "", agent: "", agentContact: "", empType: "", income: "", emi: "", docPan: "Pending", docAadhaar: "Pending", docSalary: "Pending", docBank: "Pending", docProperty: "Pending", notes: "" });
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
   const [customNote, setCustomNote] = useState("");
   const [toastMsg, setToastMsg] = useState<{ title: string; icon: any; color: string } | null>(null);
   const [isWaModalOpen, setIsWaModalOpen] = useState(false);
@@ -3090,29 +3079,6 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
     setVisibleCount(20);
   }, [activeSection, selectedManager?.name]);
   // Helpers for Forms
-<<<<<<< HEAD
-=======
-  const getLatestLoanDetails = () => {
-    if (!selectedLead) return null;
-    let ex: Record<string, any> = { loanRequired: selectedLead.loanPlanned || "N/A", status: "Pending", bankName: "N/A", amountReq: "N/A", amountApp: "N/A", cibil: "N/A", agent: "N/A", agentContact: "N/A", empType: "N/A", income: "N/A", emi: "N/A", docPan: "Pending", docAadhaar: "Pending", docSalary: "Pending", docBank: "Pending", docProperty: "Pending", notes: "N/A" };
-    const lu = currentLeadFollowUps.filter((f: any) => f.message?.includes("🏦 Loan Update:"));
-    if (lu.length > 0) {
-      const msg = lu[lu.length - 1].message;
-      const g = (l: string) => { const m = msg.match(new RegExp(`• ${l}: (.*)`)); return m ? m[1].trim() : "N/A"; };
-      ex = { loanRequired: g("Loan Required"), status: g("Status"), bankName: g("Bank Name"), amountReq: g("Amount Requested"), amountApp: g("Amount Approved"), cibil: g("CIBIL Score"), agent: g("Agent Name"), agentContact: g("Agent Contact"), empType: g("Employment Type"), income: g("Monthly Income"), emi: g("Existing EMIs"), docPan: g("PAN Card"), docAadhaar: g("Aadhaar Card"), docSalary: g("Salary Slips"), docBank: g("Bank Statements"), docProperty: g("Property Docs"), notes: g("Notes") };
-    }
-    return ex;
-  };
-
-  const getLoanStatusColor = (s: string) => {
-    const sl = (s || "").toLowerCase();
-    if (sl === "approved") return isDark ? "bg-green-900/20 text-green-400 border-green-500/30" : "bg-green-50 text-green-700 border-green-300";
-    if (sl === "rejected") return isDark ? "bg-red-900/20 text-red-400 border-red-500/30" : "bg-red-50 text-red-700 border-red-300";
-    if (sl === "in progress") return isDark ? "bg-yellow-900/20 text-yellow-400 border-yellow-500/30" : "bg-yellow-50 text-yellow-700 border-yellow-300";
-    return isDark ? "bg-gray-900/20 text-gray-400 border-gray-500/30" : "bg-gray-50 text-gray-600 border-gray-300";
-  };
-
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
   const prefillSalesForm = (targetLead?: any) => {
     const l = targetLead || selectedLead;
     if (!l) return;
@@ -3124,16 +3090,6 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
     setSalesForm({ propertyType: g("Property Type"), location: g("Location"), budget: g("Budget"), useType: g("Use Type"), purchaseDate: g("Planning to Purchase"), loanPlanned: g("Loan Planned"), leadStatus: g("Lead Status"), siteVisit: "" });
   };
 
-<<<<<<< HEAD
-=======
-  const prefillLoanForm = () => {
-    const cur = getLatestLoanDetails();
-    if (!cur) return;
-    const n = (v: string) => v !== "N/A" ? v : "";
-    setLoanForm({ loanRequired: n(cur.loanRequired), status: cur.status !== "Pending" ? cur.status : "", bank: n(cur.bankName), amountReq: n(cur.amountReq), amountApp: n(cur.amountApp), cibil: n(cur.cibil), agent: n(cur.agent), agentContact: n(cur.agentContact), empType: n(cur.empType), income: n(cur.income), emi: n(cur.emi), docPan: cur.docPan !== "N/A" ? cur.docPan : "Pending", docAadhaar: cur.docAadhaar !== "N/A" ? cur.docAadhaar : "Pending", docSalary: cur.docSalary !== "N/A" ? cur.docSalary : "Pending", docBank: cur.docBank !== "N/A" ? cur.docBank : "Pending", docProperty: cur.docProperty !== "N/A" ? cur.docProperty : "Pending", notes: n(cur.notes) });
-  };
-
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
   const handleSendCustomNote = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!customNote.trim() || !selectedLead) return;
@@ -3179,25 +3135,6 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
     } catch { }
   };
 
-<<<<<<< HEAD
-=======
-  const handleLoanFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!selectedLead) return;
-    const msg = `🏦 Loan Update:\n• Loan Required: ${loanForm.loanRequired || "N/A"}\n• Status: ${loanForm.status || "N/A"}\n• Bank Name: ${loanForm.bank || "N/A"}\n• Amount Requested: ${loanForm.amountReq || "N/A"}\n• Amount Approved: ${loanForm.amountApp || "N/A"}\n• CIBIL Score: ${loanForm.cibil || "N/A"}\n• Agent Name: ${loanForm.agent || "N/A"}\n• Agent Contact: ${loanForm.agentContact || "N/A"}\n• Employment Type: ${loanForm.empType || "N/A"}\n• Monthly Income: ${loanForm.income || "N/A"}\n• Existing EMIs: ${loanForm.emi || "N/A"}\n• PAN Card: ${loanForm.docPan || "Pending"}\n• Aadhaar Card: ${loanForm.docAadhaar || "Pending"}\n• Salary Slips: ${loanForm.docSalary || "Pending"}\n• Bank Statements: ${loanForm.docBank || "Pending"}\n• Property Docs: ${loanForm.docProperty || "Pending"}\n• Notes: ${loanForm.notes || "N/A"}`;
-    const nm = { leadId: String(selectedLead.id), salesManagerName: adminUser.name, createdBy: "admin", message: msg, siteVisitDate: null, createdAt: new Date().toISOString() };
-    const dbp = { leadId: String(selectedLead.id), salesManagerName: adminUser.name, ...loanForm };
-    setShowLoanForm(false);
-    setToastMsg({ title: `Loan Data Synced for ${selectedLead.name}`, icon: <FaCheckCircle />, color: "blue" });
-    setTimeout(() => setToastMsg(null), 3000);
-    try {
-      await fetch("/api/followups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(nm) });
-      await fetch("/api/loan/update", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(dbp) }).catch(() => { });
-      refetch();
-    } catch { }
-  };
-
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
   const [bookingData, setBookingData] = useState<any>(null);
   const [showBookingView, setShowBookingView] = useState(false);
   const [bookingDetailTab, setBookingDetailTab] = useState<"personal" | "loan" | "booking">("personal");
@@ -3219,7 +3156,6 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
     } catch { setBookingData(null); }
   };
 
-<<<<<<< HEAD
   // Loan & Deal Tracking panel — independent of bookingData/fetchBookingForLead above,
   // which (when wired up) swaps the whole detail view to ClosedLeadBookingView.
   const [loanDealBooking, setLoanDealBooking] = useState<any>(null);
@@ -3238,8 +3174,6 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
     } catch { setLoanDealLatest(null); }
   }, []);
 
-=======
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
   useEffect(() => {
     if (selectedLead) {
       fetchBookingForLead(selectedLead.id);
@@ -3249,14 +3183,11 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
     }
   }, [selectedLead]);
 
-<<<<<<< HEAD
   useEffect(() => {
     if (selectedLead?.id) fetchLoanDealData(selectedLead.id);
     else { setLoanDealBooking(null); setLoanDealLatest(null); }
   }, [selectedLead?.id, fetchLoanDealData]);
 
-=======
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
   const handleReopenLead = async () => {
     if (!selectedLead || selectedLead.status !== "Closing") return;
     setIsReopening(true);
@@ -3692,11 +3623,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                               <button onClick={() => { prefillSalesForm(); setShowSalesForm(true); setShowLoanForm(false); }} className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${theme.btnPrimary}`}>
                                 <FaFileInvoice /> Fill Salesform
                               </button>
-<<<<<<< HEAD
                               <button onClick={() => { setShowLoanForm(true); setShowSalesForm(false); }} className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${theme.btnSecondary}`}>
-=======
-                              <button onClick={() => { prefillLoanForm(); setShowLoanForm(true); setShowSalesForm(false); }} className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${theme.btnSecondary}`}>
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
                                 <FaUsers /> Track Loan
                               </button>
                               <button onClick={() => setIsClosingModalOpen(true)} className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${theme.btnWarning}`}>
@@ -3758,7 +3685,6 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                           </div>
 
                         ) : showLoanForm ? (
-<<<<<<< HEAD
                           <LoanDealForm
                             lead={selectedLead}
                             booking={loanDealBooking}
@@ -3774,68 +3700,6 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                               refetch();
                             }}
                           />
-=======
-                          <div className={`rounded-xl border p-3 shadow-xl flex-1 overflow-y-auto custom-scrollbar flex flex-col animate-fadeIn ${theme.modalCard}`} style={theme.modalGlass}>
-                            <div className={`flex justify-between items-center mb-3 border-b pb-2 flex-shrink-0 ${theme.tableBorder}`}>
-                              <div>
-                                <h3 className={`text-base font-bold flex items-center gap-2 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}><FaUsers /> Loan Tracking Workflow</h3>
-                                <p className={`text-xs mt-0.5 ${theme.textFaint}`}>For Lead #{selectedLead.sr_no || selectedLead.id}</p>
-                              </div>
-                              <button type="button" onClick={() => setShowLoanForm(false)} className={`p-1 ${theme.textMuted} hover:text-red-500`}><FaTimes /></button>
-                            </div>
-                            <form onSubmit={handleLoanFormSubmit} className="flex flex-col gap-3 flex-1">
-                              <div>
-                                <h4 className={`text-xs font-bold uppercase tracking-wider mb-3 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>1. Loan Decision</h4>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                  <div><label className={`text-xs mb-1 block ${theme.textMuted}`}>Loan Required? *</label>
-                                    <select required value={loanForm.loanRequired} onChange={e => setLoanForm({ ...loanForm, loanRequired: e.target.value })} className={formSelect}><option value="">Select</option><option>Yes</option><option>No</option><option>Not Sure</option></select>
-                                  </div>
-                                  <div>
-                                    <label className={`text-xs mb-1 block ${theme.textMuted}`}>Loan Status *</label>
-                                    <select required value={loanForm.status} onChange={e => setLoanForm({ ...loanForm, status: e.target.value })} className={formSelect}><option value="">Select Status</option><option>Approved</option><option>In Progress</option><option>Rejected</option></select>
-                                    {loanForm.status && (<p className={`text-[10px] mt-1.5 font-semibold ${loanForm.status === "Approved" ? "text-green-500" : loanForm.status === "Rejected" ? "text-red-500" : isDark ? "text-yellow-400" : "text-yellow-600"}`}>{loanForm.status === "Approved" && "✅ Loan cleared — schedule closing meeting"}{loanForm.status === "In Progress" && "📄 Follow up on pending documents"}{loanForm.status === "Rejected" && "❌ Loan rejected — suggest co-applicant or other bank"}</p>)}
-                                  </div>
-                                </div>
-                              </div>
-                              <div className={`border-t pt-3 ${theme.tableBorder}`}>
-                                <h4 className={`text-xs font-bold uppercase tracking-wider mb-3 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>2. Bank & Loan Details</h4>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                  {[{ label: "Bank Name", k: "bank", ph: "e.g. HDFC" }, { label: "Amount Required", k: "amountReq", ph: "e.g. 60L" }, { label: "Amount Approved", k: "amountApp", ph: "e.g. 55L" }, { label: "CIBIL Score", k: "cibil", ph: "e.g. 750" }, { label: "Agent Name", k: "agent", ph: "Agent Name" }, { label: "Agent Contact", k: "agentContact", ph: "Agent Phone", tel: true }].map(f => (
-                                    <div key={f.k}><label className={`text-xs mb-1 block ${theme.textMuted}`}>{f.label}</label><input type={f.tel ? "tel" : "text"} value={(loanForm as any)[f.k]} onChange={e => setLoanForm({ ...loanForm, [f.k]: e.target.value })} className={formInput} placeholder={f.ph} /></div>
-                                  ))}
-                                </div>
-                              </div>
-                              <div className={`border-t pt-3 ${theme.tableBorder}`}>
-                                <h4 className={`text-xs font-bold uppercase tracking-wider mb-3 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>3. Financial Qualification</h4>
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                  <div><label className={`text-xs mb-1 block ${theme.textMuted}`}>Employment</label><select value={loanForm.empType} onChange={e => setLoanForm({ ...loanForm, empType: e.target.value })} className={formSelect}><option value="">Select</option><option>Salaried</option><option>Self-employed</option></select></div>
-                                  <div><label className={`text-xs mb-1 block ${theme.textMuted}`}>Monthly Income</label><input type="text" value={loanForm.income} onChange={e => setLoanForm({ ...loanForm, income: e.target.value })} className={formInput} placeholder="e.g. 1L" /></div>
-                                  <div><label className={`text-xs mb-1 block ${theme.textMuted}`}>Existing EMIs</label><input type="text" value={loanForm.emi} onChange={e => setLoanForm({ ...loanForm, emi: e.target.value })} className={formInput} placeholder="e.g. 15k" /></div>
-                                </div>
-                              </div>
-                              <div className={`border-t pt-3 ${theme.tableBorder}`}>
-                                <h4 className={`text-xs font-bold uppercase tracking-wider mb-3 flex items-center gap-1 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}><FaFileAlt /> 4. Document Checklist</h4>
-                                <div className={`grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-lg border ${theme.settingsBg}`} style={theme.settingsBgGl}>
-                                  {["docPan", "docAadhaar", "docSalary", "docBank", "docProperty"].map(docKey => {
-                                    const label = docKey === "docPan" ? "PAN Card" : docKey === "docAadhaar" ? "Aadhaar Card" : docKey === "docSalary" ? "Salary Slips / ITR" : docKey === "docBank" ? "Bank Statements" : "Property Documents";
-                                    return (
-                                      <div key={docKey} className={`flex items-center justify-between border p-2 rounded-lg ${theme.innerBlock}`}>
-                                        <span className={`text-xs font-medium ${theme.text}`}>{label}</span>
-                                        <select value={(loanForm as any)[docKey]} onChange={e => setLoanForm({ ...loanForm, [docKey]: e.target.value })} className={`text-xs font-bold bg-transparent outline-none cursor-pointer ${(loanForm as any)[docKey] === "Uploaded" ? "text-green-500" : "text-gray-500"}`}><option>Pending</option><option>Uploaded</option></select>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                              <div className={`border-t pt-3 ${theme.tableBorder}`}>
-                                <h4 className={`text-xs font-bold uppercase tracking-wider mb-3 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>5. Notes / Remarks</h4>
-                                <textarea value={loanForm.notes} onChange={e => setLoanForm({ ...loanForm, notes: e.target.value })} className={`w-full rounded-lg px-4 py-2.5 text-sm outline-none resize-none h-20 custom-scrollbar border ${theme.inputInner} ${theme.text} ${theme.inputFocus}`} placeholder="Bank feedback, CIBIL issues, Internal notes..." />
-                              </div>
-                              <button type="submit" className={`mt-3 flex-shrink-0 w-full font-bold py-2.5 rounded-xl shadow-md transition-colors cursor-pointer text-xs ${theme.btnSecondary}`}>Save Loan Tracker Update</button>
-                            </form>
-                          </div>
-
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
                         ) : (
                           <div className="flex flex-col h-full animate-fadeIn">
                             <div className={`flex items-center gap-2 mb-3 border p-1.5 rounded-xl flex-shrink-0 ${theme.tableWrap}`}>
@@ -3861,11 +3725,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                                     <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Property Type</p><p className={`font-semibold ${theme.text}`}>{selectedLead.propType || "Pending"}</p></div>
                                     <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Type of Use</p><p className={`font-semibold ${theme.text}`}>{selectedLead.useType !== "Pending" ? selectedLead.useType : (selectedLead.purpose || "N/A")}</p></div>
                                     <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Planning to Buy?</p><p className={`font-semibold ${theme.text}`}>{selectedLead.planningPurchase || "Pending"}</p></div>
-<<<<<<< HEAD
                                     <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Loan Required?</p><p className={`font-semibold ${theme.text}`}>{loanDealLatest?.loan_required || selectedLead.loanPlanned || "Pending"}</p></div>
-=======
-                                    <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Loan Required?</p><p className={`font-semibold ${theme.text}`}>{getLatestLoanDetails()?.loanRequired}</p></div>
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
                                     <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Status</p><span className={`text-sm font-bold ${selectedLead.status === "Closing" ? "text-amber-500" : selectedLead.status === "Visit Scheduled" ? "text-orange-400" : theme.accentText}`}>{selectedLead.status || "Assigned"}</span></div>
                                     <div className={`col-span-2 p-3 rounded-xl border ${theme.settingsBg}`} style={theme.settingsBgGl}>
                                       <p className={`text-xs font-bold uppercase tracking-wider mb-0.5 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>📍 Site Visit Date</p>
@@ -3920,39 +3780,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                                 /> */}
                                 </div>
                               ) : (
-<<<<<<< HEAD
                                 <LoanDealView lead={selectedLead} booking={loanDealBooking} loanUpdate={loanDealLatest} isDark={isDark} t={theme} />
-=======
-                                <div>
-                                  {(() => {
-                                    const curLoan: any = getLatestLoanDetails() || {};
-                                    const sColor = getLoanStatusColor(curLoan?.status || "");
-                                    const isHighProb = curLoan?.status?.toLowerCase() === "approved" && selectedLead.mongoVisitDate;
-                                    return (
-                                      <>
-                                        <h3 className={`text-sm font-bold border-b pb-2 mb-4 uppercase flex items-center justify-between ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}><span className="flex items-center gap-2"><FaUsers /> Deal Loan Overview</span></h3>
-                                        {isHighProb && <div className="mb-4 bg-gradient-to-r from-orange-500/20 to-red-500/20 border border-orange-500/50 p-3 rounded-lg flex items-center justify-center gap-2 text-orange-400 font-bold tracking-wide shadow-md">🚀 HIGH PROBABILITY DEAL</div>}
-                                        <div className="grid grid-cols-2 gap-y-3 gap-x-2 text-sm">
-                                          <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Loan Required?</p><p className={`font-semibold ${theme.text}`}>{curLoan?.loanRequired}</p></div>
-                                          <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Current Status</p><p className={`font-bold px-2 py-0.5 rounded inline-block border ${sColor}`}>{curLoan?.status}</p></div>
-                                          <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Amount Requested</p><p className="text-orange-500 font-semibold">{curLoan?.amountReq}</p></div>
-                                          <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Amount Approved</p><p className={`font-semibold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{curLoan?.amountApp}</p></div>
-                                          {[{ label: "Bank Name", val: curLoan?.bankName }, { label: "CIBIL Score", val: curLoan?.cibil }, { label: "Agent Name", val: curLoan?.agent }, { label: "Agent Contact", val: curLoan?.agentContact }, { label: "Emp Type", val: curLoan?.empType }, { label: "Monthly Income", val: curLoan?.income }, { label: "Existing EMIs", val: curLoan?.emi }].map(f => (
-                                            <div key={f.label}><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>{f.label}</p><p className={`font-semibold ${theme.text}`}>{f.val}</p></div>
-                                          ))}
-                                          <div className="col-span-2 mb-2"><p className={`text-xs font-bold uppercase tracking-widest ${theme.textMuted}`}>Document Status</p></div>
-                                          {[{ label: "PAN Card", val: curLoan?.docPan }, { label: "Aadhaar", val: curLoan?.docAadhaar }, { label: "Salary/ITR", val: curLoan?.docSalary }, { label: "Bank Stmt", val: curLoan?.docBank }, { label: "Property Docs", val: curLoan?.docProperty }].map((doc, i) => (
-                                            <div key={i} className={`flex items-center justify-between p-2 rounded-lg col-span-1 border ${theme.innerBlock}`}>
-                                              <span className={`text-xs ${theme.textMuted}`}>{doc.label}</span>
-                                              {doc.val === "Uploaded" ? <FaCheck className="text-green-500 text-xs" /> : <FaClock className={`text-xs ${theme.textFaint}`} />}
-                                            </div>
-                                          ))}
-                                        </div>
-                                      </>
-                                    );
-                                  })()}
-                                </div>
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
                               )}
                             </div>
                             <div className="grid grid-cols-2 gap-3 mt-3 flex-shrink-0">
@@ -4136,10 +3964,6 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
   const [showSalesForm, setShowSalesForm] = useState(false);
   const [showLoanForm, setShowLoanForm] = useState(false);
   const [salesForm, setSalesForm] = useState({ propertyType: "", location: "", budget: "", useType: "", purchaseDate: "", loanPlanned: "", siteVisit: "", leadStatus: "" });
-<<<<<<< HEAD
-=======
-  const [loanForm, setLoanForm] = useState({ loanRequired: "", status: "", bank: "", amountReq: "", amountApp: "", cibil: "", agent: "", agentContact: "", empType: "", income: "", emi: "", docPan: "Pending", docAadhaar: "Pending", docSalary: "Pending", docBank: "Pending", docProperty: "Pending", notes: "" });
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
   const [customNote, setCustomNote] = useState("");
   const [toastMsg, setToastMsg] = useState<{ title: string; icon: any; color: string } | null>(null);
   const [isWaModalOpen, setIsWaModalOpen] = useState(false);
@@ -4167,7 +3991,6 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
     } catch { setBookingData(null); }
   };
 
-<<<<<<< HEAD
   // Loan & Deal Tracking panel — independent of bookingData/fetchBookingForLead above,
   // which (when wired up) swaps the whole detail view to ClosedLeadBookingView.
   const [loanDealBooking, setLoanDealBooking] = useState<any>(null);
@@ -4186,8 +4009,6 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
     } catch { setLoanDealLatest(null); }
   }, []);
 
-=======
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
   useEffect(() => {
     if (selectedLead) {
       fetchBookingForLead(selectedLead.id);
@@ -4197,14 +4018,11 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
     }
   }, [selectedLead]);
 
-<<<<<<< HEAD
   useEffect(() => {
     if (selectedLead?.id) fetchLoanDealData(selectedLead.id);
     else { setLoanDealBooking(null); setLoanDealLatest(null); }
   }, [selectedLead?.id, fetchLoanDealData]);
 
-=======
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
   // Transfer States
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [transferNote, setTransferNote] = useState("");
@@ -4379,29 +4197,6 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
     setVisibleCount(20);
   }, [activeSection, selectedSiteHead?.name]);
   // Helpers for Forms
-<<<<<<< HEAD
-=======
-  const getLatestLoanDetails = () => {
-    if (!selectedLead) return null;
-    let ex: Record<string, any> = { loanRequired: selectedLead.loanPlanned || "N/A", status: "Pending", bankName: "N/A", amountReq: "N/A", amountApp: "N/A", cibil: "N/A", agent: "N/A", agentContact: "N/A", empType: "N/A", income: "N/A", emi: "N/A", docPan: "Pending", docAadhaar: "Pending", docSalary: "Pending", docBank: "Pending", docProperty: "Pending", notes: "N/A" };
-    const lu = currentLeadFollowUps.filter((f: any) => f.message?.includes("🏦 Loan Update:"));
-    if (lu.length > 0) {
-      const msg = lu[lu.length - 1].message;
-      const g = (l: string) => { const m = msg.match(new RegExp(`• ${l}: (.*)`)); return m ? m[1].trim() : "N/A"; };
-      ex = { loanRequired: g("Loan Required"), status: g("Status"), bankName: g("Bank Name"), amountReq: g("Amount Requested"), amountApp: g("Amount Approved"), cibil: g("CIBIL Score"), agent: g("Agent Name"), agentContact: g("Agent Contact"), empType: g("Employment Type"), income: g("Monthly Income"), emi: g("Existing EMIs"), docPan: g("PAN Card"), docAadhaar: g("Aadhaar Card"), docSalary: g("Salary Slips"), docBank: g("Bank Statements"), docProperty: g("Property Docs"), notes: g("Notes") };
-    }
-    return ex;
-  };
-
-  const getLoanStatusColor = (s: string) => {
-    const sl = (s || "").toLowerCase();
-    if (sl === "approved") return isDark ? "bg-green-900/20 text-green-400 border-green-500/30" : "bg-green-50 text-green-700 border-green-300";
-    if (sl === "rejected") return isDark ? "bg-red-900/20 text-red-400 border-red-500/30" : "bg-red-50 text-red-700 border-red-300";
-    if (sl === "in progress") return isDark ? "bg-yellow-900/20 text-yellow-400 border-yellow-500/30" : "bg-yellow-50 text-yellow-700 border-yellow-300";
-    return isDark ? "bg-gray-900/20 text-gray-400 border-gray-500/30" : "bg-gray-50 text-gray-600 border-gray-300";
-  };
-
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
   const prefillSalesForm = (targetLead?: any) => {
     const l = targetLead || selectedLead;
     if (!l) return;
@@ -4413,16 +4208,6 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
     setSalesForm({ propertyType: g("Property Type"), location: g("Location"), budget: g("Budget"), useType: g("Use Type"), purchaseDate: g("Planning to Purchase"), loanPlanned: g("Loan Planned"), leadStatus: g("Lead Status"), siteVisit: "" });
   };
 
-<<<<<<< HEAD
-=======
-  const prefillLoanForm = () => {
-    const cur = getLatestLoanDetails();
-    if (!cur) return;
-    const n = (v: string) => v !== "N/A" ? v : "";
-    setLoanForm({ loanRequired: n(cur.loanRequired), status: cur.status !== "Pending" ? cur.status : "", bank: n(cur.bankName), amountReq: n(cur.amountReq), amountApp: n(cur.amountApp), cibil: n(cur.cibil), agent: n(cur.agent), agentContact: n(cur.agentContact), empType: n(cur.empType), income: n(cur.income), emi: n(cur.emi), docPan: cur.docPan !== "N/A" ? cur.docPan : "Pending", docAadhaar: cur.docAadhaar !== "N/A" ? cur.docAadhaar : "Pending", docSalary: cur.docSalary !== "N/A" ? cur.docSalary : "Pending", docBank: cur.docBank !== "N/A" ? cur.docBank : "Pending", docProperty: cur.docProperty !== "N/A" ? cur.docProperty : "Pending", notes: n(cur.notes) });
-  };
-
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
   const handleSendCustomNote = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!customNote.trim() || !selectedLead) return;
@@ -4462,25 +4247,6 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
     } catch { }
   };
 
-<<<<<<< HEAD
-=======
-  const handleLoanFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!selectedLead) return;
-    const msg = `🏦 Loan Update:\n• Loan Required: ${loanForm.loanRequired || "N/A"}\n• Status: ${loanForm.status || "N/A"}\n• Bank Name: ${loanForm.bank || "N/A"}\n• Amount Requested: ${loanForm.amountReq || "N/A"}\n• Amount Approved: ${loanForm.amountApp || "N/A"}\n• CIBIL Score: ${loanForm.cibil || "N/A"}\n• Agent Name: ${loanForm.agent || "N/A"}\n• Agent Contact: ${loanForm.agentContact || "N/A"}\n• Employment Type: ${loanForm.empType || "N/A"}\n• Monthly Income: ${loanForm.income || "N/A"}\n• Existing EMIs: ${loanForm.emi || "N/A"}\n• PAN Card: ${loanForm.docPan || "Pending"}\n• Aadhaar Card: ${loanForm.docAadhaar || "Pending"}\n• Salary Slips: ${loanForm.docSalary || "Pending"}\n• Bank Statements: ${loanForm.docBank || "Pending"}\n• Property Docs: ${loanForm.docProperty || "Pending"}\n• Notes: ${loanForm.notes || "N/A"}`;
-    const nm = { leadId: String(selectedLead.id), salesManagerName: adminUser.name, createdBy: "admin", message: msg, siteVisitDate: null, createdAt: new Date().toISOString() };
-    const dbp = { leadId: String(selectedLead.id), salesManagerName: adminUser.name, ...loanForm };
-    setShowLoanForm(false);
-    setToastMsg({ title: `Loan Data Synced for ${selectedLead.name}`, icon: <FaCheckCircle />, color: "blue" });
-    setTimeout(() => setToastMsg(null), 3000);
-    try {
-      await fetch("/api/followups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(nm) });
-      await fetch("/api/loan/update", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(dbp) }).catch(() => { });
-      refetch();
-    } catch { }
-  };
-
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
   // handleBookingSuccess and fetchBookingForLead are defined in the admin panel block above
 
 
@@ -4928,11 +4694,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                               <button onClick={() => { prefillSalesForm(); setShowSalesForm(true); setShowLoanForm(false); }} className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${theme.btnPrimary}`}>
                                 <FaFileInvoice /> Fill Salesform
                               </button>
-<<<<<<< HEAD
                               <button onClick={() => { setShowLoanForm(true); setShowSalesForm(false); }} className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${theme.btnSecondary}`}>
-=======
-                              <button onClick={() => { prefillLoanForm(); setShowLoanForm(true); setShowSalesForm(false); }} className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${theme.btnSecondary}`}>
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
                                 <FaUniversity /> Track Loan
                               </button>
                               <button onClick={() => setIsClosingModalOpen(true)} className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${theme.btnWarning}`}>
@@ -4991,7 +4753,6 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                           </div>
 
                         ) : showLoanForm ? (
-<<<<<<< HEAD
                           <LoanDealForm
                             lead={selectedLead}
                             booking={loanDealBooking}
@@ -5007,68 +4768,6 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                               refetch();
                             }}
                           />
-=======
-                          <div className={`rounded-xl border p-5 shadow-xl flex-1 overflow-y-auto custom-scrollbar flex flex-col animate-fadeIn ${theme.modalCard}`} style={theme.modalGlass}>
-                            <div className={`flex justify-between items-center mb-4 border-b pb-3 flex-shrink-0 ${theme.tableBorder}`}>
-                              <div>
-                                <h3 className={`text-lg font-bold flex items-center gap-2 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}><FaUniversity /> Loan Tracking Workflow</h3>
-                                <p className={`text-xs mt-0.5 ${theme.textFaint}`}>For Lead #{selectedLead.sr_no || selectedLead.id}</p>
-                              </div>
-                              <button type="button" onClick={() => setShowLoanForm(false)} className={`p-1 ${theme.textMuted} hover:text-red-500`}><FaTimes /></button>
-                            </div>
-                            <form onSubmit={handleLoanFormSubmit} className="flex flex-col gap-3 flex-1">
-                              <div>
-                                <h4 className={`text-xs font-bold uppercase tracking-wider mb-3 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>1. Loan Decision</h4>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                  <div><label className={`text-xs mb-1 block ${theme.textMuted}`}>Loan Required? *</label>
-                                    <select required value={loanForm.loanRequired} onChange={e => setLoanForm({ ...loanForm, loanRequired: e.target.value })} className={formSelect}><option value="">Select</option><option>Yes</option><option>No</option><option>Not Sure</option></select>
-                                  </div>
-                                  <div>
-                                    <label className={`text-xs mb-1 block ${theme.textMuted}`}>Loan Status *</label>
-                                    <select required value={loanForm.status} onChange={e => setLoanForm({ ...loanForm, status: e.target.value })} className={formSelect}><option value="">Select Status</option><option>Approved</option><option>In Progress</option><option>Rejected</option></select>
-                                    {loanForm.status && (<p className={`text-[10px] mt-1.5 font-semibold ${loanForm.status === "Approved" ? "text-green-500" : loanForm.status === "Rejected" ? "text-red-500" : isDark ? "text-yellow-400" : "text-yellow-600"}`}>{loanForm.status === "Approved" && "✅ Loan cleared — schedule closing meeting"}{loanForm.status === "In Progress" && "📄 Follow up on pending documents"}{loanForm.status === "Rejected" && "❌ Loan rejected — suggest co-applicant or other bank"}</p>)}
-                                  </div>
-                                </div>
-                              </div>
-                              <div className={`border-t pt-4 ${theme.tableBorder}`}>
-                                <h4 className={`text-xs font-bold uppercase tracking-wider mb-3 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>2. Bank & Loan Details</h4>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                  {[{ label: "Bank Name", k: "bank", ph: "e.g. HDFC" }, { label: "Amount Required", k: "amountReq", ph: "e.g. 60L" }, { label: "Amount Approved", k: "amountApp", ph: "e.g. 55L" }, { label: "CIBIL Score", k: "cibil", ph: "e.g. 750" }, { label: "Agent Name", k: "agent", ph: "Agent Name" }, { label: "Agent Contact", k: "agentContact", ph: "Agent Phone", tel: true }].map(f => (
-                                    <div key={f.k}><label className={`text-xs mb-1 block ${theme.textMuted}`}>{f.label}</label><input type={f.tel ? "tel" : "text"} value={(loanForm as any)[f.k]} onChange={e => setLoanForm({ ...loanForm, [f.k]: e.target.value })} className={formInput} placeholder={f.ph} /></div>
-                                  ))}
-                                </div>
-                              </div>
-                              <div className={`border-t pt-4 ${theme.tableBorder}`}>
-                                <h4 className={`text-xs font-bold uppercase tracking-wider mb-3 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>3. Financial Qualification</h4>
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                  <div><label className={`text-xs mb-1 block ${theme.textMuted}`}>Employment</label><select value={loanForm.empType} onChange={e => setLoanForm({ ...loanForm, empType: e.target.value })} className={formSelect}><option value="">Select</option><option>Salaried</option><option>Self-employed</option></select></div>
-                                  <div><label className={`text-xs mb-1 block ${theme.textMuted}`}>Monthly Income</label><input type="text" value={loanForm.income} onChange={e => setLoanForm({ ...loanForm, income: e.target.value })} className={formInput} placeholder="e.g. 1L" /></div>
-                                  <div><label className={`text-xs mb-1 block ${theme.textMuted}`}>Existing EMIs</label><input type="text" value={loanForm.emi} onChange={e => setLoanForm({ ...loanForm, emi: e.target.value })} className={formInput} placeholder="e.g. 15k" /></div>
-                                </div>
-                              </div>
-                              <div className={`border-t pt-4 ${theme.tableBorder}`}>
-                                <h4 className={`text-xs font-bold uppercase tracking-wider mb-3 flex items-center gap-1 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}><FaFileAlt /> 4. Document Checklist</h4>
-                                <div className={`grid grid-cols-1 sm:grid-cols-2 gap-3 p-5 rounded-lg border ${theme.settingsBg}`} style={theme.settingsBgGl}>
-                                  {["docPan", "docAadhaar", "docSalary", "docBank", "docProperty"].map(docKey => {
-                                    const label = docKey === "docPan" ? "PAN Card" : docKey === "docAadhaar" ? "Aadhaar Card" : docKey === "docSalary" ? "Salary Slips / ITR" : docKey === "docBank" ? "Bank Statements" : "Property Documents";
-                                    return (
-                                      <div key={docKey} className={`flex items-center justify-between border p-2 rounded-lg ${theme.innerBlock}`}>
-                                        <span className={`text-xs font-medium ${theme.text}`}>{label}</span>
-                                        <select value={(loanForm as any)[docKey]} onChange={e => setLoanForm({ ...loanForm, [docKey]: e.target.value })} className={`text-xs font-bold bg-transparent outline-none cursor-pointer ${(loanForm as any)[docKey] === "Uploaded" ? "text-green-500" : "text-gray-500"}`}><option>Pending</option><option>Uploaded</option></select>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                              <div className={`border-t pt-4 ${theme.tableBorder}`}>
-                                <h4 className={`text-xs font-bold uppercase tracking-wider mb-3 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>5. Notes / Remarks</h4>
-                                <textarea value={loanForm.notes} onChange={e => setLoanForm({ ...loanForm, notes: e.target.value })} className={`w-full rounded-lg px-4 py-2.5 text-sm outline-none resize-none h-20 custom-scrollbar border ${theme.inputInner} ${theme.text} ${theme.inputFocus}`} placeholder="Bank feedback, CIBIL issues, Internal notes..." />
-                              </div>
-                              <button type="submit" className={`mt-4 flex-shrink-0 w-full font-bold py-3.5 rounded-xl shadow-md transition-colors cursor-pointer ${theme.btnSecondary}`}>Save Loan Tracker Update</button>
-                            </form>
-                          </div>
-
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
                         ) : (
                           <div className="flex flex-col h-full animate-fadeIn">
                             <div className={`flex items-center gap-2 mb-4 border p-1.5 rounded-xl flex-shrink-0 ${theme.tableWrap}`}>
@@ -5094,11 +4793,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                                     <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Property Type</p><p className={`font-semibold ${theme.text}`}>{selectedLead.propType || "Pending"}</p></div>
                                     <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Type of Use</p><p className={`font-semibold ${theme.text}`}>{selectedLead.useType !== "Pending" ? selectedLead.useType : (selectedLead.purpose || "N/A")}</p></div>
                                     <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Planning to Buy?</p><p className={`font-semibold ${theme.text}`}>{selectedLead.planningPurchase || "Pending"}</p></div>
-<<<<<<< HEAD
                                     <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Loan Required?</p><p className={`font-semibold ${theme.text}`}>{loanDealLatest?.loan_required || selectedLead.loanPlanned || "Pending"}</p></div>
-=======
-                                    <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Loan Required?</p><p className={`font-semibold ${theme.text}`}>{getLatestLoanDetails()?.loanRequired}</p></div>
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
                                     <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Status</p><span className={`text-sm font-bold ${selectedLead.status === "Closing" ? "text-amber-500" : selectedLead.status === "Visit Scheduled" ? "text-orange-400" : theme.accentText}`}>{selectedLead.status || "Assigned"}</span></div>
                                     <div className={`col-span-2 p-5 rounded-xl border ${theme.settingsBg}`} style={theme.settingsBgGl}>
                                       <p className={`text-xs font-bold uppercase tracking-wider mb-0.5 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>📍 Site Visit Date</p>
@@ -5153,39 +4848,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                                 /> */}
                                 </div>
                               ) : (
-<<<<<<< HEAD
                                 <LoanDealView lead={selectedLead} booking={loanDealBooking} loanUpdate={loanDealLatest} isDark={isDark} t={theme} />
-=======
-                                <div>
-                                  {(() => {
-                                    const curLoan: any = getLatestLoanDetails() || {};
-                                    const sColor = getLoanStatusColor(curLoan?.status || "");
-                                    const isHighProb = curLoan?.status?.toLowerCase() === "approved" && selectedLead.mongoVisitDate;
-                                    return (
-                                      <>
-                                        <h3 className={`text-sm font-bold border-b pb-2 mb-6 uppercase flex items-center justify-between ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}><span className="flex items-center gap-2"><FaUniversity /> Deal Loan Overview</span></h3>
-                                        {isHighProb && <div className="mb-6 bg-gradient-to-r from-orange-500/20 to-red-500/20 border border-orange-500/50 p-5 rounded-lg flex items-center justify-center gap-2 text-orange-400 font-bold tracking-wide shadow-md">🚀 HIGH PROBABILITY DEAL</div>}
-                                        <div className="grid grid-cols-2 gap-y-5 gap-x-4 text-sm">
-                                          <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Loan Required?</p><p className={`font-semibold ${theme.text}`}>{curLoan?.loanRequired}</p></div>
-                                          <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Current Status</p><p className={`font-bold px-2 py-0.5 rounded inline-block border ${sColor}`}>{curLoan?.status}</p></div>
-                                          <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Amount Requested</p><p className="text-orange-500 font-semibold">{curLoan?.amountReq}</p></div>
-                                          <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Amount Approved</p><p className={`font-semibold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{curLoan?.amountApp}</p></div>
-                                          {[{ label: "Bank Name", val: curLoan?.bankName }, { label: "CIBIL Score", val: curLoan?.cibil }, { label: "Agent Name", val: curLoan?.agent }, { label: "Agent Contact", val: curLoan?.agentContact }, { label: "Emp Type", val: curLoan?.empType }, { label: "Monthly Income", val: curLoan?.income }, { label: "Existing EMIs", val: curLoan?.emi }].map(f => (
-                                            <div key={f.label}><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>{f.label}</p><p className={`font-semibold ${theme.text}`}>{f.val}</p></div>
-                                          ))}
-                                          <div className="col-span-2 mb-2"><p className={`text-xs font-bold uppercase tracking-widest ${theme.textMuted}`}>Document Status</p></div>
-                                          {[{ label: "PAN Card", val: curLoan?.docPan }, { label: "Aadhaar", val: curLoan?.docAadhaar }, { label: "Salary/ITR", val: curLoan?.docSalary }, { label: "Bank Stmt", val: curLoan?.docBank }, { label: "Property Docs", val: curLoan?.docProperty }].map((doc, i) => (
-                                            <div key={i} className={`flex items-center justify-between p-2 rounded-lg col-span-1 border ${theme.innerBlock}`}>
-                                              <span className={`text-xs ${theme.textMuted}`}>{doc.label}</span>
-                                              {doc.val === "Uploaded" ? <FaCheck className="text-green-500 text-xs" /> : <FaClock className={`text-xs ${theme.textFaint}`} />}
-                                            </div>
-                                          ))}
-                                        </div>
-                                      </>
-                                    );
-                                  })()}
-                                </div>
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
                               )}
                             </div>
                             <div className="grid grid-cols-2 gap-3 mt-4 flex-shrink-0">
@@ -5340,10 +5003,6 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
   const [showSalesForm, setShowSalesForm] = useState(false);
   const [showLoanForm, setShowLoanForm] = useState(false);
   const [salesForm, setSalesForm] = useState({ propertyType: "", location: "", budget: "", useType: "", purchaseDate: "", loanPlanned: "", siteVisit: "", leadStatus: "" });
-<<<<<<< HEAD
-=======
-  const [loanForm, setLoanForm] = useState({ loanRequired: "", status: "", bank: "", amountReq: "", amountApp: "", cibil: "", agent: "", agentContact: "", empType: "", income: "", emi: "", docPan: "Pending", docAadhaar: "Pending", docSalary: "Pending", docBank: "Pending", docProperty: "Pending", notes: "" });
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
   const [customNote, setCustomNote] = useState("");
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [transferNote, setTransferNote] = useState("");
@@ -5375,7 +5034,6 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
     } catch { setBookingData(null); }
   };
 
-<<<<<<< HEAD
   // Loan & Deal Tracking panel — independent of bookingData/fetchBookingForLead above,
   // which (when wired up) swaps the whole detail view to ClosedLeadBookingView.
   const [loanDealBooking, setLoanDealBooking] = useState<any>(null);
@@ -5394,8 +5052,6 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
     } catch { setLoanDealLatest(null); }
   }, []);
 
-=======
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
   const handleBookingSuccess = async (booking: any) => {
     setIsClosingModalOpen(false);
     showToast(`Booking ${booking.booking_number} confirmed successfully!`);
@@ -5411,14 +5067,11 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
     }
   }, [selectedLead]);
 
-<<<<<<< HEAD
   useEffect(() => {
     if (selectedLead?.id) fetchLoanDealData(selectedLead.id);
     else { setLoanDealBooking(null); setLoanDealLatest(null); }
   }, [selectedLead?.id, fetchLoanDealData]);
 
-=======
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
   // ── Auto-drill into a lead when navigated from Enquiry Overview ──
   useEffect(() => {
     const raw = localStorage.getItem("crm_drill_lead");
@@ -5474,29 +5127,6 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
   );
   const isLeadLocked = !!selectedLead && (selectedLead.status === "Closing" || selectedLead.status === "Closed" || !!selectedLead.closingDate || !!selectedLead.is_lost_lead);
 
-<<<<<<< HEAD
-=======
-  const getLatestLoanDetails = () => {
-    if (!selectedLead) return null;
-    let ex: Record<string, any> = { loanRequired: selectedLead.loanPlanned || "N/A", status: "Pending", bankName: "N/A", amountReq: "N/A", amountApp: "N/A", cibil: "N/A", agent: "N/A", agentContact: "N/A", empType: "N/A", income: "N/A", emi: "N/A", docPan: "Pending", docAadhaar: "Pending", docSalary: "Pending", docBank: "Pending", docProperty: "Pending", notes: "N/A" };
-    const lu = currentFollowUps.filter((f: any) => f.message?.includes("🏦 Loan Update:"));
-    if (lu.length > 0) {
-      const msg = lu[lu.length - 1].message;
-      const g = (l: string) => { const m = msg.match(new RegExp(`• ${l}: (.*)`)); return m ? m[1].trim() : "N/A"; };
-      ex = { loanRequired: g("Loan Required"), status: g("Status"), bankName: g("Bank Name"), amountReq: g("Amount Requested"), amountApp: g("Amount Approved"), cibil: g("CIBIL Score"), agent: g("Agent Name"), agentContact: g("Agent Contact"), empType: g("Employment Type"), income: g("Monthly Income"), emi: g("Existing EMIs"), docPan: g("PAN Card"), docAadhaar: g("Aadhaar Card"), docSalary: g("Salary Slips"), docBank: g("Bank Statements"), docProperty: g("Property Docs"), notes: g("Notes") };
-    }
-    return ex;
-  };
-
-  const getLoanStatusColor = (s: string) => {
-    const sl = (s || "").toLowerCase();
-    if (sl === "approved") return isDark ? "bg-green-900/20 text-green-400 border-green-500/30" : "bg-green-50 text-green-700 border-green-300";
-    if (sl === "rejected") return isDark ? "bg-red-900/20 text-red-400 border-red-500/30" : "bg-red-50 text-red-700 border-red-300";
-    if (sl === "in progress") return isDark ? "bg-yellow-900/20 text-yellow-400 border-yellow-500/30" : "bg-yellow-50 text-yellow-700 border-yellow-300";
-    return isDark ? "bg-gray-900/20 text-gray-400 border-gray-500/30" : "bg-gray-50 text-gray-600 border-gray-300";
-  };
-
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
   const prefillSalesForm = (targetLead?: any) => {
     const l = targetLead || selectedLead;
     if (!l) return;
@@ -5507,15 +5137,6 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
     const g = (label: string) => { const m = msg.match(new RegExp(`• ${label}: (.*)`)); return m && m[1].trim() !== "N/A" ? m[1].trim() : ""; };
     setSalesForm({ propertyType: g("Property Type"), location: g("Location"), budget: g("Budget"), useType: g("Use Type"), purchaseDate: g("Planning to Purchase"), loanPlanned: g("Loan Planned"), leadStatus: g("Lead Status"), siteVisit: "" });
   };
-<<<<<<< HEAD
-=======
-  const prefillLoanForm = () => {
-    const cur = getLatestLoanDetails();
-    if (!cur) return;
-    const n = (v: string) => v !== "N/A" ? v : "";
-    setLoanForm({ loanRequired: n(cur.loanRequired), status: cur.status !== "Pending" ? cur.status : "", bank: n(cur.bankName), amountReq: n(cur.amountReq), amountApp: n(cur.amountApp), cibil: n(cur.cibil), agent: n(cur.agent), agentContact: n(cur.agentContact), empType: n(cur.empType), income: n(cur.income), emi: n(cur.emi), docPan: cur.docPan !== "N/A" ? cur.docPan : "Pending", docAadhaar: cur.docAadhaar !== "N/A" ? cur.docAadhaar : "Pending", docSalary: cur.docSalary !== "N/A" ? cur.docSalary : "Pending", docBank: cur.docBank !== "N/A" ? cur.docBank : "Pending", docProperty: cur.docProperty !== "N/A" ? cur.docProperty : "Pending", notes: n(cur.notes) });
-  };
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
 
   const actorName = adminUser?.name || "Admin";
 
@@ -5558,20 +5179,6 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
     } catch { }
   };
 
-<<<<<<< HEAD
-=======
-  const handleLoanFormSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedLead) return;
-    const msg = `🏦 Loan Update:\n• Loan Required: ${loanForm.loanRequired || "N/A"}\n• Status: ${loanForm.status || "N/A"}\n• Bank Name: ${loanForm.bank || "N/A"}\n• Amount Requested: ${loanForm.amountReq || "N/A"}\n• Amount Approved: ${loanForm.amountApp || "N/A"}\n• CIBIL Score: ${loanForm.cibil || "N/A"}\n• Agent Name: ${loanForm.agent || "N/A"}\n• Agent Contact: ${loanForm.agentContact || "N/A"}\n• Employment Type: ${loanForm.empType || "N/A"}\n• Monthly Income: ${loanForm.income || "N/A"}\n• Existing EMIs: ${loanForm.emi || "N/A"}\n• PAN Card: ${loanForm.docPan || "Pending"}\n• Aadhaar Card: ${loanForm.docAadhaar || "Pending"}\n• Salary Slips: ${loanForm.docSalary || "Pending"}\n• Bank Statements: ${loanForm.docBank || "Pending"}\n• Property Docs: ${loanForm.docProperty || "Pending"}\n• Notes: ${loanForm.notes || "N/A"}`;
-    const nm = { leadId: String(selectedLead.id), salesManagerName: actorName, createdBy: "admin", message: msg, siteVisitDate: null, createdAt: new Date().toISOString() };
-    setShowLoanForm(false);
-    showToast(`Loan data logged for ${selectedLead.name}`);
-    try { await fetch("/api/followups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(nm) }); refetch(); } catch { }
-  };
-
-
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
   // handleBookingSuccess and fetchBookingForLead are defined in the admin panel block above
 
 
@@ -6195,11 +5802,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                                     className={`${theme.btnPrimary} px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer`}>
                                     <FaFileInvoice /> Fill Salesform
                                   </button>
-<<<<<<< HEAD
                                   <button onClick={() => { setShowLoanForm(true); setShowSalesForm(false); }}
-=======
-                                  <button onClick={() => { prefillLoanForm(); setShowLoanForm(true); setShowSalesForm(false); }}
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
                                     className={`${theme.btnSecondary} px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer`}>
                                     <FaUniversity /> Track Loan
                                   </button>
@@ -6271,7 +5874,6 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                             </form>
                           </div>
                         ) : showLoanForm ? (
-<<<<<<< HEAD
                           <LoanDealForm
                             lead={selectedLead}
                             booking={loanDealBooking}
@@ -6287,64 +5889,6 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                               refetch();
                             }}
                           />
-=======
-                          <div className={`rounded-xl border p-5 shadow-xl flex flex-col animate-fadeIn ${theme.modalCard} ${theme.scroll}`}
-                            style={{ ...theme.modalGlass, overflowY: "scroll", height: "calc(100vh - 320px)", scrollbarWidth: "thin" }}>
-                            <div className={`flex justify-between items-center mb-4 border-b pb-3 flex-shrink-0 ${theme.tableBorder}`}>
-                              <div>
-                                <h3 className={`text-lg font-bold flex items-center gap-2 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}><FaUniversity /> Loan Tracking</h3>
-                                <p className={`text-xs mt-0.5 ${theme.textFaint}`}>For Lead #{selectedLead.sr_no || selectedLead.id}</p>
-                              </div>
-                              <button type="button" onClick={() => setShowLoanForm(false)} className={`p-1 ${theme.textMuted}`}><FaTimes /></button>
-                            </div>
-                            <form onSubmit={handleLoanFormSubmit} className="flex flex-col gap-2 flex-1">
-                              <div className="grid grid-cols-2 gap-3">
-                                <div><label className={`text-xs mb-1 block ${theme.textMuted}`}>Loan Required? *</label>
-                                  <select required value={loanForm.loanRequired} onChange={e => setLoanForm({ ...loanForm, loanRequired: e.target.value })} className={`w-full rounded-lg px-4 py-3 sm:py-4.5 text-sm outline-none cursor-pointer ${theme.select}`}>
-                                    <option value="">Select</option><option>Yes</option><option>No</option><option>Not Sure</option>
-                                  </select>
-                                </div>
-                                <div><label className={`text-xs mb-1 block ${theme.textMuted}`}>Loan Status *</label>
-                                  <select required value={loanForm.status} onChange={e => setLoanForm({ ...loanForm, status: e.target.value })} className={`w-full rounded-lg px-4 py-3 sm:py-4.5 text-sm outline-none cursor-pointer ${theme.select}`}>
-                                    <option value="">Select Status</option><option>Approved</option><option>In Progress</option><option>Rejected</option>
-                                  </select>
-                                </div>
-                              </div>
-                              <div className="grid grid-cols-2 gap-3">
-                                {[{ label: "Bank Name", k: "bank", ph: "e.g. HDFC" }, { label: "Amount Required", k: "amountReq", ph: "e.g. 60L" }, { label: "Amount Approved", k: "amountApp", ph: "e.g. 55L" }, { label: "CIBIL Score", k: "cibil", ph: "e.g. 750" }, { label: "Agent Name", k: "agent", ph: "Agent Name" }, { label: "Agent Contact", k: "agentContact", ph: "Agent Phone" }].map(f => (
-                                  <div key={f.k}><label className={`text-xs mb-1 block ${theme.textMuted}`}>{f.label}</label><input type="text" value={(loanForm as any)[f.k]} onChange={e => setLoanForm({ ...loanForm, [f.k]: e.target.value })} className={`w-full rounded-lg px-4 py-3 sm:py-4 text-sm outline-none ${theme.inputInner} ${theme.text} ${theme.inputFocus}`} placeholder={f.ph} /></div>
-                                ))}
-                              </div>
-                              <div className="grid grid-cols-3 gap-3">
-                                <div><label className={`text-xs mb-1 block ${theme.textMuted}`}>Employment</label>
-                                  <select value={loanForm.empType} onChange={e => setLoanForm({ ...loanForm, empType: e.target.value })} className={`w-full rounded-lg px-4 py-3 sm:py-4.5 text-sm outline-none cursor-pointer ${theme.select}`}>
-                                    <option value="">Select</option><option>Salaried</option><option>Self-employed</option>
-                                  </select>
-                                </div>
-                                <div><label className={`text-xs mb-1 block ${theme.textMuted}`}>Monthly Income</label><input type="text" value={loanForm.income} onChange={e => setLoanForm({ ...loanForm, income: e.target.value })} className={`w-full rounded-lg px-4 py-3 sm:py-4 text-sm outline-none ${theme.inputInner} ${theme.text} ${theme.inputFocus}`} placeholder="e.g. 1L" /></div>
-                                <div><label className={`text-xs mb-1 block ${theme.textMuted}`}>Existing EMIs</label><input type="text" value={loanForm.emi} onChange={e => setLoanForm({ ...loanForm, emi: e.target.value })} className={`w-full rounded-lg px-4 py-3 sm:py-4 text-sm outline-none ${theme.inputInner} ${theme.text} ${theme.inputFocus}`} placeholder="e.g. 15k" /></div>
-                              </div>
-                              <div className={`border-t pt-3 ${theme.tableBorder}`}>
-                                <p className={`text-xs font-bold mb-2 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>Document Checklist</p>
-                                <div className="grid grid-cols-2 gap-2">
-                                  {["docPan", "docAadhaar", "docSalary", "docBank", "docProperty"].map(docKey => {
-                                    const label = docKey === "docPan" ? "PAN Card" : docKey === "docAadhaar" ? "Aadhaar" : docKey === "docSalary" ? "Salary/ITR" : docKey === "docBank" ? "Bank Stmt" : "Property Docs";
-                                    return (
-                                      <div key={docKey} className={`flex items-center justify-between border p-2 rounded-lg ${theme.innerBlock}`}>
-                                        <span className={`text-xs ${theme.textMuted}`}>{label}</span>
-                                        <select value={(loanForm as any)[docKey]} onChange={e => setLoanForm({ ...loanForm, [docKey]: e.target.value })} className={`text-xs font-bold bg-transparent outline-none cursor-pointer ${(loanForm as any)[docKey] === "Uploaded" ? "text-green-500" : theme.textMuted}`}>
-                                          <option value="Pending">Pending</option><option value="Uploaded">Uploaded</option>
-                                        </select>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                              <div><label className={`text-xs mb-1 block ${theme.textMuted}`}>Notes</label><textarea value={loanForm.notes} onChange={e => setLoanForm({ ...loanForm, notes: e.target.value })} className={`w-full rounded-lg px-4 py-2 text-sm outline-none resize-none h-16 border ${theme.inputInner} ${theme.text} ${theme.inputFocus}`} placeholder="Internal notes..." /></div>
-                              <button type="submit" className={`mt-auto w-full font-bold py-3.5 rounded-xl shadow-md transition-colors cursor-pointer ${theme.btnSecondary}`}>Save Loan Tracker Update</button>
-                            </form>
-                          </div>
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
                         ) : (
                           <div className="flex flex-col h-full animate-fadeIn">
                             <div className={`flex items-center gap-2 mb-4 p-1.5 rounded-xl flex-shrink-0 ${theme.tableWrap}`}>
@@ -6371,11 +5915,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                                     <div><p className={`text-xs font-medium mb-1 ${theme.textMuted}`}>Property Type</p><p className={`font-semibold ${theme.text}`}>{selectedLead.propType || "Pending"}</p></div>
                                     <div><p className={`text-xs font-medium mb-1 ${theme.textMuted}`}>Type of Use</p><p className={`font-semibold ${theme.text}`}>{selectedLead.useType && selectedLead.useType !== "Pending" ? selectedLead.useType : (selectedLead.purpose || "N/A")}</p></div>
                                     <div><p className={`text-xs font-medium mb-1 ${theme.textMuted}`}>Planning to Buy?</p><p className={`font-semibold ${theme.text}`}>{selectedLead.planningPurchase || "Pending"}</p></div>
-<<<<<<< HEAD
                                     <div><p className={`text-xs font-medium mb-1 ${theme.textMuted}`}>Loan Required?</p><p className={`font-semibold ${theme.text}`}>{loanDealLatest?.loan_required || selectedLead.loanPlanned || "Pending"}</p></div>
-=======
-                                    <div><p className={`text-xs font-medium mb-1 ${theme.textMuted}`}>Loan Required?</p><p className={`font-semibold ${theme.text}`}>{getLatestLoanDetails()?.loanRequired}</p></div>
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
                                     <div><p className={`text-xs font-medium mb-1 ${theme.textMuted}`}>Status</p><p className={`font-semibold ${theme.accentText}`}>{selectedLead.status || "Assigned"}</p></div>
                                     <div className={`col-span-2 p-5 rounded-xl border ${isDark ? "border-[#9E217B]/20" : "border-[#9E217B]/20"} ${theme.settingsBg}`}>
                                       <p className={`text-xs font-bold uppercase tracking-wider mb-1 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>📍 Site Visit Date</p>
@@ -6423,39 +5963,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                                   </div>
                                 </div>
                               ) : (
-<<<<<<< HEAD
                                 <LoanDealView lead={selectedLead} booking={loanDealBooking} loanUpdate={loanDealLatest} isDark={isDark} t={theme} />
-=======
-                                <div>
-                                  {(() => {
-                                    const curLoan: any = getLatestLoanDetails() || {};
-                                    const sColor = getLoanStatusColor(curLoan?.status || "");
-                                    const isHighProb = curLoan?.status?.toLowerCase() === "approved" && selectedLead.mongoVisitDate;
-                                    return (
-                                      <>
-                                        <h3 className={`text-sm font-bold border-b pb-2 mb-6 uppercase flex items-center gap-2 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}><FaUniversity /> Deal Loan Overview</h3>
-                                        {isHighProb && <div className="mb-6 bg-gradient-to-r from-orange-500/10 to-red-500/10 border border-orange-500/30 p-5 rounded-lg flex items-center justify-center gap-2 text-orange-500 font-bold tracking-wide shadow-md">🚀 HIGH PROBABILITY DEAL (Visit Done + Loan Approved)</div>}
-                                        <div className="grid grid-cols-2 gap-y-5 gap-x-4 text-sm">
-                                          <div><p className={`text-xs font-medium mb-1 ${theme.textMuted}`}>Loan Required?</p><p className={`font-semibold ${theme.text}`}>{curLoan?.loanRequired}</p></div>
-                                          <div><p className={`text-xs font-medium mb-1 ${theme.textMuted}`}>Current Status</p><p className={`font-bold px-2 py-0.5 rounded inline-block border ${sColor}`}>{curLoan?.status}</p></div>
-                                          <div><p className={`text-xs font-medium mb-1 ${theme.textMuted}`}>Amount Requested</p><p className="text-orange-500 font-semibold">{curLoan?.amountReq}</p></div>
-                                          <div><p className={`text-xs font-medium mb-1 ${theme.textMuted}`}>Amount Approved</p><p className="text-green-500 font-semibold">{curLoan?.amountApp}</p></div>
-                                          {[{ label: "Bank Name", val: curLoan?.bankName }, { label: "CIBIL Score", val: curLoan?.cibil }, { label: "Agent Name", val: curLoan?.agent }, { label: "Agent Contact", val: curLoan?.agentContact }, { label: "Emp Type", val: curLoan?.empType }, { label: "Monthly Income", val: curLoan?.income }, { label: "Existing EMIs", val: curLoan?.emi }].map(f => (
-                                            <div key={f.label}><p className={`text-xs font-medium mb-1 ${theme.textMuted}`}>{f.label}</p><p className={`font-semibold ${theme.text}`}>{f.val}</p></div>
-                                          ))}
-                                          <div className="col-span-2 mb-2"><p className={`text-xs font-bold uppercase tracking-widest ${theme.textMuted}`}>Document Status</p></div>
-                                          {[{ label: "PAN Card", val: curLoan?.docPan }, { label: "Aadhaar", val: curLoan?.docAadhaar }, { label: "Salary/ITR", val: curLoan?.docSalary }, { label: "Bank Stmt", val: curLoan?.docBank }, { label: "Property Docs", val: curLoan?.docProperty }].map((doc, i) => (
-                                            <div key={i} className={`flex items-center justify-between border p-2 rounded-lg col-span-1 ${theme.innerBlock}`}>
-                                              <span className={`text-xs ${theme.textMuted}`}>{doc.label}</span>
-                                              {doc.val === "Uploaded" ? <FaCheck className="text-green-500 text-xs" /> : <FaClock className={`${theme.textFaint} text-xs`} />}
-                                            </div>
-                                          ))}
-                                        </div>
-                                      </>
-                                    );
-                                  })()}
-                                </div>
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
                               )}
                             </div>
                             <div className="grid grid-cols-2 gap-3 mt-4 flex-shrink-0">

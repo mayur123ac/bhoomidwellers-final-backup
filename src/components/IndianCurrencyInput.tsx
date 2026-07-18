@@ -1,11 +1,7 @@
 "use client";
 // IndianCurrencyInput.tsx — Reusable ₹-prefixed input with live Indian comma formatting
 import React, { useRef, useLayoutEffect } from "react";
-<<<<<<< HEAD
 import { formatIndianNumber, cleanCurrencyValue, formatCurrencyDisplay } from "@/lib/currency";
-=======
-import { formatIndianNumber, cleanCurrencyValue } from "@/lib/currency";
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
 
 interface IndianCurrencyInputProps {
     value: string;                       // clean numeric string, e.g. "9000000"
@@ -23,10 +19,7 @@ export default function IndianCurrencyInput({
     const pendingCaret = useRef<{ pos: number; prevLen: number } | null>(null);
 
     const displayValue = formatIndianNumber(value);
-<<<<<<< HEAD
     const formattedHint = cleanCurrencyValue(value) ? formatCurrencyDisplay(value) : "";
-=======
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
 
     // Restore caret position after the formatted string re-renders (comma insertion shifts it)
     useLayoutEffect(() => {
@@ -66,12 +59,9 @@ export default function IndianCurrencyInput({
                 disabled={disabled}
                 className={`${className} pl-7`}
             />
-<<<<<<< HEAD
             {/* {formattedHint && (
                 <span className="block mt-1 text-[11px] opacity-60 select-none">{formattedHint}</span>
             )} */}
-=======
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
         </div>
     );
 }

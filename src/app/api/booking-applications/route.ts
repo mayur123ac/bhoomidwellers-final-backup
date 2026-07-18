@@ -361,13 +361,10 @@ export async function POST(req: NextRequest) {
     const state = getStr("state");
     const country = getStr("country");
 
-<<<<<<< HEAD
     const apartment_name = getStr("apartment_name");
     const project_name = getStr("project_name");
     const tower = getStr("tower");
     const wing = getStr("wing");
-=======
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
     const property_type = getStr("property_type");
     const floor_number = getStr("floor_number");
     const flat_number = getStr("flat_number");
@@ -463,18 +460,11 @@ export async function POST(req: NextRequest) {
           booking_source, direct_source, channel_partner_name, channel_partner_contact,
           unit_cost, sdr, gst, declaration_accepted, terms_accepted, consent_accepted,
           application_date, created_by, created_role, booking_status,
-<<<<<<< HEAD
           booking_date, agreement_value, booking_amount, booking_remarks, internal_notes,
           apartment_name, project_name, tower, wing
         ) VALUES (
           $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,'Pending',
           $37,$38,$39,$40,$41,$42,$43,$44,$45
-=======
-          booking_date, agreement_value, booking_amount, booking_remarks, internal_notes
-        ) VALUES (
-          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,'Pending',
-          $37,$38,$39,$40,$41
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
         ) RETURNING id`,
         [
           lead_id, primary_name, primary_email, primary_mobile, primary_pan, primary_aadhaar,
@@ -487,12 +477,8 @@ export async function POST(req: NextRequest) {
           booking_source || "Direct", direct_source, channel_partner_name, channel_partner_contact,
           unit_cost, sdr, gst, declaration_accepted, terms_accepted, consent_accepted,
           application_date, created_by, created_role,
-<<<<<<< HEAD
           booking_date || null, cleanNum(agreement_value), cleanNum(booking_amount), booking_remarks, internal_notes,
           apartment_name, project_name, tower, wing
-=======
-          booking_date || null, cleanNum(agreement_value), cleanNum(booking_amount), booking_remarks, internal_notes
->>>>>>> cd2b0086d5cb85c0685d879c49ba9ed21dd19ac4
         ]
       );
       const newId = insertRes.rows[0].id;
