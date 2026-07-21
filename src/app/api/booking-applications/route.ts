@@ -291,6 +291,8 @@ export async function GET(req: NextRequest) {
              l.expected_disbursement_amount, l.disbursement_amount, l.disbursement_status,
              r.expected_registration_date, r.actual_registration_date, r.registration_status,
              r.registration_number, r.registration_remarks,
+             r.stamp_duty_amount, r.stamp_duty_status, r.stamp_duty_paid_date,
+             r.registration_fee_amount, r.registration_fee_status, r.registration_fee_paid_date,
              COALESCE(
                (SELECT json_agg(json_build_object('charge_name', cc.charge_name, 'amount', cc.amount, 'remarks', cc.remarks))
                 FROM booking_custom_charges cc WHERE cc.booking_id = b.id),
@@ -305,7 +307,11 @@ export async function GET(req: NextRequest) {
                'government_charges', clv.government_charges,
                'refunds', clv.refunds,
                'net_collection', clv.net_collection,
-               'outstanding_balance', clv.outstanding_balance
+               'outstanding_balance', clv.outstanding_balance,
+               'total_cost_to_customer', tcv.total_cost_to_customer,
+               'stamp_duty', tcv.stamp_duty,
+               'registration_fee', tcv.registration_fee,
+               'gst_amount', tcv.gst_amount
              ) AS financial_summary
       FROM booking_applications b
       LEFT JOIN walkin_enquiries w ON w.id = b.lead_id
@@ -313,6 +319,7 @@ export async function GET(req: NextRequest) {
       LEFT JOIN booking_loan_details l ON l.booking_id = b.id
       LEFT JOIN booking_registration_details r ON r.booking_id = b.id
       LEFT JOIN customer_ledger_view clv ON clv.booking_id = b.id
+      LEFT JOIN booking_total_cost_view tcv ON tcv.booking_id = b.id
     `;
     const params: any[] = [];
     if (leadId) {
@@ -400,14 +407,21 @@ export async function POST(req: NextRequest) {
     const booking_remarks = getStr("booking_remarks");
     const internal_notes = getStr("internal_notes");
 
+    // Revenue recognition flags (which items management counts as revenue)
+    const revenue_include_ocr = getStr("revenue_include_ocr") === "true";
+    const revenue_include_sdr = getStr("revenue_include_sdr") === "true";
+    const revenue_include_cash = getStr("revenue_include_cash") === "true";
+    const revenue_include_sanction = getStr("revenue_include_sanction") === "true";
+    const revenue_include_disbursement = getStr("revenue_include_disbursement") === "true";
+
     const token_amount = getStr("token_amount");
     const ocr_amount = getStr("ocr_amount");
     const ocr_received_date = getStr("ocr_received_date");
     const ocr_payment_mode = getStr("ocr_payment_mode");
     const ocr_remarks = getStr("ocr_remarks");
-    const sdr_amount = getStr("sdr_amount");
-    const sdr_payment_date = getStr("sdr_payment_date");
-    const sdr_status = getStr("sdr_status");
+    // DEPRECATED (Phase 6): sdr_amount / sdr_payment_date / sdr_status are no longer read
+    // for new bookings — replaced by the stamp_duty_* / registration_fee_* split. Only
+    // sdr_remarks is still persisted (not part of the deprecation set).
     const sdr_remarks = getStr("sdr_remarks");
     const cash_component = getStr("cash_component");
     const cash_component_date = getStr("cash_component_date");
@@ -435,6 +449,38 @@ export async function POST(req: NextRequest) {
     const disbursement_amount = getStr("disbursement_amount");
     const disbursement_status = getStr("disbursement_status");
 
+    // EMI details
+    const interest_rate = getStr("interest_rate");
+    const loan_tenure_months = getStr("loan_tenure_months");
+    const emi_start_date = getStr("emi_start_date");
+    const payment_type = getStr("payment_type");
+    const pre_emi_amount = getStr("pre_emi_amount");
+    const emi_amount = getStr("emi_amount");
+
+    // Possession tracking (optional — defaults apply if the client doesn't send these yet)
+    const expected_possession_date = getStr("expected_possession_date");
+    const actual_possession_date = getStr("actual_possession_date");
+    const possession_status = getStr("possession_status");
+    const oc_cc_status = getStr("oc_cc_status");
+    const oc_cc_date = getStr("oc_cc_date");
+    const possession_charges = getStr("possession_charges");
+    const maintenance_deposit = getStr("maintenance_deposit");
+    const legal_charges = getStr("legal_charges");
+
+    // GST — rate is client-overridable, amount is always server-computed from agreement_value
+    const gst_rate_input = getStr("gst_rate");
+
+    // Stamp Duty & Registration Fee — client-overridable, else Maharashtra defaults apply
+    const stamp_duty_amount_input = getStr("stamp_duty_amount");
+    const stamp_duty_paid_date = getStr("stamp_duty_paid_date");
+    const stamp_duty_status = getStr("stamp_duty_status");
+    const stamp_duty_payment_mode = getStr("stamp_duty_payment_mode");
+    const stamp_duty_receipt_no = getStr("stamp_duty_receipt_no");
+    const registration_fee_amount_input = getStr("registration_fee_amount");
+    const registration_fee_paid_date = getStr("registration_fee_paid_date");
+    const registration_fee_status = getStr("registration_fee_status");
+    const registration_fee_payment_mode = getStr("registration_fee_payment_mode");
+
     let custom_charges: any[] = [];
     try { custom_charges = JSON.parse(getStr("custom_charges") || "[]"); } catch { }
 
@@ -442,8 +488,9 @@ export async function POST(req: NextRequest) {
     let joint_applicants: any[] = [];
     try { joint_applicants = JSON.parse(getStr("joint_applicants") || "[]"); } catch { }
 
-    let payment_details: any[] = [];
-    try { payment_details = JSON.parse(getStr("payment_details") || "[]"); } catch { }
+    // payment_details JSONB is deprecated as of the ledger-as-source-of-truth model.
+    // New bookings write nothing to it; financial_ledger is authoritative going forward.
+    // (Legacy bookings created before this change keep their payment_details intact.)
 
     // We will do everything inside a transaction
     const result = await transaction(async (client) => {
@@ -461,10 +508,11 @@ export async function POST(req: NextRequest) {
           unit_cost, sdr, gst, declaration_accepted, terms_accepted, consent_accepted,
           application_date, created_by, created_role, booking_status,
           booking_date, agreement_value, booking_amount, booking_remarks, internal_notes,
-          apartment_name, project_name, tower, wing
+          apartment_name, project_name, tower, wing,
+          revenue_include_ocr, revenue_include_sdr, revenue_include_cash, revenue_include_sanction, revenue_include_disbursement
         ) VALUES (
           $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,'Pending',
-          $37,$38,$39,$40,$41,$42,$43,$44,$45
+          $37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50
         ) RETURNING id`,
         [
           lead_id, primary_name, primary_email, primary_mobile, primary_pan, primary_aadhaar,
@@ -473,12 +521,13 @@ export async function POST(req: NextRequest) {
           address, pin, state, country || "India",
           property_type, floor_number, flat_number, carpet_area,
           consideration_value, consideration_value_words, parking_details,
-          JSON.stringify(payment_details), witness_name, witness_aadhaar,
+          '[]', witness_name, witness_aadhaar,
           booking_source || "Direct", direct_source, channel_partner_name, channel_partner_contact,
           unit_cost, sdr, gst, declaration_accepted, terms_accepted, consent_accepted,
           application_date, created_by, created_role,
           booking_date || null, cleanNum(agreement_value), cleanNum(booking_amount), booking_remarks, internal_notes,
-          apartment_name, project_name, tower, wing
+          apartment_name, project_name, tower, wing,
+          revenue_include_ocr, revenue_include_sdr, revenue_include_cash, revenue_include_sanction, revenue_include_disbursement
         ]
       );
       const newId = insertRes.rows[0].id;
@@ -488,23 +537,53 @@ export async function POST(req: NextRequest) {
 
       await client.query(`UPDATE booking_applications SET booking_number = $1 WHERE id = $2`, [bookingNumber, newId]);
 
+      // 1a-2. Auto-compute GST and Stamp Duty / Registration Fee (Maharashtra defaults; overridable by client)
+      const agreementVal = cleanNum(agreement_value);
+      const gstRate = gst_rate_input ? cleanNum(gst_rate_input) : 5;
+      const gstAmount = agreementVal * gstRate / 100;
+      const stampDutyAmount = stamp_duty_amount_input ? cleanNum(stamp_duty_amount_input) : agreementVal * 0.05;
+      const registrationFeeAmount = registration_fee_amount_input ? cleanNum(registration_fee_amount_input) : Math.min(agreementVal * 0.01, 30000);
+
+      await client.query(`
+        UPDATE booking_applications SET
+          gst_rate = $1, gst_amount = $2,
+          expected_possession_date = $3, actual_possession_date = $4, possession_status = COALESCE($5, possession_status),
+          oc_cc_status = COALESCE($6, oc_cc_status), oc_cc_date = $7,
+          possession_charges = $8, maintenance_deposit = $9, legal_charges = $10
+        WHERE id = $11
+      `, [gstRate, gstAmount, expected_possession_date || null, actual_possession_date || null, possession_status || null,
+          oc_cc_status || null, oc_cc_date || null,
+          cleanNum(possession_charges), cleanNum(maintenance_deposit), cleanNum(legal_charges), newId]);
+
       // 1b. Insert Financials
+      // DEPRECATED (Phase 6): sdr_amount / sdr_payment_date / sdr_status are no longer
+      // written for new bookings — the split stamp_duty_* / registration_fee_* columns on
+      // booking_registration_details are authoritative (inserted in step 1d below). The old
+      // columns are left NULL so legacy rows keep their data and fallback reads still work.
+      // (ocr_amount is intentionally still written: it feeds the financial_ledger 'ocr' line,
+      // which has no derived replacement yet — see deferred pipeline notes.)
       await client.query(`
         INSERT INTO booking_financials (booking_id, token_amount, ocr_amount, ocr_received_date, ocr_payment_mode, ocr_remarks, sdr_amount, sdr_payment_date, sdr_status, sdr_remarks, cash_component, cash_component_date, cash_component_remarks)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-      `, [newId, cleanNum(token_amount), cleanNum(ocr_amount), ocr_received_date || null, ocr_payment_mode, ocr_remarks, cleanNum(sdr_amount), sdr_payment_date || null, sdr_status || 'Pending', sdr_remarks, cleanNum(cash_component), cash_component_date || null, cash_component_remarks]);
+      `, [newId, cleanNum(token_amount), cleanNum(ocr_amount), ocr_received_date || null, ocr_payment_mode, ocr_remarks, null, null, null, sdr_remarks, cleanNum(cash_component), cash_component_date || null, cash_component_remarks]);
 
-      // 1c. Insert Loan Details
+      // 1c. Insert Loan Details (incl. EMI fields)
       await client.query(`
-        INSERT INTO booking_loan_details (booking_id, loan_required, bank_name, loan_executive, loan_type, loan_reference_no, loan_amount, sanction_amount, sanction_date, sanction_status, loan_status, expected_disbursement_date, actual_disbursement_date, expected_disbursement_amount, disbursement_amount, disbursement_status)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
-      `, [newId, loan_required, bank_name, loan_executive, loan_type, loan_reference_no, cleanNum(loan_amount), cleanNum(sanction_amount), sanction_date || null, sanction_status || 'Pending', loan_status || 'Pending', expected_disbursement_date || null, actual_disbursement_date || null, cleanNum(expected_disbursement_amount), cleanNum(disbursement_amount), disbursement_status || 'Pending']);
+        INSERT INTO booking_loan_details (booking_id, loan_required, bank_name, loan_executive, loan_type, loan_reference_no, loan_amount, sanction_amount, sanction_date, sanction_status, loan_status, expected_disbursement_date, actual_disbursement_date, expected_disbursement_amount, disbursement_amount, disbursement_status, interest_rate, loan_tenure_months, emi_start_date, payment_type, pre_emi_amount, emi_amount)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+      `, [newId, loan_required, bank_name, loan_executive, loan_type, loan_reference_no, cleanNum(loan_amount), cleanNum(sanction_amount), sanction_date || null, sanction_status || 'Pending', loan_status || 'Pending', expected_disbursement_date || null, actual_disbursement_date || null, cleanNum(expected_disbursement_amount), cleanNum(disbursement_amount), disbursement_status || 'Pending', cleanNum(interest_rate), cleanNum(loan_tenure_months), emi_start_date || null, payment_type || 'Pre-EMI', cleanNum(pre_emi_amount), cleanNum(emi_amount)]);
 
-      // 1d. Insert Registration Details
+      // 1d. Insert Registration Details (with split Stamp Duty / Registration Fee)
       await client.query(`
-        INSERT INTO booking_registration_details (booking_id, expected_registration_date, actual_registration_date, registration_status, registration_number, registration_remarks)
-        VALUES ($1, $2, $3, $4, $5, $6)
-      `, [newId, expected_registration_date || null, actual_registration_date || null, registration_status || 'Pending', registration_number, registration_remarks]);
+        INSERT INTO booking_registration_details (
+          booking_id, expected_registration_date, actual_registration_date, registration_status, registration_number, registration_remarks,
+          stamp_duty_amount, stamp_duty_paid_date, stamp_duty_status, stamp_duty_payment_mode, stamp_duty_receipt_no,
+          registration_fee_amount, registration_fee_paid_date, registration_fee_status, registration_fee_payment_mode
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+      `, [newId, expected_registration_date || null, actual_registration_date || null, registration_status || 'Pending', registration_number, registration_remarks,
+          stampDutyAmount, stamp_duty_paid_date || null, stamp_duty_status || 'Pending', stamp_duty_payment_mode, stamp_duty_receipt_no,
+          registrationFeeAmount, registration_fee_paid_date || null, registration_fee_status || 'Pending', registration_fee_payment_mode]);
 
       // 1e. Insert Custom Charges
       for (const charge of custom_charges) {
@@ -535,17 +614,66 @@ export async function POST(req: NextRequest) {
         }
       };
 
+      await upsertLedger('token', 'CREDIT', cleanNum(token_amount), booking_date, 'NO', 'Customer', null, null, null);
       await upsertLedger('booking_amount', 'CREDIT', cleanNum(booking_amount), booking_date, 'NO', 'Customer', null, null, booking_remarks);
       await upsertLedger('ocr', 'CREDIT', cleanNum(ocr_amount), ocr_received_date, 'YES', 'Customer', null, ocr_payment_mode, ocr_remarks);
-      await upsertLedger('sdr', 'CREDIT', cleanNum(sdr_amount), sdr_payment_date, 'NO', 'Customer', null, null, sdr_remarks);
+      // DEPRECATED (Phase 6): the single 'sdr' government-charge ledger line is retired.
+      // Recording stamp_duty / registration_fee as pass-through ledger entries (so
+      // customer_ledger_view.government_charges reflects the split) is part of the
+      // deferred revenue-pipeline pass — the split amounts persist on
+      // booking_registration_details and surface via booking_total_cost_view today.
       await upsertLedger('cash_component', 'CREDIT', cleanNum(cash_component), cash_component_date, 'YES', 'Customer', null, null, cash_component_remarks);
       await upsertLedger('loan_disbursement', 'CREDIT', cleanNum(disbursement_amount), actual_disbursement_date, 'YES', 'Bank', bank_name, null, null);
+
+      // 1f-3. Default Payment Milestones (standard under-construction demand schedule)
+      // Token is chronologically first (Booking milestone); the larger Booking Amount
+      // (up to the RERA 10% cap) is typically settled just before Agreement execution.
+      const defaultMilestones = [
+        { name: 'Booking', order: 1, percentage: 10, paid: cleanNum(token_amount), paidDate: booking_date },
+        { name: 'Agreement', order: 2, percentage: 10, paid: cleanNum(booking_amount), paidDate: booking_date },
+        { name: 'Plinth', order: 3, percentage: 10, paid: 0, paidDate: null },
+        { name: 'Slab Completion (1-5)', order: 4, percentage: 15, paid: 0, paidDate: null },
+        { name: 'Slab Completion (6-10)', order: 5, percentage: 15, paid: 0, paidDate: null },
+        { name: 'Brickwork', order: 6, percentage: 10, paid: 0, paidDate: null },
+        { name: 'Plaster & Flooring', order: 7, percentage: 10, paid: 0, paidDate: null },
+        { name: 'Finishing', order: 8, percentage: 10, paid: 0, paidDate: null },
+        { name: 'Possession', order: 9, percentage: 10, paid: 0, paidDate: null },
+      ];
+      for (const ms of defaultMilestones) {
+        const demandAmount = agreementVal * ms.percentage / 100;
+        const status = ms.paid <= 0 ? 'Upcoming' : ms.paid >= demandAmount ? 'Paid' : 'Partially Paid';
+        await client.query(`
+          INSERT INTO booking_payment_milestones (booking_id, milestone_name, milestone_order, percentage, demand_amount, paid_amount, paid_date, status)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        `, [newId, ms.name, ms.order, ms.percentage, demandAmount, ms.paid, ms.paidDate || null, status]);
+      }
 
       // 1g. Insert initial stage history
       await client.query(`
         INSERT INTO booking_stage_history (booking_id, stage_name, employee_name, remarks)
         VALUES ($1, 'Booking Submitted', $2, 'Initial booking form submitted.')
       `, [newId, created_by || 'System']);
+
+      // 1h. Phase B5: migrate the lead's multi-bank loan applications to this booking.
+      // The lead-level draft (loan_tracking_info.loan_application_ids) references
+      // loan_applications rows; on booking creation they become booking-scoped so the
+      // shopping history follows the booking. Best-effort — never fails the booking.
+      try {
+        const leadDraftRes = await client.query(`SELECT loan_tracking_info FROM walkin_enquiries WHERE id = $1`, [lead_id]);
+        const draftRaw = leadDraftRes.rows[0]?.loan_tracking_info;
+        const draft = typeof draftRaw === "string" ? JSON.parse(draftRaw) : (draftRaw || {});
+        const ids = Array.isArray(draft?.loan_application_ids)
+          ? draft.loan_application_ids.map((n: any) => Number(n)).filter((n: number) => Number.isInteger(n) && n > 0)
+          : [];
+        if (ids.length > 0) {
+          await client.query(
+            `UPDATE loan_applications SET booking_id = $1, updated_at = NOW() WHERE id = ANY($2::int[])`,
+            [newId, ids]
+          );
+        }
+      } catch (e) {
+        console.warn("[POST booking-applications] loan_application_ids migration skipped:", (e as any)?.message);
+      }
 
       // 2. Upload Files to R2
 

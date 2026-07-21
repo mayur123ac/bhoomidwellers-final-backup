@@ -288,8 +288,8 @@ function TrancheHistory({ tranches, isDark, t }: { tranches: Tranche[]; isDark: 
                 {tr.remarks && <p className={`text-[9px] mt-0.5 ${t.textFaint}`}>{tr.remarks}</p>}
               </div>
               <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border text-center ${isTrancheCompleted(tr.status) ? "text-emerald-500 border-emerald-500/30 bg-emerald-500/10"
-                  : tr.status === "Scheduled" ? "text-blue-400 border-blue-500/30 bg-blue-500/10"
-                    : "text-amber-400 border-amber-500/30 bg-amber-500/10"
+                : tr.status === "Scheduled" ? "text-blue-400 border-blue-500/30 bg-blue-500/10"
+                  : "text-amber-400 border-amber-500/30 bg-amber-500/10"
                 }`}>{tr.status}</span>
               <span className={`text-[10px] truncate ${t.textFaint}`}>{tr.bank_reference_no || "—"}</span>
               <span className={`text-[10px] ${t.textFaint}`}>
@@ -319,6 +319,26 @@ export default function LoanDealView({ lead, booking, loanUpdate, isDark = false
       .then(d => { if (d.success) setTranches(d.tranches); })
       .catch(() => { });
   }, [lead?.id]);
+
+  // Phase E: full multi-bank shopping history (all applications incl. rejections).
+  const [applications, setApplications] = useState<any[]>([]);
+  useEffect(() => {
+    if (!lead?.id) { setApplications([]); return; }
+    fetch(`/api/walkin_enquiries/${lead.id}/loan-applications`)
+      .then(r => r.json())
+      .then(d => { if (d.success) setApplications(d.data || []); })
+      .catch(() => { });
+  }, [lead?.id]);
+
+  // Phase E: PDD checklist status (only once a booking exists).
+  const [pdd, setPdd] = useState<any[]>([]);
+  useEffect(() => {
+    if (!booking?.id) { setPdd([]); return; }
+    fetch(`/api/booking-applications/${booking.id}/pdd`)
+      .then(r => r.json())
+      .then(d => { if (d.success) setPdd(d.data || []); })
+      .catch(() => { });
+  }, [booking?.id]);
 
   const sColor = getLoanStatusColor(lu?.status || "", isDark);
   const isHighProb = lu?.status?.toLowerCase() === "approved" && lead?.mongoVisitDate;
@@ -496,6 +516,43 @@ export default function LoanDealView({ lead, booking, loanUpdate, isDark = false
           Bank Loan Details
         </SectionHeading>
 
+        {/* Phase E: multi-lender shopping history — every bank the case was filed with,
+            including rejections, so the full trail is visible (not just the winner). */}
+        {applications.length > 0 && (
+          <div className="mb-5">
+            <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-widest mb-2 ${t.textMuted}`}>
+              Lender Applications ({applications.length})
+            </p>
+            <div className="space-y-2">
+              {applications.map((a) => {
+                const chip = a.status === "Sanctioned" ? "text-emerald-500 border-emerald-500/30 bg-emerald-500/10"
+                  : a.status === "Rejected" ? "text-red-500 border-red-500/30 bg-red-500/10"
+                    : a.status === "Withdrawn" ? "text-gray-500 border-gray-400/30 bg-gray-500/10"
+                      : "text-amber-500 border-amber-500/30 bg-amber-500/10";
+                return (
+                  <div key={a.id} className={`rounded-lg border p-3 ${a.is_selected ? "border-[#00AEEF]/50 bg-[#00AEEF]/5" : t.innerBlock}`}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className={`text-sm font-bold ${t.text}`}>
+                        {a.bank_name}{a.is_selected && <span className="ml-2 text-[10px] font-bold text-[#00AEEF]">⭐ Selected</span>}
+                      </span>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${chip}`}>{a.status}</span>
+                    </div>
+                    <div className={`flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] ${t.textMuted}`}>
+                      <span>Requested: <b className={t.text}>{formatCurrencyDisplay(a.amount_requested)}</b></span>
+                      <span>Sanctioned: <b className={t.text}>{formatCurrencyDisplay(a.amount_sanctioned)}</b></span>
+                      {a.interest_rate ? <span>Rate: <b className={t.text}>{a.interest_rate}%</b></span> : null}
+                      {a.dsa_agent_name ? <span>DSA: <b className={t.text}>{a.dsa_agent_name}</b></span> : null}
+                    </div>
+                    {a.status === "Rejected" && a.rejection_reason && (
+                      <p className="text-[11px] mt-1 text-red-500">Rejected — “{a.rejection_reason}”</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {!hasDealData ? (
           <p className={`text-xs sm:text-sm italic mb-2 ${t.textMuted}`}>
             No loan/deal details yet. Use "Track Loan" to log them — they'll carry over to the Booking
@@ -508,7 +565,7 @@ export default function LoanDealView({ lead, booking, loanUpdate, isDark = false
               <Field label="Loan Executive" val={src.loan_executive} t={t} />
               <Field label="Loan Type" val={src.loan_type} t={t} />
               <Field label="Loan Reference No." val={src.loan_reference_no} t={t} />
-              <Field label="Requested Loan Amount" val={formatCurrencyDisplay(src.loan_amount)} t={t} />
+              {/* <Field label="Requested Loan Amount" val={formatCurrencyDisplay(src.loan_amount)} t={t} /> */}
               <Field label="Overall Loan Status" val={src.loan_status} t={t} />
             </div>
 
@@ -520,7 +577,7 @@ export default function LoanDealView({ lead, booking, loanUpdate, isDark = false
                 Sanction
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-y-3 gap-x-3 text-xs sm:text-sm">
-                <Field label="Requested" val={formatCurrencyDisplay(src.loan_amount)} t={t} />
+                {/* <Field label="Requested" val={formatCurrencyDisplay(src.loan_amount)} t={t} /> */}
                 <Field label="Sanctioned" val={formatCurrencyDisplay(src.sanction_amount)} t={t} emphasize="green" />
                 <Field label="Sanction Date" val={formatDate(src.sanction_date)} t={t} />
                 <Field label="Status" val={src.sanction_status} t={t} />
@@ -612,6 +669,38 @@ export default function LoanDealView({ lead, booking, loanUpdate, isDark = false
               {tranches.length > 0 && (
                 <TrancheHistory tranches={tranches} isDark={isDark} t={t} />
               )}
+
+              {/* Phase E: PDD checklist status (read-only) */}
+              {pdd.length > 0 && (() => {
+                const today = new Date().toISOString().split("T")[0];
+                const done = pdd.filter((p: any) => p.submitted).length;
+                return (
+                  <div className={`mt-4 rounded-lg border p-3 ${t.innerBlock}`}>
+                    <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-widest mb-2 ${t.textMuted}`}>
+                      Post-Disbursement Documents ({done}/{pdd.length})
+                    </p>
+                    <div className="space-y-1.5">
+                      {pdd.map((p: any) => {
+                        const due = p.required_by_date ? String(p.required_by_date).split("T")[0] : null;
+                        const overdue = !p.submitted && due != null && due < today;
+                        return (
+                          <div key={p.id} className="flex items-center justify-between gap-2">
+                            <span className="flex items-center gap-2 min-w-0">
+                              <span className={`w-3.5 h-3.5 rounded flex items-center justify-center border flex-shrink-0 ${p.submitted ? "bg-green-500 border-green-500" : `${t.innerBlock} border-gray-400`}`}>
+                                {p.submitted && <FaCheck className="text-white text-[7px]" />}
+                              </span>
+                              <span className={`text-[11px] truncate ${t.text}`}>{p.document_name}</span>
+                            </span>
+                            <span className={`text-[10px] font-semibold flex-shrink-0 ${p.submitted ? "text-green-500" : overdue ? "text-red-500" : t.textMuted}`}>
+                              {p.submitted ? `Submitted ${formatDate(p.submitted_date)}` : `Due ${formatDate(p.required_by_date)}${overdue ? " ⚠" : ""}`}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
           </>
@@ -638,38 +727,30 @@ export default function LoanDealView({ lead, booking, loanUpdate, isDark = false
               <Field label="Token Amount" val={formatCurrencyDisplay(src.token_amount)} t={t} emphasize="green" />
             </div>
 
-            {/* OCR */}
+            {/* Stamp Duty & Registration — prefers the split fields, falls back to legacy sdr_* */}
             <div className={`rounded-lg border p-3 sm:p-3.5 ${t.innerBlock}`}>
               <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-widest mb-3 ${t.textMuted}`}>
-                OCR
+                Stamp Duty &amp; Registration
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-y-3 gap-x-3 text-xs sm:text-sm">
-                <Field label="Amount" val={formatCurrencyDisplay(src.ocr_amount)} t={t} emphasize="green" />
-                <Field label="Received Date" val={formatDate(src.ocr_received_date)} t={t} />
-                <Field label="Payment Mode" val={src.ocr_payment_mode} t={t} />
+                <Field label="Stamp Duty" val={formatCurrencyDisplay(src.stamp_duty_amount || src.sdr_amount)} t={t} emphasize="green" />
+                <Field label="Stamp Duty Status" val={src.stamp_duty_status || src.sdr_status} t={t} />
+                <Field label="Stamp Duty Date" val={formatDate(src.stamp_duty_paid_date || src.sdr_payment_date)} t={t} />
+                <Field label="Registration Fee" val={formatCurrencyDisplay(src.registration_fee_amount)} t={t} emphasize="green" />
+                <Field label="Registration Status" val={src.registration_fee_status} t={t} />
               </div>
-              {src.ocr_remarks && (
-                <div className="mt-3">
-                  <Field label="Remarks" val={src.ocr_remarks} t={t} />
-                </div>
-              )}
             </div>
 
-            {/* SDR */}
+            {/* GST & Other Charges */}
             <div className={`rounded-lg border p-3 sm:p-3.5 ${t.innerBlock}`}>
               <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-widest mb-3 ${t.textMuted}`}>
-                SDR
+                GST &amp; Other Charges
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-y-3 gap-x-3 text-xs sm:text-sm">
-                <Field label="Amount" val={formatCurrencyDisplay(src.sdr_amount)} t={t} emphasize="green" />
-                <Field label="Payment Date" val={formatDate(src.sdr_payment_date)} t={t} />
-                <Field label="Status" val={src.sdr_status} t={t} />
+                <Field label={`GST${src.gst_rate ? ` (${src.gst_rate}%)` : ""}`} val={formatCurrencyDisplay(src.gst_amount)} t={t} emphasize="green" />
+                <Field label="Legal Charges" val={formatCurrencyDisplay(src.legal_charges)} t={t} />
+                <Field label="Maintenance Deposit" val={formatCurrencyDisplay(src.maintenance_deposit)} t={t} />
               </div>
-              {src.sdr_remarks && (
-                <div className="mt-3">
-                  <Field label="Remarks" val={src.sdr_remarks} t={t} />
-                </div>
-              )}
             </div>
 
             {/* Cash component */}

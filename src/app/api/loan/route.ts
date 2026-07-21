@@ -2,6 +2,23 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 
+// C5: loan_updates is an append-only activity log — every POST inserts a NEW row
+// (it never updates in place), so the timeline is the history. The authoritative
+// current status lives elsewhere (booking_loan_details.loan_status post-booking, or
+// the lead's draft pre-booking). These columns add per-entry audit clarity.
+// Idempotent ADD COLUMN IF NOT EXISTS matches the codebase's ensure-table pattern,
+// so the live loan-save path works whether or not the columns were added manually.
+let loanColsEnsured = false;
+async function ensureLoanUpdatesColumns() {
+  if (loanColsEnsured) return;
+  await query(`
+    ALTER TABLE loan_updates
+      ADD COLUMN IF NOT EXISTS previous_status TEXT,
+      ADD COLUMN IF NOT EXISTS new_status TEXT
+  `);
+  loanColsEnsured = true;
+}
+
 // ── GET: Fetch loan updates, optionally scoped to one lead ────────────────────
 export async function GET(req: Request) {
   try {
@@ -56,8 +73,17 @@ export async function POST(req: Request) {
       );
     }
 
+    await ensureLoanUpdatesColumns();
 
-    // 1. Save structured loan data to PostgreSQL
+    // Audit pair: carry the last entry's status forward as previous_status.
+    const prevRows = await query<{ new_status: string | null; status: string | null }>(
+      `SELECT new_status, status FROM loan_updates WHERE lead_id = $1 ORDER BY created_at DESC LIMIT 1`,
+      [String(body.leadId)]
+    );
+    const previousStatus = prevRows[0]?.new_status ?? prevRows[0]?.status ?? null;
+    const newStatus = body.status || "Pending";
+
+    // 1. Append a new activity-log row to PostgreSQL (never an in-place update)
     const rows = await query(
       `INSERT INTO loan_updates (
         lead_id, sales_manager_name, created_by,
@@ -66,20 +92,20 @@ export async function POST(req: Request) {
         cibil, agent, agent_contact,
         emp_type, income, emi,
         doc_pan, doc_aadhaar, doc_salary, doc_bank, doc_property,
-        notes
+        notes, previous_status, new_status
       ) VALUES (
         $1,$2,$3,$4,$5,
         $6,$7,$8,
         $9,$10,$11,
         $12,$13,$14,
         $15,$16,$17,$18,$19,
-        $20
+        $20,$21,$22
       ) RETURNING *`,
       [
         String(body.leadId),
         body.salesManagerName || null,
         body.createdBy || "sales",
-        body.status || "Pending",
+        newStatus,
         body.loanRequired || null,
         body.bank || null,
         body.amountReq || null,
@@ -96,6 +122,8 @@ export async function POST(req: Request) {
         body.docBank || "Pending",
         body.docProperty || "Pending",
         body.notes || null,
+        previousStatus,
+        newStatus,
       ]
     );
 

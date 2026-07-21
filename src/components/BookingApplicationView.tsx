@@ -2,6 +2,8 @@
 // BookingApplicationView.tsx — Read-only view of a submitted booking
 import React, { useRef } from "react";
 import { formatCurrencyDisplay } from "@/lib/currency";
+import TDSTracker from "@/components/TDSTracker";
+import PaymentSequenceStepper from "@/components/PaymentSequenceStepper";
 import {
   FaUser, FaBuilding, FaHandshake, FaFileAlt, FaCheck, FaMoneyBillWave,
   FaPrint, FaDownload, FaEdit, FaCheckCircle, FaTimesCircle, FaIdCard,
@@ -170,6 +172,9 @@ export default function BookingApplicationView({
         )}
       </div>
 
+      {/* ── Payment Sequence Stepper (Phase 7) ── */}
+      <PaymentSequenceStepper booking={booking} isDark={isDark} />
+
       {/* ── CRM / Enquiry Information ── */}
       <div className={`rounded-2xl border p-5 ${cardBg}`}>
         <p className={sectionTitle}><FaIdCard className="inline mr-1.5" />CRM Enquiry Information</p>
@@ -199,7 +204,9 @@ export default function BookingApplicationView({
         </div>
       </div>
       {/* ── Financial Details ── */}
-      <div className={`rounded-2xl border p-5 ${cardBg}`}>
+      {/* Phase 6 read-path migration: prefer the split stamp_duty_* / registration_fee_*
+          fields, fall back to legacy sdr_* so old bookings still render correctly. */}
+      <div id="sec-financials" className={`rounded-2xl border p-5 scroll-mt-4 ${cardBg}`}>
         <p className={sectionTitle}><FaMoneyBillWave className="inline mr-1.5" />Financial Details</p>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           {[
@@ -208,11 +215,13 @@ export default function BookingApplicationView({
             { label: "OCR Received Date", val: formatDate(booking.ocr_received_date) },
             { label: "OCR Payment Mode", val: safeVal(booking.ocr_payment_mode) },
             { label: "OCR Remarks", val: safeVal(booking.ocr_remarks) },
-            { label: "SDR Amount", val: formatCurrencyDisplay(booking.sdr_amount) },
-            { label: "SDR Payment Date", val: formatDate(booking.sdr_payment_date) },
-            { label: "SDR Status", val: safeVal(booking.sdr_status) },
-            { label: "SDR Remarks", val: safeVal(booking.sdr_remarks) },
-            { label: "Cash Component", val: formatCurrencyDisplay(booking.cash_component) },
+            { label: "GST", val: formatCurrencyDisplay(booking.gst_amount) + (booking.gst_rate ? ` (${booking.gst_rate}%)` : "") },
+            { label: "Stamp Duty", val: formatCurrencyDisplay(booking.stamp_duty_amount || booking.sdr_amount) },
+            { label: "Stamp Duty Status", val: safeVal(booking.stamp_duty_status || booking.sdr_status) },
+            { label: "Stamp Duty Paid Date", val: formatDate(booking.stamp_duty_paid_date || booking.sdr_payment_date) },
+            { label: "Registration Fee", val: formatCurrencyDisplay(booking.registration_fee_amount) },
+            { label: "Registration Fee Status", val: safeVal(booking.registration_fee_status) },
+            { label: "Cash / Direct Payment", val: formatCurrencyDisplay(booking.cash_component) },
             { label: "Cash Payment Date", val: formatDate(booking.cash_component_date) },
             { label: "Cash Remarks", val: safeVal(booking.cash_component_remarks) },
             { label: "Total Received", val: formatCurrencyDisplay(booking.total_received) },
@@ -223,8 +232,27 @@ export default function BookingApplicationView({
         </div>
       </div>
 
+      {/* ── TDS Deductions (Section 194-IA) — only ≥ ₹50L, admin/site_head only ── */}
+      {(() => {
+        const agreementVal = parseFloat(String(booking.agreement_value ?? "").replace(/[₹,\s]/g, "")) || 0;
+        const isTdsRole = userRole === "admin" || userRole === "site_head" || userRole === "site head";
+        if (agreementVal < 5000000 || !isTdsRole) return null;
+        let tdsRecords: any[] = [];
+        try { tdsRecords = typeof booking.tds_records === "string" ? JSON.parse(booking.tds_records) : (booking.tds_records || []); } catch { tdsRecords = []; }
+        return (
+          <TDSTracker
+            bookingId={booking.id}
+            agreementValue={agreementVal}
+            initialRecords={tdsRecords}
+            userRole={userRole}
+            userName={currentUser?.name || ""}
+            isDark={isDark}
+          />
+        );
+      })()}
+
       {/* ── Registration Details ── */}
-      <div className={`rounded-2xl border p-5 ${cardBg}`}>
+      <div id="sec-registration" className={`rounded-2xl border p-5 scroll-mt-4 ${cardBg}`}>
         <p className={sectionTitle}>Registration Details</p>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           {[
@@ -241,7 +269,7 @@ export default function BookingApplicationView({
 
       {/* ── Bank Loan Details ── */}
       {booking.loan_required && (
-        <div className={`rounded-2xl border p-5 ${cardBg}`}>
+        <div id="sec-loan" className={`rounded-2xl border p-5 scroll-mt-4 ${cardBg}`}>
           <p className={sectionTitle}>Bank Loan Details</p>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {[
@@ -259,12 +287,74 @@ export default function BookingApplicationView({
               { label: "Expected Disbursement Amount", val: formatCurrencyDisplay(booking.expected_disbursement_amount) },
               { label: "Amount Disbursed", val: formatCurrencyDisplay(booking.disbursement_amount) },
               { label: "Disbursement Status", val: safeVal(booking.disbursement_status) },
+              { label: "Interest Rate", val: booking.interest_rate ? `${booking.interest_rate}%` : "—" },
+              { label: "Loan Tenure", val: booking.loan_tenure_months ? `${booking.loan_tenure_months} months` : "—" },
+              { label: "Pre-EMI Amount", val: formatCurrencyDisplay(booking.pre_emi_amount) },
+              { label: "Full EMI Amount", val: formatCurrencyDisplay(booking.emi_amount) },
+              { label: "EMI Start Date", val: formatDate(booking.emi_start_date) },
+              { label: "Payment Type", val: safeVal(booking.payment_type) },
             ].map(({ label, val }) => (
               <div key={label}><p className={fieldLabel}>{label}</p><p className={fieldVal}>{val}</p></div>
             ))}
           </div>
         </div>
       )}
+
+      {/* ── Payment Milestones (Phase 4 data — read-only display) ── */}
+      {(() => {
+        let milestones: any[] = [];
+        try { milestones = typeof booking.payment_milestones === "string" ? JSON.parse(booking.payment_milestones) : (booking.payment_milestones || []); } catch { milestones = []; }
+        if (!milestones.length) return null;
+        const statusColor = (s: string) => s === "Paid" ? "text-green-500" : s === "Partially Paid" ? "text-amber-500" : s === "Overdue" ? "text-red-500" : textMuted;
+        return (
+          <div id="sec-milestones" className={`rounded-2xl border p-5 scroll-mt-4 ${cardBg}`}>
+            <p className={sectionTitle}><FaMoneyBillWave className="inline mr-1.5" />Payment Milestones</p>
+            <div className={`rounded-xl border overflow-x-auto ${isDark ? "border-[#2A2A35]" : "border-[#E5E7EB]"}`}>
+              <table className="w-full text-sm min-w-[520px]">
+                <thead>
+                  <tr className={isDark ? "bg-[#1A1A28]" : "bg-[#F8FAFC]"}>
+                    <th className={`text-left px-3 py-2 text-xs font-bold ${textMuted}`}>Milestone</th>
+                    <th className={`text-right px-3 py-2 text-xs font-bold ${textMuted}`}>%</th>
+                    <th className={`text-right px-3 py-2 text-xs font-bold ${textMuted}`}>Demand</th>
+                    <th className={`text-right px-3 py-2 text-xs font-bold ${textMuted}`}>Paid</th>
+                    <th className={`text-left px-3 py-2 text-xs font-bold ${textMuted}`}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {milestones.map((m, i) => (
+                    <tr key={m.id ?? i} className={`border-t ${isDark ? "border-[#2A2A35]" : "border-[#F1F5F9]"}`}>
+                      <td className={`px-3 py-2 text-xs ${textMain}`}>{safeVal(m.milestone_name)}</td>
+                      <td className={`px-3 py-2 text-xs text-right ${textMuted}`}>{m.percentage != null ? `${m.percentage}%` : "—"}</td>
+                      <td className={`px-3 py-2 text-xs text-right ${textMain}`}>{formatCurrencyDisplay(m.demand_amount)}</td>
+                      <td className={`px-3 py-2 text-xs text-right font-bold ${textMain}`}>{formatCurrencyDisplay(m.paid_amount)}</td>
+                      <td className={`px-3 py-2 text-xs font-semibold ${statusColor(m.status)}`}>{safeVal(m.status)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── Possession Details (Phase 3 data — read-only display) ── */}
+      <div id="sec-possession" className={`rounded-2xl border p-5 scroll-mt-4 ${cardBg}`}>
+        <p className={sectionTitle}><FaBuilding className="inline mr-1.5" />Possession Details</p>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { label: "Expected Possession", val: formatDate(booking.expected_possession_date) },
+            { label: "Actual Possession", val: formatDate(booking.actual_possession_date) },
+            { label: "Possession Status", val: safeVal(booking.possession_status) },
+            { label: "OC / CC Status", val: safeVal(booking.oc_cc_status) },
+            { label: "OC / CC Date", val: formatDate(booking.oc_cc_date) },
+            { label: "Possession Charges", val: formatCurrencyDisplay(booking.possession_charges) },
+            { label: "Maintenance Deposit", val: formatCurrencyDisplay(booking.maintenance_deposit) },
+            { label: "Legal Charges", val: formatCurrencyDisplay(booking.legal_charges) },
+          ].map(({ label, val }) => (
+            <div key={label}><p className={fieldLabel}>{label}</p><p className={fieldVal}>{val}</p></div>
+          ))}
+        </div>
+      </div>
 
       {/* ── Custom Charges ── */}
       {(() => {

@@ -64,6 +64,30 @@ interface BookingFormData {
   // Custom Charges
   custom_charges: { charge_name: string; amount: string; remarks: string; }[];
   internal_notes: string;
+  // Revenue recognition — which financial items management chooses to count as
+  // realized revenue. Off by default: revenue is an explicit opt-in, never auto.
+  revenue_include_ocr: boolean;
+  revenue_include_sdr: boolean;
+  revenue_include_cash: boolean;
+  revenue_include_sanction: boolean;
+  revenue_include_disbursement: boolean;
+
+  // Cost breakdown — GST is auto-computed from agreement_value × rate.
+  gst_rate: string; gst_amount: string; gst_paid: string; gst_status: string;
+  // Stamp Duty & Registration Fee (split) — amounts auto-computed (Maharashtra
+  // defaults), the rest are captured manually as they are paid.
+  stamp_duty_amount: string; stamp_duty_paid_date: string; stamp_duty_status: string;
+  stamp_duty_payment_mode: string; stamp_duty_receipt_no: string;
+  registration_fee_amount: string; registration_fee_paid_date: string;
+  registration_fee_status: string; registration_fee_payment_mode: string;
+  // Other charges (manual)
+  legal_charges: string; maintenance_deposit: string; possession_charges: string;
+  // Possession tracking
+  expected_possession_date: string; actual_possession_date: string;
+  possession_status: string; oc_cc_status: string; oc_cc_date: string;
+  // Loan EMI details (pre_emi_amount / emi_amount are auto-computed)
+  interest_rate: string; loan_tenure_months: string; emi_start_date: string;
+  payment_type: string; pre_emi_amount: string; emi_amount: string;
 
   // Step 4 — Declaration
   declaration_accepted: boolean; terms_accepted: boolean; consent_accepted: boolean;
@@ -147,6 +171,146 @@ function parseIndianAmount(val: string): string {
   return clean.replace(/[^0-9]/g, "");
 }
 
+// ─── Revenue recognition ────────────────────────────────────────────────────
+// A single, modular source of truth for the Financial Summary. New financial
+// transaction types can be added by pushing another entry into `items`.
+//
+// Rules (matches real-estate accounting):
+//   • Revenue counts an item only if it is BOTH actually received/completed AND
+//     explicitly marked "Include in Revenue". Nothing is auto-counted.
+//   • "Received" is auto-derived from the item's own date/status fields.
+//   • Loan Sanction is informational (bank approval, not cash) — it never sits
+//     in Scheduled Receivables and only reaches Revenue if management opts in.
+//   • Scheduled Receivables = money entered but not yet received (future income).
+//     It is shown separately and never reduces Balance Receivable.
+type RevenueItemKey = "ocr" | "sdr" | "cash" | "sanction" | "disbursement";
+type RevenueFlagKey =
+  | "revenue_include_ocr" | "revenue_include_sdr" | "revenue_include_cash"
+  | "revenue_include_sanction" | "revenue_include_disbursement";
+
+interface RevenueItem {
+  key: RevenueItemKey;
+  label: string;
+  amount: number;
+  received: boolean;          // has the money actually arrived / milestone completed
+  receivedLabel: string;      // wording for the status chip ("Received" / "Approved" …)
+  informational: boolean;     // true = not a cash receipt (Loan Sanction)
+  includeKey: RevenueFlagKey;
+  included: boolean;
+  countsAsRevenue: boolean;   // received && included
+}
+
+interface FinancialSummary {
+  agreementValue: number;
+  items: RevenueItem[];
+  revenue: number;
+  scheduledReceivables: number;
+  balanceReceivable: number;
+}
+
+function computeFinancials(form: BookingFormData): FinancialSummary {
+  const agreementValue = toNumber(form.agreement_value);
+
+  const disbursementAmount = toNumber(form.disbursement_amount) || toNumber(form.expected_disbursement_amount);
+
+  const base: Omit<RevenueItem, "countsAsRevenue">[] = [
+    {
+      key: "ocr", label: "OCR", amount: toNumber(form.ocr_amount),
+      received: !!form.ocr_received_date, receivedLabel: "Received", informational: false,
+      includeKey: "revenue_include_ocr", included: !!form.revenue_include_ocr,
+    },
+    {
+      key: "sdr", label: "SDR", amount: toNumber(form.sdr_amount),
+      received: form.sdr_status === "Paid", receivedLabel: "Paid", informational: false,
+      includeKey: "revenue_include_sdr", included: !!form.revenue_include_sdr,
+    },
+    {
+      key: "cash", label: "Cash Component", amount: toNumber(form.cash_component),
+      received: !!form.cash_component_date, receivedLabel: "Received", informational: false,
+      includeKey: "revenue_include_cash", included: !!form.revenue_include_cash,
+    },
+    {
+      key: "sanction", label: "Loan Sanction", amount: toNumber(form.sanction_amount),
+      received: form.sanction_status === "Approved", receivedLabel: "Approved", informational: true,
+      includeKey: "revenue_include_sanction", included: !!form.revenue_include_sanction,
+    },
+    {
+      key: "disbursement", label: "Loan Disbursement", amount: disbursementAmount,
+      received: !!form.actual_disbursement_date || form.disbursement_status === "Completed",
+      receivedLabel: "Received", informational: false,
+      includeKey: "revenue_include_disbursement", included: !!form.revenue_include_disbursement,
+    },
+  ];
+
+  const items: RevenueItem[] = base.map(it => ({ ...it, countsAsRevenue: it.received && it.included }));
+
+  const revenue = items.filter(i => i.countsAsRevenue).reduce((s, i) => s + i.amount, 0);
+
+  // Future income: entered but not yet received. Sanction excluded (informational).
+  const scheduledReceivables = items
+    .filter(i => !i.informational && !i.received && i.amount > 0)
+    .reduce((s, i) => s + i.amount, 0);
+
+  const balanceReceivable = agreementValue - revenue;
+
+  return { agreementValue, items, revenue, scheduledReceivables, balanceReceivable };
+}
+
+// ─── Cost breakdown ─────────────────────────────────────────────────────────
+// Total Cost to Customer = Agreement + GST + Stamp Duty + Registration Fee
+// + Legal + Maintenance + Possession + Custom Charges. Auto amounts follow
+// Maharashtra defaults (GST 5%, Stamp Duty 5%, Registration 1% capped ₹30K).
+interface CostBreakdown {
+  agreementValue: number; gstRate: number; gstAmount: number;
+  stampDuty: number; registrationFee: number;
+  legalCharges: number; maintenanceDeposit: number; possessionCharges: number;
+  customChargesTotal: number; totalCost: number;
+  loanAmount: number; ownContributionRequired: number;
+}
+
+function autoGstAmount(agreementValue: number, rate: number) { return Math.round(agreementValue * rate / 100); }
+function autoStampDuty(agreementValue: number) { return Math.round(agreementValue * 0.05); }
+function autoRegistrationFee(agreementValue: number) { return Math.min(Math.round(agreementValue * 0.01), 30000); }
+
+function computeCostBreakdown(form: BookingFormData): CostBreakdown {
+  const agreementValue = toNumber(form.agreement_value);
+  const gstRate = toNumber(form.gst_rate) || 5;
+  const gstAmount = toNumber(form.gst_amount) || autoGstAmount(agreementValue, gstRate);
+  const stampDuty = toNumber(form.stamp_duty_amount) || autoStampDuty(agreementValue);
+  const registrationFee = toNumber(form.registration_fee_amount) || autoRegistrationFee(agreementValue);
+  const legalCharges = toNumber(form.legal_charges);
+  const maintenanceDeposit = toNumber(form.maintenance_deposit);
+  const possessionCharges = toNumber(form.possession_charges);
+  const customChargesTotal = (form.custom_charges || []).reduce((s, c) => s + toNumber(c.amount), 0);
+  const totalCost = agreementValue + gstAmount + stampDuty + registrationFee
+    + legalCharges + maintenanceDeposit + possessionCharges + customChargesTotal;
+  const loanAmount = form.loan_required ? (toNumber(form.sanction_amount) || toNumber(form.loan_amount)) : 0;
+  // Own contribution the buyer must fund from pocket. Government pass-through
+  // (stamp duty / registration) is the buyer's cost too but is excluded here so
+  // this figure mirrors the API's required_own_contribution (Agreement + GST − Loan).
+  const ownContributionRequired = Math.max(agreementValue + gstAmount - loanAmount, 0);
+  return {
+    agreementValue, gstRate, gstAmount, stampDuty, registrationFee,
+    legalCharges, maintenanceDeposit, possessionCharges, customChargesTotal,
+    totalCost, loanAmount, ownContributionRequired,
+  };
+}
+
+// Standard amortization: EMI = P·r·(1+r)^n / ((1+r)^n − 1), r = monthly rate.
+function computeEmi(principal: number, annualRatePct: number, tenureMonths: number): number {
+  if (principal <= 0 || annualRatePct <= 0 || tenureMonths <= 0) return 0;
+  const r = annualRatePct / 12 / 100;
+  const pow = Math.pow(1 + r, tenureMonths);
+  return Math.round((principal * r * pow) / (pow - 1));
+}
+
+// Pre-EMI is interest-only on the amount disbursed so far (falls back to sanctioned).
+function computePreEmi(disbursed: number, sanctioned: number, annualRatePct: number): number {
+  const base = disbursed > 0 ? disbursed : sanctioned;
+  if (base <= 0 || annualRatePct <= 0) return 0;
+  return Math.round(base * annualRatePct / 12 / 100);
+}
+
 // Loan & Deal Tracking (LoanDealForm) drafts sections 6-7 onto the lead itself
 // (walkin_enquiries.loan_tracking_info) before a booking exists. When "Mark as
 // Closing" opens this modal fresh, that draft prefills the loan/financial fields.
@@ -195,6 +359,24 @@ function defaultForm(lead: any): BookingFormData {
     expected_disbursement_amount: draft.expected_disbursement_amount || "", disbursement_amount: draft.disbursement_amount || "", disbursement_status: draft.disbursement_status || "Pending",
     custom_charges: Array.isArray(draft.custom_charges) ? draft.custom_charges : [],
     internal_notes: "",
+    revenue_include_ocr: false,
+    revenue_include_sdr: false,
+    revenue_include_cash: false,
+    revenue_include_sanction: false,
+    revenue_include_disbursement: false,
+
+    // Phase B: draft (loan_tracking_info) is a superset of Step 3 — prefill directly, no translation.
+    gst_rate: draft.gst_rate || "5", gst_amount: "", gst_paid: "", gst_status: "Pending",
+    stamp_duty_amount: draft.stamp_duty_amount || "", stamp_duty_paid_date: "", stamp_duty_status: draft.stamp_duty_status || "Pending",
+    stamp_duty_payment_mode: "E-Stamp", stamp_duty_receipt_no: "",
+    registration_fee_amount: draft.registration_fee_amount || "", registration_fee_paid_date: "",
+    registration_fee_status: draft.registration_fee_status || "Pending", registration_fee_payment_mode: "",
+    legal_charges: draft.legal_charges || "", maintenance_deposit: draft.maintenance_deposit || "", possession_charges: "",
+    expected_possession_date: "", actual_possession_date: "",
+    possession_status: "Pre-Construction", oc_cc_status: "Pending", oc_cc_date: "",
+    interest_rate: draft.interest_rate || "", loan_tenure_months: draft.loan_tenure_months || "",
+    emi_start_date: draft.emi_start_date || "", payment_type: draft.payment_type || "Pre-EMI",
+    pre_emi_amount: "", emi_amount: "",
 
     declaration_accepted: false, terms_accepted: false, consent_accepted: false,
     signature_data: "", application_date: today,
@@ -212,6 +394,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
   const [isPdfGenerating, setIsPdfGenerating] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [termsScrolled, setTermsScrolled] = useState(false);
+  const [showAdditionalPayment, setShowAdditionalPayment] = useState(false);
   const [sigMode, setSigMode] = useState<"draw" | "upload">("draw");
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const isDrawing = useRef(false);
@@ -232,9 +415,9 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
           safeBooking[k] = existingBooking[k];
         }
       });
-      setForm({ 
-        ...initialForm, 
-        ...safeBooking, 
+      setForm({
+        ...initialForm,
+        ...safeBooking,
         joint_applicants: typeof safeBooking.joint_applicants === 'string' ? JSON.parse(safeBooking.joint_applicants) : (safeBooking.joint_applicants || initialForm.joint_applicants),
         payment_details: typeof safeBooking.payment_details === 'string' ? JSON.parse(safeBooking.payment_details) : (safeBooking.payment_details || initialForm.payment_details)
       });
@@ -259,6 +442,35 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
       if (words) setForm(f => ({ ...f, consideration_value_words: words }));
     }
   }, [form.consideration_value]);
+
+  // Auto-compute GST / Stamp Duty / Registration Fee from agreement value.
+  // These are "Est." fields — always kept in sync so they never drift.
+  useEffect(() => {
+    const av = toNumber(form.agreement_value);
+    const rate = toNumber(form.gst_rate) || 5;
+    const gst = String(autoGstAmount(av, rate));
+    const stamp = String(autoStampDuty(av));
+    const reg = String(autoRegistrationFee(av));
+    setForm(f => (
+      f.gst_amount === gst && f.stamp_duty_amount === stamp && f.registration_fee_amount === reg
+        ? f
+        : { ...f, gst_amount: gst, stamp_duty_amount: stamp, registration_fee_amount: reg }
+    ));
+  }, [form.agreement_value, form.gst_rate]);
+
+  // Auto-compute Pre-EMI / EMI from loan figures.
+  useEffect(() => {
+    if (!form.loan_required) return;
+    const sanctioned = toNumber(form.sanction_amount) || toNumber(form.loan_amount);
+    const disbursed = toNumber(form.disbursement_amount);
+    const rate = toNumber(form.interest_rate);
+    const tenure = toNumber(form.loan_tenure_months);
+    const preEmi = String(computePreEmi(disbursed, sanctioned, rate));
+    const emi = String(computeEmi(sanctioned, rate, tenure));
+    setForm(f => (
+      f.pre_emi_amount === preEmi && f.emi_amount === emi ? f : { ...f, pre_emi_amount: preEmi, emi_amount: emi }
+    ));
+  }, [form.loan_required, form.sanction_amount, form.loan_amount, form.disbursement_amount, form.interest_rate, form.loan_tenure_months]);
 
   const set = useCallback(<K extends keyof BookingFormData>(key: K, val: BookingFormData[K]) => {
     setForm(f => ({ ...f, [key]: val }));
@@ -332,6 +544,8 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
       if (!form.property_type.trim()) e.property_type = "Property type is required";
       if (!form.flat_number.trim()) e.flat_number = "Flat number is required";
       if (!form.consideration_value.trim()) e.consideration_value = "Consideration value is required";
+    }
+    if (s === 3) {
       if (!form.booking_date) e.booking_date = "Booking date is required";
       if (!form.agreement_value) e.agreement_value = "Agreement value is required";
       if (!form.booking_amount) e.booking_amount = "Booking amount is required";
@@ -428,6 +642,45 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
       formData.append("disbursement_status", form.disbursement_status);
       formData.append("custom_charges", JSON.stringify(form.custom_charges));
       formData.append("internal_notes", form.internal_notes);
+      // Revenue recognition flags
+      formData.append("revenue_include_ocr", form.revenue_include_ocr ? 'true' : 'false');
+      formData.append("revenue_include_sdr", form.revenue_include_sdr ? 'true' : 'false');
+      formData.append("revenue_include_cash", form.revenue_include_cash ? 'true' : 'false');
+      formData.append("revenue_include_sanction", form.revenue_include_sanction ? 'true' : 'false');
+      formData.append("revenue_include_disbursement", form.revenue_include_disbursement ? 'true' : 'false');
+
+      // Cost breakdown — GST rate is user-set; amount is derived (server also recomputes).
+      formData.append("gst_rate", form.gst_rate);
+      formData.append("gst_amount", form.gst_amount);
+      formData.append("gst_paid", form.gst_paid);
+      formData.append("gst_status", form.gst_status);
+      // Stamp Duty & Registration Fee (split)
+      formData.append("stamp_duty_amount", form.stamp_duty_amount);
+      formData.append("stamp_duty_paid_date", form.stamp_duty_paid_date);
+      formData.append("stamp_duty_status", form.stamp_duty_status);
+      formData.append("stamp_duty_payment_mode", form.stamp_duty_payment_mode);
+      formData.append("stamp_duty_receipt_no", form.stamp_duty_receipt_no);
+      formData.append("registration_fee_amount", form.registration_fee_amount);
+      formData.append("registration_fee_paid_date", form.registration_fee_paid_date);
+      formData.append("registration_fee_status", form.registration_fee_status);
+      formData.append("registration_fee_payment_mode", form.registration_fee_payment_mode);
+      // Other charges
+      formData.append("legal_charges", form.legal_charges);
+      formData.append("maintenance_deposit", form.maintenance_deposit);
+      formData.append("possession_charges", form.possession_charges);
+      // Possession tracking
+      formData.append("expected_possession_date", form.expected_possession_date);
+      formData.append("actual_possession_date", form.actual_possession_date);
+      formData.append("possession_status", form.possession_status);
+      formData.append("oc_cc_status", form.oc_cc_status);
+      formData.append("oc_cc_date", form.oc_cc_date);
+      // EMI details
+      formData.append("interest_rate", form.interest_rate);
+      formData.append("loan_tenure_months", form.loan_tenure_months);
+      formData.append("emi_start_date", form.emi_start_date);
+      formData.append("payment_type", form.payment_type);
+      formData.append("pre_emi_amount", form.pre_emi_amount);
+      formData.append("emi_amount", form.emi_amount);
 
       formData.append("declaration_accepted", form.declaration_accepted ? 'true' : 'false');
       formData.append("terms_accepted", form.terms_accepted ? 'true' : 'false');
@@ -453,9 +706,9 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
         if (ja.aadhaar_back_file) formData.append(`joint_${i}_aadhaar_back_file`, ja.aadhaar_back_file);
       });
 
-      const res = await fetch(isEditMode ? `/api/booking-applications/${existingBooking.id}` : "/api/booking-applications", { 
-        method: isEditMode ? "PUT" : "POST", 
-        body: formData 
+      const res = await fetch(isEditMode ? `/api/booking-applications/${existingBooking.id}` : "/api/booking-applications", {
+        method: isEditMode ? "PUT" : "POST",
+        body: formData
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.message || "Failed to save booking");
@@ -928,31 +1181,10 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                                 <input value={form.consideration_value_words} onChange={e => set("consideration_value_words", e.target.value)} placeholder="Auto-generated" className={inputCls} />
                               </div>
                             </div>
-                            <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
-                              <div>
-                                <label className={labelCls}>Booking Date</label>
-                                <input type="date" value={form.booking_date} onChange={e => set("booking_date", e.target.value)} className={`${inputCls} ${errors.booking_date ? "!border-red-500" : ""}`} />
-                                {errors.booking_date && <p className={errCls}>{errors.booking_date}</p>}
-                              </div>
-                              <div>
-                                <label className={labelCls}>Agreement Value</label>
-                                <IndianCurrencyInput value={form.agreement_value} onChange={val => set("agreement_value", val)} placeholder="50,00,000" className={`${inputCls} ${errors.agreement_value ? "!border-red-500" : ""}`} />
-                                {errors.agreement_value && <p className={errCls}>{errors.agreement_value}</p>}
-                              </div>
-                              <div>
-                                <label className={labelCls}>Booking Amount</label>
-                                <IndianCurrencyInput value={form.booking_amount} onChange={val => set("booking_amount", val)} placeholder="1,00,000" className={`${inputCls} ${errors.booking_amount ? "!border-red-500" : ""}`} />
-                                {errors.booking_amount && <p className={errCls}>{errors.booking_amount}</p>}
-                              </div>
-                            </div>
                             <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
                               <div>
                                 <label className={labelCls}>Parking Details</label>
                                 <input value={form.parking_details} onChange={e => set("parking_details", e.target.value)} placeholder="e.g. 1 covered parking" className={inputCls} />
-                              </div>
-                              <div>
-                                <label className={labelCls}>Booking Remarks</label>
-                                <input value={form.booking_remarks} onChange={e => set("booking_remarks", e.target.value)} placeholder="Any initial remarks" className={inputCls} />
                               </div>
                             </div>
                           </div>
@@ -1017,111 +1249,216 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                       {/* ══════════ STEP 3: Financials & Registration ══════════ */}
                       {step === 3 && (
                         <div className="space-y-6">
-                          {/* Financial Details */}
+                          {/* ── Section 1: Booking & Agreement ── */}
                           <div>
-                            <p className={sectionTitle}><FaMoneyBillWave className="inline mr-2" />Financial Details</p>
+                            <p className={sectionTitle}><FaMoneyBillWave className="inline mr-2" />Booking &amp; Agreement</p>
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                               <div>
-                                <label className={labelCls}>Token Amount</label>
-                                <IndianCurrencyInput value={form.token_amount} onChange={val => set("token_amount", val)} placeholder="50,000" className={inputCls} />
+                                <label className={labelCls}>Booking Date</label>
+                                <input type="date" value={form.booking_date} onChange={e => set("booking_date", e.target.value)} className={`${inputCls} ${errors.booking_date ? "!border-red-500" : ""}`} />
+                                {errors.booking_date && <p className={errCls}>{errors.booking_date}</p>}
                               </div>
                               <div>
-                                <label className={labelCls}>OCR Amount</label>
-                                <IndianCurrencyInput value={form.ocr_amount} onChange={val => set("ocr_amount", val)} placeholder="5,00,000" className={inputCls} />
+                                <label className={labelCls}>Agreement Value</label>
+                                <IndianCurrencyInput value={form.agreement_value} onChange={val => set("agreement_value", val)} placeholder="50,00,000" className={`${inputCls} ${errors.agreement_value ? "!border-red-500" : ""}`} />
+                                {errors.agreement_value && <p className={errCls}>{errors.agreement_value}</p>}
                               </div>
                               <div>
-                                <label className={labelCls}>OCR Received Date</label>
-                                <input type="date" value={form.ocr_received_date} onChange={e => set("ocr_received_date", e.target.value)} className={inputCls} />
+                                <label className={labelCls}>Booking Amount</label>
+                                <IndianCurrencyInput value={form.booking_amount} onChange={val => set("booking_amount", val)} placeholder="1,00,000" className={`${inputCls} ${errors.booking_amount ? "!border-red-500" : ""}`} />
+                                {errors.booking_amount && <p className={errCls}>{errors.booking_amount}</p>}
                               </div>
                             </div>
                             <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                              <div>
+                                <label className={labelCls}>Token Amount <span className="font-normal opacity-70">(part of Booking Amount)</span></label>
+                                <IndianCurrencyInput value={form.token_amount} onChange={val => set("token_amount", val)} placeholder="50,000" className={inputCls} />
+                              </div>
+                              <div className="sm:col-span-2">
+                                <label className={labelCls}>Booking Remarks</label>
+                                <input value={form.booking_remarks} onChange={e => set("booking_remarks", e.target.value)} placeholder="Any initial remarks" className={inputCls} />
+                              </div>
+                            </div>
+                            {(() => {
+                              const av = toNumber(form.agreement_value);
+                              const maxBooking = av * 0.10;
+                              const bk = toNumber(form.booking_amount);
+                              if (av <= 0) return null;
+                              const over = bk > maxBooking;
+                              return (
+                                <div className={`mt-3 rounded-lg px-3 py-2 text-xs flex items-start gap-2 border ${over ? (isDark ? "bg-amber-500/10 border-amber-500/30 text-amber-300" : "bg-amber-50 border-amber-300 text-amber-700") : (isDark ? "bg-[#14141B] border-[#2A2A35] text-[#888899]" : "bg-[#F8FAFC] border-[#E5E7EB] text-[#6B7280]")}`}>
+                                  <span>⚠</span>
+                                  <span>
+                                    <strong>RERA:</strong> Booking amount should not exceed 10% of agreement value.
+                                    Max allowed: <strong>{formatINR(maxBooking)}</strong>.
+                                    {over && <span className="font-bold"> Current booking amount ({formatINR(bk)}) exceeds this cap.</span>}
+                                  </span>
+                                </div>
+                              );
+                            })()}
+                          </div>
+
+                          {/* ── Section 2: Total Cost Breakdown (auto-computed) ── */}
+                          <div className={`border-t pt-6 ${divider}`}>
+                            <p className={sectionTitle}>Total Cost Breakdown <span className="font-normal normal-case opacity-70">(auto-computed)</span></p>
+                            {(() => {
+                              const cost = computeCostBreakdown(form);
+                              const Row = ({ label, value, hint, strong }: { label: string; value: number; hint?: string; strong?: boolean }) => (
+                                <div className={`flex items-center justify-between px-4 py-2.5 ${strong ? "" : "border-b"} ${divider}`}>
+                                  <span className={`text-xs ${strong ? `font-bold ${textMain}` : textMuted}`}>{label}{hint && <span className="ml-1 opacity-60">{hint}</span>}</span>
+                                  <span className={`text-sm ${strong ? "font-extrabold" : "font-semibold"} ${textMain}`}>{formatINR(value)}</span>
+                                </div>
+                              );
+                              return (
+                                <div className={`rounded-xl border overflow-hidden ${isDark ? "bg-[#121218] border-[#2A2A35]" : "bg-white border-[#E5E7EB]"}`}>
+                                  <Row label="Agreement Value" value={cost.agreementValue} />
+                                  <div className={`flex items-center justify-between px-4 py-2.5 border-b ${divider}`}>
+                                    <span className={`text-xs ${textMuted} flex items-center gap-2`}>
+                                      + GST
+                                      <select value={form.gst_rate} onChange={e => set("gst_rate", e.target.value)} className={`rounded-md px-1.5 py-0.5 text-xs outline-none border ${isDark ? "bg-[#14141B] border-[#2A2A35] text-white" : "bg-white border-[#9CA3AF] text-[#1A1A1A]"}`}>
+                                        <option value="5">5% (no ITC)</option>
+                                        <option value="12">12% (with ITC)</option>
+                                      </select>
+                                    </span>
+                                    <span className={`text-sm font-semibold ${textMain}`}>{formatINR(cost.gstAmount)}</span>
+                                  </div>
+                                  <Row label="+ Stamp Duty" value={cost.stampDuty} hint="(5% est.)" />
+                                  <Row label="+ Registration Fee" value={cost.registrationFee} hint="(1% est., cap ₹30K)" />
+                                  <div className={`flex items-center justify-between px-4 py-2 border-b ${divider}`}>
+                                    <span className={`text-xs ${textMuted}`}>+ Legal Charges</span>
+                                    <IndianCurrencyInput value={form.legal_charges} onChange={val => set("legal_charges", val)} placeholder="0" className={`${inputCls} text-xs py-1.5 w-40 text-right`} />
+                                  </div>
+                                  <div className={`flex items-center justify-between px-4 py-2 border-b ${divider}`}>
+                                    <span className={`text-xs ${textMuted}`}>+ Maintenance Deposit</span>
+                                    <IndianCurrencyInput value={form.maintenance_deposit} onChange={val => set("maintenance_deposit", val)} placeholder="0" className={`${inputCls} text-xs py-1.5 w-40 text-right`} />
+                                  </div>
+                                  <Row label="+ Custom Charges" value={cost.customChargesTotal} hint="(from below)" />
+                                  <div className={isDark ? "bg-[#14141B]" : "bg-[#F8FAFC]"}>
+                                    <Row label="Total Cost to Customer" value={cost.totalCost} strong />
+                                  </div>
+                                  {form.loan_required && (
+                                    <div className={`border-t ${divider}`}>
+                                      <Row label="Own Contribution Required" value={cost.ownContributionRequired} hint="(Agreement + GST − Loan)" />
+                                      <Row label="Loan Amount" value={cost.loanAmount} />
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </div>
+
+                          {/* ── Section 3: Own Contribution (OCR) ── */}
+                          <div className={`border-t pt-6 ${divider}`}>
+                            <p className={sectionTitle}>Own Contribution (OCR)</p>
+                            {(() => {
+                              const cost = computeCostBreakdown(form);
+                              const paid = toNumber(form.token_amount) + toNumber(form.booking_amount) + toNumber(form.ocr_amount) + toNumber(form.cash_component);
+                              const required = cost.ownContributionRequired;
+                              const remaining = Math.max(required - paid, 0);
+                              const breakdown = [
+                                { label: "Token Amount", amount: toNumber(form.token_amount), date: form.booking_date },
+                                { label: "Booking Amount", amount: toNumber(form.booking_amount), date: form.booking_date },
+                                { label: "Additional Own Payment", amount: toNumber(form.ocr_amount), date: form.ocr_received_date },
+                                { label: "Cash / Direct Payment", amount: toNumber(form.cash_component), date: form.cash_component_date },
+                              ].filter(b => b.amount > 0);
+                              return (
+                                <div className={`rounded-xl border overflow-hidden mb-4 ${isDark ? "bg-[#121218] border-[#2A2A35]" : "bg-white border-[#E5E7EB]"}`}>
+                                  <div className={`grid grid-cols-3 border-b ${divider}`}>
+                                    <div className={`px-4 py-3 border-r ${divider}`}><p className={`text-[10px] font-semibold uppercase ${textMuted}`}>Required</p><p className={`font-bold text-sm ${textMain}`}>{formatINR(required)}</p></div>
+                                    <div className={`px-4 py-3 border-r ${divider}`}><p className={`text-[10px] font-semibold uppercase ${textMuted}`}>Paid</p><p className="font-bold text-sm text-green-500">{formatINR(paid)}</p></div>
+                                    <div className="px-4 py-3"><p className={`text-[10px] font-semibold uppercase ${textMuted}`}>Remaining</p><p className={`font-bold text-sm ${remaining > 0 ? "text-amber-500" : "text-green-500"}`}>{formatINR(remaining)}</p></div>
+                                  </div>
+                                  {breakdown.length === 0 ? (
+                                    <p className={`px-4 py-3 text-xs italic ${textMuted}`}>No own-contribution payments captured yet.</p>
+                                  ) : (
+                                    <div className={`divide-y ${isDark ? "divide-[#2A2A35]" : "divide-[#F1F5F9]"}`}>
+                                      {breakdown.map((b, i) => (
+                                        <div key={i} className="flex items-center justify-between px-4 py-2">
+                                          <span className={`text-xs ${textMain}`}>✓ {b.label}</span>
+                                          <span className={`text-xs ${textMuted}`}>{b.date || "—"}</span>
+                                          <span className={`text-xs font-bold ${textMain}`}>{formatINR(b.amount)}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                              <div>
+                                <label className={labelCls}>Additional Own Payment <span className="font-normal opacity-70">(installments beyond token/booking)</span></label>
+                                <IndianCurrencyInput value={form.ocr_amount} onChange={val => set("ocr_amount", val)} placeholder="0" className={inputCls} />
+                              </div>
+                              <div>
+                                <label className={labelCls}>Received Date</label>
+                                <input type="date" value={form.ocr_received_date} onChange={e => set("ocr_received_date", e.target.value)} className={inputCls} />
+                              </div>
                               <div>
                                 <label className={labelCls}>OCR Payment Mode</label>
                                 <select value={form.ocr_payment_mode} onChange={e => set("ocr_payment_mode", e.target.value)} className={inputCls}>
                                   {["Cheque", "NEFT/RTGS", "Cash", "UPI", "Demand Draft", "Other"].map(v => <option key={v} value={v}>{v}</option>)}
                                 </select>
                               </div>
-                              <div className="sm:col-span-2">
-                                <label className={labelCls}>OCR Remarks</label>
-                                <input value={form.ocr_remarks} onChange={e => set("ocr_remarks", e.target.value)} placeholder="Remarks" className={inputCls} />
-                              </div>
                             </div>
-                            <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div className="mt-4">
+                              <label className={labelCls}>OCR Remarks</label>
+                              <input value={form.ocr_remarks} onChange={e => set("ocr_remarks", e.target.value)} placeholder="Remarks" className={inputCls} />
+                            </div>
+                          </div>
+
+                          {/* ── Section 4: Stamp Duty & Registration (split) ── */}
+                          <div className={`border-t pt-6 ${divider}`}>
+                            <p className={sectionTitle}>Stamp Duty &amp; Registration</p>
+                            <p className={`text-[11px] font-bold uppercase tracking-wider mb-2 ${accent}`}>Stamp Duty</p>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                               <div>
-                                <label className={labelCls}>SDR Amount</label>
-                                <IndianCurrencyInput value={form.sdr_amount} onChange={val => set("sdr_amount", val)} placeholder="3,50,000" className={inputCls} />
+                                <label className={labelCls}>Amount <span className="font-normal opacity-70">(auto)</span></label>
+                                <input readOnly value={formatINR(toNumber(form.stamp_duty_amount))} className={`${inputCls} opacity-80 cursor-default`} />
                               </div>
                               <div>
-                                <label className={labelCls}>SDR Payment Date</label>
-                                <input type="date" value={form.sdr_payment_date} onChange={e => set("sdr_payment_date", e.target.value)} className={inputCls} />
-                              </div>
-                              <div>
-                                <label className={labelCls}>SDR Status</label>
-                                <select value={form.sdr_status} onChange={e => set("sdr_status", e.target.value)} className={inputCls}>
+                                <label className={labelCls}>Status</label>
+                                <select value={form.stamp_duty_status} onChange={e => set("stamp_duty_status", e.target.value)} className={inputCls}>
                                   <option value="Pending">Pending</option>
                                   <option value="Paid">Paid</option>
                                 </select>
                               </div>
+                              <div>
+                                <label className={labelCls}>Payment Mode</label>
+                                <select value={form.stamp_duty_payment_mode} onChange={e => set("stamp_duty_payment_mode", e.target.value)} className={inputCls}>
+                                  {["E-Stamp", "Franking", "Stamp Paper"].map(v => <option key={v} value={v}>{v}</option>)}
+                                </select>
+                              </div>
                             </div>
-                            <div className="mt-4">
-                              <label className={labelCls}>SDR Remarks</label>
-                              <input value={form.sdr_remarks} onChange={e => set("sdr_remarks", e.target.value)} placeholder="Remarks" className={inputCls} />
+                            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              <div>
+                                <label className={labelCls}>Paid Date</label>
+                                <input type="date" value={form.stamp_duty_paid_date} onChange={e => set("stamp_duty_paid_date", e.target.value)} className={inputCls} />
+                              </div>
+                              <div>
+                                <label className={labelCls}>Receipt No.</label>
+                                <input value={form.stamp_duty_receipt_no} onChange={e => set("stamp_duty_receipt_no", e.target.value)} placeholder="Receipt / reference" className={inputCls} />
+                              </div>
+                            </div>
+                            <p className={`text-[11px] font-bold uppercase tracking-wider mb-2 mt-5 ${accent}`}>Registration</p>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                              <div>
+                                <label className={labelCls}>Fee <span className="font-normal opacity-70">(auto)</span></label>
+                                <input readOnly value={formatINR(toNumber(form.registration_fee_amount))} className={`${inputCls} opacity-80 cursor-default`} />
+                              </div>
+                              <div>
+                                <label className={labelCls}>Status</label>
+                                <select value={form.registration_status} onChange={e => set("registration_status", e.target.value)} className={inputCls}>
+                                  <option value="Pending">Pending</option>
+                                  <option value="Scheduled">Scheduled</option>
+                                  <option value="Completed">Completed</option>
+                                </select>
+                              </div>
+                              <div>
+                                <label className={labelCls}>Registration Number</label>
+                                <input value={form.registration_number} onChange={e => set("registration_number", e.target.value)} placeholder="Registration No." className={inputCls} />
+                              </div>
                             </div>
                             <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
-                              <div>
-                                <label className={labelCls}>Cash Component</label>
-                                <IndianCurrencyInput value={form.cash_component} onChange={val => set("cash_component", val)} placeholder="If applicable" className={inputCls} />
-                              </div>
-                              <div>
-                                <label className={labelCls}>Cash Payment Date</label>
-                                <input type="date" value={form.cash_component_date} onChange={e => set("cash_component_date", e.target.value)} className={inputCls} />
-                              </div>
-                              <div>
-                                <label className={labelCls}>Cash Remarks</label>
-                                <input value={form.cash_component_remarks} onChange={e => set("cash_component_remarks", e.target.value)} placeholder="Remarks" className={inputCls} />
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Auto Calculated Financial Summary */}
-                          <div className={`border-t pt-6 ${divider}`}>
-                            <p className={sectionTitle}><FaMoneyBillWave className="inline mr-2" />Financial Summary (Auto-Calculated)</p>
-                            {(() => {
-                              const agreementValue = toNumber(form.agreement_value);
-                              const ocrReceived = toNumber(form.ocr_amount);
-                              const cashComponent = toNumber(form.cash_component);
-                              const loanSanction = toNumber(form.sanction_amount);
-                              const loanDisbursed = toNumber(form.disbursement_amount);
-                              const sdrPaid = toNumber(form.sdr_amount);
-                              const totalReceived = ocrReceived + cashComponent + loanDisbursed + sdrPaid;
-                              const balanceReceivable = agreementValue - totalReceived;
-                              const rows: [string, number][] = [
-                                ["Agreement Value", agreementValue],
-                                ["OCR Received", ocrReceived],
-                                ["Cash Component", cashComponent],
-                                ["Loan Sanction", loanSanction],
-                                ["Loan Disbursed", loanDisbursed],
-                                ["SDR Paid", sdrPaid],
-                                ["Total Received", totalReceived],
-                                ["Balance Receivable", balanceReceivable],
-                              ];
-                              return (
-                                <div className={`rounded-xl border p-4 grid grid-cols-2 sm:grid-cols-4 gap-4 ${isDark ? "bg-[#121218] border-[#2A2A35]" : "bg-[#F8FAFC] border-[#E5E7EB]"}`}>
-                                  {rows.map(([label, val]) => (
-                                    <div key={label}>
-                                      <p className={`text-[10px] font-semibold uppercase tracking-wide mb-0.5 ${textMuted}`}>{label}</p>
-                                      <p className={`font-bold text-sm ${label === "Balance Receivable" && val > 0 ? "text-amber-500" : label === "Total Received" ? "text-green-500" : textMain}`}>{formatINR(val)}</p>
-                                    </div>
-                                  ))}
-                                </div>
-                              );
-                            })()}
-                          </div>
-
-                          {/* Registration Details */}
-                          <div className={`border-t pt-6 ${divider}`}>
-                            <p className={sectionTitle}>Registration Details</p>
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                               <div>
                                 <label className={labelCls}>Expected Registration Date</label>
                                 <input type="date" value={form.expected_registration_date} onChange={e => set("expected_registration_date", e.target.value)} className={inputCls} />
@@ -1131,24 +1468,43 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                                 <input type="date" value={form.actual_registration_date} onChange={e => set("actual_registration_date", e.target.value)} className={inputCls} />
                               </div>
                               <div>
-                                <label className={labelCls}>Registration Status</label>
-                                <select value={form.registration_status} onChange={e => set("registration_status", e.target.value)} className={inputCls}>
-                                  <option value="Pending">Pending</option>
-                                  <option value="Scheduled">Scheduled</option>
-                                  <option value="Completed">Completed</option>
-                                </select>
-                              </div>
-                            </div>
-                            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                              <div>
-                                <label className={labelCls}>Registration Number</label>
-                                <input value={form.registration_number} onChange={e => set("registration_number", e.target.value)} placeholder="Registration No." className={inputCls} />
-                              </div>
-                              <div>
                                 <label className={labelCls}>Registration Remarks</label>
                                 <input value={form.registration_remarks} onChange={e => set("registration_remarks", e.target.value)} placeholder="Remarks" className={inputCls} />
                               </div>
                             </div>
+                          </div>
+
+                          {/* ── Section 5: Additional Direct Payment (collapsible, optional) ── */}
+                          <div className={`border-t pt-6 ${divider}`}>
+                            <button
+                              type="button"
+                              onClick={() => setShowAdditionalPayment(v => !v)}
+                              className={`flex items-center gap-2 text-sm font-bold uppercase tracking-wider ${isDark ? "text-[#d4006e]" : "text-[#9E217B]"}`}
+                            >
+                              <FaChevronRight className={`text-[10px] transition-transform ${showAdditionalPayment ? "rotate-90" : ""}`} />
+                              Additional Direct Payment (Optional)
+                            </button>
+                            {showAdditionalPayment && (
+                              <div className="mt-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                  <div>
+                                    <label className={labelCls}>Amount</label>
+                                    <IndianCurrencyInput value={form.cash_component} onChange={val => set("cash_component", val)} placeholder="If applicable" className={inputCls} />
+                                  </div>
+                                  <div>
+                                    <label className={labelCls}>Date</label>
+                                    <input type="date" value={form.cash_component_date} onChange={e => set("cash_component_date", e.target.value)} className={inputCls} />
+                                  </div>
+                                  <div>
+                                    <label className={labelCls}>Remarks</label>
+                                    <input value={form.cash_component_remarks} onChange={e => set("cash_component_remarks", e.target.value)} placeholder="Remarks" className={inputCls} />
+                                  </div>
+                                </div>
+                                <p className={`mt-2 text-[11px] flex items-center gap-1.5 ${isDark ? "text-amber-400" : "text-amber-600"}`}>
+                                  ⚠ This payment is outside the agreement value.
+                                </p>
+                              </div>
+                            )}
                           </div>
 
                           {/* Bank Loan Details */}
@@ -1254,6 +1610,46 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                                       </select>
                                     </div>
                                   </div>
+                                  <p className={`mt-3 text-[11px] flex items-start gap-1.5 ${textMuted}`}>
+                                    <span>ℹ</span>
+                                    <span>Disbursement tranches are tracked in the Loan &amp; Deal section after the booking is confirmed. This captures the initial/first disbursement only.</span>
+                                  </p>
+                                </div>
+
+                                {/* EMI Details */}
+                                <div className={`border-t pt-4 mt-2 ${divider}`}>
+                                  <p className={`text-xs font-bold uppercase tracking-wider mb-3 ${accent}`}>EMI Details</p>
+                                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                    <div>
+                                      <label className={labelCls}>Interest Rate (%)</label>
+                                      <input type="number" step="0.01" value={form.interest_rate} onChange={e => set("interest_rate", e.target.value)} placeholder="8.5" className={inputCls} />
+                                    </div>
+                                    <div>
+                                      <label className={labelCls}>Tenure (months)</label>
+                                      <input type="number" value={form.loan_tenure_months} onChange={e => set("loan_tenure_months", e.target.value)} placeholder="240" className={inputCls} />
+                                    </div>
+                                    <div>
+                                      <label className={labelCls}>EMI Start Date</label>
+                                      <input type="date" value={form.emi_start_date} onChange={e => set("emi_start_date", e.target.value)} className={inputCls} />
+                                    </div>
+                                  </div>
+                                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                    <div>
+                                      <label className={labelCls}>Pre-EMI Amount <span className="font-normal opacity-70">(auto)</span></label>
+                                      <input readOnly value={formatINR(toNumber(form.pre_emi_amount))} className={`${inputCls} opacity-80 cursor-default`} />
+                                    </div>
+                                    <div>
+                                      <label className={labelCls}>Full EMI Amount <span className="font-normal opacity-70">(auto)</span></label>
+                                      <input readOnly value={formatINR(toNumber(form.emi_amount))} className={`${inputCls} opacity-80 cursor-default`} />
+                                    </div>
+                                    <div>
+                                      <label className={labelCls}>Payment Type</label>
+                                      <select value={form.payment_type} onChange={e => set("payment_type", e.target.value)} className={inputCls}>
+                                        <option value="Pre-EMI">Pre-EMI</option>
+                                        <option value="Full EMI">Full EMI</option>
+                                      </select>
+                                    </div>
+                                  </div>
                                 </div>
                               </div>
                             )}
@@ -1284,6 +1680,128 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                                 ))}
                               </div>
                             )}
+                          </div>
+
+                          {/* ── Section 7: Financial Summary (accounting-correct) ── */}
+                          <div className={`border-t pt-6 ${divider}`}>
+                            <p className={sectionTitle}><FaMoneyBillWave className="inline mr-2" />Financial Summary <span className="font-normal normal-case opacity-70">(auto-calculated)</span></p>
+                            <p className={`text-xs mb-4 ${textMuted}`}>
+                              Developer revenue (agreement + GST) is kept separate from government pass-through
+                              (stamp duty &amp; registration) and other charges, so collection figures never overstate
+                              the developer&apos;s income.
+                            </p>
+                            {(() => {
+                              const cost = computeCostBreakdown(form);
+                              const grossReceivable = cost.agreementValue + cost.gstAmount;
+                              const govtTotal = cost.stampDuty + cost.registrationFee;
+                              const othersTotal = cost.legalCharges + cost.maintenanceDeposit + cost.possessionCharges + cost.customChargesTotal;
+                              const ownPaid = toNumber(form.token_amount) + toNumber(form.booking_amount) + toNumber(form.ocr_amount) + toNumber(form.cash_component);
+                              const sanctioned = form.loan_required ? toNumber(form.sanction_amount) : 0;
+                              const disbursed = form.loan_required ? toNumber(form.disbursement_amount) : 0;
+                              const remainingOcr = Math.max(cost.ownContributionRequired - ownPaid, 0);
+                              const totalReceived = ownPaid + disbursed;
+                              const balance = Math.max(cost.totalCost - totalReceived, 0);
+                              const Line = ({ label, value, strong, color }: { label: string; value: number; strong?: boolean; color?: string }) => (
+                                <div className="flex items-center justify-between px-4 py-1.5">
+                                  <span className={`text-xs ${strong ? `font-bold ${textMain}` : textMuted}`}>{label}</span>
+                                  <span className={`text-xs ${strong ? "font-extrabold" : "font-semibold"} ${color || textMain}`}>{formatINR(value)}</span>
+                                </div>
+                              );
+                              const Head = ({ children }: { children: React.ReactNode }) => (
+                                <p className={`px-4 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider ${accent}`}>{children}</p>
+                              );
+                              return (
+                                <div className={`rounded-xl border overflow-hidden ${isDark ? "bg-[#121218] border-[#2A2A35]" : "bg-white border-[#E5E7EB]"}`}>
+                                  <Head>Developer Revenue</Head>
+                                  <Line label="Agreement Value" value={cost.agreementValue} />
+                                  <Line label={`+ GST (${cost.gstRate}%)`} value={cost.gstAmount} />
+                                  <Line label="= Gross Receivable" value={grossReceivable} strong />
+
+                                  <div className={`border-t mt-1 ${divider}`} />
+                                  <Head>Government Charges (Pass-Through)</Head>
+                                  <Line label="Stamp Duty" value={cost.stampDuty} />
+                                  <Line label="Registration Fee" value={cost.registrationFee} />
+                                  <Line label="= Govt Total" value={govtTotal} strong />
+
+                                  <div className={`border-t mt-1 ${divider}`} />
+                                  <Head>Other Charges</Head>
+                                  <Line label="Legal + Maintenance + Possession" value={cost.legalCharges + cost.maintenanceDeposit + cost.possessionCharges} />
+                                  <Line label="Custom Charges" value={cost.customChargesTotal} />
+                                  <Line label="= Others Total" value={othersTotal} strong />
+
+                                  <div className={isDark ? "bg-[#14141B] border-t border-[#2A2A35]" : "bg-[#F8FAFC] border-t border-[#E5E7EB]"}>
+                                    <Line label="TOTAL COST TO CUSTOMER" value={cost.totalCost} strong />
+                                  </div>
+
+                                  <div className={`border-t mt-1 ${divider}`} />
+                                  <Head>Funding</Head>
+                                  <Line label="Own Contribution (paid)" value={ownPaid} color="text-green-500" />
+                                  {form.loan_required && <Line label="Loan (sanctioned)" value={sanctioned} />}
+                                  {form.loan_required && <Line label="Loan (disbursed)" value={disbursed} color="text-green-500" />}
+                                  <Line label="Remaining OCR needed" value={remainingOcr} color={remainingOcr > 0 ? "text-amber-500" : "text-green-500"} />
+
+                                  <div className={`border-t mt-1 ${divider}`} />
+                                  <Head>Collection Status</Head>
+                                  <Line label="Total Received" value={totalReceived} color="text-green-500" />
+                                  <Line label="Total Outstanding" value={balance} color={balance > 0 ? "text-amber-500" : "text-green-500"} />
+
+                                  <div className={isDark ? "bg-[#14141B] border-t border-[#2A2A35]" : "bg-[#F8FAFC] border-t border-[#E5E7EB]"}>
+                                    <Line label="BALANCE RECEIVABLE" value={balance} strong color={balance > 0 ? "text-amber-500" : textMain} />
+                                  </div>
+                                </div>
+                              );
+                            })()}
+
+                            {/* Revenue recognition overrides — preserved so management can still
+                                mark which items count toward realized developer revenue downstream. */}
+                            <details className={`mt-4 rounded-xl border ${isDark ? "border-[#2A2A35] bg-[#121218]" : "border-[#E5E7EB] bg-white"}`}>
+                              <summary className={`cursor-pointer px-4 py-2.5 text-xs font-bold uppercase tracking-wider ${textMuted}`}>
+                                Revenue Recognition (advanced)
+                              </summary>
+                              <div className={`px-4 pb-3 pt-1 border-t ${divider}`}>
+                                <p className={`text-[11px] mb-2 ${textMuted}`}>
+                                  Tick an item to count it toward realized revenue once it is received/completed.
+                                  Loan Sanction is informational (bank approval, not cash).
+                                </p>
+                                {computeFinancials(form).items.map(item => (
+                                  <label key={item.key} className="flex items-center gap-2 py-1 cursor-pointer">
+                                    <input type="checkbox" checked={item.included} onChange={e => set(item.includeKey, e.target.checked)} className="w-4 h-4 cursor-pointer" />
+                                    <span className={`text-xs ${textMain}`}>{item.label}</span>
+                                    {item.informational && <span className={`text-[9px] uppercase ${textMuted}`}>(info)</span>}
+                                    <span className={`ml-auto text-[11px] ${textMuted}`}>{formatINR(item.amount)}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            </details>
+                          </div>
+
+                          {/* ── Section 3C: Possession Details ── */}
+                          <div className={`border-t pt-6 ${divider}`}>
+                            <p className={sectionTitle}>Possession Details</p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              <div>
+                                <label className={labelCls}>Expected Possession Date</label>
+                                <input type="date" value={form.expected_possession_date} onChange={e => set("expected_possession_date", e.target.value)} className={inputCls} />
+                              </div>
+                              <div>
+                                <label className={labelCls}>Possession Status</label>
+                                <select value={form.possession_status} onChange={e => set("possession_status", e.target.value)} className={inputCls}>
+                                  {["Pre-Construction", "Under Construction", "Nearing Completion", "Ready for Possession", "Possession Given", "Occupied"].map(v => <option key={v} value={v}>{v}</option>)}
+                                </select>
+                              </div>
+                            </div>
+                            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              <div>
+                                <label className={labelCls}>OC / CC Status</label>
+                                <select value={form.oc_cc_status} onChange={e => set("oc_cc_status", e.target.value)} className={inputCls}>
+                                  {["Pending", "Applied", "Received"].map(v => <option key={v} value={v}>{v}</option>)}
+                                </select>
+                              </div>
+                              <div>
+                                <label className={labelCls}>OC / CC Date</label>
+                                <input type="date" value={form.oc_cc_date} onChange={e => set("oc_cc_date", e.target.value)} className={inputCls} />
+                              </div>
+                            </div>
                           </div>
                         </div>
                       )}
@@ -1459,7 +1977,8 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                                 { label: "Property", val: `${form.property_type}, Flat ${form.flat_number}` },
                                 { label: "Floor", val: form.floor_number },
                                 { label: "Carpet Area", val: form.carpet_area ? `${form.carpet_area} sq.ft.` : "-" },
-                                { label: "Booking Amount", val: form.consideration_value ? `₹${form.consideration_value}` : "-" },
+                                { label: "Agreement Value", val: form.agreement_value ? `₹${form.agreement_value}` : "-" },
+                                { label: "Booking Amount", val: form.booking_amount ? `₹${form.booking_amount}` : "-" },
                                 { label: "Booking Source", val: form.booking_source },
                                 { label: "Date", val: form.application_date },
                               ].map(({ label, val }) => (
@@ -1493,6 +2012,80 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                               </div>
                             </div>
                           ))}
+
+                          {/* Cost Breakdown card */}
+                          {toNumber(form.agreement_value) > 0 && (() => {
+                            const cost = computeCostBreakdown(form);
+                            const rows: [string, number][] = [
+                              ["Agreement Value", cost.agreementValue],
+                              [`GST (${cost.gstRate}%)`, cost.gstAmount],
+                              ["Stamp Duty", cost.stampDuty],
+                              ["Registration Fee", cost.registrationFee],
+                              ["Legal Charges", cost.legalCharges],
+                              ["Maintenance Deposit", cost.maintenanceDeposit],
+                              ["Custom Charges", cost.customChargesTotal],
+                            ];
+                            return (
+                              <div className={`rounded-xl border p-4 ${isDark ? "border-[#2A2A35] bg-[#121218]" : "border-[#E5E7EB] bg-white"}`}>
+                                <p className={`text-xs font-bold uppercase tracking-wider mb-3 ${accent}`}>Cost Breakdown</p>
+                                {rows.filter(([, v]) => v > 0).map(([k, v]) => (
+                                  <div key={k} className="flex items-center justify-between py-0.5">
+                                    <span className={`text-xs ${textMuted}`}>{k}</span>
+                                    <span className={`text-xs font-semibold ${textMain}`}>{formatINR(v)}</span>
+                                  </div>
+                                ))}
+                                <div className={`flex items-center justify-between mt-2 pt-2 border-t ${divider}`}>
+                                  <span className={`text-xs font-bold ${textMain}`}>Total Cost to Customer</span>
+                                  <span className={`text-sm font-extrabold ${textMain}`}>{formatINR(cost.totalCost)}</span>
+                                </div>
+                              </div>
+                            );
+                          })()}
+
+                          {/* Loan summary card */}
+                          {form.loan_required && (
+                            <div className={`rounded-xl border p-4 ${isDark ? "border-[#2A2A35] bg-[#121218]" : "border-[#E5E7EB] bg-white"}`}>
+                              <p className={`text-xs font-bold uppercase tracking-wider mb-3 ${accent}`}>Loan Summary</p>
+                              <div className="grid grid-cols-2 gap-2">
+                                {[
+                                  ["Bank", form.bank_name],
+                                  ["Loan Type", form.loan_type],
+                                  ["Sanction Amount", form.sanction_amount ? formatINR(toNumber(form.sanction_amount)) : ""],
+                                  ["Loan Status", form.loan_status],
+                                  ["Interest Rate", form.interest_rate ? `${form.interest_rate}%` : ""],
+                                  ["Tenure", form.loan_tenure_months ? `${form.loan_tenure_months} months` : ""],
+                                  ["Pre-EMI", toNumber(form.pre_emi_amount) > 0 ? formatINR(toNumber(form.pre_emi_amount)) : ""],
+                                  ["Full EMI", toNumber(form.emi_amount) > 0 ? formatINR(toNumber(form.emi_amount)) : ""],
+                                  ["Payment Type", form.payment_type],
+                                ].filter(([, v]) => v).map(([k, v]) => (
+                                  <div key={k as string}>
+                                    <p className={`text-[10px] font-semibold ${textMuted}`}>{k}</p>
+                                    <p className={`text-sm font-medium ${textMain}`}>{v}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Possession card */}
+                          {(form.expected_possession_date || form.possession_status !== "Pre-Construction" || form.oc_cc_status !== "Pending") && (
+                            <div className={`rounded-xl border p-4 ${isDark ? "border-[#2A2A35] bg-[#121218]" : "border-[#E5E7EB] bg-white"}`}>
+                              <p className={`text-xs font-bold uppercase tracking-wider mb-3 ${accent}`}>Possession</p>
+                              <div className="grid grid-cols-2 gap-2">
+                                {[
+                                  ["Expected Possession", form.expected_possession_date],
+                                  ["Possession Status", form.possession_status],
+                                  ["OC / CC Status", form.oc_cc_status],
+                                  ["OC / CC Date", form.oc_cc_date],
+                                ].filter(([, v]) => v).map(([k, v]) => (
+                                  <div key={k as string}>
+                                    <p className={`text-[10px] font-semibold ${textMuted}`}>{k}</p>
+                                    <p className={`text-sm font-medium ${textMain}`}>{v}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
 
                           {/* Payment table summary */}
                           {form.payment_details.some(r => r.amount) && (

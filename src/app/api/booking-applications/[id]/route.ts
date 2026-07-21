@@ -42,13 +42,35 @@ export async function GET(
               l.loan_amount, l.sanction_amount, l.sanction_date, l.sanction_status, l.loan_status,
               l.expected_disbursement_date, l.actual_disbursement_date,
               l.expected_disbursement_amount, l.disbursement_amount, l.disbursement_status,
+              l.interest_rate, l.loan_tenure_months, TO_CHAR(l.emi_start_date, 'YYYY-MM-DD') AS emi_start_date, l.payment_type, l.pre_emi_amount, l.emi_amount,
               r.expected_registration_date, r.actual_registration_date, r.registration_status,
               r.registration_number, r.registration_remarks,
+              r.stamp_duty_amount, r.stamp_duty_paid_date, r.stamp_duty_status, r.stamp_duty_payment_mode, r.stamp_duty_receipt_no,
+              r.registration_fee_amount, r.registration_fee_paid_date, r.registration_fee_status, r.registration_fee_payment_mode,
               COALESCE(
                 (SELECT json_agg(json_build_object('charge_name', cc.charge_name, 'amount', cc.amount, 'remarks', cc.remarks))
                  FROM booking_custom_charges cc WHERE cc.booking_id = b.id),
                 '[]'
               ) AS custom_charges,
+              COALESCE(
+                (SELECT json_agg(json_build_object(
+                  'id', pm.id, 'milestone_name', pm.milestone_name, 'milestone_order', pm.milestone_order,
+                  'percentage', pm.percentage, 'demand_amount', pm.demand_amount, 'demand_date', pm.demand_date,
+                  'due_date', pm.due_date, 'paid_amount', pm.paid_amount, 'paid_date', pm.paid_date,
+                  'status', pm.status, 'remarks', pm.remarks
+                ) ORDER BY pm.milestone_order)
+                 FROM booking_payment_milestones pm WHERE pm.booking_id = b.id),
+                '[]'
+              ) AS payment_milestones,
+              COALESCE(
+                (SELECT json_agg(json_build_object(
+                  'id', t.id, 'payment_id', t.payment_id, 'tds_amount', t.tds_amount, 'tds_rate', t.tds_rate,
+                  'form_26qb_filed', t.form_26qb_filed, 'form_26qb_date', t.form_26qb_date,
+                  'acknowledgement_no', t.acknowledgement_no, 'financial_year', t.financial_year, 'quarter', t.quarter
+                ) ORDER BY t.created_at)
+                 FROM booking_tds_records t WHERE t.booking_id = b.id),
+                '[]'
+              ) AS tds_records,
               json_build_object(
                'agreement_value', clv.agreement_value,
                'gross_collection', clv.gross_collection,
@@ -56,7 +78,14 @@ export async function GET(
                'government_charges', clv.government_charges,
                'refunds', clv.refunds,
                'net_collection', clv.net_collection,
-               'outstanding_balance', clv.outstanding_balance
+               'outstanding_balance', clv.outstanding_balance,
+               'total_cost_to_customer', tcv.total_cost_to_customer,
+               'stamp_duty', tcv.stamp_duty,
+               'registration_fee', tcv.registration_fee,
+               'gst_amount', tcv.gst_amount,
+               'required_own_contribution', tcv.required_own_contribution,
+               'actual_own_contribution', tcv.actual_own_contribution,
+               'total_loan_disbursed', tcv.total_loan_disbursed
              ) AS financial_summary
        FROM booking_applications b
        LEFT JOIN walkin_enquiries w ON w.id = b.lead_id
@@ -64,6 +93,7 @@ export async function GET(
        LEFT JOIN booking_loan_details l ON l.booking_id = b.id
        LEFT JOIN booking_registration_details r ON r.booking_id = b.id
        LEFT JOIN customer_ledger_view clv ON clv.booking_id = b.id
+       LEFT JOIN booking_total_cost_view tcv ON tcv.booking_id = b.id
        WHERE b.id = $1`,
       [Number(id)]
     );
@@ -110,8 +140,11 @@ export async function PUT(
               l.loan_amount, l.sanction_amount, TO_CHAR(l.sanction_date, 'YYYY-MM-DD') AS sanction_date, l.sanction_status, l.loan_status,
               TO_CHAR(l.expected_disbursement_date, 'YYYY-MM-DD') AS expected_disbursement_date, TO_CHAR(l.actual_disbursement_date, 'YYYY-MM-DD') AS actual_disbursement_date,
               l.expected_disbursement_amount, l.disbursement_amount, l.disbursement_status,
+              l.interest_rate, l.loan_tenure_months, TO_CHAR(l.emi_start_date, 'YYYY-MM-DD') AS emi_start_date, l.payment_type, l.pre_emi_amount, l.emi_amount,
               TO_CHAR(r.expected_registration_date, 'YYYY-MM-DD') AS expected_registration_date, TO_CHAR(r.actual_registration_date, 'YYYY-MM-DD') AS actual_registration_date, r.registration_status,
               r.registration_number, r.registration_remarks,
+              r.stamp_duty_amount, TO_CHAR(r.stamp_duty_paid_date, 'YYYY-MM-DD') AS stamp_duty_paid_date, r.stamp_duty_status, r.stamp_duty_payment_mode, r.stamp_duty_receipt_no,
+              r.registration_fee_amount, TO_CHAR(r.registration_fee_paid_date, 'YYYY-MM-DD') AS registration_fee_paid_date, r.registration_fee_status, r.registration_fee_payment_mode,
               TO_CHAR(b.booking_date, 'YYYY-MM-DD') AS booking_date,
               TO_CHAR(b.application_date, 'YYYY-MM-DD') AS application_date
        FROM booking_applications b
@@ -181,6 +214,16 @@ export async function PUT(
       payment_details[i].attachment_url = await handleUpload(`payment_${i}_attachment_file`, existingPayment.attachment_url);
     }
 
+    // Derived financials — recomputed on every save so they never drift from agreement_value.
+    // Explicit client overrides (non-zero) win; otherwise Maharashtra defaults apply.
+    const agreementValue = cleanNum(getStr("agreement_value"));
+    const gstRate = getStr("gst_rate") ? cleanNum(getStr("gst_rate")) : (Number(currentData.gst_rate) || 5);
+    const gstAmount = agreementValue * gstRate / 100;
+    const stampDutyInput = cleanNum(getStr("stamp_duty_amount"));
+    const stampDutyAmount = stampDutyInput > 0 ? stampDutyInput : agreementValue * 0.05;
+    const registrationFeeInput = cleanNum(getStr("registration_fee_amount"));
+    const registrationFeeAmount = registrationFeeInput > 0 ? registrationFeeInput : Math.min(agreementValue * 0.01, 30000);
+
     // Extract all strings
     const fields = {
       primary_name: getStr("primary_name"),
@@ -215,10 +258,27 @@ export async function PUT(
       sdr: getStr("sdr"),
       gst: getStr("gst"),
       booking_date: getStr("booking_date") || null,
-      agreement_value: cleanNum(getStr("agreement_value")),
+      agreement_value: agreementValue,
       booking_amount: cleanNum(getStr("booking_amount")),
       booking_remarks: getStr("booking_remarks"),
       internal_notes: getStr("internal_notes"),
+      revenue_include_ocr: getStr("revenue_include_ocr") === "true",
+      revenue_include_sdr: getStr("revenue_include_sdr") === "true",
+      revenue_include_cash: getStr("revenue_include_cash") === "true",
+      revenue_include_sanction: getStr("revenue_include_sanction") === "true",
+      revenue_include_disbursement: getStr("revenue_include_disbursement") === "true",
+      expected_possession_date: getStr("expected_possession_date") || null,
+      actual_possession_date: getStr("actual_possession_date") || null,
+      possession_status: getStr("possession_status") || currentData.possession_status || 'Pre-Construction',
+      oc_cc_status: getStr("oc_cc_status") || currentData.oc_cc_status || 'Pending',
+      oc_cc_date: getStr("oc_cc_date") || null,
+      possession_charges: cleanNum(getStr("possession_charges")),
+      maintenance_deposit: cleanNum(getStr("maintenance_deposit")),
+      legal_charges: cleanNum(getStr("legal_charges")),
+      gst_rate: gstRate,
+      gst_amount: gstAmount,
+      gst_paid: cleanNum(getStr("gst_paid")),
+      gst_status: getStr("gst_status") || currentData.gst_status || 'Pending',
       primary_aadhaar_front_url,
       primary_aadhaar_back_url,
       primary_pan_url,
@@ -257,6 +317,12 @@ export async function PUT(
       expected_disbursement_amount: cleanNum(getStr("expected_disbursement_amount")),
       disbursement_amount: cleanNum(getStr("disbursement_amount")),
       disbursement_status: getStr("disbursement_status") || 'Pending',
+      interest_rate: cleanNum(getStr("interest_rate")),
+      loan_tenure_months: cleanNum(getStr("loan_tenure_months")),
+      emi_start_date: getStr("emi_start_date") || null,
+      payment_type: getStr("payment_type") || 'Pre-EMI',
+      pre_emi_amount: cleanNum(getStr("pre_emi_amount")),
+      emi_amount: cleanNum(getStr("emi_amount")),
     };
 
     const regFields = {
@@ -265,6 +331,15 @@ export async function PUT(
       registration_status: getStr("registration_status") || 'Pending',
       registration_number: getStr("registration_number"),
       registration_remarks: getStr("registration_remarks"),
+      stamp_duty_amount: stampDutyAmount,
+      stamp_duty_paid_date: getStr("stamp_duty_paid_date") || null,
+      stamp_duty_status: getStr("stamp_duty_status") || currentData.stamp_duty_status || 'Pending',
+      stamp_duty_payment_mode: getStr("stamp_duty_payment_mode"),
+      stamp_duty_receipt_no: getStr("stamp_duty_receipt_no"),
+      registration_fee_amount: registrationFeeAmount,
+      registration_fee_paid_date: getStr("registration_fee_paid_date") || null,
+      registration_fee_status: getStr("registration_fee_status") || currentData.registration_fee_status || 'Pending',
+      registration_fee_payment_mode: getStr("registration_fee_payment_mode"),
     };
 
     const changed_fields: Record<string, any> = {};
@@ -381,6 +456,7 @@ export async function PUT(
         }
       };
 
+      await upsertLedger('token', 'CREDIT', finFields.token_amount, fields.booking_date, 'NO', 'Customer', null, null, null);
       await upsertLedger('booking_amount', 'CREDIT', fields.booking_amount, fields.booking_date, 'NO', 'Customer', null, null, fields.booking_remarks);
       await upsertLedger('ocr', 'CREDIT', finFields.ocr_amount, finFields.ocr_received_date, 'YES', 'Customer', null, finFields.ocr_payment_mode, finFields.ocr_remarks);
       await upsertLedger('sdr', 'CREDIT', finFields.sdr_amount, finFields.sdr_payment_date, 'NO', 'Customer', null, null, finFields.sdr_remarks);
