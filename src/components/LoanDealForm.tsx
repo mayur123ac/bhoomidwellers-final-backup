@@ -828,8 +828,18 @@ export default function LoanDealForm({ lead, booking, loanUpdate, user, isDark =
                   <option>Salaried</option><option>Self-employed</option>
                 </select>
               </div>
-              <div><label className={labelCls}>Monthly Income</label><input type="text" value={loanForm.income} onChange={e => updateLoanForm({ income: e.target.value })} className={inputCls} placeholder="e.g. 1L" /></div>
-              <div><label className={labelCls}>Existing EMIs</label><input type="text" value={loanForm.emi} onChange={e => updateLoanForm({ emi: e.target.value })} className={inputCls} placeholder="e.g. 15k" /></div>
+              <div><label className={labelCls}>Monthly Income</label><IndianCurrencyInput
+                value={loanForm.income}
+                onChange={val => updateLoanForm({ income: val })}
+                className={inputCls}
+                placeholder="Monthly Income"
+              /></div>
+              <div><label className={labelCls}>Existing EMIs</label><IndianCurrencyInput
+                value={loanForm.emi}
+                onChange={val => updateLoanForm({ income: val })}
+                className={inputCls}
+                placeholder="EXisting Emi"
+              /></div>
               <div><label className={labelCls}>CIBIL Score</label><input type="text" value={loanForm.cibil} onChange={e => updateLoanForm({ cibil: e.target.value })} className={inputCls} placeholder="e.g. 750" /></div>
             </div>
           </div>
