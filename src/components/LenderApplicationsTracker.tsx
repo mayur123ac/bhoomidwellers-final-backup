@@ -5,6 +5,7 @@
 // server-side, which copies its details into booking_loan_details / the draft (C1).
 import React, { useCallback, useEffect, useState } from "react";
 import { FaPlus, FaEdit, FaTrash, FaStar, FaRegStar, FaTimes } from "react-icons/fa";
+import IndianCurrencyInput from "./IndianCurrencyInput";
 
 export interface LoanApplication {
   id: number;
@@ -233,8 +234,8 @@ export default function LenderApplicationsTracker({ leadId, userName, userRole, 
             <div><label className={labelCls}>DSA / Agent Contact</label><input value={form.dsa_agent_contact} onChange={e => setForm(f => ({ ...f, dsa_agent_contact: e.target.value }))} className={inputCls} /></div>
             <div><label className={labelCls}>Loan Executive (Bank Officer)</label><input value={form.loan_executive} onChange={e => setForm(f => ({ ...f, loan_executive: e.target.value }))} className={inputCls} /></div>
             <div><label className={labelCls}>Loan Reference No.</label><input value={form.loan_reference_no} onChange={e => setForm(f => ({ ...f, loan_reference_no: e.target.value }))} className={inputCls} /></div>
-            <div><label className={labelCls}>Amount Requested</label><input value={form.amount_requested} onChange={e => setForm(f => ({ ...f, amount_requested: e.target.value }))} className={inputCls} placeholder="40,00,000" /></div>
-            <div><label className={labelCls}>Amount Sanctioned</label><input value={form.amount_sanctioned} onChange={e => setForm(f => ({ ...f, amount_sanctioned: e.target.value }))} className={inputCls} placeholder="38,00,000" /></div>
+            <div><label className={labelCls}>Amount Requested</label><IndianCurrencyInput value={form.amount_requested} onChange={val => setForm(f => ({ ...f, amount_requested: val }))} className={inputCls} placeholder="40,00,000" /></div>
+            <div><label className={labelCls}>Amount Sanctioned</label><IndianCurrencyInput value={form.amount_sanctioned} onChange={val => setForm(f => ({ ...f, amount_sanctioned: val }))} className={inputCls} placeholder="38,00,000" /></div>
             <div><label className={labelCls}>Interest Rate (%)</label><input type="number" step="0.01" value={form.interest_rate} onChange={e => setForm(f => ({ ...f, interest_rate: e.target.value }))} className={inputCls} placeholder="8.5" /></div>
             <div><label className={labelCls}>Tenure (months)</label><input type="number" value={form.tenure_months} onChange={e => setForm(f => ({ ...f, tenure_months: e.target.value }))} className={inputCls} placeholder="240" /></div>
             <div><label className={labelCls}>Application Date</label><input type="date" value={form.application_date} onChange={e => setForm(f => ({ ...f, application_date: e.target.value }))} className={inputCls} /></div>

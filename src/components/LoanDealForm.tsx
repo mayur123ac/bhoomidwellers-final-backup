@@ -422,7 +422,10 @@ export default function LoanDealForm({ lead, booking, loanUpdate, user, isDark =
       interest_rate: src?.interest_rate ? String(src.interest_rate) : "",
       loan_tenure_months: src?.loan_tenure_months ? String(src.loan_tenure_months) : "",
       expected_disbursement_date: dateOnly(src?.expected_disbursement_date),
-      expected_disbursement_amount: src?.expected_disbursement_amount ? String(src.expected_disbursement_amount) : "",
+      // Expected Disbursement Amount is a fresh planning input — always blank until
+      // typed, never pre-filled from a previously saved value (avoids showing a stale
+      // number the user didn't enter this session). Saving an empty field clears it.
+      expected_disbursement_amount: "",
       actual_disbursement_date: dateOnly(src?.actual_disbursement_date),
       disbursement_amount: src?.disbursement_amount ? String(src.disbursement_amount) : "",
       disbursement_status: src?.disbursement_status || "Pending",
@@ -836,9 +839,9 @@ export default function LoanDealForm({ lead, booking, loanUpdate, user, isDark =
               /></div>
               <div><label className={labelCls}>Existing EMIs</label><IndianCurrencyInput
                 value={loanForm.emi}
-                onChange={val => updateLoanForm({ income: val })}
+                onChange={val => updateLoanForm({ emi: val })}
                 className={inputCls}
-                placeholder="EXisting Emi"
+                placeholder="Existing Emi"
               /></div>
               <div><label className={labelCls}>CIBIL Score</label><input type="text" value={loanForm.cibil} onChange={e => updateLoanForm({ cibil: e.target.value })} className={inputCls} placeholder="e.g. 750" /></div>
             </div>
@@ -859,7 +862,12 @@ export default function LoanDealForm({ lead, booking, loanUpdate, user, isDark =
             <div className={`border-t pt-3 ${t.tableBorder}`}>
               <SectionHeader icon="💰" title="3. Loan Requirement" subtitle="What the customer is asking for." t={t} />
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div><label className={labelCls}>Required Loan Amount</label><input type="text" value={loanForm.amountReq} onChange={e => updateLoanForm({ amountReq: e.target.value })} className={inputCls} placeholder="e.g. 60L" /></div>
+                <div><label className={labelCls}>Required Loan Amount</label><IndianCurrencyInput
+                  value={loanForm.amountReq}
+                  onChange={val => updateLoanForm({ amountReq: val })}
+                  className={inputCls}
+                  placeholder="60,00,000"
+                /></div>
                 <div>
                   <label className={labelCls}>Loan Type</label>
                   <select value={dealForm.loan_type} onChange={e => updateDealForm({ loan_type: e.target.value })} className={selectCls}>
@@ -867,7 +875,7 @@ export default function LoanDealForm({ lead, booking, loanUpdate, user, isDark =
                     {LOAN_TYPE_OPTS.map(o => <option key={o}>{o}</option>)}
                   </select>
                 </div>
-                <div><label className={labelCls}>Preferred Bank (Optional)</label><input type="text" value={dealForm.bank_name} onChange={e => updateDealForm({ bank_name: e.target.value })} className={inputCls} placeholder="e.g. HDFC" /></div>
+                <div><label className={labelCls}>Preferred Bank</label><input type="text" value={dealForm.bank_name} onChange={e => updateDealForm({ bank_name: e.target.value })} className={inputCls} placeholder="e.g. HDFC" /></div>
               </div>
             </div>
 
