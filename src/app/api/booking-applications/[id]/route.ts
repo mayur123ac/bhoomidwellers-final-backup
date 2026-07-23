@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
 import { uploadBufferToR2 } from "@/lib/r2";
+import { syncBookingUnit, releaseUnitForBooking, flatIdentityChanged } from "@/lib/inventorySync";
 
 export const dynamic = "force-dynamic";
 
@@ -373,6 +374,25 @@ export async function PUT(
     diff(regFields, currentData);
 
     const updatedRow = await transaction(async (client) => {
+      // ── Cancellation short-circuit ──
+      // A cancel action sends only booking_status; running the normal full-form update
+      // below would blank every field the client didn't resend (plus the financial / loan
+      // / registration tables). So when a booking is being cancelled we ONLY flip the
+      // status and release its inventory unit, then return — skipping the destructive
+      // writes. Same transaction, so the release rolls back with the status change.
+      const cancelStatus = getStr("booking_status");
+      if (cancelStatus === "Cancelled" && currentData.booking_status !== "Cancelled") {
+        await client.query(`UPDATE booking_applications SET booking_status = 'Cancelled', updated_at = NOW() WHERE id = $1`, [Number(id)]);
+        await releaseUnitForBooking(client, Number(id), `booking #${id} cancelled`, user_name);
+        await client.query(
+          `INSERT INTO booking_history (booking_id, updated_by, user_role, changed_fields)
+           VALUES ($1, $2, $3, $4)`,
+          [Number(id), user_name, user_role, JSON.stringify({ booking_status: { from: currentData.booking_status, to: "Cancelled" } })],
+        );
+        const cancelledRow = await client.query(`SELECT * FROM booking_applications WHERE id = $1`, [Number(id)]);
+        return cancelledRow.rows[0];
+      }
+
       // 1. Update Booking Applications
       const baSet: string[] = [];
       const baVals: any[] = [];
@@ -383,6 +403,26 @@ export async function PUT(
       baSet.push(`updated_at = NOW()`);
       baVals.push(Number(id));
       await client.query(`UPDATE booking_applications SET ${baSet.join(", ")} WHERE id = $${baVals.length}`, baVals);
+
+      // ── Inventory sync: on a flat change, release the previously linked unit and book
+      // the newly chosen one (same transaction as the booking write). Cancellation is
+      // handled by the short-circuit at the top of this transaction.
+      if (flatIdentityChanged(currentData, fields)) {
+        await releaseUnitForBooking(client, Number(id), `flat changed on booking #${id}`, user_name);
+        await syncBookingUnit(client, {
+          bookingId: Number(id),
+          leadId: currentData.lead_id,
+          actor: user_name,
+          apartment_name: fields.apartment_name,
+          project_name: fields.project_name,
+          tower: fields.tower,
+          wing: fields.wing,
+          property_type: fields.property_type,
+          floor_number: fields.floor_number,
+          flat_number: fields.flat_number,
+          carpet_area: fields.carpet_area,
+        });
+      }
 
       // 2. Update Financials
       const fSet: string[] = [];

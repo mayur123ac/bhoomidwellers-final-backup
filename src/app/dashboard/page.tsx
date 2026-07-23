@@ -9,7 +9,7 @@ import {
   FaThLarge, FaClipboardList, FaUsers, FaIdCard,
   FaSearch, FaBell, FaChevronLeft, FaPhoneAlt, FaComments,
   FaCheckCircle, FaCalendarAlt, FaTimes,
-  FaFileInvoice, FaFileInvoiceDollar, FaPaperPlane, FaMicrophone, FaWhatsapp, FaTable, FaChartPie, FaEyeSlash, FaUniversity, FaHandshake, FaExchangeAlt, FaBriefcase, FaDownload, FaCog, FaMapMarkerAlt, FaSignal, FaUserClock, FaTrashAlt
+  FaFileInvoice, FaFileInvoiceDollar, FaPaperPlane, FaMicrophone, FaWhatsapp, FaTable, FaChartPie, FaEyeSlash, FaUniversity, FaHandshake, FaExchangeAlt, FaBriefcase, FaDownload, FaCog, FaMapMarkerAlt, FaSignal, FaUserClock, FaTrashAlt, FaBoxes
 } from "react-icons/fa";
 import { FaWandMagicSparkles } from "react-icons/fa6";
 import {
@@ -25,6 +25,7 @@ import CrmUpdatesNotification from "@/components/CrmUpdatesNotification";
 import PermanentLeadDeleteDialog from "@/components/PermanentLeadDeleteDialog";
 import LoanDealForm from "@/components/LoanDealForm";
 import LoanDealView from "@/components/LoanDealView";
+import InventoryManagementView from "@/components/InventoryManagementView";
 // import ActivityTimeline from "@/components/ActivityTimeline";
 import {
   handleMarkLostLead as markLostLeadApi,
@@ -40,6 +41,26 @@ const RevenueIntelligenceView = dynamic(() => import("./RevenueIntelligenceView"
 const GeoAnalyticsView = dynamic(() => import("./GeoAnalyticsView"), { ssr: false });
 const LiveActivityView = dynamic(() => import("./LiveActivityView"), { ssr: false });
 const SiteVisitOverview = dynamic(() => import("./SiteVisitOverview"), { ssr: false });
+
+// Cancel a booking (admin action). The PUT short-circuits on booking_status=Cancelled:
+// it only flips status + releases the linked inventory unit, so this minimal payload is safe.
+async function cancelBookingViaApi(
+  bookingId: number | string,
+  user: { name?: string; role?: string } | null | undefined,
+): Promise<{ success: boolean; message?: string }> {
+  try {
+    const fd = new FormData();
+    fd.set("booking_status", "Cancelled");
+    fd.set("user_name", user?.name || "");
+    fd.set("user_role", user?.role || "");
+    const res = await fetch(`/api/booking-applications/${bookingId}`, { method: "PUT", body: fd });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || !json.success) return { success: false, message: json.message || "Failed to cancel booking" };
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, message: e?.message || "Network error while cancelling booking" };
+  }
+}
 
 // ─── SUN/MOON ICONS ───────────────────────────────────────────────────────────
 const SunIcon = () => (
@@ -661,6 +682,7 @@ function AdminAtlasDashboardContent() {
   const menuItems = [
     { id: "dashboard", icon: FaThLarge, label: "Overview" },
     { id: "revenue_intelligence", icon: FaFileInvoiceDollar, label: "Revenue Intelligence" },
+    { id: "inventory", icon: FaBoxes, label: "Inventory" },
     { id: "receptionist", icon: FaClipboardList, label: "Receptionist" },
     { id: "sales", icon: FaUsers, label: "Sales Managers" },
     { id: "site_head", icon: FaUniversity, label: "Site Heads" },
@@ -767,7 +789,7 @@ function AdminAtlasDashboardContent() {
             {menuItems.slice(0, -1).filter(i => i.label.toLowerCase().includes(navSearch.toLowerCase())).map((item, idx) => {
               const isActive = activeView === item.id;
               const groupOf: Record<string, string> = {
-                dashboard: "Workspace", revenue_intelligence: "Workspace",
+                dashboard: "Workspace", revenue_intelligence: "Workspace", inventory: "Workspace",
                 receptionist: "Team", sales: "Team", site_head: "Team",
                 site_visit_overview: "Insights", attendance: "Insights", monitoring: "Insights", live_activity: "Insights", geo: "Insights",
                 caller: "Admin", employees: "Admin",
@@ -1108,6 +1130,11 @@ function AdminAtlasDashboardContent() {
                 <p className={theme.textMuted}>You do not have permission to access this module.</p>
               </div>
             )
+          )}
+          {activeView === "inventory" && (
+            <div className="flex flex-col h-full overflow-hidden p-1">
+              <InventoryManagementView user={user} isDark={isDark} t={theme} />
+            </div>
           )}
           {activeView === "sales" && <AdminSalesView managers={managers} allLeads={allLeads} followUps={followUps} isLoading={isLoading} adminUser={user} refetch={refetch} theme={theme} isDark={isDark} />}
           {activeView === "site_head" && <AdminSiteHeadView siteHeads={siteHeads} allLeads={allLeads} followUps={followUps} isLoading={isLoading} adminUser={user} refetch={refetch} theme={theme} isDark={isDark} />}
@@ -3569,6 +3596,12 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                       userRole={adminUser?.role?.toLowerCase() || "admin"}
                       currentUser={adminUser}
                       onRefetch={() => { if (selectedLead) fetchBookingForLead(selectedLead.id); }}
+                      onCancel={async () => {
+                        if (!window.confirm("Cancel this booking? The unit will be released.")) return;
+                        const r = await cancelBookingViaApi(bookingData.id, adminUser);
+                        if (r.success) { showToast("Booking cancelled — unit released.", "red"); if (selectedLead) fetchBookingForLead(selectedLead.id); }
+                        else showToast(r.message || "Failed to cancel booking", "red");
+                      }}
                     />
                   </div>
                 </div>
@@ -4640,6 +4673,12 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                       userRole={adminUser?.role?.toLowerCase() || "admin"}
                       currentUser={adminUser}
                       onRefetch={() => { if (selectedLead) fetchBookingForLead(selectedLead.id); }}
+                      onCancel={async () => {
+                        if (!window.confirm("Cancel this booking? The unit will be released.")) return;
+                        const r = await cancelBookingViaApi(bookingData.id, adminUser);
+                        if (r.success) { showToast("Booking cancelled — unit released.", "red"); if (selectedLead) fetchBookingForLead(selectedLead.id); }
+                        else showToast(r.message || "Failed to cancel booking", "red");
+                      }}
                     />
                   </div>
                 </div>

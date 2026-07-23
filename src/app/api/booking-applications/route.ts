@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
 import { uploadBufferToR2 } from "@/lib/r2";
+import { syncBookingUnit } from "@/lib/inventorySync";
 
 export const dynamic = "force-dynamic";
 
@@ -762,6 +763,17 @@ export async function POST(req: NextRequest) {
           joint_applicants = $4, signature_data = $5
         WHERE id = $6
       `, [updatesForDb.primary_pan_url || null, updatesForDb.primary_aadhaar_front_url || null, updatesForDb.primary_aadhaar_back_url || null, JSON.stringify(joint_applicants), updatesForDb.signature_data || null, newId]);
+
+      // ── Inventory sync: mark the booked unit (create it if the bulk generator
+      // never did). Runs inside this transaction, so a sync failure rolls the whole
+      // booking back — no booking succeeds while its inventory link silently fails.
+      await syncBookingUnit(client, {
+        bookingId: newId,
+        leadId: lead_id,
+        actor: created_by,
+        apartment_name, project_name, tower, wing,
+        property_type, floor_number, flat_number, carpet_area,
+      });
 
       // Return the saved booking row — PDF generation is intentionally decoupled and done on-demand
       const fetchBooking = await client.query(`SELECT * FROM booking_applications WHERE id = $1`, [newId]);
