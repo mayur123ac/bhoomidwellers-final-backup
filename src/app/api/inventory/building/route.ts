@@ -4,7 +4,7 @@
 // Linked/active units are SKIPPED and reported. Each deletion writes a history row.
 import { NextRequest, NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
-import { isAdmin, isLinkedActive, linkDescriptor, softDeleteUnit } from "@/lib/inventoryDelete";
+import { isAdmin, isLinkedActive, isBookingProtected, bookingProtectedReason, linkDescriptor, softDeleteUnit } from "@/lib/inventoryDelete";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +18,14 @@ function buildScope(project_name?: string, tower?: string, wing?: string, apartm
   return { whereSql: where.join(" AND "), vals };
 }
 
-const LINKED_SQL = `(status IN ('booked','registered','on_hold') OR lead_id IS NOT NULL OR booking_id IS NOT NULL)`;
+// Mirrors isLinkedActive + isBookingProtected so the preview COUNT exactly matches
+// the server-side delete decision.
+const LINKED_SQL = `(
+  status IN ('booked','registered','on_hold')
+  OR lead_id IS NOT NULL
+  OR booking_id IS NOT NULL
+  OR LOWER(source) IN ('booking sync','booking_sync')
+)`;
 
 // ─── GET — accurate preview counts (COUNT(*), never capped) ───────────────────
 export async function GET(req: NextRequest) {
@@ -66,7 +73,9 @@ export async function DELETE(req: NextRequest) {
       const skipped: { id: number; flat_no: string; reason: string }[] = [];
       const deletable: any[] = [];
       for (const u of rows) {
-        if (isLinkedActive(u)) skipped.push({ id: u.id, flat_no: u.flat_no, reason: `linked to ${linkDescriptor(u)}` });
+        // Hard block first: booking-protected units can never be deleted.
+        if (isBookingProtected(u)) skipped.push({ id: u.id, flat_no: u.flat_no, reason: bookingProtectedReason(u) });
+        else if (isLinkedActive(u)) skipped.push({ id: u.id, flat_no: u.flat_no, reason: `linked to ${linkDescriptor(u)}` });
         else deletable.push(u);
       }
       for (const u of deletable) {

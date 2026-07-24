@@ -7,7 +7,7 @@
 //   • on_hold requires a hold_expires_at; leaving on_hold clears it.
 import { NextRequest, NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
-import { isAdmin, isLinkedActive, linkDescriptor, softDeleteUnit } from "@/lib/inventoryDelete";
+import { isAdmin, isLinkedActive, isBookingProtected, bookingProtectedReason, linkDescriptor, softDeleteUnit } from "@/lib/inventoryDelete";
 
 export const dynamic = "force-dynamic";
 
@@ -207,6 +207,11 @@ export async function DELETE(
       const unit = existing.rows[0];
       if (unit.deleted_at) return { unit };  // already deleted — idempotent
 
+      // ── HARD BLOCK: booking-protected units can NEVER be deleted, even by admin.
+      // This covers: booking_id set, status = booked/registered, source = booking sync.
+      if (isBookingProtected(unit))
+        return { hardBlocked: bookingProtectedReason(unit) };
+
       const linked = isLinkedActive(unit);
       // Guardrail (also enforced client-side): a linked/active unit can only be
       // removed with an explicit force override — never a plain delete.
@@ -223,6 +228,8 @@ export async function DELETE(
 
     if ("notFound" in result)
       return NextResponse.json({ success: false, message: "Unit not found" }, { status: 404 });
+    if ("hardBlocked" in result)
+      return NextResponse.json({ success: false, message: result.hardBlocked }, { status: 409 });
     if ("blocked" in result)
       return NextResponse.json({ success: false, message: result.blocked, requiresOverride: true }, { status: 409 });
     return NextResponse.json({ success: true, data: result.unit }, { status: 200 });

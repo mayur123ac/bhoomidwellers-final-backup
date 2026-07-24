@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   FaPlus, FaTable, FaThLarge, FaTimes, FaSort, FaSortUp, FaSortDown,
   FaHistory, FaExternalLinkAlt, FaChevronDown, FaLayerGroup, FaPen,
-  FaTrash, FaExclamationTriangle, FaBuilding,
+  FaTrash, FaExclamationTriangle, FaBuilding, FaLock,
 } from "react-icons/fa";
 import { formatCurrencyDisplay } from "@/lib/currency";
 import AddUnitModal from "./AddUnitModal";
@@ -45,6 +45,22 @@ const STATUS: Record<string, SC> = {
 const sc = (s: string): SC => STATUS[s] || { label: s, text: "text-gray-500", border: "border-gray-400/30", bg: "bg-gray-500/10", hex: "#9ca3af" };
 const STATUS_KEYS = Object.keys(STATUS);
 
+
+// ── Booking protection (mirrors lib/inventoryDelete.isBookingProtected) ──
+// A unit is HARD-PROTECTED when it has a booking_id, status booked/registered,
+// or source = booking sync. These units show a lock instead of a delete button,
+// and the backend refuses deletion even if force=true is passed.
+const isBookingProtected = (u: InventoryUnit) => {
+  const status = (u.status || "").toLowerCase().trim();
+  const source = (u.source || "").toLowerCase().trim();
+  return (
+    status === "booked" ||
+    status === "registered" ||
+    u.booking_id != null ||
+    source === "booking sync" ||
+    source === "booking_sync"
+  );
+};
 
 // Delete guardrail (mirrors the server in lib/inventoryDelete.ts). A unit is
 // "linked/active" — and so guarded — when booked/registered/on_hold or tied to a lead/booking.
@@ -390,8 +406,18 @@ function TableView({ columns, colW, sort, sorted, t, allSelected, selected, togg
             ))}
             {canDelete && (
               <td className="px-2 py-1.5 text-right" onClick={e => e.stopPropagation()}>
-                <button type="button" onClick={() => onDeleteUnit(u)} title={isLinkedActive(u) ? `Delete — warning: ${linkLabel(u)}` : "Delete unit"}
-                  className="p-1.5 rounded text-red-500 hover:bg-red-500/10"><FaTrash className="text-[11px]" /></button>
+                {isBookingProtected(u) ? (
+                  // Hard-locked: unit is tied to a booking and cannot be deleted.
+                  <span
+                    title={`Locked — this unit is linked to a booking and cannot be deleted.`}
+                    className="inline-flex items-center justify-center p-1.5 rounded text-gray-400 cursor-not-allowed"
+                  >
+                    <FaLock className="text-[11px]" />
+                  </span>
+                ) : (
+                  <button type="button" onClick={() => onDeleteUnit(u)} title={isLinkedActive(u) ? `Delete — warning: ${linkLabel(u)}` : "Delete unit"}
+                    className="p-1.5 rounded text-red-500 hover:bg-red-500/10"><FaTrash className="text-[11px]" /></button>
+                )}
               </td>
             )}
           </tr>
@@ -738,7 +764,19 @@ function UnitDrawer({ unitId, onClose, user, canManage, isAdminUser, isDark, t, 
                     <StatusBadge status={unit.status} />
                     <div className="flex items-center gap-3">
                       {canManage && !editing && <button onClick={() => setEditing(true)} className="text-[11px] font-semibold text-[#00AEEF] hover:underline flex items-center gap-1"><FaPen className="text-[9px]" /> Change status</button>}
-                      {isAdminUser && <button onClick={() => onRequestDelete(unit)} className="text-[11px] font-semibold text-red-500 hover:underline flex items-center gap-1"><FaTrash className="text-[9px]" /> Delete</button>}
+                      {isAdminUser && (
+                        unit && isBookingProtected(unit) ? (
+                          // Hard-locked: show a read-only badge, no delete action.
+                          <span
+                            title="Locked — this unit is linked to a booking and cannot be deleted."
+                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-400 cursor-not-allowed"
+                          >
+                            <FaLock className="text-[9px]" /> Locked
+                          </span>
+                        ) : (
+                          <button onClick={() => onRequestDelete(unit)} className="text-[11px] font-semibold text-red-500 hover:underline flex items-center gap-1"><FaTrash className="text-[9px]" /> Delete</button>
+                        )
+                      )}
                     </div>
                   </div>
                   {editing && (

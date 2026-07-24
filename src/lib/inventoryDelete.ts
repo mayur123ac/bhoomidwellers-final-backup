@@ -12,13 +12,36 @@ export function isAdmin(role: string): boolean {
 
 const ACTIVE_STATUSES = ["booked", "registered", "on_hold"];
 
-// A unit is "active/linked" (guarded) if its status is booked/registered/on_hold
-// OR it points at a real lead/booking.
+// ── HARD block: a unit must NEVER be deletable (not even with force=true) when it is
+// booked, registered, linked to a booking application, or created by booking sync.
+// This protects booking history, financial ledger, and revenue reports.
+export function isBookingProtected(u: any): boolean {
+  const status = (u.status || "").toLowerCase().trim();
+  const source = (u.source || "").toLowerCase().trim();
+  if (status === "booked" || status === "registered") return true;
+  if (u.booking_id != null) return true;
+  if (source === "booking sync" || source === "booking_sync") return true;
+  return false;
+}
+
+// Human phrase for the hard-block rejection message.
+export function bookingProtectedReason(u: any): string {
+  const parts: string[] = [];
+  if (u.booking_id) parts.push(`booking #${u.booking_id}`);
+  if (parts.length) return `This inventory unit is linked to ${parts.join(" / ")} and cannot be deleted.`;
+  const status = (u.status || "").toLowerCase().trim();
+  if (status === "booked" || status === "registered") return `This inventory unit has status "${u.status}" and cannot be deleted.`;
+  return "This inventory unit is linked to a booking and cannot be deleted.";
+}
+
+// A unit is "active/linked" (guarded, but overrideable by admin force) if its status
+// is on_hold or it points at a real lead (without a booking reference).
+// NOTE: booking-protected units are caught by isBookingProtected() BEFORE this check.
 export function isLinkedActive(u: any): boolean {
   return ACTIVE_STATUSES.includes(u.status) || u.lead_id != null || u.booking_id != null;
 }
 
-// Human phrase describing why a unit is guarded — for skip reasons and warnings.
+// Human phrase describing why a unit is guarded (for skip reasons and warnings).
 export function linkDescriptor(u: any): string {
   const parts: string[] = [];
   if (u.booking_id) parts.push(`booking #${u.booking_id}`);

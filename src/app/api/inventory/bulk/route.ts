@@ -4,7 +4,7 @@
 // summary pattern. Each deletion writes an inventory_unit_history row.
 import { NextRequest, NextResponse } from "next/server";
 import { transaction } from "@/lib/db";
-import { isAdmin, isLinkedActive, linkDescriptor, softDeleteUnit } from "@/lib/inventoryDelete";
+import { isAdmin, isLinkedActive, isBookingProtected, bookingProtectedReason, linkDescriptor, softDeleteUnit } from "@/lib/inventoryDelete";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +30,9 @@ export async function DELETE(req: NextRequest) {
       const skipped: { id: number; flat_no: string; reason: string }[] = [];
       const deletable: any[] = [];
       for (const u of rows) {
-        if (isLinkedActive(u)) skipped.push({ id: u.id, flat_no: u.flat_no, reason: `linked to ${linkDescriptor(u)}` });
+        // Hard block first: booking-protected units can never be deleted.
+        if (isBookingProtected(u)) skipped.push({ id: u.id, flat_no: u.flat_no, reason: bookingProtectedReason(u) });
+        else if (isLinkedActive(u)) skipped.push({ id: u.id, flat_no: u.flat_no, reason: `linked to ${linkDescriptor(u)}` });
         else deletable.push(u);
       }
 
