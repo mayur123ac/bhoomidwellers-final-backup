@@ -383,6 +383,42 @@ function defaultForm(lead: any): BookingFormData {
   };
 }
 
+// ─── Date Normalizer ─────────────────────────────────────────────────────────
+// PostgreSQL DATE/TIMESTAMP columns are serialised by the node-postgres driver
+// as full ISO-8601 strings (e.g. "2026-07-24T00:00:00.000Z") or as JS Date
+// objects. HTML <input type="date"> requires exactly "YYYY-MM-DD". Any other
+// format makes the input render as blank — which is the root cause of the
+// date-persistence bug. This helper normalises every possible shape into the
+// one format that the browser accepts.
+function toDateStr(val: any): string {
+  if (!val) return "";
+  // Already a JS Date object
+  if (val instanceof Date) return val.toISOString().split("T")[0];
+  const s = String(val);
+  // ISO timestamp: "2026-07-24T00:00:00.000Z" or "2026-07-24 00:00:00"
+  if (s.includes("T") || (s.length > 10 && s.includes(" "))) return s.split("T")[0].split(" ")[0];
+  // Already YYYY-MM-DD (10 chars)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  return "";
+}
+
+// All date keys that exist in BookingFormData. Every value from existingBooking
+// for these keys must be passed through toDateStr() before entering form state.
+const DATE_FIELDS: (keyof BookingFormData)[] = [
+  "booking_date", "application_date",
+  "ocr_received_date",
+  "sdr_payment_date",
+  "cash_component_date",
+  "sanction_date",
+  "expected_disbursement_date", "actual_disbursement_date",
+  "expected_registration_date", "actual_registration_date",
+  "stamp_duty_paid_date",
+  "registration_fee_paid_date",
+  "expected_possession_date", "actual_possession_date",
+  "oc_cc_date",
+  "emi_start_date",
+];
+
 // ─── Main Modal ───────────────────────────────────────────────────────────────
 export default function BookingFormModal({ isOpen, onClose, lead, user, isDark = false, onSuccess, existingBooking, isEditMode }: BookingFormModalProps) {
   const [step, setStep] = useState(1);
@@ -413,6 +449,17 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
       Object.keys(existingBooking).forEach(k => {
         if (existingBooking[k] !== null && existingBooking[k] !== undefined) {
           safeBooking[k] = existingBooking[k];
+        }
+      });
+      // ── Date normalisation ────────────────────────────────────────────────
+      // PostgreSQL returns DATE columns as ISO timestamps ("2026-07-24T00:00:00.000Z")
+      // which HTML <input type="date"> cannot display — it requires "YYYY-MM-DD".
+      // We normalise every date field here so the form always receives the
+      // correct format regardless of which API endpoint fed existingBooking.
+      DATE_FIELDS.forEach(key => {
+        const raw = safeBooking[key] ?? existingBooking[key];
+        if (raw !== null && raw !== undefined) {
+          safeBooking[key] = toDateStr(raw);
         }
       });
       setForm({
