@@ -290,6 +290,8 @@ export async function GET(req: NextRequest) {
              l.loan_amount, l.sanction_amount, l.sanction_date, l.sanction_status, l.loan_status,
              l.expected_disbursement_date, l.actual_disbursement_date,
              l.expected_disbursement_amount, l.disbursement_amount, l.disbursement_status,
+             l.interest_rate, l.loan_tenure_months, TO_CHAR(l.emi_start_date, 'YYYY-MM-DD') AS emi_start_date,
+             l.payment_type, l.pre_emi_amount, l.emi_amount,
              r.expected_registration_date, r.actual_registration_date, r.registration_status,
              r.registration_number, r.registration_remarks,
              r.stamp_duty_amount, r.stamp_duty_status, r.stamp_duty_paid_date,

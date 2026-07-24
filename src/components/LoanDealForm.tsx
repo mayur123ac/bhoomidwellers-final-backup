@@ -692,6 +692,8 @@ export default function LoanDealForm({ lead, booking, loanUpdate, user, isDark =
         fd.set("sanction_date", dealForm.sanction_date);
         fd.set("sanction_status", dealForm.sanction_status);
         fd.set("loan_status", dealForm.loan_status);
+        fd.set("interest_rate", dealForm.interest_rate);
+        fd.set("loan_tenure_months", dealForm.loan_tenure_months);
         fd.set("expected_disbursement_date", dealForm.expected_disbursement_date);
         fd.set("expected_disbursement_amount", dealForm.expected_disbursement_amount);
         fd.set("actual_disbursement_date", dealForm.actual_disbursement_date);
