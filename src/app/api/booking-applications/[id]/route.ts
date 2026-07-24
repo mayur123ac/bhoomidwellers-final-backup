@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
 import { uploadBufferToR2 } from "@/lib/r2";
-import { syncBookingUnit, releaseUnitForBooking, flatIdentityChanged } from "@/lib/inventorySync";
+import { syncBookingUnit, releaseUnitForBooking, flatIdentityChanged, parseFloor } from "@/lib/inventorySync";
 
 export const dynamic = "force-dynamic";
 
@@ -381,16 +381,85 @@ export async function PUT(
       // status and release its inventory unit, then return — skipping the destructive
       // writes. Same transaction, so the release rolls back with the status change.
       const cancelStatus = getStr("booking_status");
-      if (cancelStatus === "Cancelled" && currentData.booking_status !== "Cancelled") {
-        await client.query(`UPDATE booking_applications SET booking_status = 'Cancelled', updated_at = NOW() WHERE id = $1`, [Number(id)]);
+      const editCancellation = getStr("edit_cancellation") === "true";
+      const cur = currentData.booking_status;
+      const isCancelAction = (cancelStatus === "Cancelled" && cur !== "Cancelled");
+      const isReactivate = (cancelStatus === "Confirmed" && cur === "Cancelled");
+      const isEditCancel = (editCancellation && cur === "Cancelled");
+
+      // Cancellation management (cancel / reactivate / edit-details) is admin-only,
+      // enforced here regardless of what the UI shows.
+      if ((isCancelAction || isReactivate || isEditCancel) && (user_role || "").trim().toLowerCase() !== "admin") {
+        throw Object.assign(new Error("Only Admin can manage booking cancellations."), { httpStatus: 403 });
+      }
+
+      // ── (A) Cancel: → Cancelled. Capture reason/remarks + who/when, release the flat.
+      // Short-circuit so the destructive full-form update below never runs on a bare cancel.
+      if (isCancelAction) {
+        const reason = getStr("cancellation_reason") || null;
+        const remarks = getStr("cancellation_remarks") || null;
+        await client.query(
+          `UPDATE booking_applications SET booking_status='Cancelled', cancellation_reason=$2,
+             cancellation_remarks=$3, cancelled_by=$4, cancelled_at=NOW(), updated_at=NOW() WHERE id=$1`,
+          [Number(id), reason, remarks, user_name],
+        );
         await releaseUnitForBooking(client, Number(id), `booking #${id} cancelled`, user_name);
         await client.query(
           `INSERT INTO booking_history (booking_id, updated_by, user_role, changed_fields)
            VALUES ($1, $2, $3, $4)`,
-          [Number(id), user_name, user_role, JSON.stringify({ booking_status: { from: currentData.booking_status, to: "Cancelled" } })],
+          [Number(id), user_name, user_role, JSON.stringify({ booking_status: { from: cur, to: "Cancelled" }, cancellation_reason: reason })],
         );
-        const cancelledRow = await client.query(`SELECT * FROM booking_applications WHERE id = $1`, [Number(id)]);
-        return cancelledRow.rows[0];
+        return (await client.query(`SELECT * FROM booking_applications WHERE id = $1`, [Number(id)])).rows[0];
+      }
+
+      // ── (B) Reactivate: Cancelled → Confirmed. Re-book the flat (block if another
+      // booking has since taken it), then clear the cancellation metadata.
+      if (isReactivate) {
+        const p = String(currentData.project_name || "").trim();
+        const tw = String(currentData.tower || "").trim();
+        const flat = String(currentData.flat_number || "").trim();
+        const wg = currentData.wing ? String(currentData.wing).trim() : null;
+        const fl = parseFloor(currentData.floor_number);
+        if (p && tw && flat && fl !== null) {
+          const held = await client.query(
+            `SELECT booking_id FROM inventory_units
+              WHERE project_name=$1 AND tower=$2 AND COALESCE(wing,'')=COALESCE($3,'')
+                AND floor=$4 AND flat_no=$5 AND deleted_at IS NULL LIMIT 1`,
+            [p, tw, wg, fl, flat],
+          );
+          const held0 = held.rows[0];
+          if (held0 && held0.booking_id != null && Number(held0.booking_id) !== Number(id)) {
+            throw Object.assign(new Error(`Flat ${flat} is now held by booking #${held0.booking_id}. Release that booking before reactivating this one.`), { httpStatus: 409 });
+          }
+        }
+        await syncBookingUnit(client, {
+          bookingId: Number(id), leadId: currentData.lead_id, actor: user_name,
+          apartment_name: currentData.apartment_name, project_name: currentData.project_name,
+          tower: currentData.tower, wing: currentData.wing, property_type: currentData.property_type,
+          floor_number: currentData.floor_number, flat_number: currentData.flat_number, carpet_area: currentData.carpet_area,
+        });
+        await client.query(
+          `UPDATE booking_applications SET booking_status='Confirmed', cancellation_reason=NULL,
+             cancellation_remarks=NULL, cancelled_by=NULL, cancelled_at=NULL, updated_at=NOW() WHERE id=$1`,
+          [Number(id)],
+        );
+        await client.query(
+          `INSERT INTO booking_history (booking_id, updated_by, user_role, changed_fields)
+           VALUES ($1, $2, $3, $4)`,
+          [Number(id), user_name, user_role, JSON.stringify({ booking_status: { from: "Cancelled", to: "Confirmed" }, action: "reactivated" })],
+        );
+        return (await client.query(`SELECT * FROM booking_applications WHERE id = $1`, [Number(id)])).rows[0];
+      }
+
+      // ── (C) Edit cancellation metadata (stays Cancelled) ──
+      if (isEditCancel) {
+        const reason = getStr("cancellation_reason") || null;
+        const remarks = getStr("cancellation_remarks") || null;
+        await client.query(
+          `UPDATE booking_applications SET cancellation_reason=$2, cancellation_remarks=$3, updated_at=NOW() WHERE id=$1`,
+          [Number(id), reason, remarks],
+        );
+        return (await client.query(`SELECT * FROM booking_applications WHERE id = $1`, [Number(id)])).rows[0];
       }
 
       // 1. Update Booking Applications
@@ -532,6 +601,7 @@ export async function PUT(
     return NextResponse.json({ success: true, data: updatedRow }, { status: 200 });
   } catch (err: any) {
     console.error("[PUT /api/booking-applications/[id]]", err);
-    return NextResponse.json({ success: false, message: err.message }, { status: 500 });
+    // Cancellation-management guards throw with an httpStatus (403 non-admin, 409 flat taken).
+    return NextResponse.json({ success: false, message: err.message }, { status: err?.httpStatus || 500 });
   }
 }

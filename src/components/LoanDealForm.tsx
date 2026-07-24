@@ -285,13 +285,14 @@ function defaultDealForm() {
     loan_required: false, bank_name: "", loan_executive: "", loan_type: "", loan_reference_no: "", loan_amount: "",
     sanction_amount: "", sanction_date: "", sanction_status: "Pending", loan_status: "Pending",
     interest_rate: "", loan_tenure_months: "",
+
     expected_disbursement_date: "", expected_disbursement_amount: "",
     actual_disbursement_date: "", disbursement_amount: "", disbursement_status: "Pending",
     custom_charges: [] as { charge_name: string; amount: string; remarks: string }[],
     token_amount: "",
     // Phase-1-3 aligned booking financials
-    gst_rate: "5", stamp_duty_amount: "", stamp_duty_status: "Pending",
-    registration_fee_amount: "", registration_fee_status: "Pending",
+    gst_rate: "5", stamp_duty_amount: "", stamp_duty_percentage: "", stamp_duty_status: "Pending", stamp_duty_mode: "auto" as "auto" | "manual",
+    registration_fee_amount: "", registration_fee_percentage: "", registration_fee_status: "Pending", registration_fee_mode: "auto" as "auto" | "manual",
     legal_charges: "", maintenance_deposit: "",
     // Estimate-only agreement value for stamp-duty/registration auto-calc before a
     // booking exists. NEVER written to booking_applications.agreement_value.
@@ -339,9 +340,9 @@ export default function LoanDealForm({ lead, booking, loanUpdate, user, isDark =
 
   // Stamp Duty / Registration Fee auto-calc toggles (UI-only; no new DB column).
   // Percent stays adjustable — e.g. 4% for a female co-owner in Maharashtra.
-  const [stampDutyMode, setStampDutyMode] = useState<"auto" | "manual">("auto");
+
   const [stampDutyPercent, setStampDutyPercent] = useState("5");
-  const [registrationFeeMode, setRegistrationFeeMode] = useState<"auto" | "manual">("auto");
+
   const [registrationFeePercent, setRegistrationFeePercent] = useState("1");
 
   // Selecting a lender copies its terms into the local deal form so the sanction
@@ -364,6 +365,12 @@ export default function LoanDealForm({ lead, booking, loanUpdate, user, isDark =
       interest_rate: app.interest_rate != null ? String(app.interest_rate) : prev.interest_rate,
       loan_tenure_months: app.tenure_months != null ? String(app.tenure_months) : prev.loan_tenure_months,
     }));
+    // Selecting a lender changes the deal-level draft (sanction fields land server-side
+    // via the merge in /api/loan-applications/[id]), but Section 7 planning fields
+    // (expected disbursement date/amount) live only in local dealForm state and would
+    // otherwise sit unsaved until the user separately clicks "Save Loan & Deal Tracker".
+    // Persist the whole draft here too, so BookingFormModal always has the latest.
+    setPendingAutoSave(true);
   }, []);
 
   // Switching to a different lead is the only time we want to force a fresh
@@ -421,11 +428,11 @@ export default function LoanDealForm({ lead, booking, loanUpdate, user, isDark =
       loan_status: src?.loan_status || "Pending",
       interest_rate: src?.interest_rate ? String(src.interest_rate) : "",
       loan_tenure_months: src?.loan_tenure_months ? String(src.loan_tenure_months) : "",
-      expected_disbursement_date: dateOnly(src?.expected_disbursement_date),
       // Expected Disbursement Amount is a fresh planning input — always blank until
       // typed, never pre-filled from a previously saved value (avoids showing a stale
       // number the user didn't enter this session). Saving an empty field clears it.
-      expected_disbursement_amount: "",
+      expected_disbursement_date: dateOnly(src?.expected_disbursement_date),
+      expected_disbursement_amount: src?.expected_disbursement_amount ? String(src.expected_disbursement_amount) : "",
       actual_disbursement_date: dateOnly(src?.actual_disbursement_date),
       disbursement_amount: src?.disbursement_amount ? String(src.disbursement_amount) : "",
       disbursement_status: src?.disbursement_status || "Pending",
@@ -434,9 +441,13 @@ export default function LoanDealForm({ lead, booking, loanUpdate, user, isDark =
       // Phase-1-3 aligned booking financials (from booking row or superset draft)
       gst_rate: src?.gst_rate ? String(src.gst_rate) : "5",
       stamp_duty_amount: src?.stamp_duty_amount ? String(src.stamp_duty_amount) : "",
+      stamp_duty_percentage: src?.stamp_duty_percentage ? String(src.stamp_duty_percentage) : "",
       stamp_duty_status: src?.stamp_duty_status || "Pending",
+      stamp_duty_mode: (src?.stamp_duty_mode as "auto" | "manual") || "auto",
       registration_fee_amount: src?.registration_fee_amount ? String(src.registration_fee_amount) : "",
+      registration_fee_percentage: src?.registration_fee_percentage ? String(src.registration_fee_percentage) : "",
       registration_fee_status: src?.registration_fee_status || "Pending",
+      registration_fee_mode: (src?.registration_fee_mode as "auto" | "manual") || "auto",
       legal_charges: src?.legal_charges ? String(src.legal_charges) : "",
       maintenance_deposit: src?.maintenance_deposit ? String(src.maintenance_deposit) : "",
       // Estimate is only meaningful pre-booking; it lives on the draft, never the booking.
@@ -507,6 +518,15 @@ export default function LoanDealForm({ lead, booking, loanUpdate, user, isDark =
   // Pending/Scheduled tranches are earmarked but not yet money-out-the-door.
   const totalDisbursed = tranches.filter(tr => isTrancheCompleted(tr.status)).reduce((sum, tr) => sum + Number(tr.amount || 0), 0);
   const sanctionAmountNum = Number(dealForm.sanction_amount) || 0;
+  const [pendingAutoSave, setPendingAutoSave] = useState(false);
+
+  useEffect(() => {
+    if (!pendingAutoSave) return;
+    setPendingAutoSave(false);
+    // Reuse the same save path as the submit button, without the form event.
+    handleSubmit({ preventDefault: () => { } } as React.FormEvent);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingAutoSave]);
   const disbursementPercent = sanctionAmountNum > 0
     ? Math.min(100, Math.round((totalDisbursed / sanctionAmountNum) * 100))
     : 0;
@@ -522,7 +542,7 @@ export default function LoanDealForm({ lead, booking, loanUpdate, user, isDark =
     : totalDisbursed >= sanctionAmountNum
       ? "Completed"
       : "Partial";
-  const isFullyDisbursed = autoDisbursementStatus === "Completed";
+  const isFullyDisbursed = dealForm.disbursement_status === "Completed" && dealForm.sanction_status === "Approved";
 
   // ── Stamp Duty / Registration Fee auto-calc ──
   const num = (v: any) => { const n = Number(String(v ?? "").replace(/[₹,\s]/g, "")); return isNaN(n) ? 0 : n; };
@@ -535,8 +555,8 @@ export default function LoanDealForm({ lead, booking, loanUpdate, user, isDark =
   const registrationFeeCapped = registrationFeeRaw >= REGISTRATION_FEE_CAP && agreementValueForCalc > 0;
   // The final value each field contributes, honoring its mode. Used for both the
   // live display sync and the save payload, so the two never diverge.
-  const finalStampDuty = stampDutyMode === "auto" ? String(computedStampDuty) : dealForm.stamp_duty_amount;
-  const finalRegistrationFee = registrationFeeMode === "auto" ? String(computedRegistrationFee) : dealForm.registration_fee_amount;
+  const finalStampDuty = dealForm.stamp_duty_mode === "auto" ? String(computedStampDuty) : dealForm.stamp_duty_amount;
+  const finalRegistrationFee = dealForm.registration_fee_mode === "auto" ? String(computedRegistrationFee) : dealForm.registration_fee_amount;
 
   // Smart default: default is "auto", but if a record already has a stamp-duty /
   // registration value that doesn't match a straight 5% / 1% auto calc (e.g. it was
@@ -549,21 +569,20 @@ export default function LoanDealForm({ lead, booking, loanUpdate, user, isDark =
     const av = booking?.agreement_value ? Number(booking.agreement_value) : num(s?.agreement_value_estimate);
     const sd = num(s?.stamp_duty_amount);
     const rf = num(s?.registration_fee_amount);
-    setStampDutyMode(sd > 0 && av > 0 && sd !== Math.round(av * 5 / 100) ? "manual" : "auto");
-    setRegistrationFeeMode(rf > 0 && av > 0 && rf !== Math.min(Math.round(av * 1 / 100), 30000) ? "manual" : "auto");
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lead?.id, booking?.id]);
 
   // Keep dealForm in sync with the computed value while in auto mode (display reads
   // the computed value directly, so this is belt-and-suspenders for the save path).
   useEffect(() => {
-    if (stampDutyMode !== "auto") return;
+    if (dealForm.stamp_duty_mode !== "auto") return;
     setDealForm(prev => (prev.stamp_duty_amount === finalStampDuty ? prev : { ...prev, stamp_duty_amount: finalStampDuty }));
-  }, [stampDutyMode, finalStampDuty]);
+  }, [dealForm.stamp_duty_mode, finalStampDuty]);
   useEffect(() => {
-    if (registrationFeeMode !== "auto") return;
+    if (dealForm.registration_fee_mode !== "auto") return;
     setDealForm(prev => (prev.registration_fee_amount === finalRegistrationFee ? prev : { ...prev, registration_fee_amount: finalRegistrationFee }));
-  }, [registrationFeeMode, finalRegistrationFee]);
+  }, [dealForm.registration_fee_mode, finalRegistrationFee]);
 
   const resetTrancheForm = () => {
     setTrancheAmount(""); setTrancheStatus("Pending"); setTrancheReceivingDate(""); setTrancheBankRef(""); setTrancheRemarks("");
@@ -689,6 +708,8 @@ export default function LoanDealForm({ lead, booking, loanUpdate, user, isDark =
         fd.set("stamp_duty_status", dealForm.stamp_duty_status);
         fd.set("registration_fee_amount", finalRegistrationFee);
         fd.set("registration_fee_status", dealForm.registration_fee_status);
+        fd.set("stamp_duty_mode", dealForm.stamp_duty_mode);
+        fd.set("registration_fee_mode", dealForm.registration_fee_mode);
         fd.set("legal_charges", dealForm.legal_charges);
         fd.set("maintenance_deposit", dealForm.maintenance_deposit);
         // Legacy OCR/SDR still forwarded to preserve existing booking values (no UI to edit them).
@@ -740,8 +761,10 @@ export default function LoanDealForm({ lead, booking, loanUpdate, user, isDark =
           gst_rate: dealForm.gst_rate,
           stamp_duty_amount: finalStampDuty,
           stamp_duty_status: dealForm.stamp_duty_status,
+          stamp_duty_mode: dealForm.stamp_duty_mode,
           registration_fee_amount: finalRegistrationFee,
           registration_fee_status: dealForm.registration_fee_status,
+          registration_fee_mode: dealForm.registration_fee_mode,
           legal_charges: dealForm.legal_charges,
           maintenance_deposit: dealForm.maintenance_deposit,
           // Estimate-only — persisted on the draft so the calc survives round-trips.
@@ -983,7 +1006,7 @@ export default function LoanDealForm({ lead, booking, loanUpdate, user, isDark =
                     <label className={labelCls}>Total Disbursed <span className="opacity-70">(from tranches)</span></label>
                     <div className={`${inputCls} opacity-70 cursor-not-allowed flex items-center`}>₹{totalDisbursed.toLocaleString("en-IN")}</div>
                   </div>
-                  <div><label className={labelCls}>Actual Disbursement Date</label><input type="date" value={dealForm.actual_disbursement_date} onChange={e => updateDealForm({ actual_disbursement_date: e.target.value })} className={inputCls} /></div>
+                  <div><label className={labelCls}>Actual Disbursement Date</label><input type="date" value={dealForm.actual_disbursement_date} onChange={e => updateDealForm({ actual_disbursement_date: e.target.value })} className={inputCls} disabled={isFullyDisbursed} /></div>
                 </div>
               ) : (
                 <>
@@ -1180,8 +1203,8 @@ export default function LoanDealForm({ lead, booking, loanUpdate, user, isDark =
               {/* Stamp Duty — auto/manual */}
               <StampDutyBlock
                 title="Stamp Duty"
-                mode={stampDutyMode}
-                onMode={m => { setIsDirty(true); setStampDutyMode(m); }}
+                mode={dealForm.stamp_duty_mode}
+                onMode={m => updateDealForm({ stamp_duty_mode: m })}
                 percent={stampDutyPercent}
                 onPercent={v => { setIsDirty(true); setStampDutyPercent(v); }}
                 agreementValue={agreementValueForCalc}
@@ -1196,8 +1219,8 @@ export default function LoanDealForm({ lead, booking, loanUpdate, user, isDark =
               {/* Registration Fee — auto/manual, capped at ₹30,000 */}
               <StampDutyBlock
                 title="Registration Fee"
-                mode={registrationFeeMode}
-                onMode={m => { setIsDirty(true); setRegistrationFeeMode(m); }}
+                mode={dealForm.registration_fee_mode}
+                onMode={m => updateDealForm({ registration_fee_mode: m })}
                 percent={registrationFeePercent}
                 onPercent={v => { setIsDirty(true); setRegistrationFeePercent(v); }}
                 agreementValue={agreementValueForCalc}

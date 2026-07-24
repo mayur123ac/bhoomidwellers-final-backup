@@ -42,26 +42,6 @@ const GeoAnalyticsView = dynamic(() => import("./GeoAnalyticsView"), { ssr: fals
 const LiveActivityView = dynamic(() => import("./LiveActivityView"), { ssr: false });
 const SiteVisitOverview = dynamic(() => import("./SiteVisitOverview"), { ssr: false });
 
-// Cancel a booking (admin action). The PUT short-circuits on booking_status=Cancelled:
-// it only flips status + releases the linked inventory unit, so this minimal payload is safe.
-async function cancelBookingViaApi(
-  bookingId: number | string,
-  user: { name?: string; role?: string } | null | undefined,
-): Promise<{ success: boolean; message?: string }> {
-  try {
-    const fd = new FormData();
-    fd.set("booking_status", "Cancelled");
-    fd.set("user_name", user?.name || "");
-    fd.set("user_role", user?.role || "");
-    const res = await fetch(`/api/booking-applications/${bookingId}`, { method: "PUT", body: fd });
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok || !json.success) return { success: false, message: json.message || "Failed to cancel booking" };
-    return { success: true };
-  } catch (e: any) {
-    return { success: false, message: e?.message || "Network error while cancelling booking" };
-  }
-}
-
 // ─── SUN/MOON ICONS ───────────────────────────────────────────────────────────
 const SunIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -420,6 +400,8 @@ function AdminAtlasDashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [activeView, setActiveView] = useState("dashboard");
+  // Deep-link target from the Inventory drawer → opens this lead's booking in the Sales view.
+  const [invOpenLeadId, setInvOpenLeadId] = useState<number | null>(null);
 
   useEffect(() => {
     const tab = searchParams.get("tab");
@@ -1133,10 +1115,11 @@ function AdminAtlasDashboardContent() {
           )}
           {activeView === "inventory" && (
             <div className="flex flex-col h-full overflow-hidden p-1">
-              <InventoryManagementView user={user} isDark={isDark} t={theme} />
+              <InventoryManagementView user={user} isDark={isDark} t={theme}
+                onOpenLead={(leadId: number) => { setInvOpenLeadId(leadId); setActiveView("sales"); }} />
             </div>
           )}
-          {activeView === "sales" && <AdminSalesView managers={managers} allLeads={allLeads} followUps={followUps} isLoading={isLoading} adminUser={user} refetch={refetch} theme={theme} isDark={isDark} />}
+          {activeView === "sales" && <AdminSalesView managers={managers} allLeads={allLeads} followUps={followUps} isLoading={isLoading} adminUser={user} refetch={refetch} theme={theme} isDark={isDark} openLeadId={invOpenLeadId} onOpenLeadHandled={() => setInvOpenLeadId(null)} />}
           {activeView === "site_head" && <AdminSiteHeadView siteHeads={siteHeads} allLeads={allLeads} followUps={followUps} isLoading={isLoading} adminUser={user} refetch={refetch} theme={theme} isDark={isDark} />}
           {activeView === "site_visit_overview" && <SiteVisitOverview managers={managers} receptionists={receptionists} allLeads={allLeads} siteHeads={siteHeads} adminUser={user} theme={theme} isDark={isDark} />}
           {activeView === "receptionist" && (
@@ -2916,7 +2899,37 @@ function WhatsAppSendModal({
 // ============================================================================
 // ADMIN SALES VIEW
 // ============================================================================
-function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, refetch, theme, isDark }: any) {
+// Opens a lead's booking view when the Inventory drawer requests it (by lead id),
+// then clears the request. `open` receives the resolved lead object.
+function useInventoryDeepLink({ openLeadId, allLeads, onOpenLeadHandled, open }: any) {
+  useEffect(() => {
+    if (openLeadId == null || !Array.isArray(allLeads) || allLeads.length === 0) return;
+    const l = allLeads.find((x: any) => String(x.id) === String(openLeadId));
+    if (l) open(l);
+    if (onOpenLeadHandled) onOpenLeadHandled();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openLeadId, allLeads]);
+}
+
+function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, refetch, theme, isDark, openLeadId, onOpenLeadHandled }: any) {
+  // Deep-link from the Inventory drawer: open the requested lead's booking view.
+  // (Effect body resolves the handlers below at run-time, after render.)
+  // Deep-link handler — await the fetch, only flip showBookingView once data is confirmed
+  useInventoryDeepLink({
+    openLeadId, allLeads, onOpenLeadHandled,
+    open: async (l: any) => {   // ← now async
+      const mgr = managers.find((m: any) => m.name === l.assigned_to);
+      if (mgr) setSelectedManager(mgr);
+
+      setSelectedLead(l);
+      setSubView("detail");
+      try { prefillSalesForm(l); } catch { }
+
+      const hasBooking = await fetchBookingForLead(l.id);   // ← awaited now
+      if (hasBooking) setShowBookingView(true);              // ← only set once data exists
+    }
+  });
+
   const [selectedManager, setSelectedManager] = useState<any>(null);
   const [searchManager, setSearchManager] = useState("");
   const [activeSection, setActiveSection] = useState<"assignedTable" | "closed">("assignedTable");
@@ -3178,9 +3191,16 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
     try {
       const res = await fetch(`/api/booking-applications?lead_id=${leadId}`);
       const json = await res.json();
-      if (json.success && json.data?.length > 0) setBookingData(json.data[0]);
-      else setBookingData(null);
-    } catch { setBookingData(null); }
+      if (json.success && json.data?.length > 0) {
+        setBookingData(json.data[0]);
+        return true;   // ← NEW
+      }
+      setBookingData(null);
+      return false;    // ← NEW
+    } catch {
+      setBookingData(null);
+      return false;    // ← NEW
+    }
   };
 
   // Loan & Deal Tracking panel — independent of bookingData/fetchBookingForLead above,
@@ -3596,12 +3616,6 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                       userRole={adminUser?.role?.toLowerCase() || "admin"}
                       currentUser={adminUser}
                       onRefetch={() => { if (selectedLead) fetchBookingForLead(selectedLead.id); }}
-                      onCancel={async () => {
-                        if (!window.confirm("Cancel this booking? The unit will be released.")) return;
-                        const r = await cancelBookingViaApi(bookingData.id, adminUser);
-                        if (r.success) { showToast("Booking cancelled — unit released.", "red"); if (selectedLead) fetchBookingForLead(selectedLead.id); }
-                        else showToast(r.message || "Failed to cancel booking", "red");
-                      }}
                     />
                   </div>
                 </div>
@@ -4019,9 +4033,16 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
     try {
       const res = await fetch(`/api/booking-applications?lead_id=${leadId}`);
       const json = await res.json();
-      if (json.success && json.data?.length > 0) setBookingData(json.data[0]);
-      else setBookingData(null);
-    } catch { setBookingData(null); }
+      if (json.success && json.data?.length > 0) {
+        setBookingData(json.data[0]);
+        return true;   // ← NEW
+      }
+      setBookingData(null);
+      return false;    // ← NEW
+    } catch {
+      setBookingData(null);
+      return false;    // ← NEW
+    }
   };
 
   // Loan & Deal Tracking panel — independent of bookingData/fetchBookingForLead above,
@@ -4673,12 +4694,6 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                       userRole={adminUser?.role?.toLowerCase() || "admin"}
                       currentUser={adminUser}
                       onRefetch={() => { if (selectedLead) fetchBookingForLead(selectedLead.id); }}
-                      onCancel={async () => {
-                        if (!window.confirm("Cancel this booking? The unit will be released.")) return;
-                        const r = await cancelBookingViaApi(bookingData.id, adminUser);
-                        if (r.success) { showToast("Booking cancelled — unit released.", "red"); if (selectedLead) fetchBookingForLead(selectedLead.id); }
-                        else showToast(r.message || "Failed to cancel booking", "red");
-                      }}
                     />
                   </div>
                 </div>
@@ -5068,9 +5083,16 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
     try {
       const res = await fetch(`/api/booking-applications?lead_id=${leadId}`);
       const json = await res.json();
-      if (json.success && json.data?.length > 0) setBookingData(json.data[0]);
-      else setBookingData(null);
-    } catch { setBookingData(null); }
+      if (json.success && json.data?.length > 0) {
+        setBookingData(json.data[0]);
+        return true;   // ← NEW
+      }
+      setBookingData(null);
+      return false;    // ← NEW
+    } catch {
+      setBookingData(null);
+      return false;    // ← NEW
+    }
   };
 
   // Loan & Deal Tracking panel — independent of bookingData/fetchBookingForLead above,

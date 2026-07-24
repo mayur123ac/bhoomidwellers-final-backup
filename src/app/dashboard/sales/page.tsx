@@ -24,8 +24,10 @@ import {
   FaChevronLeft, FaCheckCircle, FaPaperPlane, FaTimes, FaPhoneAlt,
   FaCalendarAlt, FaUserCircle, FaMicrophone, FaWhatsapp, FaRobot,
   FaEyeSlash, FaEye, FaSearch, FaUniversity, FaUsers, FaFileAlt, FaCheck,
-  FaClock, FaBell, FaHandshake, FaClipboardList
+  FaClock, FaBell, FaHandshake, FaClipboardList, FaBuilding, FaEdit
 } from "react-icons/fa";
+
+import InventoryManagementView from "@/components/InventoryManagementView";
 import {
   PieChart, Pie, Cell, Tooltip as RTooltip, ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, CartesianGrid
@@ -331,7 +333,7 @@ export default function SalesDashboard() {
   const [showPassword, setShowPassword] = useState(false);
   const [dismissedFollowUps, setDismissedFollowUps] = useState<Set<string>>(new Set());
   const [dismissedVisits, setDismissedVisits] = useState<Set<string>>(new Set());
-
+  const [pendingLeadOpen, setPendingLeadOpen] = useState<number | null>(null);
   const [activePopup, setActivePopup] = useState<"notifications" | "profile" | "visit" | null>(null);
   const topbarRef = useRef<HTMLDivElement>(null);
   // ── Attendance: live clock tick ──
@@ -497,6 +499,7 @@ export default function SalesDashboard() {
               { view: "overview", icon: <FaThLarge className="w-[18px] h-[18px] flex-shrink-0" />, title: "Dashboard" },
               { view: "forms", icon: <FaFileInvoice className="w-[18px] h-[18px] flex-shrink-0" />, title: "Assigned Leads" },
               { view: "closed-leads", icon: <FaCheckCircle className="w-[18px] h-[18px] flex-shrink-0" />, title: "Closed Leads" },
+              { view: "inventory", icon: <FaBuilding className="w-[18px] h-[18px] flex-shrink-0" />, title: "Inventory" },
               { view: "site_visits", icon: <FaCalendarAlt className="w-[18px] h-[18px] flex-shrink-0" />, title: "Site Visits" },
               { view: "attendance", icon: <FaClock className="w-[18px] h-[18px] flex-shrink-0" />, title: "My Attendance" },
               { view: "assistant", icon: <FaRobot className="w-[18px] h-[18px] flex-shrink-0" />, title: "Bhoomi AI" },
@@ -851,6 +854,8 @@ export default function SalesDashboard() {
               isLoading={isLoading} adminUser={user} refetch={refetch}
               initialView={activeView} setMainView={setActiveView}
               isDark={isDark} t={t}
+              pendingLeadOpen={pendingLeadOpen}                              // ← NEW
+              onPendingLeadOpenHandled={() => setPendingLeadOpen(null)}
             />
           ) : activeView === "assistant" ? (
             <AssistantView
@@ -866,6 +871,16 @@ export default function SalesDashboard() {
               adminUser={user}
               theme={t}
               isDark={isDark}
+            />
+          ) : activeView === "inventory" ? (
+            <InventoryManagementView
+              user={user}
+              isDark={isDark}
+              t={t}
+              onOpenLead={(leadId: number) => {
+                setPendingLeadOpen(leadId);
+                setActiveView("forms");   // mounts SalesManagerView so it can pick up pendingLeadOpen
+              }}
             />
           ) : activeView === "attendance" ? (
             <AttendanceView
@@ -893,6 +908,7 @@ export default function SalesDashboard() {
           { view: "overview", icon: <FaThLarge className="w-5 h-5 sm:w-6 sm:h-6" />, title: "Dashboard" },
           { view: "forms", icon: <FaFileInvoice className="w-5 h-5 sm:w-6 sm:h-6" />, title: "Assigned" },
           { view: "closed-leads", icon: <FaCheckCircle className="w-5 h-5 sm:w-6 sm:h-6" />, title: "Closed" },
+          { view: "inventory", icon: <FaBuilding className="w-5 h-5 sm:w-6 sm:h-6" />, title: "Inventory" },
           { view: "site_visits", icon: <FaCalendarAlt className="w-5 h-5 sm:w-6 sm:h-6" />, title: "Visits" },
           { view: "attendance", icon: <FaClock className="w-5 h-5" />, title: "My Attendance" },
           { view: "assistant", icon: <FaRobot className="w-5 h-5 sm:w-6 sm:h-6" />, title: "AI" },
@@ -1107,7 +1123,11 @@ function DashboardAnalytics({ leads, isDark, t }: { leads: any[]; isDark: boolea
 // ============================================================================
 // SALES MANAGER MODULE
 // ============================================================================
-function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser, refetch, initialView, setMainView, isDark, t }: any) {
+function SalesManagerView({
+  managers, allLeads, followUps, isLoading, adminUser, refetch,
+  initialView, setMainView, isDark, t,
+  pendingLeadOpen, onPendingLeadOpenHandled,        // ← NEW
+}: any) {
   const getStatusStyle = (status: string) => {
     const s = status || "Assigned";
     if (s === "New Lead") return t.statusNew;
@@ -1120,6 +1140,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
     if (s === "Lost Lead") return t.statusLost;
     return t.statusAssigned;
   };
+  const [autoOpenBooking, setAutoOpenBooking] = useState(false);
   const [subView, setSubView] = useState<"overview" | "cards" | "detail" | "closed-leads">(
     initialView === "overview" ? "overview" : initialView === "detail" ? "detail" : initialView === "closed-leads" ? "closed-leads" : "cards"
   );
@@ -1180,6 +1201,7 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const selectedYear = new Date().getFullYear();
 
+  const [isEditingBooking, setIsEditingBooking] = useState(false);
   const [cardsPage, setCardsPage] = useState(1);
   const cardsSentinelRef = useRef<HTMLDivElement>(null);
   const isAdmin = String(adminUser?.role || "").toLowerCase() === "admin";
@@ -1195,6 +1217,27 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
     if (selectedLead?.id) fetchBookingForLead(selectedLead.id);
     else { setBookingData(null); setShowBookingView(false); }
   }, [selectedLead?.id]);
+
+  // Jump here from the Inventory tab: open the lead and, once its booking loads, the booking form itself.
+  useEffect(() => {
+    if (pendingLeadOpen == null) return;
+    const lead = allLeads.find((l: any) => Number(l.id) === Number(pendingLeadOpen));
+    if (lead) {
+      setSelectedLead(lead);
+      setMainView("detail");
+      setSubView("detail");
+      setAutoOpenBooking(true);
+    }
+    onPendingLeadOpenHandled?.();
+  }, [pendingLeadOpen, allLeads]);
+
+  // Once the booking for that lead has finished loading, flip straight to the booking view.
+  useEffect(() => {
+    if (autoOpenBooking && bookingData) {
+      setShowBookingView(true);
+      setAutoOpenBooking(false);
+    }
+  }, [autoOpenBooking, bookingData]);
   useEffect(() => {
     if (selectedLead) {
       const u = allLeads.find((l: any) => String(l.id) === String(selectedLead.id));
@@ -1329,7 +1372,15 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
   const handleBookingSuccess = (booking: any) => {
     setBookingData(booking);
     setBookingDetailTab("booking");
-    setToastMsg({ title: `🎉 Booking ${booking.booking_number} created for ${selectedLead?.name}!`, icon: <FaHandshake />, color: "green" });
+    const wasEdit = isEditingBooking;
+    setIsEditingBooking(false);
+    setToastMsg({
+      title: wasEdit
+        ? `✅ Booking ${booking.booking_number} updated for ${selectedLead?.name}!`
+        : `🎉 Booking ${booking.booking_number} created for ${selectedLead?.name}!`,
+      icon: <FaHandshake />,
+      color: "green",
+    });
     setTimeout(() => setToastMsg(null), 4000);
     refetch();
   };
@@ -2018,10 +2069,27 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
         {subView === "detail" && selectedLead && (
           bookingData && showBookingView ? (
             <div className="animate-fadeIn w-full h-[calc(100vh-130px)] overflow-hidden bg-transparent flex flex-col">
-              <div className="flex items-center p-2 shrink-0 border-b border-white/10 shadow-sm" style={t.cardGlass}>
+              <div className="flex items-center justify-between p-2 shrink-0 border-b border-white/10 shadow-sm" style={t.cardGlass}>
                 <button onClick={() => setShowBookingView(false)} className={`px-4 py-1.5 text-xs font-bold flex items-center gap-1.5 border rounded-lg transition-colors cursor-pointer shadow-sm ${t.textMuted} ${t.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}>
                   <FaChevronLeft /> Back to Lead Details
                 </button>
+                {(() => {
+                  // Same rule as BookingApplicationView: admin always, sales only for own lead + not-yet-approved.
+                  const role = String(adminUser?.role || "").toLowerCase();
+                  const isAdminRole = role === "admin" || role === "site_head";
+                  const isOwner = adminUser?.name && selectedLead?.assigned_to === adminUser.name;
+                  const notApproved = bookingData?.booking_status !== "Approved";
+                  const canEdit = isAdminRole || (isOwner && notApproved);
+                  if (!canEdit) return null;
+                  return (
+                    <button
+                      onClick={() => setIsEditingBooking(true)}
+                      className={`px-4 py-1.5 text-xs font-bold flex items-center gap-1.5 rounded-lg transition-colors cursor-pointer shadow-sm text-white ${isDark ? "bg-[#9E217B] hover:bg-[#7a1960]" : "bg-[#00AEEF] hover:bg-[#0088bb]"}`}
+                    >
+                      <FaEdit /> Edit Booking Form
+                    </button>
+                  );
+                })()}
               </div>
               <div className="flex-1 overflow-hidden">
                 <ClosedLeadBookingView
@@ -2408,12 +2476,14 @@ function SalesManagerView({ managers, allLeads, followUps, isLoading, adminUser,
         )}
 
         <BookingFormModal
-          isOpen={isClosingModalOpen}
-          onClose={() => setIsClosingModalOpen(false)}
+          isOpen={isClosingModalOpen || isEditingBooking}
+          onClose={() => { setIsClosingModalOpen(false); setIsEditingBooking(false); }}
           lead={selectedLead}
           user={adminUser}
           isDark={isDark}
           onSuccess={handleBookingSuccess}
+          isEditMode={isEditingBooking}
+          existingBooking={isEditingBooking ? bookingData : null}
         />
 
         {selectedLead && (

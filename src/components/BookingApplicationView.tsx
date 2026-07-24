@@ -19,10 +19,11 @@ interface BookingApplicationViewProps {
   onEdit?: () => void;
   onApprove?: () => void;
   onCancel?: () => void;
+  onEditCancellation?: () => void; // NEW — opens edit/reversal modal
 }
 
 export default function BookingApplicationView({
-  booking, lead, isDark = false, userRole, currentUser, onEdit, onApprove, onCancel,
+  booking, lead, isDark = false, userRole, currentUser, onEdit, onApprove, onCancel, onEditCancellation,
 }: BookingApplicationViewProps) {
   const printRef = useRef<HTMLDivElement>(null);
 
@@ -99,6 +100,13 @@ export default function BookingApplicationView({
           <div>
             <p className={`text-xs font-semibold ${textMuted}`}>Booking Number</p>
             <p className={`text-2xl font-black ${accent}`}>{safeVal(booking.booking_number)}</p>
+            {/* NEW — unit identity breadcrumb */}
+            <p className={`text-sm font-semibold mt-1 ${textMain}`}>
+              {safeVal(booking.project_name)} <span className={textMuted}>›</span> {safeVal(booking.apartment_name)}
+              {booking.tower && <> <span className={textMuted}>›</span> Tower {safeVal(booking.tower)}</>}
+              {booking.wing && <> <span className={textMuted}>, Wing {safeVal(booking.wing)}</span></>}
+              {" "}<span className={textMuted}>·</span> Floor {safeVal(booking.floor_number)}, Flat {safeVal(booking.flat_number)}
+            </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <span className={`text-xs font-bold px-3 py-1.5 rounded-full border ${statusColor}`}>{bookingStatus}</span>
@@ -135,6 +143,11 @@ export default function BookingApplicationView({
                 <FaTimesCircle className="text-[10px]" /> Cancel
               </button>
             )}
+            {userRole === "admin" && bookingStatus === "Cancelled" && onEditCancellation && (
+              <button onClick={onEditCancellation} className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 border border-amber-500/30 transition-colors">
+                <FaEdit className="text-[10px]" /> Edit Cancellation
+              </button>
+            )}
             <button onClick={handlePrint} className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer border transition-colors ${isDark ? "border-[#2A2A35] text-[#888899] hover:border-[#9E217B] hover:text-[#d4006e]" : "border-[#9CA3AF] text-[#6B7280] hover:border-[#9E217B] hover:text-[#9E217B]"}`}>
               <FaPrint className="text-[10px]" /> Print
             </button>
@@ -148,7 +161,7 @@ export default function BookingApplicationView({
           {[
             { label: "Lead No.", val: `#${booking.lead_sr_no || lead?.sr_no || booking.lead_id}` },
             { label: "Application Date", val: formatDate(booking.application_date) },
-            { label: "Flat / Unit", val: `${safeVal(booking.flat_number)}, Floor ${safeVal(booking.floor_number)}` },
+            // Flat/Unit line removed — now in breadcrumb above
             { label: "Consideration Value", val: formatCurrencyDisplay(booking.consideration_value) },
             { label: "Sales Manager", val: safeVal(booking.lead_assigned_to || lead?.assigned_to) },
             { label: "Property Type", val: safeVal(booking.property_type) },
@@ -171,6 +184,26 @@ export default function BookingApplicationView({
           </div>
         )}
       </div>
+
+      {/* Cancellation edit */}
+      {bookingStatus === "Cancelled" && (
+        <div className={`rounded-2xl border p-5 ${isDark ? "bg-red-500/5 border-red-500/30" : "bg-red-50 border-red-200"}`}>
+          <p className="text-xs font-bold uppercase tracking-wider mb-3 text-red-500">
+            <FaTimesCircle className="inline mr-1.5" /> Cancellation Details
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div><p className={fieldLabel}>Cancelled By</p><p className={fieldVal}>{safeVal(booking.cancelled_by)}</p></div>
+            <div><p className={fieldLabel}>Cancelled Date</p><p className={fieldVal}>{formatDate(booking.cancelled_at)}</p></div>
+            <div><p className={fieldLabel}>Reason</p><p className={fieldVal}>{safeVal(booking.cancellation_reason)}</p></div>
+          </div>
+          {booking.cancellation_remarks && (
+            <div className="mt-3">
+              <p className={fieldLabel}>Remarks</p>
+              <p className={fieldVal}>{booking.cancellation_remarks}</p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Payment Sequence Stepper (Phase 7) ── */}
       <PaymentSequenceStepper booking={booking} isDark={isDark} />

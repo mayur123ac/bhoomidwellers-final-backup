@@ -24,22 +24,34 @@ const cleanNum = (v: any) => {
 
 const SYNC_ONLY_STATUSES = ["booked", "registered"];
 
+
 // Fields a user may PATCH directly. status + hold_expires_at are handled
 // separately below because they carry lifecycle rules.
 const EDITABLE: Record<string, (v: any) => any> = {
-  apartment_name:     v => (v == null ? null : String(v).trim()),
-  project_name:       v => (v == null ? null : String(v).trim()),
-  tower:              v => (v == null ? null : String(v).trim()),
-  wing:               v => (v ? String(v).trim() : null),
-  unit_type:          v => (v == null ? null : String(v).trim()),
-  floor:              v => (v === "" || v == null ? null : Number(v)),
-  flat_no:            v => (v == null ? null : String(v).trim()),
-  carpet_area_sqft:   cleanNum,
+  apartment_name: v => (v == null ? null : String(v).trim()),
+  project_name: v => (v == null ? null : String(v).trim()),
+  tower: v => (v == null ? null : String(v).trim()),
+  wing: v => (v ? String(v).trim() : null),
+  unit_type: v => (v == null ? null : String(v).trim()),
+  floor: v => (v === "" || v == null ? null : Number(v)),
+  flat_no: v => (v == null ? null : String(v).trim()),
+  carpet_area_sqft: cleanNum,
   built_up_area_sqft: cleanNum,
-  rate_per_sqft:      cleanNum,
-  base_price:         cleanNum,
-  facing:             v => (v ? String(v).trim() : null),
+  rate_per_sqft: cleanNum,
+  base_price: cleanNum,
+  facing: v => (v ? String(v).trim() : null),
 };
+
+// Single unit joined with its linked lead (name/phone/email) and booking
+// (number/status/applicant) so the detail drawer can show who holds it.
+const UNIT_DETAIL_SQL = `
+  SELECT iu.*, w.name AS lead_name, w.phone AS lead_phone, w.email AS lead_email,
+         w.assigned_to AS lead_assigned_to,
+         b.booking_number, b.booking_status, b.primary_name AS booking_primary_name
+    FROM inventory_units iu
+    LEFT JOIN walkin_enquiries w ON w.id = iu.lead_id
+    LEFT JOIN booking_applications b ON b.id = iu.booking_id
+   WHERE iu.id = $1`;
 
 // ─── GET — single unit + its history ──────────────────────────────────────────
 export async function GET(
@@ -48,7 +60,7 @@ export async function GET(
 ) {
   const { id } = await params;
   try {
-    let rows = await query(`SELECT * FROM inventory_units WHERE id = $1`, [Number(id)]);
+    let rows = await query(UNIT_DETAIL_SQL, [Number(id)]);
     if (!rows.length)
       return NextResponse.json({ success: false, message: "Unit not found" }, { status: 404 });
 
@@ -64,7 +76,7 @@ export async function GET(
          VALUES ($1, 'on_hold', 'available', 'System', 'hold expired')`,
         [Number(id)],
       );
-      rows = await query(`SELECT * FROM inventory_units WHERE id = $1`, [Number(id)]);
+      rows = await query(UNIT_DETAIL_SQL, [Number(id)]);
     }
 
     const history = await query(

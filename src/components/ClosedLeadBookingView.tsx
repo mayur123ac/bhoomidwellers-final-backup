@@ -8,6 +8,7 @@ import {
 import { formatCurrencyDisplay } from "@/lib/currency";
 import BookingApplicationView from "./BookingApplicationView";
 import BookingFormModal from "./BookingFormModal";
+import CancellationModal from "./CancellationModal";
 
 interface ClosedLeadBookingViewProps {
   currentUser?: any;
@@ -22,10 +23,12 @@ interface ClosedLeadBookingViewProps {
 }
 
 export default function ClosedLeadBookingView({
-  booking, lead, userRole, isDark = false, onEdit, onApprove, onCancel, currentUser, onRefetch
+  booking, lead, userRole, isDark = false, onEdit, onApprove, currentUser, onRefetch
 }: ClosedLeadBookingViewProps) {
   const [activeTab, setActiveTab] = useState<"summary" | "payments" | "documents" | "timeline" | "crm">("summary");
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [editCancelOpen, setEditCancelOpen] = useState(false);
   const [history, setHistory] = useState<any[]>([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [crmOpen, setCrmOpen] = useState(false);
@@ -432,9 +435,11 @@ export default function ClosedLeadBookingView({
             lead={lead}
             isDark={isDark}
             userRole={userRole}
+            currentUser={currentUser}
             onEdit={() => setIsEditModalOpen(true)}
             onApprove={onApprove}
-            onCancel={onCancel}
+            onCancel={() => setCancelOpen(true)}
+            onEditCancellation={() => setEditCancelOpen(true)}
           />
           {isEditModalOpen && (
             <BookingFormModal
@@ -451,6 +456,16 @@ export default function ClosedLeadBookingView({
               }}
             />
           )}
+          <CancellationModal
+            isOpen={cancelOpen} mode="cancel" booking={booking} user={currentUser} isDark={isDark}
+            onClose={() => setCancelOpen(false)}
+            onDone={() => { setCancelOpen(false); if (onRefetch) onRefetch(); }}
+          />
+          <CancellationModal
+            isOpen={editCancelOpen} mode="edit" booking={booking} user={currentUser} isDark={isDark}
+            onClose={() => setEditCancelOpen(false)}
+            onDone={() => { setEditCancelOpen(false); if (onRefetch) onRefetch(); }}
+          />
           </>
         )}
         {activeTab === "payments" && renderPayments()}

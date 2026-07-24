@@ -519,6 +519,12 @@ export default function ReceptionistDashboard() {
     try { return new Date(ds).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }); }
     catch { return "Invalid"; }
   };
+  // Reformats a phone input to "+91 XXXXXXXXXX" while preserving cursor position,
+  // so digits are inserted where the user is actually typing instead of jumping
+  // to the front/back and duplicatin
+  // Input only ever holds raw digits — the "+91" prefix is rendered separately,
+  // so there's no reformatting-while-typing to fight the cursor over.
+  const cleanMobileDigits = (raw: string) => raw.replace(/\D/g, "").slice(0, 10);
   const maskPhone = (phone: any) => {
     if (!phone || phone === "N/A") return "N/A";
     const c = String(phone).replace(/[^a-zA-Z0-9]/g, "");
@@ -3212,13 +3218,34 @@ export default function ReceptionistDashboard() {
                     </div>
                     <div>
                       <label className={`block text-xs mb-1.5 font-medium pl-2 ${t.textMuted}`}>Mobile No *</label>
-                      <input type="tel" required value={enquiryForm.mobile} onChange={e => setEnquiryForm({ ...enquiryForm, mobile: e.target.value })}
-                        className={`w-full rounded-lg p-3 text-sm outline-none transition-colors border ${t.modalInput} ${t.text}`} placeholder="+91 0000000000" />
+                      <div className={`flex items-center rounded-lg border overflow-hidden ${t.modalInput}`}>
+                        <span className={`pl-3 pr-1 text-sm font-semibold select-none ${t.textMuted}`}>+91</span>
+                        <input
+                          type="tel"
+                          required
+                          inputMode="numeric"
+                          maxLength={10}
+                          value={enquiryForm.mobile}
+                          onChange={e => setEnquiryForm({ ...enquiryForm, mobile: cleanMobileDigits(e.target.value) })}
+                          className={`flex-1 p-3 pl-1 text-sm outline-none bg-transparent ${t.text}`}
+                          placeholder="8369787919"
+                        />
+                      </div>
                     </div>
                     <div>
                       <label className={`block text-xs mb-1.5 font-medium pl-2 ${t.textMuted}`}>Alt Mobile No</label>
-                      <input type="tel" value={enquiryForm.altMobile} onChange={e => setEnquiryForm({ ...enquiryForm, altMobile: e.target.value })}
-                        className={`w-full rounded-lg p-3 text-sm outline-none transition-colors border ${t.modalInput} ${t.text}`} placeholder="+91 0000000000" />
+                      <div className={`flex items-center rounded-lg border overflow-hidden ${t.modalInput}`}>
+                        <span className={`pl-3 pr-1 text-sm font-semibold select-none ${t.textMuted}`}>+91</span>
+                        <input
+                          type="tel"
+                          inputMode="numeric"
+                          maxLength={10}
+                          value={enquiryForm.altMobile}
+                          onChange={e => setEnquiryForm({ ...enquiryForm, altMobile: cleanMobileDigits(e.target.value) })}
+                          className={`flex-1 p-3 pl-1 text-sm outline-none bg-transparent ${t.text}`}
+                          placeholder="9876543210"
+                        />
+                      </div>
                     </div>
                     <div>
                       <label className={`block text-xs mb-1.5 font-medium pl-2 ${t.textMuted}`}>Email ID</label>

@@ -24,23 +24,27 @@ export interface InventoryUnit {
   lead_id: number | null; booking_id: number | null;
   created_by: string | null; updated_by: string | null;
   created_at: string; updated_at: string; deleted_at: string | null;
+  lead_name?: string | null; lead_phone?: string | null; lead_email?: string | null;
+  lead_assigned_to?: string | null;   // ← NEW
+  booking_number?: string | null; booking_status?: string | null; booking_primary_name?: string | null;
 }
 interface HistoryRow { id: number; old_status: string | null; new_status: string; changed_by: string | null; reason: string | null; changed_at: string; }
 
 // ── 8-status config (badge classes + heatmap hex) ──
 type SC = { label: string; text: string; border: string; bg: string; hex: string };
 const STATUS: Record<string, SC> = {
-  available:   { label: "Available",   text: "text-emerald-500", border: "border-emerald-500/30", bg: "bg-emerald-500/10", hex: "#10b981" },
-  booked:      { label: "Booked",      text: "text-blue-500",    border: "border-blue-500/30",    bg: "bg-blue-500/10",    hex: "#3b82f6" },
-  blocked:     { label: "Blocked",     text: "text-gray-500",    border: "border-gray-400/30",    bg: "bg-gray-500/10",    hex: "#6b7280" },
-  on_hold:     { label: "On Hold",     text: "text-amber-500",   border: "border-amber-500/30",   bg: "bg-amber-500/10",   hex: "#f59e0b" },
-  registered:  { label: "Registered",  text: "text-violet-500",  border: "border-violet-500/30",  bg: "bg-violet-500/10",  hex: "#8b5cf6" },
-  refuge_area: { label: "Refuge Area", text: "text-zinc-500",    border: "border-zinc-400/30",    bg: "bg-zinc-500/10",    hex: "#71717a" },
-  unfinished:  { label: "Unfinished",  text: "text-orange-500",  border: "border-orange-500/30",  bg: "bg-orange-500/10",  hex: "#f97316" },
-  cancelled:   { label: "Cancelled",   text: "text-red-500",     border: "border-red-500/30",     bg: "bg-red-500/10",     hex: "#ef4444" },
+  available: { label: "Available", text: "text-emerald-500", border: "border-emerald-500/30", bg: "bg-emerald-500/10", hex: "#10b981" },
+  booked: { label: "Booked", text: "text-blue-500", border: "border-blue-500/30", bg: "bg-blue-500/10", hex: "#3b82f6" },
+  blocked: { label: "Blocked", text: "text-gray-500", border: "border-gray-400/30", bg: "bg-gray-500/10", hex: "#6b7280" },
+  on_hold: { label: "On Hold", text: "text-amber-500", border: "border-amber-500/30", bg: "bg-amber-500/10", hex: "#f59e0b" },
+  registered: { label: "Registered", text: "text-violet-500", border: "border-violet-500/30", bg: "bg-violet-500/10", hex: "#8b5cf6" },
+  refuge_area: { label: "Refuge Area", text: "text-zinc-500", border: "border-zinc-400/30", bg: "bg-zinc-500/10", hex: "#71717a" },
+  unfinished: { label: "Unfinished", text: "text-orange-500", border: "border-orange-500/30", bg: "bg-orange-500/10", hex: "#f97316" },
+  cancelled: { label: "Cancelled", text: "text-red-500", border: "border-red-500/30", bg: "bg-red-500/10", hex: "#ef4444" },
 };
 const sc = (s: string): SC => STATUS[s] || { label: s, text: "text-gray-500", border: "border-gray-400/30", bg: "bg-gray-500/10", hex: "#9ca3af" };
 const STATUS_KEYS = Object.keys(STATUS);
+
 
 // Delete guardrail (mirrors the server in lib/inventoryDelete.ts). A unit is
 // "linked/active" — and so guarded — when booked/registered/on_hold or tied to a lead/booking.
@@ -92,7 +96,7 @@ interface Props {
 const blankFilters = { search: "", project_name: "", tower: "", wing: "", floor: "", unit_type: "", status: "", min_area: "", max_area: "" };
 
 export default function InventoryManagementView({ user, isDark, t, onOpenLead, onOpenBooking }: Props) {
-  const canManage = ["admin", "sales manager", "sales_manager"].includes((user?.role || "").trim().toLowerCase());
+  const canManage = ["admin", "sales manager", "sales_manager"].includes((user?.role || "").trim().toLowerCase())
   const isAdminUser = (user?.role || "").trim().toLowerCase() === "admin"; // delete is admin-only
 
   const [units, setUnits] = useState<InventoryUnit[]>([]);
@@ -199,17 +203,22 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
       .map(([floor, us]) => [floor, [...us].sort((a, b) => a.flat_no.localeCompare(b.flat_no, undefined, { numeric: true }))] as [number, InventoryUnit[]]);
   }, [sorted]);
 
+  const openLinked = (u: InventoryUnit) => {
+    if (u.lead_id && onOpenLead) onOpenLead(u.lead_id);
+    else if (u.booking_id && onOpenBooking) onOpenBooking(u.booking_id);
+  };
+  const linkClickable = !!(onOpenLead || onOpenBooking);
   const linkChip = (u: InventoryUnit) => {
     if (u.booking_id) return (
-      <button type="button" onClick={e => { e.stopPropagation(); onOpenBooking?.(u.booking_id!); }} disabled={!onOpenBooking}
-        className={`inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded ${onOpenBooking ? "text-blue-500 hover:bg-blue-500/10 cursor-pointer" : t.textMuted}`}>
-        Booking #{u.booking_id}{onOpenBooking && <FaExternalLinkAlt className="text-[7px]" />}
+      <button type="button" onClick={e => { e.stopPropagation(); openLinked(u); }} disabled={!linkClickable}
+        className={`inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded ${linkClickable ? "text-blue-500 hover:bg-blue-500/10 cursor-pointer" : t.textMuted}`}>
+        Booking #{u.booking_id}{linkClickable && <FaExternalLinkAlt className="text-[7px]" />}
       </button>
     );
     if (u.lead_id) return (
-      <button type="button" onClick={e => { e.stopPropagation(); onOpenLead?.(u.lead_id!); }} disabled={!onOpenLead}
-        className={`inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded ${onOpenLead ? "text-[#00AEEF] hover:bg-[#00AEEF]/10 cursor-pointer" : t.textMuted}`}>
-        Lead #{u.lead_id}{onOpenLead && <FaExternalLinkAlt className="text-[7px]" />}
+      <button type="button" onClick={e => { e.stopPropagation(); openLinked(u); }} disabled={!linkClickable}
+        className={`inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded ${linkClickable ? "text-[#00AEEF] hover:bg-[#00AEEF]/10 cursor-pointer" : t.textMuted}`}>
+        Lead #{u.lead_id}{linkClickable && <FaExternalLinkAlt className="text-[7px]" />}
       </button>
     );
     return <span className={`text-[10px] ${t.textFaint}`}>—</span>;
@@ -671,7 +680,12 @@ function UnitDrawer({ unitId, onClose, user, canManage, isAdminUser, isDark, t, 
   const [newStatus, setNewStatus] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-
+  const roleClean = (user?.role || "").trim().toLowerCase();
+  const isSalesManagerUser = ["sales manager", "sales_manager"].includes(roleClean);
+  const isOwnLead = !!(unit?.lead_assigned_to && user?.name && unit.lead_assigned_to === user.name);
+  // Admin always sees everything. A Sales Manager sees full contact details only
+  // for leads assigned to them; otherwise just name + booking number.
+  const fullLinkedDetails = isAdminUser || !isSalesManagerUser || isOwnLead;
   const load = useCallback(async () => {
     if (unitId == null) return;
     setLoading(true); setErr(null);
@@ -753,12 +767,46 @@ function UnitDrawer({ unitId, onClose, user, canManage, isAdminUser, isDark, t, 
                     {row("Source", String(unit.source || "").replace("_", " "))}
                   </div>
 
-                  {/* Linked */}
                   {(unit.booking_id || unit.lead_id) && (
                     <div className={`rounded-xl border p-3 mb-3 ${t.innerBlock}`}>
                       <p className={`text-[10px] font-bold uppercase tracking-widest mb-2 ${t.textMuted}`}>Linked</p>
-                      {unit.booking_id && <button onClick={() => onOpenBooking?.(unit.booking_id!)} disabled={!onOpenBooking} className={`flex items-center gap-1.5 text-xs font-semibold ${onOpenBooking ? "text-blue-500 hover:underline" : t.text}`}>Booking #{unit.booking_id}{onOpenBooking && <FaExternalLinkAlt className="text-[8px]" />}</button>}
-                      {unit.lead_id && <button onClick={() => onOpenLead?.(unit.lead_id!)} disabled={!onOpenLead} className={`flex items-center gap-1.5 text-xs font-semibold mt-1 ${onOpenLead ? "text-[#00AEEF] hover:underline" : t.text}`}>Lead #{unit.lead_id}{onOpenLead && <FaExternalLinkAlt className="text-[8px]" />}</button>}
+                      {fullLinkedDetails ? (
+                        <>
+                          {(unit.lead_name || unit.lead_id) && (
+                            <div className="mb-2">
+                              <p className={`text-sm font-bold ${t.text}`}>{unit.lead_name || `Lead #${unit.lead_id}`}</p>
+                              <div className={`text-[11px] ${t.textMuted}`}>
+                                {unit.lead_phone ? <span>{unit.lead_phone}</span> : null}
+                                {unit.lead_phone && unit.lead_email ? " · " : ""}
+                                {unit.lead_email ? <span>{unit.lead_email}</span> : null}
+                                {unit.lead_id ? <span className={t.textFaint}> · Lead #{unit.lead_id}</span> : null}
+                              </div>
+                            </div>
+                          )}
+                          {unit.booking_id && (
+                            <div className={`text-[11px] mb-2 ${t.textMuted}`}>
+                              Booking <b className={t.text}>{unit.booking_number || `#${unit.booking_id}`}</b>
+                              {unit.booking_status ? <> · <span className={t.text}>{unit.booking_status}</span></> : null}
+                              {unit.booking_primary_name ? <> · {unit.booking_primary_name}</> : null}
+                            </div>
+                          )}
+                          {(onOpenLead && unit.lead_id) ? (
+                            <button onClick={() => onOpenLead!(unit.lead_id!)} className="flex items-center gap-1.5 text-xs font-bold text-[#00AEEF] hover:underline">
+                              Open booking of this lead <FaExternalLinkAlt className="text-[8px]" />
+                            </button>
+                          ) : (onOpenBooking && unit.booking_id) ? (
+                            <button onClick={() => onOpenBooking!(unit.booking_id!)} className="flex items-center gap-1.5 text-xs font-bold text-blue-500 hover:underline">
+                              Open booking #{unit.booking_id} <FaExternalLinkAlt className="text-[8px]" />
+                            </button>
+                          ) : null}
+                        </>
+                      ) : (
+                        // Restricted view: not this sales manager's lead — name + booking number only.
+                        <div className="text-sm">
+                          <span className={`font-bold ${t.text}`}>{unit.booking_primary_name || unit.lead_name || `Lead #${unit.lead_id}`}</span>
+                          {unit.booking_number && <span className={`ml-1 text-[11px] ${t.textMuted}`}>Booking {unit.booking_number}</span>}
+                        </div>
+                      )}
                     </div>
                   )}
 
