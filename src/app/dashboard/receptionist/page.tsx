@@ -54,7 +54,50 @@ const LEAD_SOURCES = [
   "Advertisement", "Referral", "Exhibition", "Channel Partner", "Website", "Call Center", "Others"
 ];
 
-const CONFIG_KEYS = ["1 RK", "1 BHK", "2 BHK", "3 BHK", "4 BHK", "4+ BHK", "Other"];
+// Full standardised Indian real-estate configuration list.
+// Order here determines order in both the combobox and all charts.
+const CONFIG_OPTIONS = [
+  // ── Residential Apartments ──────────────────────────────────────────────
+  "Studio",
+  "1 RK",
+  "1 BHK",
+  "1.5 BHK",
+  "2 BHK",
+  "2.5 BHK",
+  "3 BHK",
+  "3.5 BHK",
+  "4 BHK",
+  "4.5 BHK",
+  "5 BHK",
+  "5+ BHK",
+  "Duplex",
+  "Penthouse",
+  "Loft",
+  // ── Independent Residential ──────────────────────────────────────────────
+  "Villa",
+  "Bungalow",
+  "Row House",
+  "Townhouse",
+  "Independent House",
+  "Farm House",
+  // ── Land ─────────────────────────────────────────────────────────────────
+  "Residential Plot",
+  "NA Plot",
+  "Agricultural Land",
+  // ── Commercial ───────────────────────────────────────────────────────────
+  "Office",
+  "Retail Shop",
+  "Showroom",
+  "Commercial Space",
+  "Warehouse",
+  "Industrial Unit",
+  "Co-working Space",
+  // ── Fallback ─────────────────────────────────────────────────────────────
+  "Other",
+] as const;
+
+// Alias kept for chart bucketing (same array, just as mutable string[]).
+const CONFIG_KEYS: string[] = [...CONFIG_OPTIONS];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SVG ICONS
@@ -281,6 +324,136 @@ function WhatsAppSettingsCard({ user, setUser, isDark, t }: {
         <p className={`text-xs flex items-center gap-1.5 ${isDark ? "text-green-400" : "text-green-600"}`}>
           <FaWhatsapp /> Active: +{user.whatsapp_number}
         </p>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONFIG COMBOBOX  — searchable, keyboard-navigable, no free text
+// ─────────────────────────────────────────────────────────────────────────────
+function ConfigCombobox({
+  value,
+  onChange,
+  isDark,
+  t,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  isDark: boolean;
+  t: ReturnType<typeof buildTheme>;
+}) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const [highlighted, setHighlighted] = useState(0);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+
+  const filtered = query.trim()
+    ? CONFIG_OPTIONS.filter(o => o.toLowerCase().includes(query.toLowerCase()))
+    : [...CONFIG_OPTIONS];
+
+  // Close on outside click
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setQuery("");
+      }
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  // Scroll highlighted item into view
+  useEffect(() => {
+    if (!open || !listRef.current) return;
+    const el = listRef.current.children[highlighted] as HTMLElement | undefined;
+    el?.scrollIntoView({ block: "nearest" });
+  }, [highlighted, open]);
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (!open) {
+      if (e.key === "ArrowDown" || e.key === "Enter") { setOpen(true); setHighlighted(0); }
+      return;
+    }
+    if (e.key === "ArrowDown") { e.preventDefault(); setHighlighted(h => Math.min(h + 1, filtered.length - 1)); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setHighlighted(h => Math.max(h - 1, 0)); }
+    else if (e.key === "Enter") {
+      e.preventDefault();
+      if (filtered[highlighted]) { select(filtered[highlighted]); }
+    }
+    else if (e.key === "Escape") { setOpen(false); setQuery(""); }
+  }
+
+  function select(option: string) {
+    onChange(option);
+    setOpen(false);
+    setQuery("");
+    setHighlighted(0);
+  }
+
+  const displayValue = open ? query : (value || "");
+  const inputPlaceholder = open ? "Type to search…" : (value ? value : "Select configuration…");
+
+  return (
+    <div ref={containerRef} className="relative w-full">
+      {/* ── Trigger / search input ── */}
+      <div
+        className={`w-full flex items-center gap-2 rounded-lg border text-sm transition-colors cursor-pointer ${
+          open
+            ? isDark ? "border-[#9E217B] bg-[#14141B]" : "border-[#00AEEF] bg-white"
+            : `${t.modalInput}`
+        }`}
+        onClick={() => { setOpen(o => !o); setHighlighted(0); }}
+      >
+        <input
+          type="text"
+          value={displayValue}
+          placeholder={inputPlaceholder}
+          onChange={e => { setQuery(e.target.value); setHighlighted(0); if (!open) setOpen(true); }}
+          onKeyDown={handleKeyDown}
+          onFocus={() => { setOpen(true); setHighlighted(0); }}
+          autoComplete="off"
+          className={`flex-1 p-3 outline-none bg-transparent ${t.text} placeholder:text-gray-400`}
+          aria-label="Room Configuration"
+        />
+        <span className={`pr-3 text-xs select-none ${t.textFaint}`}>{open ? "▲" : "▼"}</span>
+      </div>
+
+      {/* ── Dropdown list ── */}
+      {open && (
+        <ul
+          ref={listRef}
+          className={`absolute z-[200] mt-1 w-full max-h-52 overflow-y-auto custom-scrollbar rounded-lg border shadow-xl text-sm ${
+            isDark ? "bg-[#121218] border-[#2A2A35]" : "bg-white border-[#D1D5DB]"
+          }`}
+          role="listbox"
+        >
+          {filtered.length === 0 ? (
+            <li className={`px-4 py-3 ${t.textFaint}`}>No match — select from list only</li>
+          ) : (
+            filtered.map((option, i) => (
+              <li
+                key={option}
+                role="option"
+                aria-selected={value === option}
+                onMouseDown={e => { e.preventDefault(); select(option); }}
+                onMouseEnter={() => setHighlighted(i)}
+                className={`px-4 py-2.5 cursor-pointer transition-colors ${
+                  i === highlighted
+                    ? isDark ? "bg-[#9E217B]/20 text-white" : "bg-[#00AEEF]/10 text-[#00AEEF]"
+                    : value === option
+                      ? isDark ? "text-[#d4006e] font-semibold" : "text-[#9E217B] font-semibold"
+                      : `${t.text}`
+                }`}
+              >
+                {option}
+                {value === option && <span className="ml-2 text-xs opacity-60">✓</span>}
+              </li>
+            ))
+          )}
+        </ul>
       )}
     </div>
   );
@@ -1227,23 +1400,31 @@ export default function ReceptionistDashboard() {
   // ─────────────────────────────────────────────────────────────────────────
   // CHART DATA
   // ─────────────────────────────────────────────────────────────────────────
+  // ── Chart bucket helper ──────────────────────────────────────────────────
+  // All new data uses exact standardised strings. Legacy rows that don't match
+  // any CONFIG_KEY are bucketed into "Other" so they still appear in the chart.
+  const bucketConfig = (rawConfig: string): string => {
+    const c = (rawConfig || "").trim();
+    return CONFIG_KEYS.includes(c) ? c : "Other";
+  };
+
   const configTodayBarData = useMemo(() => {
     const filtered = mergedLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= todayStart);
-    const cc: Record<string, number> = {}; CONFIG_KEYS.forEach(k => cc[k] = 0);
-    filtered.forEach((item: any) => { const c = String(item.configuration || "").trim(); if (cc[c] !== undefined) cc[c]++; else cc["Other"]++; });
+    const cc: Record<string, number> = {}; CONFIG_KEYS.forEach(k => (cc[k] = 0));
+    filtered.forEach((item: any) => { cc[bucketConfig(item.configuration)]++; });
     return CONFIG_KEYS.map((name, i) => ({ name, count: cc[name], color: t.chartColors[i % t.chartColors.length] })).filter(d => d.count > 0);
   }, [mergedLeads, todayStart, t.chartColors]);
 
   const configMonthlyBarData = useMemo(() => {
     const filtered = mergedLeads.filter((e: any) => { if (!e.created_at) return false; const d = new Date(e.created_at); return d.getMonth() === configChartMonth && d.getFullYear() === dateNow.getFullYear(); });
-    const cc: Record<string, number> = {}; CONFIG_KEYS.forEach(k => cc[k] = 0);
-    filtered.forEach((item: any) => { const c = String(item.configuration || "").trim(); if (cc[c] !== undefined) cc[c]++; else cc["Other"]++; });
+    const cc: Record<string, number> = {}; CONFIG_KEYS.forEach(k => (cc[k] = 0));
+    filtered.forEach((item: any) => { cc[bucketConfig(item.configuration)]++; });
     return CONFIG_KEYS.map((name, i) => ({ name, count: cc[name], color: t.chartColors[i % t.chartColors.length] })).filter(d => d.count > 0);
   }, [mergedLeads, configChartMonth, isDark]);
 
   const configInceptionBarData = useMemo(() => {
-    const cc: Record<string, number> = {}; CONFIG_KEYS.forEach(k => cc[k] = 0);
-    mergedLeads.forEach((item: any) => { const c = String(item.configuration || "").trim(); if (cc[c] !== undefined) cc[c]++; else cc["Other"]++; });
+    const cc: Record<string, number> = {}; CONFIG_KEYS.forEach(k => (cc[k] = 0));
+    mergedLeads.forEach((item: any) => { cc[bucketConfig(item.configuration)]++; });
     return CONFIG_KEYS.map((name, i) => ({ name, count: cc[name], color: t.chartColors[i % t.chartColors.length] })).filter(d => d.count > 0);
   }, [mergedLeads, t.chartColors]);
 
@@ -1253,7 +1434,7 @@ export default function ReceptionistDashboard() {
       const monthIdx = d.getMonth(); const year = d.getFullYear();
       const filtered = mergedLeads.filter((e: any) => { if (!e.created_at) return false; const dd = new Date(e.created_at); return dd.getMonth() === monthIdx && dd.getFullYear() === year; });
       const entry: Record<string, any> = { month: MONTH_NAMES[monthIdx].slice(0, 3) };
-      CONFIG_KEYS.forEach(k => { entry[k] = filtered.filter((e: any) => { const c = String(e.configuration || "").trim(); return k === "Other" ? !CONFIG_KEYS.slice(0, -1).includes(c) : c === k; }).length; });
+      CONFIG_KEYS.forEach(k => { entry[k] = filtered.filter((e: any) => bucketConfig(e.configuration) === k).length; });
       return entry;
     });
   };
