@@ -663,6 +663,9 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
                 </div>
             )}
 
+            {/* ── Keyframe styles (stable — never inside a conditional) ── */}
+            <style>{`@keyframes barIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}`}</style>
+
             {/* ── Table card ── */}
             <div className={`${theme.tableWrap} rounded-2xl overflow-hidden`} style={theme.tableGlass}>
                 {/* ═══ Toolbar row 1: title + search + actions ═══ */}
@@ -829,7 +832,6 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
                         className={`flex flex-wrap items-center justify-between gap-3 px-5 py-2.5 border-b animate-[barIn_180ms_ease-out] ${isDark ? "bg-red-950/25 border-red-900/40" : "bg-red-50 border-red-100"
                             }`}
                     >
-                        <style>{`@keyframes barIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}`}</style>
                         <div className="flex items-center gap-3">
                             <span
                                 className={`text-xs font-black tabular-nums ${isDark ? "text-red-200" : "text-red-700"
@@ -881,7 +883,7 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
                             <tr>
                                 {selectMode && (
                                     <th
-                                        className={`w-[46px] px-4 py-3 border-b ${isDark ? "border-white/[0.08]" : "border-gray-500"
+                                        className={`w-[46px] px-4 py-3 border-b ${isDark ? "border-white/[0.08]" : "border-indigo-500"
                                             }`}
                                     >
                                         <Checkbox
@@ -991,7 +993,7 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
                                             {selectMode && (
                                                 <td
                                                     onClick={(e) => e.stopPropagation()}
-                                                    className={`px-4 py-3.5 border-b ${isDark ? "border-white/[0.045]" : "border-gray-200"
+                                                    className={`px-4 py-3.5 border-b ${isDark ? "border-white/[0.045]" : "border-gray-300"
                                                         }`}
                                                 >
                                                     <Checkbox checked={isSelected} onChange={() => toggleSelectOne(id)} />
@@ -1003,7 +1005,7 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
                                                     key={col.key}
                                                     className={`
                             px-3 py-3.5 whitespace-nowrap border-b
-                            ${isDark ? "border-white/[0.045]" : "border-gray-200"}
+                            ${isDark ? "border-white/[0.045]" : "border-indigo-300"}
                             ${col.align === "right" ? "text-right" : col.align === "center" ? "text-center" : "text-left"}
                             ${colIdx === 0 && isDuplicate
                                                             ? "relative before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[3px] before:bg-amber-500"

@@ -632,7 +632,7 @@ export function ColumnSelector({
             rounded-xl border shadow-2xl p-2
             ${isDark
                             ? "bg-[#141419]/95 border-white/10 backdrop-blur-xl"
-                            : "bg-white/95 border-gray-200 backdrop-blur-xl"
+                            : "bg-white/95 border-gray-300 backdrop-blur-xl"
                         }
           `}
                 >
@@ -697,7 +697,7 @@ export function SkeletonRows({
     return (
         <>
             {Array.from({ length: rows }).map((_, r) => (
-                <tr key={r} className={isDark ? "border-white/[0.04]" : "border-gray-200"}>
+                <tr key={r} className={isDark ? "border-white/[0.04]" : "border-gray-300"}>
                     {Array.from({ length: cols }).map((__, c) => (
                         <td key={c} className="px-3 py-4">
                             <div
