@@ -45,7 +45,10 @@ export async function PUT(
     const allowedFields = [
       "name",
       "status",
+      "phone",
+      "email",
       "alt_phone",
+      "location",
       "loan_planned",
       "source_other",
       "cp_name",
@@ -64,6 +67,7 @@ export async function PUT(
       "loan_tracking_info",
       "referral_info",
     ];
+
 
     const result = await transaction(async (client) => {
       const existingRows = await client.query(

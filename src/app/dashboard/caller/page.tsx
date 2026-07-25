@@ -24,7 +24,7 @@ import { MdOutlinePhoneInTalk } from "react-icons/md";
 type LeadSource = string;
 interface RawLead {
   id: string; dbId?: number;
-  name: string; phone: string; email?: string;
+  name: string; phone: string; altPhone?: string; email?: string;
   source?: LeadSource; budget?: string; location?: string;
   feedback?: string; channelPartner?: string; assignManager?: string;
   srNo?: string; formNo?: string; date?: string;
@@ -243,7 +243,7 @@ function LeadDetailView({ lead, onBack, onUpdateLead, callerName }: {
   const dtInputRef = useRef<HTMLInputElement>(null);
   const [editingInfo, setEditingInfo] = useState(false);
   const [infoDraft, setInfoDraft] = useState({
-    name: lead.name, phone: lead.phone || "", email: lead.email || "",
+    name: lead.name, phone: lead.phone || "", altPhone: lead.altPhone || "", email: lead.email || "",
     budget: lead.budget || "", location: lead.location || "",
     source: lead.source || "", channelPartner: lead.channelPartner || "",
     assignManager: lead.assignManager || ""
@@ -253,7 +253,7 @@ function LeadDetailView({ lead, onBack, onUpdateLead, callerName }: {
 
   useEffect(() => {
     if (!editingInfo) setInfoDraft({
-      name: lead.name, phone: lead.phone || "", email: lead.email || "",
+      name: lead.name, phone: lead.phone || "", altPhone: lead.altPhone || "", email: lead.email || "",
       budget: lead.budget || "", location: lead.location || "",
       source: lead.source || "", channelPartner: lead.channelPartner || "",
       assignManager: lead.assignManager || ""
@@ -266,7 +266,7 @@ function LeadDetailView({ lead, onBack, onUpdateLead, callerName }: {
     onUpdateLead({ ...lead, ...infoDraft });
     setEditingInfo(false);
     await apiUpdateLead(lead.dbId, {
-      name: infoDraft.name, contact_no: infoDraft.phone, email: infoDraft.email,
+      name: infoDraft.name, contact_no: infoDraft.phone, alt_phone: infoDraft.altPhone, email: infoDraft.email,
       budget: infoDraft.budget, location: infoDraft.location, source: infoDraft.source,
       channel_partner: infoDraft.channelPartner, assign_manager: infoDraft.assignManager
     });
@@ -303,6 +303,7 @@ function LeadDetailView({ lead, onBack, onUpdateLead, callerName }: {
   const viewFields = [
     { label: "Name", value: lead.name, icon: <FaUser className="text-[10px]" /> },
     { label: "Phone", value: lead.phone, icon: <FaPhoneAlt className="text-[10px]" />, mono: true },
+    { label: "Alt Phone", value: lead.altPhone, icon: <FaPhoneAlt className="text-[10px]" />, mono: true },
     { label: "Email", value: lead.email, icon: <FaEnvelope className="text-[10px]" /> },
     { label: "Budget", value: lead.budget, icon: <FaMoneyBillWave className="text-[10px]" />, green: true },
     { label: "Location", value: lead.location, icon: <FaMapMarkerAlt className="text-[10px]" /> },
@@ -313,6 +314,7 @@ function LeadDetailView({ lead, onBack, onUpdateLead, callerName }: {
   const editFields = [
     { label: "Name", key: "name" as const, icon: <FaUser className="text-[10px]" /> },
     { label: "Phone", key: "phone" as const, icon: <FaPhoneAlt className="text-[10px]" /> },
+    { label: "Alt Phone", key: "altPhone" as const, icon: <FaPhoneAlt className="text-[10px]" /> },
     { label: "Email", key: "email" as const, icon: <FaEnvelope className="text-[10px]" /> },
     { label: "Budget", key: "budget" as const, icon: <FaMoneyBillWave className="text-[10px]" /> },
     { label: "Location", key: "location" as const, icon: <FaMapMarkerAlt className="text-[10px]" /> },

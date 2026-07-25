@@ -111,8 +111,9 @@ export async function POST(req: Request) {
              use_type = $4,
              planning_purchase = $5,
              loan_planned_confirmed = $6,
-             lead_interest_status = $7
-         WHERE id = $8`,
+             lead_interest_status = $7,
+             location = $8
+         WHERE id = $9`,
         [
           newStatus,
           formFields.propertyType || null,
@@ -121,6 +122,7 @@ export async function POST(req: Request) {
           formFields.purchaseDate || null,
           formFields.loanPlanned || null,
           formFields.leadStatus || null,
+          formFields.location || null,
           leadId,
         ]
       );

@@ -2,6 +2,10 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import Head from "next/head";
+import { Inter } from "next/font/google";
+import InlineContactField from "@/components/InlineContactField";
+import { contactFieldSave } from "@/lib/contactFieldSave";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
@@ -1721,12 +1725,32 @@ export default function EmployeesPage() {
                     <div className={`border rounded-2xl p-6 ${t.detailCard}`}>
                       <h3 className={`text-xs font-bold uppercase tracking-wider mb-4 pb-2 ${t.accentText} ${t.detailSection}`}>Lead Information</h3>
                       <div className="space-y-3 text-sm">
+                        <div className="flex justify-between items-start">
+                          <div className="w-full">
+                            <InlineContactField label="Contact No." value={selectedLead.contact_no} fieldType="tel" isDark={isDark} theme={{text: t.textLight, textFaint: t.textFaint, inputInner: t.inp, inputFocus: "focus:border-[#d946a8]"}} canEdit={user?.role === "Admin" || user?.role === "Caller"} mono onSave={async (val) => { const r = await contactFieldSave(selectedLead._id, "phone", val, "leads"); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, contact_no: val })); showToast("Contact details updated successfully."); }} />
+                          </div>
+                        </div>
+                        <div className="flex justify-between items-start">
+                          <div className="w-full">
+                            <InlineContactField label="Email" value={selectedLead.email} fieldType="email" isDark={isDark} theme={{text: t.textLight, textFaint: t.textFaint, inputInner: t.inp, inputFocus: "focus:border-[#d946a8]"}} canEdit={user?.role === "Admin" || user?.role === "Caller"} onSave={async (val) => { const r = await contactFieldSave(selectedLead._id, "email", val, "leads"); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, email: val || "N/A" })); showToast("Contact details updated successfully."); }} />
+                          </div>
+                        </div>
                         {[
-                          { label: "Contact No.", value: selectedLead.contact_no },
-                          { label: "Email", value: selectedLead.email },
                           { label: "Source", value: selectedLead.source },
                           { label: "Channel Partner", value: selectedLead.channel_partner },
                           { label: "Assign Manager", value: selectedLead.assign_manager },
+                        ].map(({ label, value }) => value && value !== "N/A" ? (
+                          <div key={label} className="flex justify-between items-start">
+                            <p className={`text-xs ${t.textMuted}`}>{label}</p>
+                            <p className={`font-medium max-w-[60%] text-right break-words ${t.text}`}>{value}</p>
+                          </div>
+                        ) : null)}
+                        <div className="flex justify-between items-start">
+                          <div className="w-full">
+                            <InlineContactField label="Location" value={selectedLead.location} fieldType="text" isDark={isDark} theme={{text: t.textLight, textFaint: t.textFaint, inputInner: t.inp, inputFocus: "focus:border-[#d946a8]"}} canEdit={user?.role === "Admin" || user?.role === "Caller"} onSave={async (val) => { const r = await contactFieldSave(selectedLead._id, "location", val, "leads"); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, location: val || "N/A" })); showToast("Contact details updated successfully."); }} />
+                          </div>
+                        </div>
+                        {[
                           { label: "Budget", value: selectedLead.budget },
                           { label: "Status", value: selectedLead.status },
                           { label: "Uploaded On", value: formatDate(selectedLead.created_at).split(",")[0] },
@@ -2771,14 +2795,38 @@ function CallerControlMode({ leads, savedLeads, setSavedLeads, adminName, onExit
                   <div className="w-full lg:w-[42%] bg-[#1a1a1a] border border-[#2a2a2a] rounded-2xl p-5 overflow-y-auto custom-scrollbar">
                     <h3 className="text-xs font-bold text-orange-400 uppercase tracking-wider mb-4 border-b border-[#2a2a2a] pb-2">Lead Information</h3>
                     <div className="space-y-3 text-sm">
+                      <div className="flex justify-between items-start">
+                        <div className="w-full">
+                          <InlineContactField label="Phone" value={sl.contact_no || sl.phone} fieldType="tel" isDark={true} theme={{text: "text-white", textFaint: "text-gray-500", inputInner: "bg-[#0f0f0f] border border-gray-700", inputFocus: "focus:border-orange-400"}} canEdit={true} mono onSave={async (val) => { const r = await contactFieldSave(sl.id, "phone", val, "leads"); if (!r.success) throw new Error(r.message); setSavedLeads(prev => prev.map(l => l.id === sl.id ? { ...l, contact_no: val, phone: val } : l)); }} />
+                        </div>
+                      </div>
+                      <div className="flex justify-between items-start">
+                        <div className="w-full">
+                          <InlineContactField label="Alt Phone" value={sl.alt_phone || sl.altPhone} fieldType="tel" isDark={true} theme={{text: "text-white", textFaint: "text-gray-500", inputInner: "bg-[#0f0f0f] border border-gray-700", inputFocus: "focus:border-orange-400"}} canEdit={true} mono onSave={async (val) => { const r = await contactFieldSave(sl.id, "alt_phone", val, "leads"); if (!r.success) throw new Error(r.message); setSavedLeads(prev => prev.map(l => l.id === sl.id ? { ...l, alt_phone: val, altPhone: val } : l)); }} />
+                        </div>
+                      </div>
+                      <div className="flex justify-between items-start">
+                        <div className="w-full">
+                          <InlineContactField label="Email" value={sl.email} fieldType="email" isDark={true} theme={{text: "text-white", textFaint: "text-gray-500", inputInner: "bg-[#0f0f0f] border border-gray-700", inputFocus: "focus:border-orange-400"}} canEdit={true} onSave={async (val) => { const r = await contactFieldSave(sl.id, "email", val, "leads"); if (!r.success) throw new Error(r.message); setSavedLeads(prev => prev.map(l => l.id === sl.id ? { ...l, email: val || "N/A" } : l)); }} />
+                        </div>
+                      </div>
                       {[
-                        { label: "Phone", value: sl.contact_no || sl.phone },
-                        { label: "Email", value: sl.email },
                         { label: "Source", value: sl.source },
                         { label: "Channel Partner", value: sl.channel_partner || sl.channelPartner },
                         { label: "Assign Manager", value: sl.assign_manager || sl.assignManager },
+                      ].map(({ label, value }) => value ? (
+                        <div key={label} className="flex justify-between items-start">
+                          <p className="text-gray-500 text-xs">{label}</p>
+                          <p className="text-white font-medium text-right max-w-[60%] break-words">{value}</p>
+                        </div>
+                      ) : null)}
+                      <div className="flex justify-between items-start">
+                        <div className="w-full">
+                          <InlineContactField label="Location" value={sl.location} fieldType="text" isDark={true} theme={{text: "text-white", textFaint: "text-gray-500", inputInner: "bg-[#0f0f0f] border border-gray-700", inputFocus: "focus:border-orange-400"}} canEdit={true} onSave={async (val) => { const r = await contactFieldSave(sl.id, "location", val, "leads"); if (!r.success) throw new Error(r.message); setSavedLeads(prev => prev.map(l => l.id === sl.id ? { ...l, location: val || "N/A" } : l)); }} />
+                        </div>
+                      </div>
+                      {[
                         { label: "Budget", value: sl.budget },
-                        { label: "Location", value: sl.location },
                         { label: "Status", value: sl.status },
                       ].map(({ label, value }) => value ? (
                         <div key={label} className="flex justify-between items-start">

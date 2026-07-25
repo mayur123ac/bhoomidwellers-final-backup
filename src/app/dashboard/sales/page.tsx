@@ -28,6 +28,8 @@ import {
 } from "react-icons/fa";
 
 import InventoryManagementView from "@/components/InventoryManagementView";
+import InlineContactField from "@/components/InlineContactField";
+import { contactFieldSave } from "@/lib/contactFieldSave";
 import UploadLeadSheet from "@/components/UploadLeadSheet";
 import SelfUploadLeadSheet from "@/components/SelfUploadLeadSheet";
 import {
@@ -2273,17 +2275,14 @@ function SalesManagerView({
                         {detailTab === "personal" ? (
                           <div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 sm:gap-y-4 gap-x-4 text-xs sm:text-sm">
-                              {[
-                                { label: "Email", val: selectedLead.email !== "N/A" ? selectedLead.email : "Not Provided" },
-                                { label: "Phone", val: selectedLead.phone, mono: true },
-                                { label: "Alt Phone", val: selectedLead.altPhone && selectedLead.altPhone !== "N/A" ? selectedLead.altPhone : "Not Provided", mono: true },
-                              ].map(f => (
-                                <div key={f.label}><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>{f.label}</p><p className={`font-semibold ${f.mono ? "font-mono" : ""} break-all ${t.text}`}>{f.val}</p></div>
-                              ))}
+                              <InlineContactField label="Email" value={selectedLead.email} fieldType="email" isDark={isDark} theme={t} canEdit={["admin", "sales manager", "site head", "site_head"].includes(adminUser?.role?.toLowerCase() || "")} onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "email", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, email: val || "N/A" })); }} />
+                              <InlineContactField label="Phone" value={selectedLead.phone} fieldType="tel" isDark={isDark} theme={t} canEdit={["admin", "sales manager", "site head", "site_head"].includes(adminUser?.role?.toLowerCase() || "")} mono onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "phone", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, phone: val })); }} />
+                              <InlineContactField label="Alt Phone" value={selectedLead.altPhone ?? selectedLead.alt_phone} fieldType="tel" isDark={isDark} theme={t} canEdit={["admin", "sales manager", "site head", "site_head"].includes(adminUser?.role?.toLowerCase() || "")} mono onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "alt_phone", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, altPhone: val, alt_phone: val })); }} />
                               <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Lead Interest</p>{selectedLead.leadInterestStatus && selectedLead.leadInterestStatus !== "Pending" ? <InterestBadge status={selectedLead.leadInterestStatus} /> : <p className={`font-semibold ${t.text}`}>Pending</p>}</div>
                               <div className="col-span-1"><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Loan Status</p>{selectedLead.loanStatus && selectedLead.loanStatus !== "N/A" ? <div className="w-fit"><LoanStatusBadge status={selectedLead.loanStatus} /></div> : <p className={`font-semibold ${t.text}`}>N/A</p>}</div>
                               <div className="col-span-1"><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Backdated Entry</p><p className={`font-semibold ${t.text}`}>{selectedLead.auto_date_enabled === false && selectedLead.enquiry_date ? formatDate(selectedLead.enquiry_date).split(",")[0] : "Null"}</p></div>
                               <div className="col-span-1 sm:col-span-2"><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Residential Address</p><p className={`font-semibold ${t.text}`}>{selectedLead.address && selectedLead.address !== "N/A" ? selectedLead.address : "Not Provided"}</p></div>
+                              <div className="col-span-1 sm:col-span-2"><InlineContactField label="Location" value={selectedLead.location} fieldType="text" isDark={isDark} theme={t} canEdit={["admin", "sales manager", "site head", "site_head"].includes(adminUser?.role?.toLowerCase() || "")} onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "location", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, location: val || "N/A" })); }} /></div>
                               <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Budget</p><p className={`font-bold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{selectedLead.salesBudget !== "Pending" ? selectedLead.salesBudget : selectedLead.budget}</p></div>
                               <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Property Type</p><p className={`font-semibold ${t.text}`}>{selectedLead.propType || selectedLead.configuration || "Pending"}</p></div>
                               <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Type of Use</p><p className={`font-semibold ${t.text}`}>{selectedLead.useType !== "Pending" ? selectedLead.useType : (selectedLead.purpose || "N/A")}</p></div>

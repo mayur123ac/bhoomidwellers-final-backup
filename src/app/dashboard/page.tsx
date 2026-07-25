@@ -29,7 +29,10 @@ import LoanDealView from "@/components/LoanDealView";
 import InventoryManagementView from "@/components/InventoryManagementView";
 import UploadLeadSheet from "@/components/UploadLeadSheet";
 import EnquiryOverviewSection from "@/components/Enquiryoverviewsection";
+import InlineContactField from "@/components/InlineContactField";
+import { contactFieldSave } from "@/lib/contactFieldSave";
 // import ActivityTimeline from "@/components/ActivityTimeline";
+
 import {
   handleMarkLostLead as markLostLeadApi,
   handleRestoreLead as restoreLeadApi,
@@ -3674,17 +3677,14 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                               {detailTab === "personal" ? (
                                 <div>
                                   <div className="grid grid-cols-2 gap-y-3 gap-x-2 text-sm">
-                                    {[
-                                      { label: "Email", val: selectedLead.email !== "N/A" ? selectedLead.email : "Not Provided" },
-                                      { label: "Phone", val: maskPhone(selectedLead.phone, adminUser?.role, selectedLead.assigned_to === adminUser?.name), mono: true },
-                                      { label: "Alt Phone", val: selectedLead.altPhone && selectedLead.altPhone !== "N/A" ? maskPhone(selectedLead.altPhone, adminUser?.role, selectedLead.assigned_to === adminUser?.name) : "Not Provided", mono: true },
-                                    ].map(f => (
-                                      <div key={f.label}><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>{f.label}</p><p className={`font-semibold ${f.mono ? "font-mono" : ""} ${theme.text}`}>{f.val}</p></div>
-                                    ))}
+                                    <InlineContactField label="Email" value={selectedLead.email} fieldType="email" isDark={isDark} theme={theme} canEdit={adminUser?.role?.toLowerCase() === "admin"} onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "email", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, email: val || "N/A" })); showToast("Contact details updated successfully."); }} />
+                                    <InlineContactField label="Phone" value={selectedLead.phone} fieldType="tel" isDark={isDark} theme={theme} canEdit={adminUser?.role?.toLowerCase() === "admin"} mono onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "phone", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, phone: val })); showToast("Contact details updated successfully."); }} />
+                                    <InlineContactField label="Alt Phone" value={selectedLead.altPhone ?? selectedLead.alt_phone} fieldType="tel" isDark={isDark} theme={theme} canEdit={adminUser?.role?.toLowerCase() === "admin"} mono onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "alt_phone", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, altPhone: val, alt_phone: val })); showToast("Contact details updated successfully."); }} />
                                     <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Lead Interest</p>{selectedLead.leadInterestStatus && selectedLead.leadInterestStatus !== "Pending" ? <InterestBadge status={selectedLead.leadInterestStatus} isDark={isDark} /> : <p className={`font-semibold ${theme.text}`}>Pending</p>}</div>
                                     <div className="col-span-1"><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Loan Status</p>{selectedLead.loanStatus && selectedLead.loanStatus !== "N/A" ? <div className="w-fit"><LoanStatusBadge status={selectedLead.loanStatus} isDark={isDark} /></div> : <p className={`font-semibold ${theme.text}`}>N/A</p>}</div>
                                     <div className="col-span-1"><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Backdated Entry</p><p className={`font-semibold ${theme.text}`}>{selectedLead.auto_date_enabled === false && selectedLead.enquiry_date ? formatDate(selectedLead.enquiry_date).split(",")[0] : "Null"}</p></div>
                                     <div className="col-span-2"><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Residential Address</p><p className={`font-semibold ${theme.text}`}>{selectedLead.address && selectedLead.address !== "N/A" ? selectedLead.address : "Not Provided"}</p></div>
+                                    <div className="col-span-2"><InlineContactField label="Location" value={selectedLead.location} fieldType="text" isDark={isDark} theme={theme} canEdit={adminUser?.role?.toLowerCase() === "admin"} onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "location", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, location: val || "N/A" })); showToast("Contact details updated successfully."); }} /></div>
                                     <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Budget</p><p className={`font-bold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{selectedLead.salesBudget !== "Pending" ? selectedLead.salesBudget : selectedLead.budget}</p></div>
                                     <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Property Type</p><p className={`font-semibold ${theme.text}`}>{selectedLead.propType || "Pending"}</p></div>
                                     <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Type of Use</p><p className={`font-semibold ${theme.text}`}>{selectedLead.useType !== "Pending" ? selectedLead.useType : (selectedLead.purpose || "N/A")}</p></div>
@@ -4749,17 +4749,14 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                               {detailTab === "personal" ? (
                                 <div>
                                   <div className="grid grid-cols-2 gap-y-3 gap-x-4 text-sm">
-                                    {[
-                                      { label: "Email", val: selectedLead.email !== "N/A" ? selectedLead.email : "Not Provided" },
-                                      { label: "Phone", val: maskPhone(selectedLead.phone, adminUser?.role, selectedLead.assigned_to === adminUser?.name), mono: true },
-                                      { label: "Alt Phone", val: selectedLead.altPhone && selectedLead.altPhone !== "N/A" ? maskPhone(selectedLead.altPhone, adminUser?.role, selectedLead.assigned_to === adminUser?.name) : "Not Provided", mono: true },
-                                    ].map(f => (
-                                      <div key={f.label}><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>{f.label}</p><p className={`font-semibold ${f.mono ? "font-mono" : ""} ${theme.text}`}>{f.val}</p></div>
-                                    ))}
+                                    <InlineContactField label="Email" value={selectedLead.email} fieldType="email" isDark={isDark} theme={theme} canEdit={adminUser?.role?.toLowerCase() === "admin"} onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "email", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, email: val || "N/A" })); showToast("Contact details updated successfully."); }} />
+                                    <InlineContactField label="Phone" value={selectedLead.phone} fieldType="tel" isDark={isDark} theme={theme} canEdit={adminUser?.role?.toLowerCase() === "admin"} mono onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "phone", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, phone: val })); showToast("Contact details updated successfully."); }} />
+                                    <InlineContactField label="Alt Phone" value={selectedLead.altPhone ?? selectedLead.alt_phone} fieldType="tel" isDark={isDark} theme={theme} canEdit={adminUser?.role?.toLowerCase() === "admin"} mono onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "alt_phone", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, altPhone: val, alt_phone: val })); showToast("Contact details updated successfully."); }} />
                                     <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Lead Interest</p>{selectedLead.leadInterestStatus && selectedLead.leadInterestStatus !== "Pending" ? <InterestBadge status={selectedLead.leadInterestStatus} isDark={isDark} /> : <p className={`font-semibold ${theme.text}`}>Pending</p>}</div>
                                     <div className="col-span-1"><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Loan Status</p>{selectedLead.loanStatus && selectedLead.loanStatus !== "N/A" ? <div className="w-fit"><LoanStatusBadge status={selectedLead.loanStatus} isDark={isDark} /></div> : <p className={`font-semibold ${theme.text}`}>N/A</p>}</div>
                                     <div className="col-span-1"><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Backdated Entry</p><p className={`font-semibold ${theme.text}`}>{selectedLead.auto_date_enabled === false && selectedLead.enquiry_date ? formatDate(selectedLead.enquiry_date).split(",")[0] : "Null"}</p></div>
                                     <div className="col-span-2"><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Residential Address</p><p className={`font-semibold ${theme.text}`}>{selectedLead.address && selectedLead.address !== "N/A" ? selectedLead.address : "Not Provided"}</p></div>
+                                    <div className="col-span-2"><InlineContactField label="Location" value={selectedLead.location} fieldType="text" isDark={isDark} theme={theme} canEdit={adminUser?.role?.toLowerCase() === "admin"} onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "location", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, location: val || "N/A" })); showToast("Contact details updated successfully."); }} /></div>
                                     <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Budget</p><p className={`font-bold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{selectedLead.salesBudget !== "Pending" ? selectedLead.salesBudget : selectedLead.budget}</p></div>
                                     <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Property Type</p><p className={`font-semibold ${theme.text}`}>{selectedLead.propType || "Pending"}</p></div>
                                     <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Type of Use</p><p className={`font-semibold ${theme.text}`}>{selectedLead.useType !== "Pending" ? selectedLead.useType : (selectedLead.purpose || "N/A")}</p></div>
@@ -5642,17 +5639,14 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                       <div>
                         <h3 className={`text-sm font-bold border-b pb-2 mb-4 uppercase tracking-widest ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"} ${theme.tableBorder}`}>Contact Information</h3>
                         <div className="space-y-4">
-                          {[
-                            { label: "Phone Number", val: selectedLead.phone, mono: true },
-                            { label: "Alt. Phone", val: selectedLead.altPhone || selectedLead.alt_phone || "N/A", mono: true },
-                            { label: "Email Address", val: selectedLead.email },
-                            { label: "Residential Address", val: selectedLead.address },
-                          ].map(({ label, val, mono }) => (
-                            <div key={label}>
-                              <p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>{label}</p>
-                              <p className={`${mono ? "text-lg tracking-widest font-semibold" : "font-medium"} ${theme.text}`}>{val || "N/A"}</p>
-                            </div>
-                          ))}
+                          <InlineContactField label="Phone Number" value={selectedLead.phone} fieldType="tel" isDark={isDark} theme={theme} canEdit={adminUser?.role?.toLowerCase() === "admin"} mono onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "phone", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, phone: val })); showToast("Contact details updated successfully."); }} />
+                          <InlineContactField label="Alt. Phone" value={selectedLead.altPhone ?? selectedLead.alt_phone} fieldType="tel" isDark={isDark} theme={theme} canEdit={adminUser?.role?.toLowerCase() === "admin"} mono onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "alt_phone", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, altPhone: val, alt_phone: val })); showToast("Contact details updated successfully."); }} />
+                          <InlineContactField label="Email Address" value={selectedLead.email} fieldType="email" isDark={isDark} theme={theme} canEdit={adminUser?.role?.toLowerCase() === "admin"} onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "email", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, email: val || "N/A" })); showToast("Contact details updated successfully."); }} />
+                          <div>
+                            <p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Residential Address</p>
+                            <p className={`font-medium ${theme.text}`}>{selectedLead.address || "N/A"}</p>
+                          </div>
+                          <InlineContactField label="Location" value={selectedLead.location} fieldType="text" isDark={isDark} theme={theme} canEdit={adminUser?.role?.toLowerCase() === "admin"} onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "location", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, location: val || "N/A" })); showToast("Contact details updated successfully."); }} />
                         </div>
                       </div>
                     </div>
@@ -5878,9 +5872,9 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                               {detailTab === "personal" ? (
                                 <div>
                                   <div className="grid grid-cols-2 gap-y-6 gap-x-4 text-sm">
-                                    <div><p className={`text-xs font-medium mb-1 ${theme.textMuted}`}>Email</p><p className={`font-semibold ${theme.text}`}>{selectedLead.email && selectedLead.email !== "N/A" ? selectedLead.email : "Not Provided"}</p></div>
-                                    <div><p className={`text-xs font-medium mb-1 flex items-center gap-1 ${theme.textMuted}`}><FaPhoneAlt className="text-[10px]" /> Phone</p><p className={`font-mono font-semibold ${theme.text}`}>{maskPhone(selectedLead.phone, adminUser?.role, selectedLead.assigned_to === adminUser?.name)}</p></div>
-                                    <div><p className={`text-xs font-medium mb-1 ${theme.textMuted}`}>Alt Phone</p><p className={`font-mono font-semibold ${theme.text}`}>{selectedLead.altPhone && selectedLead.altPhone !== "N/A" ? maskPhone(selectedLead.altPhone, adminUser?.role, selectedLead.assigned_to === adminUser?.name) : "Not Provided"}</p></div>
+                                    <InlineContactField label="Email" value={selectedLead.email} fieldType="email" isDark={isDark} theme={theme} canEdit={adminUser?.role?.toLowerCase() === "admin"} onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "email", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, email: val || "N/A" })); showToast("Contact details updated successfully."); }} />
+                                    <InlineContactField label="Phone" value={selectedLead.phone} fieldType="tel" isDark={isDark} theme={theme} canEdit={adminUser?.role?.toLowerCase() === "admin"} mono onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "phone", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, phone: val })); showToast("Contact details updated successfully."); }} />
+                                    <InlineContactField label="Alt Phone" value={selectedLead.altPhone ?? selectedLead.alt_phone} fieldType="tel" isDark={isDark} theme={theme} canEdit={adminUser?.role?.toLowerCase() === "admin"} mono onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "alt_phone", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, altPhone: val, alt_phone: val })); showToast("Contact details updated successfully."); }} />
                                     <div><p className={`text-xs font-medium mb-1 ${theme.textMuted}`}>Lead Interest</p>
                                       {selectedLead.leadInterestStatus && selectedLead.leadInterestStatus !== "Pending" ? <InterestBadge status={selectedLead.leadInterestStatus} isDark={isDark} /> : <p className={`font-semibold ${theme.text}`}>Pending</p>}
                                     </div>
@@ -5889,6 +5883,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                                     </div>
                                     <div className="col-span-1"><p className={`text-xs font-medium mb-1 ${theme.textMuted}`}>Backdated Entry</p><p className={`font-semibold ${theme.text}`}>{selectedLead.auto_date_enabled === false && selectedLead.enquiry_date ? formatDate(selectedLead.enquiry_date).split(",")[0] : "Null"}</p></div>
                                     <div className="col-span-2"><p className={`text-xs font-medium mb-1 ${theme.textMuted}`}>Residential Address</p><p className={`font-semibold ${theme.text}`}>{selectedLead.address && selectedLead.address !== "N/A" ? selectedLead.address : "Not Provided"}</p></div>
+                                    <div className="col-span-2"><InlineContactField label="Location" value={selectedLead.location} fieldType="text" isDark={isDark} theme={theme} canEdit={adminUser?.role?.toLowerCase() === "admin"} onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "location", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, location: val || "N/A" })); showToast("Contact details updated successfully."); }} /></div>
                                     <div><p className={`text-xs font-medium mb-1 ${theme.textMuted}`}>Budget</p><p className="text-green-500 font-bold">{selectedLead.salesBudget && selectedLead.salesBudget !== "Pending" ? selectedLead.salesBudget : selectedLead.budget}</p></div>
                                     <div><p className={`text-xs font-medium mb-1 ${theme.textMuted}`}>Property Type</p><p className={`font-semibold ${theme.text}`}>{selectedLead.propType || "Pending"}</p></div>
                                     <div><p className={`text-xs font-medium mb-1 ${theme.textMuted}`}>Type of Use</p><p className={`font-semibold ${theme.text}`}>{selectedLead.useType && selectedLead.useType !== "Pending" ? selectedLead.useType : (selectedLead.purpose || "N/A")}</p></div>
