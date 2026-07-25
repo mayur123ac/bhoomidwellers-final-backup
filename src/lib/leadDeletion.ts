@@ -318,8 +318,12 @@ export async function deleteLeadLocalUploads(leadId: number): Promise<LocalAsset
 
 export async function deleteLeadDatabaseRecords(
   client: PoolClient,
-  leadId: number
+  leadId: number,
+  options: { recalc?: boolean } = {}
 ): Promise<LeadDatabaseDeletionResult> {
+  // recalc defaults to true so existing single-delete behavior is unchanged.
+  // Bulk delete passes recalc:false and calls recalculateSrNos once after the batch.
+  const { recalc = true } = options;
   const deletedRecords: Record<string, number> = {};
 
   for (const item of LEAD_RELATED_DELETES) {
@@ -355,7 +359,9 @@ export async function deleteLeadDatabaseRecords(
   );
   deletedRecords.walkin_enquiries = leadDeleteResult.rowCount ?? 0;
 
-  await recalculateSrNos(client);
+  if (recalc) {
+    await recalculateSrNos(client);
+  }
 
   return { deletedRecords, clearedLiveStateRows };
 }

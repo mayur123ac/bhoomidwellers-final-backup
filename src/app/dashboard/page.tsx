@@ -23,9 +23,12 @@ import ClosedLeadBookingView from "@/components/ClosedLeadBookingView";
 import LostLeadModal from "@/components/LostLeadModal";
 import CrmUpdatesNotification from "@/components/CrmUpdatesNotification";
 import PermanentLeadDeleteDialog from "@/components/PermanentLeadDeleteDialog";
+import BulkDeleteLeadsDialog from "@/components/BulkDeleteLeadsDialog";
 import LoanDealForm from "@/components/LoanDealForm";
 import LoanDealView from "@/components/LoanDealView";
 import InventoryManagementView from "@/components/InventoryManagementView";
+import UploadLeadSheet from "@/components/UploadLeadSheet";
+import EnquiryOverviewSection from "@/components/Enquiryoverviewsection";
 // import ActivityTimeline from "@/components/ActivityTimeline";
 import {
   handleMarkLostLead as markLostLeadApi,
@@ -1441,6 +1444,84 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deletedLeadIds, setDeletedLeadIds] = useState<Set<number | string>>(new Set());
 
+  // ── Duplicate detection (phone-based) ──────────────────────────────────────
+  const [duplicateIds, setDuplicateIds] = useState<Set<number>>(new Set());
+  // leadId -> all leadIds in its duplicate group (for the tooltip)
+  const [dupGroupByLeadId, setDupGroupByLeadId] = useState<Map<number, number[]>>(new Map());
+  const [showDuplicatesOnly, setShowDuplicatesOnly] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/walkin_enquiries/duplicates")
+      .then((r) => r.json())
+      .then((data) => {
+        if (!data?.success) return;
+        setDuplicateIds(new Set((data.allDuplicateLeadIds || []).map((n: any) => Number(n))));
+        const map = new Map<number, number[]>();
+        for (const g of data.duplicateGroups || []) {
+          const ids = (g.leadIds || []).map((n: any) => Number(n));
+          for (const id of ids) map.set(id, ids);
+        }
+        setDupGroupByLeadId(map);
+      })
+      .catch(() => { });
+  }, [allLeads.length]);
+
+  // ── Bulk select + delete ───────────────────────────────────────────────────
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [bulkDeleteError, setBulkDeleteError] = useState<string | null>(null);
+
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  };
+
+  const toggleSelectOne = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const handleBulkDelete = async (reason?: string) => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    setIsBulkDeleting(true);
+    setBulkDeleteError(null);
+    try {
+      const res = await fetch("/api/walkin_enquiries/bulk-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leadIds: ids, reason }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        setBulkDeleteError(json.message || "Bulk delete failed.");
+        return;
+      }
+      const deletedNow: number[] = ids.filter(
+        (id) => !json.failed?.some((f: any) => Number(f.id) === id)
+      );
+      setDeletedLeadIds((prev) => new Set([...prev, ...deletedNow]));
+      const failCount = json.failed?.length || 0;
+      setToastMsg(
+        `Deleted ${json.deleted} lead${json.deleted === 1 ? "" : "s"}.` +
+        (failCount ? ` ${failCount} failed.` : "")
+      );
+      setTimeout(() => setToastMsg(null), 4000);
+      setBulkDeleteOpen(false);
+      exitSelectMode();
+      refetch();
+    } catch (e: any) {
+      setBulkDeleteError(e.message ?? "Bulk delete failed.");
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
+
   // ── Enhanced Reassign Logic ────────────────────────────────────────────────
   const handleReassignLead = async () => {
     if (!reassignLead || !reassignTarget || !reassignNote.trim()) return;
@@ -1685,10 +1766,13 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
         return !isNGD;
       });
     }
+    if (showDuplicatesOnly) {
+      leads = leads.filter((l: any) => duplicateIds.has(Number(l.id)));
+    }
     // Sort numerically by sr_no descending so Lead No. order is always correct (#119, #118 ... #2, #1)
     leads = [...leads].sort((a: any, b: any) => (Number(b.sr_no) || 0) - (Number(a.sr_no) || 0));
     return leads;
-  }, [allLeads, overviewSearch, overviewSearchColumn, lostLeadFilter, showLostLeads, showNGDLeads, deletedLeadIds]);
+  }, [allLeads, overviewSearch, overviewSearchColumn, lostLeadFilter, showLostLeads, showNGDLeads, deletedLeadIds, showDuplicatesOnly, duplicateIds]);
 
   const formatDate = (ds: string) => {
     if (!ds) return "—";
@@ -1875,226 +1959,45 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
           OVERALL MODE
       ════════════════════════════════════════════════ */}
       {perfMode === "overall" ? (
-        <div className="animate-fadeIn space-y-4">
-          {allLeads.length > 0 && (
-            <div>
-              <div className="flex items-center gap-3 mb-4">
-                <FaChartPie className="text-[#00AEEF]" />
-                <h3 className={`font-bold text-sm uppercase tracking-wider ${theme.text}`}>Overall Lead Analytics</h3>
-                <span className={`text-xs px-2 py-0.5 rounded border ${theme.settingsBg} ${theme.textMuted}`}>{allLeads.length} leads</span>
-              </div>
-              <DashboardAnalytics leads={allLeads} theme={theme} isDark={isDark} />
-            </div>
-          )}
-
-          <div className={`${theme.tableWrap} rounded-xl overflow-hidden`} style={theme.tableGlass}>
-            <div className={`p-5 flex flex-wrap justify-between items-center gap-2 ${theme.tableHead}`}>
-              <h3 className={`font-bold flex items-center gap-2 ${theme.text}`}>
-                <FaTable className="text-[#00AEEF]" /> Enquiry Overview
-              </h3>
-              <div className="flex items-center gap-3 flex-wrap">
-                <select
-                  value={lostLeadFilter}
-                  onChange={(e) => setLostLeadFilter(e.target.value as any)}
-                  className={`px-3 py-1.5 text-xs font-bold rounded-lg outline-none border cursor-pointer ${theme.select}`}
-                >
-                  <option value="all">All Leads</option>
-                  <option value="active">Active Leads</option>
-                  <option value="lost">Lost Leads</option>
-                </select>
-                <label className={`flex items-center gap-1.5 text-xs font-semibold cursor-pointer select-none ${theme.textMuted}`}>
-                  <input
-                    type="checkbox"
-                    checked={showLostLeads}
-                    onChange={(e) => setShowLostLeads(e.target.checked)}
-                    className="accent-[#9E217B] w-3.5 h-3.5 cursor-pointer"
-                    disabled={lostLeadFilter !== "all"}
-                  />
-                  Show Lost
-                </label>
-                <select
-                  value={overviewSearchColumn}
-                  onChange={(e) => setOverviewSearchColumn(e.target.value)}
-                  className={`px-3 py-1.5 text-xs font-bold rounded-lg outline-none border cursor-pointer ${theme.select}`}
-                >
-                  <option value="all">All Columns</option>
-                  <option value="lead_no">Lead No.</option>
-                  <option value="name">Name</option>
-                  <option value="prop_type">Property Type</option>
-                  <option value="budget">Budget</option>
-                  <option value="source">Source</option>
-                  <option value="cp_name">CP Name</option>
-                  <option value="cp_company">CP Company</option>
-                  <option value="cp_phone">CP Phone</option>
-                  <option value="status">Status</option>
-                  <option value="interest">Interest</option>
-                  <option value="site_visit">Site Visit</option>
-                  <option value="assigned_to">Assigned To</option>
-                </select>
-                <TableSearchInput value={overviewSearch} onChange={setOverviewSearch} theme={theme} />
-                <button
-                  onClick={() => downloadCSV(allLeads.map(formatLeadForExport), "Overall_Enquiries.csv")}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold border rounded-lg transition-colors hover:opacity-80 ${isDark ? 'bg-[#222] border-[#333] text-white' : 'bg-white border-indigo-200 text-indigo-600'}`}
-                >
-                  <FaDownload size={12} /> Export CSV
-                </button>
-                <span className={`text-xs px-3 py-1 rounded-full ${theme.btnClosingBadge}`}>
-                  Total: {filteredOverviewLeads.length}
-                </span>
-              </div>
-            </div>
-
-            <div className="overflow-x-auto">
-              <div ref={loadLessRef} style={{ height: "1px", width: "100%" }} />
-              <table className="w-full text-left text-sm">
-                <thead className={`text-xs uppercase sticky top-0 z-10 ${theme.tableHead} ${theme.textHeader}`}>
-                  <tr>
-                    {[
-                      { label: "LEAD NO.", width: "min-w-[80px]" },
-                      { label: "NAME", width: "min-w-[140px]" },
-                      { label: "PROP. TYPE", width: "min-w-[100px]" },
-                      { label: "BUDGET", width: "min-w-[100px]" },
-                      { label: "SOURCE", width: "min-w-[120px]" },
-                      { label: "CP NAME", width: "min-w-[110px]" },
-                      { label: "CP COMPANY", width: "min-w-[120px]" },
-                      { label: "CP PHONE", width: "min-w-[110px]" },
-                      { label: "STATUS", width: "min-w-[120px]" },
-                      { label: "LOST STATUS", width: "min-w-[100px]" },
-                      { label: "INTEREST", width: "min-w-[110px]" },
-                      { label: "SITE VISIT", width: "min-w-[100px]" },
-                      { label: "DATE CREATED", width: "min-w-[110px]" },
-                      { label: "BACKDATED ENTRY", width: "min-w-[110px]" },
-                      { label: "ASSIGNED TO", width: "min-w-[140px]" },
-                      { label: "REASSIGN", width: "min-w-[110px]" },
-                      { label: "ACTION", width: "min-w-[70px]" },
-                    ].map(({ label, width }) => (
-                      <th key={label} className={`px-2 py-3 whitespace-nowrap ${width}`}>{label}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className={`divide-y ${theme.tableDivide}`}>
-                  {isLoading ? (
-                    <tr><td colSpan={17} className={`text-center py-8 ${theme.textMuted}`}>Syncing...</td></tr>
-                  ) : filteredOverviewLeads.length === 0 ? (
-                    <tr><td colSpan={17} className={`text-center py-8 ${theme.textMuted}`}>No leads match your search.</td></tr>
-                  ) : filteredOverviewLeads.slice(0, visibleCount).map((lead: any) => {
-                    let assignedRole = "Unassigned";
-                    let assignedName = lead.assigned_receptionist || lead.assigned_to || "";
-                    if (lead.assigned_receptionist) assignedRole = "Receptionist";
-                    else if (siteHeads?.some((sh: any) => sh.name === lead.assigned_to)) assignedRole = "Site Head";
-                    else if (lead.assigned_to) assignedRole = "Sales Manager";
-
-                    return (
-                      <tr key={lead.id} className={`transition-colors cursor-pointer whitespace-nowrap ${theme.tableRow}`} style={lead.is_lost_lead ? { opacity: 0.5, filter: "grayscale(0.5)" } : {}} onClick={() => onNavigateToSales && onNavigateToSales(lead)}>
-                        <td className={`px-4 py-3 sm:py-4.5 font-bold ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>#{lead.sr_no || lead.id}</td>
-                        <td className={`px-4 py-2.5 font-medium ${theme.text}`}>
-                          {(lead.assigned_to || lead.assign2d_receptionist) ? (
-                            <span
-                              className={`cursor-pointer hover:underline transition-colors ${isDark ? "hover:text-[#d946a8]" : "hover:text-[#9E217B]"}`}
-                              title={`Open lead detail for ${lead.name}`}
-                              onClick={(e) => { e.stopPropagation(); onNavigateToSales && onNavigateToSales(lead); }}
-                            >
-                              {lead.name}
-                            </span>
-                          ) : (
-                            lead.name
-                          )}
-                        </td>
-                        <td className={`px-2 py-2 ${theme.textMuted}`}>{(lead.propType && lead.propType !== "Pending" && lead.propType !== "N/A" ? lead.propType : lead.configuration && lead.configuration !== "Pending" && lead.configuration !== "N/A" ? lead.configuration : "Pending")}</td>
-                        <td className={`px-2 py-2 font-semibold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget || lead.budget || "N/A"}</td>
-                        <td className={`px-2 py-2 text-xs ${theme.textMuted}`}>{lead.source || "—"}</td>
-                        <td className={`px-2 py-2 ${theme.textMuted}`}>{lead.cpName || lead.cp_name || "—"}</td>
-                        <td className={`px-2 py-2 ${theme.textMuted}`}>{lead.cpCompany || lead.cp_company || "—"}</td>
-                        <td className={`px-2 py-2 font-mono text-xs ${theme.textMuted}`}>{lead.cpPhone || lead.cp_phone || "—"}</td>
-                        <td className="px-2 py-2.5">
-                          <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase border flex-shrink-0 whitespace-nowrap ${lead.status === "Closing" ? theme.statusClosing : lead.status === "Visit Scheduled" ? theme.statusVisit : theme.statusAssigned}`}>
-                            {lead.status || "Assigned"}
-                          </span>
-                        </td>
-                        <td className="px-2 py-2">
-                          {lead.is_lost_lead ? (
-                            <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase border flex-shrink-0 whitespace-nowrap ${theme.statusLost}`}>
-                              Lost Lead
-                            </span>
-                          ) : (
-                            <span className={`text-[10px] font-semibold uppercase ${isDark ? "text-green-400" : "text-emerald-600"}`}>Active</span>
-                          )}
-                        </td>
-                        <td className="px-2 py-2">
-                          {lead.leadInterestStatus && lead.leadInterestStatus !== "Pending"
-                            ? <InterestBadge status={lead.leadInterestStatus} size="sm" isDark={isDark} />
-                            : <span className={`text-xs italic ${theme.textFaint}`}>—</span>}
-                        </td>
-                        <td className="px-4 py-3 sm:py-4.5">
-                          {lead.mongoVisitDate
-                            ? <span className="text-orange-500 font-medium">{formatDate(lead.mongoVisitDate).split(",")[0]}</span>
-                            : <span className={`text-xs italic ${theme.textFaint}`}>Pending</span>}
-                        </td>
-                        <td className={`px-2 py-2 text-xs whitespace-normal min-w-[120px] ${theme.textFaint}`}>
-                          {lead.created_at ? formatDate(lead.created_at) : "—"}
-                        </td>
-                        <td className={`px-2 py-2 text-xs whitespace-normal min-w-[120px] ${theme.textFaint}`}>
-                          {lead.auto_date_enabled === false && lead.enquiry_date ? formatDate(lead.enquiry_date).split(",")[0] : "-"}
-                        </td>
-                        <td className={`px-2 py-2 ${theme.textMuted}`}>
-                          {assignedName ? (
-                            <div className="flex flex-col gap-0.5">
-                              <span className={`font-semibold ${theme.text}`}>{assignedName}</span>
-                              <span className={`text-[9px] px-1.5 py-0.5 rounded border inline-block w-fit ${isDark ? "bg-[#222] border-[#333]" : "bg-gray-50 border-gray-200"}`}>
-                                {assignedRole}
-                              </span>
-                            </div>
-                          ) : "—"}
-                        </td>
-                        <td className="px-2 py-2" onClick={e => e.stopPropagation()}>
-                          {lead.status === "Closing" || lead.status === "Closed" || !!lead.closingDate ? (
-                            <span className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase border whitespace-nowrap ${isDark ? "text-gray-400 border-gray-600 bg-gray-800/50" : "text-gray-500 border-gray-300 bg-gray-100"}`}>
-                              Marked closed
-                            </span>
-                          ) : (
-                            <button className={`text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${isDark ? "bg-orange-600 hover:bg-orange-500 text-white" : "bg-orange-100 hover:bg-orange-200 text-orange-700"}`}
-                              onClick={e => { e.stopPropagation(); setReassignLead(lead); setReassignTarget(""); setReassignNote(""); setIsReassignModalOpen(true); }}>
-                              <FaExchangeAlt /> Reassign
-                            </button>
-                          )}
-                        </td>
-                        <td className="px-2 py-2" onClick={e => e.stopPropagation()}>
-                          {isAdmin ? (
-                            <button
-                              onClick={() => { setDeleteError(null); setDeleteConfirmLead(lead); }}
-                              title="Delete Permanently"
-                              className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors cursor-pointer ${isDark ? "bg-red-900/20 hover:bg-red-600 text-red-400 hover:text-white" : "bg-red-50 hover:bg-red-500 text-red-500 hover:text-white"}`}
-                            >
-                              <FaTrashAlt className="text-xs" />
-                            </button>
-                          ) : (
-                            <span className={`text-xs italic ${theme.textFaint}`}>—</span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-
-              {visibleCount < filteredOverviewLeads.length && (
-                <div ref={loadMoreRef} className={`flex items-center justify-center gap-3 py-6 ${theme.textMuted}`}>
-                  <div className="w-4 h-4 rounded-full border-2 border-[#9E217B] border-t-transparent animate-spin" />
-                  <span className="text-xs font-medium">Loading more… ({visibleCount} of {filteredOverviewLeads.length})</span>
-                </div>
-              )}
-              {visibleCount >= filteredOverviewLeads.length && allLeads.length > 20 && (
-                <div className={`text-center py-2.5 text-xs font-medium ${theme.textFaint}`}>
-                  ✓ All {filteredOverviewLeads.length} leads loaded
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        /* ════════════════════════════════════════════════
-            MANAGER MODE — no selection yet
-        ════════════════════════════════════════════════ */
+        <EnquiryOverviewSection
+          allLeads={allLeads}
+          filteredOverviewLeads={filteredOverviewLeads}
+          isLoading={isLoading}
+          theme={theme}
+          isDark={isDark}
+          isAdmin={isAdmin}
+          siteHeads={siteHeads}
+          lostLeadFilter={lostLeadFilter}
+          setLostLeadFilter={setLostLeadFilter}
+          showLostLeads={showLostLeads}
+          setShowLostLeads={setShowLostLeads}
+          duplicateIds={duplicateIds}
+          dupGroupByLeadId={dupGroupByLeadId}
+          showDuplicatesOnly={showDuplicatesOnly}
+          setShowDuplicatesOnly={setShowDuplicatesOnly}
+          overviewSearch={overviewSearch}
+          setOverviewSearch={setOverviewSearch}
+          overviewSearchColumn={overviewSearchColumn}
+          setOverviewSearchColumn={setOverviewSearchColumn}
+          selectMode={selectMode}
+          setSelectMode={setSelectMode}
+          exitSelectMode={exitSelectMode}
+          selectedIds={selectedIds}
+          setSelectedIds={setSelectedIds}
+          toggleSelectOne={toggleSelectOne}
+          onOpenBulkDelete={() => { setBulkDeleteError(null); setBulkDeleteOpen(true); }}
+          onToast={setToastMsg}
+          onDeleteLead={(lead) => { setDeleteError(null); setDeleteConfirmLead(lead); }}
+          onReassign={(lead) => { setReassignLead(lead); setReassignTarget(""); setReassignNote(""); setIsReassignModalOpen(true); }}
+          onNavigateToSales={onNavigateToSales}
+          refetch={refetch}
+          formatDate={formatDate}
+          downloadCSV={downloadCSV}
+          formatLeadForExport={formatLeadForExport}
+          DashboardAnalytics={DashboardAnalytics}
+          UploadLeadSheet={UploadLeadSheet}
+          InterestBadge={InterestBadge}
+        />
       ) : perfMode === "manager" && !selectedManagerName ? (
         <div className={`flex-1 flex flex-col items-center justify-center border-2 border-dashed rounded-xl min-h-[300px] ${theme.textMuted} ${theme.tableBorder}`}>
           <FaTable className="text-4xl mb-4 opacity-20" />
@@ -2709,6 +2612,20 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
           setDeleteError(null);
         }}
         onConfirm={handleDeleteLead}
+      />
+
+      <BulkDeleteLeadsDialog
+        open={bulkDeleteOpen}
+        count={selectedIds.size}
+        isDark={isDark}
+        isDeleting={isBulkDeleting}
+        error={bulkDeleteError}
+        onClose={() => {
+          if (isBulkDeleting) return;
+          setBulkDeleteOpen(false);
+          setBulkDeleteError(null);
+        }}
+        onConfirm={handleBulkDelete}
       />
     </div>
   );

@@ -28,6 +28,8 @@ import {
 } from "react-icons/fa";
 
 import InventoryManagementView from "@/components/InventoryManagementView";
+import UploadLeadSheet from "@/components/UploadLeadSheet";
+import SelfUploadLeadSheet from "@/components/SelfUploadLeadSheet";
 import {
   PieChart, Pie, Cell, Tooltip as RTooltip, ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, CartesianGrid
@@ -1897,6 +1899,18 @@ function SalesManagerView({
                       </button>
                     )}
                   </div>
+
+                  {/* Bulk Excel import — Site Head assigns to any manager; Sales Manager self-uploads (if admin-enabled) */}
+                  {(() => {
+                    const roleLc = (adminUser?.role || "").toLowerCase().replace(/_/g, " ");
+                    if (roleLc === "site head" || roleLc === "admin") {
+                      return <UploadLeadSheet mode="assign" isDark={isDark} onImported={refetch} />;
+                    }
+                    if (roleLc === "sales manager") {
+                      return <SelfUploadLeadSheet isDark={isDark} onImported={refetch} />;
+                    }
+                    return null;
+                  })()}
                 </div>
                 <p className={`text-[10px] ${t.textFaint}`}>
                   {paginatedLeads.length} shown · {filteredLeads.length} filtered
