@@ -1210,7 +1210,11 @@ function SalesManagerView({
 
   useEffect(() => { setSubView(initialView === "overview" ? "overview" : initialView === "detail" && selectedLead ? "detail" : initialView === "closed-leads" ? "closed-leads" : "cards"); }, [initialView]);
   // Collapse the AI Assistant panel whenever a different lead is opened
-  useEffect(() => { setAiPanelOpen(false); }, [selectedLead?.id]);
+  useEffect(() => {
+    setAiPanelOpen(false);
+    setShowSalesForm(false);
+    setShowLoanForm(false);
+  }, [selectedLead?.id]);
   useEffect(() => {
     if (selectedLead?.id) fetchLoanDealData(selectedLead.id);
     else { setLoanDealBooking(null); setLoanDealLatest(null); }
@@ -1771,8 +1775,6 @@ function SalesManagerView({
                               setSelectedLead(lead);
                               setMainView("detail");
                               setSubView("detail");
-                              const locked = !!lead.is_lost_lead || lead.status === "Closing" || !!lead.closingDate;
-                              if (!locked) { prefillSalesForm(lead); setShowSalesForm(true); setShowLoanForm(false); }
                             }}>
                               <td className={`px-4 sm:px-3 py-3 sm:py-2.5 font-bold ${t.accentText}`}>#{lead.sr_no || lead.id}</td>
                               <td className={`px-4 py-3 sm:py-2.5 font-medium ${t.text}`}>{lead.name}</td>
@@ -2051,8 +2053,6 @@ function SalesManagerView({
                           setSelectedLead(lead);
                           setMainView("detail");
                           setSubView("detail");
-                          const locked = !!lead.is_lost_lead || lead.status === "Closing" || !!lead.closingDate;
-                          if (!locked) { prefillSalesForm(lead); setShowSalesForm(true); setShowLoanForm(false); }
                         }}>
                           <td className={`px-4 sm:px-3 py-3 sm:py-2.5 font-bold ${t.accentText}`}>#{lead.sr_no || lead.id}</td>
                           <td className={`px-4 py-3 sm:py-2.5 font-semibold ${t.text}`}>{lead.name}</td>
