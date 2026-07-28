@@ -471,9 +471,13 @@ export default function ReceptionistDashboard() {
   const [transferTarget, setTransferTarget] = useState("");
   const [isTransferring, setIsTransferring] = useState(false);
   // ── Receptionist Leads tab ──
-  // ── Receptionist Leads tab ──
   const [searchRecepLeads, setSearchRecepLeads] = useState("");
   const recepLeadsSentinelRef = useRef<HTMLDivElement>(null);
+  // directAssignedLeads: fetched directly from the DB via dedicated endpoints,
+  // NOT filtered from the paginated enquiries list. This is the source of truth
+  // for the "Receptionist Leads" tab and must match the Admin view exactly.
+  const [directAssignedLeads, setDirectAssignedLeads] = useState<any[]>([]);
+  const [isFetchingDirectLeads, setIsFetchingDirectLeads] = useState(false);
 
   // Advanced Filter States
   const [searchColumn, setSearchColumn] = useState<string>("all");
@@ -635,6 +639,8 @@ export default function ReceptionistDashboard() {
           fetchSourcingManagers();
           initialLoad();
           fetchFollowUps();
+          // Fetch all leads directly assigned to this receptionist (bypasses pagination)
+          fetchMyAssignedLeads(p.name || "");
         } else { router.replace("/dashboard"); }
       } catch { router.replace("/"); }
     } else { router.replace("/"); }
@@ -795,8 +801,57 @@ export default function ReceptionistDashboard() {
     }
   };
 
+  // ── Fetch leads directly assigned to the logged-in receptionist ──
+  // Uses BOTH ownership columns to mirror the Admin Receptionist View exactly:
+  //   /api/receptionist/assigned  → WHERE assigned_to = name
+  //   /api/receptionist/leads     → WHERE assigned_receptionist = name
+  // The two result sets are merged by ID so a lead that appears in both
+  // (e.g. transferred to the same person who originally created it) is not counted twice.
+  const fetchMyAssignedLeads = useCallback(async (name: string) => {
+    if (!name || name === "Loading...") return;
+    setIsFetchingDirectLeads(true);
+    try {
+      const encodedName = encodeURIComponent(name);
+      const [resAssigned, resSelf] = await Promise.all([
+        fetch(`/api/receptionist/assigned?name=${encodedName}`),
+        fetch(`/api/receptionist/leads?name=${encodedName}`),
+      ]);
+      const [jsonAssigned, jsonSelf] = await Promise.all([
+        resAssigned.ok ? resAssigned.json() : { success: false, data: [] },
+        resSelf.ok ? resSelf.json() : { success: false, data: [] },
+      ]);
+      const assignedRows: any[] = jsonAssigned.success ? (jsonAssigned.data ?? []) : [];
+      const selfRows: any[] = jsonSelf.success ? (jsonSelf.data ?? []) : [];
+      // Merge and deduplicate by lead ID
+      const merged = [...new Map([...assignedRows, ...selfRows].map((l: any) => [l.id, l])).values()];
+      // Normalise field names to match the shape used elsewhere in this dashboard
+      const fmtDate = (ds: string) => {
+        if (!ds) return "N/A";
+        try { return new Date(ds).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }); }
+        catch { return "Invalid"; }
+      };
+      const formatted = merged.map((item: any) => ({
+        ...item,
+        assignedTo: item.assigned_to || "Unassigned",
+        assignedReceptionist: item.assigned_receptionist || null,
+        altPhone: item.alt_phone,
+        pinCode: item.pin_code,
+        city: item.city,
+        date: fmtDate(item.created_at),
+        enquiryDate: item.enquiry_date || item.created_at,
+        autoDateEnabled: item.auto_date_enabled ?? true,
+        status: (item.status === "Routed" || item.status === "ROUTED" ? "Assigned" : item.status) || "Assigned",
+      }));
+      setDirectAssignedLeads(formatted);
+    } catch (e) {
+      console.error("fetchMyAssignedLeads error", e);
+    } finally {
+      setIsFetchingDirectLeads(false);
+    }
+  }, []);
+
   const refetchAll = async () => {
-    await Promise.all([initialLoad(), fetchFollowUps()]);
+    await Promise.all([initialLoad(), fetchFollowUps(), fetchMyAssignedLeads(user.name)]);
   };
   // ── Notification Queue & History Handler ──
   useEffect(() => {
@@ -931,15 +986,17 @@ export default function ReceptionistDashboard() {
     });
   }, [enquiries, followUps]);
 
-  // Receptionist-owned leads = assigned_receptionist === user.name OR assigned_to === user.name
-  // This is already correct — lost leads are NOT excluded here, keep as is:
+  // myAssignedLeads: sourced from directAssignedLeads (fetched directly from DB
+  // via /api/receptionist/assigned + /api/receptionist/leads) rather than from
+  // the paginated enquiries list. This fixes the bug where leads transferred to
+  // this receptionist were invisible because they fell outside the loaded page.
+  // Closing/closed leads are excluded here; closedLeads handles those separately.
   const myAssignedLeads = useMemo(() =>
-    mergedLeads.filter((l: any) =>
-      (l.assignedReceptionist === user.name || l.assigned_to === user.name) &&
+    directAssignedLeads.filter((l: any) =>
       l.status !== "Closing" &&
       !l.closingDate
     )
-    , [mergedLeads, user.name]);
+    , [directAssignedLeads]);
 
   const currentLeadFollowUps = useMemo(() =>
     followUps.filter((f: any) => String(f.leadId) === String(selectedLead?.id))
@@ -964,12 +1021,12 @@ export default function ReceptionistDashboard() {
   };
 
   // Closed leads = status Closing OR has a closing follow-up
+  // Also sourced from directAssignedLeads so transferred leads are included.
   const closedLeads = useMemo(() =>
-    mergedLeads.filter((l: any) =>
-      (l.status === "Closing" || !!l.closingDate) &&
-      (l.assignedReceptionist === user.name || l.assigned_to === user.name)
+    directAssignedLeads.filter((l: any) =>
+      l.status === "Closing" || !!l.closingDate
     )
-    , [mergedLeads, user.name]);
+    , [directAssignedLeads]);
 
   const filteredClosedLeads = closedLeads.filter((l: any) =>
     (l.name || "").toLowerCase().includes(searchClosedLeads.toLowerCase()) ||
@@ -3051,7 +3108,7 @@ export default function ReceptionistDashboard() {
                       ))}
                     </tr></thead>
                     <tbody className={`${t.tableDivide} divide-y`}>
-                      {isFetchingEnquiries ? (
+                      {isFetchingDirectLeads ? (
                         <tr><td colSpan={11} className={`p-8 text-center text-sm ${t.textMuted}`}>Loading your leads...</td></tr>
                       ) : filteredRecepLeads.length === 0 ? (
                         <tr><td colSpan={11} className={`p-12 text-center ${t.textMuted}`}>
