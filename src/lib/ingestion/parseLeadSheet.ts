@@ -1,6 +1,9 @@
 // lib/ingestion/parseLeadSheet.ts
 // Parses an uploaded .xlsx lead sheet into structured rows using fuzzy header matching.
 import * as XLSX from "xlsx";
+// Type-only deps inside cpCommissionEngine, so importing it here adds no runtime
+// weight to the client bundle this parser runs in.
+import { isChannelPartnerSource } from "@/lib/cpCommissionEngine";
 
 export interface ParsedLead {
   name: string;
@@ -10,6 +13,7 @@ export interface ParsedLead {
   enquiry_date: string; // ISO string
   source: string | null;
   cp_name: string | null;
+  cp_phone: string | null;
   feedback: string | null; // raw remarks text, stored verbatim as a follow-up
   configuration: string | null;
   budget: string | null;
@@ -46,6 +50,10 @@ const FIELD_ALIASES: Record<string, string[]> = {
   enquiry_date: ["Date", "DATE", "Enquiry Date"],
   source: ["Source", "SOURCE"],
   cp_name: ["Channel Partner", "Chanel Patner", "CP"],
+  // Declared AFTER `phone` on purpose: matchHeader breaks fuzzy ties by first
+  // occurrence, so an ambiguous header like "Contact No" still resolves to the
+  // lead's own phone rather than the partner's.
+  cp_phone: ["CP Phone", "CP Contact", "CP Mobile", "Channel Partner Phone", "Channel Partner Contact"],
   feedback: ["Feedback", "FEEDBACK", "Remarks"],
   configuration: ["Prop Type", "Property Type", "Configuration"],
   budget: ["Budget", "BUDGET"],
@@ -277,6 +285,18 @@ export function parseLeadSheet(buffer: ArrayBuffer | Buffer): ParseResult {
       }
     }
 
+    // A CP-sourced row must carry the partner's phone. Without it the partner can
+    // only be matched on name, which is how the historical 124 unattributed leads
+    // happened — and where two partners share a name, name-only matching merges
+    // them and pays commission to the wrong person. Flagging the row here (rather
+    // than importing it unattributed) is the same contract as the other required
+    // fields above: the importer reports it, nothing silently degrades.
+    const rowSource = cellToString(mapped.source);
+    const cpPhoneRaw = cellToString(mapped.cp_phone);
+    if (isChannelPartnerSource(rowSource) && cpPhoneRaw === "") {
+      errors.push(`Missing required field: cp_phone (required when source is "${rowSource}")`);
+    }
+
     if (errors.length > 0) {
       errorRows.push({ rowNum, errors, raw });
       continue;
@@ -288,8 +308,9 @@ export function parseLeadSheet(buffer: ArrayBuffer | Buffer): ParseResult {
       alt_phone: altPhone,
       external_ref: cellToString(mapped.external_ref) || null,
       enquiry_date: enquiryDateIso as string,
-      source: cellToString(mapped.source) || null,
+      source: rowSource || null,
       cp_name: cellToString(mapped.cp_name) || null,
+      cp_phone: cpPhoneRaw || null,
       feedback: cellToString(mapped.feedback) || null,
       configuration: cellToString(mapped.configuration) || null,
       budget: cellToString(mapped.budget) || null,

@@ -11,7 +11,7 @@ import {
   FaPhoneAlt, FaUserCircle, FaBriefcase, FaSearch, FaDownload,
   FaFileInvoice, FaHandshake, FaUniversity, FaUsers, FaFileAlt,
   FaClock, FaMicrophone, FaWhatsapp, FaCheckCircle,
-  FaExchangeAlt, FaUserTie
+  FaExchangeAlt, FaUserTie, FaChartPie
 } from "react-icons/fa";
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend,
@@ -45,6 +45,7 @@ const MONTH_NAMES = [
 
 const NAV_ITEMS = [
   { id: "overview", icon: <FaThLarge className="w-5 h-5" />, title: "Dashboard" },
+  { id: "analytics", icon: <FaChartPie className="w-5 h-5" />, title: "Analytics" },
   // { id: "assigned", icon: <FaFileInvoice className="w-5 h-5" />, title: "Assigned Forms" },
   { id: "recep-leads", icon: <FaUsers className="w-5 h-5" />, title: "Receptionist Leads" },
   { id: "closed-leads", icon: <FaCheckCircle className="w-5 h-5" />, title: "Closed Leads" },
@@ -402,11 +403,10 @@ function ConfigCombobox({
     <div ref={containerRef} className="relative w-full">
       {/* ── Trigger / search input ── */}
       <div
-        className={`w-full flex items-center gap-2 rounded-lg border text-sm transition-colors cursor-pointer ${
-          open
-            ? isDark ? "border-[#9E217B] bg-[#14141B]" : "border-[#00AEEF] bg-white"
-            : `${t.modalInput}`
-        }`}
+        className={`w-full flex items-center gap-2 rounded-lg border text-sm transition-colors cursor-pointer ${open
+          ? isDark ? "border-[#9E217B] bg-[#14141B]" : "border-[#00AEEF] bg-white"
+          : `${t.modalInput}`
+          }`}
         onClick={() => { setOpen(o => !o); setHighlighted(0); }}
       >
         <input
@@ -427,9 +427,8 @@ function ConfigCombobox({
       {open && (
         <ul
           ref={listRef}
-          className={`absolute z-[200] mt-1 w-full max-h-52 overflow-y-auto custom-scrollbar rounded-lg border shadow-xl text-sm ${
-            isDark ? "bg-[#121218] border-[#2A2A35]" : "bg-white border-[#D1D5DB]"
-          }`}
+          className={`absolute z-[200] mt-1 w-full max-h-52 overflow-y-auto custom-scrollbar rounded-lg border shadow-xl text-sm ${isDark ? "bg-[#121218] border-[#2A2A35]" : "bg-white border-[#D1D5DB]"
+            }`}
           role="listbox"
         >
           {filtered.length === 0 ? (
@@ -442,13 +441,12 @@ function ConfigCombobox({
                 aria-selected={value === option}
                 onMouseDown={e => { e.preventDefault(); select(option); }}
                 onMouseEnter={() => setHighlighted(i)}
-                className={`px-4 py-2.5 cursor-pointer transition-colors ${
-                  i === highlighted
-                    ? isDark ? "bg-[#9E217B]/20 text-white" : "bg-[#00AEEF]/10 text-[#00AEEF]"
-                    : value === option
-                      ? isDark ? "text-[#d4006e] font-semibold" : "text-[#9E217B] font-semibold"
-                      : `${t.text}`
-                }`}
+                className={`px-4 py-2.5 cursor-pointer transition-colors ${i === highlighted
+                  ? isDark ? "bg-[#9E217B]/20 text-white" : "bg-[#00AEEF]/10 text-[#00AEEF]"
+                  : value === option
+                    ? isDark ? "text-[#d4006e] font-semibold" : "text-[#9E217B] font-semibold"
+                    : `${t.text}`
+                  }`}
               >
                 {option}
                 {value === option && <span className="ml-2 text-xs opacity-60">✓</span>}
@@ -547,6 +545,8 @@ export default function ReceptionistDashboard() {
     }
   }, [autoDate]);
   const [showCpDropdown, setShowCpDropdown] = useState(false);
+  // Inline validation for the required CP phone (shown under the field, not an alert).
+  const [cpPhoneError, setCpPhoneError] = useState("");
 
   // ___Lost Leads
   const [showLostModal, setShowLostModal] = useState(false);
@@ -1126,6 +1126,16 @@ export default function ReceptionistDashboard() {
       return;
     }
 
+    // CP phone is required for Channel Partner enquiries — it is the only key that
+    // identifies a partner uniquely. The API enforces this too; this check exists so
+    // the user sees the problem on the field instead of as a failed request.
+    if (enquiryForm.source === "Channel Partner" && !enquiryForm.cpDetails.phone.trim()) {
+      setCpPhoneError("CP phone number is required for Channel Partner enquiries.");
+      setIsSubmitting(false);
+      return;
+    }
+    setCpPhoneError("");
+
     const newEntry = {
       name: enquiryForm.fullName,
       phone: enquiryForm.mobile,
@@ -1162,6 +1172,7 @@ export default function ReceptionistDashboard() {
       if (res.ok) {
         showToast(isReceptionist ? `Lead self-assigned to you!` : `Lead assigned to ${assignTo}!`);
         setIsEnquiryModalOpen(false);
+        setCpPhoneError("");
         setEnquiryForm({ fullName: "", mobile: "", altMobile: "", email: "", address: "", occupation: "", organization: "", budget: "", configuration: "", purpose: "", source: "", assignedTo: "", loanPlanned: "", sourceOther: "", referralName: "", cpDetails: { name: "", company: "", phone: "" }, selfAssign: false, enquiryDate: getTodayString() });
         refetchAll();
       } else { alert("Server Error. Please check DB schema."); }
@@ -2202,7 +2213,7 @@ export default function ReceptionistDashboard() {
           )}
 
           {/* ── SHARED PAGE HEADER ── */}
-          {!["settings", "detail", "assistant", "assigned", "recep-leads", "closed-leads", "attendance"].includes(activeTab) && (
+          {!["settings", "detail", "assistant", "assigned", "recep-leads", "closed-leads", "attendance", "analytics"].includes(activeTab) && (
             <div className="flex justify-between items-center mb-8">
               <h1 className={`text-xl md:text-3xl font-bold flex items-center flex-wrap gap-2 md:gap-3 ${t.text}`}>
                 Hi, {String(user?.name || "User").split(" ")[0]}
@@ -2218,9 +2229,94 @@ export default function ReceptionistDashboard() {
           {/* ════════════════════════════════════════════════════
               OVERVIEW TAB
           ════════════════════════════════════════════════════ */}
+          {/* ════════════════════════════════════════════════════
+              OVERVIEW TAB
+          ════════════════════════════════════════════════════ */}
           {activeTab === "overview" && (
             <div className="animate-fadeIn pb-10">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+
+              {/* Front Desk Log */}
+              <div className={`rounded-2xl border overflow-hidden ${t.tableWrap}`} style={t.tableGlass}>
+                <div className={`p-4 md:p-6 border-b flex justify-between items-center ${t.tableBorder}`}>
+                  <div>
+                    <h2 className={`text-base md:text-lg font-bold flex items-center gap-3 ${t.text}`}>
+                      Front Desk Log
+                    </h2>
+                    <p className={`text-xs mt-0.5 ${t.textFaint}`}>{receptionistLeads.length} shown · {totalCount} total</p>
+                  </div>
+                  <div className="flex gap-4 items-center">
+                    <div className="relative hidden md:block">
+                      <FaSearch className={`absolute left-3 top-1/2 -translate-y-1/2 text-xs ${t.textFaint}`} />
+                      <input type="text" placeholder="Search leads..." value={searchRecep} onChange={e => setSearchRecep(e.target.value)}
+                        className={`rounded-lg pl-9 pr-4 py-2 text-sm outline-none w-48 transition-colors border ${t.inputBg} ${t.text}`} />
+                    </div>
+                    <button onClick={() => setIsEnquiryModalOpen(true)} className={`font-bold py-1.5 px-3 md:py-2 md:px-4 rounded-lg transition-colors text-xs flex items-center gap-2 cursor-pointer ${t.btnPrimary}`}>+ New Entry</button>
+                  </div>
+                </div>
+                <div className="overflow-x-auto custom-scrollbar">
+                  <table className="w-full text-left border-collapse whitespace-nowrap">
+                    <thead><tr className={t.tableHead}>
+                      {["Lead No.", "Client Name", "Source", "CP Name", "CP Company", "CP Phone", "Budget", "Phone", "Alt. Phone", "Date Created", "Backdated Entry", "Sales Manager"].map(h => (
+                        <th key={h} className={`px-3 py-3 md:p-4 font-bold uppercase tracking-wider border-b ${t.textHeader} ${t.tableBorder}`}>{h}</th>
+                      ))}
+                    </tr></thead>
+                    <tbody className={`${t.tableDivide} divide-y`}>
+                      {isFetchingEnquiries ? (
+                        <tr><td colSpan={11} className={`p-8 text-center text-sm ${t.textMuted}`}>Fetching data...</td></tr>
+                      ) : receptionistLeads.length === 0 ? (
+                        <tr><td colSpan={11} className={`p-8 text-center text-sm ${t.textMuted}`}>No leads found.</td></tr>
+                      ) : receptionistLeads.map((enquiry: any) => (
+                        <tr key={enquiry.id} className={`transition-colors cursor-pointer ${t.tableRow}`} onClick={() => { setSelectedLead(enquiry); setActiveTab("detail"); }}>
+                          <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-bold ${t.accentText}`}>#{enquiry.sr_no || enquiry.id}</td>
+                          <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-semibold ${t.text}`}>{enquiry.name}</td>
+
+                          <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm ${t.textMuted}`}>
+                            {enquiry.source || <span className="italic text-[10px]">—</span>}
+                          </td>
+                          <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm truncate max-w-[100px] ${t.textMuted}`}>{enquiry.cp_name || <span className="italic text-[10px]">—</span>}</td>
+                          <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm truncate max-w-[100px] ${t.textMuted}`}>{enquiry.cp_company || <span className="italic text-[10px]">—</span>}</td>
+                          <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm truncate max-w-[100px] ${t.textMuted}`}>{enquiry.cp_phone || <span className="italic text-[10px]">—</span>}</td>
+                          <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-bold ${isDark ? "text-green-700" : "text-emerald-600"}`}>{enquiry.salesBudget || enquiry.budget}</td>
+                          <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm font-mono ${t.text}`}>{maskPhone(enquiry.phone)}</td>
+                          <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm font-mono ${t.textMuted}`}>{maskPhone(enquiry.altPhone)}</td>
+                          <td className={`px-3 py-3 md:p-4 text-[10px] md:text-xs whitespace-normal min-w-[120px] ${t.textFaint}`}>{enquiry.date}</td>
+                          <td className={`px-3 py-3 md:p-4 text-[10px] md:text-xs whitespace-normal min-w-[110px] ${t.textFaint}`}>
+                            {enquiry.autoDateEnabled === false && enquiry.enquiryDate ? formatDate(enquiry.enquiryDate).split(",")[0] : "-"}
+                          </td>
+                          <td className="px-3 py-3 md:p-4 text-xs md:text-sm">
+                            <span className={`px-2 py-1 rounded-md text-[10px] md:text-xs font-semibold ${t.accentBg}`}>{enquiry.assignedTo || "Unassigned"}</span>
+                          </td>
+                        </tr>
+                      ))}
+                      {isLoadingMore && <LoaderRow />}
+                      {!hasMore && !isFetchingEnquiries && enquiries.length > 0 && (
+                        <tr><td colSpan={11} className={`p-4 text-center text-xs ${t.textFaint}`}>All {totalCount} records loaded</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                  <div ref={tableSentinelRef} className="h-1 w-full" aria-hidden="true" />
+                </div>
+              </div>
+
+            </div>
+          )}
+
+          {/* ════════════════════════════════════════════════════
+              ANALYTICS TAB
+          ════════════════════════════════════════════════════ */}
+          {activeTab === "analytics" && (
+            <div className="animate-fadeIn pb-10">
+              <div className="flex justify-between items-center mb-8">
+                <div>
+                  <h1 className={`text-xl md:text-3xl font-bold ${t.text}`}>Analytics</h1>
+                  <p className={`text-xs mt-1 ${t.textFaint}`}>Charts and breakdowns for your enquiries</p>
+                </div>
+                <button onClick={refetchAll} className={`text-white text-xs md:text-sm font-semibold flex items-center gap-1 md:gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-lg transition-all shadow-sm ${t.btnPrimary}`}>
+                  ↻ Refresh Live Data
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
                 {/* Card 1: Room Configurations */}
                 <div className={`rounded-2xl p-6 border flex flex-col ${t.card}`} style={t.cardGlass}>
@@ -2432,70 +2528,7 @@ export default function ReceptionistDashboard() {
                     </table>
                   </div>
                 </div>
-              </div>
 
-              {/* Front Desk Log */}
-              <div className={`rounded-2xl border overflow-hidden ${t.tableWrap}`} style={t.tableGlass}>
-                <div className={`p-4 md:p-6 border-b flex justify-between items-center ${t.tableBorder}`}>
-                  <div>
-                    <h2 className={`text-base md:text-lg font-bold flex items-center gap-3 ${t.text}`}>
-                      Front Desk Log
-
-                    </h2>
-                    <p className={`text-xs mt-0.5 ${t.textFaint}`}>{receptionistLeads.length} shown · {totalCount} total</p>
-                  </div>
-                  <div className="flex gap-4 items-center">
-                    <div className="relative hidden md:block">
-                      <FaSearch className={`absolute left-3 top-1/2 -translate-y-1/2 text-xs ${t.textFaint}`} />
-                      <input type="text" placeholder="Search leads..." value={searchRecep} onChange={e => setSearchRecep(e.target.value)}
-                        className={`rounded-lg pl-9 pr-4 py-2 text-sm outline-none w-48 transition-colors border ${t.inputBg} ${t.text}`} />
-                    </div>
-                    <button onClick={() => setIsEnquiryModalOpen(true)} className={`font-bold py-1.5 px-3 md:py-2 md:px-4 rounded-lg transition-colors text-xs flex items-center gap-2 cursor-pointer ${t.btnPrimary}`}>+ New Entry</button>
-                  </div>
-                </div>
-                <div className="overflow-x-auto custom-scrollbar">
-                  <table className="w-full text-left border-collapse whitespace-nowrap">
-                    <thead><tr className={t.tableHead}>
-                      {["Lead No.", "Client Name", "Source", "CP Name", "CP Company", "CP Phone", "Budget", "Phone", "Alt. Phone", "Date Created", "Backdated Entry", "Sales Manager"].map(h => (
-                        <th key={h} className={`px-3 py-3 md:p-4 font-bold uppercase tracking-wider border-b ${t.textHeader} ${t.tableBorder}`}>{h}</th>
-                      ))}
-                    </tr></thead>
-                    <tbody className={`${t.tableDivide} divide-y`}>
-                      {isFetchingEnquiries ? (
-                        <tr><td colSpan={11} className={`p-8 text-center text-sm ${t.textMuted}`}>Fetching data...</td></tr>
-                      ) : receptionistLeads.length === 0 ? (
-                        <tr><td colSpan={11} className={`p-8 text-center text-sm ${t.textMuted}`}>No leads found.</td></tr>
-                      ) : receptionistLeads.map((enquiry: any) => (
-                        <tr key={enquiry.id} className={`transition-colors cursor-pointer ${t.tableRow}`} onClick={() => { setSelectedLead(enquiry); setActiveTab("detail"); }}>
-                          <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-bold ${t.accentText}`}>#{enquiry.sr_no || enquiry.id}</td>
-                          <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-semibold ${t.text}`}>{enquiry.name}</td>
-
-                          <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm ${t.textMuted}`}>
-                            {enquiry.source || <span className="italic text-[10px]">—</span>}
-                          </td>
-                          <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm truncate max-w-[100px] ${t.textMuted}`}>{enquiry.cp_name || <span className="italic text-[10px]">—</span>}</td>
-                          <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm truncate max-w-[100px] ${t.textMuted}`}>{enquiry.cp_company || <span className="italic text-[10px]">—</span>}</td>
-                          <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm truncate max-w-[100px] ${t.textMuted}`}>{enquiry.cp_phone || <span className="italic text-[10px]">—</span>}</td>
-                          <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-bold ${isDark ? "text-green-700" : "text-emerald-600"}`}>{enquiry.salesBudget || enquiry.budget}</td>
-                          <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm font-mono ${t.text}`}>{maskPhone(enquiry.phone)}</td>
-                          <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm font-mono ${t.textMuted}`}>{maskPhone(enquiry.altPhone)}</td>
-                          <td className={`px-3 py-3 md:p-4 text-[10px] md:text-xs whitespace-normal min-w-[120px] ${t.textFaint}`}>{enquiry.date}</td>
-                          <td className={`px-3 py-3 md:p-4 text-[10px] md:text-xs whitespace-normal min-w-[110px] ${t.textFaint}`}>
-                            {enquiry.autoDateEnabled === false && enquiry.enquiryDate ? formatDate(enquiry.enquiryDate).split(",")[0] : "-"}
-                          </td>
-                          <td className="px-3 py-3 md:p-4 text-xs md:text-sm">
-                            <span className={`px-2 py-1 rounded-md text-[10px] md:text-xs font-semibold ${t.accentBg}`}>{enquiry.assignedTo || "Unassigned"}</span>
-                          </td>
-                        </tr>
-                      ))}
-                      {isLoadingMore && <LoaderRow />}
-                      {!hasMore && !isFetchingEnquiries && enquiries.length > 0 && (
-                        <tr><td colSpan={11} className={`p-4 text-center text-xs ${t.textFaint}`}>All {totalCount} records loaded</td></tr>
-                      )}
-                    </tbody>
-                  </table>
-                  <div ref={tableSentinelRef} className="h-1 w-full" aria-hidden="true" />
-                </div>
               </div>
             </div>
           )}
@@ -2556,6 +2589,7 @@ export default function ReceptionistDashboard() {
                       </div>
                     </div>
                   </div>
+
 
                   {/* ── Channel Partner Card ── */}
 
@@ -3558,6 +3592,9 @@ export default function ReceptionistDashboard() {
                           }
                           return updated;
                         });
+                        // Switching away from Channel Partner must not leave a stale
+                        // CP-phone error attached to a source that has no CP fields.
+                        setCpPhoneError("");
                       }}
                         className={`w-full rounded-lg p-3 text-sm outline-none transition-colors border cursor-pointer ${t.modalInput} ${t.text}`}>
                         <option value="" disabled>Select Source</option>
@@ -3671,6 +3708,36 @@ export default function ReceptionistDashboard() {
                     {enquiryForm.source === "Channel Partner" && (
                       <div className={`sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2 p-4 rounded-xl border ${t.settingsBg} ${t.tableBorder}`}>
                         <h4 className={`sm:col-span-2 text-xs font-bold mb-1 ${t.accentText}`}>Channel Partner Details</h4>
+
+                        {/* Phone is first, emphasized, and now REQUIRED. It is the only
+                            field that identifies a partner uniquely: name-only matching
+                            creates duplicates, and where two partners share a name it
+                            merges them and pays commission to the wrong person. Enforced
+                            client-side here and again in POST /api/walkin_enquiries. */}
+                        <div className="sm:col-span-2">
+                          <label className={`block text-xs mb-1.5 font-semibold pl-2 ${t.accentText}`}>
+                            CP Phone Number *
+                          </label>
+                          <input
+                            required
+                            type="text"
+                            value={enquiryForm.cpDetails.phone}
+                            onChange={e => {
+                              setEnquiryForm({ ...enquiryForm, cpDetails: { ...enquiryForm.cpDetails, phone: e.target.value } });
+                              if (cpPhoneError) setCpPhoneError("");
+                            }}
+                            className={`w-full rounded-lg p-3 text-sm outline-none transition-colors border-2 ${cpPhoneError ? "border-red-500" : t.modalInput} ${t.text}`}
+                            placeholder="Phone Number"
+                          />
+                          {cpPhoneError ? (
+                            <p className="text-[11px] mt-1.5 pl-2 font-medium text-red-500">{cpPhoneError}</p>
+                          ) : (
+                            <p className={`text-[11px] mt-1.5 pl-2 ${t.textMuted}`}>
+                              Required — identifies this partner and prevents duplicate records.
+                            </p>
+                          )}
+                        </div>
+
                         <div>
                           <label className={`block text-xs mb-1.5 font-medium pl-2 ${t.textMuted}`}>CP Name *</label>
                           <input
@@ -3727,16 +3794,8 @@ export default function ReceptionistDashboard() {
                           )}
                         </div>
 
-                        {/* Standard Phone Input (Auto-fills if CP selected above) */}
-                        <div>
-                          <label className={`block text-xs mb-1.5 font-medium pl-2 ${t.textMuted}`}>CP Contact</label>
-                          <input type="text"
-                            value={enquiryForm.cpDetails.phone}
-                            onChange={e => setEnquiryForm({ ...enquiryForm, cpDetails: { ...enquiryForm.cpDetails, phone: e.target.value } })}
-                            className={`w-full rounded-lg p-3 text-sm outline-none transition-colors border ${t.modalInput} ${t.text}`}
-                            placeholder="Phone Number"
-                          />
-                        </div>
+                        {/* CP phone now lives at the top of this block (see above) so it
+                            reads as the primary identifier rather than an afterthought. */}
 
                       </div>
                     )}

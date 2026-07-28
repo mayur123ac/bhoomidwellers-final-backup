@@ -15,6 +15,11 @@ const REQUIRED_TABLES = [
   "customer_ledger_view",
 ];
 
+// Looked up but NOT part of the hasRequiredTables gate: the dashboard must keep
+// working on a database where the CP commission layer was never applied. When
+// they are absent the payout columns come back as zero/null.
+const OPTIONAL_TABLES = ["cp_commissions", "channel_partners"];
+
 async function getExistingTables() {
   const rows = await query<{ table_name: string }>(
     `
@@ -23,7 +28,7 @@ async function getExistingTables() {
       WHERE table_schema = 'public'
         AND table_name = ANY($1::text[])
     `,
-    [REQUIRED_TABLES],
+    [[...REQUIRED_TABLES, ...OPTIONAL_TABLES]],
   );
   return new Set(rows.map((row) => row.table_name));
 }
@@ -95,6 +100,52 @@ export async function GET(req: NextRequest) {
 
     const existingTables = await getExistingTables();
     const hasRequiredTables = REQUIRED_TABLES.every((tableName) => existingTables.has(tableName));
+
+    /* ── CP commission payout ────────────────────────────────────────────────
+       At most one non-reversed commission can exist per booking (enforced by
+       idx_cp_commissions_booking_active), so a LATERAL taking the newest
+       non-reversed row is exact rather than a "pick one" heuristic. Reversed
+       rows are excluded: a reversed commission was never really owed.
+
+       Gross is the cost to the developer; net is what the partner receives and
+       tds is withheld and remitted to the government on their behalf. Both are
+       carried so the dashboard can show cost and cash-out separately. */
+    const hasCpPayout = OPTIONAL_TABLES.every((tableName) => existingTables.has(tableName));
+    const cpPayoutColumns = hasCpPayout
+      ? `
+          COALESCE(cpc.gross_commission_amount, 0)::numeric AS cp_commission_gross,
+          COALESCE(cpc.tds_amount, 0)::numeric AS cp_commission_tds,
+          COALESCE(cpc.net_payable_amount, 0)::numeric AS cp_commission_net,
+          cpc.status AS cp_commission_status,
+          cpc.commission_source AS cp_commission_source,
+          cpc.paid_date AS cp_commission_paid_date,
+          cpc.partner_name AS channel_partner_name,
+          cpc.channel_partner_id AS channel_partner_id`
+      : `
+          0::numeric AS cp_commission_gross,
+          0::numeric AS cp_commission_tds,
+          0::numeric AS cp_commission_net,
+          NULL::text AS cp_commission_status,
+          NULL::text AS cp_commission_source,
+          NULL::date AS cp_commission_paid_date,
+          NULL::text AS channel_partner_name,
+          NULL::int AS channel_partner_id`;
+
+    const cpPayoutJoin = hasCpPayout
+      ? `
+        LEFT JOIN LATERAL (
+          SELECT c.gross_commission_amount, c.tds_amount, c.net_payable_amount,
+                 c.status, c.commission_source, c.paid_date, c.channel_partner_id,
+                 cp.name AS partner_name
+            FROM cp_commissions c
+            JOIN channel_partners cp ON cp.id = c.channel_partner_id
+           WHERE c.booking_id = b.id
+             AND c.status <> 'reversed'
+           ORDER BY c.id DESC
+           LIMIT 1
+        ) cpc ON TRUE`
+      : "";
+
     if (!hasRequiredTables) {
       const emptyAnalytics = buildRevenueAnalytics([]);
       return NextResponse.json({
@@ -197,7 +248,8 @@ export async function GET(req: NextRequest) {
           r.registration_status,
           r.registration_number,
           p.current_stage,
-          p.status AS pipeline_status
+          p.status AS pipeline_status,
+          ${cpPayoutColumns}
         FROM booking_applications b
         LEFT JOIN walkin_enquiries w ON w.id = b.lead_id
         LEFT JOIN booking_financials f ON f.booking_id = b.id
@@ -205,6 +257,7 @@ export async function GET(req: NextRequest) {
         LEFT JOIN booking_registration_details r ON r.booking_id = b.id
         LEFT JOIN booking_pipeline p ON p.booking_id = b.id
         LEFT JOIN customer_ledger_view clv ON clv.booking_id = b.id
+        ${cpPayoutJoin}
         WHERE LOWER(COALESCE(b.booking_status, '')) IN ('confirmed', 'approved')
       ),
       filtered AS (

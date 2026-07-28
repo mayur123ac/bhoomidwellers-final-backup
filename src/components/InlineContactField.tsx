@@ -180,7 +180,7 @@ export default function InlineContactField({
             placeholder={
               fieldType === "email" ? "email@example.com" : fieldType === "tel" ? "Enter number" : `Enter ${label.toLowerCase()}`
             }
-            className={`flex-1 px-2.5 py-1.5 rounded-lg text-sm outline-none transition-all duration-150 ${
+            className={`flex-1 min-w-0 px-2.5 py-1.5 rounded-lg text-sm outline-none transition-all duration-150 ${
               mono ? "font-mono" : ""
             } ${theme.inputInner} ${theme.inputFocus} ${theme.text} ${
               saving ? "opacity-50 cursor-not-allowed" : ""

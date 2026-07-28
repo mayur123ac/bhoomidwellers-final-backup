@@ -9,7 +9,10 @@ import {
   FaMoneyBillWave, FaHandshake, FaFileAlt, FaCheck, FaPlus, FaTrash,
   FaPen, FaUpload, FaCheckCircle, FaPrint, FaDownload,
 } from "react-icons/fa";
-import { formatCurrencyDisplay, toStorageValue } from "@/lib/currency";
+import { formatCurrencyDisplay, formatCurrencyDecimal, toStorageValue } from "@/lib/currency";
+// Reused so the inline rate field enforces exactly what the CP Master enforces —
+// 0-100 and at most 2dp, matching NUMERIC(5,2).
+import { validateRate } from "./ChannelPartnerFormModal";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface PaymentRow { date: string; transaction_type: string; amount: string; }
@@ -47,6 +50,9 @@ interface BookingFormData {
   // Step 3 — Source
   booking_source: "Direct" | "Channel Partner";
   direct_source: string; channel_partner_name: string; channel_partner_contact: string;
+  // CP commission intent — recorded against the partner when the booking saves.
+  cp_commission_mode: "auto" | "manual" | "none";
+  cp_commission_amount: string; cp_commission_reason: string;
   // Booking Info
   booking_date: string; agreement_value: string; booking_amount: string; booking_remarks: string;
   // Financial Details
@@ -346,6 +352,10 @@ function defaultForm(lead: any): BookingFormData {
       : "",
     channel_partner_name: lead?.cpName || lead?.cp_name || "",
     channel_partner_contact: lead?.cpPhone || lead?.cp_phone || "",
+    // Default to auto for CP-sourced bookings; nothing is recorded for direct ones.
+    cp_commission_mode: lead?.source === "Channel Partner" ? "auto" : "none",
+    cp_commission_amount: "",
+    cp_commission_reason: "",
 
     booking_date: today, agreement_value: "", booking_amount: "", booking_remarks: "",
     token_amount: draft.token_amount || "", ocr_amount: draft.ocr_amount || "", ocr_received_date: draft.ocr_received_date || "", ocr_payment_mode: draft.ocr_payment_mode || "Cheque", ocr_remarks: draft.ocr_remarks || "",
@@ -431,6 +441,117 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [termsScrolled, setTermsScrolled] = useState(false);
   const [showAdditionalPayment, setShowAdditionalPayment] = useState(false);
+  // CP commission preview. Computed server-side (NUMERIC) rather than in JS so the
+  // figure shown here is exactly what gets written on save.
+  const [cpPreview, setCpPreview] = useState<any | null>(null);
+  const [cpPreviewError, setCpPreviewError] = useState<string | null>(null);
+  const [cpMaster, setCpMaster] = useState<any | null>(null);
+  // Inline rate fix. A missing rate is the single most likely blocker here (every
+  // partner discovered from lead intake starts without one), and sending the user
+  // to another screen mid-booking loses the form. Settable in place instead.
+  const [cpPreviewCode, setCpPreviewCode] = useState<string | null>(null);
+  const [rateInput, setRateInput] = useState("");
+  const [rateSaving, setRateSaving] = useState(false);
+  const [rateError, setRateError] = useState<string | null>(null);
+  // Lead objects reach this modal in two shapes: raw DB rows (snake_case, from the
+  // receptionist/closed-lead paths) and the dashboard's mapped camelCase shape.
+  // Accept both so attribution works regardless of which screen opened the form.
+  const cpId: number | null = lead?.channel_partner_id ?? lead?.channelPartnerId ?? null;
+
+  // Mirrors the server-side gate on PATCH /api/channel-partners/:id — the button is
+  // hidden for roles the API would reject anyway.
+  const canSetRate = ["admin", "sales manager", "sales_manager"]
+    .includes((user?.role || "").trim().toLowerCase());
+
+  const saveCpRate = async () => {
+    const invalid = validateRate(rateInput);
+    if (invalid) { setRateError(invalid); return; }
+    setRateSaving(true); setRateError(null);
+    try {
+      const res = await fetch(`/api/channel-partners/${cpId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          default_commission_rate: Number(rateInput),
+          user_name: user?.name, user_role: user?.role, updated_by: user?.name,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) { setRateError(json.message || "Could not save rate."); return; }
+      setCpMaster(json.data);
+      setRateInput("");
+      // Nudge the debounced preview so the calculated figure appears immediately.
+      setForm(f => ({ ...f }));
+    } catch (e: any) {
+      setRateError(e?.message || "Could not save rate.");
+    } finally { setRateSaving(false); }
+  };
+
+  // Prefill the CP name/contact from the partner master once the lead's partner is
+  // known. The lead's own cp_name/cp_phone seed the form (see defaultForm), but the
+  // master record is the canonical one — it carries the name the partner was first
+  // registered under, and a phone even when the lead's copy is blank. Only fills
+  // empty fields, so anything typed here is never overwritten.
+  useEffect(() => {
+    if (!cpId) { setCpMaster(null); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/channel-partners/${cpId}`);
+        const json = await res.json();
+        if (cancelled || !json.success) return;
+        setCpMaster(json.data);
+        setForm(f => ({
+          ...f,
+          channel_partner_name: f.channel_partner_name?.trim() ? f.channel_partner_name : (json.data.name || ""),
+          channel_partner_contact: f.channel_partner_contact?.trim() ? f.channel_partner_contact : (json.data.phone || ""),
+        }));
+      } catch { /* prefill is a convenience; failure must not block the form */ }
+    })();
+    return () => { cancelled = true; };
+  }, [cpId]);
+
+  // Live commission preview, debounced. Fires on agreement value, mode, and manual
+  // amount. Uses the partner-level preview because the booking row does not exist
+  // yet — same engine arithmetic and same FY threshold query as the save path.
+  useEffect(() => {
+    const isCp = form.booking_source === "Channel Partner";
+    const mode = form.cp_commission_mode;
+    // Note "none" is NOT excluded: the commission is still calculated and shown so
+    // the user can see what they are choosing not to record. Only the save is opted out of.
+    if (!isCp || !cpId) { setCpPreview(null); setCpPreviewError(null); return; }
+
+    const agreement = Number(String(form.agreement_value || "").replace(/[₹,\s]/g, ""));
+    const manualAmt = Number(String(form.cp_commission_amount || "").replace(/[₹,\s]/g, ""));
+    if (mode !== "manual" && !(agreement > 0)) { setCpPreview(null); setCpPreviewError(null); return; }
+    if (mode === "manual" && !(manualAmt >= 0 && String(form.cp_commission_amount).trim() !== "")) {
+      setCpPreview(null); setCpPreviewError(null); return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch("/api/cp-commissions/preview", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            channelPartnerId: cpId,
+            agreementValue: agreement || null,
+            ...(mode === "manual" ? { overrideGross: manualAmt } : {}),
+          }),
+        });
+        const json = await res.json();
+        if (json.success) { setCpPreview(json.data); setCpPreviewError(null); setCpPreviewCode(null); }
+        else {
+          setCpPreview(null);
+          setCpPreviewError(json.message || "Could not calculate commission.");
+          setCpPreviewCode(json.code || null);
+        }
+      } catch {
+        setCpPreview(null); setCpPreviewError("Could not calculate commission."); setCpPreviewCode(null);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [cpId, form.booking_source, form.cp_commission_mode, form.agreement_value, form.cp_commission_amount]);
   const [sigMode, setSigMode] = useState<"draw" | "upload">("draw");
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const isDrawing = useRef(false);
@@ -646,6 +767,14 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
       formData.append("direct_source", form.direct_source);
       formData.append("channel_partner_name", form.channel_partner_name);
       formData.append("channel_partner_contact", form.channel_partner_contact);
+      // Only send a commission intent for CP-sourced bookings that have a partner
+      // on the lead; otherwise the server records nothing.
+      formData.append(
+        "cp_commission_mode",
+        form.booking_source === "Channel Partner" && cpId ? form.cp_commission_mode : "none"
+      );
+      formData.append("cp_commission_amount", form.cp_commission_amount);
+      formData.append("cp_commission_reason", form.cp_commission_reason);
       formData.append("unit_cost", (form as any).unit_cost || "");
       formData.append("sdr", (form as any).sdr || "");
       formData.append("gst", (form as any).gst || "");
@@ -1861,7 +1990,19 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                           <div className="flex gap-6">
                             {(["Direct", "Channel Partner"] as const).map(src => (
                               <label key={src} className="flex items-center gap-2 cursor-pointer">
-                                <div onClick={() => set("booking_source", src)} className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${form.booking_source === src ? (isDark ? "border-[#9E217B] bg-[#9E217B]" : "border-[#00AEEF] bg-[#00AEEF]") : (isDark ? "border-[#2A2A35]" : "border-[#9CA3AF]")}`}>
+                                <div onClick={() => {
+                                  set("booking_source", src);
+                                  // Selecting Channel Partner turns the calculation on by
+                                  // default (the initial value is derived from the lead, which
+                                  // may not have been CP-sourced). Switching to Direct stops
+                                  // anything being recorded.
+                                  setForm(f => ({
+                                    ...f,
+                                    cp_commission_mode: src === "Channel Partner"
+                                      ? (f.cp_commission_mode === "none" ? "auto" : f.cp_commission_mode)
+                                      : "none",
+                                  }));
+                                }} className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${form.booking_source === src ? (isDark ? "border-[#9E217B] bg-[#9E217B]" : "border-[#00AEEF] bg-[#00AEEF]") : (isDark ? "border-[#2A2A35]" : "border-[#9CA3AF]")}`}>
                                   {form.booking_source === src && <div className="w-2 h-2 rounded-full bg-white" />}
                                 </div>
                                 <span className={`font-semibold text-sm ${textMain}`}>{src}</span>
@@ -1887,6 +2028,170 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                                   <label className={labelCls}>Contact Number</label>
                                   <input value={form.channel_partner_contact} onChange={e => set("channel_partner_contact", e.target.value)} placeholder="10-digit mobile" className={inputCls} />
                                 </div>
+                              </div>
+
+                              {/* ── CP commission ──────────────────────────────
+                                  Recorded against the partner when this booking
+                                  saves, and visible immediately under Channel
+                                  Partners in the admin panel. */}
+                              <div className={`rounded-xl p-4 border ${isDark ? "bg-[#9E217B]/5 border-[#9E217B]/25" : "bg-[#9E217B]/5 border-[#9E217B]/20"}`}>
+                                <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                                  <div>
+                                    <p className={`text-xs font-bold ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>Channel Partner Commission</p>
+                                    {cpMaster && (
+                                      <p className={`text-[10px] mt-0.5 ${textMuted}`}>
+                                        From this lead: <strong className={textMain}>{cpMaster.name}</strong>
+                                        {cpMaster.phone ? ` · ${cpMaster.phone}` : ""}
+                                        {cpMaster.default_commission_rate !== null
+                                          ? ` · ${cpMaster.default_commission_rate}%`
+                                          : " · no rate set"}
+                                      </p>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-4">
+                                    {/* Recording is optional — the commission is calculated
+                                        and shown either way, but nothing is written unless
+                                        this is on. */}
+                                    <label className={`flex items-center gap-2 cursor-pointer text-[11px] ${textMuted}`}>
+                                      <input
+                                        type="checkbox"
+                                        checked={form.cp_commission_mode !== "none"}
+                                        onChange={e => set("cp_commission_mode", e.target.checked ? "auto" : "none")}
+                                        className="cursor-pointer"
+                                      />
+                                      Record commission
+                                    </label>
+                                    {form.cp_commission_mode !== "none" && (
+                                      <label className={`flex items-center gap-2 cursor-pointer text-[11px] ${textMuted}`}>
+                                        <input
+                                          type="checkbox"
+                                          checked={form.cp_commission_mode === "manual"}
+                                          onChange={e => set("cp_commission_mode", e.target.checked ? "manual" : "auto")}
+                                          className="cursor-pointer"
+                                        />
+                                        Enter manually
+                                      </label>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {!cpId && (
+                                  <p className={`text-[11px] ${textMuted}`}>
+                                    This lead has no channel partner on record, so no commission can be recorded.
+                                    Set the CP on the lead first.
+                                  </p>
+                                )}
+
+                                {cpId && form.cp_commission_mode !== "manual" && (
+                                  <div>
+                                    <label className={labelCls}>Commission (auto-calculated)</label>
+                                    <input
+                                      readOnly
+                                      value={cpPreview ? formatCurrencyDecimal(cpPreview.gross) : ""}
+                                      placeholder={cpPreviewError ? "—" : "Enter agreement value above"}
+                                      className={`${inputCls} cursor-not-allowed opacity-90`}
+                                    />
+                                    <p className={`text-[10px] mt-1 ${textMuted}`}>
+                                      {cpPreview
+                                        ? `${formatCurrencyDecimal(cpPreview.agreementValue)} × ${cpPreview.commissionRatePercent}% (this partner's configured rate)`
+                                        : "Calculated from the agreement value and the partner's configured rate."}
+                                    </p>
+                                  </div>
+                                )}
+
+                                {cpId && form.cp_commission_mode === "manual" && (
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div>
+                                      <label className={labelCls}>Commission Amount</label>
+                                      <input
+                                        value={form.cp_commission_amount}
+                                        onChange={e => set("cp_commission_amount", e.target.value)}
+                                        placeholder="e.g. 150000"
+                                        className={inputCls}
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className={labelCls}>Reason</label>
+                                      <input
+                                        value={form.cp_commission_reason}
+                                        onChange={e => set("cp_commission_reason", e.target.value)}
+                                        placeholder="Why it differs from the standard rate"
+                                        className={inputCls}
+                                      />
+                                    </div>
+                                  </div>
+                                )}
+
+                                {cpPreviewError && (
+                                  <p className="text-[11px] mt-2 text-amber-500">{cpPreviewError}</p>
+                                )}
+
+                                {/* Missing rate is fixable in place — no need to leave the
+                                    booking and lose the form. Same validation and endpoint
+                                    the CP Master uses; the server re-checks the role. */}
+                                {cpId && cpPreviewCode === "CP_RATE_NOT_SET" && (
+                                  canSetRate ? (
+                                    <div className={`mt-3 pt-3 border-t ${divider}`}>
+                                      <label className={labelCls}>Set commission rate for {cpMaster?.name || "this partner"} (%)</label>
+                                      <div className="flex items-center gap-2">
+                                        <input
+                                          value={rateInput}
+                                          onChange={e => { setRateInput(e.target.value); setRateError(null); }}
+                                          placeholder="e.g. 2 or 1.75"
+                                          className={`${inputCls} flex-1`}
+                                        />
+                                        <button
+                                          type="button"
+                                          disabled={rateSaving || !rateInput.trim()}
+                                          onClick={saveCpRate}
+                                          className={`px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer whitespace-nowrap ${isDark ? "bg-[#9E217B] hover:bg-[#7a1960] text-white" : "bg-[#9E217B] hover:bg-[#7a1960] text-white"} ${rateSaving || !rateInput.trim() ? "opacity-50 cursor-not-allowed" : ""}`}
+                                        >
+                                          {rateSaving ? "Saving..." : "Save rate"}
+                                        </button>
+                                      </div>
+                                      {rateError
+                                        ? <p className="text-[10px] mt-1 text-red-500">{rateError}</p>
+                                        : <p className={`text-[10px] mt-1 ${textMuted}`}>
+                                            Saved against the partner, so it applies to their future bookings too.
+                                            Or tick &ldquo;Enter manually&rdquo; to just type an amount for this booking.
+                                          </p>}
+                                    </div>
+                                  ) : (
+                                    <p className={`text-[11px] mt-2 ${textMuted}`}>
+                                      Tick &ldquo;Enter manually&rdquo; to record an amount for this booking, or ask an
+                                      admin to set this partner&apos;s rate under Channel Partners.
+                                    </p>
+                                  )
+                                )}
+
+                                {cpId && form.cp_commission_mode === "none" && (
+                                  <p className={`text-[11px] mt-2 ${textMuted}`}>
+                                    Shown for reference only — this commission will <strong>not</strong> be recorded
+                                    against the partner. You can add it later from Channel Partners.
+                                  </p>
+                                )}
+
+                                {cpPreview && (
+                                  <div className={`mt-3 pt-3 border-t text-[11px] space-y-1 ${divider}`}>
+                                    <div className="flex justify-between">
+                                      <span className={textMuted}>Gross commission</span>
+                                      <span className={`font-bold ${textMain}`}>{formatCurrencyDecimal(cpPreview.gross)}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span className={textMuted}>TDS ({cpPreview.tdsPercent}%)</span>
+                                      <span className={textMain}>{formatCurrencyDecimal(cpPreview.tdsAmount)}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span className={textMuted}>Net payable</span>
+                                      <span className={`font-bold ${textMain}`}>{formatCurrencyDecimal(cpPreview.netPayable)}</span>
+                                    </div>
+                                    {cpPreview.crossed && (
+                                      <p className="text-[10px] pt-1 text-amber-500">
+                                        This partner is over the ₹20,000 FY threshold, so {cpPreview.tdsPercent}% TDS applies.
+                                      </p>
+                                    )}
+                                  </div>
+                                )}
                               </div>
                             </motion.div>
                           )}

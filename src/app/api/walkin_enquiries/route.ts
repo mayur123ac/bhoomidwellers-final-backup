@@ -1,6 +1,7 @@
 //walkin_enquiries/route.ts
 import { NextResponse } from "next/server";
 import { query, transaction, recalculateSrNos } from "@/lib/db";
+import { isChannelPartnerSource, resolveChannelPartnerId } from "@/lib/cpCommissionEngine";
 
 export const dynamic = "force-dynamic";
 
@@ -67,7 +68,38 @@ export async function POST(req: Request) {
       );
     }
 
+    // Effective source is resolved once so the CP gate and the stored value agree.
+    const effectiveSource = source || "Direct Walk-in";
+
+    // CP-sourced enquiries must carry the partner's phone. It is the only
+    // high-confidence identity key: without it the partner can only be matched by
+    // name, which both creates duplicates and — where two partners share a name —
+    // silently merges them, sending commission to the wrong person.
+    //
+    // New writes only. Historical rows without a phone are untouched and stay valid.
+    if (isChannelPartnerSource(effectiveSource) && !String(cp_phone || "").trim()) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Channel Partner phone number is required for Channel Partner enquiries.",
+          code: "CP_PHONE_REQUIRED",
+        },
+        { status: 400 }
+      );
+    }
+
     const result = await transaction(async (client) => {
+      // Resolve the channel partner (find-or-create) in the same transaction as the
+      // enquiry insert, so a failure here rolls back both. Non-CP sources are
+      // skipped entirely — their cp_name is sub-source noise, not partner data.
+      const channelPartnerId = isChannelPartnerSource(effectiveSource)
+        ? await resolveChannelPartnerId(
+            client,
+            { cp_name, cp_company, cp_phone, source: effectiveSource },
+            assigned_receptionist || assignedTo || "system"
+          )
+        : null;
+
       const insertRes = await client.query(
         `INSERT INTO walkin_enquiries (
           name, phone, email, address, occupation, organization,
@@ -76,7 +108,7 @@ export async function POST(req: Request) {
           cp_name, cp_company, cp_phone,
           loan_planned, assigned_to, assigned_receptionist, status,
           is_global_shared, overseeing_site_head,
-          enquiry_date, auto_date_enabled
+          enquiry_date, auto_date_enabled, channel_partner_id
         )
         VALUES (
           $1,  $2,  $3,  $4,  $5,  $6,
@@ -85,7 +117,7 @@ export async function POST(req: Request) {
           $14, $15, $16,
           $17, $18, $19, $20,
           $21, $22,
-          $23, $24
+          $23, $24, $25
         )
         RETURNING id`,
         [
@@ -98,7 +130,7 @@ export async function POST(req: Request) {
           budget || "Pending",                // $7
           configuration || "N/A",             // $8
           purpose || "N/A",                   // $9
-          source || "Direct Walk-in",         // $10
+          effectiveSource,                    // $10
           alt_phone || null,                  // $11
           source_other || null,               // $12
           referral_name || null,              // $13
@@ -113,6 +145,7 @@ export async function POST(req: Request) {
           overseeing_site_head || null,       // $22
           enquiry_date || new Date().toISOString(), // $23
           auto_date_enabled ?? true,          // $24
+          channelPartnerId,                   // $25
         ]
       );
       

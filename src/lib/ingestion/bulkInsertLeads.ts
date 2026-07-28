@@ -2,6 +2,7 @@
 // Inserts a batch of parsed leads inside a single transaction, then recalculates
 // Sr. Nos ONCE at the end. Duplicate external_ref rows are skipped, not aborted.
 import { transaction, recalculateSrNos } from "@/lib/db";
+import { isChannelPartnerSource, resolveChannelPartnerId } from "@/lib/cpCommissionEngine";
 import type { ParsedLead } from "./parseLeadSheet";
 
 export interface BulkInsertParams {
@@ -37,6 +38,21 @@ export async function bulkInsertLeads(
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
+      const rowSource = clamp(row.source || "Direct Walk-in", 100);
+
+      // CP-sourced sheet rows now carry the partner's phone (parseLeadSheet rejects
+      // them otherwise), so this resolves via the high-confidence phone branch
+      // rather than falling back to name matching. Runs inside the batch
+      // transaction, which is what lets repeat partners within one sheet collapse
+      // onto a single row. Non-CP sources are skipped: their cp_name holds
+      // sub-source labels ("Hoarding", "Social Media"), not partners.
+      const channelPartnerId = isChannelPartnerSource(rowSource)
+        ? await resolveChannelPartnerId(
+            client,
+            { cp_name: row.cp_name, cp_company: null, cp_phone: row.cp_phone, source: rowSource },
+            uploadedByName
+          )
+        : null;
 
       const insertRes = await client.query(
         `INSERT INTO walkin_enquiries (
@@ -46,7 +62,7 @@ export async function bulkInsertLeads(
           cp_name, cp_company, cp_phone,
           loan_planned, assigned_to, assigned_receptionist, status,
           is_global_shared, overseeing_site_head,
-          enquiry_date, auto_date_enabled, external_ref
+          enquiry_date, auto_date_enabled, external_ref, channel_partner_id
         )
         VALUES (
           $1,  $2,  $3,  $4,  $5,  $6,
@@ -55,7 +71,7 @@ export async function bulkInsertLeads(
           $14, $15, $16,
           $17, $18, $19, $20,
           $21, $22,
-          $23, $24, $25
+          $23, $24, $25, $26
         )
         ON CONFLICT (external_ref) WHERE external_ref IS NOT NULL DO NOTHING
         RETURNING id`,
@@ -69,13 +85,13 @@ export async function bulkInsertLeads(
           clamp(row.budget || "Pending", 100), // $7
           clamp(row.configuration || "N/A", 100), // $8
           "N/A", // $9  purpose
-          clamp(row.source || "Direct Walk-in", 100), // $10
+          rowSource, // $10
           clamp(row.alt_phone, 20), // $11 alt_phone
           null, // $12 source_other
           null, // $13 referral_name
           clamp(row.cp_name, 150), // $14
           null, // $15 cp_company
-          null, // $16 cp_phone
+          clamp(row.cp_phone, 20), // $16 cp_phone
           "Pending", // $17 loan_planned
           clamp(assignedTo, 150), // $18
           null, // $19 assigned_receptionist
@@ -85,6 +101,7 @@ export async function bulkInsertLeads(
           row.enquiry_date, // $23
           false, // $24 auto_date_enabled
           clamp(row.external_ref || null, 100), // $25 external_ref
+          channelPartnerId, // $26
         ]
       );
 

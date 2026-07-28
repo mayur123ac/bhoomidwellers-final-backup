@@ -282,6 +282,9 @@ function useAdminData() {
           loanStatus, loanAmtReq, loanAmtApp,
           source: lead.source, sourceOther: lead.source_other,
           cpName: lead.cp_name, cpCompany: lead.cp_company, cpPhone: lead.cp_phone,
+          // See dashboard/page.tsx — the booking form needs the resolved partner id
+          // to attribute commission, not just the free-text CP name/phone.
+          channelPartnerId: lead.channel_partner_id,
           altPhone: lead.alt_phone, address: lead.address,
           mongoVisitDate: latestVisitDate,
           closingDate,

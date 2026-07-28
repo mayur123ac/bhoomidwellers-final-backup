@@ -1,3 +1,26 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   Revenue analytics — Bhoomi Dwellers CRM
+
+   REVENUE MODEL
+   ─────────────
+   Agreement Value  = developer's full entitlement for the unit
+                    = customer own contribution + bank loan disbursement
+
+   Developer Revenue Received  (CASH BASIS — confirmed receipts only)
+                    = token + booking amount + OCR + cash component
+                      + actual loan disbursement
+
+   NOT developer revenue (collected on the government's behalf):
+                      SDR (stamp duty + registration), GST, statutory charges
+
+   Gross Collection = Developer Revenue + Government Charges
+   Balance Receivable = Agreement Value − Developer Revenue Received
+
+   THE CORE RULE: an amount counts as revenue only when there is evidence the
+   money actually arrived — a receipt date, or a status that reads as completed.
+   An agreed-but-unpaid ₹20L OCR is a receivable, not revenue.
+   ══════════════════════════════════════════════════════════════════════════ */
+
 export type RevenueStageId =
   | "booking"
   | "loan_applied"
@@ -19,32 +42,42 @@ export const REVENUE_STAGES: Array<{ id: RevenueStageId; label: string }> = [
   { id: "completed", label: "Completed" },
 ];
 
-export type RevenueRecord = Record<string, any> & {
-  agreement_value_number: number;
-  expected_revenue: number;
-  actual_revenue: number;
-  pending_revenue: number;
-  gross_collection: number;
-  developer_revenue: number;
-  government_charges: number;
-  net_collection: number;
-  outstanding_balance: number;
-  collection_efficiency: number;
-  booking_completion_percentage: number;
-  days_to_registration: number | null;
-  days_to_disbursement: number | null;
-  days_delayed: number;
-  forecast_month: string | null;
-  forecast_week: string | null;
-  derived_stage: RevenueStageId;
-  derived_stage_label: string;
-  registration_delay_days: number;
-  loan_delay_days: number;
-  ocr_delay_days: number;
-  sdr_delay_days: number;
-  disbursement_delay_days: number;
-  sdr_due_date: string | null;
-};
+/* ═══════════════════════ RECOGNITION CONFIG ═══════════════════════
+   Two double-counting risks that depend on how your team fills the sheet.
+   Both are currently unverifiable because `ocr_amount` and `token_amount`
+   are empty on every booking. Revisit once real OCR data exists.
+   ═════════════════════════════════════════════════════════════════ */
+
+/**
+ * TRUE  → `ocr_amount` is CUMULATIVE own contribution and already contains the
+ *         booking amount. Booking amount is then NOT added separately.
+ * FALSE → `ocr_amount` holds only instalments collected AFTER booking.
+ *
+ * Default FALSE. Justification: with OCR empty on all bookings, booking_amount
+ * is the only confirmed receipt in the system — treating it as included in OCR
+ * would report ₹0 revenue against ₹5,00,000 actually collected.
+ */
+export const OCR_INCLUDES_BOOKING_AMOUNT = false;
+
+/**
+ * TRUE  → `booking_amount` already contains `token_amount` (token adjusted into
+ *         the booking amount, the usual Indian convention).
+ * FALSE → token and booking amount are separate receipts.
+ */
+export const BOOKING_AMOUNT_INCLUDES_TOKEN = true;
+
+/** Statuses that confirm receipt when no date column is populated. */
+const RECEIPT_CONFIRMING_STATUSES = [
+  "received",
+  "paid",
+  "disbursed",
+  "completed",
+  "complete",
+  "credited",
+  "cleared",
+];
+
+/* ═══════════════════════════ PRIMITIVES ═══════════════════════════ */
 
 export function parseRevenueAmount(value: unknown): number {
   if (value === null || value === undefined || value === "") return 0;
@@ -115,9 +148,7 @@ export function isSameDay(value: unknown, now = new Date()): boolean {
 export function isThisWeek(value: unknown, now = new Date()): boolean {
   const date = toDate(value);
   if (!date) return false;
-  const start = startOfWeek(now);
-  const end = endOfWeek(now);
-  return date >= start && date <= end;
+  return date >= startOfWeek(now) && date <= endOfWeek(now);
 }
 
 export function isThisMonth(value: unknown, now = new Date()): boolean {
@@ -147,15 +178,30 @@ export function normalizeRevenueStatus(value: unknown): string {
 
 export function statusMatches(value: unknown, keywords: string[]): boolean {
   const status = normalizeRevenueStatus(value);
+  if (!status) return false;
   return keywords.some((keyword) => status.includes(keyword));
 }
 
 export function isCompletedStatus(value: unknown): boolean {
-  return statusMatches(value, ["completed", "complete", "approved", "sanctioned", "received", "disbursed", "done"]);
+  return statusMatches(value, [
+    "completed",
+    "complete",
+    "approved",
+    "sanctioned",
+    "received",
+    "disbursed",
+    "done",
+  ]);
 }
 
 export function isRejectedStatus(value: unknown): boolean {
   return statusMatches(value, ["rejected", "cancelled", "canceled", "declined"]);
+}
+
+/** Confirms actual receipt — stricter than isCompletedStatus, which also
+ *  accepts "approved"/"sanctioned" (commitments, not payments). */
+function isReceiptConfirmed(value: unknown): boolean {
+  return statusMatches(value, RECEIPT_CONFIRMING_STATUSES);
 }
 
 export function delayDays(dueValue: unknown, actualValue: unknown, now = new Date()): number {
@@ -187,30 +233,212 @@ export function getSdrDueDate(record: Record<string, any>): string | null {
   return toDateKey(due);
 }
 
+/* ═════════════════════════ RECEIPT LEDGER ═════════════════════════ */
+
+export type ReceiptLine = {
+  key: string;
+  label: string;
+  amount: number;
+  /** true only when there's evidence the money arrived */
+  received: boolean;
+  receivedOn: string | null;
+  /** collected for the government — excluded from developer revenue */
+  isGovernment: boolean;
+  /** suppressed to avoid double-counting under current config */
+  suppressed: boolean;
+  suppressedReason?: string;
+};
+
+/**
+ * Sums only tranches that have actually been disbursed.
+ * Falls back to the booking's rolled-up `disbursement_amount`.
+ */
+function disbursementReceipt(record: Record<string, any>): { amount: number; received: boolean; date: string | null } {
+  const tranches = Array.isArray(record.disbursement_tranches) ? record.disbursement_tranches : null;
+
+  if (tranches && tranches.length > 0) {
+    let total = 0;
+    let latest: string | null = null;
+    for (const tranche of tranches) {
+      const date = tranche.disbursed_date || tranche.actual_disbursement_date || tranche.received_date;
+      const confirmed = !!toDate(date) || isReceiptConfirmed(tranche.status);
+      if (!confirmed) continue;
+      total += parseRevenueAmount(tranche.amount ?? tranche.disbursement_amount);
+      const key = toDateKey(date);
+      if (key && (!latest || key > latest)) latest = key;
+    }
+    return { amount: total, received: total > 0, date: latest };
+  }
+
+  const amount = parseRevenueAmount(record.disbursement_amount);
+  const date = toDateKey(record.actual_disbursement_date);
+  const received = amount > 0 && (!!date || isReceiptConfirmed(record.disbursement_status));
+  return { amount, received, date };
+}
+
+/**
+ * Every money line on a booking, with receipt status resolved.
+ * This is the single place receipt recognition happens.
+ */
+export function buildReceiptLines(record: Record<string, any>): ReceiptLine[] {
+  const lines: ReceiptLine[] = [];
+
+  // Booking-time receipts. No dedicated date columns exist, so the booking's
+  // own date is the receipt date — a booking record cannot exist without the
+  // deposit having been taken.
+  const bookingDateKey = toDateKey(
+    record.booking_date || record.application_date || record.created_at
+  );
+
+  const tokenAmount = parseRevenueAmount(record.token_amount);
+  lines.push({
+    key: "token_amount",
+    label: "Token / earnest money",
+    amount: tokenAmount,
+    received: tokenAmount > 0 && !!bookingDateKey,
+    receivedOn: toDateKey(record.token_received_date) || bookingDateKey,
+    isGovernment: false,
+    suppressed: BOOKING_AMOUNT_INCLUDES_TOKEN && tokenAmount > 0,
+    suppressedReason: BOOKING_AMOUNT_INCLUDES_TOKEN
+      ? "Token is adjusted into the booking amount (BOOKING_AMOUNT_INCLUDES_TOKEN)"
+      : undefined,
+  });
+
+  const bookingAmount = parseRevenueAmount(record.booking_amount);
+  lines.push({
+    key: "booking_amount",
+    label: "Booking amount",
+    amount: bookingAmount,
+    received: bookingAmount > 0 && !!bookingDateKey,
+    receivedOn: toDateKey(record.booking_amount_received_date) || bookingDateKey,
+    isGovernment: false,
+    suppressed: OCR_INCLUDES_BOOKING_AMOUNT && bookingAmount > 0,
+    suppressedReason: OCR_INCLUDES_BOOKING_AMOUNT
+      ? "Booking amount is already inside OCR (OCR_INCLUDES_BOOKING_AMOUNT)"
+      : undefined,
+  });
+
+  // Own contribution instalments
+  const ocrAmount = parseRevenueAmount(record.ocr_amount);
+  const ocrDate = toDateKey(record.ocr_received_date);
+  lines.push({
+    key: "ocr_amount",
+    label: "OCR (own contribution)",
+    amount: ocrAmount,
+    received: ocrAmount > 0 && (!!ocrDate || isReceiptConfirmed(record.ocr_status)),
+    receivedOn: ocrDate,
+    isGovernment: false,
+    suppressed: false,
+  });
+
+  const cashAmount = parseRevenueAmount(record.cash_component);
+  const cashDate = toDateKey(record.cash_component_date);
+  lines.push({
+    key: "cash_component",
+    label: "Cash component",
+    amount: cashAmount,
+    received: cashAmount > 0 && (!!cashDate || isReceiptConfirmed(record.cash_component_status)),
+    receivedOn: cashDate,
+    isGovernment: false,
+    suppressed: false,
+  });
+
+  // Bank loan — disbursed only, never sanctioned
+  const disbursement = disbursementReceipt(record);
+  lines.push({
+    key: "disbursement_amount",
+    label: "Loan disbursement",
+    amount: disbursement.amount,
+    received: disbursement.received,
+    receivedOn: disbursement.date,
+    isGovernment: false,
+    suppressed: false,
+  });
+
+  // Government charges — collected, but never developer revenue
+  const sdrAmount = parseRevenueAmount(record.sdr_amount);
+  const sdrDate = toDateKey(record.sdr_payment_date);
+  lines.push({
+    key: "sdr_amount",
+    label: "SDR (stamp duty + registration)",
+    amount: sdrAmount,
+    received: sdrAmount > 0 && (!!sdrDate || isReceiptConfirmed(record.sdr_status)),
+    receivedOn: sdrDate,
+    isGovernment: true,
+    suppressed: false,
+  });
+
+  const gstAmount = parseRevenueAmount(record.gst_amount);
+  lines.push({
+    key: "gst_amount",
+    label: "GST",
+    amount: gstAmount,
+    received: gstAmount > 0 && (!!toDateKey(record.gst_payment_date) || isReceiptConfirmed(record.gst_status)),
+    receivedOn: toDateKey(record.gst_payment_date),
+    isGovernment: true,
+    suppressed: false,
+  });
+
+  const otherGovt = parseRevenueAmount(record.other_government_charges);
+  lines.push({
+    key: "other_government_charges",
+    label: "Other statutory charges",
+    amount: otherGovt,
+    received: otherGovt > 0 && !!toDateKey(record.other_government_charges_date),
+    receivedOn: toDateKey(record.other_government_charges_date),
+    isGovernment: true,
+    suppressed: false,
+  });
+
+  return lines.filter((line) => line.amount > 0 || line.received);
+}
+
 export function calculateExpectedRevenue(record: Record<string, any>): number {
   return parseRevenueAmount(record.agreement_value);
 }
 
 /**
- * Developer Revenue = OCR + Cash Component + Actual Loan Disbursement.
+ * Developer Revenue Received — CASH BASIS.
  *
- * EXCLUDES: token_amount, booking_amount, sdr_amount, loan_amount,
- *           sanction_amount, expected_disbursement_amount.
+ * Counts: token + booking amount + OCR + cash component + actual disbursement,
+ *         each only when receipt is confirmed by date or status.
  *
- * This is the SINGLE SOURCE OF TRUTH for revenue received.
- * All KPI cards, tables, exports and charts must use this helper.
+ * Excludes: SDR / GST / statutory charges (government's money),
+ *           loan_amount, sanction_amount, expected_disbursement_amount
+ *           (commitments, not receipts).
+ *
+ * SINGLE SOURCE OF TRUTH for revenue received. All KPI cards, tables, exports
+ * and charts must use this helper.
  */
 export function calculateDeveloperRevenue(record: Record<string, any>): number {
-  const ocr = parseRevenueAmount(record.ocr_amount);
-  const cash = parseRevenueAmount(record.cash_component);
-  const disbursement = parseRevenueAmount(record.disbursement_amount);
-  return ocr + cash + disbursement;
+  return buildReceiptLines(record)
+    .filter((line) => line.received && !line.isGovernment && !line.suppressed)
+    .reduce((total, line) => total + line.amount, 0);
+}
+
+/** Money recorded on the booking that has NOT yet been confirmed as received. */
+export function calculateUnconfirmedRevenue(record: Record<string, any>): number {
+  return buildReceiptLines(record)
+    .filter((line) => !line.received && !line.isGovernment && !line.suppressed)
+    .reduce((total, line) => total + line.amount, 0);
+}
+
+/** Government charges actually collected — pass-through, not revenue. */
+export function calculateGovernmentCharges(record: Record<string, any>): number {
+  return buildReceiptLines(record)
+    .filter((line) => line.received && line.isGovernment)
+    .reduce((total, line) => total + line.amount, 0);
 }
 
 /** @deprecated Use calculateDeveloperRevenue instead */
 export function calculateActualRevenue(record: Record<string, any>): number {
   return calculateDeveloperRevenue(record);
 }
+
+/* ═══════════════════════════ STAGES ═══════════════════════════
+   Stage detection stays amount-OR-date (a stage is reached when the event
+   happens), unlike revenue, which requires confirmed receipt.
+   ═══════════════════════════════════════════════════════════════ */
 
 export function recordReachesStage(record: Record<string, any>, stage: RevenueStageId): boolean {
   const loanApplied =
@@ -273,31 +501,105 @@ export function deriveRevenueStage(record: Record<string, any>): RevenueStageId 
   return ordered.find((stage) => recordReachesStage(record, stage)) || "booking";
 }
 
+/* ═══════════════════════════ ENRICHMENT ═══════════════════════════ */
+
+export type RevenueRecord = Record<string, any> & {
+  agreement_value_number: number;
+  expected_revenue: number;
+
+  /** CANONICAL: confirmed developer revenue, cash basis */
+  developer_revenue_received: number;
+  /** Alias of developer_revenue_received, kept for existing consumers */
+  actual_revenue: number;
+  /** Recorded but not yet confirmed as received */
+  unconfirmed_revenue: number;
+  /** Government charges actually collected (pass-through, not revenue) */
+  government_charges_received: number;
+  /** developer_revenue_received + government_charges_received */
+  gross_collection_received: number;
+  /** agreement_value − developer_revenue_received, floored at 0 */
+  balance_receivable: number;
+  /** @deprecated alias of balance_receivable */
+  pending_revenue: number;
+
+  /** Value handed over by the ledger view, for drift comparison only */
+  ledger_developer_revenue: number | null;
+  ledger_drift: number;
+
+  receipt_lines: ReceiptLine[];
+  has_unconfirmed_amounts: boolean;
+  is_overpaid: boolean;
+
+  collection_efficiency: number;
+  booking_completion_percentage: number;
+  days_to_registration: number | null;
+  days_to_disbursement: number | null;
+  days_delayed: number;
+  forecast_month: string | null;
+  forecast_week: string | null;
+  derived_stage: RevenueStageId;
+  derived_stage_label: string;
+  registration_delay_days: number;
+  loan_delay_days: number;
+  ocr_delay_days: number;
+  sdr_delay_days: number;
+  disbursement_delay_days: number;
+  sdr_due_date: string | null;
+};
+
 export function enrichRevenueRecord(record: Record<string, any>, now = new Date()): RevenueRecord {
   const agreementValue = parseRevenueAmount(record.agreement_value);
   const expectedRevenue = calculateExpectedRevenue(record);
 
-  // SINGLE SOURCE OF TRUTH: always use calculateDeveloperRevenue.
-  // Never rely on the ledger view's developer_revenue here — it may include
-  // booking_amount or other non-revenue items.
-  const actualRevenue = calculateDeveloperRevenue(record);
-  const pendingRevenue = Math.max(agreementValue - actualRevenue, 0);
+  const receiptLines = buildReceiptLines(record);
+  const developerRevenue = receiptLines
+    .filter((line) => line.received && !line.isGovernment && !line.suppressed)
+    .reduce((total, line) => total + line.amount, 0);
+  const unconfirmedRevenue = receiptLines
+    .filter((line) => !line.received && !line.isGovernment && !line.suppressed)
+    .reduce((total, line) => total + line.amount, 0);
+  const governmentCharges = receiptLines
+    .filter((line) => line.received && line.isGovernment)
+    .reduce((total, line) => total + line.amount, 0);
 
-  // Overpayment validation
-  if (actualRevenue > agreementValue && agreementValue > 0) {
+  const balanceReceivable = Math.max(agreementValue - developerRevenue, 0);
+  const isOverpaid = agreementValue > 0 && developerRevenue > agreementValue;
+
+  if (isOverpaid) {
     console.warn(
-      `[Revenue] Overpayment detected for booking ${record.booking_number || record.booking_id}: ` +
-      `received ₹${actualRevenue} exceeds agreement ₹${agreementValue}`
+      `[Revenue] Overpayment on booking ${record.booking_number || record.booking_id}: ` +
+      `received ₹${developerRevenue} exceeds agreement ₹${agreementValue}`
     );
   }
 
-  const gross_collection = parseRevenueAmount(record.gross_collection);
-  const developer_revenue = parseRevenueAmount(record.developer_revenue);
-  const government_charges = parseRevenueAmount(record.government_charges);
-  const net_collection = parseRevenueAmount(record.net_collection);
-  const outstanding_balance = parseRevenueAmount(record.outstanding_balance);
+  // Config sanity check: both token and booking amount present while token is
+  // being suppressed means either a real double-count or lost revenue.
+  const tokenLine = receiptLines.find((line) => line.key === "token_amount");
+  if (tokenLine?.suppressed && tokenLine.amount > 0) {
+    console.warn(
+      `[Revenue] Booking ${record.booking_number || record.booking_id} has token_amount ` +
+      `₹${tokenLine.amount} excluded by BOOKING_AMOUNT_INCLUDES_TOKEN. ` +
+      `Verify the token is genuinely adjusted into booking_amount.`
+    );
+  }
 
-  const collectionEfficiency = agreementValue > 0 ? Math.round((actualRevenue / agreementValue) * 100) : 0;
+  // Compare against the ledger view without trusting it.
+  const ledgerDeveloperRevenue =
+    record.developer_revenue === undefined || record.developer_revenue === null
+      ? null
+      : parseRevenueAmount(record.developer_revenue);
+  const ledgerDrift = ledgerDeveloperRevenue === null ? 0 : ledgerDeveloperRevenue - developerRevenue;
+
+  if (ledgerDeveloperRevenue !== null && Math.abs(ledgerDrift) > 1) {
+    console.warn(
+      `[Revenue] Ledger drift on booking ${record.booking_number || record.booking_id}: ` +
+      `ledger ₹${ledgerDeveloperRevenue} vs computed ₹${developerRevenue} (Δ ₹${ledgerDrift}). ` +
+      `The ledger honours reversals; investigate before trusting either figure.`
+    );
+  }
+
+  const collectionEfficiency =
+    agreementValue > 0 ? Math.round((developerRevenue / agreementValue) * 100) : 0;
   const reachedStages = REVENUE_STAGES.filter((stage) => recordReachesStage(record, stage.id)).length;
   const derivedStage = deriveRevenueStage(record);
   const stageLabel = REVENUE_STAGES.find((stage) => stage.id === derivedStage)?.label || "Booking";
@@ -306,28 +608,54 @@ export function enrichRevenueRecord(record: Record<string, any>, now = new Date(
   const loanTargetDate = addDays(bookingDate, 14);
   const ocrTargetDate = addDays(bookingDate, 7);
 
-  const registrationDelayDays = delayDays(record.expected_registration_date, record.actual_registration_date, now);
-  const loanDelayDays = recordReachesStage(record, "loan_applied") ? delayDays(loanTargetDate, record.sanction_date, now) : 0;
+  const registrationDelayDays = delayDays(
+    record.expected_registration_date,
+    record.actual_registration_date,
+    now
+  );
+  const loanDelayDays = recordReachesStage(record, "loan_applied")
+    ? delayDays(loanTargetDate, record.sanction_date, now)
+    : 0;
   const ocrDelayDays = delayDays(ocrTargetDate, record.ocr_received_date, now);
   const sdrDelayDays = delayDays(sdrDueDate, record.sdr_payment_date, now);
-  const disbursementDelayDays = delayDays(record.expected_disbursement_date, record.actual_disbursement_date, now);
+  const disbursementDelayDays = delayDays(
+    record.expected_disbursement_date,
+    record.actual_disbursement_date,
+    now
+  );
 
   return {
     ...record,
+
     agreement_value_number: agreementValue,
     expected_revenue: expectedRevenue,
-    actual_revenue: actualRevenue,
-    pending_revenue: pendingRevenue,
-    gross_collection,
-    developer_revenue,
-    government_charges,
-    net_collection,
-    outstanding_balance,
+
+    developer_revenue_received: developerRevenue,
+    actual_revenue: developerRevenue,
+    unconfirmed_revenue: unconfirmedRevenue,
+    government_charges_received: governmentCharges,
+    gross_collection_received: developerRevenue + governmentCharges,
+    balance_receivable: balanceReceivable,
+    pending_revenue: balanceReceivable,
+
+    ledger_developer_revenue: ledgerDeveloperRevenue,
+    ledger_drift: ledgerDrift,
+
+    receipt_lines: receiptLines,
+    has_unconfirmed_amounts: unconfirmedRevenue > 0,
+    is_overpaid: isOverpaid,
+
     collection_efficiency: collectionEfficiency,
     booking_completion_percentage: Math.round((reachedStages / REVENUE_STAGES.length) * 100),
     days_to_registration: daysBetween(bookingDate, record.actual_registration_date),
     days_to_disbursement: daysBetween(bookingDate, record.actual_disbursement_date),
-    days_delayed: Math.max(registrationDelayDays, loanDelayDays, ocrDelayDays, sdrDelayDays, disbursementDelayDays),
+    days_delayed: Math.max(
+      registrationDelayDays,
+      loanDelayDays,
+      ocrDelayDays,
+      sdrDelayDays,
+      disbursementDelayDays
+    ),
     forecast_month: getForecastMonth(record.expected_disbursement_date),
     forecast_week: getForecastWeek(record.expected_disbursement_date),
     derived_stage: derivedStage,
@@ -340,6 +668,8 @@ export function enrichRevenueRecord(record: Record<string, any>, now = new Date(
     sdr_due_date: sdrDueDate,
   };
 }
+
+/* ═══════════════════════════ AGGREGATION ═══════════════════════════ */
 
 function average(values: number[]): number {
   const positive = values.filter((value) => value > 0);
@@ -364,28 +694,53 @@ function groupBy<T>(items: T[], keyFn: (item: T) => string): Record<string, T[]>
   }, {});
 }
 
-function topRecords(records: RevenueRecord[], predicate: (record: RevenueRecord) => boolean, limit = 8): RevenueRecord[] {
+function topRecords(
+  records: RevenueRecord[],
+  predicate: (record: RevenueRecord) => boolean,
+  limit = 8
+): RevenueRecord[] {
   return records
     .filter(predicate)
-    .sort((a, b) => String(a.expected_disbursement_date || a.expected_registration_date || "").localeCompare(String(b.expected_disbursement_date || b.expected_registration_date || "")))
+    .sort((a, b) =>
+      String(a.expected_disbursement_date || a.expected_registration_date || "").localeCompare(
+        String(b.expected_disbursement_date || b.expected_registration_date || "")
+      )
+    )
     .slice(0, limit);
+}
+
+/**
+ * Cash expected by a future date. Prefers the bank's expected disbursement
+ * figure; falls back to the outstanding balance.
+ *
+ * Note the `??`-safe logic: a fully-collected booking forecasts ZERO, it does
+ * not fall through to its full agreement value.
+ */
+function forecastAmount(record: RevenueRecord): number {
+  const expected = parseRevenueAmount(record.expected_disbursement_amount);
+  if (expected > 0) return Math.min(expected, record.balance_receivable);
+  return record.balance_receivable;
 }
 
 export function buildRevenueAnalytics(rawRecords: Record<string, any>[], now = new Date()) {
   const records = rawRecords.map((record) => enrichRevenueRecord(record, now));
 
   const totalAgreementValue = sum(records, (record) => record.agreement_value_number);
-  // Revenue Received and Pending are calculated across ALL bookings, not just this month.
-  // This ensures KPI cards show consistent totals against Total Agreement Value.
-  const revenueReceived = sum(records, (record) => record.actual_revenue);
-  const pendingRevenue = Math.max(totalAgreementValue - revenueReceived, 0);
-  const collectionEfficiency = totalAgreementValue > 0 ? Math.round((revenueReceived / totalAgreementValue) * 100) : 0;
+  const revenueReceived = sum(records, (record) => record.developer_revenue_received);
+  const unconfirmedRevenue = sum(records, (record) => record.unconfirmed_revenue);
+  const governmentChargesReceived = sum(records, (record) => record.government_charges_received);
 
-  // Overpayment validation at summary level
-  if (revenueReceived > totalAgreementValue && totalAgreementValue > 0) {
+  // Summed per-record so the KPI card reconciles with the table. Subtracting
+  // aggregates would let one overpaid booking mask another's shortfall.
+  const balanceReceivable = sum(records, (record) => record.balance_receivable);
+
+  const collectionEfficiency =
+    totalAgreementValue > 0 ? Math.round((revenueReceived / totalAgreementValue) * 100) : 0;
+
+  const overpaidBookings = count(records, (record) => record.is_overpaid);
+  if (overpaidBookings > 0) {
     console.warn(
-      `[Revenue Summary] Revenue Received (${revenueReceived}) exceeds Total Agreement Value (${totalAgreementValue}). ` +
-      `Check individual bookings for overpayment.`
+      `[Revenue Summary] ${overpaidBookings} booking(s) show receipts exceeding agreement value.`
     );
   }
 
@@ -397,15 +752,33 @@ export function buildRevenueAnalytics(rawRecords: Record<string, any>[], now = n
       last_month: count(records, (record) => isLastMonth(record.booking_date || record.created_at, now)),
     },
     registration: {
-      due_this_week: count(records, (record) => !record.actual_registration_date && isThisWeek(record.expected_registration_date, now)),
+      due_this_week: count(
+        records,
+        (record) => !record.actual_registration_date && isThisWeek(record.expected_registration_date, now)
+      ),
       completed_this_week: count(records, (record) => isThisWeek(record.actual_registration_date, now)),
-      pending: count(records, (record) => !record.actual_registration_date && !isCompletedStatus(record.registration_status)),
-      delayed: count(records, (record) => !record.actual_registration_date && record.registration_delay_days > 0),
+      pending: count(
+        records,
+        (record) => !record.actual_registration_date && !isCompletedStatus(record.registration_status)
+      ),
+      delayed: count(
+        records,
+        (record) => !record.actual_registration_date && record.registration_delay_days > 0
+      ),
     },
     loan_sanction: {
-      pending: count(records, (record) => recordReachesStage(record, "loan_applied") && !recordReachesStage(record, "loan_sanctioned") && !isRejectedStatus(record.loan_status)),
+      pending: count(
+        records,
+        (record) =>
+          recordReachesStage(record, "loan_applied") &&
+          !recordReachesStage(record, "loan_sanctioned") &&
+          !isRejectedStatus(record.loan_status)
+      ),
       approved: count(records, (record) => recordReachesStage(record, "loan_sanctioned")),
-      rejected: count(records, (record) => isRejectedStatus(record.loan_status) || isRejectedStatus(record.sanction_status)),
+      rejected: count(
+        records,
+        (record) => isRejectedStatus(record.loan_status) || isRejectedStatus(record.sanction_status)
+      ),
       processing: count(records, (record) => statusMatches(record.loan_status, ["processing", "in process"])),
     },
     ocr: {
@@ -417,44 +790,95 @@ export function buildRevenueAnalytics(rawRecords: Record<string, any>[], now = n
     sdr: {
       pending: count(records, (record) => !recordReachesStage(record, "sdr_paid")),
       completed: count(records, (record) => recordReachesStage(record, "sdr_paid")),
-      due_this_week: count(records, (record) => !recordReachesStage(record, "sdr_paid") && isThisWeek(record.sdr_due_date, now)),
+      due_this_week: count(
+        records,
+        (record) => !recordReachesStage(record, "sdr_paid") && isThisWeek(record.sdr_due_date, now)
+      ),
     },
     disbursement: {
-      due_this_week: count(records, (record) => !record.actual_disbursement_date && isThisWeek(record.expected_disbursement_date, now)),
-      due_this_month: count(records, (record) => !record.actual_disbursement_date && isThisMonth(record.expected_disbursement_date, now)),
+      due_this_week: count(
+        records,
+        (record) => !record.actual_disbursement_date && isThisWeek(record.expected_disbursement_date, now)
+      ),
+      due_this_month: count(
+        records,
+        (record) => !record.actual_disbursement_date && isThisMonth(record.expected_disbursement_date, now)
+      ),
       received: count(records, (record) => recordReachesStage(record, "disbursement")),
-      delayed: count(records, (record) => !record.actual_disbursement_date && record.disbursement_delay_days > 0),
+      delayed: count(
+        records,
+        (record) => !record.actual_disbursement_date && record.disbursement_delay_days > 0
+      ),
     },
     cash_component: {
-      pending: count(records, (record) => parseRevenueAmount(record.cash_component) > 0 && !record.cash_component_date),
-      received: count(records, (record) => parseRevenueAmount(record.cash_component) > 0 && !!record.cash_component_date),
-      outstanding: sum(records, (record) => (record.cash_component_date ? 0 : parseRevenueAmount(record.cash_component))),
+      pending: count(
+        records,
+        (record) => parseRevenueAmount(record.cash_component) > 0 && !record.cash_component_date
+      ),
+      received: count(
+        records,
+        (record) => parseRevenueAmount(record.cash_component) > 0 && !!record.cash_component_date
+      ),
+      outstanding: sum(records, (record) =>
+        record.cash_component_date ? 0 : parseRevenueAmount(record.cash_component)
+      ),
+    },
+    revenue_quality: {
+      bookings_with_unconfirmed_amounts: count(records, (record) => record.has_unconfirmed_amounts),
+      unconfirmed_revenue: unconfirmedRevenue,
+      overpaid_bookings: overpaidBookings,
+      bookings_with_ledger_drift: count(records, (record) => Math.abs(record.ledger_drift) > 1),
     },
   };
 
+  const notYetDisbursed = records.filter((record) => !recordReachesStage(record, "disbursement"));
+
   const forecast = {
-    next_7_days: sum(records.filter((record) => !record.actual_disbursement_date && isWithinNextDays(record.expected_disbursement_date, 7, now)), (record) => record.pending_revenue || record.expected_revenue),
-    next_15_days: sum(records.filter((record) => !record.actual_disbursement_date && isWithinNextDays(record.expected_disbursement_date, 15, now)), (record) => record.pending_revenue || record.expected_revenue),
-    next_30_days: sum(records.filter((record) => !record.actual_disbursement_date && isWithinNextDays(record.expected_disbursement_date, 30, now)), (record) => record.pending_revenue || record.expected_revenue),
-    next_90_days: sum(records.filter((record) => !record.actual_disbursement_date && isWithinNextDays(record.expected_disbursement_date, 90, now)), (record) => record.pending_revenue || record.expected_revenue),
+    next_7_days: sum(
+      notYetDisbursed.filter((record) => isWithinNextDays(record.expected_disbursement_date, 7, now)),
+      forecastAmount
+    ),
+    next_15_days: sum(
+      notYetDisbursed.filter((record) => isWithinNextDays(record.expected_disbursement_date, 15, now)),
+      forecastAmount
+    ),
+    next_30_days: sum(
+      notYetDisbursed.filter((record) => isWithinNextDays(record.expected_disbursement_date, 30, now)),
+      forecastAmount
+    ),
+    next_90_days: sum(
+      notYetDisbursed.filter((record) => isWithinNextDays(record.expected_disbursement_date, 90, now)),
+      forecastAmount
+    ),
   };
 
   const pipeline = REVENUE_STAGES.map((stage) => ({
     ...stage,
     count: count(records, (record) => recordReachesStage(record, stage.id)),
-    value: sum(records.filter((record) => recordReachesStage(record, stage.id)), (record) => record.agreement_value_number),
+    value: sum(
+      records.filter((record) => recordReachesStage(record, stage.id)),
+      (record) => record.agreement_value_number
+    ),
   }));
 
-  const salesManagers = Object.entries(groupBy(records, (record) => String(record.sales_manager || record.created_by || "Unassigned"))).map(([name, managerRecords]) => ({
+  const salesManagers = Object.entries(
+    groupBy(records, (record) => String(record.sales_manager || record.created_by || "Unassigned"))
+  ).map(([name, managerRecords]) => ({
     name,
     bookings: managerRecords.length,
     agreement_value: sum(managerRecords, (record) => record.agreement_value_number),
-    revenue_received: sum(managerRecords, (record) => record.actual_revenue),
-    pending: sum(managerRecords, (record) => record.pending_revenue),
+    revenue_received: sum(managerRecords, (record) => record.developer_revenue_received),
+    pending: sum(managerRecords, (record) => record.balance_receivable),
   }));
 
-  const projects = Object.entries(groupBy(records, (record) => String(record.project || record.preferred_project || "Unassigned"))).map(([name, projectRecords]) => {
-    const uniqueFlats = new Set(projectRecords.map((record) => `${record.wing || ""}-${record.floor || record.floor_number || ""}-${record.flat_number || ""}`));
+  const projects = Object.entries(
+    groupBy(records, (record) => String(record.project || record.preferred_project || "Unassigned"))
+  ).map(([name, projectRecords]) => {
+    const uniqueFlats = new Set(
+      projectRecords.map(
+        (record) => `${record.wing || ""}-${record.floor || record.floor_number || ""}-${record.flat_number || ""}`
+      )
+    );
     return {
       name,
       total_flats: uniqueFlats.size,
@@ -462,17 +886,29 @@ export function buildRevenueAnalytics(rawRecords: Record<string, any>[], now = n
       available: Math.max(uniqueFlats.size - projectRecords.length, 0),
       registration_pending: count(projectRecords, (record) => !record.actual_registration_date),
       disbursement_pending: count(projectRecords, (record) => !record.actual_disbursement_date),
-      revenue_generated: sum(projectRecords, (record) => record.actual_revenue),
+      revenue_generated: sum(projectRecords, (record) => record.developer_revenue_received),
     };
   });
 
-  const banks = Object.entries(groupBy(records.filter((record) => record.bank_name), (record) => String(record.bank_name))).map(([name, bankRecords]) => ({
+  const banks = Object.entries(
+    groupBy(records.filter((record) => record.bank_name), (record) => String(record.bank_name))
+  ).map(([name, bankRecords]) => ({
     name,
     loan_count: bankRecords.length,
     approved: count(bankRecords, (record) => recordReachesStage(record, "loan_sanctioned")),
-    pending: count(bankRecords, (record) => !recordReachesStage(record, "loan_sanctioned") && !isRejectedStatus(record.loan_status)),
-    rejected: count(bankRecords, (record) => isRejectedStatus(record.loan_status) || isRejectedStatus(record.sanction_status)),
+    pending: count(
+      bankRecords,
+      (record) => !recordReachesStage(record, "loan_sanctioned") && !isRejectedStatus(record.loan_status)
+    ),
+    rejected: count(
+      bankRecords,
+      (record) => isRejectedStatus(record.loan_status) || isRejectedStatus(record.sanction_status)
+    ),
     disbursed: count(bankRecords, (record) => recordReachesStage(record, "disbursement")),
+    amount_disbursed: sum(bankRecords, (record) => {
+      const line = record.receipt_lines.find((l: ReceiptLine) => l.key === "disbursement_amount");
+      return line?.received ? line.amount : 0;
+    }),
   }));
 
   const delays = {
@@ -484,30 +920,80 @@ export function buildRevenueAnalytics(rawRecords: Record<string, any>[], now = n
   };
 
   const upcoming = {
-    registration_due: topRecords(records, (record) => !record.actual_registration_date && isWithinNextDays(record.expected_registration_date, 7, now)),
-    loan_followup: topRecords(records, (record) => recordReachesStage(record, "loan_applied") && !recordReachesStage(record, "loan_sanctioned")),
+    registration_due: topRecords(
+      records,
+      (record) => !record.actual_registration_date && isWithinNextDays(record.expected_registration_date, 7, now)
+    ),
+    loan_followup: topRecords(
+      records,
+      (record) => recordReachesStage(record, "loan_applied") && !recordReachesStage(record, "loan_sanctioned")
+    ),
     ocr_pending: topRecords(records, (record) => !recordReachesStage(record, "ocr_completed")),
     sdr_pending: topRecords(records, (record) => !recordReachesStage(record, "sdr_paid")),
-    disbursement_due: topRecords(records, (record) => !record.actual_disbursement_date && isWithinNextDays(record.expected_disbursement_date, 7, now)),
+    disbursement_due: topRecords(
+      records,
+      (record) => !record.actual_disbursement_date && isWithinNextDays(record.expected_disbursement_date, 7, now)
+    ),
   };
 
   const alerts = records
     .flatMap((record) => {
-      const items: Array<{ type: "danger" | "warning" | "success"; title: string; booking_id: number; booking_number: string; customer_name: string; days: number }> = [];
+      const items: Array<{
+        type: "danger" | "warning" | "success";
+        title: string;
+        booking_id: number;
+        booking_number: string;
+        customer_name: string;
+        days: number;
+      }> = [];
       const bookingNumber = String(record.booking_number || record.booking_id || "");
       const customerName = String(record.customer_name || record.primary_name || "");
+      const base = { booking_id: record.booking_id, booking_number: bookingNumber, customer_name: customerName };
 
       if (!record.actual_registration_date && record.registration_delay_days > 0) {
-        items.push({ type: "danger", title: `Registration overdue by ${record.registration_delay_days} days`, booking_id: record.booking_id, booking_number: bookingNumber, customer_name: customerName, days: record.registration_delay_days });
+        items.push({
+          type: "danger",
+          title: `Registration overdue by ${record.registration_delay_days} days`,
+          days: record.registration_delay_days,
+          ...base,
+        });
       }
       if (!recordReachesStage(record, "ocr_completed") && record.ocr_delay_days > 0) {
-        items.push({ type: "warning", title: `OCR pending for ${record.ocr_delay_days} days`, booking_id: record.booking_id, booking_number: bookingNumber, customer_name: customerName, days: record.ocr_delay_days });
+        items.push({
+          type: "warning",
+          title: `OCR pending for ${record.ocr_delay_days} days`,
+          days: record.ocr_delay_days,
+          ...base,
+        });
       }
       if (isSameDay(record.sanction_date, now)) {
-        items.push({ type: "success", title: "Loan sanctioned today", booking_id: record.booking_id, booking_number: bookingNumber, customer_name: customerName, days: 0 });
+        items.push({ type: "success", title: "Loan sanctioned today", days: 0, ...base });
       }
       if (!record.actual_disbursement_date && record.disbursement_delay_days > 0) {
-        items.push({ type: "danger", title: `Disbursement delayed by ${record.disbursement_delay_days} days`, booking_id: record.booking_id, booking_number: bookingNumber, customer_name: customerName, days: record.disbursement_delay_days });
+        items.push({
+          type: "danger",
+          title: `Disbursement delayed by ${record.disbursement_delay_days} days`,
+          days: record.disbursement_delay_days,
+          ...base,
+        });
+      }
+      if (record.has_unconfirmed_amounts) {
+        items.push({
+          type: "warning",
+          title: `${formatRevenueAmount(record.unconfirmed_revenue)} recorded without a receipt date`,
+          days: 0,
+          ...base,
+        });
+      }
+      if (record.is_overpaid) {
+        items.push({
+          type: "danger",
+          title: `Receipts exceed agreement value by ${formatRevenueAmount(
+            record.developer_revenue_received - record.agreement_value_number
+          )}`,
+          days: 0,
+          ...base,
+        });
       }
       return items;
     })
@@ -520,8 +1006,14 @@ export function buildRevenueAnalytics(rawRecords: Record<string, any>[], now = n
       total_agreement_value: totalAgreementValue,
       expected_revenue: totalAgreementValue,
       revenue_received: revenueReceived,
-      pending_revenue: pendingRevenue,
+      unconfirmed_revenue: unconfirmedRevenue,
+      government_charges_received: governmentChargesReceived,
+      gross_collection_received: revenueReceived + governmentChargesReceived,
+      balance_receivable: balanceReceivable,
+      /** @deprecated alias of balance_receivable */
+      pending_revenue: balanceReceivable,
       collection_efficiency: collectionEfficiency,
+      overpaid_bookings: overpaidBookings,
     },
     indicators,
     forecast,

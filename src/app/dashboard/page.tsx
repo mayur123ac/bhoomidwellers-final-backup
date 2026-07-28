@@ -9,7 +9,7 @@ import {
   FaThLarge, FaClipboardList, FaUsers, FaIdCard,
   FaSearch, FaBell, FaChevronLeft, FaPhoneAlt, FaComments,
   FaCheckCircle, FaCalendarAlt, FaTimes,
-  FaFileInvoice, FaFileInvoiceDollar, FaPaperPlane, FaMicrophone, FaWhatsapp, FaTable, FaChartPie, FaEyeSlash, FaUniversity, FaHandshake, FaExchangeAlt, FaBriefcase, FaDownload, FaCog, FaMapMarkerAlt, FaSignal, FaUserClock, FaTrashAlt, FaBoxes
+  FaFileInvoice, FaFileInvoiceDollar, FaPaperPlane, FaMicrophone, FaWhatsapp, FaTable, FaChartPie, FaEyeSlash, FaUniversity, FaHandshake, FaExchangeAlt, FaBriefcase, FaDownload, FaCog, FaMapMarkerAlt, FaSignal, FaUserClock, FaTrashAlt, FaBoxes, FaUserTie
 } from "react-icons/fa";
 import { FaWandMagicSparkles } from "react-icons/fa6";
 import {
@@ -27,6 +27,7 @@ import BulkDeleteLeadsDialog from "@/components/BulkDeleteLeadsDialog";
 import LoanDealForm from "@/components/LoanDealForm";
 import LoanDealView from "@/components/LoanDealView";
 import InventoryManagementView from "@/components/InventoryManagementView";
+import ChannelPartnerListView from "@/components/ChannelPartnerListView";
 import UploadLeadSheet from "@/components/UploadLeadSheet";
 import EnquiryOverviewSection from "@/components/Enquiryoverviewsection";
 import InlineContactField from "@/components/InlineContactField";
@@ -255,6 +256,10 @@ function useAdminData() {
           loanStatus, loanAmtReq, loanAmtApp, loanRequired,
           source: lead.source, sourceOther: lead.source_other,
           cpName: lead.cp_name, cpCompany: lead.cp_company, cpPhone: lead.cp_phone,
+          // The resolved partner id, not just the free-text CP fields. Without it
+          // the booking form cannot tell which partner to attribute commission to
+          // and reports "no channel partner on record" even when there is one.
+          channelPartnerId: lead.channel_partner_id,
           altPhone: lead.alt_phone, address: lead.address,
           mongoVisitDate: latestVisitDate,
           closingDate,
@@ -666,11 +671,14 @@ function AdminAtlasDashboardContent() {
   const userRole = (user?.role || "").toLowerCase();
   const isAdmin = userRole === "admin";
   const isSiteHead = userRole === "site_head" || userRole === "site head";
+  // Same gate InventoryManagementView uses for its manage actions.
+  const isSalesManager = ["admin", "sales manager", "sales_manager"].includes(userRole.trim());
 
   const menuItems = [
     { id: "dashboard", icon: FaThLarge, label: "Overview" },
     { id: "revenue_intelligence", icon: FaFileInvoiceDollar, label: "Revenue Intelligence" },
     { id: "inventory", icon: FaBoxes, label: "Inventory" },
+    { id: "channel_partners", icon: FaUserTie, label: "Channel Partners" },
     { id: "receptionist", icon: FaClipboardList, label: "Receptionist" },
     { id: "sales", icon: FaUsers, label: "Sales Managers" },
     { id: "site_head", icon: FaUniversity, label: "Site Heads" },
@@ -688,6 +696,13 @@ function AdminAtlasDashboardContent() {
     // Non-admin roles should only see what's allowed.
     // Admin only panels:
     if (item.id === "revenue_intelligence" || item.id === "live_activity" || item.id === "geo") {
+      return false;
+    }
+
+    // Channel Partners is financial-adjacent master data (commission rates drive
+    // payouts), so it follows the same admin/sales-manager gate as inventory
+    // management rather than being visible to every role.
+    if (item.id === "channel_partners" && !isSalesManager) {
       return false;
     }
 
@@ -777,7 +792,7 @@ function AdminAtlasDashboardContent() {
             {menuItems.slice(0, -1).filter(i => i.label.toLowerCase().includes(navSearch.toLowerCase())).map((item, idx) => {
               const isActive = activeView === item.id;
               const groupOf: Record<string, string> = {
-                dashboard: "Workspace", revenue_intelligence: "Workspace", inventory: "Workspace",
+                dashboard: "Workspace", revenue_intelligence: "Workspace", inventory: "Workspace", channel_partners: "Workspace",
                 receptionist: "Team", sales: "Team", site_head: "Team",
                 site_visit_overview: "Insights", attendance: "Insights", monitoring: "Insights", live_activity: "Insights", geo: "Insights",
                 caller: "Admin", employees: "Admin",
@@ -1124,6 +1139,17 @@ function AdminAtlasDashboardContent() {
               <InventoryManagementView user={user} isDark={isDark} t={theme}
                 onOpenLead={(leadId: number) => { setInvOpenLeadId(leadId); setActiveView("sales"); }} />
             </div>
+          )}
+          {activeView === "channel_partners" && (
+            isSalesManager ? (
+              <ChannelPartnerListView user={user} isDark={isDark} t={theme} />
+            ) : (
+              <div className="flex items-center justify-center h-full flex-col gap-2">
+                <FaTimes className="text-red-500 w-16 h-16" />
+                <h2 className="text-2xl font-bold text-red-500">Access Denied</h2>
+                <p className={theme.textMuted}>You do not have permission to access this module.</p>
+              </div>
+            )
           )}
           {activeView === "sales" && <AdminSalesView managers={managers} allLeads={allLeads} followUps={followUps} isLoading={isLoading} adminUser={user} refetch={refetch} theme={theme} isDark={isDark} openLeadId={invOpenLeadId} onOpenLeadHandled={() => setInvOpenLeadId(null)} />}
           {activeView === "site_head" && <AdminSiteHeadView siteHeads={siteHeads} allLeads={allLeads} followUps={followUps} isLoading={isLoading} adminUser={user} refetch={refetch} theme={theme} isDark={isDark} />}

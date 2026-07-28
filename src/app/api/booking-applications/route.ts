@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
 import { uploadBufferToR2 } from "@/lib/r2";
 import { syncBookingUnit } from "@/lib/inventorySync";
+import { computeCPCommission } from "@/lib/cpCommissionEngine";
 
 export const dynamic = "force-dynamic";
 
@@ -501,6 +502,18 @@ export async function POST(req: NextRequest) {
     // New bookings write nothing to it; financial_ledger is authoritative going forward.
     // (Legacy bookings created before this change keep their payment_details intact.)
 
+    // CP commission intent from the booking form.
+    //   "auto"   — accrue using the partner's configured rate
+    //   "manual" — accrue the amount the user typed, recorded as an override
+    //   "none"   — record nothing (default, so existing callers are unaffected)
+    const cp_commission_mode = (getStr("cp_commission_mode") || "none").toLowerCase();
+    const cp_commission_amount = getStr("cp_commission_amount");
+    const cp_commission_reason = getStr("cp_commission_reason");
+
+    // Populated inside the transaction; surfaced in the response so the UI can
+    // tell the user a booking saved but its commission did not.
+    let commissionResult: { accrued: boolean; reason?: string; code?: string } | null = null;
+
     // We will do everything inside a transaction
     const result = await transaction(async (client) => {
       // 1. Insert DB record to get ID
@@ -518,10 +531,14 @@ export async function POST(req: NextRequest) {
           application_date, created_by, created_role, booking_status,
           booking_date, agreement_value, booking_amount, booking_remarks, internal_notes,
           apartment_name, project_name, tower, wing,
-          revenue_include_ocr, revenue_include_sdr, revenue_include_cash, revenue_include_sanction, revenue_include_disbursement
+          revenue_include_ocr, revenue_include_sdr, revenue_include_cash, revenue_include_sanction, revenue_include_disbursement,
+          sourced_by_channel_partner_id
         ) VALUES (
           $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,'Pending',
-          $37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50
+          $37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,
+          -- CP attribution is inherited from the source lead, never re-entered.
+          -- Resolves to NULL for direct/non-CP leads and for bookings with no lead.
+          (SELECT channel_partner_id FROM walkin_enquiries WHERE id = $1)
         ) RETURNING id`,
         [
           lead_id, primary_name, primary_email, primary_mobile, primary_pan, primary_aadhaar,
@@ -783,6 +800,54 @@ export async function POST(req: NextRequest) {
         property_type, floor_number, flat_number, carpet_area,
       });
 
+      // ── CP commission accrual ────────────────────────────────────────────
+      // Only when the booking inherited a channel partner AND the form asked for
+      // it. Deliberately NON-FATAL, unlike the inventory sync above: the most
+      // common failure is CP_RATE_NOT_SET (a partner discovered from lead intake
+      // who has never had a rate negotiated), and refusing to save the booking
+      // over a missing commission rate would block the sale itself. The reason is
+      // returned to the caller so the UI can surface it instead of failing
+      // silently — the commission can then be added later from the CP Master.
+      if (cp_commission_mode !== "none") {
+        const bookingRow = await client.query(
+          `SELECT sourced_by_channel_partner_id FROM booking_applications WHERE id = $1`,
+          [newId]
+        );
+        const attributedCp = bookingRow.rows[0]?.sourced_by_channel_partner_id ?? null;
+
+        if (attributedCp !== null) {
+          try {
+            // Nested savepoint: a failed accrual must not poison the outer
+            // transaction and take the whole booking down with it.
+            await client.query("SAVEPOINT cp_commission");
+            const isManual = cp_commission_mode === "manual";
+            await computeCPCommission(client, newId, created_by || "system", {
+              source: isManual ? "manual" : "auto",
+              overrideGross: isManual ? cleanNum(cp_commission_amount) : undefined,
+              overrideReason: isManual
+                ? (cp_commission_reason || "Manually entered at booking")
+                : undefined,
+            });
+            await client.query("RELEASE SAVEPOINT cp_commission");
+            commissionResult = { accrued: true };
+          } catch (cErr: any) {
+            await client.query("ROLLBACK TO SAVEPOINT cp_commission");
+            commissionResult = {
+              accrued: false,
+              reason: cErr?.message || "Commission could not be recorded.",
+              code: cErr?.code || "COMMISSION_FAILED",
+            };
+            console.warn(`[CP] booking ${newId} saved but commission not accrued: ${commissionResult.reason}`);
+          }
+        } else {
+          commissionResult = {
+            accrued: false,
+            reason: "No channel partner is attributed to this booking's lead.",
+            code: "NO_CP_ATTRIBUTED",
+          };
+        }
+      }
+
       // Return the saved booking row — PDF generation is intentionally decoupled and done on-demand
       const fetchBooking = await client.query(`SELECT * FROM booking_applications WHERE id = $1`, [newId]);
       return fetchBooking.rows[0];
@@ -792,7 +857,10 @@ export async function POST(req: NextRequest) {
     await query(`UPDATE booking_applications SET booking_status = 'Confirmed' WHERE id = $1`, [result.id]);
     await query(`UPDATE walkin_enquiries SET status = 'Closed' WHERE id = $1`, [lead_id]);
 
-    return NextResponse.json({ success: true, data: { ...result, booking_status: 'Confirmed' } }, { status: 201 });
+    return NextResponse.json(
+      { success: true, data: { ...result, booking_status: 'Confirmed' }, commission: commissionResult },
+      { status: 201 }
+    );
   } catch (err: any) {
     console.error("[POST /api/booking-applications]", err);
     return NextResponse.json({ success: false, message: err.message }, { status: 500 });
