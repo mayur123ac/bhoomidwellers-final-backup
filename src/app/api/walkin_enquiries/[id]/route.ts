@@ -1,7 +1,8 @@
 // app/api/walkin_enquiries/[id]/route.ts
 import { NextResponse } from "next/server";
 import { transaction, recalculateSrNos } from "@/lib/db";
-import { requireRole } from "@/lib/serverAuth";
+import { requireRole, getServerSession } from "@/lib/serverAuth";
+import { normalizeRole } from "@/lib/cpRbac";
 import {
   deleteLeadAssets,
   deleteLeadDatabaseRecords,
@@ -32,6 +33,24 @@ export async function PUT(
   const { id } = await params;
 
   try {
+    // This endpoint has no per-role field scoping — allowedFields below never
+    // includes sourcing_manager_id, so it can't reassign a channel partner, but a
+    // Sourcing Manager could still use it to edit status/assigned_to on ANY lead,
+    // including a CP enquiry that belongs to someone else. Receptionist, Sales
+    // Manager, Site Head and Admin all have real, working call sites against this
+    // route today (booking forms, contact-field edits, loan deal updates, lead
+    // status changes) — narrowing their access here risks breaking flows this
+    // change was never asked to touch. The Sourcing Manager panel has no call site
+    // against this endpoint at all, so blocking that one role closes the gap with
+    // zero regression risk for everyone else.
+    const session = await getServerSession();
+    if (session?.role && normalizeRole(session.role) === "sourcing manager") {
+      return NextResponse.json(
+        { success: false, message: "Sourcing Managers cannot edit leads directly." },
+        { status: 403 }
+      );
+    }
+
     const leadId = Number(id);
     if (Number.isNaN(leadId)) {
       return NextResponse.json(

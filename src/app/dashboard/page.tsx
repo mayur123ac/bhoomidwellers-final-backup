@@ -28,6 +28,8 @@ import LoanDealForm from "@/components/LoanDealForm";
 import LoanDealView from "@/components/LoanDealView";
 import InventoryManagementView from "@/components/InventoryManagementView";
 import ChannelPartnerListView from "@/components/ChannelPartnerListView";
+import ChannelPartnerEnquiriesTable from "@/components/ChannelPartnerEnquiriesTable";
+import { canViewPartners } from "@/lib/cpRbac";
 import UploadLeadSheet from "@/components/UploadLeadSheet";
 import EnquiryOverviewSection from "@/components/Enquiryoverviewsection";
 import InlineContactField from "@/components/InlineContactField";
@@ -679,6 +681,7 @@ function AdminAtlasDashboardContent() {
     { id: "revenue_intelligence", icon: FaFileInvoiceDollar, label: "Revenue Intelligence" },
     { id: "inventory", icon: FaBoxes, label: "Inventory" },
     { id: "channel_partners", icon: FaUserTie, label: "Channel Partners" },
+    { id: "cp_management", icon: FaHandshake, label: "CP Management" },
     { id: "receptionist", icon: FaClipboardList, label: "Receptionist" },
     { id: "sales", icon: FaUsers, label: "Sales Managers" },
     { id: "site_head", icon: FaUniversity, label: "Site Heads" },
@@ -699,10 +702,17 @@ function AdminAtlasDashboardContent() {
       return false;
     }
 
-    // Channel Partners is financial-adjacent master data (commission rates drive
-    // payouts), so it follows the same admin/sales-manager gate as inventory
-    // management rather than being visible to every role.
-    if (item.id === "channel_partners" && !isSalesManager) {
+    // Channel Partners holds both business-profile data and commission rates.
+    // Read access extends to Site Head; the rate column and the commission
+    // drill-down stay behind canSeePartnerCommercials inside the view, and the
+    // API strips the rate from the payload for roles that lack it.
+    if (item.id === "channel_partners" && !canViewPartners(userRole)) {
+      return false;
+    }
+
+    // CP Management is the assignment/reassignment console — Admin only, since
+    // reassigning a Sourcing Manager is an Admin-exclusive right (Part 7).
+    if (item.id === "cp_management" && !isAdmin) {
       return false;
     }
 
@@ -1140,8 +1150,23 @@ function AdminAtlasDashboardContent() {
                 onOpenLead={(leadId: number) => { setInvOpenLeadId(leadId); setActiveView("sales"); }} />
             </div>
           )}
+          {activeView === "cp_management" && (
+            <div className="h-full">
+              <ChannelPartnerEnquiriesTable
+                user={user}
+                isDark={isDark}
+                t={theme}
+                title="Channel Partner Management"
+                subtitle="Every CP enquiry — filter by Sourcing Manager and reassign"
+              />
+            </div>
+          )}
           {activeView === "channel_partners" && (
-            isSalesManager ? (
+            canViewPartners(userRole) ? (
+              // Permissions come from the role, not from this panel: Admin gets
+              // edit + delete, Sales Manager keeps edit (and the commission
+              // columns / rate queue), Site Head is read-only with no commercial
+              // figures. The API applies the same gates independently.
               <ChannelPartnerListView user={user} isDark={isDark} t={theme} />
             ) : (
               <div className="flex items-center justify-center h-full flex-col gap-2">

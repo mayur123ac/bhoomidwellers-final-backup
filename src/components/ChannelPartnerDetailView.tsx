@@ -286,7 +286,10 @@ export default function ChannelPartnerDetailView({ partner, onBack, user, isDark
         onClose={() => setEditing(null)}
         onSaved={fetchAll}
         commission={editing}
-        partnerRate={partner.default_commission_rate}
+        // Optional on the interface now: the API omits the rate entirely for roles
+        // without commercial visibility. This view is only reachable for roles that
+        // have it, so absent collapses to null — same as "no rate agreed yet".
+        partnerRate={partner.default_commission_rate ?? null}
         user={user}
         isDark={isDark}
         t={t}

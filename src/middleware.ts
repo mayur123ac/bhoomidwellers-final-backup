@@ -26,7 +26,9 @@ export function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL("/", request.url));
     }
 
-    const role = user.role.toLowerCase();
+    // Underscores normalized to spaces: the users table holds both "site_head"
+    // and "Site Head", and the same is true for any multi-word role added later.
+    const role = user.role.toLowerCase().trim().replace(/_/g, " ");
 
     // ─── Role-Based Route Protection ──────────────────────────────────────────
 
@@ -59,13 +61,14 @@ export function middleware(request: NextRequest) {
     // 4. Site Head
     // Can access /dashboard (limited), but CANNOT access /dashboard/employees or /dashboard/settings
     // or /dashboard/sales or /dashboard/receptionist or caller panel etc.
-    if (role === "site_head" || role === "site head") {
+    if (role === "site head") {
       const forbiddenPaths = [
         "/dashboard/employees",
         "/dashboard/settings",
         "/dashboard/caller",
         "/dashboard/sales",
         "/dashboard/receptionist",
+        "/dashboard/sourcing",
       ];
 
       const isForbidden = forbiddenPaths.some((p) => pathname.startsWith(p));
@@ -75,7 +78,16 @@ export function middleware(request: NextRequest) {
       return NextResponse.next();
     }
 
-    // 5. Caller
+    // 5. Sourcing Manager
+    // Channel Partner management only — no lead, commission or attendance panels.
+    if (role === "sourcing manager") {
+      if (!pathname.startsWith("/dashboard/sourcing")) {
+        return NextResponse.redirect(new URL("/dashboard/sourcing", request.url));
+      }
+      return NextResponse.next();
+    }
+
+    // 6. Caller
     if (role === "caller") {
       if (!pathname.startsWith("/dashboard/caller")) {
         return NextResponse.redirect(new URL("/dashboard/caller", request.url));

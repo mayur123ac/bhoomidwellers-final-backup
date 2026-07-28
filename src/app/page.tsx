@@ -31,15 +31,19 @@ export default function Login() {
         const data = await res.json();
         localStorage.setItem("crm_user", JSON.stringify(data.user));
 
-        const userRole = data.user.role.toLowerCase();
+        // Underscores normalized to spaces so "site_head" and "Site Head" (both
+        // occur in the users table) take the same branch, as in middleware.ts.
+        const userRole = data.user.role.toLowerCase().trim().replace(/_/g, " ");
         if (userRole === "receptionist") {
           router.push("/dashboard/receptionist");
         } else if (userRole === "admin") {
           router.push("/dashboard");
         } else if (userRole === "sales manager") {
           router.push("/dashboard/sales");
-        } else if (userRole === "site_head" || userRole === "site head") {
-          router.push("/dashboard"); 
+        } else if (userRole === "site head") {
+          router.push("/dashboard");
+        } else if (userRole === "sourcing manager") {
+          router.push("/dashboard/sourcing");
         } else if (userRole === "caller") {
           router.push("/dashboard/caller");
         } else {

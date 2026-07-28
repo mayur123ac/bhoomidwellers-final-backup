@@ -16,8 +16,10 @@
 
 import type { PoolClient } from "pg";
 
-/** Source values that carry real partner identity in cp_name/cp_company/cp_phone. */
-const CP_SOURCE_VALUES = ["Channel Partner", "CP"] as const;
+/** Source values that carry real partner identity in cp_name/cp_company/cp_phone.
+ *  Exported so /api/cp-enquiries selects exactly the rows commission attribution
+ *  treats as CP leads — the two must never disagree about what counts. */
+export const CP_SOURCE_VALUES = ["Channel Partner", "CP"] as const;
 
 /**
  * Every other source (Outdoor, Digital, Reference, ...) also populates cp_name via

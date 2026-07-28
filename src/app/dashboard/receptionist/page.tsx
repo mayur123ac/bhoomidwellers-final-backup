@@ -21,6 +21,13 @@ import { Ghost, AlertTriangle } from "lucide-react";
 import LoginTimerWidget from "@/components/LoginTimerWidget";
 import CrmUpdatesNotification from "@/components/CrmUpdatesNotification";
 import LostLeadModal from "@/components/LostLeadModal";
+// buildTheme and WhatsAppSettingsCard used to be defined in this file; they moved
+// out unchanged so the Sourcing Manager panel shares them instead of forking.
+import { buildTheme } from "@/lib/crmTheme";
+import WhatsAppSettingsCard from "@/components/WhatsAppSettingsCard";
+import ChannelPartnerFormModal from "@/components/ChannelPartnerFormModal";
+import ChannelPartnerEnquiriesTable from "@/components/ChannelPartnerEnquiriesTable";
+import SearchableSelect from "@/components/SearchableSelect";
 import BookingFormModal from "@/components/BookingFormModal";
 import BookingApplicationView from "@/components/BookingApplicationView";
 import InlineContactField from "@/components/InlineContactField";
@@ -48,6 +55,7 @@ const NAV_ITEMS = [
   { id: "analytics", icon: <FaChartPie className="w-5 h-5" />, title: "Analytics" },
   // { id: "assigned", icon: <FaFileInvoice className="w-5 h-5" />, title: "Assigned Forms" },
   { id: "recep-leads", icon: <FaUsers className="w-5 h-5" />, title: "Receptionist Leads" },
+  { id: "cp-enquiries", icon: <FaHandshake className="w-5 h-5" />, title: "Channel Partner Enquiries" },
   { id: "closed-leads", icon: <FaCheckCircle className="w-5 h-5" />, title: "Closed Leads" },
   { id: "attendance", icon: <FaClock className="w-5 h-5" />, title: "My Attendance" },
   { id: "assistant", icon: <FaRobot className="w-5 h-5" />, title: "CRM AI Assistant" },
@@ -121,118 +129,6 @@ const MoonIcon = () => (
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
-// THEME TOKENS
-// ─────────────────────────────────────────────────────────────────────────────
-function buildTheme(isDark: boolean) {
-  return {
-    pageWrap: isDark ? "bg-[#0A0A0F] text-white" : "text-[#1A1A1A]",
-    mainBg: isDark ? "bg-[#0A0A0F]" : "bg-transparent",
-    sidebar: isDark ? "bg-[#121218] border-[#2A2A35]" : "bg-[#1A1A1A] border-[#2A2A2A]",
-    header: isDark ? "bg-[#121218] border-[#2A2A35]" : "bg-white border-[#9CA3AF]",
-    headerGlass: isDark ? {} : { boxShadow: "0 1px 0 #9CA3AF, 0 4px 16px rgba(0,174,239,0.06)" },
-
-    // ── Cards (No intense glow in light mode, border changes to Magenta on hover) ──
-    card: isDark
-      ? "bg-[#121218] border-[#2A2A35] transition-all duration-300 hover:border-[#d4006e]/50 hover:shadow-2xl hover:shadow-[#d4006e]/20"
-      : "bg-gradient-to-r from-[#f1f5ff] via-[#eef2ff] to-[#f5f3ff] border-[#9CA3AF] transition-all duration-300 hover:border-[#9E217B] hover:shadow-xl",
-    cardGlass: isDark ? {} : { boxShadow: "0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(0,174,239,0.07)" },
-
-    statusLost: isDark ? "text-red-300 border-red-500/30 bg-red-950/30" : "text-red-700 border-red-300 bg-red-50",
-    cardLost: isDark
-      ? "bg-[#171717] border border-red-900/25 opacity-70 grayscale saturate-50 transition-all duration-300 hover:opacity-90 hover:border-red-500/30"
-      : "bg-slate-100 border border-red-200 opacity-75 grayscale saturate-50 transition-all duration-300 hover:opacity-90 hover:border-red-300",
-    rowLost: isDark
-      ? "bg-[#151515]/80 text-gray-500 opacity-75 grayscale"
-      : "bg-slate-100/80 text-slate-500 opacity-80 grayscale",
-    tableWrap: isDark ? "bg-[#121218] border-[#2A2A35]" : "bg-white border-[#9CA3AF]",
-    tableGlass: isDark ? {} : { boxShadow: "0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(158,33,123,0.06), 0 16px 36px rgba(0,0,0,0.09)" },
-    tableHead: isDark ? "bg-[#1A1A28]" : "bg-[#F1F5F9]",
-    tableRow: isDark ? "hover:bg-[#1C1C2A]" : "hover:bg-[#F8FAFC]",
-    tableDivide: isDark ? "divide-[#1E1E2A]" : "divide-[#9CA3AF]",
-    tableBorder: isDark ? "border-[#2A2A35]" : "border-[#9CA3AF]",
-    inputBg: isDark ? "bg-[#14141B] border-[#2A2A35]" : "bg-white border-[#9CA3AF]",
-    modalCard: isDark ? "bg-[#121218] border-[#2A2A35]" : "bg-white border-[#9CA3AF]",
-    modalGlass: isDark ? {} : { boxShadow: "0 2px 4px rgba(0,0,0,0.04), 0 8px 24px rgba(0,174,239,0.08), 0 32px 72px rgba(0,0,0,0.16)" },
-    modalInner: isDark ? "bg-[#0A0A0F]" : "bg-[#F8FAFC]",
-    modalHeader: isDark ? "bg-[#1A1A28]" : "bg-[#F1F5F9]",
-    modalBlock: isDark ? "bg-[#14141B] border-[#1E1E2A]" : "bg-white border-[#9CA3AF]",
-    modalBlockGl: isDark ? {} : { boxShadow: "0 1px 2px rgba(0,0,0,0.03), 0 3px 8px rgba(0,174,239,0.05)" },
-    modalInput: isDark ? "bg-[#14141B] border-[#2A2A35]" : "bg-white border-[#9CA3AF]",
-    settingsBg: isDark ? "bg-[#14141B] border-[#2A2A35]" : "bg-[#F8FAFC] border-[#9CA3AF]",
-    settingsBgGl: isDark ? {} : { boxShadow: "inset 0 1px 3px rgba(0,0,0,0.04)" },
-    innerBlock: isDark ? "bg-[#121212] border-[#333]" : "bg-white border-[#D1D5DB]",
-    inputInner: isDark ? "bg-[#14141B] border-[#2A2A35]" : "bg-white border-[#9CA3AF]",
-    inputFocus: isDark ? "focus:border-[#9E217B]" : "focus:border-[#00AEEF]",
-    dropdown: isDark ? "bg-[#121218] border-[#2A2A35]" : "bg-white border-[#9CA3AF]",
-    dropdownGlass: isDark ? {} : { boxShadow: "0 2px 4px rgba(0,0,0,0.04), 0 8px 20px rgba(0,174,239,0.08), 0 20px 40px rgba(0,0,0,0.10)" },
-
-    // ── Chat (Gray background, dark border, black text in light mode) ──
-    chatArea: isDark ? "bg-[#0A0A0F]" : "bg-[#F1F5F9]",
-    chatBubbleAi: isDark ? "bg-[#1A1A28] text-white border border-[#2A2A35]" : "bg-[#F3F4F6] border border-[#CBD5E1] text-gray-900 font-medium shadow-sm",
-    chatInput: isDark ? "bg-[#14141B] border-[#2A2A35]" : "bg-[#F3F4F6] border border-[#64748B] hover:border-[#475569] focus-within:bg-white focus-within:border-[#475569] shadow-inner",
-    chatPanel: isDark ? "bg-[#121218] border-[#2A2A35]" : "bg-white border border-[#94A3B8]",
-    chatPanelGl: isDark ? {} : { boxShadow: "0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(158,33,123,0.06), 0 16px 36px rgba(0,0,0,0.09)" },
-
-    fupDefault: isDark ? "bg-[#2a2135] border border-[#4c1d95]" : "bg-indigo-50 border border-indigo-200",
-    fupLoan: isDark ? "bg-blue-900/20 border border-blue-600/40" : "bg-blue-50 border border-blue-200",
-    fupSalesform: isDark ? "bg-[#222] border border-[#444]" : "bg-white border border-[#D1D5DB]",
-    fupClosing: isDark ? "bg-yellow-900/20 border border-yellow-600/40" : "bg-amber-50 border border-amber-300",
-    fupTransfer: isDark ? "bg-purple-900/20 border border-purple-600/40" : "bg-purple-50 border border-purple-300",
-
-    text: isDark ? "text-white" : "text-[#1A1A1A]",
-    textMuted: isDark ? "text-[#888899]" : "text-[#334155]", // Darker text
-    textFaint: isDark ? "text-[#55556A]" : "text-[#475569]", // Darker faint
-    textHeader: isDark ? "text-xs text-[#B0B0C4]" : "text-xs font-bold text-[#334155]", // Darker headers
-
-    navActive: isDark ? "bg-[#1A1A28] text-white" : "bg-[#2A2A2A] text-[#9E217B]",
-    navInactive: isDark ? "text-[#888899] hover:bg-[#1A1A28] hover:text-white" : "text-[#9CA3AF] hover:bg-[#2A2A2A] hover:text-white",
-    navIndicator: isDark ? "bg-[#9E217B] shadow-[0_0_10px_2px_rgba(158,33,123,0.5)]" : "bg-[#9E217B] shadow-[0_0_8px_rgba(158,33,123,0.4)]",
-    toggleWrap: isDark ? "bg-[#1C1C2A] border-[#2A2A38] text-yellow-300" : "bg-[#F1F5F9] border-[#9CA3AF] text-[#1A1A1A]",
-
-    accentText: isDark ? "text-[#d4006e]" : "text-[#00AEEF]",
-    accentBg: isDark ? "bg-[#9E217B]/10 text-[#d4006e] border border-[#9E217B]/30" : "bg-[#00AEEF]/10 text-[#00AEEF] border border-[#00AEEF]/30",
-    sectionTitle: isDark ? "text-[#d4006e]" : "text-[#9E217B]",
-    sectionBorder: isDark ? "border-[#9E217B]/20" : "border-[#9E217B]/25",
-
-    // ── Buttons (Hover Scale & Shadow Pop-out) ──
-    btnPrimary: isDark ? "bg-[#9E217B] hover:bg-[#7a1960] text-white shadow-md transition-colors duration-200" : "bg-[#00AEEF] hover:bg-[#0088bb] text-white shadow-sm transition-colors duration-200",
-    btnSecondary: isDark ? "bg-blue-700 hover:bg-blue-800 text-white shadow-md transition-colors duration-200" : "bg-[#9E217B] hover:bg-[#7a1960] text-white shadow-sm transition-colors duration-200",
-    btnWarning: isDark ? "bg-yellow-600 hover:bg-yellow-700 text-white shadow-md transition-colors duration-200" : "bg-amber-500 hover:bg-amber-600 text-white shadow-sm transition-colors duration-200",
-    btnDanger: isDark ? "bg-red-500/10 text-red-500 hover:bg-red-600/20 border border-red-500/30 transition-colors duration-200" : "bg-[#9E217B]/10 text-[#9E217B] hover:bg-[#9E217B]/20 border border-[#9E217B]/30 transition-colors duration-200",
-    btnTransfer: isDark ? "bg-purple-600 hover:bg-purple-700 text-white shadow-md transition-colors duration-200" : "bg-purple-600 hover:bg-purple-700 text-white shadow-sm transition-colors duration-200",
-    btnClosingBadge: isDark ? "bg-yellow-900/20 border border-yellow-500/40 text-yellow-400" : "bg-amber-50 border border-amber-400/60 text-amber-600",
-    scroll: isDark ? "custom-scrollbar" : "custom-scrollbar",
-    logoBg: isDark ? "bg-[#9E217B] shadow-lg shadow-[#9E217B]/30" : "bg-[#9E217B] shadow-lg shadow-[#9E217B]/30",
-
-    // ── Stat glow orbs (used by AttendanceView) ──
-    statGlow1: isDark ? "bg-[#d4006e]/10" : "bg-[#00AEEF]/10",
-    statGlow2: isDark ? "bg-blue-600/10" : "bg-[#9E217B]/10",
-    statGlow3: isDark ? "bg-blue-600/10" : "bg-indigo-400/10",
-    statGlow4: isDark ? "bg-yellow-500/10" : "bg-amber-400/10",
-    statGlow5: isDark ? "bg-green-600/10" : "bg-emerald-400/10",
-    selectSmall: isDark ? "bg-[#1A1A28] border-[#2A2A35] text-white" : "bg-white border-[#D1D5DB] text-[#6B7280]",
-    chartColors: isDark
-      ? ["#d946ef", "#8b5cf6", "#3b82f6", "#0ea5e9", "#6b7280", "#f59e0b", "#10b981"]
-      : ["#00AEEF", "#9E217B", "#0077b6", "#d4006e", "#9CA3AF", "#f59e0b", "#10b981"],
-    tooltipBg: isDark ? "#1a1a1a" : "rgba(255,255,255,0.98)",
-    tooltipColor: isDark ? "#fff" : "#1A1A1A",
-    tooltipBorder: isDark ? "1px solid rgba(158,33,123,0.3)" : "1px solid #E5E7EB",
-    legendColor: isDark ? "#9ca3af" : "#6B7280",
-    exportBtn: isDark ? "border-[#2A2A35] hover:border-[#9E217B] hover:text-[#d4006e] text-[#888899]" : "border-[#9CA3AF] hover:border-[#9E217B] hover:text-[#9E217B] text-[#6B7280]",
-    statusAssigned: isDark ? "text-purple-400 border-purple-500/30 bg-purple-500/10" : "text-purple-700 border-purple-300 bg-purple-50",
-    statusNew: isDark ? "text-blue-400 border-blue-500/30 bg-blue-500/10" : "text-blue-700 border-blue-300 bg-blue-50",
-    statusContacted: isDark ? "text-cyan-400 border-cyan-500/30 bg-cyan-500/10" : "text-cyan-700 border-cyan-300 bg-cyan-50",
-    statusInterested: isDark ? "text-green-400 border-green-500/30 bg-green-500/10" : "text-green-700 border-green-300 bg-green-50",
-    statusVisit: isDark ? "text-orange-400 border-orange-500/30 bg-orange-500/10" : "text-orange-500 border-orange-400/40 bg-orange-50",
-    statusClosing: isDark ? "text-yellow-400 border-yellow-500/40 bg-yellow-500/10" : "text-amber-600 border-amber-400/50 bg-amber-50",
-    statusCompleted: isDark ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/10" : "text-emerald-700 border-emerald-300 bg-emerald-50",
-    statusNGD: "bg-[rgba(251,146,60,0.12)] text-[#F97316] border border-[rgba(249,115,22,0.4)]",
-    cardNGD: "bg-[rgba(249,115,22,0.06)] border border-[rgba(249,115,22,0.35)] hover:border-[#F97316] shadow-[0_4px_12px_rgba(249,115,22,0.12)] transition-all duration-300 flex flex-col h-full",
-    rowNGD: "bg-[rgba(249,115,22,0.03)]",
-  };
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // HELPER BADGES
 // ─────────────────────────────────────────────────────────────────────────────
 function InterestBadge({ status, size = "md" }: { status: string; size?: "sm" | "md" }) {
@@ -260,77 +156,6 @@ function LoanStatusBadge({ status }: { status: string }) {
   );
 }
 
-function WhatsAppSettingsCard({ user, setUser, isDark, t }: {
-  user: any; setUser: any; isDark: boolean; t: any;
-}) {
-  const [input, setInput] = useState(user.whatsapp_number || "");
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-
-  const handleSave = async () => {
-    if (!input.trim()) return;
-    setSaving(true);
-    try {
-      const res = await fetch("/api/users/update-whatsapp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: user.name, whatsapp_number: input.trim() }),
-      });
-      const json = await res.json();
-      if (json.success) {
-        setUser((prev: any) => ({ ...prev, whatsapp_number: input.trim() }));
-        setSaved(true);
-        setTimeout(() => setSaved(false), 2500);
-      }
-    } catch { }
-    finally { setSaving(false); }
-  };
-
-  return (
-    <div className="space-y-4">
-      <p className={`text-xs ${t.textFaint}`}>
-        This number is used when logging WhatsApp messages to the CRM timeline.
-        Include country code without the <code>+</code> sign.
-      </p>
-      <div className="flex gap-3 items-center">
-        <div className="flex-1">
-          <label className={`block text-xs mb-1.5 font-medium ${t.textFaint}`}>
-            WhatsApp Number (with country code)
-          </label>
-          <input
-            type="tel"
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            placeholder="e.g. 919876543210"
-            className={`w-full rounded-lg p-3 text-sm outline-none transition-colors border ${isDark
-              ? "bg-[#14141B] border-[#2A2A35] text-white focus:border-[#9E217B]"
-              : "bg-white border-[#9CA3AF] text-[#1A1A1A] focus:border-[#00AEEF]"
-              }`}
-          />
-        </div>
-        <button
-          onClick={handleSave}
-          disabled={saving || !input.trim()}
-          className={`mt-5 px-5 py-3 rounded-lg font-bold text-sm transition-all ${saved
-            ? "bg-green-600 text-white"
-            : saving || !input.trim()
-              ? "opacity-50 cursor-not-allowed bg-gray-400 text-white"
-              : (isDark
-                ? "bg-[#9E217B] hover:bg-[#b8268f] text-white"
-                : "bg-[#00AEEF] hover:bg-[#0099d4] text-white")
-            }`}
-        >
-          {saved ? "✓ Saved" : saving ? "Saving..." : "Save"}
-        </button>
-      </div>
-      {user.whatsapp_number && (
-        <p className={`text-xs flex items-center gap-1.5 ${isDark ? "text-green-400" : "text-green-600"}`}>
-          <FaWhatsapp /> Active: +{user.whatsapp_number}
-        </p>
-      )}
-    </div>
-  );
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONFIG COMBOBOX  — searchable, keyboard-navigable, no free text
@@ -519,14 +344,19 @@ export default function ReceptionistDashboard() {
 
   // ── Enquiry (new-entry) modal ──
   const [isEnquiryModalOpen, setIsEnquiryModalOpen] = useState(false);
+  // Channel Partner office-visit registration. Create-only for this role: the
+  // Receptionist records the partner's profile but never edits or lists them.
+  const [isCpVisitModalOpen, setIsCpVisitModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isSubmittingRef = useRef(false);
   const getTodayString = () => new Date().toISOString().split("T")[0];
   const [enquiryForm, setEnquiryForm] = useState({
-    fullName: "", mobile: "", altMobile: "", email: "", address: "",
+    fullName: "", mobile: "", altMobile: "", email: "", address: "", pinCode: "", city: "",
     occupation: "", organization: "", budget: "", configuration: "",
     purpose: "", source: "", assignedTo: "", loanPlanned: "", sourceOther: "", referralName: "",
     cpDetails: { name: "", company: "", phone: "" },
+    sourcingManagerId: "",   // users.id of the assigned Sourcing Manager (CP enquiries only)
+    preferredLocation: "",
     selfAssign: false,
     enquiryDate: getTodayString(),
   });
@@ -545,6 +375,19 @@ export default function ReceptionistDashboard() {
     }
   }, [autoDate]);
   const [showCpDropdown, setShowCpDropdown] = useState(false);
+  // Sourcing Managers available for CP assignment. Fetched, never hardcoded.
+  const [sourcingManagers, setSourcingManagers] = useState<any[]>([]);
+  const [isFetchingSourcingManagers, setIsFetchingSourcingManagers] = useState(true);
+  const [sourcingManagersError, setSourcingManagersError] = useState<string | null>(null);
+  const sourcingManagerOptions = useMemo(
+    () => sourcingManagers.map((m: any) => ({
+      value: String(m.id),
+      label: m.name,
+      sublabel: `ID ${m.id}${m.username ? ` · ${m.username}` : ""} · ${m.phone || m.whatsapp_number || "no phone on file"}`,
+      keywords: `${m.username || ""} ${m.phone || ""} ${m.email || ""}`,
+    })),
+    [sourcingManagers]
+  );
   // Inline validation for the required CP phone (shown under the field, not an alert).
   const [cpPhoneError, setCpPhoneError] = useState("");
 
@@ -789,6 +632,7 @@ export default function ReceptionistDashboard() {
         const role = (p.role || "").toLowerCase();
         if (role === "receptionist" || role === "admin") {
           fetchSalesManagers();
+          fetchSourcingManagers();
           initialLoad();
           fetchFollowUps();
         } else { router.replace("/dashboard"); }
@@ -860,6 +704,8 @@ export default function ReceptionistDashboard() {
         assignedTo: item.assigned_to || "Unassigned",
         assignedReceptionist: item.assigned_receptionist || null,
         altPhone: item.alt_phone,
+        pinCode: item.pin_code,
+        city: item.city,
         date: formatDate(item.created_at),
         enquiryDate: item.enquiry_date || item.created_at,
         autoDateEnabled: item.auto_date_enabled ?? true,
@@ -901,6 +747,28 @@ export default function ReceptionistDashboard() {
     await fetchPage(next, true);
     setIsLoadingMore(false);
   }, [isLoadingMore, hasMore, offset]);
+
+  const fetchSourcingManagers = async () => {
+    setIsFetchingSourcingManagers(true);
+    setSourcingManagersError(null);
+    try {
+      const res = await fetch("/api/users/sourcing-manager");
+      const json = await res.json();
+      if (res.ok && json.success && Array.isArray(json.data)) {
+        setSourcingManagers(json.data);
+      } else {
+        // A failed or malformed response left `sourcingManagers` at [], which is
+        // visually identical to "zero accounts exist" — the field's error copy
+        // reads that fetch failure and a real empty list differently on purpose.
+        setSourcingManagersError(json.message || `Request failed (${res.status}).`);
+      }
+    } catch (e: any) {
+      console.error("fetchSourcingManagers error", e);
+      setSourcingManagersError(e.message || "Network error.");
+    } finally {
+      setIsFetchingSourcingManagers(false);
+    }
+  };
 
   const fetchSalesManagers = async () => {
     setIsFetchingManagers(true);
@@ -1142,6 +1010,10 @@ export default function ReceptionistDashboard() {
       alt_phone: enquiryForm.altMobile || null,
       email: enquiryForm.email || "N/A",
       address: enquiryForm.address || "N/A",
+      // null, not "N/A" — these are the match keys for the future CP-by-area
+      // lookup, where a placeholder string would read as a real area.
+      pin_code: enquiryForm.pinCode || null,
+      city: enquiryForm.city || null,
       occupation: enquiryForm.occupation || "N/A",
       organization: enquiryForm.organization || "N/A",
       budget: enquiryForm.budget || "Pending",
@@ -1155,6 +1027,12 @@ export default function ReceptionistDashboard() {
       cp_name: enquiryForm.source === "Channel Partner" ? enquiryForm.cpDetails.name : null,
       cp_company: enquiryForm.source === "Channel Partner" ? enquiryForm.cpDetails.company : null,
       cp_phone: enquiryForm.source === "Channel Partner" ? enquiryForm.cpDetails.phone : null,
+      preferred_location: enquiryForm.preferredLocation || null,
+      // Only sent for CP enquiries — the server leaves assigned_at/by NULL when this
+      // is null, so a non-CP lead never looks like it has a sourcing assignment.
+      sourcing_manager_id: enquiryForm.source === "Channel Partner" && enquiryForm.sourcingManagerId
+        ? Number(enquiryForm.sourcingManagerId)
+        : null,
       loan_planned: enquiryForm.loanPlanned || "Pending",
       assignedTo: assignTo,
       assigned_receptionist: isReceptionist ? user.name : null,
@@ -1173,7 +1051,7 @@ export default function ReceptionistDashboard() {
         showToast(isReceptionist ? `Lead self-assigned to you!` : `Lead assigned to ${assignTo}!`);
         setIsEnquiryModalOpen(false);
         setCpPhoneError("");
-        setEnquiryForm({ fullName: "", mobile: "", altMobile: "", email: "", address: "", occupation: "", organization: "", budget: "", configuration: "", purpose: "", source: "", assignedTo: "", loanPlanned: "", sourceOther: "", referralName: "", cpDetails: { name: "", company: "", phone: "" }, selfAssign: false, enquiryDate: getTodayString() });
+        setEnquiryForm({ fullName: "", mobile: "", altMobile: "", email: "", address: "", pinCode: "", city: "", occupation: "", organization: "", budget: "", configuration: "", purpose: "", source: "", assignedTo: "", loanPlanned: "", sourceOther: "", referralName: "", cpDetails: { name: "", company: "", phone: "" }, sourcingManagerId: "", preferredLocation: "", selfAssign: false, enquiryDate: getTodayString() });
         refetchAll();
       } else { alert("Server Error. Please check DB schema."); }
     } catch { alert("Network Error while submitting."); }
@@ -2212,19 +2090,61 @@ export default function ReceptionistDashboard() {
             </div>
           )}
 
+          {/* ════════════════════════════════════════════════════
+              CHANNEL PARTNER ENQUIRIES — view only for Receptionist.
+              Row scoping and the reassign gate live in /api/cp-enquiries,
+              so this panel just renders whatever it is allowed to see.
+          ════════════════════════════════════════════════════ */}
+          {activeTab === "cp-enquiries" && (
+            <div className="animate-fadeIn h-[calc(100vh-140px)]">
+              <ChannelPartnerEnquiriesTable
+                user={user}
+                isDark={isDark}
+                t={t}
+                title="Channel Partner Enquiries"
+                subtitle="All enquiries sourced through a Channel Partner"
+              />
+            </div>
+          )}
+
           {/* ── SHARED PAGE HEADER ── */}
-          {!["settings", "detail", "assistant", "assigned", "recep-leads", "closed-leads", "attendance", "analytics"].includes(activeTab) && (
+          {!["settings", "detail", "assistant", "assigned", "recep-leads", "closed-leads", "attendance", "analytics", "cp-enquiries"].includes(activeTab) && (
             <div className="flex justify-between items-center mb-8">
               <h1 className={`text-xl md:text-3xl font-bold flex items-center flex-wrap gap-2 md:gap-3 ${t.text}`}>
                 Hi, {String(user?.name || "User").split(" ")[0]}
                 <span className={`text-xs md:text-sm font-medium px-2 py-0.5 md:px-3 md:py-1 rounded-full capitalize ${isDark ? "text-[#9E217B] bg-white/80 border border-[#9E217B]/40" : "text-[#9E217B] bg-[#9E217B]/10 border border-[#9E217B]/20"}`}>Front Desk</span>
               </h1>
-              <button onClick={refetchAll} className={`text-white text-xs md:text-sm font-semibold flex items-center gap-1 md:gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-lg transition-all shadow-sm ${t.btnPrimary}`}>
-                <span className="md:hidden">↻ Sync</span>
-                <span className="hidden md:inline">↻ Refresh Live Data</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setIsCpVisitModalOpen(true)}
+                  className={`text-xs md:text-sm font-semibold flex items-center gap-1 md:gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-lg transition-all shadow-sm ${t.btnSecondary}`}>
+                  <FaUserTie className="text-[11px]" />
+                  <span className="md:hidden">CP</span>
+                  <span className="hidden md:inline">CP Office Visit</span>
+                </button>
+                <button onClick={refetchAll} className={`text-white text-xs md:text-sm font-semibold flex items-center gap-1 md:gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-lg transition-all shadow-sm ${t.btnPrimary}`}>
+                  <span className="md:hidden">↻ Sync</span>
+                  <span className="hidden md:inline">↻ Refresh Live Data</span>
+                </button>
+              </div>
             </div>
           )}
+
+          {/* ── CP Office Visit Registration (create-only for Receptionist) ── */}
+          <ChannelPartnerFormModal
+            isOpen={isCpVisitModalOpen}
+            onClose={() => setIsCpVisitModalOpen(false)}
+            onSaved={info => {
+              // A merge means the phone matched an existing partner and their
+              // record was topped up — the operator asked to create something and
+              // no new record appeared, so say so rather than a generic success.
+              if (info) showToast(info.merged ? "Existing partner updated" : "Channel partner registered", info.merged ? "blue" : "green");
+            }}
+            partner={null}
+            user={user}
+            isDark={isDark}
+            t={t}
+            variant="office_visit"
+          />
 
           {/* ════════════════════════════════════════════════════
               OVERVIEW TAB
@@ -2572,6 +2492,58 @@ export default function ReceptionistDashboard() {
                         <div>
                           <p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Residential Address</p>
                           <p className={`font-medium ${t.text}`}>{selectedLead.address || "N/A"}</p>
+                          <div className="grid grid-cols-2 gap-4 mt-3">
+                            <div>
+                              <p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Pin Code</p>
+                              <p className={`font-medium ${t.text}`}>{selectedLead.pinCode || selectedLead.pin_code || "N/A"}</p>
+                            </div>
+                            <div>
+                              <p className={`text-xs font-medium mb-1 ${t.textFaint}`}>City</p>
+                              <p className={`font-medium ${t.text}`}>{selectedLead.city || "N/A"}</p>
+                            </div>
+                            <div className="col-span-2">
+                              <p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Preferred Location</p>
+                              <p className={`font-medium ${t.text}`}>{selectedLead.preferred_location || "N/A"}</p>
+                            </div>
+                          </div>
+
+                          {/* ── Assignment Details — CP enquiries only, read-only.
+                              Rendered only when the lead actually came through a
+                              Channel Partner, so non-CP leads don't show an empty
+                              sourcing block. Receptionists cannot change this. ── */}
+                          {(selectedLead.source === "Channel Partner" || selectedLead.source === "CP") && (
+                            <div className={`mt-4 rounded-xl p-4 border ${isDark ? "bg-[#9E217B]/10 border-[#9E217B]/30" : "bg-[#9E217B]/5 border-[#9E217B]/25"}`}>
+                              <p className={`text-xs font-bold uppercase tracking-wider mb-3 ${t.accentText}`}>
+                                Assignment Details
+                              </p>
+                              <div className="grid grid-cols-2 gap-4">
+                                {/* /api/walkin_enquiries is a plain SELECT * with no join,
+                                    so only sourcing_manager_id is on the lead. The person's
+                                    details are resolved from the list already fetched for the
+                                    enquiry form rather than widening that paginated query. */}
+                                {(() => {
+                                  const sm = sourcingManagers.find(
+                                    (m: any) => String(m.id) === String(selectedLead.sourcing_manager_id)
+                                  );
+                                  return [
+                                  ["Assigned Sourcing Manager", sm?.name],
+                                  ["Employee ID", selectedLead.sourcing_manager_id ? `#${selectedLead.sourcing_manager_id}` : null],
+                                  ["Phone Number", sm?.phone || sm?.whatsapp_number],
+                                  ["Email", sm?.email],
+                                  ["Assigned Date", selectedLead.sourcing_manager_assigned_at ? formatDate(selectedLead.sourcing_manager_assigned_at) : null],
+                                  ["Assigned By", selectedLead.sourcing_manager_assigned_by],
+                                ]; })().map(([label, value]) => (
+                                  <div key={String(label)}>
+                                    <p className={`text-xs font-medium mb-1 ${t.textFaint}`}>{label}</p>
+                                    <p className={`font-medium text-sm ${t.text}`}>{value ? String(value) : "N/A"}</p>
+                                  </div>
+                                ))}
+                              </div>
+                              <p className={`text-[10px] mt-3 ${t.textFaint}`}>
+                                Read-only. Only an Admin can change the assigned Sourcing Manager.
+                              </p>
+                            </div>
+                          )}
                         </div>
                         <InlineContactField label="Location" value={selectedLead.location} fieldType="text" isDark={isDark} theme={t} canEdit={user?.role === "Admin" || user?.role === "Receptionist"} onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "location", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, location: val || "N/A" })); showToast("Contact details updated successfully."); }} />
                       </div>
@@ -2902,6 +2874,8 @@ export default function ReceptionistDashboard() {
                                     <div className="col-span-1"><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Loan Status</p>{selectedLead.loanStatus && selectedLead.loanStatus !== "N/A" ? <div className="w-fit"><LoanStatusBadge status={selectedLead.loanStatus} /></div> : <p className={`font-semibold ${t.text}`}>N/A</p>}</div>
                                     <div className="col-span-1"><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Backdated Entry</p><p className={`font-semibold ${t.text}`}>{selectedLead.auto_date_enabled === false && selectedLead.enquiry_date ? formatDate(selectedLead.enquiry_date).split(",")[0] : "Null"}</p></div>
                                     <div className="col-span-2"><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Residential Address</p><p className={`font-semibold ${t.text}`}>{selectedLead.address && selectedLead.address !== "N/A" ? selectedLead.address : "Not Provided"}</p></div>
+                                    <div><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Pin Code</p><p className={`font-semibold ${t.text}`}>{selectedLead.pinCode || selectedLead.pin_code || "N/A"}</p></div>
+                                    <div><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>City</p><p className={`font-semibold ${t.text}`}>{selectedLead.city || "N/A"}</p></div>
                                     <div className="col-span-2"><InlineContactField label="Location" value={selectedLead.location} fieldType="text" isDark={isDark} theme={t} canEdit={user?.role === "Admin" || user?.role === "Receptionist"} onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "location", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, location: val || "N/A" })); showToast("Contact details updated successfully."); }} /></div>
                                     <div><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Budget</p><p className={`font-bold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{selectedLead.salesBudget !== "Pending" ? selectedLead.salesBudget : selectedLead.budget}</p></div>
                                     <div><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Property Type</p><p className={`font-semibold ${t.text}`}>{selectedLead.propType || "Pending"}</p></div>
@@ -3434,6 +3408,36 @@ export default function ReceptionistDashboard() {
                       <label className={`block text-xs mb-1.5 font-medium pl-2 ${t.textMuted}`}>Address</label>
                       <input type="text" value={enquiryForm.address} onChange={e => setEnquiryForm({ ...enquiryForm, address: e.target.value })}
                         className={`w-full rounded-lg p-3 text-sm outline-none transition-colors border ${t.modalInput} ${t.text}`} placeholder="Full residential address" />
+
+                      {/* Pin Code + City — optional, same as Address. Captured now so
+                          Channel Partners can later be matched to enquiry demand by
+                          area; no filtering UI is wired to these yet. */}
+                      <div className="grid grid-cols-2 gap-4 mt-4">
+                        <div>
+                          <label className={`block text-xs mb-1.5 font-medium pl-2 ${t.textMuted}`}>Pin Code</label>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            maxLength={6}
+                            value={enquiryForm.pinCode}
+                            // Digits only: the column is VARCHAR, but a stray letter
+                            // would break an equality match against a CP's pincode.
+                            onChange={e => setEnquiryForm({ ...enquiryForm, pinCode: e.target.value.replace(/\D/g, "").slice(0, 6) })}
+                            className={`w-full rounded-lg p-3 text-sm outline-none transition-colors border ${t.modalInput} ${t.text}`}
+                            placeholder="e.g. 411045"
+                          />
+                        </div>
+                        <div>
+                          <label className={`block text-xs mb-1.5 font-medium pl-2 ${t.textMuted}`}>City</label>
+                          <input
+                            type="text"
+                            value={enquiryForm.city}
+                            onChange={e => setEnquiryForm({ ...enquiryForm, city: e.target.value })}
+                            className={`w-full rounded-lg p-3 text-sm outline-none transition-colors border ${t.modalInput} ${t.text}`}
+                            placeholder="e.g. Pune"
+                          />
+                        </div>
+                      </div>
                     </div>
                     <div>
                       <label className={`block text-xs mb-1.5 font-medium pl-2 ${t.textMuted}`}>Mobile No *</label>
@@ -3554,6 +3558,15 @@ export default function ReceptionistDashboard() {
                       <label className={`block text-xs mb-1.5 font-medium pl-2 ${t.textMuted}`}>Budget *</label>
                       <input type="text" required value={enquiryForm.budget} onChange={e => setEnquiryForm({ ...enquiryForm, budget: e.target.value })}
                         className={`w-full rounded-lg p-3 text-sm outline-none transition-colors border ${t.modalInput} ${t.text}`} placeholder="e.g. 80 Lakhs, 1.5 Cr" />
+                    </div>
+                    <div>
+                      {/* Where the client wants to buy — distinct from the residential
+                          address captured in Personal Information. */}
+                      <label className={`block text-xs mb-1.5 font-medium pl-2 ${t.textMuted}`}>Preferred Location</label>
+                      <input type="text" value={enquiryForm.preferredLocation}
+                        onChange={e => setEnquiryForm({ ...enquiryForm, preferredLocation: e.target.value })}
+                        className={`w-full rounded-lg p-3 text-sm outline-none transition-colors border ${t.modalInput} ${t.text}`}
+                        placeholder="e.g. Baner, Wakad, Hinjewadi" />
                     </div>
                     <div>
                       <label className={`block text-xs mb-1.5 font-medium pl-2 ${t.textMuted}`}>Configuration (BHK)</label>
@@ -3796,6 +3809,54 @@ export default function ReceptionistDashboard() {
 
                         {/* CP phone now lives at the top of this block (see above) so it
                             reads as the primary identifier rather than an afterthought. */}
+
+                        {/* ── Assign Sourcing Manager ──
+                            Only the employee id is stored. Names are never hardcoded —
+                            the list is fetched from /api/users/sourcing-manager. */}
+                        <div className="md:col-span-2">
+                          <label className={`block text-xs mb-1.5 font-medium pl-2 ${t.textMuted}`}>
+                            Assign Sourcing Manager <span className="text-red-500">*</span>
+                          </label>
+                          <SearchableSelect
+                            value={enquiryForm.sourcingManagerId}
+                            onChange={v => setEnquiryForm(prev => ({ ...prev, sourcingManagerId: v }))}
+                            options={sourcingManagerOptions}
+                            isDark={isDark}
+                            t={t}
+                            placeholder={isFetchingSourcingManagers ? "Loading Sourcing Managers…" : "Search by name, ID or phone…"}
+                            emptyMessage={isFetchingSourcingManagers ? "Loading…" : "No active Sourcing Managers yet"}
+                            disabled={isFetchingSourcingManagers}
+                            ariaLabel="Assign Sourcing Manager"
+                          />
+                          {/* Three distinct states, deliberately not collapsed into one:
+                              a genuinely empty registry, a failed fetch, and "loading" all
+                              left the list at [] before this fix — which meant a network
+                              error looked identical to "zero Sourcing Manager accounts
+                              exist" with no way to tell them apart from this screen. */}
+                          {isFetchingSourcingManagers ? (
+                            <p className={`text-[11px] mt-1.5 pl-2 ${t.textFaint}`}>Loading Sourcing Managers…</p>
+                          ) : sourcingManagersError ? (
+                            <p className="text-[11px] mt-1.5 pl-2 font-medium text-red-500">
+                              Couldn&apos;t load Sourcing Managers ({sourcingManagersError}).{" "}
+                              <button type="button" onClick={fetchSourcingManagers} className="underline cursor-pointer">
+                                Retry
+                              </button>
+                            </p>
+                          ) : sourcingManagers.length === 0 ? (
+                            // A walk-in partner must never be turned away because no
+                            // Sourcing Manager account exists yet — reception can submit
+                            // unassigned and an Admin assigns from Channel Partner
+                            // Management afterwards.
+                            <p className={`text-[11px] mt-1.5 pl-2 ${isDark ? "text-amber-400" : "text-amber-600"}`}>
+                              No Sourcing Managers yet — create one in Add Employee. You can still
+                              submit; an Admin can assign this enquiry later.
+                            </p>
+                          ) : !enquiryForm.sourcingManagerId ? (
+                            <p className={`text-[11px] mt-1.5 pl-2 ${isDark ? "text-amber-400" : "text-amber-600"}`}>
+                              Required for Channel Partner enquiries.
+                            </p>
+                          ) : null}
+                        </div>
 
                       </div>
                     )}
