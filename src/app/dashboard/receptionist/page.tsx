@@ -11,7 +11,7 @@ import {
   FaPhoneAlt, FaUserCircle, FaBriefcase, FaSearch, FaDownload,
   FaFileInvoice, FaHandshake, FaUniversity, FaUsers, FaFileAlt,
   FaClock, FaMicrophone, FaWhatsapp, FaCheckCircle,
-  FaExchangeAlt, FaUserTie, FaChartPie
+  FaExchangeAlt, FaUserTie, FaChartPie, FaInfoCircle
 } from "react-icons/fa";
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend,
@@ -42,6 +42,73 @@ import { useActivityTracker } from "@/hooks/useActivityTracker";
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
 // ─────────────────────────────────────────────────────────────────────────────
+function DraggableTableContainer({ children, className, isDark }: { children: React.ReactNode, className?: string, isDark: boolean }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [startX, setStartX] = useState(0);
+  const [scrollLeft, setScrollLeft] = useState(0);
+  const [showLeftShadow, setShowLeftShadow] = useState(false);
+  const [showRightShadow, setShowRightShadow] = useState(true);
+
+  const handleScroll = () => {
+    if (!scrollRef.current) return;
+    const { scrollLeft, scrollWidth, clientWidth } = scrollRef.current;
+    setShowLeftShadow(scrollLeft > 0);
+    setShowRightShadow(scrollLeft < scrollWidth - clientWidth - 1);
+  };
+
+  useEffect(() => {
+    handleScroll();
+    window.addEventListener("resize", handleScroll);
+    return () => window.removeEventListener("resize", handleScroll);
+  }, []);
+
+  const onMouseDown = (e: React.MouseEvent) => {
+    if (!scrollRef.current) return;
+    setIsDragging(true);
+    setStartX(e.pageX - scrollRef.current.offsetLeft);
+    setScrollLeft(scrollRef.current.scrollLeft);
+  };
+  const onMouseLeave = () => setIsDragging(false);
+  const onMouseUp = () => setIsDragging(false);
+  const onMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging || !scrollRef.current) return;
+    e.preventDefault();
+    const x = e.pageX - scrollRef.current.offsetLeft;
+    const walk = (x - startX) * 1.5;
+    scrollRef.current.scrollLeft = scrollLeft - walk;
+  };
+
+  const shadowColor = isDark ? "from-[#121218]" : "from-white";
+
+  return (
+    <div className={`relative ${className || ""}`}>
+      {showLeftShadow && <div className={`absolute top-0 bottom-0 left-[230px] w-8 bg-gradient-to-r ${shadowColor} to-transparent pointer-events-none z-[15] opacity-100`} />}
+      {showRightShadow && <div className={`absolute top-0 bottom-0 right-0 w-8 bg-gradient-to-l ${shadowColor} to-transparent pointer-events-none z-[15] opacity-100`} />}
+      <div
+        ref={scrollRef}
+        onScroll={handleScroll}
+        onMouseDown={onMouseDown}
+        onMouseLeave={onMouseLeave}
+        onMouseUp={onMouseUp}
+        onMouseMove={onMouseMove}
+        className={`overflow-auto custom-scrollbar draggable-table-scroll ${isDragging ? "cursor-grabbing select-none" : "cursor-grab"} pb-2`}
+        style={{ maxHeight: "calc(200vh - 250px)" }}
+      >
+        <style>{`
+          .draggable-table-scroll::-webkit-scrollbar {
+            height: 10px !important;
+          }
+          .draggable-table-scroll::-webkit-scrollbar-thumb {
+            border-radius: 10px;
+          }
+        `}</style>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 const PAGE_SIZE = 20;
 const CARDS_PER_PAGE = 20;
 
@@ -390,6 +457,18 @@ export default function ReceptionistDashboard() {
   );
   // Inline validation for the required CP phone (shown under the field, not an alert).
   const [cpPhoneError, setCpPhoneError] = useState("");
+
+  // ── Registered-partner cross-check ──
+  // The CP phone number is the partner's identity. As soon as a full one is typed
+  // we ask whether it already belongs to a registered partner and, if so, who owns
+  // them — because that owner gets the lead regardless of what this form selects
+  // (enforced server-side in POST /api/walkin_enquiries). Showing the answer before
+  // submit means the receptionist sees where the lead is going, instead of picking a
+  // manager whose choice is then silently discarded.
+  const [cpLookup, setCpLookup] = useState<any>(null);
+  const [cpLookupLoading, setCpLookupLoading] = useState(false);
+  /** The phone matched a registered partner whose owner will take this lead. */
+  const cpRoutedByPartner = !!(cpLookup?.found && cpLookup?.routable);
 
   // ___Lost Leads
   const [showLostModal, setShowLostModal] = useState(false);
@@ -776,6 +855,45 @@ export default function ReceptionistDashboard() {
     }
   };
 
+  // Debounced so a 10-digit number typed at speed produces one request, not ten.
+  // Only fires for CP enquiries and only on a complete number — a partial one can
+  // never match the 10-digit key, and asking would flash a misleading
+  // "new partner" state on every keystroke.
+  useEffect(() => {
+    const digits = (enquiryForm.cpDetails.phone || "").replace(/\D/g, "");
+    if (enquiryForm.source !== "Channel Partner" || digits.length < 10) {
+      setCpLookup(null);
+      setCpLookupLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setCpLookupLoading(true);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/channel-partners/lookup?phone=${encodeURIComponent(digits)}`);
+        const json = await res.json();
+        if (cancelled) return;
+        setCpLookup(res.ok && json.success ? json : null);
+        // A registered partner's owner is the manager this lead will actually go
+        // to, so the field is set to match rather than left showing a different
+        // name than the outcome.
+        if (res.ok && json.success && json.routable) {
+          setEnquiryForm(prev => ({
+            ...prev,
+            sourcingManagerId: String(json.partner.assigned_sourcing_manager_id),
+          }));
+        }
+      } catch {
+        // A failed lookup is not blocking: the server re-checks on submit, so the
+        // worst case is the receptionist picks manually and is corrected there.
+        if (!cancelled) setCpLookup(null);
+      } finally {
+        if (!cancelled) setCpLookupLoading(false);
+      }
+    }, 400);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [enquiryForm.cpDetails.phone, enquiryForm.source]);
+
   const fetchSalesManagers = async () => {
     setIsFetchingManagers(true);
     try {
@@ -1105,9 +1223,17 @@ export default function ReceptionistDashboard() {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(newEntry),
       });
       if (res.ok) {
-        showToast(isReceptionist ? `Lead self-assigned to you!` : `Lead assigned to ${assignTo}!`);
+        const json = await res.json().catch(() => ({}));
+        // When the partner's registered owner overrode the form's pick, say where
+        // the lead went — otherwise the operator has no way to know it moved.
+        showToast(
+          json?.routedByPartner && json?.routedTo
+            ? `Lead routed to ${json.routedTo} — the registered partner's Sourcing Manager.`
+            : isReceptionist ? `Lead self-assigned to you!` : `Lead assigned to ${assignTo}!`
+        );
         setIsEnquiryModalOpen(false);
         setCpPhoneError("");
+        setCpLookup(null);
         setEnquiryForm({ fullName: "", mobile: "", altMobile: "", email: "", address: "", pinCode: "", city: "", occupation: "", organization: "", budget: "", configuration: "", purpose: "", source: "", assignedTo: "", loanPlanned: "", sourceOther: "", referralName: "", cpDetails: { name: "", company: "", phone: "" }, sourcingManagerId: "", preferredLocation: "", selfAssign: false, enquiryDate: getTodayString() });
         refetchAll();
       } else { alert("Server Error. Please check DB schema."); }
@@ -2230,11 +2356,17 @@ export default function ReceptionistDashboard() {
                     <button onClick={() => setIsEnquiryModalOpen(true)} className={`font-bold py-1.5 px-3 md:py-2 md:px-4 rounded-lg transition-colors text-xs flex items-center gap-2 cursor-pointer ${t.btnPrimary}`}>+ New Entry</button>
                   </div>
                 </div>
-                <div className="overflow-x-auto custom-scrollbar">
+                <DraggableTableContainer isDark={isDark}>
                   <table className="w-full text-left border-collapse whitespace-nowrap">
-                    <thead><tr className={t.tableHead}>
+                    <thead className="sticky top-0 z-[25]"><tr className={t.tableHead}>
                       {["Lead No.", "Client Name", "Source", "CP Name", "CP Company", "CP Phone", "Budget", "Phone", "Alt. Phone", "Date Created", "Backdated Entry", "Sales Manager"].map(h => (
-                        <th key={h} className={`px-3 py-3 md:p-4 font-bold uppercase tracking-wider border-b ${t.textHeader} ${t.tableBorder}`}>{h}</th>
+                        <th key={h} className={`px-3 py-3 md:p-4 font-bold uppercase tracking-wider border-b ${t.textHeader} ${t.tableBorder} ${h === "Lead No." ? `sticky left-0 z-20 ${isDark ? "bg-[#1A1A28]" : "bg-[#F1F5F9]"}` :
+                          h === "Client Name" ? `sticky left-[80px] z-20 ${isDark ? "bg-[#1A1A28]" : "bg-[#F1F5F9]"}` : ""
+                          }`}
+                          style={
+                            h === "Lead No." ? { minWidth: '80px', maxWidth: '80px' } :
+                              h === "Client Name" ? { minWidth: '150px', maxWidth: '150px', boxShadow: isDark ? "1px 0 0 #2A2A35" : "1px 0 0 #9CA3AF" } : {}
+                          }>{h}</th>
                       ))}
                     </tr></thead>
                     <tbody className={`${t.tableDivide} divide-y`}>
@@ -2242,29 +2374,32 @@ export default function ReceptionistDashboard() {
                         <tr><td colSpan={11} className={`p-8 text-center text-sm ${t.textMuted}`}>Fetching data...</td></tr>
                       ) : receptionistLeads.length === 0 ? (
                         <tr><td colSpan={11} className={`p-8 text-center text-sm ${t.textMuted}`}>No leads found.</td></tr>
-                      ) : receptionistLeads.map((enquiry: any) => (
-                        <tr key={enquiry.id} className={`transition-colors cursor-pointer ${t.tableRow}`} onClick={() => { setSelectedLead(enquiry); setActiveTab("detail"); }}>
-                          <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-bold ${t.accentText}`}>#{enquiry.sr_no || enquiry.id}</td>
-                          <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-semibold ${t.text}`}>{enquiry.name}</td>
+                      ) : receptionistLeads.map((enquiry: any) => {
+                        const rowBgClass = isDark ? "bg-[#121218]" : "bg-white";
+                        return (
+                          <tr key={enquiry.id} className={`transition-colors cursor-pointer ${t.tableRow} ${rowBgClass}`} onClick={() => { setSelectedLead(enquiry); setActiveTab("detail"); }}>
+                            <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-bold ${t.accentText} sticky left-0 z-10 bg-inherit`} style={{ minWidth: '80px', maxWidth: '80px' }}>#{enquiry.sr_no || enquiry.id}</td>
+                            <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-semibold ${t.text} sticky left-[80px] z-10 bg-inherit`} style={{ minWidth: '150px', maxWidth: '150px', boxShadow: isDark ? "1px 0 0 #2A2A35" : "1px 0 0 #9CA3AF" }}>{enquiry.name}</td>
 
-                          <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm ${t.textMuted}`}>
-                            {enquiry.source || <span className="italic text-[10px]">—</span>}
-                          </td>
-                          <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm truncate max-w-[100px] ${t.textMuted}`}>{enquiry.cp_name || <span className="italic text-[10px]">—</span>}</td>
-                          <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm truncate max-w-[100px] ${t.textMuted}`}>{enquiry.cp_company || <span className="italic text-[10px]">—</span>}</td>
-                          <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm truncate max-w-[100px] ${t.textMuted}`}>{enquiry.cp_phone || <span className="italic text-[10px]">—</span>}</td>
-                          <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-bold ${isDark ? "text-green-700" : "text-emerald-600"}`}>{enquiry.salesBudget || enquiry.budget}</td>
-                          <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm font-mono ${t.text}`}>{maskPhone(enquiry.phone)}</td>
-                          <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm font-mono ${t.textMuted}`}>{maskPhone(enquiry.altPhone)}</td>
-                          <td className={`px-3 py-3 md:p-4 text-[10px] md:text-xs whitespace-normal min-w-[120px] ${t.textFaint}`}>{enquiry.date}</td>
-                          <td className={`px-3 py-3 md:p-4 text-[10px] md:text-xs whitespace-normal min-w-[110px] ${t.textFaint}`}>
-                            {enquiry.autoDateEnabled === false && enquiry.enquiryDate ? formatDate(enquiry.enquiryDate).split(",")[0] : "-"}
-                          </td>
-                          <td className="px-3 py-3 md:p-4 text-xs md:text-sm">
-                            <span className={`px-2 py-1 rounded-md text-[10px] md:text-xs font-semibold ${t.accentBg}`}>{enquiry.assignedTo || "Unassigned"}</span>
-                          </td>
-                        </tr>
-                      ))}
+                            <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm ${t.textMuted}`}>
+                              {enquiry.source || <span className="italic text-[10px]">—</span>}
+                            </td>
+                            <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm truncate max-w-[100px] ${t.textMuted}`}>{enquiry.cp_name || <span className="italic text-[10px]">—</span>}</td>
+                            <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm truncate max-w-[100px] ${t.textMuted}`}>{enquiry.cp_company || <span className="italic text-[10px]">—</span>}</td>
+                            <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm truncate max-w-[100px] ${t.textMuted}`}>{enquiry.cp_phone || <span className="italic text-[10px]">—</span>}</td>
+                            <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-bold ${isDark ? "text-green-700" : "text-emerald-600"}`}>{enquiry.salesBudget || enquiry.budget}</td>
+                            <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm font-mono ${t.text}`}>{maskPhone(enquiry.phone)}</td>
+                            <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm font-mono ${t.textMuted}`}>{maskPhone(enquiry.altPhone)}</td>
+                            <td className={`px-3 py-3 md:p-4 text-[10px] md:text-xs whitespace-normal min-w-[120px] ${t.textFaint}`}>{enquiry.date}</td>
+                            <td className={`px-3 py-3 md:p-4 text-[10px] md:text-xs whitespace-normal min-w-[110px] ${t.textFaint}`}>
+                              {enquiry.autoDateEnabled === false && enquiry.enquiryDate ? formatDate(enquiry.enquiryDate).split(",")[0] : "-"}
+                            </td>
+                            <td className="px-3 py-3 md:p-4 text-xs md:text-sm">
+                              <span className={`px-2 py-1 rounded-md text-[10px] md:text-xs font-semibold ${t.accentBg}`}>{enquiry.assignedTo || "Unassigned"}</span>
+                            </td>
+                          </tr>
+                        )
+                      })}
                       {isLoadingMore && <LoaderRow />}
                       {!hasMore && !isFetchingEnquiries && enquiries.length > 0 && (
                         <tr><td colSpan={11} className={`p-4 text-center text-xs ${t.textFaint}`}>All {totalCount} records loaded</td></tr>
@@ -2272,7 +2407,7 @@ export default function ReceptionistDashboard() {
                     </tbody>
                   </table>
                   <div ref={tableSentinelRef} className="h-1 w-full" aria-hidden="true" />
-                </div>
+                </DraggableTableContainer>
               </div>
 
             </div>
@@ -2583,13 +2718,14 @@ export default function ReceptionistDashboard() {
                                     (m: any) => String(m.id) === String(selectedLead.sourcing_manager_id)
                                   );
                                   return [
-                                  ["Assigned Sourcing Manager", sm?.name],
-                                  ["Employee ID", selectedLead.sourcing_manager_id ? `#${selectedLead.sourcing_manager_id}` : null],
-                                  ["Phone Number", sm?.phone || sm?.whatsapp_number],
-                                  ["Email", sm?.email],
-                                  ["Assigned Date", selectedLead.sourcing_manager_assigned_at ? formatDate(selectedLead.sourcing_manager_assigned_at) : null],
-                                  ["Assigned By", selectedLead.sourcing_manager_assigned_by],
-                                ]; })().map(([label, value]) => (
+                                    ["Assigned Sourcing Manager", sm?.name],
+                                    ["Employee ID", selectedLead.sourcing_manager_id ? `#${selectedLead.sourcing_manager_id}` : null],
+                                    ["Phone Number", sm?.phone || sm?.whatsapp_number],
+                                    ["Email", sm?.email],
+                                    ["Assigned Date", selectedLead.sourcing_manager_assigned_at ? formatDate(selectedLead.sourcing_manager_assigned_at) : null],
+                                    ["Assigned By", selectedLead.sourcing_manager_assigned_by],
+                                  ];
+                                })().map(([label, value]) => (
                                   <div key={String(label)}>
                                     <p className={`text-xs font-medium mb-1 ${t.textFaint}`}>{label}</p>
                                     <p className={`font-medium text-sm ${t.text}`}>{value ? String(value) : "N/A"}</p>
@@ -3100,11 +3236,19 @@ export default function ReceptionistDashboard() {
                   <p className={`text-sm font-semibold ${t.text}`}>{filteredRecepLeads.length} leads</p>
                   <p className={`text-xs ${t.textFaint}`}>Showing all leads assigned to or handled by you</p>
                 </div>
-                <div className="overflow-x-auto custom-scrollbar">
+                <DraggableTableContainer isDark={isDark}>
                   <table className="w-full text-left border-collapse whitespace-nowrap">
-                    <thead><tr className={t.tableHead}>
+                    <thead className="sticky top-0 z-[25]"><tr className={t.tableHead}>
                       {["Lead No.", "Client Name", "CP Details", "Budget", "Phone", "Alt. Phone", "Date Created", "Assigned to", "Site Visits", "Status", "Actions"].map(h => (
-                        <th key={h} className={`px-3 py-3 md:p-4 font-bold uppercase tracking-wider border-b ${t.textHeader} ${t.tableBorder}`}>{h}</th>
+                        <th key={h} className={`px-3 py-3 md:p-4 font-bold uppercase tracking-wider border-b ${t.textHeader} ${t.tableBorder} ${h === "Lead No." ? `sticky left-0 z-20 ${isDark ? "bg-[#1A1A28]" : "bg-[#F1F5F9]"}` :
+                          h === "Client Name" ? `sticky left-[80px] z-20 ${isDark ? "bg-[#1A1A28]" : "bg-[#F1F5F9]"}` : ""
+                          }`}
+                          style={
+                            h === "Lead No." ? { minWidth: '80px', maxWidth: '80px' } :
+                              h === "Client Name" ? { minWidth: '150px', maxWidth: '150px', boxShadow: isDark ? "1px 0 0 #2A2A35" : "1px 0 0 #9CA3AF" } : {}
+                          }>
+                          {h}
+                        </th>
                       ))}
                     </tr></thead>
                     <tbody className={`${t.tableDivide} divide-y`}>
@@ -3119,15 +3263,16 @@ export default function ReceptionistDashboard() {
                       ) : filteredRecepLeads.map((lead: any) => {
                         const isLost = !!lead.is_lost_lead;
                         const isNGD = lead.status === "NON GENUINE DEMAND (NGD)" || lead.leadStatus === "NON GENUINE DEMAND (NGD)" || lead.leadInterestStatus === "NON GENUINE DEMAND (NGD)";
+                        const rowBgClass = isLost ? (isDark ? "bg-[#151515]" : "bg-slate-100") : isNGD ? (isDark ? "bg-[#1a1410]" : "bg-orange-50") : (isDark ? "bg-[#121218]" : "bg-white");
                         return (
                           <tr key={lead.id}
-                            className={`transition-colors ${isLost ? t.rowLost : isNGD ? t.rowNGD : t.tableRow}`}>
+                            className={`transition-colors ${isLost ? t.rowLost : isNGD ? t.rowNGD : t.tableRow} ${rowBgClass}`}>
 
                             {/* 1. Lead No. */}
-                            <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-bold ${t.accentText}`}>#{lead.sr_no || lead.id}</td>
+                            <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-bold ${t.accentText} sticky left-0 z-10 bg-inherit`} style={{ minWidth: '80px', maxWidth: '80px' }}>#{lead.sr_no || lead.id}</td>
 
                             {/* 2. Client Name */}
-                            <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-semibold ${t.text}`}>{lead.name}</td>
+                            <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-semibold ${t.text} sticky left-[80px] z-10 bg-inherit`} style={{ minWidth: '150px', maxWidth: '150px', boxShadow: isDark ? "1px 0 0 #2A2A35" : "1px 0 0 #9CA3AF" }}>{lead.name}</td>
 
                             {/* 3. CP Details */}
                             <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm ${t.textMuted}`}>
@@ -3195,7 +3340,7 @@ export default function ReceptionistDashboard() {
                       })}
                     </tbody>
                   </table>
-                </div>
+                </DraggableTableContainer>
               </div>
             </div>
           )}
@@ -3243,11 +3388,17 @@ export default function ReceptionistDashboard() {
                       <p className={`text-sm font-semibold ${t.text}`}>{filteredClosedLeads.length} closed leads</p>
                       <p className={`text-xs ${t.textFaint}`}>Click any row to view full history</p>
                     </div>
-                    <div className="overflow-x-auto custom-scrollbar">
+                    <DraggableTableContainer isDark={isDark}>
                       <table className="w-full text-left border-collapse whitespace-nowrap">
-                        <thead><tr className={t.tableHead}>
+                        <thead className="sticky top-0 z-[25]"><tr className={t.tableHead}>
                           {["Lead No.", "Client Name", "Budget", "Property", "Status", "Assigned To", "Site Visit", "Closing Date", "Actions"].map(h => (
-                            <th key={h} className={`px-3 py-3 md:p-4 font-bold uppercase tracking-wider border-b ${t.textHeader} ${t.tableBorder}`}>{h}</th>
+                            <th key={h} className={`px-3 py-3 md:p-4 font-bold uppercase tracking-wider border-b ${t.textHeader} ${t.tableBorder} ${h === "Lead No." ? `sticky left-0 z-20 ${isDark ? "bg-[#1A1A28]" : "bg-[#F1F5F9]"}` :
+                              h === "Client Name" ? `sticky left-[80px] z-20 ${isDark ? "bg-[#1A1A28]" : "bg-[#F1F5F9]"}` : ""
+                              }`}
+                              style={
+                                h === "Lead No." ? { minWidth: '80px', maxWidth: '80px' } :
+                                  h === "Client Name" ? { minWidth: '150px', maxWidth: '150px', boxShadow: isDark ? "1px 0 0 #2A2A35" : "1px 0 0 #9CA3AF" } : {}
+                              }>{h}</th>
                           ))}
                         </tr></thead>
                         <tbody className={`${t.tableDivide} divide-y`}>
@@ -3259,35 +3410,38 @@ export default function ReceptionistDashboard() {
                               <p className="text-lg font-semibold">No closed leads yet.</p>
                               <p className={`text-sm mt-2 ${t.textFaint}`}>Leads marked as Closing will appear here.</p>
                             </td></tr>
-                          ) : filteredClosedLeads.map((lead: any) => (
-                            <tr key={lead.id} className={`transition-colors cursor-pointer ${t.tableRow}`}
-                              onClick={() => { setSelectedClosedLead(lead); setClosedLeadView("detail"); }}>
-                              <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-bold ${t.accentText}`}>#{lead.sr_no || lead.id}</td>
-                              <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-semibold ${t.text}`}>{lead.name}</td>
-                              <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-bold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget || lead.budget}</td>
-                              <td className={`px-3 py-3 md:p-4 text-xs ${t.textMuted}`}>{(lead.propType && lead.propType !== "Pending" && lead.propType !== "N/A" ? lead.propType : lead.configuration && lead.configuration !== "Pending" && lead.configuration !== "N/A" ? lead.configuration : "N/A")}</td>
-                              <td className="px-3 py-3 md:p-4">
-                                <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase border ${t.statusClosing}`}>
-                                  {lead.status}
-                                </span>
-                              </td>
-                              <td className={`px-3 py-3 md:p-4 text-xs ${t.textMuted}`}>{lead.assignedTo || "Unassigned"}</td>
-                              <td className={`px-3 py-3 md:p-4 text-[10px] ${lead.mongoVisitDate ? "text-orange-400" : t.textFaint}`}>
-                                {lead.mongoVisitDate ? formatDate(lead.mongoVisitDate).split(",")[0] : "—"}
-                              </td>
-                              <td className={`px-3 py-3 md:p-4 text-[10px] ${t.textFaint}`}>
-                                {lead.closingDate ? formatDate(lead.closingDate).split(",")[0] : "—"}
-                              </td>
-                              <td className="px-3 py-3 md:p-4">
-                                <button className={`text-xs font-bold px-3 py-1.5 rounded-lg ${t.btnWarning}`}>
-                                  View History
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
+                          ) : filteredClosedLeads.map((lead: any) => {
+                            const rowBgClass = isDark ? "bg-[#121218]" : "bg-white";
+                            return (
+                              <tr key={lead.id} className={`transition-colors cursor-pointer ${t.tableRow} ${rowBgClass}`}
+                                onClick={() => { setSelectedClosedLead(lead); setClosedLeadView("detail"); }}>
+                                <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-bold ${t.accentText} sticky left-0 z-10 bg-inherit`} style={{ minWidth: '80px', maxWidth: '80px' }}>#{lead.sr_no || lead.id}</td>
+                                <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-semibold ${t.text} sticky left-[80px] z-10 bg-inherit`} style={{ minWidth: '150px', maxWidth: '150px', boxShadow: isDark ? "1px 0 0 #2A2A35" : "1px 0 0 #9CA3AF" }}>{lead.name}</td>
+                                <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-bold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget || lead.budget}</td>
+                                <td className={`px-3 py-3 md:p-4 text-xs ${t.textMuted}`}>{(lead.propType && lead.propType !== "Pending" && lead.propType !== "N/A" ? lead.propType : lead.configuration && lead.configuration !== "Pending" && lead.configuration !== "N/A" ? lead.configuration : "N/A")}</td>
+                                <td className="px-3 py-3 md:p-4">
+                                  <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase border ${t.statusClosing}`}>
+                                    {lead.status}
+                                  </span>
+                                </td>
+                                <td className={`px-3 py-3 md:p-4 text-xs ${t.textMuted}`}>{lead.assignedTo || "Unassigned"}</td>
+                                <td className={`px-3 py-3 md:p-4 text-[10px] ${lead.mongoVisitDate ? "text-orange-400" : t.textFaint}`}>
+                                  {lead.mongoVisitDate ? formatDate(lead.mongoVisitDate).split(",")[0] : "—"}
+                                </td>
+                                <td className={`px-3 py-3 md:p-4 text-[10px] ${t.textFaint}`}>
+                                  {lead.closingDate ? formatDate(lead.closingDate).split(",")[0] : "—"}
+                                </td>
+                                <td className="px-3 py-3 md:p-4">
+                                  <button className={`text-xs font-bold px-3 py-1.5 rounded-lg ${t.btnWarning}`}>
+                                    View History
+                                  </button>
+                                </td>
+                              </tr>
+                            )
+                          })}
                         </tbody>
                       </table>
-                    </div>
+                    </DraggableTableContainer>
                   </div>
                 </>
               )}
@@ -3801,10 +3955,58 @@ export default function ReceptionistDashboard() {
                           />
                           {cpPhoneError ? (
                             <p className="text-[11px] mt-1.5 pl-2 font-medium text-red-500">{cpPhoneError}</p>
+                          ) : cpLookupLoading ? (
+                            <p className={`text-[11px] mt-1.5 pl-2 ${t.textFaint}`}>Checking the partner registry…</p>
                           ) : (
                             <p className={`text-[11px] mt-1.5 pl-2 ${t.textMuted}`}>
                               Required — identifies this partner and prevents duplicate records.
                             </p>
+                          )}
+
+                          {/* ── Registry cross-check result ──
+                              Three outcomes, each worth saying differently:
+                              a registered partner with an owner (routing is decided),
+                              a registered partner with none (this form picks the owner),
+                              and an unknown number (a new partner will be created). */}
+                          {!cpLookupLoading && cpLookup?.found && cpLookup.routable && (
+                            <div className={`mt-2 rounded-lg px-3 py-2 flex items-start gap-2 text-[11px] ${isDark
+                              ? "bg-emerald-500/10 border border-emerald-500/25 text-emerald-300"
+                              : "bg-emerald-50 border border-emerald-200 text-emerald-800"}`}>
+                              <FaUserTie className="mt-0.5 flex-shrink-0" />
+                              <span>
+                                <b>{cpLookup.partner.name}</b>
+                                {cpLookup.partner.company_name ? ` (${cpLookup.partner.company_name})` : ""}
+                                {" "}is a registered Channel Partner with{" "}
+                                <b>{Number(cpLookup.partner.lead_count || 0)}</b> lead
+                                {Number(cpLookup.partner.lead_count || 0) === 1 ? "" : "s"} so far.
+                                This lead goes to their Sourcing Manager,{" "}
+                                <b>{cpLookup.partner.assigned_sourcing_manager_name}</b>.
+                              </span>
+                            </div>
+                          )}
+
+                          {!cpLookupLoading && cpLookup?.found && !cpLookup.routable && (
+                            <div className={`mt-2 rounded-lg px-3 py-2 flex items-start gap-2 text-[11px] ${isDark
+                              ? "bg-amber-500/10 border border-amber-500/25 text-amber-300"
+                              : "bg-amber-50 border border-amber-200 text-amber-800"}`}>
+                              <FaInfoCircle className="mt-0.5 flex-shrink-0" />
+                              <span>
+                                <b>{cpLookup.partner.name}</b> is already registered but has no active
+                                Sourcing Manager. Choose one below — they will own this partner from now on.
+                              </span>
+                            </div>
+                          )}
+
+                          {!cpLookupLoading && cpLookup && !cpLookup.found && (
+                            <div className={`mt-2 rounded-lg px-3 py-2 flex items-start gap-2 text-[11px] ${isDark
+                              ? "bg-blue-500/10 border border-blue-500/25 text-blue-300"
+                              : "bg-blue-50 border border-blue-200 text-blue-700"}`}>
+                              <FaInfoCircle className="mt-0.5 flex-shrink-0" />
+                              <span>
+                                New number — a Channel Partner record will be created and assigned to the
+                                Sourcing Manager you pick below.
+                              </span>
+                            </div>
                           )}
                         </div>
 
@@ -3872,7 +4074,10 @@ export default function ReceptionistDashboard() {
                             the list is fetched from /api/users/sourcing-manager. */}
                         <div className="md:col-span-2">
                           <label className={`block text-xs mb-1.5 font-medium pl-2 ${t.textMuted}`}>
-                            Assign Sourcing Manager <span className="text-red-500">*</span>
+                            Assign Sourcing Manager{" "}
+                            {cpRoutedByPartner
+                              ? <span className={t.textFaint}>(set by the partner&apos;s registration)</span>
+                              : <span className="text-red-500">*</span>}
                           </label>
                           <SearchableSelect
                             value={enquiryForm.sourcingManagerId}
@@ -3882,15 +4087,29 @@ export default function ReceptionistDashboard() {
                             t={t}
                             placeholder={isFetchingSourcingManagers ? "Loading Sourcing Managers…" : "Search by name, ID or phone…"}
                             emptyMessage={isFetchingSourcingManagers ? "Loading…" : "No active Sourcing Managers yet"}
-                            disabled={isFetchingSourcingManagers}
+                            // Locked once the phone matches an owned partner: the server
+                            // routes to that owner anyway, so an editable field here would
+                            // only let the operator record a choice that never takes effect.
+                            disabled={isFetchingSourcingManagers || cpRoutedByPartner}
                             ariaLabel="Assign Sourcing Manager"
                           />
+                          {cpRoutedByPartner && (
+                            <p className={`text-[11px] mt-1.5 pl-2 ${isDark ? "text-emerald-400" : "text-emerald-700"}`}>
+                              This partner is already registered under{" "}
+                              <b>{cpLookup.partner.assigned_sourcing_manager_name}</b>, so their leads
+                              stay with them. An Admin can reassign the partner from Channel Partner Management.
+                            </p>
+                          )}
                           {/* Three distinct states, deliberately not collapsed into one:
                               a genuinely empty registry, a failed fetch, and "loading" all
                               left the list at [] before this fix — which meant a network
                               error looked identical to "zero Sourcing Manager accounts
                               exist" with no way to tell them apart from this screen. */}
-                          {isFetchingSourcingManagers ? (
+                          {cpRoutedByPartner ? (
+                            // The routing is already explained above; repeating the
+                            // "required" / "no managers" copy here would contradict it.
+                            null
+                          ) : isFetchingSourcingManagers ? (
                             <p className={`text-[11px] mt-1.5 pl-2 ${t.textFaint}`}>Loading Sourcing Managers…</p>
                           ) : sourcingManagersError ? (
                             <p className="text-[11px] mt-1.5 pl-2 font-medium text-red-500">

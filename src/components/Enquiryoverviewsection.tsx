@@ -54,7 +54,53 @@
    component paginates instead. Those can be deleted from the parent.
    ══════════════════════════════════════════════════════════════════════════ */
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
+
+function DraggableTableContainer({ children, className, isDark }: { children: React.ReactNode, className?: string, isDark: boolean }) {
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const [isDragging, setIsDragging] = useState(false);
+    const [startX, setStartX] = useState(0);
+    const [scrollLeft, setScrollLeft] = useState(0);
+    const onMouseDown = (e: React.MouseEvent) => {
+        if (!scrollRef.current) return;
+        setIsDragging(true);
+        setStartX(e.pageX - scrollRef.current.offsetLeft);
+        setScrollLeft(scrollRef.current.scrollLeft);
+    };
+    const onMouseLeave = () => setIsDragging(false);
+    const onMouseUp = () => setIsDragging(false);
+    const onMouseMove = (e: React.MouseEvent) => {
+        if (!isDragging || !scrollRef.current) return;
+        e.preventDefault();
+        const x = e.pageX - scrollRef.current.offsetLeft;
+        const walk = (x - startX) * 1.5;
+        scrollRef.current.scrollLeft = scrollLeft - walk;
+    };
+    return (
+        <div className={`relative ${className || ""}`}>
+            <div
+                ref={scrollRef}
+                onMouseDown={onMouseDown}
+                onMouseLeave={onMouseLeave}
+                onMouseUp={onMouseUp}
+                onMouseMove={onMouseMove}
+                className={`overflow-auto custom-scrollbar draggable-table-scroll ${isDragging ? "cursor-grabbing select-none" : "cursor-grab"} pb-2`}
+                style={{ maxHeight: "calc(120vh - 250px)" }}
+            >
+                <style>{`
+          .draggable-table-scroll::-webkit-scrollbar {
+            height: 10px !important;
+          }
+          .draggable-table-scroll::-webkit-scrollbar-thumb {
+            border-radius: 10px;
+          }
+        `}</style>
+                {children}
+            </div>
+        </div>
+    );
+}
+
 import {
     FaChartPie,
     FaTable,
@@ -871,7 +917,7 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
                 )}
 
                 {/* ═══ Table ═══ */}
-                <div className="overflow-x-auto">
+                <DraggableTableContainer isDark={isDark}>
                     <table className="w-full text-left text-sm border-separate border-spacing-0">
                         <thead
                             className={`sticky top-0 z-20 ${theme.tableHead} ${theme.textHeader}`}
@@ -1022,7 +1068,7 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
                             )}
                         </tbody>
                     </table>
-                </div>
+                </DraggableTableContainer>
 
                 {/* ═══ Pagination ═══ */}
                 {!isLoading && sortedLeads.length > 0 && (

@@ -4,12 +4,27 @@ import { query } from "@/lib/db";
 import { getServerSession } from "@/lib/serverAuth";
 import {
   canViewPartners,
+  canViewAllPartners,
   canEditPartners,
   canDeletePartners,
+  canAssignPartners,
   canSeePartnerCommercials,
 } from "@/lib/cpRbac";
+import { parseAssignee, isActiveSourcingManager } from "@/lib/sourcingAssignment";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * A Sourcing Manager may only open partners assigned to them. Returned as 404
+ * rather than 403 deliberately: "you may not see this one" still confirms the
+ * partner exists and, by elimination, who else holds them.
+ */
+function outOfScope(id: string) {
+  return NextResponse.json(
+    { success: false, message: `Channel partner ${id} not found.` },
+    { status: 404 }
+  );
+}
 
 /**
  * Fields any editing role may change. The office-visit profile columns
@@ -61,9 +76,15 @@ export async function GET(
   try {
     const rows = await query(
       `SELECT cp.*,
+              sm.name            AS assigned_sourcing_manager_name,
+              sm.username        AS assigned_sourcing_manager_username,
+              sm.email           AS assigned_sourcing_manager_email,
+              sm.whatsapp_number AS assigned_sourcing_manager_phone,
+              sm.is_active       AS assigned_sourcing_manager_active,
               (SELECT COUNT(*) FROM walkin_enquiries w WHERE w.channel_partner_id = cp.id) AS lead_count,
               (SELECT COUNT(*) FROM booking_applications b WHERE b.sourced_by_channel_partner_id = cp.id) AS booking_count
          FROM channel_partners cp
+         LEFT JOIN users sm ON sm.id = cp.assigned_sourcing_manager_id
         WHERE cp.id = $1`,
       [Number(id)]
     );
@@ -72,6 +93,13 @@ export async function GET(
         { success: false, message: `Channel partner ${id} not found.` },
         { status: 404 }
       );
+    }
+
+    if (
+      !canViewAllPartners(auth.session.role) &&
+      String(rows[0].assigned_sourcing_manager_id ?? "") !== String(auth.session._id ?? auth.session.id ?? "")
+    ) {
+      return outOfScope(id);
     }
 
     let data: any = rows[0];
@@ -136,6 +164,50 @@ export async function PATCH(
       );
     }
 
+    // ── Reassignment ────────────────────────────────────────────────────────
+    // Handled outside the generic EDITABLE_FIELDS loop because it carries two
+    // companion columns (at / by) that the client must not be able to set, and
+    // because an explicit null is meaningful here — it unassigns the partner
+    // rather than being treated as a blank string.
+    //
+    // Admin-only, a narrower gate than the rest of this route: a Sales Manager can
+    // edit a partner's commercial terms but does not decide whose desk they sit on.
+    // Silently dropping the field would let a Sales Manager's edit form appear to
+    // reassign and quietly not, so an attempt is refused outright.
+    const assignee = parseAssignee(body.assigned_sourcing_manager_id);
+    if (assignee.kind !== "absent" && !canAssignPartners(auth.session.role)) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Only an Admin can change a partner's Sourcing Manager.",
+          code: "ASSIGN_FORBIDDEN",
+        },
+        { status: 403 }
+      );
+    }
+    if (assignee.kind === "invalid") {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "assigned_sourcing_manager_id must be a Sourcing Manager's user id, or null to unassign.",
+          code: "INVALID_SOURCING_MANAGER",
+        },
+        { status: 400 }
+      );
+    }
+    if (assignee.kind === "id" && !(await isActiveSourcingManager(assignee.id))) {
+      // Guards against parking a partner on a Receptionist or a deactivated
+      // account, where they would be invisible on every Sourcing Manager panel.
+      return NextResponse.json(
+        {
+          success: false,
+          message: "That user is not an active Sourcing Manager.",
+          code: "INVALID_SOURCING_MANAGER",
+        },
+        { status: 400 }
+      );
+    }
+
     const sets: string[] = [];
     const values: any[] = [];
     for (const field of EDITABLE_FIELDS) {
@@ -152,11 +224,35 @@ export async function PATCH(
       sets.push(`${field} = $${values.length}`);
     }
 
+    if (assignee.kind !== "absent") {
+      const newAssignee = assignee.kind === "id" ? assignee.id : null;
+      values.push(newAssignee);
+      const p = values.length;
+      sets.push(`assigned_sourcing_manager_id = $${p}`);
+      // Timestamp and actor are stamped server-side, and only when the owner
+      // actually changes — re-saving an unrelated field must not make the
+      // assignment look freshly made.
+      sets.push(
+        `assigned_sourcing_manager_at = CASE
+           WHEN $${p}::int IS NULL THEN NULL
+           WHEN assigned_sourcing_manager_id IS DISTINCT FROM $${p}::int THEN now()
+           ELSE assigned_sourcing_manager_at END`
+      );
+      values.push(updatedBy);
+      const a = values.length;
+      sets.push(
+        `assigned_sourcing_manager_by = CASE
+           WHEN $${p}::int IS NULL THEN NULL
+           WHEN assigned_sourcing_manager_id IS DISTINCT FROM $${p}::int THEN $${a}
+           ELSE assigned_sourcing_manager_by END`
+      );
+    }
+
     if (sets.length === 0) {
       return NextResponse.json(
         {
           success: false,
-          message: `Nothing to update. Editable fields: ${EDITABLE_FIELDS.join(", ")}.`,
+          message: `Nothing to update. Editable fields: ${EDITABLE_FIELDS.join(", ")}, assigned_sourcing_manager_id.`,
           code: "NO_EDITABLE_FIELDS",
         },
         { status: 400 }

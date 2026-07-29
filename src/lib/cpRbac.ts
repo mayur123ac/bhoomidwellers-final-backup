@@ -24,6 +24,28 @@ export function normalizeRole(role: any): string {
 const VIEW_ROLES = ["admin", "sales manager", "sourcing manager", "site head", "receptionist"];
 
 /**
+ * See the whole partner registry, rather than only the partners assigned to you.
+ *
+ * Sourcing Manager is the one role excluded: their panel is their own book of
+ * partners, and the registry at large is not theirs to browse. This is enforced in
+ * GET /api/channel-partners by forcing their own id into the WHERE clause — the
+ * same shape /api/cp-enquiries already uses — so the rows never leave the server
+ * rather than being filtered out in the UI.
+ */
+const VIEW_ALL_ROLES = ["admin", "sales manager", "site head", "receptionist"];
+
+/**
+ * Change which Sourcing Manager owns a partner.
+ *
+ * Admin only, matching /api/cp-enquiries/[id]/assign: a Sales Manager works the
+ * commercial queue (rates, bank details) but does not decide whose desk a partner
+ * sits on, and a Sourcing Manager must not be able to claim partners or push their
+ * own book onto someone else. Note this governs *re*assignment — picking an owner
+ * while first registering a partner is part of create, gated by CREATE_ROLES.
+ */
+const ASSIGN_ROLES = ["admin"];
+
+/**
  * Create a CP record. Receptionist and Sourcing Manager are here for the
  * office-visit registration flow; they deliberately do NOT get edit.
  */
@@ -46,9 +68,11 @@ const DELETE_ROLES = ["admin"];
 const COMMERCIAL_ROLES = ["admin", "sales manager"];
 
 export const canViewPartners = (role: any) => VIEW_ROLES.includes(normalizeRole(role));
+export const canViewAllPartners = (role: any) => VIEW_ALL_ROLES.includes(normalizeRole(role));
 export const canCreatePartners = (role: any) => CREATE_ROLES.includes(normalizeRole(role));
 export const canEditPartners = (role: any) => EDIT_ROLES.includes(normalizeRole(role));
 export const canDeletePartners = (role: any) => DELETE_ROLES.includes(normalizeRole(role));
+export const canAssignPartners = (role: any) => ASSIGN_ROLES.includes(normalizeRole(role));
 export const canSeePartnerCommercials = (role: any) => COMMERCIAL_ROLES.includes(normalizeRole(role));
 
 /**
@@ -59,6 +83,8 @@ export interface CpPermissions {
   canCreate: boolean;
   canEdit: boolean;
   canDelete: boolean;
+  canAssign: boolean;
+  canViewAll: boolean;
   canSeeCommercials: boolean;
 }
 
@@ -67,6 +93,8 @@ export function cpPermissionsFor(role: any): CpPermissions {
     canCreate: canCreatePartners(role),
     canEdit: canEditPartners(role),
     canDelete: canDeletePartners(role),
+    canAssign: canAssignPartners(role),
+    canViewAll: canViewAllPartners(role),
     canSeeCommercials: canSeePartnerCommercials(role),
   };
 }

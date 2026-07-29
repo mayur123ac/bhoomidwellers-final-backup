@@ -27,6 +27,15 @@ interface Props {
   t: any;
   title?: string;
   subtitle?: string;
+  /**
+   * Prepend a positional "Sr. No." column (1, 2, 3 …).
+   *
+   * Distinct from "Lead No.", which is the lead's own permanent number: this one
+   * counts the rows currently on screen, so it renumbers from 1 when the list is
+   * searched or filtered. Off by default — the Receptionist and Admin panels
+   * already carry twenty columns and scroll horizontally.
+   */
+  showSerial?: boolean;
 }
 
 const dash = (t: any) => <span className={t.textFaint}>—</span>;
@@ -49,7 +58,9 @@ const cpField = (row: any, masterKey: string, enquiryKey?: string) =>
 const employeeCode = (id: any, username?: any) =>
   username || (id ? `#${id}` : null);
 
-export default function ChannelPartnerEnquiriesTable({ user, isDark, t, title, subtitle }: Props) {
+export default function ChannelPartnerEnquiriesTable({
+  user, isDark, t, title, subtitle, showSerial = false,
+}: Props) {
   const role = normalizeRole(user?.role);
   const isAdmin = role === "admin";
   // Reassignment is Admin-only: reception assigns once at creation and cannot change
@@ -148,6 +159,7 @@ export default function ChannelPartnerEnquiriesTable({ user, isDark, t, title, s
   };
 
   const columns = [
+    ...(showSerial ? ["Sr. No."] : []),
     "Lead No.", "Created", "CP Name", "CP Company", "CP Phone",
     "Office Address", "Owner / Contact", "GST", "RERA", "CP City", "CP Pin",
     "Client Name", "Client Phone", "Alt Phone", "Client Email",
@@ -241,16 +253,24 @@ export default function ChannelPartnerEnquiriesTable({ user, isDark, t, title, s
                   </p>
                   <p className={`text-xs ${t.textMuted}`}>
                     {search ? "Try a different name, phone or GST."
-                      : role === "sourcing manager" ? "Enquiries appear here once a Receptionist assigns a Channel Partner to you."
-                      : "They appear here when a Receptionist logs an enquiry with source “Channel Partner”."}
+                      : role === "sourcing manager"
+                        ? "An enquiry appears here when it is routed to you, or when it comes from a Channel Partner assigned to you. If a partner of yours has brought leads but nothing shows, ask an Admin to confirm the partner is assigned to you."
+                        : smFilter && smFilter !== "unassigned"
+                          ? "This manager has no enquiries — neither routed to them directly, nor from a Channel Partner assigned to them. An Admin assigns partners in Channel Partner Management."
+                          : "They appear here when a Receptionist logs an enquiry with source “Channel Partner”."}
                   </p>
                 </td>
               </tr>
             )}
 
-            {!loading && visible.map(r => (
+            {!loading && visible.map((r, i) => (
               <tr key={r.id} onClick={() => setDetail(r)}
                 className={`text-xs cursor-pointer ${t.tableRow} ${isDark ? "border-b border-[#222]" : "border-b border-slate-100"}`}>
+                {/* Position on screen, not an identifier — muted so it doesn't
+                    compete with the lead number sitting next to it. */}
+                {showSerial && (
+                  <td className={`px-3 py-3 whitespace-nowrap ${t.textMuted}`}>{i + 1}</td>
+                )}
                 <td className={`px-3 py-3 font-bold whitespace-nowrap ${t.text}`}>
                   #{String(r.sr_no || r.id).padStart(3, "0")}
                 </td>
@@ -279,7 +299,15 @@ export default function ChannelPartnerEnquiriesTable({ user, isDark, t, title, s
                 <td className={cell}>{requirementOf(r) || dash(t)}</td>
                 <td className="px-3 py-3 whitespace-nowrap">
                   {r.sourcing_manager_name ? (
-                    <span className={`font-semibold ${t.text}`}>{r.sourcing_manager_name}</span>
+                    <>
+                      <span className={`font-semibold ${t.text}`}>{r.sourcing_manager_name}</span>
+                      {/* Inherited from the partner rather than set on this enquiry.
+                          Worth marking: it means reassigning the partner moves this
+                          lead too, which a per-enquiry assignment would not. */}
+                      {r.sourcing_manager_inherited && (
+                        <span className={`block text-[9px] ${t.textFaint}`}>via partner</span>
+                      )}
+                    </>
                   ) : (
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-500">
                       Unassigned
@@ -298,15 +326,17 @@ export default function ChannelPartnerEnquiriesTable({ user, isDark, t, title, s
                       onClick={e => {
                         e.stopPropagation();
                         setReassignError(null);
-                        setReassignTo(r.sourcing_manager_id ? String(r.sourcing_manager_id) : "");
+                        // Pre-filled with the effective owner, so reassigning a lead
+                        // that inherited its manager starts from who actually holds it.
+                        setReassignTo(r.effective_sourcing_manager_id ? String(r.effective_sourcing_manager_id) : "");
                         setReassignTarget(r);
                       }}
                       className={`px-3 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer whitespace-nowrap ${
-                        r.sourcing_manager_id ? `${t.textMuted} ${isDark ? "hover:bg-[#222]" : "hover:bg-slate-100"}` : t.btnPrimary
+                        r.effective_sourcing_manager_id ? `${t.textMuted} ${isDark ? "hover:bg-[#222]" : "hover:bg-slate-100"}` : t.btnPrimary
                       }`}
                     >
                       <FaExchangeAlt className="inline text-[9px] mr-1" />
-                      {r.sourcing_manager_id ? "Reassign" : "Assign"}
+                      {r.effective_sourcing_manager_id ? "Reassign" : "Assign"}
                     </button>
                   </td>
                 )}
@@ -349,12 +379,33 @@ export default function ChannelPartnerEnquiriesTable({ user, isDark, t, title, s
                   highlight: true,
                   fields: [
                     ["Assigned Sourcing Manager", detail.sourcing_manager_name],
-                    ["Employee ID", detail.sourcing_manager_id ? `#${detail.sourcing_manager_id}` : null],
+                    ["Employee ID", detail.effective_sourcing_manager_id ? `#${detail.effective_sourcing_manager_id}` : null],
                     ["Username", detail.sourcing_manager_username],
                     ["Phone Number", detail.sourcing_manager_phone],
                     ["Email", detail.sourcing_manager_email],
-                    ["Assigned Date", fmtDate(detail.sourcing_manager_assigned_at, true)],
-                    ["Assigned By", detail.sourcing_manager_assigned_by],
+                    // An inherited assignment has no enquiry-level date or actor —
+                    // the partner's are the ones that apply, and saying which is
+                    // which explains why reassigning the partner moves this lead.
+                    [
+                      "Assigned Via",
+                      detail.sourcing_manager_name
+                        ? (detail.sourcing_manager_inherited
+                            ? "Channel Partner ownership"
+                            : "Set on this enquiry")
+                        : null,
+                    ],
+                    [
+                      "Assigned Date",
+                      fmtDate(detail.sourcing_manager_inherited
+                        ? detail.partner_assigned_at
+                        : detail.sourcing_manager_assigned_at, true),
+                    ],
+                    [
+                      "Assigned By",
+                      detail.sourcing_manager_inherited
+                        ? detail.partner_assigned_by
+                        : detail.sourcing_manager_assigned_by,
+                    ],
                   ],
                 },
                 {
@@ -472,6 +523,16 @@ export default function ChannelPartnerEnquiriesTable({ user, isDark, t, title, s
                 className={`mt-2 text-[10px] underline cursor-pointer ${t.textFaint}`}>
                 Clear assignment instead
               </button>
+
+              {/* Assigning an inherited lead pins it, which is a one-way change worth
+                  stating: it stops following the partner from here on. */}
+              {reassignTarget.sourcing_manager_inherited && (
+                <p className={`text-[10px] mt-2 ${isDark ? "text-amber-400" : "text-amber-600"}`}>
+                  This enquiry currently follows its Channel Partner&apos;s owner. Setting a
+                  manager here pins it to this enquiry only — it will no longer move when the
+                  partner is reassigned.
+                </p>
+              )}
 
               {reassignError && (
                 <div className="mt-4 rounded-lg px-3 py-2 text-xs bg-red-500/10 border border-red-500/30 text-red-500">

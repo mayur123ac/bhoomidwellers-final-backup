@@ -13,13 +13,12 @@ import { useRouter } from "next/navigation";
 import { clearCrmSession, getStoredCrmUser, installLoggedOutBackGuard } from "@/lib/authSession";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  FaThLarge, FaCog, FaTimes, FaUserTie, FaEyeSlash, FaCalendarAlt,
-  FaBuilding, FaIdCard, FaPlus, FaHandshake,
+  FaThLarge, FaCog, FaEyeSlash, FaCalendarAlt,
+  FaBuilding, FaIdCard, FaPlus, FaHandshake, FaClipboardList,
 } from "react-icons/fa";
 import ChannelPartnerEnquiriesTable from "@/components/ChannelPartnerEnquiriesTable";
+import AssignedChannelPartnersView from "@/components/AssignedChannelPartnersView";
 import { buildTheme } from "@/lib/crmTheme";
-import { cpPermissionsFor } from "@/lib/cpRbac";
-import ChannelPartnerListView from "@/components/ChannelPartnerListView";
 import ChannelPartnerFormModal from "@/components/ChannelPartnerFormModal";
 import WhatsAppSettingsCard from "@/components/WhatsAppSettingsCard";
 import LoginTimerWidget from "@/components/LoginTimerWidget";
@@ -40,10 +39,19 @@ const MoonIcon = () => (
   </svg>
 );
 
+// "My Channel Partners" (partner records assigned to this manager) and
+// "My CP Enquiries" (individual client walk-ins routed to them) are deliberately
+// separate tabs: they are different units of work. The former is the partner
+// relationship this role owns, the latter is one lead at a time.
+//
+// There is no full-registry tab. A Sourcing Manager sees only the partners
+// assigned to them — enforced in GET /api/channel-partners, which forces their own
+// id into the WHERE clause — so a second "all partners" tab would now render the
+// identical list under a name that promises otherwise.
 const NAV_ITEMS = [
   { id: "overview", icon: <FaThLarge className="w-5 h-5" />, title: "Dashboard" },
-  { id: "partners", icon: <FaUserTie className="w-5 h-5" />, title: "Channel Partners" },
-  { id: "assigned-cps", icon: <FaHandshake className="w-5 h-5" />, title: "Assigned Channel Partners" },
+  { id: "my-cps", icon: <FaHandshake className="w-5 h-5" />, title: "My Channel Partners" },
+  { id: "assigned-cps", icon: <FaClipboardList className="w-5 h-5" />, title: "My CP Enquiries" },
 ];
 
 export default function SourcingManagerDashboard() {
@@ -60,12 +68,12 @@ export default function SourcingManagerDashboard() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const topbarRef = useRef<HTMLDivElement>(null);
 
-  // Sourcing Manager can create but not edit, and never sees commercial terms.
-  const perms = cpPermissionsFor("sourcing manager");
-
   const [partners, setPartners] = useState<any[]>([]);
   const [loadingStats, setLoadingStats] = useState(true);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
+  // Bumped after a registration so the partner table refetches too, not just the
+  // overview stats — the new partner should appear without a manual refresh.
+  const [partnersVersion, setPartnersVersion] = useState(0);
   const [toastMsg, setToastMsg] = useState<{ title: string; color: string } | null>(null);
 
   const showToast = (title: string, color = "green") => {
@@ -117,31 +125,39 @@ export default function SourcingManagerDashboard() {
 
   const handleLogout = () => { clearCrmSession(); router.replace("/"); };
 
-  // ── Registration stats, computed from the same list the table renders ──
-  // Deliberately about CP registration activity, not leads: this panel has no
-  // lead data and should not imply it does.
+  // ── Stats ──
+  // `partners` is already only this manager's book: the API scopes the list for
+  // this role, so there is no "mine vs all" split to compute here and no way for
+  // another manager's numbers to leak into these totals.
   const now = new Date();
   const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
   const parsed = partners.map(p => ({ ...p, _created: p.created_at ? new Date(p.created_at) : null }));
-  const totalCps = parsed.length;
+  const myPartners = parsed.length;
   const addedToday = parsed.filter(p => p._created && p._created >= todayStart).length;
   const addedThisMonth = parsed.filter(p => p._created && p._created >= monthStart).length;
   const activeCps = parsed.filter(p => p.status === "active").length;
-  // The 16 partners discovered from lead intake have a name and phone but no
-  // office-visit profile. Surfacing that gap is the point of this panel.
   const profileComplete = parsed.filter(p =>
     p.office_address && p.gst_number && p.rera_registration_no && p.owner_contact_person
   ).length;
-  const needsProfile = totalCps - profileComplete;
+  const myPartnersNeedingProfile = myPartners - profileComplete;
   const myRegistrations = parsed.filter(p => p.created_by === user.name).length;
 
+  // The headline this role is actually measured on: not how many partners were
+  // filed, but how much business those partners brought in.
+  const myLeads = parsed.reduce((n, p) => n + Number(p.lead_count || 0), 0);
+  const myBookings = parsed.reduce((n, p) => n + Number(p.booking_count || 0), 0);
+  const myTopPartners = [...parsed]
+    .filter(p => Number(p.lead_count || 0) > 0)
+    .sort((a, b) => Number(b.lead_count || 0) - Number(a.lead_count || 0))
+    .slice(0, 6);
+
   const statCards = [
-    { label: "Total Partners", value: totalCps, icon: <FaUserTie />, glow: t.statGlow1 },
-    { label: "Added Today", value: addedToday, icon: <FaCalendarAlt />, glow: t.statGlow2 },
-    { label: "Added This Month", value: addedThisMonth, icon: <FaBuilding />, glow: t.statGlow3 },
-    { label: "Profile Incomplete", value: needsProfile, icon: <FaIdCard />, glow: t.statGlow4 },
+    { label: "Your Partners", value: myPartners, icon: <FaHandshake />, glow: t.statGlow1, tab: "my-cps" },
+    { label: "Leads They Brought", value: myLeads, icon: <FaClipboardList />, glow: t.statGlow2, tab: "my-cps" },
+    { label: "Bookings Sourced", value: myBookings, icon: <FaBuilding />, glow: t.statGlow3, tab: "my-cps" },
+    { label: "Profiles To Complete", value: myPartnersNeedingProfile, icon: <FaIdCard />, glow: t.statGlow4, tab: "my-cps" },
   ];
 
   return (
@@ -387,7 +403,8 @@ export default function SourcingManagerDashboard() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 md:gap-6 mb-6">
                 {statCards.map(c => (
-                  <div key={c.label} className={`relative rounded-2xl border p-5 overflow-hidden ${t.card}`} style={t.cardGlass}>
+                  <div key={c.label} onClick={() => setActiveTab(c.tab)}
+                    className={`relative rounded-2xl border p-5 overflow-hidden cursor-pointer transition-transform hover:scale-[1.02] ${t.card}`} style={t.cardGlass}>
                     <div className={`absolute -top-8 -right-8 w-28 h-28 rounded-full blur-2xl ${c.glow}`} />
                     <div className="relative">
                       <div className={`flex items-center gap-2 mb-3 ${t.textMuted}`}>
@@ -409,9 +426,11 @@ export default function SourcingManagerDashboard() {
                   </h3>
                   <div className="space-y-4">
                     {[
-                      { k: "Active partners", v: `${activeCps} of ${totalCps}` },
-                      { k: "Full office-visit profile on file", v: `${profileComplete} of ${totalCps}` },
+                      { k: "Partners who have brought a lead", v: `${myTopPartners.length} of ${myPartners}` },
+                      { k: "Active partners", v: `${activeCps} of ${myPartners}` },
+                      { k: "Full office-visit profile on file", v: `${profileComplete} of ${myPartners}` },
                       { k: "Registered by you", v: myRegistrations },
+                      { k: "Assigned to you today / this month", v: `${addedToday} / ${addedThisMonth}` },
                     ].map(r => (
                       <div key={r.k} className="flex items-center justify-between gap-4">
                         <p className={`text-xs ${t.textMuted}`}>{r.k}</p>
@@ -421,13 +440,13 @@ export default function SourcingManagerDashboard() {
                   </div>
                   {/* Partners auto-created from Channel Partner enquiries have only a
                       name and phone. That backlog is this role's actual work queue. */}
-                  {!loadingStats && needsProfile > 0 && (
+                  {!loadingStats && myPartnersNeedingProfile > 0 && (
                     <div className={`mt-5 rounded-lg px-3 py-2.5 text-[11px] ${isDark ? "bg-amber-500/10 border border-amber-500/25 text-amber-400" : "bg-amber-50 border border-amber-200 text-amber-700"}`}>
-                      {needsProfile} partner{needsProfile === 1 ? "" : "s"} {needsProfile === 1 ? "has" : "have"} no
+                      {myPartnersNeedingProfile} of your partner{myPartnersNeedingProfile === 1 ? " has" : "s have"} no
                       full office-visit profile — usually because they were created automatically from a
-                      Channel Partner enquiry. Registering them with the same phone number tops up the
-                      existing record.
-                      <button onClick={() => setActiveTab("partners")}
+                      Channel Partner enquiry. Start a New Entry with the same phone number: you&apos;ll be
+                      shown the existing partner and can choose to fill in their profile.
+                      <button onClick={() => setActiveTab("my-cps")}
                         className={`ml-1 underline font-bold cursor-pointer`}>
                         View partners
                       </button>
@@ -435,53 +454,83 @@ export default function SourcingManagerDashboard() {
                   )}
                 </div>
 
+                {/* Which of this manager's partners are actually delivering. Ranked
+                    by leads brought, because that is the relationship being managed —
+                    a registry sorted by registration date answers a question nobody
+                    in this role is asking. */}
                 <div className={`rounded-2xl border p-6 ${t.card}`} style={t.cardGlass}>
                   <h3 className={`text-sm font-bold uppercase tracking-wider border-b pb-2 mb-5 ${t.sectionTitle} ${t.tableBorder}`}>
-                    Recently Registered
+                    Your Top Partners by Leads
                   </h3>
                   {loadingStats ? (
                     <p className={`text-xs ${t.textFaint}`}>Loading…</p>
-                  ) : (() => {
-                    const recent = [...parsed]
-                      .filter(p => p._created)
-                      .sort((a, b) => b._created!.getTime() - a._created!.getTime())
-                      .slice(0, 6);
-                    if (recent.length === 0) return <p className={`text-xs ${t.textFaint}`}>Nothing registered yet.</p>;
-                    return (
-                      <div className="space-y-3">
-                        {recent.map(p => (
-                          <div key={p.id} className="flex items-center justify-between gap-3">
-                            <div className="min-w-0">
-                              <p className={`text-xs font-bold truncate ${t.text}`}>{p.name}</p>
-                              <p className={`text-[10px] truncate ${t.textFaint}`}>
-                                {p.company_name || "No company on file"}
-                                {p.created_by ? ` · by ${p.created_by}` : " · auto (lead intake)"}
+                  ) : myTopPartners.length === 0 ? (
+                    <>
+                      <p className={`text-xs ${t.textFaint}`}>
+                        {myPartners === 0
+                          ? "No partners assigned to you yet."
+                          : "None of your partners has brought a lead yet."}
+                      </p>
+                      <p className={`text-[11px] mt-2 ${t.textMuted}`}>
+                        A partner is matched by phone number — when a Receptionist logs an
+                        enquiry with your partner&apos;s number, it lands here automatically.
+                      </p>
+                    </>
+                  ) : (
+                    <div className="space-y-3">
+                      {myTopPartners.map((p, i) => {
+                        const share = myLeads > 0 ? (Number(p.lead_count || 0) / myLeads) * 100 : 0;
+                        return (
+                          <div key={p.id} onClick={() => setActiveTab("my-cps")} className="cursor-pointer group">
+                            <div className="flex items-center justify-between gap-3 mb-1">
+                              <div className="min-w-0 flex items-center gap-2">
+                                <span className={`text-[10px] font-black w-4 flex-shrink-0 ${t.textFaint}`}>#{i + 1}</span>
+                                <div className="min-w-0">
+                                  <p className={`text-xs font-bold truncate ${t.text}`}>{p.name}</p>
+                                  <p className={`text-[10px] truncate ${t.textFaint}`}>
+                                    {p.company_name || "No company on file"}
+                                    {Number(p.booking_count || 0) > 0 ? ` · ${p.booking_count} booking(s)` : ""}
+                                  </p>
+                                </div>
+                              </div>
+                              <p className={`text-xs font-black whitespace-nowrap ${t.accentText}`}>
+                                {p.lead_count}
                               </p>
                             </div>
-                            <p className={`text-[10px] whitespace-nowrap ${t.textMuted}`}>
-                              {p._created!.toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
-                            </p>
+                            <div className={`h-1.5 rounded-full overflow-hidden ml-6 ${isDark ? "bg-[#252525]" : "bg-slate-200"}`}>
+                              <div className="h-full rounded-full bg-[#9E217B] transition-all" style={{ width: `${share}%` }} />
+                            </div>
                           </div>
-                        ))}
-                      </div>
-                    );
-                  })()}
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
           )}
 
           {/* ════════════════════════════════════════════════════
-              CHANNEL PARTNERS
+              MY CHANNEL PARTNERS — the partner records this manager owns.
+              Scoped in /api/channel-partners, which forces the session user's
+              own id into the WHERE clause for this role: another manager's
+              partners never reach this page to begin with.
           ════════════════════════════════════════════════════ */}
-          {activeTab === "partners" && (
+          {activeTab === "my-cps" && (
             <div className="animate-fadeIn h-[calc(100vh-140px)]">
-              <ChannelPartnerListView user={user} isDark={isDark} t={t} permissions={perms} />
+              <AssignedChannelPartnersView
+                isDark={isDark}
+                t={t}
+                title="My Channel Partners"
+                subtitle="Channel Partners assigned to you — click any row for their full profile and history"
+                onNewEntry={() => setQuickAddOpen(true)}
+                refreshKey={partnersVersion}
+              />
             </div>
           )}
 
           {/* ════════════════════════════════════════════════════
-              ASSIGNED CHANNEL PARTNERS
+              ASSIGNED CP ENQUIRIES
               Scoping is enforced in /api/cp-enquiries, which forces the
               session user's own id into the WHERE clause and ignores any
               sourcing_manager_id param — another manager's rows never
@@ -493,8 +542,9 @@ export default function SourcingManagerDashboard() {
                 user={user}
                 isDark={isDark}
                 t={t}
-                title="Assigned Channel Partners"
-                subtitle="Channel Partner enquiries assigned to you"
+                title="Assigned CP Enquiries"
+                subtitle="Individual Channel Partner enquiries routed to you"
+                showSerial
               />
             </div>
           )}
@@ -548,6 +598,7 @@ export default function SourcingManagerDashboard() {
         onSaved={info => {
           if (info) showToast(info.merged ? "Existing partner updated" : "Channel partner registered", info.merged ? "blue" : "green");
           fetchPartners();
+          setPartnersVersion(v => v + 1);
         }}
         partner={null}
         user={user}

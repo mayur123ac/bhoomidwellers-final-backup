@@ -127,7 +127,7 @@ export async function PUT(
         } else {
           // No booking yet — merge the winning lender into the lead's draft (JSONB),
           // preserving every other draft key BookingFormModal will read on prefill.
-          const merge = {
+          const merge: Record<string, any> = {
             loan_required: true,
             bank_name: row.bank_name || "",
             loan_type: row.loan_type || "",
@@ -141,6 +141,10 @@ export async function PUT(
             interest_rate: row.interest_rate != null ? String(row.interest_rate) : "",
             loan_tenure_months: row.tenure_months != null ? String(row.tenure_months) : "",
           };
+          // Carry forward expected-disbursement planning fields if the lender application
+          // row tracks them — otherwise leave the draft's existing values untouched.
+          if (row.expected_disbursement_date) merge.expected_disbursement_date = String(row.expected_disbursement_date).split("T")[0];
+          if (row.expected_disbursement_amount != null) merge.expected_disbursement_amount = String(row.expected_disbursement_amount);
           await client.query(
             `UPDATE walkin_enquiries
                SET loan_tracking_info = COALESCE(loan_tracking_info, '{}'::jsonb) || $2::jsonb

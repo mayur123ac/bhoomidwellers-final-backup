@@ -5919,7 +5919,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                               <button onClick={() => setDetailTab("loan")} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-colors cursor-pointer ${detailTab === "loan" ? theme.btnSecondary : `${theme.textMuted} hover:opacity-80`}`}>Loan Tracking</button>
                             </div>
                             <div className={`rounded-xl p-5 ${theme.chatPanel} ${theme.scroll}`}
-                              style={{ ...theme.chatPanelGl, overflowY: "scroll", height: "calc(100vh - 380px)", scrollbarWidth: "thin" }}>
+                              style={{ ...theme.chatPanelGl, overflowY: "scroll", height: "calc(200vh - 380px)", scrollbarWidth: "thin" }}>
                               {detailTab === "personal" ? (
                                 <div>
                                   <div className="grid grid-cols-2 gap-y-6 gap-x-4 text-sm">

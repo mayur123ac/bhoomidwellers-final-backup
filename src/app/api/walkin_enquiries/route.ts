@@ -2,8 +2,9 @@
 import { NextResponse } from "next/server";
 import { query, transaction, recalculateSrNos } from "@/lib/db";
 import { isChannelPartnerSource, resolveChannelPartnerId } from "@/lib/cpCommissionEngine";
+import { claimPartnerForSourcingManager, resolvePartnerOwner } from "@/lib/sourcingAssignment";
 import { getServerSession } from "@/lib/serverAuth";
-import { normalizeRole } from "@/lib/cpRbac";
+import { normalizeRole, normalizeCpPhone } from "@/lib/cpRbac";
 
 export const dynamic = "force-dynamic";
 
@@ -132,9 +133,33 @@ export async function POST(req: Request) {
       );
     }
 
-    const requestedSourcingManagerId = isCpEnquiry ? Number(sourcing_manager_id) : null;
+    const rawSourcingManagerId = isCpEnquiry ? Number(sourcing_manager_id) : null;
+    const requestedSourcingManagerId = Number.isInteger(rawSourcingManagerId)
+      ? rawSourcingManagerId
+      : null;
+
     if (isCpEnquiry) {
-      if (!Number.isInteger(requestedSourcingManagerId)) {
+      // Is this CP phone already a registered partner with an owner? If so the
+      // manual pick is optional — the partner's owner decides the routing anyway
+      // (see resolvePartnerOwner in the transaction below). This makes the field
+      // genuinely unnecessary for a known partner, rather than a formality the
+      // receptionist has to satisfy with an answer the server then discards.
+      const cpKey = normalizeCpPhone(cp_phone);
+      const ownedRows = cpKey
+        ? await query(
+            `SELECT 1
+               FROM channel_partners cp
+               JOIN users sm ON sm.id = cp.assigned_sourcing_manager_id
+              WHERE right(regexp_replace(COALESCE(cp.phone, ''), '\\D', '', 'g'), 10) = $1
+                AND sm.is_active = true
+                AND REPLACE(LOWER(TRIM(sm.role)), '_', ' ') = 'sourcing manager'
+              LIMIT 1`,
+            [cpKey]
+          )
+        : [];
+      const partnerAlreadyOwned = ownedRows.length > 0;
+
+      if (requestedSourcingManagerId === null && !partnerAlreadyOwned) {
         return NextResponse.json(
           {
             success: false,
@@ -145,24 +170,29 @@ export async function POST(req: Request) {
         );
       }
 
-      const managerRows = await query(
-        `SELECT id FROM users
-          WHERE id = $1
-            AND is_active = true
-            AND REPLACE(LOWER(TRIM(role)), '_', ' ') = 'sourcing manager'
-          LIMIT 1`,
-        [requestedSourcingManagerId]
-      );
-
-      if (managerRows.length === 0) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Selected user is not an active Sourcing Manager.",
-            code: "INVALID_SOURCING_MANAGER",
-          },
-          { status: 400 }
+      // A supplied id is still validated even when it will be overridden — a bad
+      // one means the form is out of sync, and failing loudly beats silently
+      // substituting a different manager than the operator saw on screen.
+      if (requestedSourcingManagerId !== null) {
+        const managerRows = await query(
+          `SELECT id FROM users
+            WHERE id = $1
+              AND is_active = true
+              AND REPLACE(LOWER(TRIM(role)), '_', ' ') = 'sourcing manager'
+            LIMIT 1`,
+          [requestedSourcingManagerId]
         );
+
+        if (managerRows.length === 0) {
+          return NextResponse.json(
+            {
+              success: false,
+              message: "Selected user is not an active Sourcing Manager.",
+              code: "INVALID_SOURCING_MANAGER",
+            },
+            { status: 400 }
+          );
+        }
       }
     }
 
@@ -177,6 +207,22 @@ export async function POST(req: Request) {
             actorName
           )
         : null;
+
+      // ── Route by the partner, not by the dropdown ───────────────────────────
+      // The CP phone has now resolved to a partner row. If that partner is already
+      // registered under a Sourcing Manager, THEY get the lead — whatever the form
+      // sent. A partner belongs to one manager, so every lead they bring must land
+      // on the same desk; letting a front-desk pick override that would scatter one
+      // partner's leads across managers and break the "who brought us what" view.
+      //
+      // Checked here rather than trusting the client's pre-submit lookup, so a lead
+      // routes correctly even from a stale form or a hand-rolled request.
+      const partnerOwner =
+        isCpEnquiry && channelPartnerId ? await resolvePartnerOwner(client, channelPartnerId) : null;
+
+      const effectiveSourcingManagerId = partnerOwner?.id ?? requestedSourcingManagerId;
+      const routedByPartner =
+        !!partnerOwner && partnerOwner.id !== requestedSourcingManagerId;
 
       const insertRes = await client.query(
         `INSERT INTO walkin_enquiries (
@@ -238,12 +284,26 @@ export async function POST(req: Request) {
           preferred_location || null,          // $28
           // Only meaningful for Channel Partner sources; every other source sends
           // null and the assigned_at/by columns stay NULL via the CASE above.
-          requestedSourcingManagerId,          // $29
+          // This is the *effective* manager — the registered partner's owner when
+          // there is one, otherwise whoever the form selected.
+          effectiveSourcingManagerId,          // $29
           actorName,                           // $30
         ]
       );
       
       const newId = insertRes.rows[0].id;
+
+      // A partner with no owner yet — typically one auto-created by this very
+      // enquiry — is claimed by the manager the form selected, so their next lead
+      // routes automatically via the branch above.
+      if (isCpEnquiry && channelPartnerId && effectiveSourcingManagerId) {
+        await claimPartnerForSourcingManager(
+          client,
+          channelPartnerId,
+          effectiveSourcingManagerId,
+          actorName
+        );
+      }
 
       if (isCpEnquiry) {
         await client.query(
@@ -279,10 +339,20 @@ export async function POST(req: Request) {
         "SELECT * FROM walkin_enquiries WHERE id = $1",
         [newId]
       );
-      return finalRes.rows[0];
+      return { row: finalRes.rows[0], routedByPartner, partnerOwner };
     });
 
-    return NextResponse.json({ success: true, data: result }, { status: 201 });
+    return NextResponse.json(
+      {
+        success: true,
+        data: result.row,
+        // Surfaced so the receptionist is told the lead went somewhere other than
+        // the manager shown in the form, rather than discovering it later.
+        routedByPartner: result.routedByPartner,
+        routedTo: result.partnerOwner?.name ?? null,
+      },
+      { status: 201 }
+    );
   } catch (error: any) {
     console.error("POST Enquiry Error:", error);
     return NextResponse.json({ success: false, message: error.message }, { status: 500 });
