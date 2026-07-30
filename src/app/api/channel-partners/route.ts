@@ -9,6 +9,7 @@ import {
   canSeePartnerCommercials,
   canViewAllPartners,
   normalizeCpPhone,
+  normalizeRole,
 } from "@/lib/cpRbac";
 import {
   parseAssignee,
@@ -215,7 +216,18 @@ export async function POST(req: NextRequest) {
     //   the phone matches an existing partner — nothing is being created, and that
     //     partner already has whatever owner they have. Demanding one here would
     //     block the profile top-up that the "Profile Incomplete" backlog depends on.
-    const assignee = parseAssignee(body.assigned_sourcing_manager_id);
+    // A Sourcing Manager always registers onto their own book. Their own id is
+    // substituted for whatever the body carried, rather than validated against it:
+    // they cannot browse other managers' partners (canViewAllPartners excludes the
+    // role) and reassignment is Admin-only, so letting a hand-rolled POST name a
+    // different owner would be a way around both gates. Derived from the session
+    // cookie, never the body.
+    const selfIsSourcingManager = normalizeRole(auth.session.role) === "sourcing manager";
+    const selfId = Number(auth.session._id ?? auth.session.id);
+    const assignee =
+      selfIsSourcingManager && Number.isInteger(selfId)
+        ? ({ kind: "id", id: selfId } as const)
+        : parseAssignee(body.assigned_sourcing_manager_id);
     if (assignee.kind === "invalid") {
       return NextResponse.json(
         {

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { requireRole } from "@/lib/serverAuth";
+import { requireRole, getSessionUserId } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +32,7 @@ export async function GET(req: Request) {
       searchParams.get("date") || new Date().toISOString().split("T")[0];
 
     // Resolve the user_id and name from the authenticated session
-    const userId = auth.session?.id;
+    const userId = getSessionUserId(auth.session);
     const userName = auth.session?.name;
 
     if (!userId && !userName) {
@@ -81,7 +81,7 @@ export async function GET(req: Request) {
         LEFT JOIN (
           SELECT DISTINCT ON (employee_id) employee_id, attendance_status
           FROM attendance_records
-          WHERE DATE(login_time AT TIME ZONE 'Asia/Kolkata') = $2
+          WHERE DATE(login_time) = $2::date
         ) ar ON u.id = ar.employee_id
         WHERE es.user_id = $1
           AND DATE(es.session_start AT TIME ZONE 'Asia/Kolkata') = $2
@@ -120,7 +120,7 @@ export async function GET(req: Request) {
         LEFT JOIN (
           SELECT DISTINCT ON (employee_id) employee_id, attendance_status
           FROM attendance_records
-          WHERE DATE(login_time AT TIME ZONE 'Asia/Kolkata') = $2
+          WHERE DATE(login_time) = $2::date
         ) ar ON u.id = ar.employee_id
         WHERE LOWER(u.name) = LOWER($1)
           AND DATE(es.session_start AT TIME ZONE 'Asia/Kolkata') = $2

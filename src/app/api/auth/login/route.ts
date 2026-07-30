@@ -58,14 +58,14 @@ export async function POST(req: Request) {
     // Extract IP and Device Info
     const ip = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "Unknown";
     const userAgent = req.headers.get("user-agent") || "Unknown Device";
-    
+
     let device_info = userAgent;
     if (userAgent.includes("Windows")) device_info = "Windows PC";
     else if (userAgent.includes("Mac OS")) device_info = "Mac";
     else if (userAgent.includes("Android")) device_info = "Android Device";
     else if (userAgent.includes("iPhone") || userAgent.includes("iPad")) device_info = "iOS Device";
     else if (userAgent.includes("Linux")) device_info = "Linux PC";
-    
+
     if (userAgent.includes("Chrome") && !userAgent.includes("Edge") && !userAgent.includes("OPR")) device_info += " / Chrome";
     else if (userAgent.includes("Safari") && !userAgent.includes("Chrome")) device_info += " / Safari";
     else if (userAgent.includes("Firefox")) device_info += " / Firefox";
@@ -79,21 +79,7 @@ export async function POST(req: Request) {
     );
     const loginSessionId = sessionRes[0].id;
 
-    // Record Attendance (Auto-mark Present on first login of the day)
-    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-    const attendanceRes = await query(
-      `SELECT id FROM attendance_records WHERE employee_id = $1 AND DATE(login_time AT TIME ZONE 'Asia/Kolkata') = $2 LIMIT 1`,
-      [user.id, today]
-    );
-
-    if (attendanceRes.length === 0) {
-      await query(
-        `INSERT INTO attendance_records (organization_id, employee_id, login_session_id, attendance_status, login_time)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [1, user.id, loginSessionId, 'Present', now]
-      );
-    }
-
+    // Attendance will now be marked manually by the user from the UI.
     const response = NextResponse.json(
       {
         message: "Login successful.",

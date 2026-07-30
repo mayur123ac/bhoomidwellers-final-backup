@@ -76,7 +76,7 @@ export async function GET(req: Request) {
       LEFT JOIN (
         SELECT DISTINCT ON (employee_id) employee_id, attendance_status
         FROM attendance_records
-        WHERE DATE(login_time AT TIME ZONE 'Asia/Kolkata') = $1
+        WHERE DATE(login_time) = $1::date
       ) ar ON u.id = ar.employee_id
       WHERE u.is_active = true
       ORDER BY l.productivity_score DESC NULLS LAST, s.session_start DESC

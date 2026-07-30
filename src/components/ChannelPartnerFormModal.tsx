@@ -38,7 +38,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaTimes, FaPercent, FaExclamationTriangle, FaInfoCircle, FaUserTie } from "react-icons/fa";
-import { canCreatePartners, canEditPartners, canAssignPartners } from "@/lib/cpRbac";
+import { canCreatePartners, canEditPartners, canAssignPartners, normalizeRole } from "@/lib/cpRbac";
 import SearchableSelect, { SelectOption } from "./SearchableSelect";
 
 export interface ChannelPartner {
@@ -78,7 +78,9 @@ interface Props {
   onClose: () => void;
   onSaved?: (info?: { merged: boolean; message: string }) => void;
   partner?: ChannelPartner | null; // null/undefined => create
-  user: { name: string; role: string };
+  // `_id` is what the login route stores in the crm_user payload; `id` is accepted
+  // too so a caller holding a users-table row can pass it straight through.
+  user: { name: string; role: string; _id?: string | number; id?: string | number };
   isDark: boolean;
   t: any;
   variant?: "full" | "office_visit";
@@ -168,6 +170,16 @@ export default function ChannelPartnerFormModal({
   // Sales Manager the field is read-only on edit and is left out of the PATCH body
   // entirely — sending it would be refused outright by the route.
   const canSetAssignment = isEdit ? canAssignPartners(user?.role) : canCreatePartners(user?.role);
+
+  // A Sourcing Manager registering a partner is that partner's owner — they are the
+  // one standing at the desk. There is no one else for them to pick: they cannot see
+  // another manager's book (canViewAllPartners excludes the role), and handing a
+  // walk-in to a colleague is a reassignment, which is Admin-only. So the field is
+  // filled with their own id and not offered as a choice. The POST route re-derives
+  // this from the session cookie, so the form is convenience, not the control.
+  const selfId = Number(user?._id ?? user?.id);
+  const selfAssigns =
+    !isEdit && normalizeRole(user?.role) === "sourcing manager" && Number.isInteger(selfId);
 
   const fetchManagers = async () => {
     setManagersLoading(true);
@@ -259,8 +271,10 @@ export default function ChannelPartnerFormModal({
           // City is filled only when blank. Overwriting would fight an operator who
           // deliberately typed something the reference table disagrees with.
           if (json.city && !f.city.trim()) next.city = json.city;
-          // Same rule for the manager: a hand-picked one is never replaced.
-          if (json.sourcingManager && !f.assigned_sourcing_manager_id) {
+          // Same rule for the manager: a hand-picked one is never replaced. Skipped
+          // entirely when the registrar owns what they register — the territory
+          // owner is not a choice being offered, so filling it would only mislead.
+          if (!selfAssigns && json.sourcingManager && !f.assigned_sourcing_manager_id) {
             next.assigned_sourcing_manager_id = String(json.sourcingManager.id);
             setSmAutoFilled(true);
           }
@@ -274,7 +288,7 @@ export default function ChannelPartnerFormModal({
       }
     }, 400);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [isOpen, form.pin_code]);
+  }, [isOpen, form.pin_code, selfAssigns]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -306,6 +320,9 @@ export default function ChannelPartnerFormModal({
           partner.assigned_sourcing_manager_id != null ? String(partner.assigned_sourcing_manager_id) : "",
       });
     } else {
+      // Pre-owned by the Sourcing Manager doing the registering. Seeded here rather
+      // than only at submit so the required-assignment check is already satisfied
+      // and the pincode lookup's "fill if blank" rule leaves it alone.
       setForm({ ...blankForm });
     }
   }, [isOpen, partner]);
@@ -345,11 +362,15 @@ export default function ChannelPartnerFormModal({
   //                                  isn't enforced until the list is known
   //   zero Sourcing Managers exist — nothing to pick; the partner is registered
   //                                  unassigned and an Admin assigns them later
+  //   the registrar IS a Sourcing   — the owner is themselves, decided below and
+  //   Manager                         re-derived server-side; there is no field to
+  //                                   fill, so demanding one would deadlock the form
   //
   // Editing is never blocked on it, in either variant: an Admin correcting a
   // legacy partner's GST number must not be forced to invent an assignment.
   const managerListKnown = !managersLoading && !managersError;
-  const assignmentRequired = isOfficeVisit && !isEdit && managerListKnown && managers.length > 0;
+  const assignmentRequired =
+    isOfficeVisit && !isEdit && !selfAssigns && managerListKnown && managers.length > 0;
   const assignmentError =
     assignmentRequired && !form.assigned_sourcing_manager_id
       ? "Assign a Sourcing Manager before registering this channel partner."
@@ -394,9 +415,15 @@ export default function ChannelPartnerFormModal({
     // "unassign", so sending null here would strip a partner's owner on any
     // Sales Manager edit.
     if (canSetAssignment) {
-      payload.assigned_sourcing_manager_id = form.assigned_sourcing_manager_id
-        ? Number(form.assigned_sourcing_manager_id)
-        : null;
+      // A Sourcing Manager's own id, not the form field: the field is never rendered
+      // for them, so relying on it would depend on the seeding effect having run
+      // before `user` finished loading. The route substitutes the session's id
+      // regardless — this just keeps the request honest about its intent.
+      payload.assigned_sourcing_manager_id = selfAssigns
+        ? selfId
+        : form.assigned_sourcing_manager_id
+          ? Number(form.assigned_sourcing_manager_id)
+          : null;
     }
 
     // Commercial fields are omitted entirely for the office-visit variant. The
@@ -582,7 +609,21 @@ export default function ChannelPartnerFormModal({
    * because they call for different actions: loading, a failed fetch (retry), an
    * empty registry (proceed unassigned), and simply not chosen yet (choose one).
    */
-  const sourcingManagerField = !canSetAssignment ? (
+  const sourcingManagerField = selfAssigns ? (
+    // No dropdown: a Sourcing Manager registers partners onto their own book, so
+    // there is nothing to choose. Still shown, because who ends up owning the
+    // partner is worth stating plainly before the record is created.
+    <div>
+      <label className={labelCls}>Sourcing Manager</label>
+      <p className={`text-sm font-semibold ${t.text}`}>
+        {user?.name || "You"} <span className={t.textFaint}>(you)</span>
+      </p>
+      <p className={`text-[10px] mt-1 ${t.textFaint}`}>
+        Partners you register are assigned to you automatically. Only an Admin can
+        move them to another Sourcing Manager.
+      </p>
+    </div>
+  ) : !canSetAssignment ? (
     // Read-only for a Sales Manager editing a partner: shown, because who owns the
     // partner is useful context while editing their terms, but not editable — and
     // an inert dropdown that silently discards the change would be worse.

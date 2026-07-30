@@ -22,6 +22,7 @@ import { buildTheme } from "@/lib/crmTheme";
 import ChannelPartnerFormModal from "@/components/ChannelPartnerFormModal";
 import WhatsAppSettingsCard from "@/components/WhatsAppSettingsCard";
 import LoginTimerWidget from "@/components/LoginTimerWidget";
+import AttendanceBadge from "@/components/AttendanceBadge";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 
 const SunIcon = () => (
@@ -166,8 +167,7 @@ export default function SourcingManagerDashboard() {
       style={isDark ? {} : { background: "linear-gradient(135deg, #e8f6fd 0%, #f8fafc 30%, #faf0fb 62%, #f8fafc 78%, #e6fafe 100%)" }}
     >
       {toastMsg && (
-        <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[200] px-6 py-3 rounded-xl shadow-lg flex items-center gap-4 animate-fadeIn border ${
-          toastMsg.color === "green" ? "bg-green-600 border-green-400 text-white" : "bg-blue-600 border-blue-400 text-white"}`}>
+        <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[200] px-6 py-3 rounded-xl shadow-lg flex items-center gap-4 animate-fadeIn border ${toastMsg.color === "green" ? "bg-green-600 border-green-400 text-white" : "bg-blue-600 border-blue-400 text-white"}`}>
           <span className="text-sm font-bold">{toastMsg.title}</span>
         </div>
       )}
@@ -333,7 +333,8 @@ export default function SourcingManagerDashboard() {
         <header className={`h-16 border-b flex items-center justify-between px-6 flex-shrink-0 z-30 ${t.header}`} style={t.headerGlass}>
           <img src="/assets/bhoomidwellersLogo_trans.png" alt="Bhoomi CRM" className="h-20 md:h-18 w-auto object-contain" />
           <div className="flex items-center space-x-4 relative" ref={topbarRef}>
-            <LoginTimerWidget isDark={isDark} />
+            {/* <LoginTimerWidget isDark={isDark} />
+            <AttendanceBadge /> */}
             <button onClick={() => setIsDark(!isDark)} aria-label="Toggle theme"
               className={`w-9 h-9 rounded-xl border flex items-center justify-center transition-all duration-200 hover:scale-105 active:scale-95 shadow-sm ${t.toggleWrap}`}>
               {isDark ? <SunIcon /> : <MoonIcon />}

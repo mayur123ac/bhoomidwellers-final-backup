@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 import { useShiftTiming } from "@/hooks/useShiftTiming";
 import AttendanceTimerWidget from "@/components/AttendanceTimerWidget";
 import { FaClock, FaCalendarAlt, FaCheckCircle, FaTimesCircle, FaMapMarkerAlt, FaFileExcel, FaTimes, FaCog, FaClipboardList, FaCheck } from "react-icons/fa";
+import { useAttendance } from "@/components/AttendanceContext";
 
 export type ThemeTokens = Record<string, string | any>;
 
@@ -24,6 +25,13 @@ export default function AttendanceView({
   const [selectedDate, setSelectedDate] = useState<string>(
     () => new Date().toISOString().split("T")[0]
   );
+  
+  const {
+    markAttendanceOptimistic,
+    refreshAttendance,
+    isMarkedPresent: headerIsMarkedPresent,
+    employeeId: headerEmployeeId,
+  } = useAttendance();
 
   // Real-time Centralized Shift Timing
   const { timing: workingHours } = useShiftTiming();
@@ -109,9 +117,14 @@ export default function AttendanceView({
       });
       if (!res.ok) { showToast("❌ Failed to update presence", false); return; }
       const data = await res.json();
+      console.log("%c[attendance-sync]", "color:#9E217B;font-weight:bold", "POST /api/attendance/mark →", data);
       if (data.success) {
         showToast("✅ Attendance marked as Present!", true);
-        // Optimistically update local state — no full refetch needed
+
+        // 1. Update the shared store FIRST so the header badge flips immediately.
+        markAttendanceOptimistic(data.timeIn || new Date().toISOString());
+
+        // 2. Update this page's table rows.
         setSessions((prev) =>
           prev.map((sess) =>
             (sess.session_id ?? sess.id) === (s.session_id ?? s.id)
@@ -119,6 +132,12 @@ export default function AttendanceView({
               : sess
           )
         );
+
+        // 3. Reconcile with the server, and let any other mounted listener re-sync.
+        //    Ordering matters: the optimistic write above happens before this
+        //    refetch is issued, so a slow response can never precede it.
+        await refreshAttendance();
+        window.dispatchEvent(new Event("attendance-marked"));
       } else {
         showToast("❌ " + (data.message || "Failed to mark attendance"), false);
       }
@@ -250,6 +269,25 @@ export default function AttendanceView({
   const isMarkedPresent = sessions.some(
     (s) => s.attendance_status?.toLowerCase() === "present"
   );
+
+  // ── Temporary tracing: page state vs shared/header state ─────────────────────
+  // Both rows below must agree. Delete this effect once the sync is verified.
+  useEffect(() => {
+    if (selectedDate !== todayStr) return;
+    console.table({
+      "Attendance page (my-sessions)": {
+        isMarkedPresent,
+        source: sessions.find((s) => s.attendance_status?.toLowerCase() === "present")
+          ?.attendance_status ?? "—",
+        userId: sessions[0]?.user_id ?? "—",
+      },
+      "Header badge (shared context)": {
+        isMarkedPresent: headerIsMarkedPresent,
+        source: "GET /api/attendance/status",
+        userId: headerEmployeeId ?? "—",
+      },
+    });
+  }, [isMarkedPresent, headerIsMarkedPresent, headerEmployeeId, selectedDate, todayStr, sessions]);
 
   return (
     <div className="animate-fadeIn space-y-6">

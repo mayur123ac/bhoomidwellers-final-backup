@@ -40,6 +40,7 @@ import CallButton from "@/components/CallButton";
 import CallModal from "@/components/CallModal";
 import OnCallBadge from "@/components/OnCallBadge";
 import LoginTimerWidget from "@/components/LoginTimerWidget";
+import AttendanceBadge from "@/components/AttendanceBadge";
 import BookingFormModal from "@/components/BookingFormModal";
 import BookingApplicationView from "@/components/BookingApplicationView";
 import ClosedLeadBookingView from "@/components/ClosedLeadBookingView";
@@ -677,7 +678,8 @@ export default function SalesDashboard() {
           </h1>
 
           <div className="flex items-center gap-2 sm:gap-2 relative" ref={topbarRef}>
-            <LoginTimerWidget isDark={isDark} />
+            {/* <LoginTimerWidget isDark={isDark} /> */}
+            <AttendanceBadge />
 
             {/* ── Theme Toggle ── */}
             <button

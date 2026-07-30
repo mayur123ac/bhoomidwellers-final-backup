@@ -17,6 +17,10 @@ export function clearCrmSession() {
   // We use fetch with keepalive or standard await depending on context, 
   // but since this might be called on unmount or before navigating, we can just fire it off
   if (typeof window !== "undefined") {
+    // Logout is a soft navigation (router.replace), so client providers mounted in
+    // the root layout are never remounted. Tell them to drop this user's state,
+    // otherwise the next user inherits it — e.g. the header attendance badge.
+    window.dispatchEvent(new Event("attendance-reset"));
     fetch("/api/auth/logout", { method: "POST" }).catch(console.error);
   }
 }

@@ -17,6 +17,7 @@ import {
   CartesianGrid, PieChart, Pie,
 } from "recharts";
 import LoginTimerWidget from "@/components/LoginTimerWidget";
+import AttendanceBadge from "@/components/AttendanceBadge";
 import BookingFormModal from "@/components/BookingFormModal";
 import BookingApplicationView from "@/components/BookingApplicationView";
 import ClosedLeadBookingView from "@/components/ClosedLeadBookingView";
@@ -1093,7 +1094,8 @@ function AdminAtlasDashboardContent() {
           </h1>
 
           <div className="flex items-center gap-3 relative z-[50]" ref={topbarRef}>
-            {/* <LoginTimerWidget isDark={isDark} /> */}
+            <LoginTimerWidget isDark={isDark} />
+            <AttendanceBadge />
             <button onClick={() => {
               const next = !isDark;
               setIsDark(next);
