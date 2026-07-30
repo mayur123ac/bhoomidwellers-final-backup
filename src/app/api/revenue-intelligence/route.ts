@@ -223,6 +223,7 @@ export async function GET(req: NextRequest) {
           COALESCE(clv.outstanding_balance, 0)::numeric AS outstanding_balance,
           COALESCE(f.token_amount, 0)::numeric AS token_amount,
           COALESCE(f.ocr_amount, 0)::numeric AS ocr_amount,
+          
           f.ocr_received_date,
           f.sdr_amount,
           f.sdr_payment_date,
@@ -247,6 +248,7 @@ export async function GET(req: NextRequest) {
           r.actual_registration_date,
           r.registration_status,
           r.registration_number,
+          COALESCE(r.registration_fee_amount, 0)::numeric AS registration_fee_amount,
           p.current_stage,
           p.status AS pipeline_status,
           ${cpPayoutColumns}

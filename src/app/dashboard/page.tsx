@@ -45,7 +45,9 @@ import {
 } from "@/lib/lostLeadSync";
 import dynamic from "next/dynamic";
 import AttendanceView from "@/components/AttendanceView";
-import { BHOOMI_AI_SYSTEM_PROMPT } from "../api/ai-assistant/prompt";
+import AdminAssistantDock from "@/components/AdminAssistantDock";
+import { CRMContextManager } from "@/lib/admin-ai/contextManager";
+
 const RevenueIntelligenceView = dynamic(() => import("./RevenueIntelligenceView"), { ssr: false });
 const GeoAnalyticsView = dynamic(() => import("./GeoAnalyticsView"), { ssr: false });
 const LiveActivityView = dynamic(() => import("./LiveActivityView"), { ssr: false });
@@ -1341,6 +1343,7 @@ function AdminAtlasDashboardContent() {
               <GeoAnalyticsView allLeads={allLeads} theme={theme} isDark={isDark} />
             </div>
           )}
+          {isAdmin && <AdminAssistantDock theme={theme} isDark={isDark} />}
         </main>
       </div>
     </div>
@@ -1942,6 +1945,35 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
     leads = [...leads].sort((a: any, b: any) => (Number(b.sr_no) || 0) - (Number(a.sr_no) || 0));
     return leads;
   }, [allLeads, overviewSearch, overviewSearchColumn, lostLeadFilter, showLostLeads, showNGDLeads, deletedLeadIds, showDuplicatesOnly, duplicateIds]);
+
+  useEffect(() => {
+    CRMContextManager.update({
+      module: "Main Dashboard",
+      metrics: {
+        totalLeads: allLeads.length,
+        activeLeads: allLeads.filter((l: any) => !l.is_lost_lead && l.status !== "Closing").length,
+        closingLeads: allLeads.filter((l: any) => l.status === "Closing").length,
+        lostLeads: allLeads.filter((l: any) => l.is_lost_lead).length,
+      },
+      filters: {
+        search: overviewSearch,
+        column: overviewSearchColumn,
+        lostFilter: lostLeadFilter,
+        showDuplicatesOnly,
+        showNGDLeads
+      },
+      totalRows: filteredOverviewLeads.length,
+      rows: filteredOverviewLeads.slice(0, 30).map((l: any) => ({
+        id: l.id,
+        name: l.name,
+        status: l.status,
+        manager: l.assigned_to,
+        created: l.created_at,
+        isLost: l.is_lost_lead
+      })),
+      selectedRow: null
+    });
+  }, [allLeads, overviewSearch, overviewSearchColumn, lostLeadFilter, showDuplicatesOnly, showNGDLeads, filteredOverviewLeads]);
 
   const formatDate = (ds: string) => {
     if (!ds) return "—";
