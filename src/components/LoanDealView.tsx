@@ -546,6 +546,9 @@ export default function LoanDealView({ lead, booking, loanUpdate, isDark = false
                     {a.status === "Rejected" && a.rejection_reason && (
                       <p className="text-[11px] mt-1 text-red-500">Rejected — “{a.rejection_reason}”</p>
                     )}
+                    {a.remarks && (
+                      <p className={`text-[11px] mt-1 italic ${t.textMuted}`}>Remarks: {a.remarks}</p>
+                    )}
                   </div>
                 );
               })}

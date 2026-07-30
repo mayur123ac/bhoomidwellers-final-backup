@@ -648,6 +648,15 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
         [sortedLeads, page, rowsPerPage]
     );
 
+    /* id → sr_no, for the "duplicate phone — also on Lead #N" tooltip.
+       Built once per allLeads change instead of scanning allLeads inside the row
+       loop for every duplicate on the page. */
+    const srNoById = useMemo(() => {
+        const m = new Map<number, number | string>();
+        for (const l of allLeads as Lead[]) m.set(Number(l.id), l.sr_no);
+        return m;
+    }, [allLeads]);
+
     /* ── selection helpers (page-scoped select-all) ── */
     const pageIds = pageRows.map((l) => Number(l.id));
     const allPageSelected = pageIds.length > 0 && pageIds.every((id) => selectedIds.has(id));
@@ -674,17 +683,36 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
         setShowDuplicatesOnly(false);
     };
 
-    const ctx: Ctx = {
-        theme,
-        isDark,
-        isAdmin,
-        siteHeads,
-        formatDate,
-        onReassign,
-        onDeleteLead,
-        onNavigateToSales,
-        InterestBadge,
-    };
+    /* Memoised because this object is handed to every cell renderer. Rebuilt
+       fresh on each render it changes identity every time, which defeats
+       memoisation in anything downstream that receives it — including on every
+       keystroke in the search box, since overviewSearch lives in the parent.
+       `theme` is already useMemo'd by the caller (dashboard/page.tsx:578), so
+       this genuinely stays stable rather than only appearing to. */
+    const ctx: Ctx = useMemo(
+        () => ({
+            theme,
+            isDark,
+            isAdmin,
+            siteHeads,
+            formatDate,
+            onReassign,
+            onDeleteLead,
+            onNavigateToSales,
+            InterestBadge,
+        }),
+        [
+            theme,
+            isDark,
+            isAdmin,
+            siteHeads,
+            formatDate,
+            onReassign,
+            onDeleteLead,
+            onNavigateToSales,
+            InterestBadge,
+        ]
+    );
 
     const colSpan = visibleColumns.length + (selectMode ? 1 : 0);
 
@@ -919,12 +947,16 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
                 {/* ═══ Table ═══ */}
                 <DraggableTableContainer isDark={isDark}>
                     <table className="w-full text-left text-sm border-separate border-spacing-0">
+                        {/* No backdrop-filter here, deliberately.
+                            theme.tableHead is bg-[#1A1A28] / bg-[#F1F5F9] — fully
+                            opaque, no alpha. A blur behind an opaque layer is
+                            invisible, but the compositor still has to snapshot and
+                            gaussian-blur the region behind this sticky header on
+                            every scroll frame before painting the solid box over
+                            it. That was the source of the scroll frame drops.
+                            If tableHead is ever made translucent, reinstate it. */}
                         <thead
                             className={`sticky top-0 z-20 ${theme.tableHead} ${theme.textHeader}`}
-                            style={{
-                                backdropFilter: "blur(12px)",
-                                WebkitBackdropFilter: "blur(12px)",
-                            }}
                         >
                             <tr>
                                 {selectMode && (
@@ -995,13 +1027,15 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
                                     const isDuplicate = duplicateIds.has(id);
                                     const isSelected = selectedIds.has(id);
 
+                                    // srNoById, not allLeads.find(). The find was a
+                                    // linear scan of every lead, run once per
+                                    // duplicate per rendered row — O(rows × dups ×
+                                    // leads). Harmless at 200 leads, quadratic at
+                                    // 10,000. The Map is built once per render below.
                                     const dupOthers = isDuplicate
                                         ? (dupGroupByLeadId.get(id) || [])
                                             .filter((x) => x !== id)
-                                            .map((x) => {
-                                                const other = allLeads.find((l: Lead) => Number(l.id) === x);
-                                                return `#${other?.sr_no || x}`;
-                                            })
+                                            .map((x) => `#${srNoById.get(x) || x}`)
                                         : [];
 
                                     const rowTitle = isDuplicate

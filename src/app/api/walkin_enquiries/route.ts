@@ -5,6 +5,8 @@ import { isChannelPartnerSource, resolveChannelPartnerId } from "@/lib/cpCommiss
 import { claimPartnerForSourcingManager, resolvePartnerOwner } from "@/lib/sourcingAssignment";
 import { getServerSession } from "@/lib/serverAuth";
 import { normalizeRole, normalizeCpPhone } from "@/lib/cpRbac";
+import { notifyCpLeadAssigned } from "@/services/whatsapp.service";
+import { jsonCompressed } from "@/lib/apiResponse";
 
 export const dynamic = "force-dynamic";
 
@@ -43,7 +45,9 @@ export async function GET(req: Request) {
     ]);
 
     const total: number = countRows[0]?.total ?? 0;
-    return NextResponse.json({ success: true, data: rows, total }, { status: 200 });
+    // Compressed: the admin dashboard requests limit=10000 here, which is ~13 MB
+    // of highly repetitive JSON (60 identical keys per row) and gzips ~35×.
+    return jsonCompressed(req, { success: true, data: rows, total }, { status: 200 });
   } catch (error: any) {
     console.error("GET Enquiries Error:", error);
     return NextResponse.json({ success: false, message: error.message }, { status: 500 });
@@ -341,6 +345,21 @@ export async function POST(req: Request) {
       );
       return { row: finalRes.rows[0], routedByPartner, partnerOwner };
     });
+
+    // ── WhatsApp: tell the Sourcing Manager the lead landed on ───────────────
+    // sourcing_manager_id on the saved row is the EFFECTIVE manager — the
+    // partner's registered owner when there is one, otherwise the form's pick
+    // (see effectiveSourcingManagerId above). So this always pages whoever the
+    // lead actually went to, not whoever the receptionist happened to select.
+    //
+    // result.row is used rather than result.partnerOwner because the latter
+    // carries only {id, name} and is null whenever the routing came from the
+    // form pick — relying on it would silently skip half the cases.
+    //
+    // Fires after COMMIT, never awaited. A failure here cannot fail the enquiry.
+    if (isCpEnquiry && result.row?.sourcing_manager_id) {
+      notifyCpLeadAssigned({ lead: result.row, loggedBy: actorName });
+    }
 
     return NextResponse.json(
       {

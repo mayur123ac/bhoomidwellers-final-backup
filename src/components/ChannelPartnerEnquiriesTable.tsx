@@ -50,6 +50,8 @@ const fmtDate = (raw: any, withTime = false) => {
   } catch { return null; }
 };
 
+
+
 /** Partner-master value first, falling back to what reception typed on the enquiry.
  *  A CP enquiry whose cp_name never resolved to a partner row still shows a name. */
 const cpField = (row: any, masterKey: string, enquiryKey?: string) =>
@@ -115,7 +117,19 @@ export default function ChannelPartnerEnquiriesTable({
     })),
     [managers]
   );
-
+  const counts = useMemo(() => {
+    let closing = 0;
+    let active = 0;
+    let lost = 0;
+    for (const r of rows) {
+      const isClosing = r.status === "Closing" || r.status === "Closed" || !!r.closingDate;
+      const isLost = !!r.is_lost_lead;
+      if (isLost) lost++;
+      else if (isClosing) closing++;
+      else active++;
+    }
+    return { closing, active, lost, total: rows.length };
+  }, [rows]);
   // Client-side search: the CP subset is a small slice of total leads, so filtering
   // in place beats a round trip per keystroke.
   const visible = useMemo(() => {
@@ -188,6 +202,16 @@ export default function ChannelPartnerEnquiriesTable({
             {subtitle && <p className={`text-[11px] ${t.textFaint}`}>{subtitle}</p>}
           </div>
           <span className={`text-xs ${t.textFaint}`}>({rows.length})</span>
+
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${isDark ? "bg-amber-500/15 text-amber-400" : "bg-amber-50 text-amber-700 border border-amber-200"
+            }`}>
+            {counts.closing} Closing
+          </span>
+
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${isDark ? "bg-emerald-500/15 text-emerald-400" : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+            }`}>
+            {counts.active} Active
+          </span>
         </div>
 
         <div className="flex items-center gap-2">
@@ -208,18 +232,16 @@ export default function ChannelPartnerEnquiriesTable({
       </div>
 
       {notice && (
-        <div className={`mx-2 mb-3 rounded-lg px-3 py-2 text-[11px] ${
-          isDark ? "bg-emerald-500/10 border border-emerald-500/25 text-emerald-400"
-                 : "bg-emerald-50 border border-emerald-200 text-emerald-700"}`}>
+        <div className={`mx-2 mb-3 rounded-lg px-3 py-2 text-[11px] ${isDark ? "bg-emerald-500/10 border border-emerald-500/25 text-emerald-400"
+            : "bg-emerald-50 border border-emerald-200 text-emerald-700"}`}>
           {notice}
         </div>
       )}
 
       {/* Read-only roles are told so explicitly, rather than just finding no buttons. */}
       {!canReassign && (
-        <div className={`mx-2 mb-3 rounded-lg px-3 py-2 text-[11px] ${
-          isDark ? "bg-[#14141B] border border-[#2A2A35] text-[#888899]"
-                 : "bg-slate-50 border border-slate-200 text-slate-600"}`}>
+        <div className={`mx-2 mb-3 rounded-lg px-3 py-2 text-[11px] ${isDark ? "bg-[#14141B] border border-[#2A2A35] text-[#888899]"
+            : "bg-slate-50 border border-slate-200 text-slate-600"}`}>
           {role === "sourcing manager"
             ? "Showing only the channel partners assigned to you. View only — contact an Admin to change an assignment."
             : "View only. The assigned Sourcing Manager is set at enquiry creation and can only be changed by an Admin."}
@@ -248,8 +270,8 @@ export default function ChannelPartnerEnquiriesTable({
                   <p className={`text-sm font-bold mb-1 ${t.text}`}>
                     {search ? "No enquiries match your search"
                       : role === "sourcing manager" ? "Nothing assigned to you yet"
-                      : smFilter ? "No enquiries for this filter"
-                      : "No Channel Partner enquiries yet"}
+                        : smFilter ? "No enquiries for this filter"
+                          : "No Channel Partner enquiries yet"}
                   </p>
                   <p className={`text-xs ${t.textMuted}`}>
                     {search ? "Try a different name, phone or GST."
@@ -331,9 +353,8 @@ export default function ChannelPartnerEnquiriesTable({
                         setReassignTo(r.effective_sourcing_manager_id ? String(r.effective_sourcing_manager_id) : "");
                         setReassignTarget(r);
                       }}
-                      className={`px-3 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer whitespace-nowrap ${
-                        r.effective_sourcing_manager_id ? `${t.textMuted} ${isDark ? "hover:bg-[#222]" : "hover:bg-slate-100"}` : t.btnPrimary
-                      }`}
+                      className={`px-3 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer whitespace-nowrap ${r.effective_sourcing_manager_id ? `${t.textMuted} ${isDark ? "hover:bg-[#222]" : "hover:bg-slate-100"}` : t.btnPrimary
+                        }`}
                     >
                       <FaExchangeAlt className="inline text-[9px] mr-1" />
                       {r.effective_sourcing_manager_id ? "Reassign" : "Assign"}
@@ -390,8 +411,8 @@ export default function ChannelPartnerEnquiriesTable({
                       "Assigned Via",
                       detail.sourcing_manager_name
                         ? (detail.sourcing_manager_inherited
-                            ? "Channel Partner ownership"
-                            : "Set on this enquiry")
+                          ? "Channel Partner ownership"
+                          : "Set on this enquiry")
                         : null,
                     ],
                     [
@@ -452,11 +473,10 @@ export default function ChannelPartnerEnquiriesTable({
               ].map(section => (
                 <div
                   key={section.heading}
-                  className={`mb-5 rounded-xl p-4 border ${
-                    section.highlight
+                  className={`mb-5 rounded-xl p-4 border ${section.highlight
                       ? isDark ? "bg-[#9E217B]/10 border-[#9E217B]/30" : "bg-[#9E217B]/5 border-[#9E217B]/25"
                       : `${t.modalBlock}`
-                  }`}
+                    }`}
                   style={section.highlight ? {} : t.modalBlockGl}
                 >
                   <p className={`text-xs font-bold uppercase tracking-wider mb-3 ${section.highlight ? t.accentText : t.sectionTitle}`}>

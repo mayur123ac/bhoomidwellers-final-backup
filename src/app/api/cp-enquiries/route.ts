@@ -33,6 +33,7 @@ import { query } from "@/lib/db";
 import { getServerSession } from "@/lib/serverAuth";
 import { normalizeRole } from "@/lib/cpRbac";
 import { CP_SOURCE_VALUES } from "@/lib/cpCommissionEngine";
+import { jsonCompressed } from "@/lib/apiResponse";
 
 export const dynamic = "force-dynamic";
 
@@ -138,7 +139,10 @@ export async function GET(req: NextRequest) {
       params
     );
 
-    return NextResponse.json(
+    // Compressed: unbounded result set (no LIMIT — every CP enquiry the caller
+    // is scoped to), and the joined partner columns repeat heavily across rows.
+    return jsonCompressed(
+      req,
       { success: true, data: rows, count: rows.length, scopedToSelf: role === "sourcing manager" },
       { status: 200 }
     );

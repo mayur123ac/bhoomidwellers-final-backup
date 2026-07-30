@@ -1,8 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { resolveLatestBookingId, seedPddChecklist } from "@/lib/pdd";
+import { getServerSession } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * Roles permitted to record a disbursement tranche.
+ *
+ * Must stay in step with `canManageDisbursement` in components/LoanDealForm.tsx —
+ * if the two lists diverge the button renders and the POST then 403s, which reads
+ * as a broken feature rather than a permission.
+ */
+const TRANCHE_ROLES = ["sales manager", "admin", "site head"];
+
+/** Matches middleware.ts: lowercase, trimmed, underscores normalised to spaces. */
+const normalize = (r: unknown) =>
+  String(r ?? "").trim().toLowerCase().replace(/_/g, " ");
 
 // ─── GET — list tranches for a lead ───────────────────────────────────────
 export async function GET(
@@ -32,10 +46,26 @@ export async function POST(
         const body = await req.json();
         const { amount, status, receiving_date, bank_reference_no, remarks, sanction_amount, user_name, user_role } = body;
 
-        const cleanRole = (user_role || "").trim().toLowerCase();
-        if (cleanRole !== "sales manager" && cleanRole !== "admin") {
+        // The signed-in session is the authority, not body.user_role. That field
+        // is client-supplied, so the previous check could be satisfied by anyone
+        // POSTing `user_role: "admin"` — it gated the UI, not the endpoint.
+        // body.user_role is still accepted below, but only as a fallback label for
+        // the audit columns.
+        const session = await getServerSession();
+        if (!session?.role) {
             return NextResponse.json(
-                { success: false, message: "Only Sales Managers and Admins can add disbursement tranches." },
+                { success: false, message: "Not signed in." },
+                { status: 401 }
+            );
+        }
+
+        const cleanRole = normalize(session.role);
+        if (!TRANCHE_ROLES.includes(cleanRole)) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    message: "Only Sales Managers, Site Heads and Admins can add disbursement tranches.",
+                },
                 { status: 403 }
             );
         }
@@ -78,7 +108,10 @@ export async function POST(
          (lead_id, booking_id, amount, status, receiving_date, bank_reference_no, remarks, added_by_name, added_by_role)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING *`,
-            [Number(id), bookingId, cleanAmount, status || "Pending", receiving_date || null, bank_reference_no || null, remarks || null, user_name || null, user_role || null]
+            // added_by_* come from the session first: the audit trail should record
+            // who actually performed the write, not what the caller claimed to be.
+            // The body values remain as a fallback for a session missing a name.
+            [Number(id), bookingId, cleanAmount, status || "Pending", receiving_date || null, bank_reference_no || null, remarks || null, session.name || user_name || null, session.role || user_role || null]
         );
 
         // Compute new total (completed-equivalent tranches only)

@@ -15,6 +15,7 @@ import {
   isActiveSourcingManager,
   countActiveSourcingManagers,
 } from "@/lib/sourcingAssignment";
+import { notifyChannelPartnerRegistered } from "@/services/whatsapp.service";
 
 export const dynamic = "force-dynamic";
 
@@ -384,6 +385,23 @@ export async function POST(req: NextRequest) {
       );
       return { merged: false, matchedName: null, row: ins.rows[0] };
     });
+
+    // ── WhatsApp: tell the assigned Sourcing Manager ─────────────────────────
+    // NEW REGISTRATIONS ONLY. A merge is deliberately excluded: the merged row
+    // can belong to a DIFFERENT Sourcing Manager (see keptDifferentOwner just
+    // below), and its profile is redacted for out-of-scope callers a few lines
+    // further down (outOfScope). Notifying on a merge would page the wrong
+    // manager with precisely the fields this route refuses to return.
+    //
+    // Not additionally gated on assigned_sourcing_manager_id: an unassigned new
+    // partner records a skipped/NO_ASSIGNEE row, which is a visible "nobody is
+    // watching this partner" signal on the admin feed rather than silence.
+    //
+    // Fires after COMMIT and is never awaited — a Meta outage, a missing token
+    // or a dropped connection must not turn a successful registration into a 500.
+    if (!result.merged) {
+      notifyChannelPartnerRegistered({ partner: result.row, registeredBy: actor });
+    }
 
     // A merge that kept a different owner is worth saying out loud: the operator
     // picked a Sourcing Manager and the saved record shows someone else, which

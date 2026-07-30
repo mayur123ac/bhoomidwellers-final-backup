@@ -142,6 +142,15 @@ export default function ChannelPartnerFormModal({
   // server tops up the existing partner instead of refusing.
   const [mergeConfirmed, setMergeConfirmed] = useState(false);
 
+  // ── Pincode auto-fill ──
+  // A full pincode resolves to a city and, where a territory is configured, to the
+  // Sourcing Manager who covers it. Both are conveniences layered on top of fields
+  // the operator can always type themselves.
+  const [pinInfo, setPinInfo] = useState<{ city: string | null; sourcingManager: { id: number; name: string } | null } | null>(null);
+  const [pinLooking, setPinLooking] = useState(false);
+  /** Set when the manager was chosen by the pincode rather than by hand. */
+  const [smAutoFilled, setSmAutoFilled] = useState(false);
+
   const isEdit = !!partner;
   const isOfficeVisit = variant === "office_visit";
   // The case the full variant is tuned for: an existing partner with no rate.
@@ -231,10 +240,48 @@ export default function ChannelPartnerFormModal({
     return () => { cancelled = true; clearTimeout(timer); };
   }, [isOpen, form.phone, isEdit, partner?.id]);
 
+  // Pincode → city + territory owner. Debounced like the phone check.
+  useEffect(() => {
+    if (!isOpen) { setPinInfo(null); return; }
+    const pin = form.pin_code.replace(/\D/g, "");
+    if (pin.length !== 6) { setPinInfo(null); setPinLooking(false); return; }
+    let cancelled = false;
+    setPinLooking(true);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/pincode-lookup?pincode=${pin}`);
+        const json = await res.json();
+        if (cancelled || !res.ok || !json.success) return;
+        setPinInfo({ city: json.city, sourcingManager: json.sourcingManager });
+
+        setForm(f => {
+          const next = { ...f };
+          // City is filled only when blank. Overwriting would fight an operator who
+          // deliberately typed something the reference table disagrees with.
+          if (json.city && !f.city.trim()) next.city = json.city;
+          // Same rule for the manager: a hand-picked one is never replaced.
+          if (json.sourcingManager && !f.assigned_sourcing_manager_id) {
+            next.assigned_sourcing_manager_id = String(json.sourcingManager.id);
+            setSmAutoFilled(true);
+          }
+          return next;
+        });
+      } catch {
+        // Purely additive: a failed lookup just means nothing gets pre-filled.
+        if (!cancelled) setPinInfo(null);
+      } finally {
+        if (!cancelled) setPinLooking(false);
+      }
+    }, 400);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [isOpen, form.pin_code]);
+
   useEffect(() => {
     if (!isOpen) return;
     setError(null);
     setMergeConfirmed(false);
+    setPinInfo(null);
+    setSmAutoFilled(false);
     if (partner) {
       const bank = partner.bank_account_details || {};
       setForm({
@@ -303,10 +350,6 @@ export default function ChannelPartnerFormModal({
   // legacy partner's GST number must not be forced to invent an assignment.
   const managerListKnown = !managersLoading && !managersError;
   const assignmentRequired = isOfficeVisit && !isEdit && managerListKnown && managers.length > 0;
-  // Placement is decided up front and never changes, while enforcement waits for
-  // the fetch. Deriving both from `assignmentRequired` would move the field from
-  // mid-form to the top the moment the manager list arrived.
-  const assignmentProminent = isOfficeVisit && !isEdit;
   const assignmentError =
     assignmentRequired && !form.assigned_sourcing_manager_id
       ? "Assign a Sourcing Manager before registering this channel partner."
@@ -319,8 +362,8 @@ export default function ChannelPartnerFormModal({
   const duplicatePhone = !!(dupCheck?.exists && !mergeConfirmed);
   const duplicateError = duplicatePhone
     ? (dupCheck.partner
-        ? `This Channel Partner phone number already exists — registered to "${dupCheck.partner.name}".`
-        : "This Channel Partner phone number already exists.")
+      ? `This Channel Partner phone number already exists — registered to "${dupCheck.partner.name}".`
+      : "This Channel Partner phone number already exists.")
     : null;
 
   const blockingError = nameError || rateError || officeVisitError || assignmentError || duplicateError;
@@ -428,13 +471,25 @@ export default function ChannelPartnerFormModal({
           // enquiry's pincode, which is the whole point of storing this.
           onChange={e => set({ pin_code: e.target.value.replace(/\D/g, "").slice(0, 6) })}
           className={inputCls}
-          placeholder="e.g. 411045"
+          placeholder="e.g. 400097"
         />
+        {pinLooking ? (
+          <p className={`text-[10px] mt-1 ${t.textFaint}`}>Looking up this pincode…</p>
+        ) : pinInfo?.sourcingManager ? (
+          <p className={`text-[10px] mt-1 ${isDark ? "text-emerald-400" : "text-emerald-700"}`}>
+            Covered by <b>{pinInfo.sourcingManager.name}</b>
+            {smAutoFilled ? " — selected below." : "."}
+          </p>
+        ) : (
+          <p className={`text-[10px] mt-1 ${t.textFaint}`}>
+            Fills City, and the Sourcing Manager if this area has one.
+          </p>
+        )}
       </div>
       <div>
         <label className={labelCls}>City</label>
         <input type="text" value={form.city} onChange={e => set({ city: e.target.value })}
-          className={inputCls} placeholder="e.g. Pune" />
+          className={inputCls} placeholder="e.g. Mumbai" />
       </div>
     </>
   );
@@ -464,10 +519,9 @@ export default function ChannelPartnerFormModal({
 
   const phoneField = (
     <div>
-      <label className={labelCls}>Contact Phone {isOfficeVisit && <span className={t.textFaint}>(optional)</span>}</label>
-      <div className={`flex items-center rounded-lg border overflow-hidden ${
-        duplicatePhone ? "border-red-500" : t.inputInner
-      }`}>
+      <label className={labelCls}>Contact Phone {isOfficeVisit && <span className={t.textFaint}></span>}</label>
+      <div className={`flex items-center rounded-lg border overflow-hidden ${duplicatePhone ? "border-red-500" : t.inputInner
+        }`}>
         <span className={`px-2.5 py-2 text-sm select-none ${t.textFaint}`}>+91</span>
         <input
           type="tel"
@@ -548,7 +602,8 @@ export default function ChannelPartnerFormModal({
       </label>
       <SearchableSelect
         value={form.assigned_sourcing_manager_id}
-        onChange={v => set({ assigned_sourcing_manager_id: v })}
+        // A manual pick stops being an auto-fill, so the "from pincode" note goes.
+        onChange={v => { set({ assigned_sourcing_manager_id: v }); setSmAutoFilled(false); }}
         options={managerOptions}
         isDark={isDark}
         t={t}
@@ -571,6 +626,10 @@ export default function ChannelPartnerFormModal({
       ) : assignmentError ? (
         <p className={`text-[10px] mt-1 ${isDark ? "text-amber-400" : "text-amber-600"}`}>
           Required — this partner needs an owner before they can be registered.
+        </p>
+      ) : smAutoFilled ? (
+        <p className={`text-[10px] mt-1 ${isDark ? "text-emerald-400" : "text-emerald-700"}`}>
+          Selected automatically from pincode {form.pin_code}. Change it if that&apos;s wrong.
         </p>
       ) : (
         <p className={`text-[10px] mt-1 ${t.textFaint}`}>
@@ -654,7 +713,7 @@ export default function ChannelPartnerFormModal({
                 duplicated — say so before submit, not after. */}
             {isOfficeVisit && !isEdit && (
               <div className={`mb-5 rounded-lg px-3 py-2 flex items-start gap-2 text-[11px] ${isDark ? "bg-blue-500/10 border border-blue-500/25 text-blue-300"
-                  : "bg-blue-50 border border-blue-200 text-blue-700"}`}>
+                : "bg-blue-50 border border-blue-200 text-blue-700"}`}>
                 <FaInfoCircle className="mt-0.5 flex-shrink-0" />
                 <span>
                   The phone number identifies this partner. If it already belongs to a
@@ -664,25 +723,12 @@ export default function ChannelPartnerFormModal({
               </div>
             )}
 
-            {/* Hoisted above the profile fields when it is required: it is the one
-                decision on this form that isn't transcription, and burying it at
-                the bottom is how a partner ends up filed with no owner. */}
-            {assignmentProminent && (
-              <div className={`mb-5 rounded-xl p-4 border ${isDark ? "bg-[#9E217B]/10 border-[#9E217B]/30" : "bg-[#9E217B]/5 border-[#9E217B]/25"}`}>
-                <div className="flex items-center gap-2 mb-2">
-                  <FaUserTie className={`text-[11px] ${t.accentText}`} />
-                  <p className={`text-xs font-bold ${t.accentText}`}>Ownership</p>
-                </div>
-                {sourcingManagerField}
-              </div>
-            )}
-
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="sm:col-span-2">
                 <label className={labelCls}>CP Name *</label>
                 <input type="text" value={form.name} onChange={e => set({ name: e.target.value })}
                   className={`${inputCls} ${nameError && form.name !== "" ? "border-red-500" : ""}`}
-                  placeholder="Full name or agency name" />
+                  placeholder="Full name of Channel Partner" />
               </div>
 
               <div>
@@ -704,9 +750,13 @@ export default function ChannelPartnerFormModal({
               {isOfficeVisit && areaFields}
 
               <div>
-                <label className={labelCls}>Owner / Contact Person</label>
+                {/* Column is still owner_contact_person — renaming it would break
+                    the CP enquiry table and overview, which read that key. The
+                    meaning is now "who received them", i.e. the person on the desk. */}
+                <label className={labelCls}>Attendee</label>
                 <input type="text" value={form.owner_contact_person} onChange={e => set({ owner_contact_person: e.target.value })}
-                  className={inputCls} placeholder="Person met / firm owner" />
+                  className={inputCls} placeholder="Your name" />
+                <p className={`text-[10px] mt-1 ${t.textFaint}`}>Who received this partner at the front desk.</p>
               </div>
 
               <div>
@@ -721,12 +771,6 @@ export default function ChannelPartnerFormModal({
                 <input type="text" value={form.gst_number} onChange={e => set({ gst_number: e.target.value })}
                   className={inputCls} placeholder="27AAAAA0000A1Z5" />
               </div>
-
-              {/* When it isn't required it sits inline with everything else,
-                  rather than being called out at the top of the form. */}
-              {!assignmentProminent && (
-                <div className="sm:col-span-2">{sourcingManagerField}</div>
-              )}
 
               {/* ── Commercial / admin-only fields ── */}
               {!isOfficeVisit && (
@@ -764,6 +808,19 @@ export default function ChannelPartnerFormModal({
                   {!isFirstRateEntry && rateField}
                 </>
               )}
+            </div>
+
+            {/* ── Ownership, last ──
+                Below the profile rather than above it, because the pincode field
+                feeds it: by the time the operator reaches this the manager is
+                usually already selected, and the block reads as a confirmation
+                instead of a question asked before the answer was available. */}
+            <div className={`mt-5 rounded-xl p-4 border ${isDark ? "bg-[#9E217B]/10 border-[#9E217B]/30" : "bg-[#9E217B]/5 border-[#9E217B]/25"}`}>
+              <div className="flex items-center gap-2 mb-2">
+                <FaUserTie className={`text-[11px] ${t.accentText}`} />
+                <p className={`text-xs font-bold ${t.accentText}`}>Ownership</p>
+              </div>
+              {sourcingManagerField}
             </div>
 
             {!isOfficeVisit && (

@@ -25,6 +25,7 @@ export interface LoanApplication {
   status: string;
   sanction_date: string | null;
   rejection_reason: string | null;
+  remarks: string | null;
   rejection_date: string | null;
   is_selected: boolean;
 }
@@ -42,7 +43,7 @@ const blankForm = {
   bank_name: "", loan_type: "", dsa_agent_name: "", dsa_agent_contact: "",
   loan_executive: "", loan_reference_no: "", amount_requested: "", amount_sanctioned: "",
   interest_rate: "", tenure_months: "", application_date: "", sanction_date: "",
-  status: "Submitted", rejection_reason: "", rejection_date: "",
+  status: "Submitted", rejection_reason: "", rejection_date: "", remarks: "",
 };
 
 interface Props {
@@ -97,7 +98,7 @@ export default function LenderApplicationsTracker({ leadId, userName, userRole, 
       interest_rate: a.interest_rate != null ? String(a.interest_rate) : "",
       tenure_months: a.tenure_months != null ? String(a.tenure_months) : "",
       application_date: dateOnly(a.application_date), sanction_date: dateOnly(a.sanction_date),
-      status: a.status || "Submitted", rejection_reason: a.rejection_reason || "", rejection_date: dateOnly(a.rejection_date),
+      status: a.status || "Submitted", rejection_reason: a.rejection_reason || "", rejection_date: dateOnly(a.rejection_date), remarks: a.remarks || "",
     });
     setError(null); setShowForm(true);
   };
@@ -195,6 +196,9 @@ export default function LenderApplicationsTracker({ leadId, userName, userRole, 
             {a.status === "Rejected" && a.rejection_reason && (
               <p className="text-[11px] mt-1 text-red-500">Rejected — “{a.rejection_reason}”</p>
             )}
+            {a.remarks && (
+              <p className={`text-[11px] mt-1 italic ${t.textMuted}`}>Remarks: {a.remarks}</p>
+            )}
             {canManage && (
               <div className="flex items-center gap-2 mt-2">
                 {!a.is_selected && (
@@ -249,6 +253,15 @@ export default function LenderApplicationsTracker({ leadId, userName, userRole, 
             {form.status === "Rejected" && (
               <div><label className={labelCls}>Rejection Reason</label><input value={form.rejection_reason} onChange={e => setForm(f => ({ ...f, rejection_reason: e.target.value }))} className={inputCls} placeholder="e.g. Low CIBIL score" /></div>
             )}
+          </div>
+          <div className="sm:col-span-2">
+            <label className={labelCls}>Remarks</label>
+            <input
+              value={form.remarks}
+              onChange={e => setForm(f => ({ ...f, remarks: e.target.value }))}
+              className={inputCls}
+              placeholder="e.g. Reason for rejection, or any other note"
+            />
           </div>
           {error && <p className="text-red-500 text-[11px] mt-2">{error}</p>}
           <div className="flex items-center gap-2 mt-3">

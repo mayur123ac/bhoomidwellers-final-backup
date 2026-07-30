@@ -11,7 +11,7 @@ export async function GET() {
       WHERE table_name = 'walkin_enquiries' 
       ORDER BY ordinal_position
     `);
-    return NextResponse.json({ 
+    return NextResponse.json({
       database: db[0],
       columns: cols.map((r: any) => r.column_name)
     });

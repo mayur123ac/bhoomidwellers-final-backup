@@ -1,3 +1,14 @@
+-- ⚠ SUPERSEDED — do not run. Use
+--   2026-07-29_cp_sourcing_manager_ownership_CONSOLIDATED.sql
+-- instead.
+--
+-- Kept only as the record of what was applied to the local database on
+-- 2026-07-29. On a database that does NOT already carry the column, this file
+-- creates the FK WITHOUT `ON DELETE SET NULL` (deleting a user would then be
+-- blocked instead of unassigning the partner) and adds a second, redundant index
+-- on assigned_sourcing_manager_id. The consolidated file fixes both and folds in
+-- the 2026-07-28 prerequisites, so it is self-contained.
+--
 -- Sourcing Manager ownership on the Channel Partner master record.
 --
 -- Until now the assignment lived only on the enquiry (walkin_enquiries.

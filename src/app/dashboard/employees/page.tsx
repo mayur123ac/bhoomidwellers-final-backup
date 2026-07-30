@@ -19,9 +19,10 @@ import {
   FaFileExcel, FaDesktop, FaCheckCircle, FaTimes, FaPaperPlane,
   FaCalendarAlt, FaHeart, FaTimesCircle, FaAngleLeft, FaCommentAlt,
   FaMoneyBillWave, FaMapMarkerAlt, FaBullseye, FaSave, FaUniversity, FaBriefcase, FaChartPie,
-  FaExchangeAlt, FaEye, FaExclamationTriangle, FaSignal, FaUserClock
+  FaExchangeAlt, FaEye, FaExclamationTriangle, FaSignal, FaUserClock, FaWhatsapp
 } from "react-icons/fa";
 import { FaWandMagicSparkles } from 'react-icons/fa6'
+import NotificationsPanel from "@/components/NotificationsPanel";
 import { useCallerSync } from "@/lib/hooks/useCallerSync";
 import CrmUpdatesNotification from "@/components/CrmUpdatesNotification";
 import { label } from "framer-motion/client";
@@ -257,7 +258,7 @@ export default function EmployeesPage() {
   });
   const t = useMemo(() => buildTheme(isDark), [isDark]);
 
-  const [activeSection, setActiveSection] = useState<"employees" | "callers" | "ai">("employees");
+  const [activeSection, setActiveSection] = useState<"employees" | "callers" | "ai" | "notifications">("employees");
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -804,6 +805,9 @@ export default function EmployeesPage() {
     { id: "geo", icon: FaMapMarkerAlt, label: "Geo Analytics", link: "/dashboard?tab=geo", section: null },
     { id: "callers", icon: FaPhoneAlt, label: "Caller Panel", link: "/dashboard/employees", section: "callers" as const },
     { id: "employees", icon: FaIdCard, label: "Add Employee", link: "/dashboard/employees", section: "employees" as const },
+    { id: "notifications", icon: FaWhatsapp, label: "WhatsApp Alerts", link: "/dashboard/employees", section: "notifications" as const },
+    // Must stay LAST: the sidebar renders menuItems.slice(0, -1) in the main
+    // list and pins this final entry to the bottom.
     { id: "ai", icon: FaWandMagicSparkles, label: "Bhoomi AI", link: "/dashboard/employees", section: "ai" as const },
   ];
 
@@ -875,7 +879,7 @@ export default function EmployeesPage() {
                 dashboard: "Workspace",
                 receptionist: "Team", sales: "Team", site_head: "Team",
                 site_visit_overview: "Insights", attendance: "Insights", monitoring: "Insights", live_activity: "Insights", geo: "Insights",
-                callers: "Admin", employees: "Admin",
+                callers: "Admin", employees: "Admin", notifications: "Admin",
               };
               const visibleItems = menuItems
                 .slice(0, -1)
@@ -1056,7 +1060,8 @@ export default function EmployeesPage() {
             <img src="/assets/bhoomidwellersLogo_trans.png" alt="Bhoomi CRM" className="h-20 md:h-18 w-auto object-contain -ml-2" />
             <span className={`text-xs sm:text-sm font-normal ${t.textFaint}`}>— {activeSection === "callers"
               ? callerSubView === "control" ? "Caller Control Mode" : "Caller Panel"
-              : activeSection === "ai" ? "Bhoomi AI" : "Add Employee"}</span>
+              : activeSection === "ai" ? "Bhoomi AI"
+              : activeSection === "notifications" ? "WhatsApp Alerts" : "Add Employee"}</span>
             <span
               className="text-xs font-semibold px-2.5 py-0.5 rounded-full"
               style={callerSubView === "control"
@@ -1482,6 +1487,10 @@ export default function EmployeesPage() {
               </div>
             </div>
           </main>
+
+        ) : activeSection === "notifications" ? (
+
+          <NotificationsPanel isDark={isDark} t={t} />
 
         ) : activeSection === "ai" ? (
 

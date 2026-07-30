@@ -531,10 +531,17 @@ export default function LoanDealForm({ lead, booking, loanUpdate, user, isDark =
     ? Math.min(100, Math.round((totalDisbursed / sanctionAmountNum) * 100))
     : 0;
   const canAddTranche = totalDisbursed < sanctionAmountNum;
-  // Same role convention as middleware.ts's route protection.
-  const userRole = (user.role || "").trim().toLowerCase();
+  // Same role convention as middleware.ts's route protection — underscores
+  // normalised to spaces, because the users table holds both "site_head" and
+  // "Site Head" and either must match.
+  const userRole = (user.role || "").trim().toLowerCase().replace(/_/g, " ");
   const isSalesManager = userRole === "sales manager";
-  const canManageDisbursement = isSalesManager || userRole === "admin";
+  // Site Head included: they oversee Sales Managers' pipelines and are expected
+  // to record disbursements on the leads they supervise. The matching server-side
+  // gate is in api/walkin_enquiries/[id]/tranches — both must list the same roles
+  // or the button appears and then the POST is refused.
+  const canManageDisbursement =
+    isSalesManager || userRole === "admin" || userRole === "site head";
   // Once a sanction amount exists, disbursement only ever reads as Partial or
   // Completed — there's no meaningful "Pending" once tranches can be added.
   const autoDisbursementStatus = sanctionAmountNum <= 0
@@ -1181,6 +1188,7 @@ export default function LoanDealForm({ lead, booking, loanUpdate, user, isDark =
                 <div>
                   <label className={labelCls}>GST Rate</label>
                   <select value={dealForm.gst_rate} onChange={e => updateDealForm({ gst_rate: e.target.value })} className={selectCls}>
+                    <option value="0">0% (no GST)</option>
                     <option value="5">5% (no ITC)</option>
                     <option value="12">12% (with ITC)</option>
                   </select>

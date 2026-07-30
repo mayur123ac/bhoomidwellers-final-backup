@@ -1,6 +1,15 @@
 //receptionist frontend
 "use client";
-
+import {
+  StatusChip,
+  ContactCell,
+  SearchBar,
+  ToolbarButton,
+  ToggleSwitch,
+  SortIcon,
+  SkeletonRows,
+  EmptyState,
+} from "@/components/Tableui"; // adjust path to match where Tableui.tsx actually lives
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { clearCrmSession, getStoredCrmUser, installLoggedOutBackGuard } from "@/lib/authSession";
@@ -11,7 +20,7 @@ import {
   FaPhoneAlt, FaUserCircle, FaBriefcase, FaSearch, FaDownload,
   FaFileInvoice, FaHandshake, FaUniversity, FaUsers, FaFileAlt,
   FaClock, FaMicrophone, FaWhatsapp, FaCheckCircle,
-  FaExchangeAlt, FaUserTie, FaChartPie, FaInfoCircle
+  FaExchangeAlt, FaUserTie, FaChartPie, FaInfoCircle, FaSyncAlt
 } from "react-icons/fa";
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend,
@@ -359,6 +368,50 @@ export default function ReceptionistDashboard() {
   useActivityTracker();
   const [isDark, setIsDark] = useState(false);
   const t = buildTheme(isDark);
+
+  /* ── Table design tokens ────────────────────────────────────────────────────
+     Mirrors EnquiryOverviewSection.tsx so the Front Desk Log, Receptionist Leads
+     and Closed Leads tables read as the same product. Presentation only — every
+     one of these is a className string; no data, handler or gate goes near them.
+
+     Held as constants rather than repeated inline because the three tables drifted
+     apart previously (p-4 here, py-3 there), and a single source is what stops
+     that recurring. */
+  const tblHeadCls = `sticky top-0 z-[25] ${t.tableHead} ${t.textHeader}`;
+  /* Intentionally empty — see below.
+     This used to carry backdropFilter: blur(12px). t.tableHead is
+     bg-[#1A1A28] / bg-[#F1F5F9], fully opaque with no alpha, so the blur was
+     never visible: the compositor snapshotted and blurred the region behind the
+     sticky header on every scroll frame, then painted a solid box over the
+     result. Removing it cost nothing visually and is what stopped the frame
+     drops while scrolling these three tables.
+     Kept as a constant rather than deleted so the three call sites do not need
+     touching, and so this reasoning stays attached to the decision. */
+  const tblHeadStyle: React.CSSProperties = {};
+  /** Column header. `text-[10px]` sits on the th so it beats the `text-xs`
+   *  inherited from t.textHeader on the thead — same trick EnquiryOverview uses. */
+  const thCls = `px-3 py-3 whitespace-nowrap border-b text-[10px] font-bold uppercase tracking-[0.09em] ${isDark ? "border-white/[0.08]" : "border-gray-300"
+    }`;
+  /** Body cell. py-3.5 is the reference row height; the old `md:p-4` made these
+   *  rows 4px taller than the admin table at desktop width. */
+  const tdCls = `px-3 py-3.5 align-middle ${isDark ? "border-white/[0.045]" : "border-indigo-300"}`;
+  const tblDivide = isDark ? "divide-white/[0.045]" : "divide-indigo-300";
+
+  /**
+   * Zebra striping, as opaque colours rather than the reference's translucent
+   * `bg-white/[0.015]`.
+   *
+   * These tables pin "Lead No." and "Client Name" with `position: sticky` +
+   * `bg-inherit`. A translucent row background would be inherited as-is, so
+   * horizontally scrolled cells would bleed through the frozen columns. Opaque
+   * values render identically and keep the freeze solid.
+   */
+  const zebraBg = (i: number) =>
+    isDark
+      ? i % 2 === 1 ? "bg-[#16161F]" : "bg-[#121218]"
+      : i % 2 === 1 ? "bg-[#F6F7FA]" : "bg-white";
+  /** t.tableRow is already an opaque hover, so the frozen columns stay solid. */
+  const rowCls = `group transition-colors duration-200 ${t.tableRow}`;
 
   const getStatusStyle = (status: string) => {
     const s = status || "Assigned";
@@ -2340,27 +2393,36 @@ export default function ReceptionistDashboard() {
 
               {/* Front Desk Log */}
               <div className={`rounded-2xl border overflow-hidden ${t.tableWrap}`} style={t.tableGlass}>
-                <div className={`p-4 md:p-6 border-b flex justify-between items-center ${t.tableBorder}`}>
-                  <div>
-                    <h2 className={`text-base md:text-lg font-bold flex items-center gap-3 ${t.text}`}>
-                      Front Desk Log
-                    </h2>
-                    <p className={`text-xs mt-0.5 ${t.textFaint}`}>{receptionistLeads.length} shown · {totalCount} total</p>
+                {/* Toolbar — same rhythm as EnquiryOverview: title + count chip,
+                    flexible search, actions pushed right, all on the head surface. */}
+                <div className={`px-5 pt-4 pb-3.5 flex flex-wrap items-center gap-3 border-b ${t.tableHead} ${isDark ? "border-white/[0.06]" : "border-indigo-300"}`}>
+                  <div className="flex items-center gap-2.5 shrink-0">
+                    <FaClipboardList className="text-[#00AEEF] text-sm" />
+                    <h2 className={`font-bold text-[15px] tracking-tight ${t.text}`}>Front Desk Log</h2>
+                    <span
+                      className={`text-[10px] font-bold px-2 py-1 rounded-md tabular-nums ${t.btnClosingBadge}`}
+                      title={receptionistLeads.length !== totalCount ? `${receptionistLeads.length} of ${totalCount} leads loaded` : undefined}
+                    >
+                      {receptionistLeads.length.toLocaleString("en-IN")}
+                      {receptionistLeads.length !== totalCount && (
+                        <span className="opacity-50"> / {Number(totalCount || 0).toLocaleString("en-IN")}</span>
+                      )}
+                    </span>
                   </div>
-                  <div className="flex gap-4 items-center">
-                    <div className="relative hidden md:block">
-                      <FaSearch className={`absolute left-3 top-1/2 -translate-y-1/2 text-xs ${t.textFaint}`} />
-                      <input type="text" placeholder="Search leads..." value={searchRecep} onChange={e => setSearchRecep(e.target.value)}
-                        className={`rounded-lg pl-9 pr-4 py-2 text-sm outline-none w-48 transition-colors border ${t.inputBg} ${t.text}`} />
-                    </div>
-                    <button onClick={() => setIsEnquiryModalOpen(true)} className={`font-bold py-1.5 px-3 md:py-2 md:px-4 rounded-lg transition-colors text-xs flex items-center gap-2 cursor-pointer ${t.btnPrimary}`}>+ New Entry</button>
+
+                  <SearchBar value={searchRecep} onChange={setSearchRecep} isDark={isDark} placeholder="Search leads..." />
+
+                  <div className="flex items-center gap-2 flex-wrap ml-auto">
+                    <ToolbarButton onClick={() => setIsEnquiryModalOpen(true)} isDark={isDark} tone="brand" title="Log a new walk-in enquiry">
+                      + New Entry
+                    </ToolbarButton>
                   </div>
                 </div>
                 <DraggableTableContainer isDark={isDark}>
-                  <table className="w-full text-left border-collapse whitespace-nowrap">
-                    <thead className="sticky top-0 z-[25]"><tr className={t.tableHead}>
+                  <table className="w-full text-left text-sm border-collapse whitespace-nowrap">
+                    <thead className={tblHeadCls} style={tblHeadStyle}><tr>
                       {["Lead No.", "Client Name", "Source", "CP Name", "CP Company", "CP Phone", "Budget", "Phone", "Alt. Phone", "Date Created", "Backdated Entry", "Sales Manager"].map(h => (
-                        <th key={h} className={`px-3 py-3 md:p-4 font-bold uppercase tracking-wider border-b ${t.textHeader} ${t.tableBorder} ${h === "Lead No." ? `sticky left-0 z-20 ${isDark ? "bg-[#1A1A28]" : "bg-[#F1F5F9]"}` :
+                        <th key={h} className={`${thCls} ${h === "Lead No." ? `sticky left-0 z-20 ${isDark ? "bg-[#1A1A28]" : "bg-[#F1F5F9]"}` :
                           h === "Client Name" ? `sticky left-[80px] z-20 ${isDark ? "bg-[#1A1A28]" : "bg-[#F1F5F9]"}` : ""
                           }`}
                           style={
@@ -2369,40 +2431,42 @@ export default function ReceptionistDashboard() {
                           }>{h}</th>
                       ))}
                     </tr></thead>
-                    <tbody className={`${t.tableDivide} divide-y`}>
+                    <tbody className={`${tblDivide} divide-y`}>
                       {isFetchingEnquiries ? (
-                        <tr><td colSpan={11} className={`p-8 text-center text-sm ${t.textMuted}`}>Fetching data...</td></tr>
+                        <SkeletonRows rows={8} cols={12} isDark={isDark} />
                       ) : receptionistLeads.length === 0 ? (
-                        <tr><td colSpan={11} className={`p-8 text-center text-sm ${t.textMuted}`}>No leads found.</td></tr>
-                      ) : receptionistLeads.map((enquiry: any) => {
-                        const rowBgClass = isDark ? "bg-[#121218]" : "bg-white";
+                        <tr><td colSpan={12}>
+                          <EmptyState onReset={() => setSearchRecep("")} hasFilters={!!searchRecep} isDark={isDark} />
+                        </td></tr>
+                      ) : receptionistLeads.map((enquiry: any, rowIdx: number) => {
+                        const rowBgClass = zebraBg(rowIdx);
                         return (
-                          <tr key={enquiry.id} className={`transition-colors cursor-pointer ${t.tableRow} ${rowBgClass}`} onClick={() => { setSelectedLead(enquiry); setActiveTab("detail"); }}>
-                            <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-bold ${t.accentText} sticky left-0 z-10 bg-inherit`} style={{ minWidth: '80px', maxWidth: '80px' }}>#{enquiry.sr_no || enquiry.id}</td>
-                            <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-semibold ${t.text} sticky left-[80px] z-10 bg-inherit`} style={{ minWidth: '150px', maxWidth: '150px', boxShadow: isDark ? "1px 0 0 #2A2A35" : "1px 0 0 #9CA3AF" }}>{enquiry.name}</td>
+                          <tr key={enquiry.id} className={`${rowCls} cursor-pointer ${rowBgClass}`} onClick={() => { setSelectedLead(enquiry); setActiveTab("detail"); }}>
+                            <td className={`${tdCls} text-[13px] font-bold ${t.accentText} sticky left-0 z-10 bg-inherit`} style={{ minWidth: '80px', maxWidth: '80px' }}>#{enquiry.sr_no || enquiry.id}</td>
+                            <td className={`${tdCls} text-[13px] font-bold ${t.text} sticky left-[80px] z-10 bg-inherit`} style={{ minWidth: '150px', maxWidth: '150px', boxShadow: isDark ? "1px 0 0 #2A2A35" : "1px 0 0 #9CA3AF" }}>{enquiry.name}</td>
 
-                            <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm ${t.textMuted}`}>
-                              {enquiry.source || <span className="italic text-[10px]">—</span>}
+                            <td className={`${tdCls} text-xs ${t.textMuted}`}>
+                              {enquiry.source || <span className="text-xs italic opacity-35">—</span>}
                             </td>
-                            <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm truncate max-w-[100px] ${t.textMuted}`}>{enquiry.cp_name || <span className="italic text-[10px]">—</span>}</td>
-                            <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm truncate max-w-[100px] ${t.textMuted}`}>{enquiry.cp_company || <span className="italic text-[10px]">—</span>}</td>
-                            <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm truncate max-w-[100px] ${t.textMuted}`}>{enquiry.cp_phone || <span className="italic text-[10px]">—</span>}</td>
-                            <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-bold ${isDark ? "text-green-700" : "text-emerald-600"}`}>{enquiry.salesBudget || enquiry.budget}</td>
-                            <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm font-mono ${t.text}`}>{maskPhone(enquiry.phone)}</td>
-                            <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm font-mono ${t.textMuted}`}>{maskPhone(enquiry.altPhone)}</td>
-                            <td className={`px-3 py-3 md:p-4 text-[10px] md:text-xs whitespace-normal min-w-[120px] ${t.textFaint}`}>{enquiry.date}</td>
-                            <td className={`px-3 py-3 md:p-4 text-[10px] md:text-xs whitespace-normal min-w-[110px] ${t.textFaint}`}>
-                              {enquiry.autoDateEnabled === false && enquiry.enquiryDate ? formatDate(enquiry.enquiryDate).split(",")[0] : "-"}
+                            <td className={`${tdCls} text-xs truncate max-w-[100px] ${t.textMuted}`}>{enquiry.cp_name || <span className="text-xs italic opacity-35">—</span>}</td>
+                            <td className={`${tdCls} text-xs truncate max-w-[100px] ${t.textMuted}`}>{enquiry.cp_company || <span className="text-xs italic opacity-35">—</span>}</td>
+                            <td className={`${tdCls} text-xs truncate max-w-[100px] ${t.textMuted}`}>{enquiry.cp_phone || <span className="text-xs italic opacity-35">—</span>}</td>
+                            <td className={`${tdCls} text-[13px] font-semibold tabular-nums ${isDark ? "text-emerald-400" : "text-emerald-600"}`}>{enquiry.salesBudget || enquiry.budget}</td>
+                            <td className={`${tdCls} text-xs font-mono ${t.text}`}>{maskPhone(enquiry.phone)}</td>
+                            <td className={`${tdCls} text-xs font-mono ${t.textMuted}`}>{maskPhone(enquiry.altPhone)}</td>
+                            <td className={`${tdCls} text-xs min-w-[120px] ${t.textFaint}`}>{enquiry.date}</td>
+                            <td className={`${tdCls} text-xs min-w-[110px] ${t.textFaint}`}>
+                              {enquiry.autoDateEnabled === false && enquiry.enquiryDate ? formatDate(enquiry.enquiryDate).split(",")[0] : <span className="text-xs italic opacity-30">—</span>}
                             </td>
-                            <td className="px-3 py-3 md:p-4 text-xs md:text-sm">
-                              <span className={`px-2 py-1 rounded-md text-[10px] md:text-xs font-semibold ${t.accentBg}`}>{enquiry.assignedTo || "Unassigned"}</span>
+                            <td className={tdCls}>
+                              <span className={`px-2 py-1 rounded-md text-[10px] font-semibold ${t.accentBg}`}>{enquiry.assignedTo || "Unassigned"}</span>
                             </td>
                           </tr>
                         )
                       })}
                       {isLoadingMore && <LoaderRow />}
                       {!hasMore && !isFetchingEnquiries && enquiries.length > 0 && (
-                        <tr><td colSpan={11} className={`p-4 text-center text-xs ${t.textFaint}`}>All {totalCount} records loaded</td></tr>
+                        <tr><td colSpan={12} className={`px-3 py-3.5 text-center text-[11px] font-semibold opacity-50`}>All {totalCount} records loaded</td></tr>
                       )}
                     </tbody>
                   </table>
@@ -3212,37 +3276,61 @@ export default function ReceptionistDashboard() {
                   <h1 className={`text-xl md:text-3xl font-bold ${t.text}`}>Receptionist Leads</h1>
                   <p className={`text-xs mt-1 ${t.textFaint}`}>Leads you have personally handled or captured</p>
                 </div>
-                <div className="relative flex items-center gap-4 flex-wrap">
-                  <div className="relative">
-                    <FaSearch className={`absolute left-3 top-1/2 -translate-y-1/2 ${t.textFaint}`} />
-                    <input type="text" placeholder="Search leads..." value={searchRecepLeads} onChange={e => setSearchRecepLeads(e.target.value)}
-                      className={`rounded-lg pl-9 pr-4 py-2 text-sm outline-none w-52 transition-colors border ${t.inputBg} ${t.text}`} />
-                  </div>
-                  <label className={`flex items-center gap-2 text-xs font-bold ${t.textMuted}`}>
-                    <input type="checkbox" checked={showLostLeads} onChange={e => setShowLostLeads(e.target.checked)} disabled={leadStatusFilter !== "all"} className="accent-red-500" />
-                    Show Lost
-                  </label>
-                  <label className={`flex items-center gap-2 text-xs font-bold ${t.textMuted}`}>
-                    <input type="checkbox" checked={showNGDLeads} onChange={e => setShowNGDLeads(e.target.checked)} disabled={leadStatusFilter !== "all"} className="accent-[#F97316]" />
-                    Show NGD
-                  </label>
-                  <button onClick={() => downloadCSV(filteredRecepLeads.map((l: any) => ({ "Lead No.": l.sr_no || l.id, "Client Name": l.name, "CP Company": l.cp_company || "N/A", "Budget": l.salesBudget || l.budget || "N/A", "Phone": l.phone || "N/A", "Alt Phone": l.altPhone || "N/A", "Date Created": l.date, "Assigned to Receptionist": l.assignedReceptionist || user.name, "Status": l.status || "Assigned" })), "Receptionist_Leads.csv")} className={`p-2 border rounded-lg ${t.exportBtn}`} title="Export CSV"><FaDownload size={12} /></button>
-                  <button onClick={refetchAll} className={`text-sm font-semibold flex items-center gap-2 px-4 py-2 rounded-lg ${t.btnPrimary}`}>↻ Refresh</button>
+                <div className="relative flex items-center gap-2 flex-wrap">
+                  <ToolbarButton
+                    onClick={() => downloadCSV(filteredRecepLeads.map((l: any) => ({ "Lead No.": l.sr_no || l.id, "Client Name": l.name, "CP Company": l.cp_company || "N/A", "Budget": l.salesBudget || l.budget || "N/A", "Phone": l.phone || "N/A", "Alt Phone": l.altPhone || "N/A", "Date Created": l.date, "Assigned to Receptionist": l.assignedReceptionist || user.name, "Status": l.status || "Assigned" })), "Receptionist_Leads.csv")}
+                    icon={<FaDownload className="text-[11px]" />} isDark={isDark} title="Download these leads as CSV">
+                    Export
+                  </ToolbarButton>
+                  <ToolbarButton onClick={refetchAll} icon={<FaSyncAlt className="text-[11px]" />} isDark={isDark} title="Refresh leads" />
                 </div>
               </div>
 
               <div className={`rounded-2xl border overflow-hidden ${t.tableWrap}`} style={t.tableGlass}>
-                <div className={`p-4 md:p-5 border-b flex justify-between items-center ${t.tableBorder}`}>
-                  <p className={`text-sm font-semibold ${t.text}`}>{filteredRecepLeads.length} leads</p>
-                  <p className={`text-xs ${t.textFaint}`}>Showing all leads assigned to or handled by you</p>
+                {/* Toolbar row 1: title + search */}
+                <div className={`px-5 pt-4 pb-3 flex flex-wrap items-center gap-3 ${t.tableHead}`}>
+                  <div className="flex items-center gap-2.5 shrink-0">
+                    <FaUserTie className="text-[#00AEEF] text-sm" />
+                    <h3 className={`font-bold text-[15px] tracking-tight ${t.text}`}>Your Leads</h3>
+                    <span className={`text-[10px] font-bold px-2 py-1 rounded-md tabular-nums ${t.btnClosingBadge}`}>
+                      {filteredRecepLeads.length.toLocaleString("en-IN")}
+                    </span>
+                  </div>
+                  <SearchBar value={searchRecepLeads} onChange={setSearchRecepLeads} isDark={isDark} placeholder="Search leads..." />
+                </div>
+
+                {/* Toolbar row 2: filters — same layout and toggle styling as EnquiryOverview.
+                    The checkboxes became ToggleSwitches; the bound state and the
+                    `leadStatusFilter !== "all"` disable rule are unchanged. */}
+                <div className={`px-5 pb-3.5 pt-3.5 flex flex-wrap items-center gap-x-5 gap-y-2.5 border-b ${t.tableHead} ${isDark ? "border-white/[0.06]" : "border-indigo-300"}`}>
+                  <span className="text-[10px] font-bold uppercase tracking-wider opacity-40">Filters</span>
+                  <ToggleSwitch
+                    checked={showLostLeads}
+                    onChange={setShowLostLeads}
+                    label="Show lost"
+                    accent="#ef4444"
+                    disabled={leadStatusFilter !== "all"}
+                    title={leadStatusFilter !== "all" ? "Controlled by the status filter" : "Include lost leads in the table"}
+                    isDark={isDark}
+                  />
+                  <ToggleSwitch
+                    checked={showNGDLeads}
+                    onChange={setShowNGDLeads}
+                    label="Show NGD"
+                    accent="#F97316"
+                    disabled={leadStatusFilter !== "all"}
+                    title={leadStatusFilter !== "all" ? "Controlled by the status filter" : "Include non-genuine-demand leads"}
+                    isDark={isDark}
+                  />
+                  <span className={`ml-auto text-[11px] font-semibold opacity-50`}>Leads assigned to or handled by you</span>
                 </div>
                 <DraggableTableContainer isDark={isDark}>
-                  <table className="w-full text-left border-collapse whitespace-nowrap">
-                    <thead className="sticky top-0 z-[25]"><tr className={t.tableHead}>
+                  <table className="w-full text-left text-sm border-collapse whitespace-nowrap">
+                    <thead className={tblHeadCls} style={tblHeadStyle}><tr>
                       {["Lead No.", "Client Name", "CP Details", "Budget", "Phone", "Alt. Phone", "Date Created", "Assigned to", "Site Visits", "Status", "Actions"].map(h => (
-                        <th key={h} className={`px-3 py-3 md:p-4 font-bold uppercase tracking-wider border-b ${t.textHeader} ${t.tableBorder} ${h === "Lead No." ? `sticky left-0 z-20 ${isDark ? "bg-[#1A1A28]" : "bg-[#F1F5F9]"}` :
+                        <th key={h} className={`${thCls} ${h === "Lead No." ? `sticky left-0 z-20 ${isDark ? "bg-[#1A1A28]" : "bg-[#F1F5F9]"}` :
                           h === "Client Name" ? `sticky left-[80px] z-20 ${isDark ? "bg-[#1A1A28]" : "bg-[#F1F5F9]"}` : ""
-                          }`}
+                          } ${h === "Status" || h === "Actions" ? "text-center" : ""}`}
                           style={
                             h === "Lead No." ? { minWidth: '80px', maxWidth: '80px' } :
                               h === "Client Name" ? { minWidth: '150px', maxWidth: '150px', boxShadow: isDark ? "1px 0 0 #2A2A35" : "1px 0 0 #9CA3AF" } : {}
@@ -3251,88 +3339,97 @@ export default function ReceptionistDashboard() {
                         </th>
                       ))}
                     </tr></thead>
-                    <tbody className={`${t.tableDivide} divide-y`}>
+                    <tbody className={`${tblDivide} divide-y`}>
                       {isFetchingDirectLeads ? (
-                        <tr><td colSpan={11} className={`p-8 text-center text-sm ${t.textMuted}`}>Loading your leads...</td></tr>
+                        <SkeletonRows rows={8} cols={11} isDark={isDark} />
                       ) : filteredRecepLeads.length === 0 ? (
-                        <tr><td colSpan={11} className={`p-12 text-center ${t.textMuted}`}>
-                          <FaUserTie className={`text-5xl mx-auto mb-4 ${t.textFaint}`} />
-                          <p className="text-lg font-semibold">No leads found.</p>
-                          <p className={`text-sm mt-2 ${t.textFaint}`}>Self-assign leads when creating new entries.</p>
+                        /* Kept as bespoke copy rather than <EmptyState>, whose text is
+                           fixed — "self-assign when creating an entry" is the actual
+                           next step here. Styling matches EmptyState exactly. */
+                        <tr><td colSpan={11}>
+                          <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
+                            <div className={`w-16 h-16 rounded-2xl grid place-items-center mb-4 ${isDark ? "bg-white/[0.04] border border-white/10" : "bg-gray-50 border border-gray-200"}`}>
+                              <FaUserTie className="text-2xl opacity-25" />
+                            </div>
+                            <p className="text-sm font-bold mb-1">No leads found</p>
+                            <p className="text-xs opacity-50 mb-5 max-w-[300px]">Self-assign leads when creating new entries and they will appear here.</p>
+                          </div>
                         </td></tr>
-                      ) : filteredRecepLeads.map((lead: any) => {
+                      ) : filteredRecepLeads.map((lead: any, rowIdx: number) => {
                         const isLost = !!lead.is_lost_lead;
                         const isNGD = lead.status === "NON GENUINE DEMAND (NGD)" || lead.leadStatus === "NON GENUINE DEMAND (NGD)" || lead.leadInterestStatus === "NON GENUINE DEMAND (NGD)";
-                        const rowBgClass = isLost ? (isDark ? "bg-[#151515]" : "bg-slate-100") : isNGD ? (isDark ? "bg-[#1a1410]" : "bg-orange-50") : (isDark ? "bg-[#121218]" : "bg-white");
+                        // Lost / NGD keep their own opaque tint — that colour carries
+                        // meaning, so it outranks the zebra stripe rather than blending.
+                        const rowBgClass = isLost ? (isDark ? "bg-[#151515]" : "bg-slate-100") : isNGD ? (isDark ? "bg-[#1a1410]" : "bg-orange-50") : zebraBg(rowIdx);
                         return (
                           <tr key={lead.id}
-                            className={`transition-colors ${isLost ? t.rowLost : isNGD ? t.rowNGD : t.tableRow} ${rowBgClass}`}>
+                            className={`group transition-colors duration-200 ${isLost ? t.rowLost : isNGD ? t.rowNGD : t.tableRow} ${rowBgClass}`}>
 
                             {/* 1. Lead No. */}
-                            <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-bold ${t.accentText} sticky left-0 z-10 bg-inherit`} style={{ minWidth: '80px', maxWidth: '80px' }}>#{lead.sr_no || lead.id}</td>
+                            <td className={`${tdCls} text-[13px] font-bold ${t.accentText} sticky left-0 z-10 bg-inherit`} style={{ minWidth: '80px', maxWidth: '80px' }}>#{lead.sr_no || lead.id}</td>
 
                             {/* 2. Client Name */}
-                            <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-semibold ${t.text} sticky left-[80px] z-10 bg-inherit`} style={{ minWidth: '150px', maxWidth: '150px', boxShadow: isDark ? "1px 0 0 #2A2A35" : "1px 0 0 #9CA3AF" }}>{lead.name}</td>
+                            <td className={`${tdCls} text-[13px] font-bold ${t.text} sticky left-[80px] z-10 bg-inherit`} style={{ minWidth: '150px', maxWidth: '150px', boxShadow: isDark ? "1px 0 0 #2A2A35" : "1px 0 0 #9CA3AF" }}>{lead.name}</td>
 
                             {/* 3. CP Details */}
-                            <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm ${t.textMuted}`}>
+                            <td className={`${tdCls} text-xs ${t.textMuted}`}>
                               {(lead.cp_company || lead.cpCompany) ? (
-                                <div className="flex flex-col gap-0.5">
+                                <div className="flex flex-col gap-[3px]">
                                   <span className={`font-semibold text-xs ${t.text}`}>{lead.cp_company || lead.cpCompany}</span>
                                   {(lead.cp_phone || lead.cpPhone) && (
                                     <span className="font-mono text-[10px] text-orange-400">{lead.cp_phone || lead.cpPhone}</span>
                                   )}
                                 </div>
-                              ) : <span className="italic text-[10px]">—</span>}
+                              ) : <span className="text-xs italic opacity-35">—</span>}
                             </td>
 
                             {/* 4. Budget */}
-                            <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-bold ${isDark ? "text-green-700" : "text-emerald-600"}`}>{lead.salesBudget || lead.budget}</td>
+                            <td className={`${tdCls} text-[13px] font-semibold tabular-nums ${isDark ? "text-emerald-400" : "text-emerald-600"}`}>{lead.salesBudget || lead.budget}</td>
 
                             {/* 5. Phone */}
-                            <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm font-mono ${t.text}`}>{maskPhone(lead.phone)}</td>
+                            <td className={`${tdCls} text-xs font-mono ${t.text}`}>{maskPhone(lead.phone)}</td>
 
                             {/* 6. Alt Phone */}
-                            <td className={`px-3 py-3 md:p-4 text-[10px] md:text-sm font-mono ${t.textMuted}`}>{maskPhone(lead.altPhone)}</td>
+                            <td className={`${tdCls} text-xs font-mono ${t.textMuted}`}>{maskPhone(lead.altPhone)}</td>
 
                             {/* 7. Date Created */}
-                            <td className={`px-3 py-3 md:p-4 text-[10px] md:text-xs whitespace-normal min-w-[120px] ${t.textFaint}`}>{lead.date}</td>
+                            <td className={`${tdCls} text-xs min-w-[120px] ${t.textFaint}`}>{lead.date}</td>
 
                             {/* 8. Assigned to */}
-                            <td className="px-3 py-3 md:p-4">
+                            <td className={tdCls}>
                               <span className={`px-2 py-1 rounded-md text-[10px] font-semibold ${isDark ? "bg-purple-500/10 text-purple-400 border border-purple-500/30" : "bg-[#9E217B]/10 text-[#9E217B] border border-[#9E217B]/30"}`}>{lead.assignedReceptionist || user.name}</span>
                             </td>
 
                             {/* Site Visits */}
-                            <td className="px-3 py-3 md:p-4">
+                            <td className={tdCls}>
                               {lead.mongoVisitDate ? (
-                                <span className="text-orange-400 font-bold text-[10px]">{formatDate(lead.mongoVisitDate).split(",")[0]}</span>
+                                <span className="text-orange-500 font-semibold text-xs whitespace-nowrap">{formatDate(lead.mongoVisitDate).split(",")[0]}</span>
                               ) : (
-                                <span className={`text-[10px] ${t.textFaint}`}>No Visit</span>
+                                <span className="text-xs italic opacity-35">Pending</span>
                               )}
                             </td>
 
                             {/* 9. Status */}
-                            <td className="px-3 py-3 md:p-4">
+                            <td className={`${tdCls} text-center`}>
                               {lead.is_lost_lead ? (
-                                <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase border inline-flex items-center gap-1 ${t.statusLost}`}>
+                                <span className={`inline-flex items-center gap-1.5 rounded-full border font-bold uppercase whitespace-nowrap tracking-wide px-2.5 py-[5px] text-[10px] ${t.statusLost}`}>
                                   <Ghost className="w-3 h-3" /> Lost
                                 </span>
                               ) : isNGD ? (
-                                <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase border ${t.statusNGD}`}>
+                                <span className={`inline-flex items-center gap-1.5 rounded-full border font-bold uppercase whitespace-nowrap tracking-wide px-2.5 py-[5px] text-[10px] ${t.statusNGD}`}>
                                   NGD
                                 </span>
                               ) : (
-                                <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase border ${getStatusStyle(lead.status)
+                                <span className={`inline-flex items-center gap-1.5 rounded-full border font-bold uppercase whitespace-nowrap tracking-wide px-2.5 py-[5px] text-[10px] ${getStatusStyle(lead.status)
                                   }`}>{lead.status || "Assigned"}</span>
                               )}
                             </td>
 
                             {/* 10. Actions */}
-                            <td className="px-3 py-3 md:p-4">
+                            <td className={`${tdCls} text-center`}>
                               <button onClick={() => { setSelectedLead(lead); setAssignedSubView("detail"); setDetailTab("personal"); setShowSalesForm(false); setShowLoanForm(false); setActiveTab("assigned"); }}
-                                className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${t.btnPrimary}`}>
-                                Open
+                                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap transition-all duration-200 hover:-translate-y-[1px] cursor-pointer ${t.btnPrimary}`}>
+                                <FaEye className="text-[9px]" /> Open
                               </button>
                             </td>
                           </tr>
@@ -3358,82 +3455,86 @@ export default function ReceptionistDashboard() {
                       <h1 className={`text-xl md:text-3xl font-bold ${t.text}`}>Closed Leads</h1>
                       <p className={`text-xs mt-1 ${t.textFaint}`}>Leads that have reached the Closing stage</p>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <div className="relative">
-                        <FaSearch className={`absolute left-3 top-1/2 -translate-y-1/2 text-xs ${t.textFaint}`} />
-                        <input type="text" placeholder="Search leads..." value={searchClosedLeads}
-                          onChange={e => setSearchClosedLeads(e.target.value)}
-                          className={`rounded-lg pl-9 pr-4 py-2 text-sm outline-none w-52 transition-colors border ${t.inputBg} ${t.text}`} />
-                      </div>
-                      <button onClick={() => downloadCSV(filteredClosedLeads.map((l: any) => ({
-                        "Lead No.": l.sr_no || l.id,
-                        "Client Name": l.name,
-                        "Budget": l.salesBudget || l.budget || "N/A",
-                        "Status": l.status,
-                        "Assigned To": l.assignedTo || "Unassigned",
-                        "Closing Date": l.closingDate ? formatDate(l.closingDate) : "N/A",
-                        "Date Created": l.date,
-                      })), "Closed_Leads.csv")}
-                        className={`p-2 border rounded-lg ${t.exportBtn}`} title="Export CSV">
-                        <FaDownload size={12} />
-                      </button>
-                      <button onClick={refetchAll} className={`text-sm font-semibold flex items-center gap-2 px-4 py-2 rounded-lg ${t.btnPrimary}`}>
-                        ↻ Refresh
-                      </button>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <ToolbarButton
+                        onClick={() => downloadCSV(filteredClosedLeads.map((l: any) => ({
+                          "Lead No.": l.sr_no || l.id,
+                          "Client Name": l.name,
+                          "Budget": l.salesBudget || l.budget || "N/A",
+                          "Status": l.status,
+                          "Assigned To": l.assignedTo || "Unassigned",
+                          "Closing Date": l.closingDate ? formatDate(l.closingDate) : "N/A",
+                          "Date Created": l.date,
+                        })), "Closed_Leads.csv")}
+                        icon={<FaDownload className="text-[11px]" />} isDark={isDark} title="Download closed leads as CSV">
+                        Export
+                      </ToolbarButton>
+                      <ToolbarButton onClick={refetchAll} icon={<FaSyncAlt className="text-[11px]" />} isDark={isDark} title="Refresh leads" />
                     </div>
                   </div>
 
                   <div className={`rounded-2xl border overflow-hidden ${t.tableWrap}`} style={t.tableGlass}>
-                    <div className={`p-4 border-b flex justify-between items-center ${t.tableBorder}`}>
-                      <p className={`text-sm font-semibold ${t.text}`}>{filteredClosedLeads.length} closed leads</p>
-                      <p className={`text-xs ${t.textFaint}`}>Click any row to view full history</p>
+                    <div className={`px-5 pt-4 pb-3.5 flex flex-wrap items-center gap-3 border-b ${t.tableHead} ${isDark ? "border-white/[0.06]" : "border-indigo-300"}`}>
+                      <div className="flex items-center gap-2.5 shrink-0">
+                        <FaHandshake className="text-[#00AEEF] text-sm" />
+                        <h3 className={`font-bold text-[15px] tracking-tight ${t.text}`}>Closed Leads</h3>
+                        <span className={`text-[10px] font-bold px-2 py-1 rounded-md tabular-nums ${t.btnClosingBadge}`}>
+                          {filteredClosedLeads.length.toLocaleString("en-IN")}
+                        </span>
+                      </div>
+                      <SearchBar value={searchClosedLeads} onChange={setSearchClosedLeads} isDark={isDark} placeholder="Search leads..." />
+                      <span className="ml-auto text-[11px] font-semibold opacity-50">Click any row to view full history</span>
                     </div>
                     <DraggableTableContainer isDark={isDark}>
-                      <table className="w-full text-left border-collapse whitespace-nowrap">
-                        <thead className="sticky top-0 z-[25]"><tr className={t.tableHead}>
+                      <table className="w-full text-left text-sm border-collapse whitespace-nowrap">
+                        <thead className={tblHeadCls} style={tblHeadStyle}><tr>
                           {["Lead No.", "Client Name", "Budget", "Property", "Status", "Assigned To", "Site Visit", "Closing Date", "Actions"].map(h => (
-                            <th key={h} className={`px-3 py-3 md:p-4 font-bold uppercase tracking-wider border-b ${t.textHeader} ${t.tableBorder} ${h === "Lead No." ? `sticky left-0 z-20 ${isDark ? "bg-[#1A1A28]" : "bg-[#F1F5F9]"}` :
+                            <th key={h} className={`${thCls} ${h === "Lead No." ? `sticky left-0 z-20 ${isDark ? "bg-[#1A1A28]" : "bg-[#F1F5F9]"}` :
                               h === "Client Name" ? `sticky left-[80px] z-20 ${isDark ? "bg-[#1A1A28]" : "bg-[#F1F5F9]"}` : ""
-                              }`}
+                              } ${h === "Status" || h === "Actions" ? "text-center" : ""}`}
                               style={
                                 h === "Lead No." ? { minWidth: '80px', maxWidth: '80px' } :
                                   h === "Client Name" ? { minWidth: '150px', maxWidth: '150px', boxShadow: isDark ? "1px 0 0 #2A2A35" : "1px 0 0 #9CA3AF" } : {}
                               }>{h}</th>
                           ))}
                         </tr></thead>
-                        <tbody className={`${t.tableDivide} divide-y`}>
+                        <tbody className={`${tblDivide} divide-y`}>
                           {isFetchingEnquiries ? (
-                            <tr><td colSpan={9} className={`p-8 text-center text-sm ${t.textMuted}`}>Loading...</td></tr>
+                            <SkeletonRows rows={8} cols={9} isDark={isDark} />
                           ) : filteredClosedLeads.length === 0 ? (
-                            <tr><td colSpan={9} className={`p-12 text-center ${t.textMuted}`}>
-                              <FaHandshake className={`text-5xl mx-auto mb-4 ${t.textFaint}`} />
-                              <p className="text-lg font-semibold">No closed leads yet.</p>
-                              <p className={`text-sm mt-2 ${t.textFaint}`}>Leads marked as Closing will appear here.</p>
+                            <tr><td colSpan={9}>
+                              <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
+                                <div className={`w-16 h-16 rounded-2xl grid place-items-center mb-4 ${isDark ? "bg-white/[0.04] border border-white/10" : "bg-gray-50 border border-gray-200"}`}>
+                                  <FaHandshake className="text-2xl opacity-25" />
+                                </div>
+                                <p className="text-sm font-bold mb-1">No closed leads yet</p>
+                                <p className="text-xs opacity-50 mb-5 max-w-[300px]">Leads marked as Closing will appear here.</p>
+                              </div>
                             </td></tr>
-                          ) : filteredClosedLeads.map((lead: any) => {
-                            const rowBgClass = isDark ? "bg-[#121218]" : "bg-white";
+                          ) : filteredClosedLeads.map((lead: any, rowIdx: number) => {
+                            const rowBgClass = zebraBg(rowIdx);
                             return (
-                              <tr key={lead.id} className={`transition-colors cursor-pointer ${t.tableRow} ${rowBgClass}`}
+                              <tr key={lead.id} className={`${rowCls} cursor-pointer ${rowBgClass}`}
                                 onClick={() => { setSelectedClosedLead(lead); setClosedLeadView("detail"); }}>
-                                <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-bold ${t.accentText} sticky left-0 z-10 bg-inherit`} style={{ minWidth: '80px', maxWidth: '80px' }}>#{lead.sr_no || lead.id}</td>
-                                <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-semibold ${t.text} sticky left-[80px] z-10 bg-inherit`} style={{ minWidth: '150px', maxWidth: '150px', boxShadow: isDark ? "1px 0 0 #2A2A35" : "1px 0 0 #9CA3AF" }}>{lead.name}</td>
-                                <td className={`px-3 py-3 md:p-4 text-xs md:text-sm font-bold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget || lead.budget}</td>
-                                <td className={`px-3 py-3 md:p-4 text-xs ${t.textMuted}`}>{(lead.propType && lead.propType !== "Pending" && lead.propType !== "N/A" ? lead.propType : lead.configuration && lead.configuration !== "Pending" && lead.configuration !== "N/A" ? lead.configuration : "N/A")}</td>
-                                <td className="px-3 py-3 md:p-4">
-                                  <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase border ${t.statusClosing}`}>
+                                <td className={`${tdCls} text-[13px] font-bold ${t.accentText} sticky left-0 z-10 bg-inherit`} style={{ minWidth: '80px', maxWidth: '80px' }}>#{lead.sr_no || lead.id}</td>
+                                <td className={`${tdCls} text-[13px] font-bold ${t.text} sticky left-[80px] z-10 bg-inherit`} style={{ minWidth: '150px', maxWidth: '150px', boxShadow: isDark ? "1px 0 0 #2A2A35" : "1px 0 0 #9CA3AF" }}>{lead.name}</td>
+                                <td className={`${tdCls} text-[13px] font-semibold tabular-nums ${isDark ? "text-emerald-400" : "text-emerald-600"}`}>{lead.salesBudget || lead.budget}</td>
+                                <td className={`${tdCls} text-xs ${t.textMuted}`}>{(lead.propType && lead.propType !== "Pending" && lead.propType !== "N/A" ? lead.propType : lead.configuration && lead.configuration !== "Pending" && lead.configuration !== "N/A" ? lead.configuration : "N/A")}</td>
+                                <td className={`${tdCls} text-center`}>
+                                  <span className={`inline-flex items-center gap-1.5 rounded-full border font-bold uppercase whitespace-nowrap tracking-wide px-2.5 py-[5px] text-[10px] ${t.statusClosing}`}>
                                     {lead.status}
                                   </span>
                                 </td>
-                                <td className={`px-3 py-3 md:p-4 text-xs ${t.textMuted}`}>{lead.assignedTo || "Unassigned"}</td>
-                                <td className={`px-3 py-3 md:p-4 text-[10px] ${lead.mongoVisitDate ? "text-orange-400" : t.textFaint}`}>
-                                  {lead.mongoVisitDate ? formatDate(lead.mongoVisitDate).split(",")[0] : "—"}
+                                <td className={`${tdCls} text-xs ${t.textMuted}`}>{lead.assignedTo || "Unassigned"}</td>
+                                <td className={`${tdCls} text-xs ${lead.mongoVisitDate ? "text-orange-500 font-semibold" : t.textFaint}`}>
+                                  {lead.mongoVisitDate ? formatDate(lead.mongoVisitDate).split(",")[0] : <span className="text-xs italic opacity-35">—</span>}
                                 </td>
-                                <td className={`px-3 py-3 md:p-4 text-[10px] ${t.textFaint}`}>
-                                  {lead.closingDate ? formatDate(lead.closingDate).split(",")[0] : "—"}
+                                <td className={`${tdCls} text-xs ${t.textFaint}`}>
+                                  {lead.closingDate ? formatDate(lead.closingDate).split(",")[0] : <span className="text-xs italic opacity-35">—</span>}
                                 </td>
-                                <td className="px-3 py-3 md:p-4">
-                                  <button className={`text-xs font-bold px-3 py-1.5 rounded-lg ${t.btnWarning}`}>
-                                    View History
+                                <td className={`${tdCls} text-center`}>
+                                  <button className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap transition-all duration-200 hover:-translate-y-[1px] cursor-pointer ${t.btnWarning}`}>
+                                    <FaEye className="text-[9px]" /> View History
                                   </button>
                                 </td>
                               </tr>
@@ -4065,6 +4166,7 @@ export default function ReceptionistDashboard() {
                             </div>
                           )}
                         </div>
+
 
                         {/* CP phone now lives at the top of this block (see above) so it
                             reads as the primary identifier rather than an afterthought. */}
