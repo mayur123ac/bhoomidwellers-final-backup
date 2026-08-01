@@ -600,6 +600,8 @@ export default function ReceptionistDashboard() {
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);  // keep existing
 
   // Transfer state (Receptionist Lead → Manager)
+  const [assignedToError, setAssignedToError] = useState("");
+
   const [transferNote, setTransferNote] = useState("");
   const [transferTarget, setTransferTarget] = useState("");
   const [isTransferring, setIsTransferring] = useState(false);
@@ -1233,6 +1235,15 @@ export default function ReceptionistDashboard() {
     }
     setCpPhoneError("");
 
+    if (!enquiryForm.selfAssign && !enquiryForm.assignedTo) {
+      setAssignedToError("Please select a Sales Manager before submitting.");
+      setIsSubmitting(false);
+      return;
+    }
+    setAssignedToError("");
+
+
+
     const newEntry = {
       name: enquiryForm.fullName,
       phone: enquiryForm.mobile,
@@ -1852,7 +1863,7 @@ export default function ReceptionistDashboard() {
         <header className={`h-16 border-b flex items-center justify-between px-6 flex-shrink-0 z-30 ${t.header}`} style={t.headerGlass}>
           <img src="/assets/bhoomidwellersLogo_trans.png" alt="Bhoomi CRM" className="h-20 md:h-18 w-auto object-contain" />
           <div className="flex items-center space-x-4 relative" ref={topbarRef}>
-            <LoginTimerWidget isDark={isDark} />
+            {/* <LoginTimerWidget isDark={isDark} /> */}
             <AttendanceBadge />
             <button onClick={() => setIsDark(!isDark)} aria-label="Toggle theme"
               className={`w-9 h-9 rounded-xl border flex items-center justify-center transition-all duration-200 hover:scale-105 active:scale-95 shadow-sm ${t.toggleWrap}`}>
@@ -3221,22 +3232,15 @@ export default function ReceptionistDashboard() {
                           })}
                           <div ref={followUpEndRef} />
                         </div>
-                        {isLeadLocked ? (
-                          <div className={`p-5 border-t flex items-center justify-center flex-shrink-0 ${t.header} ${t.tableBorder}`} style={t.headerGlass}>
-                            <span className={`text-xs font-semibold ${t.textFaint}`}>
-                              {selectedLead.is_lost_lead ? "❌ Lost Lead • Read Only — follow-ups disabled" : "✅ Lead Closed • Read Only — follow-ups disabled"}
-                            </span>
-                          </div>
-                        ) : (
-                          <form onSubmit={handleSendCustomNote} className={`p-4 border-t flex gap-3 items-center flex-shrink-0 ${t.header} ${t.tableBorder}`} style={t.headerGlass}>
-                            <input
-                              type="text" value={customNote} onChange={e => setCustomNote(e.target.value)}
-                              placeholder="Add follow-up note..."
-                              className={`flex-1 rounded-xl px-4 py-3 text-sm outline-none transition-colors border ${t.inputBg} ${t.text} ${t.inputFocus}`}
-                            />
-                            <button type="submit" className={`w-12 h-12 text-white rounded-xl flex items-center justify-center cursor-pointer transition-colors shadow-lg ${isDark ? "bg-purple-600 hover:bg-purple-500" : "bg-[#00AEEF] hover:bg-[#0099d4]"}`}><FaPaperPlane className="text-sm ml-[-2px]" /></button>
-                          </form>
-                        )}
+                        {/* Open on closed/lost leads too — see the note in the sales panel. */}
+                        <form onSubmit={handleSendCustomNote} className={`p-4 border-t flex gap-3 items-center flex-shrink-0 ${t.header} ${t.tableBorder}`} style={t.headerGlass}>
+                          <input
+                            type="text" value={customNote} onChange={e => setCustomNote(e.target.value)}
+                            placeholder="Add follow-up note..."
+                            className={`flex-1 rounded-xl px-4 py-3 text-sm outline-none transition-colors border ${t.inputBg} ${t.text} ${t.inputFocus}`}
+                          />
+                          <button type="submit" className={`w-12 h-12 text-white rounded-xl flex items-center justify-center cursor-pointer transition-colors shadow-lg ${isDark ? "bg-purple-600 hover:bg-purple-500" : "bg-[#00AEEF] hover:bg-[#0099d4]"}`}><FaPaperPlane className="text-sm ml-[-2px]" /></button>
+                        </form>
                       </div>
                     </div>
                   </div>
@@ -3939,7 +3943,7 @@ export default function ReceptionistDashboard() {
                           Assign to Manager
                         </button>
                         <button type="button"
-                          onClick={() => setEnquiryForm({ ...enquiryForm, selfAssign: true, assignedTo: "" })}
+                          onClick={() => { setEnquiryForm({ ...enquiryForm, selfAssign: true, assignedTo: "" }); setAssignedToError(""); }}
                           className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-colors border ${enquiryForm.selfAssign ? (isDark ? "bg-[#9E217B] border-[#9E217B] text-white" : "bg-[#9E217B] border-[#9E217B] text-white") : `${t.textMuted} ${t.tableBorder}`}`}>
                           Self-Assign (Me)
                         </button>
@@ -3947,7 +3951,10 @@ export default function ReceptionistDashboard() {
                       {enquiryForm.selfAssign ? (
                         <p className={`text-xs ${isDark ? "text-[#d4006e]" : "text-[#9E217B]"}`}>✓ Lead will be assigned to <strong>{user.name}</strong> (you)</p>
                       ) : (
-                        <div className={`w-full rounded-xl border-2 overflow-hidden ${isDark ? "border-purple-500/40" : "border-purple-300"}`}>
+                        <div className={`w-full rounded-xl border-2 overflow-hidden ${assignedToError
+                          ? "border-red-500"
+                          : isDark ? "border-purple-500/40" : "border-purple-300"
+                          }`}>
                           {isFetchingManagers ? (
                             <div className={`p-3 text-sm ${t.textMuted}`}>Loading managers…</div>
                           ) : combinedAssignees.length === 0 ? (
@@ -3989,7 +3996,8 @@ export default function ReceptionistDashboard() {
                                       key={i}
                                       onClick={() => {
                                         setEnquiryForm({ ...enquiryForm, assignedTo: m.name });
-                                        setShowManagerDropdown(false);  // ← closes on click
+                                        setAssignedToError("");
+                                        setShowManagerDropdown(false);
                                       }}
                                       className={`px-4 py-3 text-sm cursor-pointer border-b transition-colors ${enquiryForm.assignedTo === m.name
                                         ? isDark ? "bg-purple-900/40 text-purple-200 font-bold" : "bg-purple-100 text-purple-800 font-bold"
@@ -4007,6 +4015,16 @@ export default function ReceptionistDashboard() {
                             </>
                           )}
                         </div>
+                      )}
+
+                      {/* The submit guard sets assignedToError but nothing displayed it,
+                          so an unassigned submit failed silently — the button appeared
+                          to do nothing. Rendered here, under the field it refers to. */}
+                      {assignedToError && (
+                        <p className="text-xs font-semibold text-red-500 flex items-center gap-1.5 mt-1.5">
+                          <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                          {assignedToError}
+                        </p>
                       )}
                     </div>
 

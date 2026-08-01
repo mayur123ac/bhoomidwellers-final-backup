@@ -1,6 +1,7 @@
 // api/cp-commissions/[id]/route.ts — [id] is always the cp_commissions id.
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +38,9 @@ export async function GET(
 ) {
   const { id } = await params;
   try {
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const rows = await query(
       `SELECT c.*, cp.name AS channel_partner_name, b.booking_number
          FROM cp_commissions c
@@ -64,6 +68,10 @@ export async function PATCH(
 ) {
   const { id } = await params;
   try {
+    // Commission edits drive real payouts.
+    const gate = await requireRoles(["admin", "sales manager"]);
+    if (!gate.ok) return gate.response;
+
     const body = await req.json();
     const updatedBy = (body.updated_by || body.user_name || "system").toString();
 

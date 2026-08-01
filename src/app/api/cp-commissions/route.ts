@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
 import { computeCPCommission, CPCommissionError } from "@/lib/cpCommissionEngine";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -9,6 +10,9 @@ export const dynamic = "force-dynamic";
 // Filters: channel_partner_id, status, date_from, date_to (on created_at).
 export async function GET(req: NextRequest) {
   try {
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const { searchParams } = new URL(req.url);
     const channelPartnerId = searchParams.get("channel_partner_id");
     const status = searchParams.get("status");
@@ -60,6 +64,10 @@ export async function GET(req: NextRequest) {
 // would allow the payee to be overridden at commission time.
 export async function POST(req: NextRequest) {
   try {
+    // Creates a commission liability.
+    const gate = await requireRoles(["admin", "sales manager"]);
+    if (!gate.ok) return gate.response;
+
     const body = await req.json();
     // Accepts both spellings: booking_id (Phase 2 callers) and bookingId (Phase 4 UI).
     const bookingId = Number(body.booking_id ?? body.bookingId);

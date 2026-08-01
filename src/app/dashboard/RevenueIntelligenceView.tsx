@@ -32,6 +32,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
+  FileText,
   HandCoins,
   Info,
   Landmark,
@@ -46,13 +47,25 @@ import {
 } from "lucide-react";
 
 import RevenueChatDock from "@/components/RevenueChatDock";
+// The full booking workspace the Sales panel shows — Booking Summary / Payment
+// History / Documents / Timeline / CRM Details, with its own "Edit Booking Form"
+// button that opens BookingFormModal internally. Mounting this rather than the
+// edit form directly means the drawer lands on the view, and editing stays one
+// click further in, exactly as it is in Sales.
+import ClosedLeadBookingView from "@/components/ClosedLeadBookingView";
 import { CRMContextManager } from "@/lib/admin-ai/contextManager";
 
 /* ─────────────────────────────── config ─────────────────────────────── */
 const DASHBOARD_ENDPOINT = "/api/revenue-intelligence";
 const paymentSummaryUrl = (bookingId: number | string) => `/api/booking-applications/${bookingId}/payment-summary`;
 const receiptsUrl = (bookingId: number | string) => `/api/booking-applications/${bookingId}/receipts`;
-const followupsUrl = (leadId: number | string) => `/api/walkin_enquiries/${leadId}/follow-ups`;
+// Full booking application — the same record the Sales and Reception panels render,
+// fetched by booking id so this works even when the row has no linked lead.
+const bookingApplicationUrl = (bookingId: number | string) => `/api/booking-applications/${bookingId}`;
+// Flat, not scoped by lead id in the path: the real endpoint is /api/followups.
+// GET accepts an optional ?lead_id= filter (see the route's own note — an index
+// scan rather than a full read of the follow_ups table); POST takes the bare path.
+const followupsUrl = () => `/api/followups`;
 
 const ACCENT = "#9E217B";
 const PAGE_SIZE = 25;
@@ -117,13 +130,16 @@ type SortKey =
   | "sanctionedDate";
 
 
+// Mirrors what /api/followups returns. The id arrives as `_id` (the route aliases
+// id::text AS "_id" on GET and returns the same key on POST) — there is no `id`.
 type Followup = {
-  id: number | string;
-  note: string;
-  created_at?: string;
-  created_by?: string;
-  author?: string;
-  next_followup_date?: string | null;
+  _id: number | string;
+  leadId: string;
+  message: string;
+  salesManagerName?: string;
+  createdBy?: string;
+  siteVisitDate?: string | null;
+  createdAt?: string;
 };
 
 /* ───────────────────────────── formatting ───────────────────────────── */
@@ -608,12 +624,12 @@ export default function RevenueIntelligenceView({ isDark, theme, user }: Props) 
 
       <div className="p-4 md:p-6 space-y-4">
         {showInfo && <HowItWorks onClose={() => setShowInfo(false)} theme={theme} isDark={isDark} />}
-        <RevenueChatDock
+        {/* <RevenueChatDock
           rows={filtered}
           filterLabel={[manager, statusFilter && `status: ${statusFilter}`, search && `“${search}”`].filter(Boolean).join(" · ")}
           theme={theme}
           isDark={isDark}
-        />
+        /> */}
         {error && (
           <div className={`rounded-xl border p-4 ${toneClasses("idle", isDark)}`}>
             <p className={`text-sm font-bold ${theme.text}`}>Revenue intelligence could not load</p>
@@ -915,6 +931,10 @@ export default function RevenueIntelligenceView({ isDark, theme, user }: Props) 
           user={user}
           mayRecord={mayRecord}
           onRecordOcr={() => setOcrRow(openRow)}
+          // Editing the booking changes agreement value, loan and registration —
+          // every figure this table sums — so a save refetches rather than leaving
+          // the row showing what it was before.
+          onSaved={() => load(true)}
           onClose={() => setOpenRow(null)}
           theme={theme}
           isDark={isDark}
@@ -1132,6 +1152,7 @@ function CaseDrawer({
   user,
   mayRecord,
   onRecordOcr,
+  onSaved,
   onClose,
   theme,
   isDark,
@@ -1140,6 +1161,7 @@ function CaseDrawer({
   user?: { name: string; role: string };
   mayRecord: boolean;
   onRecordOcr: () => void;
+  onSaved?: () => void;
   onClose: () => void;
   theme: any;
   isDark: boolean;
@@ -1158,17 +1180,56 @@ function CaseDrawer({
   const [justSaved, setJustSaved] = useState(false);
   const noteRef = useRef<HTMLTextAreaElement>(null);
 
+  /* Booking application, loaded on demand. Keyed off bookingId rather than leadId
+     so it opens for every case in the table — including the ones whose lead link
+     is missing, which are exactly the cases someone needs to look up by hand. */
+  const [bookingOpen, setBookingOpen] = useState(false);
+  const [booking, setBooking] = useState<any>(null);
+  const [loadingBooking, setLoadingBooking] = useState(false);
+  const [bookingError, setBookingError] = useState("");
+
   const leadId = row.leadId;
   const bookingId = row.bookingId;
 
   useEffect(() => {
+    noteRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key !== "Escape") return;
+      // The booking form stacks above the drawer, so Escape dismisses the top
+      // layer first rather than closing both at once.
+      if (bookingOpen) setBookingOpen(false);
+      else onClose();
     };
     window.addEventListener("keydown", onKey);
-    noteRef.current?.focus();
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [onClose, bookingOpen]);
+
+  const fetchBooking = async () => {
+    if (!bookingId) return;
+    setLoadingBooking(true);
+    setBookingError("");
+    try {
+      const res = await fetch(bookingApplicationUrl(bookingId), { cache: "no-store" });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.message || "The booking form could not load.");
+      setBooking(json.data);
+    } catch (err: any) {
+      setBookingError(err.message || "The booking form could not load.");
+    } finally {
+      setLoadingBooking(false);
+    }
+  };
+
+  const openBookingForm = () => {
+    if (!bookingId) return;
+    setBookingOpen(true);
+    // Fetched once per drawer; reopening shows what is already in hand.
+    if (booking || loadingBooking) return;
+    fetchBooking();
+  };
 
   /* Receipt history comes from the payment-summary route, which already
      returns the own-contribution breakdown straight off the ledger. */
@@ -1195,10 +1256,19 @@ function CaseDrawer({
     setLoadingThread(true);
     setThreadError("");
     try {
-      const res = await fetch(followupsUrl(leadId), { cache: "no-store" });
+      const res = await fetch(
+        `${followupsUrl()}?lead_id=${encodeURIComponent(String(leadId))}`,
+        { cache: "no-store" }
+      );
       const json = await res.json();
       if (!res.ok || !json.success) throw new Error(json.message || "Follow-ups could not load.");
-      setFollowups(json.data || json.follow_ups || json.followups || []);
+      // Filtered again here rather than trusted: ?lead_id= narrows the query, but
+      // this panel must never show another lead's thread if the param is ever
+      // dropped or the endpoint reverts to returning the whole table.
+      const mine = (json.data || []).filter(
+        (f: Followup) => String(f.leadId) === String(leadId)
+      );
+      setFollowups(mine);
     } catch (err: any) {
       setThreadError(err.message || "Follow-ups could not load.");
     } finally {
@@ -1215,15 +1285,15 @@ function CaseDrawer({
     setSaving(true);
     setSaveError("");
     try {
-      const res = await fetch(followupsUrl(leadId), {
+      const res = await fetch(followupsUrl(), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          note: note.trim(),
-          next_followup_date: nextDate || null,
-          booking_id: bookingId,
-          user_name: user?.name,
-          user_role: user?.role,
+          leadId,
+          message: note.trim(),
+          salesManagerName: user?.name,
+          createdBy: user?.name,
+          siteVisitDate: nextDate || null,
         }),
       });
       const json = await res.json();
@@ -1258,6 +1328,27 @@ function CaseDrawer({
     ["Registration", shortDate(row.raw?.actual_registration_date || row.raw?.expected_registration_date)],
   ];
 
+  /* The lead BookingFormModal needs, rebuilt from the booking's own lead_* columns
+     rather than from row.leadId. Same value in practice, but it comes from the
+     record being edited, so the form still opens if the revenue row's lead link is
+     ever missing — and it carries the name/phone/address the form prefills from. */
+  const bookingLead = booking
+    ? {
+      id: booking.lead_id ?? leadId,
+      sr_no: booking.lead_sr_no,
+      name: booking.lead_name ?? row.customerName,
+      phone: booking.lead_phone,
+      alt_phone: booking.lead_alt_phone,
+      email: booking.lead_email,
+      address: booking.lead_address,
+      budget: booking.lead_budget,
+      configuration: booking.lead_configuration,
+      purpose: booking.lead_purpose,
+      source: booking.lead_source,
+      assigned_to: booking.lead_assigned_to,
+    }
+    : null;
+
   const labelCls = `text-[10px] font-bold uppercase tracking-[0.07em] ${theme.textMuted}`;
   const fieldCls = `w-full rounded-lg px-3 py-2 text-sm outline-none border transition-colors ${isDark ? "border-white/10 bg-white/[0.04] text-gray-100" : "border-slate-200 bg-white text-slate-800"
     }`;
@@ -1286,6 +1377,18 @@ function CaseDrawer({
               {row.flatNo} · {row.bookingNumber} · {row.salesManager}
             </p>
             {row.customerNote && <p className={`text-[11px] mt-1 italic ${theme.textMuted}`}>{row.customerNote}</p>}
+            {bookingId && (
+              <button
+                onClick={openBookingForm}
+                className={`mt-2 text-[10px] font-black px-2.5 py-1 rounded-full inline-flex items-center gap-1.5 border transition-colors ${isDark
+                  ? "border-white/15 text-gray-200 hover:bg-white/10"
+                  : "border-slate-200 text-slate-600 hover:bg-slate-100"
+                  }`}
+              >
+                <FileText className="w-3 h-3" />
+                View booking form
+              </button>
+            )}
           </div>
           <button
             onClick={onClose}
@@ -1420,22 +1523,22 @@ function CaseDrawer({
               <div className="space-y-2">
                 {followups.map((f) => (
                   <article
-                    key={f.id}
+                    key={f._id}
                     className={`rounded-xl border p-3 ${isDark ? "border-white/10 bg-white/[0.03]" : "border-slate-200 bg-slate-50/60"
                       }`}
                   >
                     <div className="flex items-center justify-between gap-2 mb-1.5">
                       <span className={`inline-flex items-center gap-1.5 text-[11px] font-bold ${theme.text}`}>
                         <User className="w-3 h-3 opacity-60" />
-                        {f.created_by || f.author || "Team"}
+                        {f.salesManagerName || f.createdBy || "Team"}
                       </span>
-                      <span className={`text-[10px] ${theme.textMuted}`}>{shortDate(f.created_at)}</span>
+                      <span className={`text-[10px] ${theme.textMuted}`}>{shortDate(f.createdAt)}</span>
                     </div>
-                    <p className={`text-xs leading-relaxed whitespace-pre-wrap ${theme.text}`}>{f.note}</p>
-                    {f.next_followup_date && (
+                    <p className={`text-xs leading-relaxed whitespace-pre-wrap ${theme.text}`}>{f.message}</p>
+                    {f.siteVisitDate && (
                       <p className={`text-[10px] mt-1.5 inline-flex items-center gap-1 ${theme.textMuted}`}>
                         <CalendarClock className="w-3 h-3" />
-                        Next: {shortDate(f.next_followup_date)}
+                        Next: {shortDate(f.siteVisitDate)}
                       </p>
                     )}
                   </article>
@@ -1445,6 +1548,80 @@ function CaseDrawer({
           </section>
         </div>
       </aside>
+
+      {/* Booking workspace, stacked above the drawer. ClosedLeadBookingView is an
+          inline panel rather than a modal — it is embedded in a page in Sales — so
+          it needs this overlay shell and its own close control here. */}
+      {bookingOpen && (
+        <div
+          className="fixed inset-0 z-[60] flex items-start justify-center p-2 sm:p-5"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Booking form"
+        >
+          <div
+            className="absolute inset-0"
+            style={{ background: "rgba(0,0,0,0.6)" }}
+            onClick={() => setBookingOpen(false)}
+          />
+          <div
+            className={`relative w-full max-w-6xl max-h-full flex flex-col rounded-2xl border shadow-2xl overflow-hidden ${isDark ? "border-white/10 bg-[#0d0d12]" : "border-slate-200 bg-white"
+              }`}
+          >
+            <div className={`px-4 py-3 border-b flex items-center justify-between gap-3 flex-shrink-0 ${theme.tableBorder}`}>
+              <div className="min-w-0">
+                <p className={`text-sm font-black truncate ${theme.text}`}>Booking form</p>
+                <p className={`text-[11px] ${theme.textMuted}`}>
+                  {row.bookingNumber} · {row.customerName}
+                </p>
+              </div>
+              <button
+                onClick={() => setBookingOpen(false)}
+                className={`p-1.5 rounded-lg flex-shrink-0 ${isDark ? "hover:bg-white/10 text-gray-300" : "hover:bg-slate-100 text-slate-500"
+                  }`}
+                aria-label="Close booking form"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-4">
+              {loadingBooking ? (
+                <div className="space-y-2">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <div key={i} className={`h-16 rounded-xl animate-pulse ${isDark ? "bg-white/[0.05]" : "bg-slate-100"}`} />
+                  ))}
+                </div>
+              ) : bookingError ? (
+                <div className="py-8 text-center">
+                  <p className="text-xs text-red-500">{bookingError}</p>
+                  <button
+                    onClick={fetchBooking}
+                    className="mt-3 text-[11px] font-black px-3 py-1.5 rounded-lg text-white"
+                    style={{ background: ACCENT }}
+                  >
+                    Try again
+                  </button>
+                </div>
+              ) : booking ? (
+                <ClosedLeadBookingView
+                  booking={booking}
+                  // Rebuilt from the booking's own lead_* columns — see bookingLead.
+                  // The nested Edit Booking Form needs lead.id to submit against.
+                  lead={bookingLead}
+                  isDark={isDark}
+                  userRole={(user?.role || "").toLowerCase().replace(/\s+/g, "_") || "sales"}
+                  currentUser={user}
+                  // Fires after an edit, a cancellation, or a cancellation edit.
+                  // Refetch the record so the open view shows the new values, and
+                  // refresh the table behind it — these figures feed its totals.
+                  onRefetch={() => { fetchBooking(); onSaved?.(); }}
+                />
+              ) : null}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

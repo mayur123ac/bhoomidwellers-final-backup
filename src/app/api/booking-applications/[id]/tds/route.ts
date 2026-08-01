@@ -1,6 +1,7 @@
 // app/api/booking-applications/[id]/tds/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +35,9 @@ export async function GET(
 ) {
   const { id } = await params;
   try {
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const rows = await query(
       `SELECT * FROM booking_tds_records WHERE booking_id = $1 ORDER BY created_at ASC`,
       [Number(id)]
@@ -52,6 +56,9 @@ export async function POST(
 ) {
   const { id } = await params;
   try {
+    const gate = await requireRoles(["admin", "site head"]);
+    if (!gate.ok) return gate.response;
+
     const body = await req.json();
     const {
       payment_id, tds_amount, tds_rate, form_26qb_filed, form_26qb_date,
@@ -103,6 +110,9 @@ export async function PUT(
 ) {
   const { id } = await params;
   try {
+    const gate = await requireRoles(["admin", "site head"]);
+    if (!gate.ok) return gate.response;
+
     const body = await req.json();
     const {
       record_id, tds_amount, tds_rate, form_26qb_filed, form_26qb_date,

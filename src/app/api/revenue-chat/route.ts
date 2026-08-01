@@ -15,6 +15,7 @@
 import { buildServerDigest } from "@/lib/revenueDigest";
 import { REVENUE_CHAT_SYSTEM_PROMPT } from "@/lib/prompts";
 import { NextRequest, NextResponse } from "next/server";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -171,6 +172,10 @@ function v0(entry: [string, { count: number }]) {
 // ─── POST — answer a question about the visible rows ──────────────────────────
 export async function POST(req: NextRequest) {
     try {
+    // Third AI endpoint - same exposure.
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
         const apiKey = process.env.OPENAI_API_KEY;
         if (!apiKey) {
             return NextResponse.json(

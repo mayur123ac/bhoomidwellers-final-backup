@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 // GET /api/receptionist/leads?name=Receptionist
 export async function GET(req: Request) {
   try {
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const { searchParams } = new URL(req.url);
     const name = searchParams.get("name");
 

@@ -1,9 +1,22 @@
 // app/api/leads/transfer/route.ts
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export async function POST(req: Request) {
   try {
+    // Reassigns a lead to another manager.
+    //
+    // Receptionist is included because handing a walk-in to a Sales Manager is
+    // the front desk's core job — the receptionist dashboard has a dedicated
+    // transfer modal for it ("Transfer state (Receptionist Lead → Manager)").
+    // An earlier gate of admin+sales-manager broke that flow; the endpoint had
+    // no check at all before, so this narrows access rather than widening it.
+    // Sourcing Manager and Site Head are excluded: neither works the walk-in
+    // queue, and lead routing is not theirs to change.
+    const gate = await requireRoles(["admin", "sales manager", "receptionist"]);
+    if (!gate.ok) return gate.response;
+
     const body = await req.json();
     const { lead_id, transfer_to, transfer_note, transferred_by } = body as {
       lead_id:        number | string;

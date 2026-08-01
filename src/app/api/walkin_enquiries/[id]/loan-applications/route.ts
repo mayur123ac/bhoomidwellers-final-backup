@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { resolveLatestBookingId } from "@/lib/pdd";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,9 @@ export async function GET(
 ) {
   const { id } = await params;
   try {
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const rows = await query(
       `SELECT * FROM loan_applications WHERE lead_id = $1 ORDER BY created_at ASC`,
       [Number(id)],
@@ -38,6 +42,9 @@ export async function POST(
 ) {
   const { id } = await params;
   try {
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const body = await req.json();
     const { user_name, user_role } = body;
 

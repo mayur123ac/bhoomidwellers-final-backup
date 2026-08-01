@@ -1,9 +1,14 @@
 //api/site-visits
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export async function GET(req: Request) {
   try {
+    // Lead names and phones join into this response.
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const { searchParams } = new URL(req.url);
     const leadId = searchParams.get("lead_id");
 
@@ -45,6 +50,9 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const { lead_id, visit_date, created_by, role, notes } = await req.json();
     if (!lead_id || !visit_date || !created_by) {
       return NextResponse.json(
@@ -110,6 +118,10 @@ export async function POST(req: Request) {
 
 export async function DELETE(req: Request) {
   try {
+    // Hard delete of a visit row.
+    const gate = await requireRoles(["admin", "sales manager", "receptionist"]);
+    if (!gate.ok) return gate.response;
+
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
     if (!id) {
@@ -124,6 +136,9 @@ export async function DELETE(req: Request) {
 
 export async function PATCH(req: Request) {
   try {
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const { id, status, notes, visit_date } = await req.json();
     if (!id) {
       return NextResponse.json({ success: false, message: "Missing id" }, { status: 400 });

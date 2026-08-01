@@ -1,5 +1,6 @@
 // app/api/caller-leads/events/route.ts
 import { NextRequest } from "next/server";
+import { requireSession } from "@/lib/serverAuth";
 
 const clients = new Set<ReadableStreamDefaultController>();
 
@@ -14,6 +15,12 @@ export function broadcastUpdate(data: object) {
 }
 
 export async function GET(req: NextRequest) {
+  // Gated before the stream opens. An SSE endpoint holds a connection and pushes
+  // every caller-lead change to whoever is listening, so leaving it open meant a
+  // live feed of lead activity to an anonymous subscriber.
+  const gate = await requireSession();
+  if (!gate.ok) return gate.response;
+
   let controller: ReadableStreamDefaultController;
   let heartbeatTimer: ReturnType<typeof setInterval>;
 

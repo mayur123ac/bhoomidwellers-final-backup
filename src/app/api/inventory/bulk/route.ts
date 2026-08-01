@@ -4,21 +4,27 @@
 // summary pattern. Each deletion writes an inventory_unit_history row.
 import { NextRequest, NextResponse } from "next/server";
 import { transaction } from "@/lib/db";
-import { isAdmin, isLinkedActive, isBookingProtected, bookingProtectedReason, linkDescriptor, softDeleteUnit } from "@/lib/inventoryDelete";
+import { requireRoles } from "@/lib/serverAuth";
+import { isLinkedActive, isBookingProtected, bookingProtectedReason, linkDescriptor, softDeleteUnit } from "@/lib/inventoryDelete";
 
 export const dynamic = "force-dynamic";
 
 export async function DELETE(req: NextRequest) {
   try {
-    const body = await req.json().catch(() => ({}));
-    const { ids, user_name, user_role } = body;
+    // Role comes from the signed session, never the body. This previously read
+    // `user_role` out of the POST body, so `{"ids":[1,2,3],"user_role":"admin"}`
+    // from any anonymous client soft-deleted inventory. Same policy as before —
+    // Admin only — but now it is a control rather than a suggestion.
+    const gate = await requireRoles(["admin"]);
+    if (!gate.ok) return gate.response;
 
-    if (!isAdmin(user_role))
-      return NextResponse.json({ success: false, message: "Only Admin can delete units." }, { status: 403 });
+    const body = await req.json().catch(() => ({}));
+    const { ids } = body;
+
     if (!Array.isArray(ids) || ids.length === 0)
       return NextResponse.json({ success: false, message: "No unit ids provided." }, { status: 400 });
 
-    const actor = user_name || "admin";
+    const actor = gate.session.name || "admin";
     const numIds = ids.map((x: any) => Number(x)).filter((n: number) => Number.isFinite(n));
 
     const result = await transaction(async (client) => {

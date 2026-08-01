@@ -6,6 +6,7 @@
 // happen. /cp-commissions/[id] is always the commission id.
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,9 @@ export async function GET(
 ) {
   const { bookingId } = await params;
   try {
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const rows = await query(
       `SELECT c.*, cp.name AS channel_partner_name, cp.status AS channel_partner_status,
               b.booking_number

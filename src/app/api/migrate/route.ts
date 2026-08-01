@@ -1,8 +1,18 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { requireRoles } from "@/lib/serverAuth";
 
 export async function GET() {
   try {
+    // Admin only. This handler executes DDL. Every statement is CREATE TABLE IF
+    // NOT EXISTS so it cannot drop anything, but an anonymous caller could still
+    // run schema changes against production and hammer the database by calling
+    // it in a loop. A GET that mutates schema should arguably not be an HTTP
+    // route at all — scripts/ already holds the migration runners — but gating
+    // it is the change that does not break whatever currently calls it.
+    const gate = await requireRoles(["admin"]);
+    if (!gate.ok) return gate.response;
+
     // 1. Employee Sessions Table
     await query(`
       CREATE TABLE IF NOT EXISTS employee_sessions (

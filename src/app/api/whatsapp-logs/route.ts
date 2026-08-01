@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export async function POST(req: Request) {
   try {
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const { lead_id, sender_name, sender_number, recipient_number, message_preview } = await req.json();
 
     await query(
@@ -36,6 +40,9 @@ export async function POST(req: Request) {
 
 export async function GET(req: Request) {
   try {
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const { searchParams } = new URL(req.url);
     const lead_id = searchParams.get("lead_id");
 

@@ -1,10 +1,14 @@
 // app/api/followups/route.ts
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 // GET: Fetch all follow-up messages
 export async function GET() {
   try {
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const messages = await query(
       `SELECT * FROM follow_ups ORDER BY created_at ASC`
     );
@@ -34,6 +38,9 @@ export async function GET() {
 // POST: Save a new follow-up message
 export async function POST(req: Request) {
   try {
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const body = await req.json();
     const { leadId, salesManagerName, createdBy, message, siteVisitDate } = body;
 

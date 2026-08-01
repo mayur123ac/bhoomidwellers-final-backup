@@ -1,10 +1,17 @@
 //api/site-visits/all
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 // GET all site visits (admin-wide overview) with lead info joined
 export async function GET(req: Request) {
   try {
+    // Returns every lead's name and phone across the company, so it needs a
+    // session at minimum. Role scoping (should a Sourcing Manager see the whole
+    // calendar?) is the separate question tracked in the field-exposure audit.
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const { searchParams } = new URL(req.url);
     const from = searchParams.get("from");
     const to = searchParams.get("to");
@@ -57,6 +64,11 @@ export async function GET(req: Request) {
 // DELETE a site visit by id
 export async function DELETE(req: Request) {
   try {
+    // Was reachable anonymously and deletes the row outright — no soft-delete,
+    // no history. Restricted to the roles that own the visit calendar.
+    const gate = await requireRoles(["admin", "sales manager", "receptionist"]);
+    if (!gate.ok) return gate.response;
+
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
     if (!id) {

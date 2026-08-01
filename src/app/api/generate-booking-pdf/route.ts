@@ -4,6 +4,7 @@ import puppeteer from 'puppeteer-core';
 import fs from 'fs/promises';
 import path from 'path';
 import { generatePresignedUrl } from '@/lib/r2';
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 /**
  * Fetch an image from Cloudflare R2 by object key and return a base64 data URI.
@@ -62,6 +63,10 @@ const formatDate = (v: any) => {
 
 export async function POST(req: Request) {
   try {
+    // Renders a booking - including PAN - to a PDF.
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const body = await req.json();
     const { booking, lead } = body;
 

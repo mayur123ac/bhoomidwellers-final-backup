@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generatePresignedUrl } from "@/lib/r2";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
@@ -10,6 +11,10 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    // Proxies stored documents - Aadhaar and PAN scans live there.
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const signedUrl = await generatePresignedUrl(key);
     // Redirect to the presigned URL
     return NextResponse.redirect(signedUrl);

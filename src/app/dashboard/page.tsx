@@ -1094,7 +1094,7 @@ function AdminAtlasDashboardContent() {
           </h1>
 
           <div className="flex items-center gap-3 relative z-[50]" ref={topbarRef}>
-            <LoginTimerWidget isDark={isDark} />
+            {/* <LoginTimerWidget isDark={isDark} /> */}
             <AttendanceBadge />
             <button onClick={() => {
               const next = !isDark;
@@ -3991,21 +3991,15 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                           })}
                           <div ref={followUpEndRef} />
                         </div>
-                        {isLeadLocked ? (
-                          <div className={`p-3 border-t flex items-center justify-center flex-shrink-0 ${theme.header} ${theme.tableBorder} ${theme.textFaint}`} style={theme.headerGlass}>
-                            <span className="text-xs font-semibold">
-                              {selectedLead.is_lost_lead ? "❌ Lost Lead • Read Only — follow-ups disabled" : "✅ Lead Closed • Read Only — follow-ups disabled"}
-                            </span>
-                          </div>
-                        ) : (
-                          <form onSubmit={handleSendCustomNote} className={`p-3 border-t flex gap-2 items-center flex-shrink-0 ${theme.header} ${theme.tableBorder}`} style={theme.headerGlass}>
-                            <input type="text" value={customNote} onChange={e => setCustomNote(e.target.value)} placeholder="Add admin note..."
-                              className={`flex-1 rounded-xl px-3 py-2 sm:py-2.5 text-sm outline-none transition-colors border ${theme.inputInner} ${theme.text} ${theme.inputFocus}`} />
-                            <button type="submit" className={`w-9 h-9 flex-shrink-0 text-white rounded-xl flex items-center justify-center cursor-pointer transition-colors shadow-lg ${isDark ? "bg-[#9E217B] hover:bg-[#b8268f]" : "bg-[#9E217B] hover:bg-[#8a1d6b]"}`}>
-                              <FaPaperPlane className="text-xs ml-[-1px]" />
-                            </button>
-                          </form>
-                        )}
+                        {/* Open on closed/lost leads too — notes record what happened;
+                            the Salesform/Loan buttons above stay gated on isLeadLocked. */}
+                        <form onSubmit={handleSendCustomNote} className={`p-3 border-t flex gap-2 items-center flex-shrink-0 ${theme.header} ${theme.tableBorder}`} style={theme.headerGlass}>
+                          <input type="text" value={customNote} onChange={e => setCustomNote(e.target.value)} placeholder="Add admin note..."
+                            className={`flex-1 rounded-xl px-3 py-2 sm:py-2.5 text-sm outline-none transition-colors border ${theme.inputInner} ${theme.text} ${theme.inputFocus}`} />
+                          <button type="submit" className={`w-9 h-9 flex-shrink-0 text-white rounded-xl flex items-center justify-center cursor-pointer transition-colors shadow-lg ${isDark ? "bg-[#9E217B] hover:bg-[#b8268f]" : "bg-[#9E217B] hover:bg-[#8a1d6b]"}`}>
+                            <FaPaperPlane className="text-xs ml-[-1px]" />
+                          </button>
+                        </form>
                       </div>
                     </div>
                   </div>
@@ -5064,21 +5058,15 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                           })}
                           <div ref={followUpEndRef} />
                         </div>
-                        {isLeadLocked ? (
-                          <div className={`p-5 border-t flex items-center justify-center flex-shrink-0 ${theme.header} ${theme.tableBorder} ${theme.textFaint}`} style={theme.headerGlass}>
-                            <span className="text-xs font-semibold">
-                              {selectedLead.is_lost_lead ? "❌ Lost Lead • Read Only — follow-ups disabled" : "✅ Lead Closed • Read Only — follow-ups disabled"}
-                            </span>
-                          </div>
-                        ) : (
-                          <form onSubmit={handleSendCustomNote} className={`p-5 border-t flex gap-3 items-center flex-shrink-0 ${theme.header} ${theme.tableBorder}`} style={theme.headerGlass}>
-                            <input type="text" value={customNote} onChange={e => setCustomNote(e.target.value)} placeholder="Add admin note..."
-                              className={`flex-1 rounded-xl px-4 py-3 sm:py-4 text-sm outline-none transition-colors border ${theme.inputInner} ${theme.text} ${theme.inputFocus}`} />
-                            <button type="submit" className={`w-12 h-12 text-white rounded-xl flex items-center justify-center cursor-pointer transition-colors shadow-lg ${isDark ? "bg-[#9E217B] hover:bg-[#b8268f]" : "bg-[#9E217B] hover:bg-[#8a1d6b]"}`}>
-                              <FaPaperPlane className="text-sm ml-[-2px]" />
-                            </button>
-                          </form>
-                        )}
+                        {/* Open on closed/lost leads too — notes record what happened;
+                            the Salesform/Loan buttons above stay gated on isLeadLocked. */}
+                        <form onSubmit={handleSendCustomNote} className={`p-5 border-t flex gap-3 items-center flex-shrink-0 ${theme.header} ${theme.tableBorder}`} style={theme.headerGlass}>
+                          <input type="text" value={customNote} onChange={e => setCustomNote(e.target.value)} placeholder="Add admin note..."
+                            className={`flex-1 rounded-xl px-4 py-3 sm:py-4 text-sm outline-none transition-colors border ${theme.inputInner} ${theme.text} ${theme.inputFocus}`} />
+                          <button type="submit" className={`w-12 h-12 text-white rounded-xl flex items-center justify-center cursor-pointer transition-colors shadow-lg ${isDark ? "bg-[#9E217B] hover:bg-[#b8268f]" : "bg-[#9E217B] hover:bg-[#8a1d6b]"}`}>
+                            <FaPaperPlane className="text-sm ml-[-2px]" />
+                          </button>
+                        </form>
                       </div>
                     </div>
                   </div>
@@ -6192,19 +6180,15 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                             })}
                           <div ref={followUpEndRef} />
                         </div>
-                        {isLeadLocked ? (
-                          <div className={`p-5 border-t flex items-center justify-center flex-shrink-0 ${theme.chatInputInner} ${theme.textFaint}`}>
-                            <span className="text-xs font-semibold">✅ Lead Closed • Read Only — follow-ups disabled</span>
-                          </div>
-                        ) : (
-                          <form onSubmit={handleSendCustomNote} className={`p-5 border-t flex gap-3 items-center flex-shrink-0 ${theme.chatInputInner}`}>
-                            <input type="text" value={customNote} onChange={e => setCustomNote(e.target.value)} placeholder="Add admin note..."
-                              className={`flex-1 border rounded-xl px-4 py-3 sm:py-4 text-sm outline-none transition-colors shadow-inner ${theme.inputInner} ${theme.text} ${theme.inputFocus}`} />
-                            <button type="submit" className={`w-12 h-12 text-white rounded-xl flex items-center justify-center cursor-pointer transition-colors shadow-lg ${isDark ? "bg-[#9E217B] hover:bg-[#b8268f]" : "bg-[#9E217B] hover:bg-[#8a1d6b]"}`}>
-                              <FaPaperPlane className="text-sm ml-[-2px]" />
-                            </button>
-                          </form>
-                        )}
+                        {/* Open on closed/lost leads too — notes record what happened;
+                            the Salesform/Loan buttons above stay gated on isLeadLocked. */}
+                        <form onSubmit={handleSendCustomNote} className={`p-5 border-t flex gap-3 items-center flex-shrink-0 ${theme.chatInputInner}`}>
+                          <input type="text" value={customNote} onChange={e => setCustomNote(e.target.value)} placeholder="Add admin note..."
+                            className={`flex-1 border rounded-xl px-4 py-3 sm:py-4 text-sm outline-none transition-colors shadow-inner ${theme.inputInner} ${theme.text} ${theme.inputFocus}`} />
+                          <button type="submit" className={`w-12 h-12 text-white rounded-xl flex items-center justify-center cursor-pointer transition-colors shadow-lg ${isDark ? "bg-[#9E217B] hover:bg-[#b8268f]" : "bg-[#9E217B] hover:bg-[#8a1d6b]"}`}>
+                            <FaPaperPlane className="text-sm ml-[-2px]" />
+                          </button>
+                        </form>
                       </div>
                     </div>
                   </div>

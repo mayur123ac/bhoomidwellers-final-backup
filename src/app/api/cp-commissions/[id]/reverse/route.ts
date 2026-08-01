@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { transaction } from "@/lib/db";
 import { reverseCPCommission, CPCommissionError } from "@/lib/cpCommissionEngine";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,10 @@ export async function POST(
 ) {
   const { id } = await params;
   try {
+    // Reversing a commission is a financial correction.
+    const gate = await requireRoles(["admin"]);
+    if (!gate.ok) return gate.response;
+
     const body = await req.json();
     const reason = (body.reason || "").toString().trim();
     const updatedBy = (body.updated_by || body.user_name || "system").toString();

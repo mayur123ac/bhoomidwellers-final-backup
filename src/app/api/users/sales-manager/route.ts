@@ -1,9 +1,13 @@
 // app/api/users/sales-manager/route.ts
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export async function GET() {
   try {
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     // Case-insensitive match — same behaviour as the old MongoDB $regex
     const managers = await query(
       `SELECT id, name

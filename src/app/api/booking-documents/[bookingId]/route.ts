@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { generatePresignedUrl } from "@/lib/r2";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export async function GET(req: NextRequest, context: { params: Promise<{ bookingId: string }> }) {
   try {
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const { bookingId } = await context.params;
     const res = await query(`SELECT * FROM booking_documents WHERE booking_id = $1`, [bookingId]);
     
@@ -28,6 +32,9 @@ export async function GET(req: NextRequest, context: { params: Promise<{ booking
 
 export async function POST(req: NextRequest, context: { params: Promise<{ bookingId: string }> }) {
   try {
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const { bookingId } = await context.params;
     const formData = await req.formData();
     const file = formData.get("file") as File | null;

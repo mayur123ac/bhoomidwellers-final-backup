@@ -1,6 +1,7 @@
 // app/api/leads/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { transaction } from "@/lib/db";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 const jsonFields = new Set<keyof LeadUpdate>([
   "site_visit_history",
@@ -24,6 +25,9 @@ export async function PATCH(
   const { id } = await params;
 
   try {
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const leadId = Number(id);
     if (Number.isNaN(leadId)) {
       return NextResponse.json({ error: "Invalid lead ID" }, { status: 400 });

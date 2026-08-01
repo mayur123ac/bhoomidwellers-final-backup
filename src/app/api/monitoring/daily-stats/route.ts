@@ -1,9 +1,13 @@
 //monitoring/daily-stats/route.ts
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export async function GET() {
   try {
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const now = new Date();
     const todayStrIST = new Date(now.getTime() + 5.5 * 60 * 60 * 1000).toISOString().split("T")[0];
     const dayStartIST = new Date(`${todayStrIST}T00:00:00.000+05:30`);

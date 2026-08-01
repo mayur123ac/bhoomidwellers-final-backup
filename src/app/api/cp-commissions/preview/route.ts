@@ -6,12 +6,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPool } from "@/lib/db";
 import { previewCPCommission, previewCommissionForPartner, CPCommissionError } from "@/lib/cpCommissionEngine";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   const client = await getPool().connect();
   try {
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const body = await req.json();
 
     const raw = body.overrideGross ?? body.override_gross;

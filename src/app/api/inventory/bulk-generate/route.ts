@@ -5,6 +5,7 @@
 // batch) are skipped and reported, the rest are inserted. source = 'bulk_generated'.
 import { NextRequest, NextResponse } from "next/server";
 import { transaction } from "@/lib/db";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,9 @@ const MAX_UNITS = 2000;
 
 export async function POST(req: NextRequest) {
   try {
+    const gate = await requireRoles(["admin"]);
+    if (!gate.ok) return gate.response;
+
     const body = await req.json();
     const { user_name, user_role, units } = body;
 

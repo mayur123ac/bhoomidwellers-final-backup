@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
 import { uploadBufferToR2 } from "@/lib/r2";
 import { syncBookingUnit, releaseUnitForBooking, flatIdentityChanged, parseFloor } from "@/lib/inventorySync";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,10 @@ export async function GET(
 ) {
   const { id } = await params;
   try {
+    // Returns primary_pan and primary_aadhaar - see the Tier 4 field audit.
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const rows = await query(
       `SELECT b.*,
               TO_CHAR(b.booking_date, 'YYYY-MM-DD') AS booking_date,
@@ -121,18 +126,23 @@ export async function PUT(
 ) {
   const { id } = await params;
   try {
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     await ensureHistoryTable();
     const formData = await req.formData();
 
     const getStr = (key: string) => (formData.get(key) as string) || "";
     const cleanNum = (val: string) => (val ? parseFloat(val.replace(/,/g, "")) : 0);
 
-    const user_role = getStr("user_role");
-    const user_name = getStr("user_name");
+    // Identity from the session, not the multipart body. These two values decide
+    // whether the edit is allowed at all and which fields it may touch (see the
+    // `sales` branch further down), so reading them from the form meant the
+    // caller chose their own permissions — "user_role=admin" in a form field was
+    // the whole check. The form may still send them; they are ignored.
+    const user_role = (gate.session.role || "").trim().toLowerCase().replace(/_/g, " ");
+    const user_name = gate.session.name || "system";
 
-    if (!user_role || !user_name) {
-      return NextResponse.json({ success: false, message: "user_role and user_name are required" }, { status: 400 });
-    }
     if (user_role === "receptionist") {
       return NextResponse.json({ success: false, message: "Receptionists cannot edit bookings." }, { status: 403 });
     }

@@ -3,10 +3,18 @@ import { getUpdatesWithReadStatus, markUpdateAsRead, createCrmUpdate } from "@/l
 
 export async function GET(req: Request) {
   try {
-    const { searchParams } = new URL(req.url);
-    const userIdParam = searchParams.get("userId");
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
 
-    // We assume userId comes from the client since auth is client-side in localStorage
+    const { searchParams } = new URL(req.url);
+
+    // The identity comes from the session, not from ?userId=. The comment this
+    // replaces read "we assume userId comes from the client since auth is
+    // client-side in localStorage" — which made read-status for ANY user
+    // fetchable by editing one query parameter. The param is still accepted so
+    // existing callers keep working, but it is ignored unless it matches.
+    const userIdParam = gate.userId != null ? String(gate.userId) : searchParams.get("userId");
+
     if (!userIdParam) {
       return NextResponse.json({ message: "userId is required" }, { status: 400 });
     }
@@ -26,6 +34,10 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
+    // Broadcast to every user; only Admin composes them.
+    const gate = await requireRoles(["admin"]);
+    if (!gate.ok) return gate.response;
+
     const body = await req.json();
     
     // If the request is to mark an update as read
@@ -61,9 +73,13 @@ export async function POST(req: Request) {
 }
 
 import { updateCrmUpdate, deleteCrmUpdate } from "@/lib/crmUpdates";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export async function PUT(req: Request) {
   try {
+    const gate = await requireRoles(["admin"]);
+    if (!gate.ok) return gate.response;
+
     const body = await req.json();
     const { id, version, title, description, category, features, is_important } = body;
     
@@ -87,6 +103,9 @@ export async function PUT(req: Request) {
 
 export async function DELETE(req: Request) {
   try {
+    const gate = await requireRoles(["admin"]);
+    if (!gate.ok) return gate.response;
+
     const { searchParams } = new URL(req.url);
     const idParam = searchParams.get("id");
 

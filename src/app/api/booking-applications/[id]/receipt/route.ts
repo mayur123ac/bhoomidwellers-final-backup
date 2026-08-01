@@ -6,6 +6,7 @@
 // and the reversal chain remains intact.
 import { NextRequest, NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +32,9 @@ export async function GET(
 ) {
     const { id } = await params;
     try {
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
         const rows = await query(
             `SELECT fl.id, fl.transaction_type, fl.amount, fl.transaction_date,
               fl.payment_mode, fl.reference_no, fl.remarks, fl.status, fl.created_by, fl.created_at
@@ -56,6 +60,9 @@ export async function POST(
 ) {
     const { id } = await params;
     try {
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
         const body = await req.json();
         const {
             transaction_type, amount, transaction_date,

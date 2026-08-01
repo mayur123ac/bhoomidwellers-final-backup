@@ -1,6 +1,7 @@
 // app/api/loan/route.ts
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 // C5: loan_updates is an append-only activity log — every POST inserts a NEW row
 // (it never updates in place), so the timeline is the history. The authoritative
@@ -22,6 +23,9 @@ async function ensureLoanUpdatesColumns() {
 // ── GET: Fetch loan updates, optionally scoped to one lead ────────────────────
 export async function GET(req: Request) {
   try {
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const { searchParams } = new URL(req.url);
     const leadId = searchParams.get("lead_id");
 
@@ -45,6 +49,9 @@ export async function GET(req: Request) {
 // ── POST: Save loan update + inject follow-up timeline message ────────────────
 export async function POST(req: Request) {
   try {
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const body = await req.json();
 
     if (!body.leadId) {

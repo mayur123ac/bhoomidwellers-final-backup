@@ -6,10 +6,14 @@
 
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 // ── POST — Mark lead as lost ──────────────────
 export async function POST(req: Request) {
   try {
+    const gate = await requireRoles(["admin", "sales manager", "receptionist"]);
+    if (!gate.ok) return gate.response;
+
     const body = await req.json();
     const { lead_id, reason, marked_by } = body as {
       lead_id: number | string;
@@ -98,6 +102,9 @@ export async function POST(req: Request) {
 // ── PUT — Restore a lost lead ─────────────────
 export async function PUT(req: Request) {
   try {
+    const gate = await requireRoles(["admin", "sales manager", "receptionist"]);
+    if (!gate.ok) return gate.response;
+
     const body = await req.json();
     const { lead_id, restored_by } = body as {
       lead_id: number | string;

@@ -1,6 +1,7 @@
 //api/completed_leads/route.ts
 import { NextResponse } from "next/server";
 import { Pool } from "pg"; 
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL, 
@@ -8,6 +9,9 @@ const pool = new Pool({
 
 export async function GET(req: Request) {
   try {
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const result = await pool.query("SELECT * FROM completed_leads ORDER BY completed_at DESC");
     return NextResponse.json({ success: true, data: result.rows }, { status: 200 });
   } catch (error: any) {
@@ -18,6 +22,9 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const body = await req.json();
     // 🔥 FIX: Accept both 'lead_id' and 'id' from the request body
     const { lead_id, id, name, email, phone, budget, propertyType, location, siteVisitDate } = body;

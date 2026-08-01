@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { broadcastLeadUpdate } from "@/lib/lostLeadEvents";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 type LostLeadPayload = {
   leadId?: number | string;
@@ -20,6 +21,10 @@ function getErrorMessage(error: unknown, fallback: string) {
 
 export async function PATCH(req: Request) {
   try {
+    // Marks a lead lost - removes it from every active pipeline view.
+    const gate = await requireRoles(["admin", "sales manager", "receptionist"]);
+    if (!gate.ok) return gate.response;
+
     const body = (await req.json()) as LostLeadPayload;
     const leadId = body.leadId ?? body.lead_id;
     const isLost = body.is_lost_lead;

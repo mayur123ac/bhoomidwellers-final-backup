@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { jsonCompressed } from "@/lib/apiResponse";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 /**
  * GET follow-ups.
@@ -41,6 +42,10 @@ const SELECT_COLUMNS = `
 
 export async function GET(req: Request) {
   try {
+    // Every follow-up note for every lead.
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const leadId = new URL(req.url).searchParams.get("lead_id");
 
     const data = leadId
@@ -64,6 +69,9 @@ export async function GET(req: Request) {
 // POST: Save a new follow-up message
 export async function POST(req: Request) {
   try {
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const body = await req.json();
     const { leadId, salesManagerName, createdBy, message, siteVisitDate } = body;
 
@@ -74,22 +82,23 @@ export async function POST(req: Request) {
       );
     }
 
-    // 🔒 Final-state lock guard
+    // The lead must exist — a follow-up against a missing id is orphaned data.
+    //
+    // Deliberately NOT gated on Closing/Lost. A closed or lost lead still has a
+    // life: payments land, banks call back, a lost lead resurfaces. Notes are a
+    // record of what happened, not an edit to the deal, so blocking them lost
+    // information without protecting anything. The final-state lock stays where
+    // it changes the deal itself — /api/loan, /api/sales-form-submit and
+    // /api/site-visits all still refuse, and the Salesform/Loan buttons stay
+    // hidden behind isLeadLocked in the UI.
     const leadRows = await query(
-      `SELECT status, is_lost_lead FROM walkin_enquiries WHERE id = $1`,
+      `SELECT id FROM walkin_enquiries WHERE id = $1`,
       [leadId]
     );
-    const lead = leadRows[0];
-    if (!lead) {
+    if (leadRows.length === 0) {
       return NextResponse.json(
         { success: false, message: "Lead not found" },
         { status: 404 }
-      );
-    }
-    if (lead.status === "Closing" || lead.is_lost_lead) {
-      return NextResponse.json(
-        { success: false, message: "Closed or Lost leads cannot be modified." },
-        { status: 403 }
       );
     }
 

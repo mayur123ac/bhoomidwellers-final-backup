@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { promises as fs } from "fs";
 import path from "path";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   try {
+    // Accepts arbitrary file uploads.
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const formData = await req.formData();
     const leadId = formData.get("leadId") as string;
     const documentType = formData.get("documentType") as string;

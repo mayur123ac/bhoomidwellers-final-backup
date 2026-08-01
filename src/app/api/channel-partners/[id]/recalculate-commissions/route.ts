@@ -12,6 +12,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { transaction } from "@/lib/db";
 import { recalculateCommission, CPCommissionError } from "@/lib/cpCommissionEngine";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,9 @@ export async function POST(
 ) {
   const { id } = await params;
   try {
+    const gate = await requireRoles(["admin", "sales manager"]);
+    if (!gate.ok) return gate.response;
+
     const body = await req.json();
 
     if ((body.user_role || "").toString().trim().toLowerCase() !== "admin") {

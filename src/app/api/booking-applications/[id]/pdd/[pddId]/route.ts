@@ -2,6 +2,7 @@
 // Mark a PDD document submitted (or edit its details).
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,9 @@ export async function PUT(
 ) {
   const { id, pddId } = await params;
   try {
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const body = await req.json();
     const { user_name, user_role } = body;
     if (!user_name || !user_role) {

@@ -201,6 +201,7 @@ export async function GET(req: NextRequest) {
         SELECT
           b.id AS booking_id,
           b.booking_number,
+          b.lead_id AS lead_id,
           COALESCE(NULLIF(b.primary_name, ''), NULLIF(w.name, ''), 'Unknown Customer') AS customer_name,
           COALESCE(NULLIF(w.assigned_to, ''), NULLIF(b.created_by, ''), 'Unassigned') AS sales_manager,
           ${projectSelect},

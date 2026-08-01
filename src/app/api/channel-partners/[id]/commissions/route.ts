@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getFinancialYearWindow, TDS_THRESHOLD_INR } from "@/lib/cpCommissionEngine";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +13,9 @@ export async function GET(
 ) {
   const { id } = await params;
   try {
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const cpId = Number(id);
     if (!cpId || Number.isNaN(cpId)) {
       return NextResponse.json({ success: false, message: "Invalid partner id." }, { status: 400 });

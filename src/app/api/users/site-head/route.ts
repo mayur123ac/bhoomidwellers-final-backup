@@ -1,9 +1,13 @@
 //api/users/site-head/route.ts
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db"; 
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export async function GET(req: Request) {
   try {
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     // CHANGED: Using the "users" table and SELECT * to avoid column name mismatches
     const rows = await query(
       `SELECT * FROM users 

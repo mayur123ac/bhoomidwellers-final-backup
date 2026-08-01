@@ -1,11 +1,15 @@
 // src/app/api/caller-leads/route.ts
 import { NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 import { broadcastUpdate } from "./events/route";
 
 // ── POST: Bulk insert leads from Excel upload ─────────────────────────────────
 export async function POST(req: Request) {
   try {
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const body = await req.json();
     const { leads = [], fileName, uploadedBy, assignedTo } = body;
 
@@ -66,6 +70,10 @@ export async function POST(req: Request) {
 // ── GET: Fetch all leads ──────────────────────────────────────────────────────
 export async function GET(req: Request) {
   try {
+    // Returns caller lead lists — names and phone numbers.
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const { searchParams } = new URL(req.url);
     const batch      = searchParams.get("batch");
     const batchesOnly = searchParams.get("batches_only");
@@ -106,6 +114,12 @@ export async function GET(req: Request) {
 // ── DELETE: Delete entire batch ───────────────────────────────────────────────
 export async function DELETE(req: Request) {
   try {
+    // Hard-deletes an entire upload batch: every caller_lead in it, all their
+    // follow-ups, and the batch row. Was anonymous, and the batchId is the only
+    // thing standing between a stranger and the whole cohort. Admin only.
+    const gate = await requireRoles(["admin"]);
+    if (!gate.ok) return gate.response;
+
     const { batchId } = await req.json();
     if (!batchId) return NextResponse.json({ error: "batchId required" }, { status: 400 });
 

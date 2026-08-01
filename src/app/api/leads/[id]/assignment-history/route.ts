@@ -1,6 +1,7 @@
 // app/api/leads/[id]/assignment-history/route.ts
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export async function GET(
   req: Request,
@@ -9,6 +10,9 @@ export async function GET(
   const { id } = await params;
 
   try {
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const leadId = Number(id);
     if (Number.isNaN(leadId)) {
       return NextResponse.json(

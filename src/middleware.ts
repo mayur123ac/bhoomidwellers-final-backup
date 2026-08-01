@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { verifySession } from "@/lib/sessionCookie";
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // We only care about /dashboard and its subpaths
@@ -18,9 +19,10 @@ export function middleware(request: NextRequest) {
   }
 
   try {
-    // Parse the session cookie
-    const decodedStr = Buffer.from(sessionCookie, "base64").toString("utf-8");
-    const user = JSON.parse(decodedStr);
+    // HMAC-verified, not just decoded: the role read below decides which panels
+    // this request may reach, so an unsigned or edited payload must not get past
+    // here. verifySession uses Web Crypto, which the Edge runtime provides.
+    const user = await verifySession<any>(sessionCookie);
 
     if (!user || !user.role) {
       return NextResponse.redirect(new URL("/", request.url));

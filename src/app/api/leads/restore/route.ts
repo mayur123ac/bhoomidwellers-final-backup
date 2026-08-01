@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { query, recalculateSrNos } from "@/lib/db";
 import { broadcastLeadUpdate } from "@/lib/lostLeadEvents";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 type RestorePayload = {
   leadId?: number | string;
@@ -17,6 +18,9 @@ function getErrorMessage(error: unknown, fallback: string) {
 
 export async function PATCH(req: Request) {
   try {
+    const gate = await requireRoles(["admin", "sales manager", "receptionist"]);
+    if (!gate.ok) return gate.response;
+
     const body = (await req.json()) as RestorePayload;
     const leadId = body.leadId ?? body.lead_id;
     const restoredBy = (body.restored_by ?? "").trim();

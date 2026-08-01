@@ -1,6 +1,7 @@
 // src/app/api/auth/login/route.ts
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { signSession } from "@/lib/sessionCookie";
 
 export async function POST(req: Request) {
   try {
@@ -79,6 +80,18 @@ export async function POST(req: Request) {
     );
     const loginSessionId = sessionRes[0].id;
 
+    // Signed, not just encoded. Refuse to issue a session at all when no secret
+    // is configured: an unverifiable cookie is one every route would have to
+    // trust blindly, so failing the login is the safer outcome.
+    const sessionValue = await signSession(userData);
+    if (!sessionValue) {
+      console.error("[login] SESSION_SECRET is not configured — refusing to issue a session.");
+      return NextResponse.json(
+        { message: "Sign-in is unavailable: the server is missing its session secret." },
+        { status: 503 },
+      );
+    }
+
     // Attendance will now be marked manually by the user from the UI.
     const response = NextResponse.json(
       {
@@ -91,7 +104,7 @@ export async function POST(req: Request) {
     // Set HttpOnly cookie for session (valid for 7 days)
     response.cookies.set({
       name: "crm_session",
-      value: Buffer.from(JSON.stringify(userData)).toString("base64"),
+      value: sessionValue,
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",

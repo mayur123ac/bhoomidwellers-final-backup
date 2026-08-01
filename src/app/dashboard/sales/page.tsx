@@ -2445,23 +2445,18 @@ function SalesManagerView({
                     })}
                     <div ref={followUpEndRef} />
                   </div>
-                  {isLeadLocked ? (
-                    <div className={`p-3 sm:p-3 border-t flex items-center justify-center flex-shrink-0 ${t.header} ${t.tableBorder} ${t.textFaint}`} style={t.headerGlass}>
-                      <span className="text-xs font-semibold">
-                        {selectedLead.is_lost_lead ? "❌ Lost Lead • Read Only — follow-ups disabled" : "✅ Lead Closed • Read Only — follow-ups disabled"}
-                      </span>
-                    </div>
-                  ) : (
-                    <form onSubmit={handleSendCustomNote} className={`p-3 sm:p-3 border-t flex gap-2 sm:gap-3 items-center flex-shrink-0 ${t.header} ${t.tableBorder}`} style={t.headerGlass}>
-                      <input
-                        ref={inputRef}
-                        type="text" value={customNote} onChange={e => setCustomNote(e.target.value)}
-                        placeholder="Add follow-up note..."
-                        className={`flex-1 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm outline-none transition-colors border ${t.inputBg} ${t.text} ${t.inputFocus}`}
-                      />
-                      <button type="submit" className={`w-10 h-10 sm:w-12 sm:h-12 text-white rounded-xl flex items-center justify-center cursor-pointer transition-colors shadow-lg flex-shrink-0 ${isDark ? "bg-purple-600 hover:bg-purple-500" : "bg-[#00AEEF] hover:bg-[#0099d4]"}`}><FaPaperPlane className="text-sm ml-[-2px]" /></button>
-                    </form>
-                  )}
+                  {/* Composer stays open on closed/lost leads — notes are a record of
+                      what happened, not an edit to the deal. The Salesform/Loan/Closing
+                      buttons above remain gated on isLeadLocked. */}
+                  <form onSubmit={handleSendCustomNote} className={`p-3 sm:p-3 border-t flex gap-2 sm:gap-3 items-center flex-shrink-0 ${t.header} ${t.tableBorder}`} style={t.headerGlass}>
+                    <input
+                      ref={inputRef}
+                      type="text" value={customNote} onChange={e => setCustomNote(e.target.value)}
+                      placeholder="Add follow-up note..."
+                      className={`flex-1 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm outline-none transition-colors border ${t.inputBg} ${t.text} ${t.inputFocus}`}
+                    />
+                    <button type="submit" className={`w-10 h-10 sm:w-12 sm:h-12 text-white rounded-xl flex items-center justify-center cursor-pointer transition-colors shadow-lg flex-shrink-0 ${isDark ? "bg-purple-600 hover:bg-purple-500" : "bg-[#00AEEF] hover:bg-[#0099d4]"}`}><FaPaperPlane className="text-sm ml-[-2px]" /></button>
+                  </form>
                 </div>
 
                 {/* RIGHT PANEL: AI ASSISTANT (collapsible, lead-scoped) */}

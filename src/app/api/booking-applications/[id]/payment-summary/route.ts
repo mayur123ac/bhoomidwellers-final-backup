@@ -1,6 +1,7 @@
 // app/api/booking-applications/[id]/payment-summary/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,9 @@ export async function GET(
 ) {
   const { id } = await params;
   try {
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const bookingRows = await query<any>(
       `SELECT
          b.id, b.lead_id, b.agreement_value::numeric AS agreement_value,

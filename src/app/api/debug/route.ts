@@ -1,8 +1,16 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { requireRoles } from "@/lib/serverAuth";
 
 export async function GET() {
   try {
+    // Admin only. This returns the database name, the server's address and the
+    // full column list of walkin_enquiries — a schema map and an infrastructure
+    // fingerprint, which is reconnaissance handed to anyone who asks. It was
+    // reachable anonymously on the deployed URL named in the comment below.
+    const gate = await requireRoles(["admin"]);
+    if (!gate.ok) return gate.response;
+
     // This will show EXACTLY which database Vercel is connected to
     const db = await query(`SELECT current_database() AS db, inet_server_addr() AS host`);
     const cols = await query(`

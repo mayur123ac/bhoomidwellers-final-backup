@@ -1,11 +1,16 @@
 import { NextResponse } from "next/server";
 import { askOpenAI, buildLeadDigest, MAX_QUESTION_CHARS, Lead } from "./llm";
 import { hydrateScope } from "./hydrate";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
   try {
+    // Second AI endpoint - was anonymous and bills the OpenAI key.
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const body = await req.json();
 
     const query = (body.query || "").trim();

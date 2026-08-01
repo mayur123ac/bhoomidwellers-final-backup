@@ -7,6 +7,7 @@
 // together or not at all.
 import { NextResponse } from "next/server";
 import { transaction } from "@/lib/db";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 type SalesFormFields = {
   propertyType?: string;
@@ -51,6 +52,9 @@ function buildMessage(f: SalesFormFields, siteVisitDate?: string | null): string
 
 export async function POST(req: Request) {
   try {
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const body = await req.json();
     const {
       leadId,

@@ -4,6 +4,7 @@
 // (see /inventory_schema.sql); this route assumes they already exist.
 import { NextRequest, NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -52,6 +53,9 @@ async function revertExpiredHolds() {
 // ─── GET — list units (filters + pagination) ──────────────────────────────────
 export async function GET(req: NextRequest) {
   try {
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     await revertExpiredHolds();
     const { searchParams } = new URL(req.url);
 
@@ -117,6 +121,9 @@ export async function GET(req: NextRequest) {
 // ─── POST — manual single create ──────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   try {
+    const gate = await requireRoles(["admin"]);
+    if (!gate.ok) return gate.response;
+
     const body = await req.json();
     const { user_name, user_role } = body;
 

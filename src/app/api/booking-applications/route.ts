@@ -4,6 +4,7 @@ import { query, transaction } from "@/lib/db";
 import { uploadBufferToR2 } from "@/lib/r2";
 import { syncBookingUnit } from "@/lib/inventorySync";
 import { computeCPCommission } from "@/lib/cpCommissionEngine";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -269,6 +270,10 @@ async function ensureTable() {
 // ─── GET — fetch bookings ─────────────────────────────────────────────────────
 export async function GET(req: NextRequest) {
   try {
+    // SELECT b.* returns primary_pan, primary_aadhaar and document URLs.
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     await ensureTable();
     const { searchParams } = new URL(req.url);
     const leadId = searchParams.get("lead_id");
@@ -350,6 +355,10 @@ export async function GET(req: NextRequest) {
 // ─── POST — create booking ────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   try {
+    // Writes primary_pan / primary_aadhaar.
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     await ensureTable();
     const formData = await req.formData();
     const getStr = (key: string) => (formData.get(key) as string) || null;

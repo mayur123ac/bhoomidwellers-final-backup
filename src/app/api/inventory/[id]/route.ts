@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
 import { isAdmin, isLinkedActive, isBookingProtected, bookingProtectedReason, linkDescriptor, softDeleteUnit } from "@/lib/inventoryDelete";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +61,9 @@ export async function GET(
 ) {
   const { id } = await params;
   try {
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     let rows = await query(UNIT_DETAIL_SQL, [Number(id)]);
     if (!rows.length)
       return NextResponse.json({ success: false, message: "Unit not found" }, { status: 404 });
@@ -97,6 +101,9 @@ export async function PATCH(
 ) {
   const { id } = await params;
   try {
+    const gate = await requireRoles(["admin"]);
+    if (!gate.ok) return gate.response;
+
     const body = await req.json();
     const { user_name, user_role } = body;
     if (!user_name || !user_role)
@@ -192,9 +199,17 @@ export async function DELETE(
 ) {
   const { id } = await params;
   try {
+    // Role was read from the request body; now from the session.
+    const gate = await requireRoles(["admin"]);
+    if (!gate.ok) return gate.response;
+
     const { searchParams } = new URL(req.url);
-    const role = searchParams.get("user_role") || "";
-    const userName = searchParams.get("user_name") || "admin";
+    // From the session, not ?user_role= — the query string was the only thing
+    // the isAdmin() check below consulted, so appending &user_role=admin to the
+    // URL satisfied it. requireRoles above is now the real gate; these remain so
+    // the history row records who actually did it.
+    const role = gate.session.role || "";
+    const userName = gate.session.name || "admin";
     // Force = the admin has passed the row-level "type the flat number" override to
     // delete a booked/registered/on_hold or lead/booking-linked unit anyway.
     const force = searchParams.get("force") === "true";

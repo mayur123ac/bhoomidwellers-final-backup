@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest, context: { params: Promise<{ bookingId: string }> }) {
   try {
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const { bookingId } = await context.params;
-    
+
     // Fetch financial details
     const financialsRes = await query(`SELECT * FROM booking_financials WHERE booking_id = $1`, [bookingId]);
     // Fetch loan details
@@ -18,7 +22,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ booking
     // Fetch custom charges
     const customChargesRes = await query(`SELECT * FROM booking_custom_charges WHERE booking_id = $1`, [bookingId]);
     // Fetch documents
-    const documentsRes = await query(`SELECT * FROM booking_documents WHERE booking_id = $1 ORDER BY uploaded_at DESC`, [bookingId]);
+    const documentsRes = await query(`SELECT * FROM booking_documents WHERE booking_id = $1 ORDER BY created_at DESC`, [bookingId]);
 
     const data = {
       financials: financialsRes[0] || null,

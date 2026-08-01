@@ -1,9 +1,13 @@
 // app/api/users/receptionist/route.ts
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export async function GET() {
   try {
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const receptionists = await query(
       `SELECT id, name, username, email, role, is_active as "isActive"
        FROM users

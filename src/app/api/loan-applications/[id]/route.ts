@@ -5,6 +5,7 @@
 // booking_loan_details if a booking exists, otherwise the lead's draft.
 import { NextRequest, NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -46,11 +47,16 @@ export async function PUT(
 ) {
   const { id } = await params;
   try {
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const body = await req.json();
-    const { user_name, user_role } = body;
-    if (!user_name || !user_role) {
-      return NextResponse.json({ success: false, message: "user_name and user_role are required" }, { status: 400 });
-    }
+    // Session-derived. The body still carries user_name/user_role and callers may
+    // keep sending them, but they are no longer read: `isLoanManager(body.user_role)`
+    // meant the request declared its own permission, so "user_role":"admin" in the
+    // JSON was the entire check.
+    const user_name = gate.session.name || "system";
+    const user_role = gate.session.role || "";
     if (!isLoanManager(user_role)) {
       return NextResponse.json({ success: false, message: "Only Admin, Site Head and Sales Managers can update loan applications." }, { status: 403 });
     }
@@ -174,9 +180,17 @@ export async function DELETE(
 ) {
   const { id } = await params;
   try {
-    const { searchParams } = new URL(req.url);
-    const role = searchParams.get("user_role") || "";
-    if (!isLoanManager(role)) {
+    // Mirrors `canManage` in LenderApplicationsTracker, which decides whether the
+    // delete control renders at all. Site Head belongs here: the component shows
+    // them the button, so omitting the role server-side produced a visible action
+    // that 403s. UI policy and API policy have to name the same roles.
+    const gate = await requireRoles(["admin", "sales manager", "site head"]);
+    if (!gate.ok) return gate.response;
+
+    // requireRoles above is the gate. This second check is kept because it is the
+    // one that names the policy in the error message, but it now reads the role
+    // from the session — `?user_role=admin` on the URL used to satisfy it.
+    if (!isLoanManager(gate.session.role || "")) {
       return NextResponse.json({ success: false, message: "Only Admin, Site Head and Sales Managers can delete loan applications." }, { status: 403 });
     }
     await query(`DELETE FROM loan_applications WHERE id = $1`, [Number(id)]);

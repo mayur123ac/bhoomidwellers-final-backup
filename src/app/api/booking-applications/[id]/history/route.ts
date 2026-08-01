@@ -1,6 +1,7 @@
 // app/api/booking-applications/[id]/history/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +11,9 @@ export async function GET(
 ) {
   const { id } = await params;
   try {
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     // Check if table exists (in case there are no history entries yet)
     await query(`
       CREATE TABLE IF NOT EXISTS booking_history (

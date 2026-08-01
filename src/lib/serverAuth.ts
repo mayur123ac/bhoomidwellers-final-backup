@@ -1,17 +1,20 @@
 import { cookies } from "next/headers";
+import { NextResponse } from "next/server";
+import { verifySession } from "./sessionCookie";
 
+/**
+ * The signed-in user, or null.
+ *
+ * The cookie is now HMAC-verified (see lib/sessionCookie.ts) rather than merely
+ * base64-decoded. Every route that gates on `session.role` depends on this call
+ * refusing a payload it cannot prove the server issued — previously a hand-made
+ * cookie claiming `role: "admin"` was accepted everywhere.
+ *
+ * Return shape is unchanged, so callers need no edits.
+ */
 export async function getServerSession() {
   const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get("crm_session")?.value;
-
-  if (!sessionCookie) return null;
-
-  try {
-    const decodedStr = Buffer.from(sessionCookie, "base64").toString("utf-8");
-    return JSON.parse(decodedStr);
-  } catch (err) {
-    return null;
-  }
+  return verifySession(cookieStore.get("crm_session")?.value);
 }
 
 /**
@@ -27,6 +30,84 @@ export function getSessionUserId(session: any): number | null {
   if (raw === undefined || raw === null || raw === "") return null;
   const parsed = Number(raw);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   THE session gate. Every API route calls one of these two helpers and nothing
+   else.
+
+   70 of 111 routes shipped with no session check at all, and the ones that did
+   check each rolled their own — which is how /api/admin/ai/chat ended up with a
+   comment reading "for now, we trust the frontend role check". The fix is not
+   better per-route checks; it is removing the discretion to write one. If a
+   route needs a user, it calls requireSession(). If it needs a specific role, it
+   calls requireRoles(). There is no third option.
+
+   No `req` parameter: cookies() reads from ambient request context in the App
+   Router, so passing the request would be decoration that implies the helper
+   might read something else from it.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+export interface SessionUser {
+  _id: string;
+  name: string;
+  email?: string;
+  role: string;
+  isActive?: boolean;
+  iat?: number;
+  exp?: number;
+}
+
+export type SessionGate =
+  | { ok: true; session: SessionUser; userId: number | null }
+  | { ok: false; response: NextResponse };
+
+function deny(message: string, code: string, status: 401 | 403): SessionGate {
+  return {
+    ok: false,
+    response: NextResponse.json({ success: false, message, code }, { status }),
+  };
+}
+
+/**
+ * Require a signed-in user. Rejects missing, unsigned, forged, tampered and
+ * expired cookies alike — verifySession cannot tell them apart and neither
+ * should the caller.
+ *
+ * Usage:
+ *   const gate = await requireSession();
+ *   if (!gate.ok) return gate.response;
+ *   // gate.session is trustworthy from here
+ */
+export async function requireSession(): Promise<SessionGate> {
+  const session = (await getServerSession()) as SessionUser | null;
+
+  if (!session?.role) {
+    return deny("You must be signed in.", "UNAUTHORIZED", 401);
+  }
+  if (session.isActive === false) {
+    return deny("This account is deactivated.", "ACCOUNT_DISABLED", 403);
+  }
+
+  return { ok: true, session, userId: getSessionUserId(session) };
+}
+
+/**
+ * Require one of the named roles. Role strings are inconsistent in the users
+ * table ("site_head" and "Site Head" both occur), so both sides are normalized
+ * the same way rather than each caller remembering to.
+ */
+export async function requireRoles(allowedRoles: string[]): Promise<SessionGate> {
+  const gate = await requireSession();
+  if (!gate.ok) return gate;
+
+  const normalize = (r: unknown) => (r ?? "").toString().trim().toLowerCase().replace(/_/g, " ");
+  const allowed = allowedRoles.map(normalize);
+
+  if (!allowed.includes(normalize(gate.session.role))) {
+    return deny("Your role cannot perform this action.", "FORBIDDEN", 403);
+  }
+  return gate;
 }
 
 export async function requireRole(allowedRoles: string[]) {

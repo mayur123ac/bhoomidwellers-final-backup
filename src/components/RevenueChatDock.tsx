@@ -140,154 +140,154 @@ export default function RevenueChatDock({ rows, filterLabel, theme, isDark }: Pr
     );
 
     /* ── collapsed ── */
-    if (!open) {
-        return (
-            <button
-                onClick={() => setOpen(true)}
-                className="fixed bottom-6 right-6 z-40 h-11 pl-3.5 pr-4 rounded-full text-white text-xs font-black inline-flex items-center gap-2 shadow-lg transition-transform hover:-translate-y-0.5"
-                style={{ background: ACCENT }}
-                aria-label="Ask about this data"
-            >
-                <MessageCircle className="w-4 h-4" />
-                Ask about this data
-            </button>
-        );
-    }
+    // if (!open) {
+    //     return (
+    //         <button
+    //             onClick={() => setOpen(true)}
+    //             className="fixed bottom-6 right-6 z-40 h-11 pl-3.5 pr-4 rounded-full text-white text-xs font-black inline-flex items-center gap-2 shadow-lg transition-transform hover:-translate-y-0.5"
+    //             style={{ background: ACCENT }}
+    //             aria-label="Ask about this data"
+    //         >
+    //             <MessageCircle className="w-4 h-4" />
+    //             Ask about this data
+    //         </button>
+    //     );
+    // }
 
-    const bubbleBase = "max-w-[85%] rounded-2xl px-3.5 py-2.5 text-[13px] leading-relaxed whitespace-pre-wrap";
+    // const bubbleBase = "max-w-[85%] rounded-2xl px-3.5 py-2.5 text-[13px] leading-relaxed whitespace-pre-wrap";
 
-    return (
-        <div
-            className={`fixed bottom-6 right-6 z-40 w-[min(420px,calc(100vw-3rem))] max-h-[min(620px,calc(100vh-6rem))] flex flex-col rounded-2xl border overflow-hidden shadow-2xl ${isDark ? "border-white/10 bg-[#0d0d12]" : "border-slate-200 bg-white"
-                }`}
-            role="dialog"
-            aria-label="Revenue assistant"
-        >
-            {/* header */}
-            <header className={`px-4 py-3 border-b flex items-start justify-between gap-3 ${theme.tableBorder}`}>
-                <div className="min-w-0">
-                    <h2 className={`text-sm font-black inline-flex items-center gap-1.5 ${theme.text}`}>
-                        <Sparkles className="w-3.5 h-3.5" style={{ color: ACCENT }} />
-                        Revenue assistant
-                    </h2>
-                    <p className={`text-[10px] mt-0.5 truncate ${theme.textMuted}`}>
-                        Reading {rows.length} booking{rows.length === 1 ? "" : "s"}
-                        {filterLabel ? ` · ${filterLabel}` : " · no filters"}
-                    </p>
-                </div>
-                <div className="flex items-center gap-1 flex-shrink-0">
-                    {turns.length > 0 && (
-                        <button
-                            onClick={() => {
-                                setTurns([]);
-                                setError("");
-                            }}
-                            className={`p-1.5 rounded-lg ${isDark ? "hover:bg-white/10 text-gray-400" : "hover:bg-slate-100 text-slate-400"}`}
-                            aria-label="Clear conversation"
-                            title="Clear conversation"
-                        >
-                            <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                    )}
-                    <button
-                        onClick={() => setOpen(false)}
-                        className={`p-1.5 rounded-lg ${isDark ? "hover:bg-white/10 text-gray-300" : "hover:bg-slate-100 text-slate-500"}`}
-                        aria-label="Close"
-                    >
-                        <X className="w-4 h-4" />
-                    </button>
-                </div>
-            </header>
+    // return (
+    //     <div
+    //         className={`fixed bottom-6 right-6 z-40 w-[min(420px,calc(100vw-3rem))] max-h-[min(620px,calc(100vh-6rem))] flex flex-col rounded-2xl border overflow-hidden shadow-2xl ${isDark ? "border-white/10 bg-[#0d0d12]" : "border-slate-200 bg-white"
+    //             }`}
+    //         role="dialog"
+    //         aria-label="Revenue assistant"
+    //     >
+    //         {/* header */}
+    //         <header className={`px-4 py-3 border-b flex items-start justify-between gap-3 ${theme.tableBorder}`}>
+    //             <div className="min-w-0">
+    //                 <h2 className={`text-sm font-black inline-flex items-center gap-1.5 ${theme.text}`}>
+    //                     <Sparkles className="w-3.5 h-3.5" style={{ color: ACCENT }} />
+    //                     Revenue assistant
+    //                 </h2>
+    //                 <p className={`text-[10px] mt-0.5 truncate ${theme.textMuted}`}>
+    //                     Reading {rows.length} booking{rows.length === 1 ? "" : "s"}
+    //                     {filterLabel ? ` · ${filterLabel}` : " · no filters"}
+    //                 </p>
+    //             </div>
+    //             <div className="flex items-center gap-1 flex-shrink-0">
+    //                 {turns.length > 0 && (
+    //                     <button
+    //                         onClick={() => {
+    //                             setTurns([]);
+    //                             setError("");
+    //                         }}
+    //                         className={`p-1.5 rounded-lg ${isDark ? "hover:bg-white/10 text-gray-400" : "hover:bg-slate-100 text-slate-400"}`}
+    //                         aria-label="Clear conversation"
+    //                         title="Clear conversation"
+    //                     >
+    //                         <Trash2 className="w-3.5 h-3.5" />
+    //                     </button>
+    //                 )}
+    //                 <button
+    //                     onClick={() => setOpen(false)}
+    //                     className={`p-1.5 rounded-lg ${isDark ? "hover:bg-white/10 text-gray-300" : "hover:bg-slate-100 text-slate-500"}`}
+    //                     aria-label="Close"
+    //                 >
+    //                     <X className="w-4 h-4" />
+    //                 </button>
+    //             </div>
+    //         </header>
 
-            {/* thread */}
-            <div ref={scrollRef} className="flex-1 overflow-y-auto custom-scrollbar px-4 py-4 space-y-3">
-                {turns.length === 0 ? (
-                    <div className="space-y-3">
-                        <p className={`text-[12px] leading-relaxed ${theme.textMuted}`}>
-                            Ask about the bookings currently on screen. Every total is computed from the table itself, so the answers
-                            match what you can see — change the filters and the answers follow.
-                        </p>
-                        <div className="space-y-1.5">
-                            {STARTERS.map((s) => (
-                                <button
-                                    key={s}
-                                    onClick={() => ask(s)}
-                                    className={`w-full text-left text-[12px] px-3 py-2 rounded-xl border transition-colors ${isDark
-                                        ? "border-white/10 text-gray-200 hover:bg-white/[0.06]"
-                                        : "border-slate-200 text-slate-700 hover:bg-slate-50"
-                                        }`}
-                                >
-                                    {s}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-                ) : (
-                    turns.map((turn, i) => (
-                        <div key={i} className={`flex ${turn.role === "user" ? "justify-end" : "justify-start"}`}>
-                            <div
-                                className={
-                                    turn.role === "user"
-                                        ? `${bubbleBase} text-white`
-                                        : `${bubbleBase} border ${isDark ? "border-white/10 bg-white/[0.04] text-gray-100" : "border-slate-200 bg-slate-50 text-slate-800"
-                                        }`
-                                }
-                                style={turn.role === "user" ? { background: ACCENT } : undefined}
-                            >
-                                {turn.content}
-                            </div>
-                        </div>
-                    ))
-                )}
+    //         {/* thread */}
+    //         <div ref={scrollRef} className="flex-1 overflow-y-auto custom-scrollbar px-4 py-4 space-y-3">
+    //             {turns.length === 0 ? (
+    //                 <div className="space-y-3">
+    //                     <p className={`text-[12px] leading-relaxed ${theme.textMuted}`}>
+    //                         Ask about the bookings currently on screen. Every total is computed from the table itself, so the answers
+    //                         match what you can see — change the filters and the answers follow.
+    //                     </p>
+    //                     <div className="space-y-1.5">
+    //                         {STARTERS.map((s) => (
+    //                             <button
+    //                                 key={s}
+    //                                 onClick={() => ask(s)}
+    //                                 className={`w-full text-left text-[12px] px-3 py-2 rounded-xl border transition-colors ${isDark
+    //                                     ? "border-white/10 text-gray-200 hover:bg-white/[0.06]"
+    //                                     : "border-slate-200 text-slate-700 hover:bg-slate-50"
+    //                                     }`}
+    //                             >
+    //                                 {s}
+    //                             </button>
+    //                         ))}
+    //                     </div>
+    //                 </div>
+    //             ) : (
+    //                 turns.map((turn, i) => (
+    //                     <div key={i} className={`flex ${turn.role === "user" ? "justify-end" : "justify-start"}`}>
+    //                         <div
+    //                             className={
+    //                                 turn.role === "user"
+    //                                     ? `${bubbleBase} text-white`
+    //                                     : `${bubbleBase} border ${isDark ? "border-white/10 bg-white/[0.04] text-gray-100" : "border-slate-200 bg-slate-50 text-slate-800"
+    //                                     }`
+    //                             }
+    //                             style={turn.role === "user" ? { background: ACCENT } : undefined}
+    //                         >
+    //                             {turn.content}
+    //                         </div>
+    //                     </div>
+    //                 ))
+    //             )}
 
-                {busy && (
-                    <div className="flex justify-start">
-                        <div
-                            className={`rounded-2xl px-3.5 py-2.5 border inline-flex items-center gap-2 text-[12px] ${isDark ? "border-white/10 bg-white/[0.04] text-gray-300" : "border-slate-200 bg-slate-50 text-slate-500"
-                                }`}
-                        >
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            Reading the table…
-                        </div>
-                    </div>
-                )}
+    //             {busy && (
+    //                 <div className="flex justify-start">
+    //                     <div
+    //                         className={`rounded-2xl px-3.5 py-2.5 border inline-flex items-center gap-2 text-[12px] ${isDark ? "border-white/10 bg-white/[0.04] text-gray-300" : "border-slate-200 bg-slate-50 text-slate-500"
+    //                             }`}
+    //                     >
+    //                         <Loader2 className="w-3.5 h-3.5 animate-spin" />
+    //                         Reading the table…
+    //                     </div>
+    //                 </div>
+    //             )}
 
-                {error && <p className="text-[11px] font-semibold text-rose-500">{error}</p>}
-            </div>
+    //             {error && <p className="text-[11px] font-semibold text-rose-500">{error}</p>}
+    //         </div>
 
-            {/* composer */}
-            <div className={`px-3 py-3 border-t ${theme.tableBorder}`}>
-                <div className="flex items-end gap-2">
-                    <textarea
-                        ref={inputRef}
-                        value={draft}
-                        onChange={(e) => setDraft(e.target.value)}
-                        onKeyDown={(e) => {
-                            if (e.key === "Enter" && !e.shiftKey) {
-                                e.preventDefault();
-                                ask(draft);
-                            }
-                        }}
-                        rows={1}
-                        placeholder="How much is still to collect from Neha's bookings?"
-                        className={`flex-1 resize-none rounded-xl px-3 py-2 text-[13px] leading-relaxed outline-none border max-h-28 ${isDark ? "border-white/10 bg-white/[0.04] text-gray-100" : "border-slate-200 bg-white text-slate-800"
-                            }`}
-                    />
-                    <button
-                        onClick={() => ask(draft)}
-                        disabled={!draft.trim() || busy}
-                        className="h-9 w-9 rounded-xl inline-flex items-center justify-center text-white flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
-                        style={{ background: ACCENT }}
-                        aria-label="Send"
-                    >
-                        <Send className="w-3.5 h-3.5" />
-                    </button>
-                </div>
-                <p className={`text-[10px] mt-1.5 ${theme.textMuted}`}>
-                    Enter sends · Shift + Enter for a new line. Figures come from this table only — check the ledger before
-                    quoting anything externally.
-                </p>
-            </div>
-        </div>
-    );
+    //         {/* composer */}
+    //         <div className={`px-3 py-3 border-t ${theme.tableBorder}`}>
+    //             <div className="flex items-end gap-2">
+    //                 <textarea
+    //                     ref={inputRef}
+    //                     value={draft}
+    //                     onChange={(e) => setDraft(e.target.value)}
+    //                     onKeyDown={(e) => {
+    //                         if (e.key === "Enter" && !e.shiftKey) {
+    //                             e.preventDefault();
+    //                             ask(draft);
+    //                         }
+    //                     }}
+    //                     rows={1}
+    //                     placeholder="How much is still to collect from Neha's bookings?"
+    //                     className={`flex-1 resize-none rounded-xl px-3 py-2 text-[13px] leading-relaxed outline-none border max-h-28 ${isDark ? "border-white/10 bg-white/[0.04] text-gray-100" : "border-slate-200 bg-white text-slate-800"
+    //                         }`}
+    //                 />
+    //                 <button
+    //                     onClick={() => ask(draft)}
+    //                     disabled={!draft.trim() || busy}
+    //                     className="h-9 w-9 rounded-xl inline-flex items-center justify-center text-white flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+    //                     style={{ background: ACCENT }}
+    //                     aria-label="Send"
+    //                 >
+    //                     <Send className="w-3.5 h-3.5" />
+    //                 </button>
+    //             </div>
+    //             <p className={`text-[10px] mt-1.5 ${theme.textMuted}`}>
+    //                 Enter sends · Shift + Enter for a new line. Figures come from this table only — check the ledger before
+    //                 quoting anything externally.
+    //             </p>
+    //         </div>
+    //     </div>
+    // );
 }

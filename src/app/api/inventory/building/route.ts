@@ -4,7 +4,8 @@
 // Linked/active units are SKIPPED and reported. Each deletion writes a history row.
 import { NextRequest, NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
-import { isAdmin, isLinkedActive, isBookingProtected, bookingProtectedReason, linkDescriptor, softDeleteUnit } from "@/lib/inventoryDelete";
+import { requireRoles } from "@/lib/serverAuth";
+import { isLinkedActive, isBookingProtected, bookingProtectedReason, linkDescriptor, softDeleteUnit } from "@/lib/inventoryDelete";
 
 export const dynamic = "force-dynamic";
 
@@ -56,15 +57,19 @@ export async function GET(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
-    const body = await req.json().catch(() => ({}));
-    const { apartment_name, project_name, tower, wing, user_name, user_role } = body;
+    // Session-derived, not body-derived — see the note in inventory/bulk. This
+    // one soft-deletes an entire tower/wing, so the body-supplied role check it
+    // shipped with was the highest-blast-radius instance of that bug.
+    const gate = await requireRoles(["admin"]);
+    if (!gate.ok) return gate.response;
 
-    if (!isAdmin(user_role))
-      return NextResponse.json({ success: false, message: "Only Admin can delete units." }, { status: 403 });
+    const body = await req.json().catch(() => ({}));
+    const { apartment_name, project_name, tower, wing } = body;
+
     if (!project_name || !String(project_name).trim() || !tower || !String(tower).trim())
       return NextResponse.json({ success: false, message: "project_name and tower are required." }, { status: 400 });
 
-    const actor = user_name || "admin";
+    const actor = gate.session.name || "admin";
     const { whereSql, vals } = buildScope(project_name, tower, wing, apartment_name);
     const scopeLabel = `Tower ${String(tower).trim()}${wing && String(wing).trim() ? ` / Wing ${String(wing).trim()}` : ""}`;
 

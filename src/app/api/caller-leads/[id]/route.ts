@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
 import { broadcastUpdate } from "../events/route";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 // ── PATCH: Update lead fields ─────────────────────────────────────────────────
 export async function PATCH(
@@ -9,6 +10,9 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const { id } = await params;
     const body = await req.json();
 
@@ -65,6 +69,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const gate = await requireRoles(["admin"]);
+    if (!gate.ok) return gate.response;
+
     const { id } = await params;
     const leadId = parseInt(id, 10);
 

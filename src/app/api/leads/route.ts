@@ -6,10 +6,14 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 // ── POST — save uploaded leads to DB ──────────
 export async function POST(req: NextRequest) {
   try {
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const body = await req.json();
     const { leads, fileName, uploadedBy } = body as {
       leads: LeadInput[];
@@ -77,6 +81,9 @@ export async function POST(req: NextRequest) {
 // ── GET — fetch leads (all or by batch) ────────
 export async function GET(req: NextRequest) {
   try {
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const { searchParams } = new URL(req.url);
     const batchId = searchParams.get("batch");
     const limit   = Math.min(Number(searchParams.get("limit") ?? 500), 1000);

@@ -3,6 +3,7 @@
 // lead-scoped list, filtered to those migrated onto this booking.
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,9 @@ export async function GET(
 ) {
   const { id } = await params;
   try {
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const rows = await query(
       `SELECT * FROM loan_applications WHERE booking_id = $1 ORDER BY created_at ASC`,
       [Number(id)],
