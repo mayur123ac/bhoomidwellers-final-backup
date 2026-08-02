@@ -33,6 +33,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { FaUniversity, FaTimes, FaFileAlt, FaFileInvoiceDollar, FaPlus, FaTrash, FaCheck, FaChevronRight } from "react-icons/fa";
 import IndianCurrencyInput from "@/components/IndianCurrencyInput";
 import LenderApplicationsTracker, { type LoanApplication } from "@/components/LenderApplicationsTracker";
+import { parseGstRate, resolveGstRate, GST_RATE_PRESETS, DEFAULT_GST_RATE } from "@/lib/gst";
 import PddChecklist from "@/components/PddChecklist";
 
 interface LoanDealFormProps {
@@ -365,12 +366,20 @@ export default function LoanDealForm({ lead, booking, loanUpdate, user, isDark =
       interest_rate: app.interest_rate != null ? String(app.interest_rate) : prev.interest_rate,
       loan_tenure_months: app.tenure_months != null ? String(app.tenure_months) : prev.loan_tenure_months,
     }));
-    // Selecting a lender changes the deal-level draft (sanction fields land server-side
-    // via the merge in /api/loan-applications/[id]), but Section 7 planning fields
-    // (expected disbursement date/amount) live only in local dealForm state and would
-    // otherwise sit unsaved until the user separately clicks "Save Loan & Deal Tracker".
-    // Persist the whole draft here too, so BookingFormModal always has the latest.
-    setPendingAutoSave(true);
+    // Deliberately does NOT save.
+    //
+    // This used to set pendingAutoSave, which ran handleSubmit — the submit
+    // button's own path — so picking a lender silently POSTed /api/loan and
+    // wrote a full "🏦 Loan Update" record to the lead's timeline. Choosing which
+    // bank to view is not the same act as committing the deal, and a form that
+    // submits itself on a selection gives the user no way to review or cancel.
+    //
+    // The selection itself is already persisted server-side by
+    // PUT /api/loan-applications/[id] (is_selected), so only the deal-level
+    // fields populated above are unsaved. setIsDirty(true) marks that, and the
+    // banner beside the Save button surfaces it — without one, dropping the
+    // auto-save would mean a lender could be picked and the populated sanction
+    // fields lost on navigate-away with nothing on screen to say so.
   }, []);
 
   // Switching to a different lead is the only time we want to force a fresh
@@ -439,7 +448,9 @@ export default function LoanDealForm({ lead, booking, loanUpdate, user, isDark =
       custom_charges: customCharges,
       token_amount: src?.token_amount ? String(src.token_amount) : "",
       // Phase-1-3 aligned booking financials (from booking row or superset draft)
-      gst_rate: src?.gst_rate ? String(src.gst_rate) : "5",
+      // Not `src?.gst_rate ? ... : "5"` — a saved 0% arrives as the number 0,
+      // which is falsy, so reopening a zero-GST deal silently reset it to 5%.
+      gst_rate: String(resolveGstRate(src?.gst_rate)),
       stamp_duty_amount: src?.stamp_duty_amount ? String(src.stamp_duty_amount) : "",
       stamp_duty_percentage: src?.stamp_duty_percentage ? String(src.stamp_duty_percentage) : "",
       stamp_duty_status: src?.stamp_duty_status || "Pending",
@@ -518,15 +529,10 @@ export default function LoanDealForm({ lead, booking, loanUpdate, user, isDark =
   // Pending/Scheduled tranches are earmarked but not yet money-out-the-door.
   const totalDisbursed = tranches.filter(tr => isTrancheCompleted(tr.status)).reduce((sum, tr) => sum + Number(tr.amount || 0), 0);
   const sanctionAmountNum = Number(dealForm.sanction_amount) || 0;
-  const [pendingAutoSave, setPendingAutoSave] = useState(false);
-
-  useEffect(() => {
-    if (!pendingAutoSave) return;
-    setPendingAutoSave(false);
-    // Reuse the same save path as the submit button, without the form event.
-    handleSubmit({ preventDefault: () => { } } as React.FormEvent);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingAutoSave]);
+  // The pendingAutoSave state and its effect were removed with the lender-select
+  // auto-submit (see handleSelectLender). They existed only to call handleSubmit
+  // from outside a form event; nothing else triggered them, so a save now happens
+  // only when the operator actually presses the button.
   const disbursementPercent = sanctionAmountNum > 0
     ? Math.min(100, Math.round((totalDisbursed / sanctionAmountNum) * 100))
     : 0;
@@ -1187,11 +1193,51 @@ export default function LoanDealForm({ lead, booking, loanUpdate, user, isDark =
                 <div><label className={labelCls}>Token Amount</label><IndianCurrencyInput value={dealForm.token_amount} onChange={val => updateDealForm({ token_amount: val })} className={inputCls} placeholder="50,000" /></div>
                 <div>
                   <label className={labelCls}>GST Rate</label>
-                  <select value={dealForm.gst_rate} onChange={e => updateDealForm({ gst_rate: e.target.value })} className={selectCls}>
-                    <option value="0">0% (no GST)</option>
-                    <option value="5">5% (no ITC)</option>
-                    <option value="12">12% (with ITC)</option>
-                  </select>
+                  {/* Free numeric entry rather than a fixed list: projects carry
+                      rates the three statutory presets do not cover, and decimals
+                      (5.5%) are legitimate. The presets stay as one-click shortcuts
+                      for the common cases. `step` drives the native ↑/↓ arrows. */}
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        min={0}
+                        max={100}
+                        step={0.5}
+                        value={dealForm.gst_rate}
+                        onChange={e => updateDealForm({ gst_rate: e.target.value })}
+                        className={`${inputCls} pr-7`}
+                        placeholder="5"
+                        aria-label="GST rate percentage"
+                      />
+                      <span className={`absolute right-2.5 top-1/2 -translate-y-1/2 text-xs pointer-events-none ${t.textFaint}`}>%</span>
+                    </div>
+                    <div className="flex gap-1">
+                      {GST_RATE_PRESETS.map(p => {
+                        const active = parseGstRate(dealForm.gst_rate) === p;
+                        return (
+                          <button
+                            key={p}
+                            type="button"
+                            onClick={() => updateDealForm({ gst_rate: String(p) })}
+                            title={p === 0 ? "No GST" : p === 5 ? "5% (no ITC)" : "12% (with ITC)"}
+                            className={`px-2 py-1.5 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer ${active
+                              ? "bg-[#9E217B] border-[#9E217B] text-white"
+                              : `${t.textMuted} ${t.tableBorder} hover:border-[#9E217B]/50`
+                              }`}
+                          >
+                            {p}%
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  {parseGstRate(dealForm.gst_rate) === null && (
+                    <p className="text-[10px] mt-1 text-amber-500 font-semibold">
+                      Enter a rate between 0 and 100 — the Booking Form will use {DEFAULT_GST_RATE}% until you do.
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -1309,6 +1355,16 @@ export default function LoanDealForm({ lead, booking, loanUpdate, user, isDark =
             className={`w-full rounded-lg px-4 py-2.5 text-sm outline-none resize-none h-20 custom-scrollbar border ${t.inputInner} ${t.text} ${t.inputFocus}`}
             placeholder="Bank feedback, CIBIL issues, internal notes..." />
         </div>
+
+        {/* Unsaved-changes notice. isDirty already existed but only guarded the
+            repopulation effects — nothing on screen reflected it. Now that
+            selecting a lender no longer auto-submits, this is what tells the
+            operator the populated sanction fields still need saving. */}
+        {isDirty && !isSubmitting && (
+          <p className={`mt-4 -mb-2 text-[11px] font-semibold flex items-center gap-1.5 ${isDark ? "text-amber-400" : "text-amber-600"}`}>
+            <span>●</span> Unsaved changes — click Save to record them.
+          </p>
+        )}
 
         <button type="submit" disabled={isSubmitting} className={`mt-4 flex-shrink-0 w-full font-bold py-3 rounded-xl shadow-md transition-colors cursor-pointer disabled:opacity-60 ${t.btnSecondary}`}>
           {isSubmitting ? "Saving..." : "Save Loan & Deal Tracker"}

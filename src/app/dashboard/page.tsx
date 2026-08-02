@@ -1600,6 +1600,44 @@ function DashboardAnalytics({ leads, theme, isDark }: { leads: any[]; theme: any
 // import { DashboardAnalytics, TableSearchInput, InterestBadge } from "./your-components"; 
 // import { downloadCSV, formatLeadForExport } from "./your-utils";
 
+/**
+ * The seven Quick Stats cards, as predicates.
+ *
+ * Defined once and used for BOTH the number printed on a card and the table
+ * filter that card applies when clicked. Writing the condition twice — once in
+ * the card, once in the filter — is how a card ends up reading "5 Closing" and
+ * filtering to 4 rows, which reads as a data bug rather than a filter bug and is
+ * miserable to trace. One definition means they cannot disagree.
+ *
+ * Each predicate is exactly the expression the card already used, moved here
+ * unchanged — including the `|| "Assigned"` default and the two-field check for
+ * Interested, which are load-bearing.
+ */
+export type StatCardFilter =
+  | "all" | "active" | "closing" | "lost" | "assigned" | "contacted" | "interested";
+
+const STAT_MATCHERS: Record<StatCardFilter, (l: any) => boolean> = {
+  all: () => true,
+  active: (l) => !l.is_lost_lead && l.status !== "Closing",
+  closing: (l) => l.status === "Closing",
+  lost: (l) => !!l.is_lost_lead,
+  // A lead with no status is treated as Assigned, matching the card's original
+  // `(l.status || "Assigned") === "Assigned"`.
+  assigned: (l) => (l.status || "Assigned") === "Assigned",
+  contacted: (l) => l.status === "Contacted",
+  interested: (l) => l.status === "Interested" || l.leadInterestStatus === "Interested",
+};
+
+const STAT_LABELS: Record<StatCardFilter, string> = {
+  all: "Total Leads",
+  active: "Active Leads",
+  closing: "Closing Leads",
+  lost: "Lost / Ghosted",
+  assigned: "Assigned",
+  contacted: "Contacted",
+  interested: "Interested",
+};
+
 function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, theme, isDark, receptionists, followUps, onNavigateToSales, refetch }: any) {
   const isAdmin = (user?.role || "").toLowerCase() === "admin";
   const [visibleCount, setVisibleCount] = useState(20);
@@ -1840,6 +1878,40 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
   const [showLostLeads, setShowLostLeads] = useState(true);
   const [showNGDLeads, setShowNGDLeads] = useState(true);
 
+  // ── Quick Stats card → table filter ───────────────────────────────────────
+  const [statCardFilter, setStatCardFilter] = useState<StatCardFilter>("all");
+  const overviewTableRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * Apply a card's filter and bring the table into view.
+   *
+   * The other lost-lead controls are reset first, deliberately. Clicking
+   * "Lost / Ghosted" while the toolbar's "show lost leads" toggle happened to be
+   * off would otherwise filter to lost leads and then hide every one of them —
+   * an empty table that looks broken. The card is an explicit instruction, so it
+   * wins over whatever the toolbar was left on.
+   *
+   * Clicking the active card clears it, so the same click both applies and
+   * undoes rather than needing a separate reset control.
+   */
+  const applyStatFilter = useCallback((id: StatCardFilter) => {
+    // Computed from the rendered value rather than inside a setState updater:
+    // updaters must be pure, and React invokes them twice under StrictMode, so
+    // the sibling setState calls belong out here.
+    const next: StatCardFilter = statCardFilter === id ? "all" : id;
+    setStatCardFilter(next);
+    setLostLeadFilter("all");
+    setShowLostLeads(true);
+    if (next === "lost") setShowNGDLeads(true);
+    // After paint, so the table has rendered its new rows before we scroll to it.
+    requestAnimationFrame(() => {
+      overviewTableRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    // statCardFilter is read above, so it must be a dependency — with an empty
+    // array the closure would keep the initial "all" forever and clicking the
+    // active card would never toggle it off.
+  }, [statCardFilter]);
+
   // ── Reset search when switching perfMode ──────────────────────────────────
   useEffect(() => {
     setOverviewSearch("");
@@ -1927,6 +1999,11 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
   const filteredOverviewLeads = useMemo(() => {
     const activeAllLeads = allLeads.filter((l: any) => !deletedLeadIds.has(l.id));
     let leads = filterLeads(activeAllLeads, overviewSearch, overviewSearchColumn);
+    // Applied first, using the same predicate the card counted with — so the
+    // number on the card and the row count below it always agree.
+    if (statCardFilter !== "all") {
+      leads = leads.filter(STAT_MATCHERS[statCardFilter]);
+    }
     if (lostLeadFilter === "active") {
       leads = leads.filter((l: any) => !l.is_lost_lead);
     } else if (lostLeadFilter === "lost") {
@@ -1946,7 +2023,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
     // Sort numerically by sr_no descending so Lead No. order is always correct (#119, #118 ... #2, #1)
     leads = [...leads].sort((a: any, b: any) => (Number(b.sr_no) || 0) - (Number(a.sr_no) || 0));
     return leads;
-  }, [allLeads, overviewSearch, overviewSearchColumn, lostLeadFilter, showLostLeads, showNGDLeads, deletedLeadIds, showDuplicatesOnly, duplicateIds]);
+  }, [allLeads, overviewSearch, overviewSearchColumn, lostLeadFilter, showLostLeads, showNGDLeads, deletedLeadIds, showDuplicatesOnly, duplicateIds, statCardFilter]);
 
   useEffect(() => {
     CRMContextManager.update({
@@ -1992,36 +2069,44 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
         <p className={`text-sm ${theme.textMuted}`}>Here is what's happening with your team today.</p>
       </div>
 
-      {/* ── Quick Stats ── */}
+      {/* ── Quick Stats ──
+          Each card filters the Enquiry Overview table below to its own segment
+          and scrolls to it. Counts come from STAT_MATCHERS, the same predicates
+          the filter uses, so the number and the filtered rows always match. */}
       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-7 gap-2 mb-8">
-        <div className={`${theme.card} rounded-xl p-5`} style={theme.cardGlass}>
-          <p className={`text-xs font-bold uppercase tracking-wider ${theme.textFaint}`}>Total Leads</p>
-          <p className={`text-2xl font-black mt-1 ${theme.text}`}>{allLeads.length}</p>
-        </div>
-        <div className={`${theme.card} rounded-xl p-5`} style={theme.cardGlass}>
-          <p className={`text-xs font-bold uppercase tracking-wider ${theme.textFaint}`}>Active Leads</p>
-          <p className={`text-2xl font-black mt-1 ${isDark ? "text-green-400" : "text-emerald-600"}`}>{allLeads.filter((l: any) => !l.is_lost_lead && l.status !== "Closing").length}</p>
-        </div>
-        <div className={`${theme.card} rounded-xl p-5`} style={theme.cardGlass}>
-          <p className={`text-xs font-bold uppercase tracking-wider ${theme.textFaint}`}>Closing Leads</p>
-          <p className={`text-2xl font-black mt-1 ${isDark ? "text-yellow-400" : "text-amber-500"}`}>{allLeads.filter((l: any) => l.status === "Closing").length}</p>
-        </div>
-        <div className={`${theme.card} rounded-xl p-5`} style={theme.cardGlass}>
-          <p className={`text-xs font-bold uppercase tracking-wider ${theme.textFaint}`}>Lost / Ghosted</p>
-          <p className={`text-2xl font-black mt-1 ${isDark ? "text-red-400" : "text-red-600"}`}> {allLeads.filter((l: any) => l.is_lost_lead).length}</p>
-        </div>
-        <div className={`${theme.card} rounded-xl p-5`} style={theme.cardGlass}>
-          <p className={`text-xs font-bold uppercase tracking-wider ${theme.textFaint}`}>Assigned</p>
-          <p className={`text-2xl font-black mt-1 ${theme.accentText}`}>{lifecycleAssignedCount}</p>
-        </div>
-        <div className={`${theme.card} rounded-xl p-5`} style={theme.cardGlass}>
-          <p className={`text-xs font-bold uppercase tracking-wider ${theme.textFaint}`}>Contacted</p>
-          <p className={`text-2xl font-black mt-1 ${isDark ? "text-cyan-400" : "text-cyan-700"}`}>{lifecycleContactedCount}</p>
-        </div>
-        <div className={`${theme.card} rounded-xl p-5`} style={theme.cardGlass}>
-          <p className={`text-xs font-bold uppercase tracking-wider ${theme.textFaint}`}>Interested</p>
-          <p className={`text-2xl font-black mt-1 ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lifecycleInterestedCount}</p>
-        </div>
+        {([
+          { id: "all", valueCls: theme.text },
+          { id: "active", valueCls: isDark ? "text-green-400" : "text-emerald-600" },
+          { id: "closing", valueCls: isDark ? "text-yellow-400" : "text-amber-500" },
+          { id: "lost", valueCls: isDark ? "text-red-400" : "text-red-600" },
+          { id: "assigned", valueCls: theme.accentText },
+          { id: "contacted", valueCls: isDark ? "text-cyan-400" : "text-cyan-700" },
+          { id: "interested", valueCls: isDark ? "text-green-400" : "text-emerald-600" },
+        ] as Array<{ id: StatCardFilter; valueCls: string }>).map(({ id, valueCls }) => {
+          const isActive = statCardFilter === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => applyStatFilter(id)}
+              aria-pressed={isActive}
+              title={isActive
+                ? `Showing ${STAT_LABELS[id]} — click again to clear`
+                : `Filter the table to ${STAT_LABELS[id]}`}
+              className={`${theme.card} rounded-xl p-5 text-left w-full transition-all cursor-pointer hover:-translate-y-0.5 hover:shadow-lg ${isActive ? "ring-2 ring-[#9E217B] ring-offset-1 ring-offset-transparent" : ""
+                }`}
+              style={theme.cardGlass}
+            >
+              <p className={`text-xs font-bold uppercase tracking-wider flex items-center justify-between gap-1 ${theme.textFaint}`}>
+                {STAT_LABELS[id]}
+                {isActive && <FaTimes className="w-2.5 h-2.5 opacity-70" />}
+              </p>
+              <p className={`text-2xl font-black mt-1 ${valueCls}`}>
+                {allLeads.filter(STAT_MATCHERS[id]).length}
+              </p>
+            </button>
+          );
+        })}
       </div>
 
       {/* ── Top performers + site visits ── */}
@@ -2161,6 +2246,29 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
       {/* ════════════════════════════════════════════════
           OVERALL MODE
       ════════════════════════════════════════════════ */}
+      {/* Scroll target for the Quick Stats cards. scroll-mt keeps the heading
+          clear of the sticky header rather than tucking under it. */}
+      <div ref={overviewTableRef} className="scroll-mt-24" />
+
+      {statCardFilter !== "all" && (
+        <div className={`mb-3 flex items-center justify-between gap-3 rounded-xl border px-4 py-2.5 ${isDark ? "border-[#9E217B]/40 bg-[#9E217B]/10" : "border-[#9E217B]/30 bg-[#9E217B]/5"
+          }`}>
+          <p className={`text-xs font-bold ${theme.text}`}>
+            Filtered to <span className="text-[#9E217B]">{STAT_LABELS[statCardFilter]}</span>
+            <span className={`ml-2 font-medium ${theme.textMuted}`}>
+              {filteredOverviewLeads.length} of {allLeads.length} leads
+            </span>
+          </p>
+          <button
+            type="button"
+            onClick={() => setStatCardFilter("all")}
+            className="text-[11px] font-black px-3 py-1.5 rounded-lg text-white bg-[#9E217B] hover:bg-[#8a1d6b] transition-colors cursor-pointer inline-flex items-center gap-1.5"
+          >
+            <FaTimes className="w-2.5 h-2.5" /> Clear filter
+          </button>
+        </div>
+      )}
+
       {perfMode === "overall" ? (
         <EnquiryOverviewSection
           allLeads={allLeads}

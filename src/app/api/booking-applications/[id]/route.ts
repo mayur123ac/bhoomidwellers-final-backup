@@ -4,6 +4,7 @@ import { query, transaction } from "@/lib/db";
 import { uploadBufferToR2 } from "@/lib/r2";
 import { syncBookingUnit, releaseUnitForBooking, flatIdentityChanged, parseFloor } from "@/lib/inventorySync";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
+import { resolveGstRate, calcGstAmount } from "@/lib/gst";
 
 export const dynamic = "force-dynamic";
 
@@ -234,8 +235,14 @@ export async function PUT(
     // Derived financials — recomputed on every save so they never drift from agreement_value.
     // Explicit client overrides (non-zero) win; otherwise Maharashtra defaults apply.
     const agreementValue = cleanNum(getStr("agreement_value"));
-    const gstRate = getStr("gst_rate") ? cleanNum(getStr("gst_rate")) : (Number(currentData.gst_rate) || 5);
-    const gstAmount = agreementValue * gstRate / 100;
+    // `Number(currentData.gst_rate) || 5` rewrote a stored 0% to 5% on every
+    // save that omitted the field, so a zero-GST booking silently regained GST
+    // the next time anything else on it was edited. resolveGstRate keeps 0 and
+    // only falls back when the value is genuinely absent.
+    const gstRate = getStr("gst_rate")
+      ? cleanNum(getStr("gst_rate"))
+      : resolveGstRate(currentData.gst_rate);
+    const gstAmount = calcGstAmount(agreementValue, gstRate);
     const stampDutyInput = cleanNum(getStr("stamp_duty_amount"));
     const stampDutyAmount = stampDutyInput > 0 ? stampDutyInput : agreementValue * 0.05;
     const registrationFeeInput = cleanNum(getStr("registration_fee_amount"));

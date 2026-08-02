@@ -5,6 +5,7 @@ import { uploadBufferToR2 } from "@/lib/r2";
 import { syncBookingUnit } from "@/lib/inventorySync";
 import { computeCPCommission } from "@/lib/cpCommissionEngine";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
+import { resolveGstRate, calcGstAmount } from "@/lib/gst";
 
 export const dynamic = "force-dynamic";
 
@@ -574,8 +575,11 @@ export async function POST(req: NextRequest) {
 
       // 1a-2. Auto-compute GST and Stamp Duty / Registration Fee (Maharashtra defaults; overridable by client)
       const agreementVal = cleanNum(agreement_value);
-      const gstRate = gst_rate_input ? cleanNum(gst_rate_input) : 5;
-      const gstAmount = agreementVal * gstRate / 100;
+      // Safe as written (the string "0" is truthy) but routed through the shared
+      // helper anyway, so create and update resolve the rate identically and a
+      // numeric 0 from a non-form caller cannot regress to 5.
+      const gstRate = resolveGstRate(gst_rate_input);
+      const gstAmount = calcGstAmount(agreementVal, gstRate);
       const stampDutyAmount = stamp_duty_amount_input ? cleanNum(stamp_duty_amount_input) : agreementVal * 0.05;
       const registrationFeeAmount = registration_fee_amount_input ? cleanNum(registration_fee_amount_input) : Math.min(agreementVal * 0.01, 30000);
 

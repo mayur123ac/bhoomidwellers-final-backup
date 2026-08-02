@@ -10,6 +10,10 @@ import {
   FaPen, FaUpload, FaCheckCircle, FaPrint, FaDownload,
 } from "react-icons/fa";
 import { formatCurrencyDisplay, formatCurrencyDecimal, toStorageValue } from "@/lib/currency";
+// Single definition of how a GST rate is resolved and applied — see lib/gst.ts
+// for why `|| 5` could not express "default when absent" for a field whose zero
+// is meaningful.
+import { resolveGstRate, calcGstAmount, GST_RATE_PRESETS } from "@/lib/gst";
 // Reused so the inline rate field enforces exactly what the CP Master enforces —
 // 0-100 and at most 2dp, matching NUMERIC(5,2).
 import { validateRate } from "./ChannelPartnerFormModal";
@@ -280,8 +284,15 @@ function autoRegistrationFee(agreementValue: number) { return Math.min(Math.roun
 
 function computeCostBreakdown(form: BookingFormData): CostBreakdown {
   const agreementValue = toNumber(form.agreement_value);
-  const gstRate = toNumber(form.gst_rate) || 5;
-  const gstAmount = toNumber(form.gst_amount) || autoGstAmount(agreementValue, gstRate);
+  const gstRate = resolveGstRate(form.gst_rate);
+  // An explicitly entered ₹0 must survive. `toNumber(...) || autoGstAmount(...)`
+  // read a genuine zero as "not set" and recomputed it at the default rate, so a
+  // 0% booking still showed GST in the cost breakdown. Emptiness, not falsiness,
+  // is what means "derive it".
+  const enteredGstAmount = String(form.gst_amount ?? "").trim();
+  const gstAmount = enteredGstAmount === ""
+    ? calcGstAmount(agreementValue, gstRate)
+    : toNumber(enteredGstAmount);
   const stampDuty = toNumber(form.stamp_duty_amount) || autoStampDuty(agreementValue);
   const registrationFee = toNumber(form.registration_fee_amount) || autoRegistrationFee(agreementValue);
   const legalCharges = toNumber(form.legal_charges);
@@ -376,7 +387,11 @@ function defaultForm(lead: any): BookingFormData {
     revenue_include_disbursement: false,
 
     // Phase B: draft (loan_tracking_info) is a superset of Step 3 — prefill directly, no translation.
-    gst_rate: draft.gst_rate || "5", gst_amount: "", gst_paid: "", gst_status: "Pending",
+    // parseGstRate, not `||`: a draft saved with 0% arrives here as 0 or "0" and
+    // must stay 0. gst_amount is left blank on purpose so the effect below
+    // derives it from this rate.
+    gst_rate: String(resolveGstRate(draft.gst_rate)),
+    gst_amount: "", gst_paid: "", gst_status: "Pending",
     stamp_duty_amount: draft.stamp_duty_amount || "", stamp_duty_paid_date: "", stamp_duty_status: draft.stamp_duty_status || "Pending",
     stamp_duty_payment_mode: "E-Stamp", stamp_duty_receipt_no: "",
     registration_fee_amount: draft.registration_fee_amount || "", registration_fee_paid_date: "",
@@ -615,8 +630,8 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
   // These are "Est." fields — always kept in sync so they never drift.
   useEffect(() => {
     const av = toNumber(form.agreement_value);
-    const rate = toNumber(form.gst_rate) || 5;
-    const gst = String(autoGstAmount(av, rate));
+    const rate = resolveGstRate(form.gst_rate);
+    const gst = String(calcGstAmount(av, rate));
     const stamp = String(autoStampDuty(av));
     const reg = String(autoRegistrationFee(av));
     setForm(f => (
