@@ -1,7 +1,7 @@
 //LiveActivityView.tsx
 import React, { useState, useEffect } from "react";
-import { FaCircle, FaUsers, FaWalking, FaExclamationTriangle, FaTimes, FaChartLine, FaShieldAlt, FaBriefcase, FaChartPie, FaInfoCircle, FaHistory, FaClock, FaCog, FaFileExcel, FaSave } from "react-icons/fa";
-import * as XLSX from 'xlsx';
+import { FaCircle, FaUsers, FaWalking, FaExclamationTriangle, FaTimes, FaChartLine, FaShieldAlt, FaBriefcase, FaChartPie, FaInfoCircle, FaHistory, FaClock, FaCog, FaSave } from "react-icons/fa";
+import AttendanceReportButton from "@/components/AttendanceReportButton";
 import { useShiftTiming } from "@/hooks/useShiftTiming";
 
 export default function LiveActivityView({ theme, isDark }: { theme: any; isDark: boolean }) {
@@ -308,64 +308,11 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
     } catch (e) { console.error(e); }
   };
 
-  const exportToExcel = () => {
-    if (sessions.length === 0) return;
-
-    const rows = sessions.map(s => {
-      const loginTime = new Date(s.session_start);
-      const [configH, configM] = workingHours.loginTime.split(':').map(Number);
-      const expected = new Date(loginTime);
-      expected.setHours(configH, configM, 0, 0);
-      const diffMin = Math.round((loginTime.getTime() - expected.getTime()) / 60000);
-
-      let punctuality = 'On Time';
-      if (!workingHours.flexible) {
-        if (diffMin > 2) {
-          const h = Math.floor(Math.abs(diffMin) / 60);
-          const m = Math.abs(diffMin) % 60;
-          punctuality = `Late ${h > 0 ? h + 'h ' : ''}${m}m`;
-        } else if (diffMin < -2) {
-          const h = Math.floor(Math.abs(diffMin) / 60);
-          const m = Math.abs(diffMin) % 60;
-          punctuality = `Early ${h > 0 ? h + 'h ' : ''}${m}m`;
-        }
-      } else {
-        punctuality = 'Flexible';
-      }
-
-      return {
-        'Employee': s.name,
-        'Status': s.status,
-        'Login Date': new Date(s.session_start).toLocaleDateString('en-IN'),
-        'Login Time': new Date(s.session_start).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-        'Logout Time': s.session_is_active ? 'User Active' : (s.session_end ? new Date(s.session_end).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'N/A'),
-        'Working Hours': getWorkingHours(s.session_start, s.session_end, s.session_is_active),
-        'Active Lead': s.active_lead_id ? `${s.active_lead_name || 'Lead'} (${s.active_lead_id})` : '-',
-        'Punctuality': punctuality,
-        'Productivity Score': s.productivity_score || 0,
-        'Long Idle Risk': s.idle_duration_seconds > 1800 ? 'Yes' : 'No',
-        'IP Address': s.ip_address || '-',
-        'Device': s.device_info || '-',
-        'Attendance': s.attendance_status || 'Absent',
-      };
-    });
-
-    const worksheet = XLSX.utils.json_to_sheet(rows);
-
-    // Set column widths
-    worksheet['!cols'] = [
-      { wch: 20 }, { wch: 10 }, { wch: 14 }, { wch: 14 },
-      { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 25 },
-      { wch: 25 }, { wch: 16 }, { wch: 10 }, { wch: 12 },
-      { wch: 16 }, { wch: 22 },
-    ];
-
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Attendance Report');
-
-    const dateLabel = new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN').replace(/\//g, '-');
-    XLSX.writeFile(workbook, `Attendance_${dateLabel}.xlsx`);
-  };
+  // The single-day exportToExcel() that lived here was removed with the toolbar
+  // button that called it. It serialised only `sessions` — the one day already
+  // loaded in the browser — and carried its own copy of the punctuality rules.
+  // Both now live in AttendanceReportButton + /api/attendance/report, so there is
+  // one export path and one place those rules are written down.
 
   const todayStr = new Date().toISOString().split('T')[0];
   const isFutureDate = selectedDate > todayStr;
@@ -525,18 +472,11 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
             </div>
 
             <div className="flex items-center gap-3 relative">
-              <button
-                onClick={exportToExcel}
-                disabled={sessions.length === 0 || isFutureDate}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-bold transition-colors
-                  ${sessions.length === 0 || isFutureDate
-                    ? 'opacity-40 cursor-not-allowed border-gray-500/20 text-gray-500'
-                    : 'border-green-500/30 text-green-500 bg-green-500/5 hover:bg-green-500/15'
-                  }`}
-              >
-                <FaFileExcel className="w-3.5 h-3.5" />
-                Export Excel
-              </button>
+              {/* Replaces the old single-day "Export Excel". That one serialised
+                  only the rows already loaded on screen; this fetches a real date
+                  range from the database via /api/attendance/report. Same green
+                  styling and same slot in the toolbar. */}
+              <AttendanceReportButton theme={theme} isDark={isDark} />
 
               <button
                 onClick={() => setShowHoursConfig(!showHoursConfig)}
