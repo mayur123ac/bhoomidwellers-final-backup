@@ -5,6 +5,8 @@ import { uploadBufferToR2 } from "@/lib/r2";
 import { syncBookingUnit, releaseUnitForBooking, flatIdentityChanged, parseFloor } from "@/lib/inventorySync";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 import { resolveGstRate, calcGstAmount } from "@/lib/gst";
+// Shared so a saved booking returns the same shape a fetched one does.
+import { fetchBookingById } from "@/lib/bookingQuery";
 
 export const dynamic = "force-dynamic";
 
@@ -621,7 +623,13 @@ export async function PUT(
       return rows.rows[0];
     });
 
-    return NextResponse.json({ success: true, data: updatedRow }, { status: 200 });
+    // Re-read with the joins, post-commit. The bare row above carries no
+    // lead_name / lead_phone / token_amount / ocr_amount, and the UI assigns this
+    // response straight into the booking view — which is how an edited booking
+    // came back showing its own customer details as "—".
+    const enriched = await fetchBookingById(Number(id));
+
+    return NextResponse.json({ success: true, data: enriched ?? updatedRow }, { status: 200 });
   } catch (err: any) {
     console.error("[PUT /api/booking-applications/[id]]", err);
     // Cancellation-management guards throw with an httpStatus (403 non-admin, 409 flat taken).

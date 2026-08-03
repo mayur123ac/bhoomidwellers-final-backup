@@ -2049,7 +2049,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                                   Recorded against the partner when this booking
                                   saves, and visible immediately under Channel
                                   Partners in the admin panel. */}
-                              <div className={`rounded-xl p-4 border ${isDark ? "bg-[#9E217B]/5 border-[#9E217B]/25" : "bg-[#9E217B]/5 border-[#9E217B]/20"}`}>
+                              {/* <div className={`rounded-xl p-4 border ${isDark ? "bg-[#9E217B]/5 border-[#9E217B]/25" : "bg-[#9E217B]/5 border-[#9E217B]/20"}`}>
                                 <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
                                   <div>
                                     <p className={`text-xs font-bold ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>Channel Partner Commission</p>
@@ -2064,9 +2064,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                                     )}
                                   </div>
                                   <div className="flex items-center gap-4">
-                                    {/* Recording is optional — the commission is calculated
-                                        and shown either way, but nothing is written unless
-                                        this is on. */}
+                                
                                     <label className={`flex items-center gap-2 cursor-pointer text-[11px] ${textMuted}`}>
                                       <input
                                         type="checkbox"
@@ -2141,9 +2139,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                                   <p className="text-[11px] mt-2 text-amber-500">{cpPreviewError}</p>
                                 )}
 
-                                {/* Missing rate is fixable in place — no need to leave the
-                                    booking and lose the form. Same validation and endpoint
-                                    the CP Master uses; the server re-checks the role. */}
+
                                 {cpId && cpPreviewCode === "CP_RATE_NOT_SET" && (
                                   canSetRate ? (
                                     <div className={`mt-3 pt-3 border-t ${divider}`}>
@@ -2207,7 +2203,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                                     )}
                                   </div>
                                 )}
-                              </div>
+                              </div> */}
                             </motion.div>
                           )}
 
