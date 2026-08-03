@@ -4,7 +4,7 @@ import { query, transaction, recalculateSrNos } from "@/lib/db";
 import { isChannelPartnerSource, resolveChannelPartnerId } from "@/lib/cpCommissionEngine";
 import { claimPartnerForSourcingManager, resolvePartnerOwner } from "@/lib/sourcingAssignment";
 import { getServerSession } from "@/lib/serverAuth";
-import { normalizeRole, normalizeCpPhone } from "@/lib/cpRbac";
+import { normalizeRole } from "@/lib/cpRbac";
 import { notifyCpLeadAssigned } from "@/services/whatsapp.service";
 import { jsonCompressed } from "@/lib/apiResponse";
 
@@ -143,37 +143,11 @@ export async function POST(req: Request) {
       : null;
 
     if (isCpEnquiry) {
-      // Is this CP phone already a registered partner with an owner? If so the
-      // manual pick is optional — the partner's owner decides the routing anyway
-      // (see resolvePartnerOwner in the transaction below). This makes the field
-      // genuinely unnecessary for a known partner, rather than a formality the
-      // receptionist has to satisfy with an answer the server then discards.
-      const cpKey = normalizeCpPhone(cp_phone);
-      const ownedRows = cpKey
-        ? await query(
-            `SELECT 1
-               FROM channel_partners cp
-               JOIN users sm ON sm.id = cp.assigned_sourcing_manager_id
-              WHERE right(regexp_replace(COALESCE(cp.phone, ''), '\\D', '', 'g'), 10) = $1
-                AND sm.is_active = true
-                AND REPLACE(LOWER(TRIM(sm.role)), '_', ' ') = 'sourcing manager'
-              LIMIT 1`,
-            [cpKey]
-          )
-        : [];
-      const partnerAlreadyOwned = ownedRows.length > 0;
-
-      if (requestedSourcingManagerId === null && !partnerAlreadyOwned) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Assign Sourcing Manager is required for Channel Partner enquiries.",
-            code: "SOURCING_MANAGER_REQUIRED",
-          },
-          { status: 400 }
-        );
-      }
-
+      // Sourcing Manager is optional: a CP enquiry may be saved unassigned and an
+      // Admin can assign it later from Channel Partner Management. When the phone
+      // resolves to an already-registered partner, resolvePartnerOwner in the
+      // transaction below routes the lead to that partner's owner regardless.
+      //
       // A supplied id is still validated even when it will be overridden — a bad
       // one means the form is out of sync, and failing loudly beats silently
       // substituting a different manager than the operator saw on screen.

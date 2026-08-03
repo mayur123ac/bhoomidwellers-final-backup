@@ -1,7 +1,8 @@
 "use client";
 // PddChecklist.tsx — Phase D5. Post-Disbursement Documents tracker, shown once a
 // loan is fully disbursed. The checklist is auto-seeded server-side when the final
-// tranche lands (Phase C4); this component seeds on demand too if it's still empty.
+// tranche lands (Phase C4). If that hasn't happened, this component offers a
+// "Create PDD Checklist" button — it never seeds just from being rendered.
 import React, { useCallback, useEffect, useState } from "react";
 import { FaCheck } from "react-icons/fa";
 
@@ -32,31 +33,38 @@ const fmt = (d: string | null) => {
 export default function PddChecklist({ bookingId, userName, userRole, isDark, t, disbursementDate }: Props) {
   const [rows, setRows] = useState<PddRow[]>([]);
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [seeding, setSeeding] = useState(false);
 
   const canManage = ["admin", "sales manager", "sales_manager", "site_head", "site head"].includes((userRole || "").trim().toLowerCase());
 
+  // Read-only. Seeding used to happen right here whenever the list came back
+  // empty, which meant merely opening the Loan & Deal form wrote a full checklist
+  // to the server without the operator asking for it. Creating the checklist is
+  // now its own button (see `seed` below).
   const load = useCallback(async () => {
     if (!bookingId) return;
     try {
       const res = await fetch(`/api/booking-applications/${bookingId}/pdd`);
       const json = await res.json();
-      if (json.success) {
-        // Empty + allowed → seed the standard checklist, then reload.
-        if ((json.data || []).length === 0 && canManage) {
-          const seedRes = await fetch(`/api/booking-applications/${bookingId}/pdd`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ user_name: userName, user_role: userRole, disbursement_date: disbursementDate || null }),
-          });
-          const seedJson = await seedRes.json();
-          if (seedJson.success) { setRows(seedJson.data); return; }
-        }
-        setRows(json.data);
-      }
+      if (json.success) setRows(json.data);
     } catch { /* non-blocking */ }
-  }, [bookingId, canManage, userName, userRole, disbursementDate]);
+  }, [bookingId]);
 
   useEffect(() => { load(); }, [load]);
+
+  const seed = async () => {
+    if (!bookingId || !canManage || seeding) return;
+    setSeeding(true);
+    try {
+      const res = await fetch(`/api/booking-applications/${bookingId}/pdd`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_name: userName, user_role: userRole, disbursement_date: disbursementDate || null }),
+      });
+      const json = await res.json();
+      if (json.success) setRows(json.data);
+    } catch { /* non-blocking */ } finally { setSeeding(false); }
+  };
 
   const toggle = async (row: PddRow) => {
     if (!canManage || busyId) return;
@@ -94,7 +102,21 @@ export default function PddChecklist({ bookingId, userName, userRole, isDark, t,
       </p>
       <div className={`rounded-lg border divide-y ${t.innerBlock}`}>
         {rows.length === 0 ? (
-          <p className={`px-3 py-2.5 text-xs italic ${t.textFaint}`}>Checklist not seeded yet.</p>
+          <div className="px-3 py-2.5 flex items-center justify-between gap-3">
+            <p className={`text-xs italic ${t.textFaint}`}>
+              {canManage ? "No checklist yet for this booking." : "Checklist not created yet."}
+            </p>
+            {canManage && (
+              <button
+                type="button"
+                onClick={seed}
+                disabled={seeding}
+                className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-[#00AEEF] text-white hover:bg-[#0095cc] transition-colors disabled:opacity-50 flex-shrink-0"
+              >
+                {seeding ? "Creating…" : "Create PDD Checklist"}
+              </button>
+            )}
+          </div>
         ) : rows.map(r => {
           const overdue = !r.submitted && r.required_by_date != null && String(r.required_by_date).split("T")[0] < today;
           return (

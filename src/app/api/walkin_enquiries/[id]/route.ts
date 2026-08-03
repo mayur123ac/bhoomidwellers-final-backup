@@ -1,6 +1,6 @@
 // app/api/walkin_enquiries/[id]/route.ts
 import { NextResponse } from "next/server";
-import { transaction, recalculateSrNos } from "@/lib/db";
+import { query, transaction, recalculateSrNos } from "@/lib/db";
 import { requireRole, getServerSession } from "@/lib/serverAuth";
 import { normalizeRole } from "@/lib/cpRbac";
 import {
@@ -25,6 +25,47 @@ const contactStatuses = new Set([
   "Closing",
   "Closed",
 ]);
+
+// ─── GET — one lead's loan-form draft ─────────────────────────────────────────
+// Read-only, and deliberately narrow: it returns the lead's id/name plus the
+// loan_tracking_info JSONB that the Loan & Deal form writes (agreement value
+// estimate, GST rate, token amount, sanction figures…). The Booking form reads
+// it to prefill Step 3 — see applyLoanPrefill in BookingFormModal.
+//
+// Scoped to these columns rather than SELECT * so a read added for a prefill
+// can't become an accidental full-lead disclosure endpoint.
+export async function GET(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+
+  try {
+    const session = await getServerSession();
+    if (!session) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
+
+    const leadId = Number(id);
+    if (Number.isNaN(leadId)) {
+      return NextResponse.json({ success: false, message: "Invalid lead ID" }, { status: 400 });
+    }
+
+    const rows = await query(
+      "SELECT id, name, loan_tracking_info FROM walkin_enquiries WHERE id = $1",
+      [leadId]
+    );
+
+    if (rows.length === 0) {
+      return NextResponse.json({ success: false, message: "Lead not found" }, { status: 404 });
+    }
+
+    return NextResponse.json({ success: true, data: rows[0] }, { status: 200 });
+  } catch (error: any) {
+    console.error("[GET /api/walkin_enquiries/[id]]", error);
+    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
+  }
+}
 
 export async function PUT(
   req: Request,

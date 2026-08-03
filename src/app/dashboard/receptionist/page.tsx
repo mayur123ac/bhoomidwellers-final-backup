@@ -4199,7 +4199,7 @@ export default function ReceptionistDashboard() {
                             Assign Sourcing Manager{" "}
                             {cpRoutedByPartner
                               ? <span className={t.textFaint}>(set by the partner&apos;s registration)</span>
-                              : <span className="text-red-500">*</span>}
+                              : <span className={t.textFaint}>(optional)</span>}
                           </label>
                           <SearchableSelect
                             value={enquiryForm.sourcingManagerId}
@@ -4250,8 +4250,9 @@ export default function ReceptionistDashboard() {
                               submit; an Admin can assign this enquiry later.
                             </p>
                           ) : !enquiryForm.sourcingManagerId ? (
-                            <p className={`text-[11px] mt-1.5 pl-2 ${isDark ? "text-amber-400" : "text-amber-600"}`}>
-                              Required for Channel Partner enquiries.
+                            <p className={`text-[11px] mt-1.5 pl-2 ${t.textFaint}`}>
+                              Optional — you can submit without one and an Admin can assign
+                              this enquiry later.
                             </p>
                           ) : null}
                         </div>

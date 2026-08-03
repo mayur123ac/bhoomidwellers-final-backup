@@ -642,6 +642,24 @@ export default function LoanDealForm({ lead, booking, loanUpdate, user, isDark =
   const selectCls = `w-full rounded-lg px-4 py-2 text-sm sm:py-2.5 outline-none cursor-pointer border ${t.inputInner} ${t.text} ${t.inputFocus}`;
   const labelCls = `text-xs mb-1 block ${t.textMuted}`;
 
+  // Saving is the Save button's job and nothing else's. Browsers implicitly submit
+  // a form when Enter is pressed in a single-line input, and this form is almost
+  // entirely single-line inputs spread over nine sections — so an operator who
+  // typed a CIBIL score and hit Enter out of habit POSTed the whole half-filled
+  // form to /api/loan and wrote a "🏦 Loan Update" entry onto the lead's timeline.
+  // From the operator's side that is indistinguishable from the form saving itself.
+  //
+  // Enter is still allowed to reach: textareas (newlines in Internal Notes) and
+  // any focused button, including the Save button — activating a control with the
+  // keyboard is an explicit action, unlike Enter in a text field.
+  const blockImplicitSubmit = (e: React.KeyboardEvent<HTMLFormElement>) => {
+    if (e.key !== "Enter") return;
+    const el = e.target as HTMLElement | null;
+    const tag = el?.tagName;
+    if (tag === "TEXTAREA" || tag === "BUTTON") return;
+    e.preventDefault();
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
@@ -828,7 +846,7 @@ export default function LoanDealForm({ lead, booking, loanUpdate, user, isDark =
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-3 flex-1">
+      <form onSubmit={handleSubmit} onKeyDown={blockImplicitSubmit} className="flex flex-col gap-3 flex-1">
 
         {/* SECTION 1 — Qualification */}
         <div>

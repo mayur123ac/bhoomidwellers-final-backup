@@ -13,7 +13,9 @@ import { formatCurrencyDisplay, formatCurrencyDecimal, toStorageValue } from "@/
 // Single definition of how a GST rate is resolved and applied — see lib/gst.ts
 // for why `|| 5` could not express "default when absent" for a field whose zero
 // is meaningful.
-import { resolveGstRate, calcGstAmount, GST_RATE_PRESETS } from "@/lib/gst";
+import { resolveGstRate, calcGstAmount, parseGstRate, GST_RATE_PRESETS } from "@/lib/gst";
+import LoanDealForm from "@/components/LoanDealForm";
+import { buildTheme } from "@/lib/crmTheme";
 // Reused so the inline rate field enforces exactly what the CP Master enforces —
 // 0-100 and at most 2dp, matching NUMERIC(5,2).
 import { validateRate } from "./ChannelPartnerFormModal";
@@ -368,7 +370,11 @@ function defaultForm(lead: any): BookingFormData {
     cp_commission_amount: "",
     cp_commission_reason: "",
 
-    booking_date: today, agreement_value: "", booking_amount: "", booking_remarks: "",
+    // agreement_value seeds from the loan form's estimate-only field. That field
+    // exists precisely so stamp duty / registration can be calculated before a
+    // booking exists; when the booking is finally raised it is the best available
+    // starting number, and it stays editable here.
+    booking_date: today, agreement_value: draft.agreement_value_estimate || "", booking_amount: "", booking_remarks: "",
     token_amount: draft.token_amount || "", ocr_amount: draft.ocr_amount || "", ocr_received_date: draft.ocr_received_date || "", ocr_payment_mode: draft.ocr_payment_mode || "Cheque", ocr_remarks: draft.ocr_remarks || "",
     sdr_amount: draft.sdr_amount || "", sdr_payment_date: draft.sdr_payment_date || "", sdr_status: draft.sdr_status || "Pending", sdr_remarks: draft.sdr_remarks || "",
     cash_component: draft.cash_component || "", cash_component_date: draft.cash_component_date || "", cash_component_remarks: draft.cash_component_remarks || "",
@@ -468,6 +474,27 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
   const [rateInput, setRateInput] = useState("");
   const [rateSaving, setRateSaving] = useState(false);
   const [rateError, setRateError] = useState<string | null>(null);
+  // ── Loan-form prefill (Step 3) ──────────────────────────────────────────────
+  // Agreement Value, GST Rate and Token Amount are all captured in the Loan &
+  // Deal form's Section 8 before a booking exists. They are carried over here so
+  // the operator isn't re-keying figures the sales manager already agreed.
+  //
+  // `loanPrefilled` marks which of the three are currently showing a carried-over
+  // value; the hint under the field reads off it, and `set()` clears the flag on
+  // the first edit. `touchedRef` is what makes the booking form's values win: once
+  // a key is in it, no later prefill pass may overwrite it.
+  const PREFILL_KEYS = ["agreement_value", "gst_rate", "token_amount"] as const;
+  const [loanPrefilled, setLoanPrefilled] = useState<Record<string, boolean>>({});
+  const touchedRef = useRef<Set<string>>(new Set());
+  // True when this open restored a sessionStorage draft. That draft is prior work
+  // in *this* form — including whatever an earlier prefill pass put there — so the
+  // on-open pass must leave it alone. (The loan-editor round trip still refreshes
+  // it: that one is the operator asking for the new numbers.)
+  const restoredDraftRef = useRef(false);
+  const [showLoanEditor, setShowLoanEditor] = useState(false);
+  const [loanEditorUpdate, setLoanEditorUpdate] = useState<any>(null);
+  const [loanEditorLoading, setLoanEditorLoading] = useState(false);
+
   // Lead objects reach this modal in two shapes: raw DB rows (snake_case, from the
   // receptionist/closed-lead paths) and the dashboard's mapped camelCase shape.
   // Accept both so attribution works regardless of which screen opened the form.
@@ -577,6 +604,9 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
     if (!isOpen || !lead?.id) return;
     const key = `booking_draft_${lead.id}`;
     const stored = sessionStorage.getItem(key);
+    // Fresh open → nothing is "touched" or "prefilled" yet.
+    touchedRef.current = new Set();
+    setLoanPrefilled({});
     if (isEditMode && existingBooking) {
       // Map existing DB fields to form state
       const initialForm = defaultForm(lead);
@@ -604,10 +634,14 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
         joint_applicants: typeof safeBooking.joint_applicants === 'string' ? JSON.parse(safeBooking.joint_applicants) : (safeBooking.joint_applicants || initialForm.joint_applicants),
         payment_details: typeof safeBooking.payment_details === 'string' ? JSON.parse(safeBooking.payment_details) : (safeBooking.payment_details || initialForm.payment_details)
       });
+      restoredDraftRef.current = false;
     } else if (stored) {
-      try { setForm(JSON.parse(stored)); } catch { setForm(defaultForm(lead)); }
+      let restored = true;
+      try { setForm(JSON.parse(stored)); } catch { setForm(defaultForm(lead)); restored = false; }
+      restoredDraftRef.current = restored;
     } else {
       setForm(defaultForm(lead));
+      restoredDraftRef.current = false;
     }
     setStep(1); setErrors({}); setTermsScrolled(false);
   }, [isOpen, lead?.id]);
@@ -656,9 +690,93 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
   }, [form.loan_required, form.sanction_amount, form.loan_amount, form.disbursement_amount, form.interest_rate, form.loan_tenure_months]);
 
   const set = useCallback(<K extends keyof BookingFormData>(key: K, val: BookingFormData[K]) => {
+    // Any write through `set` counts as the booking form owning that field from
+    // now on — a later prefill pass must not overwrite it.
+    touchedRef.current.add(key as string);
+    setLoanPrefilled(p => (p[key as string] ? { ...p, [key as string]: false } : p));
     setForm(f => ({ ...f, [key]: val }));
     setErrors(e => { const ne = { ...e }; delete ne[key]; return ne; });
   }, []);
+
+  // Carries Agreement Value / GST Rate / Token Amount over from the Loan & Deal
+  // form's Section-8 draft (walkin_enquiries.loan_tracking_info) — the same
+  // source defaultForm() reads, refetched so the modal reflects edits made after
+  // the parent screen last loaded this lead.
+  //
+  // `force` is the return-from-loan-editor path: the operator just changed these
+  // numbers deliberately, so untouched fields are refreshed rather than only
+  // filled. In edit mode a saved booking's agreement value is a registered
+  // figure, never an estimate, so there force still only fills blanks.
+  const applyLoanPrefill = useCallback(async (opts?: { force?: boolean }) => {
+    if (!lead?.id) return;
+    const force = !!opts?.force;
+    try {
+      const res = await fetch(`/api/walkin_enquiries/${lead.id}`);
+      const json = await res.json().catch(() => ({}));
+      if (!json?.success) return;
+      const draft = parseLoanTrackingDraft(json.data);
+
+      const incoming: Partial<Record<typeof PREFILL_KEYS[number], string>> = {};
+      if (String(draft.agreement_value_estimate ?? "").trim() !== "") incoming.agreement_value = String(draft.agreement_value_estimate);
+      if (String(draft.gst_rate ?? "").trim() !== "") incoming.gst_rate = String(resolveGstRate(draft.gst_rate));
+      if (String(draft.token_amount ?? "").trim() !== "") incoming.token_amount = String(draft.token_amount);
+      if (Object.keys(incoming).length === 0) return;
+
+      // A Set, not an array: the updater below can be invoked more than once for a
+      // single update (React StrictMode), and re-applying the same keys must not
+      // change the outcome.
+      const applied = new Set<string>();
+      setForm(f => {
+        const nextForm = { ...f };
+        PREFILL_KEYS.forEach(k => {
+          if (incoming[k] === undefined) return;
+          if (touchedRef.current.has(k)) return;
+          const current = String(f[k] ?? "").trim();
+          if (k === "gst_rate") {
+            // Never blank — defaultForm always resolves a rate — so "is it empty"
+            // can't gate it. Untouched means the form still holds a default the
+            // operator never chose, which the loan form's rate should replace.
+            if (current === incoming[k]) return;
+          } else if (current !== "" && !(force && !isEditMode)) {
+            return;
+          }
+          nextForm[k] = incoming[k] as string;
+          applied.add(k);
+        });
+        return applied.size ? nextForm : f;
+      });
+      if (applied.size) {
+        setLoanPrefilled(p => {
+          const next = { ...p };
+          applied.forEach(k => { next[k] = true; });
+          return next;
+        });
+      }
+    } catch { /* prefill is a convenience; failure must never block the form */ }
+  }, [lead?.id, isEditMode]);
+
+  useEffect(() => {
+    if (!isOpen || !lead?.id || isEditMode) return;
+    if (restoredDraftRef.current) return;
+    applyLoanPrefill();
+  }, [isOpen, lead?.id, isEditMode, applyLoanPrefill]);
+
+  const openLoanEditor = useCallback(async () => {
+    setShowLoanEditor(true);
+    setLoanEditorLoading(true);
+    try {
+      const res = await fetch(`/api/loan?lead_id=${lead?.id}`);
+      const json = await res.json().catch(() => ({}));
+      const rows = json?.success ? (json.data || json.updates || []) : [];
+      setLoanEditorUpdate(Array.isArray(rows) && rows.length ? rows[rows.length - 1] : null);
+    } catch { setLoanEditorUpdate(null); }
+    finally { setLoanEditorLoading(false); }
+  }, [lead?.id]);
+
+  const prefillHint = (key: string) =>
+    loanPrefilled[key] ? (
+      <p className={`text-[10px] mt-1 ${textMuted}`}>Prefilled from Loan Form — you can edit</p>
+    ) : null;
 
   // ── Canvas signature ──
   const startDraw = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -1321,7 +1439,8 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                             <p className={sectionTitle}><FaBuilding className="inline mr-2" />Details of Unit Applied For</p>
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                               {[
-                                { key: "apartment_name", label: "Apartment Name", placeholder: "Bhoomi Heights" },
+                                // Temporarily hidden — to be re-enabled later
+                                // { key: "apartment_name", label: "Apartment Name", placeholder: "Bhoomi Heights" },
                                 { key: "project_name", label: "Project Name", placeholder: "Bhoomi Dwellers" },
                                 { key: "tower", label: "Tower", placeholder: "A" },
                                 { key: "wing", label: "Wing", placeholder: "North" },
@@ -1442,7 +1561,19 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                         <div className="space-y-6">
                           {/* ── Section 1: Booking & Agreement ── */}
                           <div>
-                            <p className={sectionTitle}><FaMoneyBillWave className="inline mr-2" />Booking &amp; Agreement</p>
+                            <div className="flex items-center justify-between gap-3 flex-wrap">
+                              <p className={sectionTitle}><FaMoneyBillWave className="inline mr-2" />Booking &amp; Agreement</p>
+                              {/* Agreement Value, GST and Token all originate in the Loan & Deal
+                                  form. Editing them at source without losing this form is the
+                                  point — the overlay keeps the booking form mounted. */}
+                              <button
+                                type="button"
+                                onClick={openLoanEditor}
+                                className={`text-[11px] font-bold underline underline-offset-2 mb-2 ${accent}`}
+                              >
+                                Edit Loan Details
+                              </button>
+                            </div>
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                               <div>
                                 <label className={labelCls}>Booking Date</label>
@@ -1450,9 +1581,10 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                                 {errors.booking_date && <p className={errCls}>{errors.booking_date}</p>}
                               </div>
                               <div>
-                                <label className={labelCls}>Agreement Value</label>
+                                <label className={labelCls}>Agreement Value <span className="font-normal opacity-70">(editable)</span></label>
                                 <IndianCurrencyInput value={form.agreement_value} onChange={val => set("agreement_value", val)} placeholder="50,00,000" className={`${inputCls} ${errors.agreement_value ? "!border-red-500" : ""}`} />
                                 {errors.agreement_value && <p className={errCls}>{errors.agreement_value}</p>}
+                                {prefillHint("agreement_value")}
                               </div>
                               <div>
                                 <label className={labelCls}>Booking Amount</label>
@@ -1464,6 +1596,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                               <div>
                                 <label className={labelCls}>Token Amount <span className="font-normal opacity-70">(part of Booking Amount)</span></label>
                                 <IndianCurrencyInput value={form.token_amount} onChange={val => set("token_amount", val)} placeholder="50,000" className={inputCls} />
+                                {prefillHint("token_amount")}
                               </div>
                               <div className="sm:col-span-2">
                                 <label className={labelCls}>Booking Remarks</label>
@@ -1502,14 +1635,56 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                               );
                               return (
                                 <div className={`rounded-xl border overflow-hidden ${isDark ? "bg-[#121218] border-[#2A2A35]" : "bg-white border-[#E5E7EB]"}`}>
-                                  <Row label="Agreement Value" value={cost.agreementValue} />
-                                  <div className={`flex items-center justify-between px-4 py-2.5 border-b ${divider}`}>
-                                    <span className={`text-xs ${textMuted} flex items-center gap-2`}>
+                                  {/* Agreement Value drives GST, stamp duty, registration fee, total
+                                      cost and own contribution — every figure below recomputes from
+                                      form.agreement_value on each render, so editing here is live. */}
+                                  <div className={`flex items-center justify-between px-4 py-2 border-b ${divider}`}>
+                                    <span className={`text-xs ${textMuted}`}>Agreement Value <span className="opacity-60">(editable)</span></span>
+                                    <IndianCurrencyInput value={form.agreement_value} onChange={val => set("agreement_value", val)} placeholder="50,00,000" className={`${inputCls} text-xs py-1.5 w-40 text-right`} />
+                                  </div>
+                                  <div className={`flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 border-b ${divider}`}>
+                                    <span className={`text-xs ${textMuted} flex items-center gap-2 flex-wrap`}>
                                       + GST
-                                      <select value={form.gst_rate} onChange={e => set("gst_rate", e.target.value)} className={`rounded-md px-1.5 py-0.5 text-xs outline-none border ${isDark ? "bg-[#14141B] border-[#2A2A35] text-white" : "bg-white border-[#9CA3AF] text-[#1A1A1A]"}`}>
-                                        <option value="5">5% (no ITC)</option>
-                                        <option value="12">12% (with ITC)</option>
-                                      </select>
+                                      {/* Same control as the Loan form's Section 8: preset buttons for
+                                          the statutory rates plus free numeric entry, so 1% / 18% and
+                                          decimals are expressible. Stored as a bare number ("5"). */}
+                                      <span className="flex gap-1">
+                                        {GST_RATE_PRESETS.map(p => {
+                                          const active = parseGstRate(form.gst_rate) === p;
+                                          return (
+                                            <button
+                                              key={p}
+                                              type="button"
+                                              onClick={() => set("gst_rate", String(p))}
+                                              title={p === 0 ? "No GST" : p === 5 ? "5% (no ITC)" : "12% (with ITC)"}
+                                              className={`px-2 py-1 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer ${active
+                                                ? "bg-[#9E217B] border-[#9E217B] text-white"
+                                                : `${textMuted} ${isDark ? "border-[#2A2A35]" : "border-[#9CA3AF]"} hover:border-[#9E217B]/50`
+                                                }`}
+                                            >
+                                              {p}%
+                                            </button>
+                                          );
+                                        })}
+                                      </span>
+                                      <span className="relative">
+                                        <input
+                                          type="number"
+                                          inputMode="decimal"
+                                          min={0}
+                                          max={100}
+                                          step={0.5}
+                                          value={form.gst_rate}
+                                          onChange={e => set("gst_rate", e.target.value)}
+                                          placeholder="5"
+                                          aria-label="GST rate percentage"
+                                          className={`w-16 rounded-md pl-1.5 pr-4 py-0.5 text-xs outline-none border ${isDark ? "bg-[#14141B] border-[#2A2A35] text-white" : "bg-white border-[#9CA3AF] text-[#1A1A1A]"}`}
+                                        />
+                                        <span className={`absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] pointer-events-none ${textMuted}`}>%</span>
+                                      </span>
+                                      {loanPrefilled.gst_rate && (
+                                        <span className={`text-[10px] ${textMuted}`}>Prefilled from Loan Form — you can edit</span>
+                                      )}
                                     </span>
                                     <span className={`text-sm font-semibold ${textMain}`}>{formatINR(cost.gstAmount)}</span>
                                   </div>
@@ -1815,10 +1990,12 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                                       <label className={labelCls}>Interest Rate (%)</label>
                                       <input type="number" step="0.01" value={form.interest_rate} onChange={e => set("interest_rate", e.target.value)} placeholder="8.5" className={inputCls} />
                                     </div>
+                                    {/* Temporarily hidden — to be re-enabled later
                                     <div>
                                       <label className={labelCls}>Tenure (months)</label>
                                       <input type="number" value={form.loan_tenure_months} onChange={e => set("loan_tenure_months", e.target.value)} placeholder="240" className={inputCls} />
                                     </div>
+                                    */}
                                     <div>
                                       <label className={labelCls}>EMI Start Date</label>
                                       <input type="date" value={form.emi_start_date} onChange={e => set("emi_start_date", e.target.value)} className={inputCls} />
@@ -2361,7 +2538,8 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                               rows: [["Name", ja.name], ["Mobile", ja.mobile], ["Email", ja.email], ["PAN", ja.pan], ["Aadhaar", ja.aadhaar]]
                             })),
                             { title: "Residential Address", rows: [["Address", form.address], ["PIN", form.pin], ["State", form.state], ["Country", form.country]] },
-                            { title: "Unit Details", rows: [["Apartment Name", form.apartment_name], ["Project Name", form.project_name], ["Tower", form.tower], ["Wing", form.wing], ["Type", form.property_type], ["Floor", form.floor_number], ["Flat No.", form.flat_number], ["Carpet Area", `${form.carpet_area} sq.ft.`], ["Consideration Value", form.consideration_value], ["Parking", form.parking_details], ["Witness", form.witness_name]] },
+                            // Apartment Name row temporarily hidden — to be re-enabled later
+                            { title: "Unit Details", rows: [["Project Name", form.project_name], ["Tower", form.tower], ["Wing", form.wing], ["Type", form.property_type], ["Floor", form.floor_number], ["Flat No.", form.flat_number], ["Carpet Area", `${form.carpet_area} sq.ft.`], ["Consideration Value", form.consideration_value], ["Parking", form.parking_details], ["Witness", form.witness_name]] },
                           ].map(section => (
                             <div key={section.title} className={`rounded-xl border p-4 ${isDark ? "border-[#2A2A35] bg-[#121218]" : "border-[#E5E7EB] bg-white"}`}>
                               <p className={`text-xs font-bold uppercase tracking-wider mb-3 ${accent}`}>{section.title}</p>
@@ -2416,7 +2594,8 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                                   ["Sanction Amount", form.sanction_amount ? formatINR(toNumber(form.sanction_amount)) : ""],
                                   ["Loan Status", form.loan_status],
                                   ["Interest Rate", form.interest_rate ? `${form.interest_rate}%` : ""],
-                                  ["Tenure", form.loan_tenure_months ? `${form.loan_tenure_months} months` : ""],
+                                  // Temporarily hidden — to be re-enabled later
+                                  // ["Tenure", form.loan_tenure_months ? `${form.loan_tenure_months} months` : ""],
                                   ["Pre-EMI", toNumber(form.pre_emi_amount) > 0 ? formatINR(toNumber(form.pre_emi_amount)) : ""],
                                   ["Full EMI", toNumber(form.emi_amount) > 0 ? formatINR(toNumber(form.emi_amount)) : ""],
                                   ["Payment Type", form.payment_type],
@@ -2517,6 +2696,43 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
             )}
           </motion.div>
         </motion.div>
+      )}
+
+      {/* ── Loan & Deal editor, layered over the booking form ──────────────────
+          Rendered above this modal (z-210 vs 200) rather than replacing it, so
+          the booking form keeps its state — the whole point of editing loan
+          details from here instead of cancelling out to the lead screen. */}
+      {showLoanEditor && (
+        <div
+          key="loan-editor"
+          className="fixed inset-0 z-[210] flex items-start justify-center p-4 overflow-y-auto bg-black/70"
+          style={{ backdropFilter: "blur(6px)" }}
+        >
+          <div className="w-full max-w-3xl my-6">
+            {loanEditorLoading ? (
+              <div className={`rounded-xl border p-6 text-sm ${isDark ? "bg-[#121218] border-[#2A2A35] text-[#888899]" : "bg-white border-[#E5E7EB] text-[#6B7280]"}`}>
+                Loading loan details…
+              </div>
+            ) : (
+              <LoanDealForm
+                lead={lead}
+                booking={existingBooking || null}
+                loanUpdate={loanEditorUpdate}
+                user={user}
+                isDark={isDark}
+                t={buildTheme(isDark)}
+                onCancel={() => setShowLoanEditor(false)}
+                onSuccess={() => {
+                  setShowLoanEditor(false);
+                  // The operator just set these figures deliberately — refresh the
+                  // untouched ones here rather than leaving the booking form on
+                  // values they have since replaced.
+                  applyLoanPrefill({ force: true });
+                }}
+              />
+            )}
+          </div>
+        </div>
       )}
     </AnimatePresence>
   );
