@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "audit:financials": "tsc -p scripts/tsconfig.audit.json && node .audit-build/scripts/financial-integrity-audit.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.100.1",

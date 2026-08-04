@@ -6,6 +6,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
+import {
+  buildFinancialSnapshot,
+  resolveBookingIdForLead,
+  BookingNotFoundError,
+  fmtINR,
+} from "@/lib/buildFinancialSnapshot";
+import { computeFinancialObligation } from "@/lib/financialObligationEngine";
 
 export const dynamic = "force-dynamic";
 
@@ -59,6 +66,55 @@ export async function PUT(
     const user_role = gate.session.role || "";
     if (!isLoanManager(user_role)) {
       return NextResponse.json({ success: false, message: "Only Admin, Site Head and Sales Managers can update loan applications." }, { status: 403 });
+    }
+
+    // ── FOE gate: a sanction may not exceed its ceiling ──────────────────────
+    // Phase 2. Validation only — nothing below this block changed. The column is
+    // amount_sanctioned (there is no `sanctioned_amount` in this schema), so that
+    // is the key watched for here.
+    if ("amount_sanctioned" in body) {
+      const appRows = await query<{ booking_id: number | null; lead_id: number | null }>(
+        `SELECT booking_id, lead_id FROM loan_applications WHERE id = $1`,
+        [Number(id)]
+      );
+      if (appRows.length === 0) {
+        return NextResponse.json({ success: false, message: "Loan application not found" }, { status: 404 });
+      }
+      // An application raised before a booking exists carries no booking_id; fall
+      // back to the lead's booking, exactly as the selection logic below does.
+      const gateBookingId = appRows[0].booking_id ?? (await resolveBookingIdForLead(Number(appRows[0].lead_id)));
+
+      // No booking means no agreement value, and therefore no ceiling to breach.
+      // Nothing to validate — let the write through rather than inventing a limit.
+      if (gateBookingId) {
+        try {
+          const snapshot = await buildFinancialSnapshot(gateBookingId);
+          const proposedSanction = Number(String(body.amount_sanctioned ?? "").replace(/[₹,\s]/g, "")) || 0;
+          const obligation = computeFinancialObligation({ ...snapshot, sanctionedAmount: proposedSanction });
+
+          if (obligation.loanOverLimit) {
+            return NextResponse.json(
+              {
+                success: false,
+                error: "LOAN_EXCEEDS_CEILING",
+                message: `Sanction of ₹${fmtINR(proposedSanction)} exceeds ceiling of ₹${fmtINR(obligation.maxAllowedLoan)} based on current customer contributions.`,
+                maxAllowedLoan: obligation.maxAllowedLoan,
+                qualifyingContribution: obligation.agreementFunded - obligation.disbursedAmount,
+                obligation,
+              },
+              { status: 422 }
+            );
+          }
+        } catch (e: any) {
+          if (e instanceof BookingNotFoundError) {
+            return NextResponse.json(
+              { success: false, error: "BOOKING_NOT_FOUND", message: e.message },
+              { status: 404 }
+            );
+          }
+          throw e;
+        }
+      }
     }
 
     const result = await transaction(async (client) => {

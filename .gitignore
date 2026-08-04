@@ -20,6 +20,9 @@
 # production
 /build
 
+# compiled output of `npm run audit:financials`
+/.audit-build
+
 # misc
 .DS_Store
 *.pem

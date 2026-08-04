@@ -7,6 +7,8 @@ import { requireSession, requireRoles } from "@/lib/serverAuth";
 import { resolveGstRate, calcGstAmount } from "@/lib/gst";
 // Shared so a saved booking returns the same shape a fetched one does.
 import { fetchBookingById } from "@/lib/bookingQuery";
+import { buildFinancialSnapshot, BookingNotFoundError, fmtINR } from "@/lib/buildFinancialSnapshot";
+import { computeFinancialObligation } from "@/lib/financialObligationEngine";
 
 export const dynamic = "force-dynamic";
 
@@ -194,6 +196,69 @@ export async function PUT(
           { success: false, message: "Only the assigned Sales Manager can edit this booking." },
           { status: 403 }
         );
+      }
+    }
+
+    // ── FOE gate: OCR may not exceed what the agreement can still absorb ──────
+    // Phase 2. Validation only — nothing below this block changed.
+    //
+    // Runs only when the request actually carries a customer-payment field, so
+    // an edit to (say) the applicant's PAN never pays for a snapshot query. It
+    // sits above the R2 uploads on purpose: a rejected save must not leave
+    // orphaned files behind.
+    const OCR_KEYS = ["ocr_amount", "token_amount", "booking_amount", "cash_component"];
+    if (OCR_KEYS.some(k => formData.has(k))) {
+      let ocrGateObligation;
+      try {
+        const current = await buildFinancialSnapshot(Number(id));
+        // Merge: proposed values win, absent keys keep their stored value, so the
+        // engine sees the state as it WOULD be after this update.
+        const proposed = {
+          ...current,
+          ...(formData.has("token_amount") ? { tokenPaid: cleanNum(getStr("token_amount")) } : {}),
+          ...(formData.has("booking_amount") ? { bookingAmountPaid: cleanNum(getStr("booking_amount")) } : {}),
+          ...(formData.has("ocr_amount") ? { additionalOCRPaid: cleanNum(getStr("ocr_amount")) } : {}),
+          ...(formData.has("cash_component") ? { cashComponent: cleanNum(getStr("cash_component")) } : {}),
+        };
+        ocrGateObligation = computeFinancialObligation(proposed);
+
+        // Blocking every over-limit save would brick an already-breached booking:
+        // BookingFormModal re-sends every field on any edit, so an operator could
+        // not correct the record — or anything else on it — from that screen. The
+        // rule is therefore "no MORE customer money on an over-limit agreement",
+        // not "no writes": a submission that leaves the OCR total unchanged or
+        // reduces it is the correction path and must get through.
+        const currentOCR = current.tokenPaid + current.bookingAmountPaid + current.additionalOCRPaid;
+        const proposedOCR = proposed.tokenPaid + proposed.bookingAmountPaid + proposed.additionalOCRPaid;
+
+        // STRICT MODE (future): replace this condition with
+        // if (result.ocrOverLimit) once Phase 6 adjustment
+        // workflow exists. Current mode blocks new money only,
+        // allowing corrections to breached bookings to pass through.
+        // See: financialObligationEngine.ts test case 2 for the
+        // OCR_EXCEEDS_ALLOCATABLE validation error that still fires
+        // in the obligation object even when the save is permitted.
+        if (ocrGateObligation.ocrOverLimit && proposedOCR > currentOCR) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: "OCR_EXCEEDS_ALLOCATABLE",
+              message: `OCR would exceed agreement balance remaining after loan disbursement. Max OCR allocatable: ₹${fmtINR(ocrGateObligation.maxOCRAllocatable)}.`,
+              maxOCRAllocatable: ocrGateObligation.maxOCRAllocatable,
+              totalOCRPaid: ocrGateObligation.totalOCRPaid,
+              obligation: ocrGateObligation,
+            },
+            { status: 422 }
+          );
+        }
+      } catch (e: any) {
+        if (e instanceof BookingNotFoundError) {
+          return NextResponse.json(
+            { success: false, error: "BOOKING_NOT_FOUND", message: e.message },
+            { status: 404 }
+          );
+        }
+        throw e;
       }
     }
 

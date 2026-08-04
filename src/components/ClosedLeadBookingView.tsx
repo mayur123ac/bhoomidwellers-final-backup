@@ -35,15 +35,18 @@ export default function ClosedLeadBookingView({
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [extendedDetails, setExtendedDetails] = useState<any>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   React.useEffect(() => {
     if (booking?.id) {
+      setIsLoading(true);
       fetch(`/api/booking-details/${booking.id}`)
         .then(res => res.json())
         .then(json => {
           if (json.success) setExtendedDetails(json.data);
         })
-        .catch(console.error);
+        .catch(console.error)
+        .finally(() => setIsLoading(false));
     }
   }, [booking?.id]);
 
@@ -424,9 +427,9 @@ export default function ClosedLeadBookingView({
   );
 
   return (
-    <div className="w-full h-full flex flex-col min-h-0 bg-transparent animate-fadeIn">
+    <div className="w-full h-full flex flex-col min-h-0 bg-transparent animate-fadeIn relative">
       {renderTabs()}
-      
+
       <div className="flex-1 overflow-y-auto custom-scrollbar pb-10">
         {activeTab === "summary" && (
           <>
@@ -473,6 +476,15 @@ export default function ClosedLeadBookingView({
         {activeTab === "timeline" && renderTimeline()}
         {activeTab === "crm" && renderCrmDetails()}
       </div>
+
+      {isLoading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/30 backdrop-blur-sm rounded-lg z-50">
+          <div className="flex flex-col items-center gap-3">
+            <FaSpinner className={`text-4xl animate-spin ${isDark ? "text-[#9E217B]" : "text-[#9E217B]"}`} />
+            <p className={`text-sm font-semibold ${isDark ? "text-white" : "text-[#1A1A1A]"}`}>Loading Booking Details...</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

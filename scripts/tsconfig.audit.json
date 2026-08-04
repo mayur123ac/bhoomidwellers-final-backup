@@ -1,0 +1,33 @@
+{
+  // Build config for the standalone audit script.
+  //
+  // The root tsconfig targets the Next bundler ("moduleResolution": "bundler",
+  // "noEmit": true) and excludes scripts/ entirely, so the audit cannot run
+  // under it. Node's ESM loader also refuses the extensionless relative imports
+  // used throughout src/lib ("./db", "./gst"), which rules out running the .ts
+  // directly with --experimental-strip-types. Emitting CommonJS first is the
+  // path that needs no new dependency and no edits to application code.
+  //
+  // `files` lists only the entry point — tsc follows the import graph and emits
+  // the src/lib modules it depends on.
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "target": "ES2022",
+    // DOM stays in: src/lib/db.ts references `window` for its browser guard, and
+    // this config typechecks the whole import graph, not just the script.
+    "lib": ["ES2022", "DOM"],
+    "noEmit": false,
+    "incremental": false,
+    "rootDir": "..",
+    "outDir": "../.audit-build",
+    "types": ["node"]
+  },
+  // `files` alone is not enough: `extends` carries the root config's `include`
+  // through, which would drag the entire app (and its DOM/JSX assumptions) into
+  // this build. Emptying both confines the compile to the entry point's graph.
+  "files": ["financial-integrity-audit.ts"],
+  "include": [],
+  "exclude": ["../node_modules"]
+}

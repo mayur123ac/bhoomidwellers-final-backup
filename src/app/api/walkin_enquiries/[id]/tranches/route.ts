@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { resolveLatestBookingId, seedPddChecklist } from "@/lib/pdd";
 import { getServerSession } from "@/lib/serverAuth";
+import {
+  buildFinancialSnapshot,
+  BookingNotFoundError,
+  NoActiveBookingForLeadError,
+  fmtINR,
+} from "@/lib/buildFinancialSnapshot";
+import { computeFinancialObligation } from "@/lib/financialObligationEngine";
 
 export const dynamic = "force-dynamic";
 
@@ -93,6 +100,80 @@ export async function POST(
                     message: `Tranche amount (₹${cleanAmount.toLocaleString("en-IN")}) exceeds remaining disbursement (₹${remaining.toLocaleString("en-IN")}).`,
                 },
                 { status: 400 }
+            );
+        }
+
+        // ── FOE gates ────────────────────────────────────────────────────────
+        // Phase 2. Validation only: nothing below this block changed. A booking
+        // is required because every ceiling is derived from agreement value and
+        // customer contribution, which live on the booking, not the lead.
+        // The lead→booking lookup lives in buildFinancialSnapshot's leadId form,
+        // so this route no longer carries its own copy of it.
+        let obligation;
+        try {
+            const snapshot = await buildFinancialSnapshot(
+                body.booking_id ? { bookingId: Number(body.booking_id) } : { leadId: Number(id) }
+            );
+            obligation = computeFinancialObligation(snapshot);
+        } catch (e: any) {
+            if (e instanceof NoActiveBookingForLeadError) {
+                return NextResponse.json(
+                    { success: false, error: "NO_ACTIVE_BOOKING", message: e.message },
+                    { status: 404 }
+                );
+            }
+            if (e instanceof BookingNotFoundError) {
+                return NextResponse.json(
+                    { success: false, error: "BOOKING_NOT_FOUND", message: e.message },
+                    { status: 404 }
+                );
+            }
+            throw e;
+        }
+
+        // Gate 1 — the sanction itself breaches its ceiling. Correct that before
+        // any more bank money moves.
+        if (obligation.loanOverLimit) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: "LOAN_EXCEEDS_CEILING",
+                    message: `Loan sanction of ₹${fmtINR(obligation.sanctionedAmount)} exceeds ceiling of ₹${fmtINR(obligation.maxAllowedLoan)}. Reduce sanction or increase customer contribution before adding disbursements.`,
+                    maxAllowedLoan: obligation.maxAllowedLoan,
+                    sanctionedAmount: obligation.sanctionedAmount,
+                    obligation,
+                },
+                { status: 422 }
+            );
+        }
+
+        // Gate 2 — no room left at all.
+        if (!obligation.canAddDisbursementTranche) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: "TRANCHE_EXCEEDS_LIMIT",
+                    message: `Total disbursed ₹${fmtINR(obligation.disbursedAmount)} already at or above limit. Max allowed: ₹${fmtINR(obligation.maxAllowedLoan)}`,
+                    maxAllowedLoan: obligation.maxAllowedLoan,
+                    disbursedAmount: obligation.disbursedAmount,
+                    obligation,
+                },
+                { status: 422 }
+            );
+        }
+
+        // Gate 3 — this particular tranche would push the total past the ceiling.
+        const newTotal = obligation.disbursedAmount + cleanAmount;
+        if (newTotal > obligation.maxAllowedLoan) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: "TRANCHE_WOULD_EXCEED",
+                    message: `This tranche of ₹${fmtINR(cleanAmount)} would bring total disbursed to ₹${fmtINR(newTotal)}, exceeding ceiling of ₹${fmtINR(obligation.maxAllowedLoan)}.`,
+                    maxTrancheAllowed: obligation.maxAllowedLoan - obligation.disbursedAmount,
+                    obligation,
+                },
+                { status: 422 }
             );
         }
 

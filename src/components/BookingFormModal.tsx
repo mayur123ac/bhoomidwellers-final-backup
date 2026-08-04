@@ -16,6 +16,8 @@ import { formatCurrencyDisplay, formatCurrencyDecimal, toStorageValue } from "@/
 import { resolveGstRate, calcGstAmount, parseGstRate, GST_RATE_PRESETS } from "@/lib/gst";
 import LoanDealForm from "@/components/LoanDealForm";
 import { buildTheme } from "@/lib/crmTheme";
+import { useFinancialStatus, canOverride } from "@/components/FinancialPositionCard";
+import TrancheOverrideModal from "@/components/TrancheOverrideModal";
 // Reused so the inline rate field enforces exactly what the CP Master enforces —
 // 0-100 and at most 2dp, matching NUMERIC(5,2).
 import { validateRate } from "./ChannelPartnerFormModal";
@@ -491,6 +493,19 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
   // on-open pass must leave it alone. (The loan-editor round trip still refreshes
   // it: that one is the operator asking for the new numbers.)
   const restoredDraftRef = useRef(false);
+  // ── FOE: derived financial state for THIS booking (Phase 4) ────────────────
+  // Only meaningful for a saved booking — a new one has no row to derive from,
+  // so no request is made and the OCR section stays fully editable.
+  //
+  // Read-only display + gating. This never changes what the form submits; the
+  // server-side gate in PUT /api/booking-applications/[id] remains the actual
+  // enforcement, and this is the version of it the operator can see.
+  const foe = useFinancialStatus(isOpen && isEditMode ? existingBooking?.id ?? null : null);
+  // Fail OPEN: a failed fetch must never stop a legitimate booking being saved.
+  const ocrLocked = foe.obligation ? foe.obligation.canAcceptMoreOCR === false : false;
+  const foeCriticals = foe.obligation?.validationErrors.filter(e => e.severity === "critical") ?? [];
+  const [showTrancheOverride, setShowTrancheOverride] = useState(false);
+
   const [showLoanEditor, setShowLoanEditor] = useState(false);
   const [loanEditorUpdate, setLoanEditorUpdate] = useState<any>(null);
   const [loanEditorLoading, setLoanEditorLoading] = useState(false);
@@ -1559,6 +1574,25 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                       {/* ══════════ STEP 3: Financials & Registration ══════════ */}
                       {step === 3 && (
                         <div className="space-y-6">
+                          {/* ── FOE: critical issues on this booking ──
+                              Compact by design: the full explanation lives on the
+                              Loan Overview, and repeating four banners here would
+                              bury the form. */}
+                          {foeCriticals.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={onClose}
+                              className="w-full text-left rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-[11px] font-semibold text-red-400 hover:bg-red-500/20 transition-colors"
+                            >
+                              ⚠️ Financial issues detected on this booking. View Loan Overview for details.
+                            </button>
+                          )}
+                          {foe.error && (
+                            <p className={`text-[10px] ${textMuted}`}>
+                              Could not load financial status. OCR limits not enforced.
+                            </p>
+                          )}
+
                           {/* ── Section 1: Booking & Agreement ── */}
                           <div>
                             <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -1588,14 +1622,14 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                               </div>
                               <div>
                                 <label className={labelCls}>Booking Amount</label>
-                                <IndianCurrencyInput value={form.booking_amount} onChange={val => set("booking_amount", val)} placeholder="1,00,000" className={`${inputCls} ${errors.booking_amount ? "!border-red-500" : ""}`} />
+                                <IndianCurrencyInput value={form.booking_amount} onChange={val => set("booking_amount", val)} placeholder="1,00,000" className={`${inputCls} ${errors.booking_amount ? "!border-red-500" : ""}`} disabled={ocrLocked} />
                                 {errors.booking_amount && <p className={errCls}>{errors.booking_amount}</p>}
                               </div>
                             </div>
                             <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
                               <div>
                                 <label className={labelCls}>Token Amount <span className="font-normal opacity-70">(part of Booking Amount)</span></label>
-                                <IndianCurrencyInput value={form.token_amount} onChange={val => set("token_amount", val)} placeholder="50,000" className={inputCls} />
+                                <IndianCurrencyInput value={form.token_amount} onChange={val => set("token_amount", val)} placeholder="50,000" className={inputCls} disabled={ocrLocked} />
                                 {prefillHint("token_amount")}
                               </div>
                               <div className="sm:col-span-2">
@@ -1750,10 +1784,59 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                                 </div>
                               );
                             })()}
+                            {/* ── FOE gate on OCR entry ──
+                                Locked means the agreement is already fully funded,
+                                so more customer money cannot be allocated to it.
+                                The amounts stay VISIBLE and merely read-only: the
+                                operator still needs to see what was collected. */}
+                            {foe.loading ? (
+                              <div className="rounded-xl border border-gray-500/20 p-4 mb-4 animate-pulse">
+                                <div className={`h-3 w-48 rounded mb-2 ${isDark ? "bg-gray-700/50" : "bg-gray-200"}`} />
+                                <div className={`h-3 w-32 rounded ${isDark ? "bg-gray-700/50" : "bg-gray-200"}`} />
+                              </div>
+                            ) : ocrLocked ? (
+                              <div className={`rounded-xl border p-4 mb-4 ${isDark ? "border-[#2A2A35] bg-[#14141B]" : "border-[#E5E7EB] bg-[#F8FAFC]"}`}>
+                                <p className={`text-xs font-bold flex items-center gap-2 mb-1 ${textMain}`}>🔒 OCR Entry Locked</p>
+                                <p className={`text-[11px] ${textMuted}`}>Agreement fully funded by loan disbursement.</p>
+                                <p className={`text-[11px] ${textMuted}`}>
+                                  Max allocatable to agreement: <b className={textMain}>{formatINR(foe.obligation?.maxOCRAllocatable ?? 0)}</b>
+                                </p>
+                                <div className="flex items-center justify-between gap-2 mt-2">
+                                  <span className={`text-[11px] ${textMuted}`}>To adjust, contact admin.</span>
+                                  {/* Admins get the live override; everyone else keeps the
+                                      inert button pointing at their admin. The role check is
+                                      repeated server-side — this only decides the label. */}
+                                  {canOverride(user?.role) ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => setShowTrancheOverride(true)}
+                                      className="text-[10px] font-bold px-2 py-1 rounded-lg border border-red-500/40 text-red-400 hover:bg-red-500/10 transition-colors"
+                                    >
+                                      Admin Override ↗
+                                    </button>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      disabled
+                                      title="Contact your admin to approve this adjustment"
+                                      className={`text-[10px] font-bold px-2 py-1 rounded-lg border cursor-not-allowed opacity-60 ${isDark ? "border-[#2A2A35] text-[#888899]" : "border-[#9CA3AF] text-[#6B7280]"}`}
+                                    >
+                                      Request Adjustment ↗
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            ) : null}
+
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                               <div>
                                 <label className={labelCls}>Additional Own Payment <span className="font-normal opacity-70">(installments beyond token/booking)</span></label>
-                                <IndianCurrencyInput value={form.ocr_amount} onChange={val => set("ocr_amount", val)} placeholder="0" className={inputCls} />
+                                <IndianCurrencyInput value={form.ocr_amount} onChange={val => set("ocr_amount", val)} placeholder="0" className={inputCls} disabled={ocrLocked} />
+                                {!ocrLocked && (foe.obligation?.maxOCRAllocatable ?? 0) > 0 && (
+                                  <p className={`text-[10px] mt-1 ${textMuted}`}>
+                                    {formatINR(foe.obligation!.maxOCRAllocatable)} remaining allocatable to agreement
+                                  </p>
+                                )}
                               </div>
                               <div>
                                 <label className={labelCls}>Received Date</label>
@@ -1855,7 +1938,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                   <div>
                                     <label className={labelCls}>Amount</label>
-                                    <IndianCurrencyInput value={form.cash_component} onChange={val => set("cash_component", val)} placeholder="If applicable" className={inputCls} />
+                                    <IndianCurrencyInput value={form.cash_component} onChange={val => set("cash_component", val)} placeholder="If applicable" className={inputCls} disabled={ocrLocked} />
                                   </div>
                                   <div>
                                     <label className={labelCls}>Date</label>
@@ -2696,6 +2779,19 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
             )}
           </motion.div>
         </motion.div>
+      )}
+
+      {/* Admin override for the disbursement gate, layered above this modal. */}
+      {showTrancheOverride && existingBooking?.id && foe.obligation && (
+        <TrancheOverrideModal
+          key="tranche-override"
+          bookingId={existingBooking.id}
+          obligation={foe.obligation}
+          isDark={isDark}
+          t={buildTheme(isDark)}
+          onClose={() => setShowTrancheOverride(false)}
+          onSuccess={() => { setShowTrancheOverride(false); foe.refetch(); }}
+        />
       )}
 
       {/* ── Loan & Deal editor, layered over the booking form ──────────────────

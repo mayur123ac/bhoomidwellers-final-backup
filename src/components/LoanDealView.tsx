@@ -16,6 +16,7 @@ import {
   FaFileSignature,
 } from "react-icons/fa";
 import { formatCurrencyDisplay } from "@/lib/currency";
+import FinancialPositionCard from "@/components/FinancialPositionCard";
 
 interface LoanDealViewProps {
   lead: any;
@@ -406,6 +407,13 @@ export default function LoanDealView({ lead, booking, loanUpdate, isDark = false
           </span>
         )}
       </h3>
+
+      {/* ── Financial position, above everything else on this page ──
+          Reads GET /api/booking-applications/[id]/financial-status. Renders the
+          card and, below it, the engine's validation banners. Nothing here is
+          computed locally — see FinancialPositionCard.tsx. Silent when the lead
+          has no booking yet: there is no agreement to fund. */}
+      <FinancialPositionCard bookingId={booking?.id ?? null} isDark={isDark} t={t} />
 
       {isHighProb && (
         <div className="mb-5 sm:mb-6 bg-gradient-to-r from-orange-500/20 to-red-500/20 border border-orange-500/50 p-2 sm:p-3 rounded-lg flex items-center justify-center gap-2 text-orange-400 text-xs sm:text-sm font-bold tracking-wide shadow-md text-center">
