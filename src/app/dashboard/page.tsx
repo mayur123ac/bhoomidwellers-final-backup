@@ -6739,7 +6739,7 @@ function SiteVisitCenter({
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <div
-      className={`rounded-xl border overflow-hidden ${isDark ? "bg-[#161616] border-[#2a2a2a]" : "bg-white border-indigo-200"
+      className={`rounded-3xl border overflow-hidden ${isDark ? "bg-[#161616] border-[#2a2a2a]" : "bg-white border-indigo-200"
         }`}
     >
       {/* ── Module header ─────────────────────────────────────────────────── */}

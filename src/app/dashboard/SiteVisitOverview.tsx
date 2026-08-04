@@ -43,7 +43,7 @@ const MONTHS = ["January", "February", "March", "April", "May", "June", "July", 
 // ─── Calendar grid tokens (light-mode visibility fix) ──────────────────────
 // Centralized so the whole calendar (header row + day grid + week view)
 // shares one consistent, clearly visible grid-line / surface treatment.
-const GRID_LINE_LIGHT = "#CBD5E1";       // slate-300 — visible grout/border color
+const GRID_LINE_LIGHT = "#a2bee2ff";       // slate-300 — visible grout/border color
 const GRID_LINE_DARK = "rgba(255,255,255,0.08)";
 const GRID_HEADER_BG_LIGHT = "#F1F5F9";  // slate-100 — distinguishes header strip from cells
 const GRID_HEADER_BG_DARK = "#1a1a1a";
@@ -86,7 +86,7 @@ function StatCard({ label, value, color, bg, icon: Icon, isDark }: any) {
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      className="rounded-2xl p-5 flex items-center gap-4 flex-shrink-0"
+      className="rounded-4xl p-5 flex items-center gap-4 flex-shrink-0"
       style={{
         background: isDark ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.9)",
         border: `1px solid ${color}40`,
@@ -325,7 +325,7 @@ function DetailDrawer({
               </button>
             </div>
             {/* Drawer Body */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-6" style={{ scrollbarWidth: "thin" }}>
+            <div className="flex-1 overflow-y-auto p-2 space-y-6" style={{ scrollbarWidth: "thin" }}>
               {/* Visit Info */}
               <Section title="Visit Details" isDark={isDark}>
                 <InfoRow icon={FaCalendarAlt} label="Visit Date" value={formatDateTime(visit.visit_date)} isDark={isDark} />
@@ -744,15 +744,15 @@ export default function SiteVisitOverview({
           </div>
           {/* Stats */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            <StatCard label="Total Visits" value={stats.total} color="#9E217B" bg="rgba(158,33,123,0.15)" icon={FaCalendarAlt} isDark={isDark} />
-            <StatCard label="Today's Upcoming" value={stats.todayUpcoming} color="#d946a8" bg="rgba(217,70,168,0.15)" icon={FaClock} isDark={isDark} />
-            <StatCard label="Completed" value={stats.completed} color="#22c55e" bg="rgba(34,197,94,0.15)" icon={FaCheckCircle} isDark={isDark} />
-            <StatCard label="Rescheduled" value={stats.rescheduled} color="#f97316" bg="rgba(249,115,22,0.15)" icon={FaSyncAlt} isDark={isDark} />
-            <StatCard label="Cancelled" value={stats.cancelled} color="#ef4444" bg="rgba(239,68,68,0.15)" icon={FaTimesCircle} isDark={isDark} />
-            <StatCard label="Employees Today" value={stats.empToday} color="#00AEEF" bg="rgba(0,174,239,0.15)" icon={FaUsers} isDark={isDark} />
+            <StatCard label="Total Visits" value={stats.total} color="#93116eff" bg="rgba(158,33,123,0.15)" icon={FaCalendarAlt} isDark={isDark} />
+            <StatCard label="Today's Upcoming" value={stats.todayUpcoming} color="#d62f9fff" bg="rgba(217,70,168,0.15)" icon={FaClock} isDark={isDark} />
+            <StatCard label="Completed" value={stats.completed} color="#119e45ff" bg="rgba(34,197,94,0.15)" icon={FaCheckCircle} isDark={isDark} />
+            <StatCard label="Rescheduled" value={stats.rescheduled} color="#e6680eff" bg="rgba(249,115,22,0.15)" icon={FaSyncAlt} isDark={isDark} />
+            <StatCard label="Cancelled" value={stats.cancelled} color="#e02c2cff" bg="rgba(233, 57, 57, 0.15)" icon={FaTimesCircle} isDark={isDark} />
+            <StatCard label="Employees Today" value={stats.empToday} color="#008fc4ff" bg="rgba(0,174,239,0.15)" icon={FaUsers} isDark={isDark} />
           </div>
           {/* Calendar Controls */}
-          <div className="rounded-2xl overflow-hidden" style={{ background: isDark ? "rgba(255,255,255,0.03)" : "rgba(255,255,255,0.9)", border: isDark ? "1px solid rgba(158,33,123,0.15)" : `1px solid ${GRID_LINE_LIGHT}`, boxShadow: isDark ? "0 8px 32px rgba(0,0,0,0.3)" : "0 8px 32px rgba(0,0,0,0.06)", backdropFilter: "blur(12px)" }}>
+          <div className="rounded-3xl overflow-hidden" style={{ background: isDark ? "rgba(171, 155, 155, 0.03)" : "rgba(255,255,255,0.9)", border: isDark ? "1px solid rgba(158,33,123,0.15)" : `1px solid ${GRID_LINE_LIGHT}`, boxShadow: isDark ? "0 8px 32px rgba(0,0,0,0.3)" : "0 8px 32px rgba(0,0,0,0.06)", backdropFilter: "blur(12px)" }}>
             {/* Calendar Header */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-6 py-4" style={{ borderBottom: isDark ? "1px solid rgba(255,255,255,0.06)" : `1px solid ${GRID_LINE_LIGHT}` }}>
               <div className="flex items-center gap-3">

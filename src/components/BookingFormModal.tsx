@@ -749,10 +749,10 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
         : rawCharges;
       const custom_charges = Array.isArray(parsedCharges)
         ? parsedCharges.map((c: any) => ({
-            charge_name: String(c?.charge_name ?? ""),
-            amount: trimNum(c?.amount ?? ""),
-            remarks: String(c?.remarks ?? ""),
-          }))
+          charge_name: String(c?.charge_name ?? ""),
+          amount: trimNum(c?.amount ?? ""),
+          remarks: String(c?.remarks ?? ""),
+        }))
         : initialForm.custom_charges;
 
       const hydrated = {
@@ -1407,7 +1407,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
             animate={{ scale: 1, y: 0 }}
             exit={{ scale: 0.93, y: 24 }}
             transition={{ type: "spring", stiffness: 300, damping: 28 }}
-            className={`w-full max-w-3xl max-h-[92vh] flex flex-col rounded-2xl shadow-2xl border overflow-hidden ${isDark ? "bg-[#0D0D12] border-[#2A2A35]" : "bg-white border-[#9CA3AF]"}`}
+            className={`w-full max-w-3xl max-h-[92vh] flex flex-col rounded-4xl shadow-2xl border overflow-hidden ${isDark ? "bg-[#0D0D12] border-[#2A2A35]" : "bg-white border-[#9CA3AF]"}`}
           >
             {/* ── Header ── */}
             <div className={`flex items-center justify-between px-6 py-4 border-b flex-shrink-0 ${isDark ? "bg-[#121218] border-[#2A2A35]" : "bg-[#F8FAFC] border-[#E5E7EB]"}`}>

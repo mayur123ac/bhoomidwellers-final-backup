@@ -16,6 +16,7 @@ import BulkGenerateUnitsModal from "./BulkGenerateUnitsModal";
 import PricingRulesModal from "./PricingRulesModal";
 import OffersModal from "./OffersModal";
 import InventoryAnalyticsModal from "./InventoryAnalyticsModal";
+import { Radius } from "lucide-react";
 
 export interface InventoryUnit {
   id: number;
@@ -255,7 +256,7 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
   };
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="flex flex-col h-full overflow-hidden ">
       {/* ── Toolbar ── */}
       <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
         <div>
@@ -264,7 +265,7 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
         </div>
         <div className="flex items-center gap-2">
           {/* View toggle */}
-          <div className={`flex items-center rounded-lg border overflow-hidden ${t.tableBorder}`}>
+          <div className={`flex items-center rounded-3xl border overflow-hidden ${t.tableBorder}`}>
             <button onClick={() => setViewMode("table")} className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold ${viewMode === "table" ? "bg-[#00AEEF] text-white" : `${t.textMuted}`}`}><FaTable className="text-[10px]" /> Table</button>
             <button onClick={() => setViewMode("grid")} className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold ${viewMode === "grid" ? "bg-[#00AEEF] text-white" : `${t.textMuted}`}`}><FaThLarge className="text-[10px]" /> Grid</button>
           </div>
@@ -349,7 +350,7 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
       )}
 
       {/* ── Body ── */}
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-auto  rounded-3xl  p-3 ">
         {loading && units.length === 0 ? (
           <p className={`text-sm italic ${t.textFaint} p-4`}>Loading inventory…</p>
         ) : units.length === 0 ? (
@@ -417,53 +418,101 @@ function TableView({ columns, colW, sort, sorted, t, allSelected, selected, togg
     return v === null || v === undefined || v === "" ? <span className={t.textFaint}>—</span> : String(v);
   };
   return (
-    <table style={{ tableLayout: "fixed", width: totalW, minWidth: "100%" }} className="text-left border-collapse">
-      <colgroup>
-        <col style={{ width: 40 }} />
-        {columns.map((c: Column) => <col key={c.key} style={{ width: colW[c.key] }} />)}
-        {canDelete && <col style={{ width: 56 }} />}
-      </colgroup>
-      <thead>
-        <tr className={`${t.tableHead}`}>
-          <th className="px-2 py-2 sticky top-0"><input type="checkbox" checked={allSelected} onChange={toggleAll} className="cursor-pointer accent-[#00AEEF]" /></th>
-          {columns.map((c: Column) => (
-            <th key={c.key} className={`relative px-2 py-2 text-[10px] font-bold uppercase tracking-wider ${t.textMuted} select-none`}>
-              <button type="button" onClick={() => toggleSort(c.key)} className={`flex items-center gap-1 ${c.sortable ? "cursor-pointer hover:text-[#00AEEF]" : "cursor-default"}`}>
-                <span className="truncate">{c.label}</span>{c.sortable && sortIcon(c.key)}
-              </button>
-              <span onMouseDown={e => onResizeStart(e, c.key)} className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-[#00AEEF]/40" />
-            </th>
-          ))}
-          {canDelete && <th className={`px-2 py-2 text-[10px] font-bold uppercase tracking-wider text-right ${t.textMuted}`}>Actions</th>}
-        </tr>
-      </thead>
-      <tbody>
-        {sorted.map((u: InventoryUnit) => (
-          <tr key={u.id} onClick={() => onRowClick(u.id)} className={`border-t ${t.tableBorder} ${t.tableRow} cursor-pointer ${selected.has(u.id) ? "bg-[#00AEEF]/5" : ""}`}>
-            <td className="px-2 py-1.5" onClick={e => e.stopPropagation()}><input type="checkbox" checked={selected.has(u.id)} onChange={() => toggleOne(u.id)} className="cursor-pointer accent-[#00AEEF]" /></td>
-            {columns.map((c: Column) => (
-              <td key={c.key} className={`px-2 py-1.5 text-xs truncate ${t.text}`}>{cell(u, c.key)}</td>
-            ))}
-            {canDelete && (
-              <td className="px-2 py-1.5 text-right" onClick={e => e.stopPropagation()}>
-                {isBookingProtected(u) ? (
-                  // Hard-locked: unit is tied to a booking and cannot be deleted.
-                  <span
-                    title={`Locked — this unit is linked to a booking and cannot be deleted.`}
-                    className="inline-flex items-center justify-center p-1.5 rounded text-gray-400 cursor-not-allowed"
+    <div className={`rounded-3xl border ${t.tableBorder} overflow-hidden`}>
+      <div className="overflow-x-auto">
+        <table
+          style={{ tableLayout: "fixed", width: totalW, minWidth: "100%" }}
+          className="text-left border-collapse"
+        >
+          <colgroup>
+            <col style={{ width: 40 }} />
+            {columns.map((c: Column) => <col key={c.key} style={{ width: colW[c.key] }} />)}
+            {canDelete && <col style={{ width: 56 }} />}
+          </colgroup>
+          <thead>
+            <tr className={`${t.tableHead}`}>
+              <th className="px-2 py-2 top-0">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={toggleAll}
+                  className="cursor-pointer accent-[#00AEEF]"
+                />
+              </th>
+              {columns.map((c: Column) => (
+                <th
+                  key={c.key}
+                  className={`relative px-2 py-2 text-[10px] font-bold uppercase tracking-wider ${t.textMuted} select-none`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => toggleSort(c.key)}
+                    className={`flex items-center gap-1 ${c.sortable ? "cursor-pointer hover:text-[#00AEEF]" : "cursor-default"}`}
                   >
-                    <FaLock className="text-[11px]" />
-                  </span>
-                ) : (
-                  <button type="button" onClick={() => onDeleteUnit(u)} title={isLinkedActive(u) ? `Delete — warning: ${linkLabel(u)}` : "Delete unit"}
-                    className="p-1.5 rounded text-red-500 hover:bg-red-500/10"><FaTrash className="text-[11px]" /></button>
+                    <span className="truncate">{c.label}</span>
+                    {c.sortable && sortIcon(c.key)}
+                  </button>
+                  <span
+                    onMouseDown={e => onResizeStart(e, c.key)}
+                    className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-[#00AEEF]/40"
+                  />
+                </th>
+              ))}
+              {canDelete && (
+                <th className={`px-2 py-2 text-[10px] font-bold uppercase tracking-wider text-right ${t.textMuted}`}>
+                  Actions
+                </th>
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((u: InventoryUnit) => (
+              <tr
+                key={u.id}
+                onClick={() => onRowClick(u.id)}
+                className={`border-t ${t.tableBorder} ${t.tableRow} cursor-pointer ${selected.has(u.id) ? "bg-[#00AEEF]/5" : ""}`}
+              >
+                <td className="px-2 py-1.5" onClick={e => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    checked={selected.has(u.id)}
+                    onChange={() => toggleOne(u.id)}
+                    className="cursor-pointer accent-[#00AEEF]"
+                  />
+                </td>
+                {columns.map((c: Column) => (
+                  <td key={c.key} className={`px-2 py-1.5 text-xs truncate ${t.text}`}>
+                    {cell(u, c.key)}
+                  </td>
+                ))}
+                {canDelete && (
+                  <td className="px-2 py-1.5 text-right" onClick={e => e.stopPropagation()}>
+                    {isBookingProtected(u) ? (
+                      // Hard-locked: unit is tied to a booking and cannot be deleted.
+                      <span
+                        title={`Locked — this unit is linked to a booking and cannot be deleted.`}
+                        className="inline-flex items-center justify-center p-1.5 rounded text-gray-400 cursor-not-allowed"
+                      >
+                        <FaLock className="text-[11px]" />
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => onDeleteUnit(u)}
+                        title={isLinkedActive(u) ? `Delete — warning: ${linkLabel(u)}` : "Delete unit"}
+                        className="p-1.5 rounded text-red-500 hover:bg-red-500/10"
+                      >
+                        <FaTrash className="text-[11px]" />
+                      </button>
+                    )}
+                  </td>
                 )}
-              </td>
-            )}
-          </tr>
-        ))}
-      </tbody>
-    </table>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 
@@ -1095,7 +1144,7 @@ function UnitDrawer({ unitId, onClose, user, canManage, isAdminUser, isDark, t, 
                                         {l.detail && <span className={`block text-[9px] ${t.textFaint}`}>{l.detail}</span>}
                                       </div>
                                       <span className={`text-xs whitespace-nowrap ${l.amount < 0 ? "text-red-500 font-semibold"
-                                          : strong ? `font-bold ${t.text}` : `font-semibold ${t.text}`}`}>
+                                        : strong ? `font-bold ${t.text}` : `font-semibold ${t.text}`}`}>
                                         {l.amount < 0 ? `− ${money(Math.abs(l.amount))}` : money(l.amount)}
                                       </span>
                                     </div>

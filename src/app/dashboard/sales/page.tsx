@@ -161,12 +161,12 @@ function buildTheme(isDark: boolean) {
     statGlow5: isDark ? "bg-green-600/10" : "bg-emerald-400/10",
 
     // ── Brand accent ──
-    accentText: isDark ? "text-[#d946a8]" : "text-[#00AEEF]",
+    accentText: isDark ? "text-[#d946a8] text-[22px]" : "text-[#00AEEF]",
     accentBg: isDark ? "bg-[#d946a8]/10 text-[#d946a8] border border-[#d946a8]/30" : "bg-[#00AEEF]/10 text-[#00AEEF] border border-[#00AEEF]/30",
     sectionTitle: isDark ? "text-[#d946a8]" : "text-[#9E217B]",
     sectionBorder: isDark ? "border-[#d946a8]/20" : "border-[#9E217B]/25",
 
-    // ── Buttons ──
+    // ── Buttons ─
     btnPrimary: isDark ? "bg-[#9E217B] hover:bg-[#7a1960] text-white shadow-md transition-colors duration-200 flex items-center justify-center min-h-[40px] px-4 py-2" : "bg-[#9E217B] hover:bg-[#7a1960] text-white shadow-sm transition-colors duration-200 flex items-center justify-center min-h-[40px] px-4 py-2",
     btnSecondary: isDark ? "bg-[#00AEEF] hover:bg-[#0088bb] text-white shadow-md transition-colors duration-200 flex items-center justify-center min-h-[40px] px-4 py-2" : "bg-[#00AEEF] hover:bg-[#0088bb] text-white shadow-sm transition-colors duration-200 flex items-center justify-center min-h-[40px] px-4 py-2",
     btnDanger: isDark ? "bg-[#3B1F1F] text-[#F28B82] hover:bg-[#4f2a2a] border border-red-900/30 transition-colors duration-200 flex items-center justify-center min-h-[40px] px-4 py-2" : "bg-[#9E217B]/10 text-[#9E217B] hover:bg-[#9E217B]/20 border border-[#9E217B]/30 transition-colors duration-200 flex items-center justify-center min-h-[40px] px-4 py-2",
@@ -670,7 +670,7 @@ export default function SalesDashboard() {
 
         {/* HEADER */}
         <header
-          className={`h-16 sm:h-20 border-b flex items-center justify-between px-4 sm:px-3 lg:px-8 flex-shrink-0 z-30 shadow-sm ${t.header}`}
+          className={`h-14 sm:h-18 border-b flex items-center justify-between px-4 sm:px-3 lg:px-8 flex-shrink-0 z-30 shadow-sm ${t.header}`}
           style={t.headerGlass}
         >
           <h1 className={`font-semibold flex items-center flex-wrap gap-1 sm:gap-2 text-sm sm:text-base lg:text-lg tracking-wide ${t.text}`}>
@@ -1056,7 +1056,7 @@ function DashboardAnalytics({ leads, isDark, t }: { leads: any[]; isDark: boolea
     <div className="space-y-4">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 sm:gap-3">
         {/* Bar chart */}
-        <div className={`rounded-xl p-3 sm:p-3 shadow-sm border ${t.tableWrap}`} style={t.tableGlass}>
+        <div className={`rounded-3xl p-3 sm:p-3 shadow-sm border ${t.tableWrap}`} style={t.tableGlass}>
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
             <div>
               <h3 className={`font-bold text-sm lg:text-base ${t.text}`}>{barMode === "weekly" ? "Leads This Week" : "Lead Source Distribution"}</h3>
@@ -1089,7 +1089,7 @@ function DashboardAnalytics({ leads, isDark, t }: { leads: any[]; isDark: boolea
         </div>
 
         {/* Pie chart */}
-        <div className={`rounded-xl p-3 sm:p-3 shadow-sm border ${t.tableWrap}`} style={t.tableGlass}>
+        <div className={`rounded-4xl p-3 sm:p-3 shadow-sm border ${t.tableWrap}`} style={t.tableGlass}>
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
             <h3 className={`font-bold text-sm lg:text-base ${t.text}`}>
               {pieMode === "interest" ? "Lead Interest Breakdown" : pieMode === "loan" ? "Loan Status Breakdown" : pieMode === "usetype" ? "Self-Use vs Investment" : pieMode === "loanrequired" ? "Loan Required?" : "Visit Scheduled vs Pending"}
@@ -1684,7 +1684,7 @@ function SalesManagerView({
                 { label: "Closing Rate", value: `${closingPct}%`, sub: `${closingLeads.length} of ${activeManagerLeads.length} leads`, glow: t.statGlow5, textColor: isDark ? "text-green-400" : "text-emerald-600" },
                 { label: "Lost Leads", value: lostManagerLeads.length, sub: `${lostRatio}% lost ratio`, glow: "bg-red-500/10", textColor: isDark ? "text-red-300" : "text-red-600" },
               ].map((stat, i) => (
-                <div key={i} className={`rounded-xl p-3 sm:p-3 shadow-sm border relative overflow-hidden transition-all flex flex-col justify-between ${t.card}`} style={t.cardGlass}>
+                <div key={i} className={`rounded-4xl p-4 sm:p-4 shadow-sm border relative overflow-hidden transition-all flex flex-col justify-between ${t.card}`} style={t.cardGlass}>
                   <div className={`absolute -right-6 -top-6 w-24 h-24 rounded-full blur-2xl pointer-events-none ${stat.glow}`} />
                   <div className="flex items-start justify-between mb-2">
                     <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider leading-tight ${t.textFaint}`}>{stat.label}</p>
@@ -1708,7 +1708,7 @@ function SalesManagerView({
             {!isLoading && <DashboardAnalytics leads={baseManagerLeads} isDark={isDark} t={t} />}
 
             {/* Overview table */}
-            <div className={`rounded-xl border shadow-sm overflow-hidden ${t.tableWrap}`} style={t.tableGlass}>
+            <div className={`rounded-4xl border shadow-sm overflow-hidden ${t.tableWrap}`} style={t.tableGlass}>
               <div className={`p-3 sm:p-3 border-b flex flex-col gap-3 ${t.tableBorder} ${t.modalHeader}`}>
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <h3 className={`font-bold flex items-center gap-2 text-sm sm:text-base ${t.text}`}>
@@ -1944,7 +1944,7 @@ function SalesManagerView({
                       return (
                         <div
                           key={lead.id}
-                          className={`rounded-xl p-3 sm:p-3 border shadow-sm transition-all group flex flex-col justify-between cursor-pointer h-full ${isLost ? t.cardLost : isClosing ? t.cardClosing : isNGD ? t.cardNGD : t.card}`}
+                          className={`rounded-3xl p-3 sm:p-3 border shadow-sm transition-all group flex flex-col justify-between cursor-pointer h-full ${isLost ? t.cardLost : isClosing ? t.cardClosing : isNGD ? t.cardNGD : t.card}`}
                           style={t.cardGlass}
                           onClick={() => { setSelectedLead(lead); setMainView("detail"); setSubView("detail"); }}
                         >
@@ -2038,7 +2038,7 @@ function SalesManagerView({
               </div>
             </div>
 
-            <div className={`rounded-xl border overflow-hidden ${t.tableWrap}`} style={t.tableGlass}>
+            <div className={`rounded-3xl border overflow-hidden ${t.tableWrap}`} style={t.tableGlass}>
               <div className={`p-3 border-b flex justify-between items-center ${t.tableBorder}`}>
                 <p className={`text-sm font-semibold ${t.text}`}>{filteredClosedLeads.length} closed leads</p>
               </div>
@@ -2130,9 +2130,9 @@ function SalesManagerView({
               <div className={`flex flex-col md:flex-row md:items-center justify-between gap-2 rounded-xl border p-3 shadow-sm flex-shrink-0 ${selectedLead.is_lost_lead ? t.cardLost : t.card}`} style={t.cardGlass}>
                 <div className="flex items-center gap-3 sm:gap-2 min-w-0">
                   <button onClick={() => { setMainView("forms"); setSubView("cards"); }} className={`w-9 h-9 sm:w-10 sm:h-10 flex flex-shrink-0 items-center justify-center border rounded-xl transition-colors cursor-pointer shadow-sm ${t.textMuted} ${t.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}><FaChevronLeft className="text-sm" /></button>
-                  <h1 className={`text-lg sm:text-lg md:text-2xl font-bold flex items-center gap-2 sm:gap-3 flex-wrap min-w-0 ${t.text}`}>
+                  <h1 className={`text-[18px] sm:text-[18px] md:text-[18px] font-bold flex items-center gap-2 sm:gap-3 flex-wrap min-w-0 ${t.text}`}>
                     <span className={t.accentText}>#{selectedLead.sr_no || selectedLead.id}</span>
-                    <span className="truncate max-w-[200px] sm:max-w-none">{selectedLead.name}</span>
+                    <span className="truncate max-w-[200px] sm:max-w-none text-[18px]">{selectedLead.name}</span>
                     {selectedLead.status === "Closing" && (
                       <span className={`text-[10px] sm:text-[11px] font-bold px-2 sm:px-3 py-1 rounded-full border flex items-center gap-1.5 flex-shrink-0 ${t.statusClosing}`}>
                         <FaHandshake className="text-xs" /> Closing
@@ -2153,11 +2153,11 @@ function SalesManagerView({
                 </div>
                 <div className="flex gap-2 sm:gap-3 flex-wrap justify-start md:justify-end flex-shrink-0">
                   {bookingData ? (
-                    <button onClick={() => setShowBookingView(true)} className="font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm flex-1 sm:flex-none justify-center">
+                    <button onClick={() => setShowBookingView(true)} className="font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm flex-1 sm:flex-none justify-center">
                       <FaEye /> View Booking Form
                     </button>
                   ) : (
-                    <button disabled title="Booking Form has not been submitted yet." className="font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors opacity-50 cursor-not-allowed bg-indigo-400 text-white shadow-sm flex-1 sm:flex-none justify-center">
+                    <button disabled title="Booking Form has not been submitted yet." className="font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-colors opacity-50 cursor-not-allowed bg-indigo-400 text-white shadow-sm flex-1 sm:flex-none justify-center">
                       <FaEye /> View Booking Form
                     </button>
                   )}
@@ -2165,7 +2165,7 @@ function SalesManagerView({
                     <button
                       type="button"
                       onClick={() => openPermanentDeleteDialog()}
-                      className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md flex-1 sm:flex-none justify-center ${isDark
+                      className={`font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md flex-1 sm:flex-none justify-center ${isDark
                         ? "bg-red-950/50 text-red-200 border border-red-900/50 hover:bg-red-600 hover:text-white"
                         : "bg-red-50 text-red-700 border border-red-200 hover:bg-red-600 hover:text-white"
                         }`}
@@ -2179,11 +2179,11 @@ function SalesManagerView({
                         {selectedLead.is_lost_lead ? <><Ghost className="w-3 h-3" /> Lost Lead • Read Only</> : <><FaCheckCircle className="text-xs" /> Lead Closed • Read Only</>}
                       </span>
                       {selectedLead.is_lost_lead ? (
-                        <button onClick={handleRestoreLead} disabled={isSavingLost} className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md flex-1 sm:flex-none justify-center ${t.btnPrimary} disabled:opacity-60`}>
+                        <button onClick={handleRestoreLead} disabled={isSavingLost} className={`font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md flex-1 sm:flex-none justify-center ${t.btnPrimary} disabled:opacity-60`}>
                           <FaCheckCircle className="text-xs" /> Restore Lead
                         </button>
                       ) : (
-                        <button onClick={handleReopenLead} disabled={isReopening} className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md flex-1 sm:flex-none justify-center ${t.btnPrimary} disabled:opacity-60`}>
+                        <button onClick={handleReopenLead} disabled={isReopening} className={`font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md flex-1 sm:flex-none justify-center ${t.btnPrimary} disabled:opacity-60`}>
                           ↩️ Reopen Lead
                         </button>
                       )}
@@ -2192,17 +2192,17 @@ function SalesManagerView({
                     !showSalesForm && !showLoanForm && (
                       <>
                         <button onClick={() => { prefillSalesForm(); setShowSalesForm(true); setShowLoanForm(false); emitActivity({ type: 'LEAD_INTERACTION', action: 'Editing Closing Form', leadId: selectedLead?.id, leadName: selectedLead?.name, module: 'Sales Form' }); }}
-                          className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md flex-1 sm:flex-none justify-center ${t.btnPrimary} ${isDark ? "shadow-purple-600/20" : "shadow-[#00AEEF]/20"}`}>
+                          className={`font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md flex-1 sm:flex-none justify-center ${t.btnPrimary} ${isDark ? "shadow-purple-600/20" : "shadow-[#00AEEF]/20"}`}>
                           <FaFileInvoice /> <span className="hidden sm:inline">Fill</span> Salesform
                         </button>
                         <button onClick={() => { setShowLoanForm(true); setShowSalesForm(false); emitActivity({ type: 'LEAD_INTERACTION', action: 'Editing Loan Form', leadId: selectedLead?.id, leadName: selectedLead?.name, module: 'Loan Form' }); }}
-                          className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md flex-1 sm:flex-none justify-center ${t.btnSecondary} ${isDark ? "shadow-blue-600/20" : "shadow-[#00AEEF]/20"}`}>
+                          className={`font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md flex-1 sm:flex-none justify-center ${t.btnSecondary} ${isDark ? "shadow-blue-600/20" : "shadow-[#00AEEF]/20"}`}>
                           <FaUniversity /> <span className="hidden sm:inline">Track</span> Loan
                         </button>
-                        <button onClick={openLostLeadModal} className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md flex-1 sm:flex-none justify-center ${t.btnDanger}`}>
+                        <button onClick={openLostLeadModal} className={`font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md flex-1 sm:flex-none justify-center ${t.btnDanger}`}>
                           <AlertTriangle className="w-4 h-4" /> Mark <span className="hidden sm:inline">as</span> Lost Lead
                         </button>
-                        <button onClick={() => setIsClosingModalOpen(true)} className={`font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md flex-1 sm:flex-none justify-center ${t.btnWarning} shadow-amber-600/20`}>
+                        <button onClick={() => setIsClosingModalOpen(true)} className={`font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md flex-1 sm:flex-none justify-center ${t.btnWarning} shadow-amber-600/20`}>
                           <FaHandshake /> Mark <span className="hidden sm:inline">as</span> Closing
                         </button>
                       </>

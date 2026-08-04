@@ -98,7 +98,7 @@ export default function ClosedLeadBookingView({
 
   let payments: any[] = [];
   try { payments = typeof booking.payment_details === "string" ? JSON.parse(booking.payment_details) : (booking.payment_details || []); } catch { payments = []; }
-  
+
   const parseAmount = (val: any) => {
     if (!val) return 0;
     let str = String(val).toLowerCase().replace(/[₹\s,]/g, "");
@@ -106,7 +106,7 @@ export default function ClosedLeadBookingView({
     if (str.includes("cr")) return (parseFloat(str) || 0) * 10000000;
     return parseFloat(str) || 0;
   };
-  
+
   const totalAmount = payments.reduce((sum: number, r: any) => sum + parseAmount(r.amount), 0);
 
   const renderTabs = () => {
@@ -144,7 +144,7 @@ export default function ClosedLeadBookingView({
           <p className={textMuted}>No payments recorded.</p>
         </div>
       ) : (
-        <div className={`rounded-xl border overflow-hidden ${isDark ? "border-[#2A2A35]" : "border-[#E5E7EB]"}`}>
+        <div className={`rounded-3xl border overflow-hidden ${isDark ? "border-[#2A2A35]" : "border-[#E5E7EB]"}`}>
           <table className="w-full text-sm">
             <thead>
               <tr className={isDark ? "bg-[#1A1A28]" : "bg-[#F8FAFC]"}>
@@ -192,7 +192,7 @@ export default function ClosedLeadBookingView({
       const detailRes = await fetch(`/api/booking-details/${booking.id}`);
       const detailJson = await detailRes.json();
       if (detailJson.success) setExtendedDetails(detailJson.data);
-      
+
     } catch (err: any) {
       alert(`Upload Failed: ${err.message}`);
     } finally {
@@ -205,8 +205,8 @@ export default function ClosedLeadBookingView({
     let parsedJointApplicants: any[] = [];
     if (booking?.joint_applicants) {
       try {
-        parsedJointApplicants = typeof booking.joint_applicants === 'string' 
-          ? JSON.parse(booking.joint_applicants) 
+        parsedJointApplicants = typeof booking.joint_applicants === 'string'
+          ? JSON.parse(booking.joint_applicants)
           : booking.joint_applicants;
       } catch (e) {
         parsedJointApplicants = [];
@@ -222,9 +222,9 @@ export default function ClosedLeadBookingView({
       { name: "Primary Applicant Aadhaar (Front)", type: "Image/PDF", isBase: true, status: booking?.primary_aadhaar_front_url ? "Available" : "Pending", url: booking?.primary_aadhaar_front_url },
       ...(booking?.primary_aadhaar_back_url ? [{ name: "Primary Applicant Aadhaar (Back)", type: "Image/PDF", isBase: true, status: "Available", url: booking.primary_aadhaar_back_url }] : []),
       ...parsedJointApplicants.flatMap((ja, i) => [
-        { name: `Joint Applicant ${i+1} PAN Card`, type: "Image/PDF", isBase: true, status: ja.pan_url ? "Available" : "Pending", url: ja.pan_url },
-        { name: `Joint Applicant ${i+1} Aadhaar (Front)`, type: "Image/PDF", isBase: true, status: ja.aadhaar_front_url ? "Available" : "Pending", url: ja.aadhaar_front_url },
-        ...(ja.aadhaar_back_url ? [{ name: `Joint Applicant ${i+1} Aadhaar (Back)`, type: "Image/PDF", isBase: true, status: "Available", url: ja.aadhaar_back_url }] : [])
+        { name: `Joint Applicant ${i + 1} PAN Card`, type: "Image/PDF", isBase: true, status: ja.pan_url ? "Available" : "Pending", url: ja.pan_url },
+        { name: `Joint Applicant ${i + 1} Aadhaar (Front)`, type: "Image/PDF", isBase: true, status: ja.aadhaar_front_url ? "Available" : "Pending", url: ja.aadhaar_front_url },
+        ...(ja.aadhaar_back_url ? [{ name: `Joint Applicant ${i + 1} Aadhaar (Back)`, type: "Image/PDF", isBase: true, status: "Available", url: ja.aadhaar_back_url }] : [])
       ]),
     ];
 
@@ -267,7 +267,7 @@ export default function ClosedLeadBookingView({
               <div className="flex gap-2">
                 {doc.status !== "Pending" ? (
                   <>
-                    <button 
+                    <button
                       onClick={() => {
                         if (doc.url) window.open(doc.url, "_blank");
                         else if (doc.name === "Booking Application Form") handleDownloadPdf();
@@ -278,16 +278,16 @@ export default function ClosedLeadBookingView({
                       View
                     </button>
                     {!doc.url && doc.name === "Booking Application Form" ? (
-                      <button 
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${isDark ? "bg-[#9E217B] text-white hover:bg-[#7a1960]" : "bg-[#9E217B] text-white hover:bg-[#7a1960]"}`} 
+                      <button
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${isDark ? "bg-[#9E217B] text-white hover:bg-[#7a1960]" : "bg-[#9E217B] text-white hover:bg-[#7a1960]"}`}
                         onClick={handleDownloadPdf}
                         disabled={isGeneratingPdf}
                       >
                         {isGeneratingPdf ? "Generating..." : "Download"}
                       </button>
                     ) : doc.url ? (
-                      <button 
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${isDark ? "bg-[#9E217B] text-white hover:bg-[#7a1960]" : "bg-[#9E217B] text-white hover:bg-[#7a1960]"}`} 
+                      <button
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${isDark ? "bg-[#9E217B] text-white hover:bg-[#7a1960]" : "bg-[#9E217B] text-white hover:bg-[#7a1960]"}`}
                         onClick={() => window.open(doc.url as string, "_blank")}
                       >
                         Download
@@ -398,7 +398,7 @@ export default function ClosedLeadBookingView({
           {crmOpen ? <FaChevronDown /> : <FaChevronRight />}
         </button>
       </div>
-      
+
       {crmOpen && (
         <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 gap-y-5 gap-x-4 animate-fadeIn">
           {[
@@ -433,42 +433,42 @@ export default function ClosedLeadBookingView({
       <div className="flex-1 overflow-y-auto custom-scrollbar pb-10">
         {activeTab === "summary" && (
           <>
-          <BookingApplicationView
-            booking={booking}
-            lead={lead}
-            isDark={isDark}
-            userRole={userRole}
-            currentUser={currentUser}
-            onEdit={() => setIsEditModalOpen(true)}
-            onApprove={onApprove}
-            onCancel={() => setCancelOpen(true)}
-            onEditCancellation={() => setEditCancelOpen(true)}
-          />
-          {isEditModalOpen && (
-            <BookingFormModal
-              isOpen={isEditModalOpen}
-              onClose={() => setIsEditModalOpen(false)}
+            <BookingApplicationView
+              booking={booking}
               lead={lead}
-              user={currentUser}
               isDark={isDark}
-              existingBooking={booking}
-              isEditMode={true}
-              onSuccess={() => {
-                setIsEditModalOpen(false);
-                if (onRefetch) onRefetch();
-              }}
+              userRole={userRole}
+              currentUser={currentUser}
+              onEdit={() => setIsEditModalOpen(true)}
+              onApprove={onApprove}
+              onCancel={() => setCancelOpen(true)}
+              onEditCancellation={() => setEditCancelOpen(true)}
             />
-          )}
-          <CancellationModal
-            isOpen={cancelOpen} mode="cancel" booking={booking} user={currentUser} isDark={isDark}
-            onClose={() => setCancelOpen(false)}
-            onDone={() => { setCancelOpen(false); if (onRefetch) onRefetch(); }}
-          />
-          <CancellationModal
-            isOpen={editCancelOpen} mode="edit" booking={booking} user={currentUser} isDark={isDark}
-            onClose={() => setEditCancelOpen(false)}
-            onDone={() => { setEditCancelOpen(false); if (onRefetch) onRefetch(); }}
-          />
+            {isEditModalOpen && (
+              <BookingFormModal
+                isOpen={isEditModalOpen}
+                onClose={() => setIsEditModalOpen(false)}
+                lead={lead}
+                user={currentUser}
+                isDark={isDark}
+                existingBooking={booking}
+                isEditMode={true}
+                onSuccess={() => {
+                  setIsEditModalOpen(false);
+                  if (onRefetch) onRefetch();
+                }}
+              />
+            )}
+            <CancellationModal
+              isOpen={cancelOpen} mode="cancel" booking={booking} user={currentUser} isDark={isDark}
+              onClose={() => setCancelOpen(false)}
+              onDone={() => { setCancelOpen(false); if (onRefetch) onRefetch(); }}
+            />
+            <CancellationModal
+              isOpen={editCancelOpen} mode="edit" booking={booking} user={currentUser} isDark={isDark}
+              onClose={() => setEditCancelOpen(false)}
+              onDone={() => { setEditCancelOpen(false); if (onRefetch) onRefetch(); }}
+            />
           </>
         )}
         {activeTab === "payments" && renderPayments()}
