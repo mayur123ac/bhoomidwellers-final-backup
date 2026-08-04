@@ -2405,7 +2405,7 @@ export default function ReceptionistDashboard() {
             <div className="animate-fadeIn pb-10">
 
               {/* Front Desk Log */}
-              <div className={`rounded-2xl border overflow-hidden ${t.tableWrap}`} style={t.tableGlass}>
+              <div className={`rounded-3xl border overflow-hidden ${t.tableWrap}`} style={t.tableGlass}>
                 {/* Toolbar — same rhythm as EnquiryOverview: title + count chip,
                     flexible search, actions pushed right, all on the head surface. */}
                 <div className={`px-5 pt-4 pb-3.5 flex flex-wrap items-center gap-3 border-b ${t.tableHead} ${isDark ? "border-white/[0.06]" : "border-indigo-300"}`}>
@@ -2432,7 +2432,7 @@ export default function ReceptionistDashboard() {
                   </div>
                 </div>
                 <DraggableTableContainer isDark={isDark}>
-                  <table className="w-full text-left text-sm border-collapse whitespace-nowrap">
+                  <table className="w-full text-left text-sm border-gray-300 whitespace-nowrap">
                     <thead className={tblHeadCls} style={tblHeadStyle}><tr>
                       {["Lead No.", "Client Name", "Source", "CP Name", "CP Company", "CP Phone", "Budget", "Phone", "Alt. Phone", "Date Created", "Backdated Entry", "Sales Manager"].map(h => (
                         <th key={h} className={`${thCls} ${h === "Lead No." ? `sticky left-0 z-20 ${isDark ? "bg-[#1A1A28]" : "bg-[#F1F5F9]"}` :
@@ -2508,7 +2508,7 @@ export default function ReceptionistDashboard() {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
                 {/* Card 1: Room Configurations */}
-                <div className={`rounded-2xl p-6 border flex flex-col ${t.card}`} style={t.cardGlass}>
+                <div className={`rounded-3xl p-6 border flex flex-col ${t.card}`} style={t.cardGlass}>
                   <div className="flex items-center justify-between mb-3">
                     <h2 className={`text-base font-bold ${t.text}`}>Room Configurations</h2>
                     <div className="flex items-center gap-2">
@@ -2572,7 +2572,7 @@ export default function ReceptionistDashboard() {
                 </div>
 
                 {/* Card 4: Lead Sources */}
-                <div className={`rounded-2xl p-6 border flex flex-col ${t.card}`} style={t.cardGlass}>
+                <div className={`rounded-3xl p-6 border flex flex-col ${t.card}`} style={t.cardGlass}>
                   <div className="flex items-center justify-between mb-3">
                     <h2 className={`text-base font-bold ${t.text}`}>Lead Sources</h2>
                     <div className="flex items-center gap-2">
@@ -2617,7 +2617,7 @@ export default function ReceptionistDashboard() {
                 </div>
 
                 {/* Card 2: Enquiry Details */}
-                <div className={`rounded-2xl p-6 border flex flex-col gap-4 ${t.card}`} style={t.cardGlass}>
+                <div className={`rounded-3xl p-6 border flex flex-col gap-4 ${t.card}`} style={t.cardGlass}>
                   <div className="flex items-center justify-between">
                     <h2 className={`text-base font-bold ${isDark ? "text-[#d4006e]" : "text-[#9E217B]"}`}>Enquiry Details</h2>
                     <div className="flex items-center gap-2">
@@ -2670,7 +2670,7 @@ export default function ReceptionistDashboard() {
                 </div>
 
                 {/* Card 3: Sales Manager Activity */}
-                <div className={`rounded-2xl p-6 border flex flex-col ${t.card}`} style={t.cardGlass}>
+                <div className={`rounded-3xl p-6 border flex flex-col ${t.card}`} style={t.cardGlass}>
                   <div className="flex items-center justify-between mb-2">
                     <h2 className={`text-base font-bold ${t.text}`}>Sales Manager Activity</h2>
                     <div className="flex items-center gap-2">
@@ -2781,7 +2781,7 @@ export default function ReceptionistDashboard() {
                               Channel Partner, so non-CP leads don't show an empty
                               sourcing block. Receptionists cannot change this. ── */}
                           {(selectedLead.source === "Channel Partner" || selectedLead.source === "CP") && (
-                            <div className={`mt-4 rounded-xl p-4 border ${isDark ? "bg-[#9E217B]/10 border-[#9E217B]/30" : "bg-[#9E217B]/5 border-[#9E217B]/25"}`}>
+                            <div className={`mt-4 rounded-3xl p-4 border ${isDark ? "bg-[#9E217B]/10 border-[#9E217B]/30" : "bg-[#9E217B]/5 border-[#9E217B]/25"}`}>
                               <p className={`text-xs font-bold uppercase tracking-wider mb-3 ${t.accentText}`}>
                                 Assignment Details
                               </p>
@@ -3005,7 +3005,7 @@ export default function ReceptionistDashboard() {
                 ) : (
                   <div className="animate-fadeIn max-w-[1600px] mx-auto flex flex-col h-[calc(100vh-130px)]">
                     {/* Detail header */}
-                    <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 rounded-2xl border p-4 sm:p-5 shadow-sm flex-shrink-0 ${t.card}`} style={t.cardGlass}>
+                    <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 rounded-2xl border p-2 sm:p-2 shadow-sm flex-shrink-0 ${t.card}`} style={t.cardGlass}>
                       <div className="flex items-center gap-4">
                         <button onClick={() => { setAssignedSubView("cards"); }} className={`w-10 h-10 flex items-center justify-center border rounded-xl transition-colors cursor-pointer shadow-sm ${t.textMuted} ${t.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}><FaChevronLeft className="text-sm" /></button>
                         <h1 className={`text-xl md:text-2xl font-bold flex items-center gap-3 ${t.text}`}>
@@ -3292,7 +3292,7 @@ export default function ReceptionistDashboard() {
                 </div>
               </div>
 
-              <div className={`rounded-2xl border overflow-hidden ${t.tableWrap}`} style={t.tableGlass}>
+              <div className={`rounded-3xl border overflow-hidden ${t.tableWrap}`} style={t.tableGlass}>
                 {/* Toolbar row 1: title + search */}
                 <div className={`px-5 pt-4 pb-3 flex flex-wrap items-center gap-3 ${t.tableHead}`}>
                   <div className="flex items-center gap-2.5 shrink-0">
@@ -3479,7 +3479,7 @@ export default function ReceptionistDashboard() {
                     </div>
                   </div>
 
-                  <div className={`rounded-2xl border overflow-hidden ${t.tableWrap}`} style={t.tableGlass}>
+                  <div className={`rounded-3xl border overflow-hidden ${t.tableWrap}`} style={t.tableGlass}>
                     <div className={`px-5 pt-4 pb-3.5 flex flex-wrap items-center gap-3 border-b ${t.tableHead} ${isDark ? "border-white/[0.06]" : "border-indigo-300"}`}>
                       <div className="flex items-center gap-2.5 shrink-0">
                         <FaHandshake className="text-[#00AEEF] text-sm" />
@@ -3619,7 +3619,7 @@ export default function ReceptionistDashboard() {
                       </div>
 
                       {/* Follow-up Timeline */}
-                      <div className={`lg:col-span-2 rounded-2xl border overflow-hidden flex flex-col ${t.chatPanel}`} style={t.chatPanelGl}>
+                      <div className={`lg:col-span-2 rounded-3xl border overflow-hidden flex flex-col ${t.chatPanel}`} style={t.chatPanelGl}>
                         <div className={`p-4 border-b flex items-center gap-3 ${t.modalHeader} ${t.tableBorder}`}>
                           <FaFileAlt className={t.accentText} />
                           <h3 className={`font-bold text-sm ${t.text}`}>Full Lead History</h3>
@@ -3704,7 +3704,7 @@ export default function ReceptionistDashboard() {
       ════════════════════════════════════════════════════ */}
       {isEnquiryModalOpen && (
         <div className="fixed inset-0 bg-black/70 z-[100] flex justify-center items-center p-4 sm:p-6 animate-fadeIn" style={{ backdropFilter: "blur(6px)" }}>
-          <div className={`rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl border ${t.modalCard}`} style={t.modalGlass}>
+          <div className={`rounded-4xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl border ${t.modalCard}`} style={t.modalGlass}>
             <div className={`p-4 md:p-6 border-b flex justify-between items-center ${t.modalHeader} ${t.tableBorder}`}>
               <div>
                 <h2 className={`text-lg md:text-xl font-bold flex items-center gap-2 ${t.text}`}><FaUserCircle className={t.accentText} /> Client Enquiry Form</h2>
