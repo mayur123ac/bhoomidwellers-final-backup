@@ -28,8 +28,9 @@ const SYNC_ONLY_STATUSES = ["booked", "registered"];
 
 // Fields a user may PATCH directly. status + hold_expires_at are handled
 // separately below because they carry lifecycle rules.
+// apartment_name is deliberately not editable — the field is retired. Legacy rows
+// keep whatever they had; nothing new can set it.
 const EDITABLE: Record<string, (v: any) => any> = {
-  apartment_name: v => (v == null ? null : String(v).trim()),
   project_name: v => (v == null ? null : String(v).trim()),
   tower: v => (v == null ? null : String(v).trim()),
   wing: v => (v ? String(v).trim() : null),

@@ -759,7 +759,7 @@ export async function POST(req: NextRequest) {
         bookingId: newId,
         leadId: lead_id,
         actor: created_by,
-        apartment_name, project_name, tower, wing,
+        project_name, tower, wing,
         property_type, floor_number, flat_number, carpet_area,
       });
 
@@ -839,6 +839,9 @@ export async function POST(req: NextRequest) {
     );
   } catch (err: any) {
     console.error("[POST /api/booking-applications]", err);
-    return NextResponse.json({ success: false, message: err.message }, { status: 500 });
+    // syncBookingUnit throws with httpStatus 409 when the chosen flat is already
+    // held by another booking. That is the operator's mistake to correct, not a
+    // server fault, so it must not be flattened into a 500.
+    return NextResponse.json({ success: false, message: err.message }, { status: err?.httpStatus || 500 });
   }
 }

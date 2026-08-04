@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
+import { resolveHierarchy } from "@/lib/inventoryHierarchy";
 
 export const dynamic = "force-dynamic";
 
@@ -34,18 +35,23 @@ const SORTABLE = new Set([
 // Lazily self-heal expired holds so a stale on_hold never blocks a unit even
 // without a cron job (spec §2). Cheap — touches only the expired rows.
 async function revertExpiredHolds() {
-  const expired = await query<{ id: number }>(
+  // held_by / held_for_lead_id are cleared alongside the expiry: leaving them set
+  // on a unit that is available again would show a released flat as still spoken
+  // for, which is worse than the no-ownership state this replaced.
+  const expired = await query<{ id: number; held_by: string | null }>(
     `UPDATE inventory_units
-        SET status = 'available', hold_expires_at = NULL, updated_at = NOW()
+        SET status = 'available', hold_expires_at = NULL,
+            held_by = NULL, held_for_lead_id = NULL, hold_reason = NULL,
+            updated_at = NOW()
       WHERE status = 'on_hold' AND hold_expires_at IS NOT NULL
         AND hold_expires_at < NOW() AND deleted_at IS NULL
-      RETURNING id`,
+      RETURNING id, held_by`,
   );
   for (const r of expired) {
     await query(
       `INSERT INTO inventory_unit_history (unit_id, old_status, new_status, changed_by, reason)
-       VALUES ($1, 'on_hold', 'available', 'System', 'hold expired')`,
-      [r.id],
+       VALUES ($1, 'on_hold', 'available', 'System', $2)`,
+      [r.id, r.held_by ? `hold expired (was ${r.held_by}'s)` : "hold expired"],
     );
   }
 }
@@ -85,7 +91,9 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get("search");
     if (search) {
       const p = push(`%${search}%`);
-      where.push(`(flat_no ILIKE ${p} OR apartment_name ILIKE ${p} OR project_name ILIKE ${p})`);
+      // apartment_name dropped from the search: it is no longer captured, so on
+      // every new unit it is NULL and matching it would only ever hit legacy rows.
+      where.push(`(flat_no ILIKE ${p} OR project_name ILIKE ${p})`);
     }
 
     const whereSql = `WHERE ${where.join(" AND ")}`;
@@ -132,7 +140,9 @@ export async function POST(req: NextRequest) {
     if (!isInventoryManager(user_role))
       return NextResponse.json({ success: false, message: "Only Admin and Sales Managers can add units." }, { status: 403 });
 
-    for (const f of ["apartment_name", "project_name", "tower", "unit_type", "flat_no"]) {
+    // apartment_name is no longer required or accepted — retired alongside the
+    // booking form's copy of the field. The column stays (nullable) for history.
+    for (const f of ["project_name", "tower", "unit_type", "flat_no"]) {
       if (!body[f] || !String(body[f]).trim())
         return NextResponse.json({ success: false, message: `${f.replace(/_/g, " ")} is required` }, { status: 400 });
     }
@@ -170,19 +180,27 @@ export async function POST(req: NextRequest) {
       );
 
     const created = await transaction(async (client) => {
+      // Keeps project_id / tower_id populated on every new unit. Without it the
+      // unit cannot resolve a price rule and cost sheets refuse it.
+      const { projectId, towerId } = await resolveHierarchy(client, project, tower, user_name);
+
       const ins = await client.query(
         `INSERT INTO inventory_units (
-           apartment_name, project_name, tower, wing, unit_type, floor, flat_no,
+           project_name, tower, wing, unit_type, floor, flat_no,
            carpet_area_sqft, built_up_area_sqft, rate_per_sqft, base_price, facing,
-           status, source, created_by, updated_by
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'manual',$14,$14)
+           status, source, created_by, updated_by,
+           project_id, tower_id, is_corner, is_park_facing, parking_slots
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'manual',$13,$13,$14,$15,$16,$17,$18)
          RETURNING *`,
         [
-          String(body.apartment_name).trim(), project, tower, wing,
+          project, tower, wing,
           String(body.unit_type).trim(), floor, flatNo,
           carpet, cleanNum(body.built_up_area_sqft), cleanNum(body.rate_per_sqft),
           cleanNum(body.base_price), body.facing ? String(body.facing).trim() : null,
           status, user_name,
+          projectId, towerId,
+          body.is_corner === true, body.is_park_facing === true,
+          Math.max(0, Math.trunc(cleanNum(body.parking_slots) ?? 0)),
         ],
       );
       const unit = ins.rows[0];

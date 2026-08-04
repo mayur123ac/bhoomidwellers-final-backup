@@ -21,6 +21,7 @@ import TrancheOverrideModal from "@/components/TrancheOverrideModal";
 // Reused so the inline rate field enforces exactly what the CP Master enforces —
 // 0-100 and at most 2dp, matching NUMERIC(5,2).
 import { validateRate } from "./ChannelPartnerFormModal";
+import UnitPicker, { type PickableUnit, unitLabel } from "./UnitPicker";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface PaymentRow { date: string; transaction_type: string; amount: string; }
@@ -464,6 +465,18 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [termsScrolled, setTermsScrolled] = useState(false);
   const [showAdditionalPayment, setShowAdditionalPayment] = useState(false);
+  // ── Step 2 unit selection (Phase 1) ─────────────────────────────────────────
+  // The seven unit fields are still the things that get submitted — the server
+  // contract is unchanged — but they are now normally filled BY picking a real
+  // row out of inventory_units rather than typed. See UnitPicker.tsx for why.
+  //
+  // `manualUnitEntry` is the deliberate escape hatch: bookings for stock that
+  // was never loaded into inventory, and every already-saved booking made
+  // before this existed, still have to be editable. It is not a fallback for
+  // "the picker failed" — it is an explicit operator choice.
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [selectedUnit, setSelectedUnit] = useState<PickableUnit | null>(null);
+  const [manualUnitEntry, setManualUnitEntry] = useState(false);
   // CP commission preview. Computed server-side (NUMERIC) rather than in JS so the
   // figure shown here is exactly what gets written on save.
   const [cpPreview, setCpPreview] = useState<any | null>(null);
@@ -712,6 +725,101 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
     setForm(f => ({ ...f, [key]: val }));
     setErrors(e => { const ne = { ...e }; delete ne[key]; return ne; });
   }, []);
+
+  // ── Unit selection plumbing (Phase 1) ───────────────────────────────────────
+  // The seven form keys that describe the flat. Kept as one list so applying a
+  // picked unit, clearing it, and the read-only rendering below can never drift
+  // apart on which fields the picker owns.
+  // apartment_name is not here: it is retired from both the booking form and
+  // inventory, so the picker neither reads nor writes it.
+  const UNIT_KEYS = ["project_name", "tower", "wing",
+    "property_type", "floor_number", "flat_number", "carpet_area"] as const;
+
+  // Copy the chosen row's values in VERBATIM. That exactness is the whole point:
+  // syncBookingUnit() re-matches this text against inventory_units by string key,
+  // so anything reformatted here would fail to match and silently fork a new unit.
+  const applyUnit = useCallback((u: PickableUnit) => {
+    setSelectedUnit(u);
+    setManualUnitEntry(false);
+    setPickerOpen(false);
+    setForm(f => ({
+      ...f,
+      project_name: u.project_name || "",
+      tower: u.tower || "",
+      wing: u.wing || "",
+      property_type: u.unit_type || "",
+      floor_number: String(u.floor ?? ""),
+      carpet_area: u.carpet_area_sqft == null || String(u.carpet_area_sqft).trim() === ""
+        ? "" : String(Number(u.carpet_area_sqft)),
+      flat_number: u.flat_no || "",
+    }));
+    UNIT_KEYS.forEach(k => touchedRef.current.add(k));
+    setErrors(e => {
+      const ne = { ...e };
+      UNIT_KEYS.forEach(k => delete ne[k as keyof BookingFormData]);
+      return ne;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Detach the booking from its inventory row and blank the fields, so the next
+  // choice starts clean rather than leaving half of a previous flat behind.
+  const clearUnit = useCallback(() => {
+    setSelectedUnit(null);
+    setForm(f => {
+      const next = { ...f };
+      UNIT_KEYS.forEach(k => { (next as any)[k] = ""; });
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Reconcile an already-saved booking back to its inventory row on open, so
+  // editing one shows the linked unit instead of an empty picker. A booking whose
+  // flat is not in inventory (pre-inventory stock, or a phantom created by the old
+  // free-text path) legitimately has no match — that drops to manual entry rather
+  // than nagging the operator to re-pick something that does not exist.
+  const unitResolvedRef = useRef(false);
+  useEffect(() => { if (!isOpen) unitResolvedRef.current = false; }, [isOpen]);
+  useEffect(() => {
+    if (!isOpen || unitResolvedRef.current) return;
+    const flat = String(form.flat_number || "").trim();
+    if (!flat) return;
+    unitResolvedRef.current = true;
+
+    const norm = (v: any) => String(v ?? "").trim().toLowerCase();
+    const floorOf = (v: any) => {
+      const s = String(v ?? "").trim().toLowerCase();
+      if (s === "g" || s === "gf" || s === "grd" || s.startsWith("ground")) return 0;
+      const m = s.match(/-?\d+/);
+      return m ? parseInt(m[0], 10) : NaN;
+    };
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/inventory?limit=500&search=${encodeURIComponent(flat)}`, { credentials: "include" });
+        const json = await res.json();
+        if (cancelled || !json?.success) return;
+        // Same five-part key the server matches on (lib/inventorySync.ts).
+        const match = (json.data as PickableUnit[]).find(u =>
+          norm(u.flat_no) === norm(form.flat_number) &&
+          norm(u.project_name) === norm(form.project_name) &&
+          norm(u.tower) === norm(form.tower) &&
+          norm(u.wing) === norm(form.wing) &&
+          u.floor === floorOf(form.floor_number)
+        );
+        if (match) setSelectedUnit(match);
+        else setManualUnitEntry(true);
+      } catch {
+        // Inventory unreachable — fall back to the fields the booking already
+        // has rather than blocking an edit on a lookup that is only cosmetic.
+        if (!cancelled) setManualUnitEntry(true);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, form.flat_number]);
 
   // Carries Agreement Value / GST Rate / Token Amount over from the Loan & Deal
   // form's Section-8 draft (walkin_enquiries.loan_tracking_info) — the same
@@ -1452,6 +1560,75 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                         <div className="space-y-6">
                           <div>
                             <p className={sectionTitle}><FaBuilding className="inline mr-2" />Details of Unit Applied For</p>
+
+                            {/* ── Unit selection (Phase 1) ──
+                                Picking a real inventory row instead of typing the flat is what
+                                keeps booking_applications and inventory_units in step: the server
+                                re-matches these fields by exact string key, so typed text could
+                                silently fork a duplicate unit. */}
+                            {!manualUnitEntry && (
+                              <div className={`mb-4 rounded-xl border p-4 ${selectedUnit
+                                ? (isDark ? "border-emerald-500/40 bg-emerald-500/5" : "border-emerald-500/40 bg-emerald-50")
+                                : (isDark ? "border-[#2A2A35] bg-[#14141B]" : "border-[#9CA3AF] bg-[#F8FAFC]")}`}>
+                                {selectedUnit ? (
+                                  <div className="flex items-center justify-between gap-4 flex-wrap">
+                                    <div className="min-w-0">
+                                      <p className={`text-[10px] font-bold uppercase tracking-wider ${textMuted}`}>Linked inventory unit</p>
+                                      <p className={`text-sm font-bold truncate ${textMain}`}>{unitLabel(selectedUnit)}</p>
+                                      <p className={`text-[11px] truncate ${textMuted}`}>
+                                        {selectedUnit.project_name}
+                                        {selectedUnit.unit_type ? ` · ${selectedUnit.unit_type}` : ""}
+                                        {form.carpet_area ? ` · ${form.carpet_area} sq.ft.` : ""}
+                                      </p>
+                                    </div>
+                                    <div className="flex items-center gap-2 flex-shrink-0">
+                                      <button type="button" onClick={() => setPickerOpen(true)}
+                                        className="px-3 py-1.5 rounded-lg text-xs font-bold bg-[#00AEEF] text-white">
+                                        Change Unit
+                                      </button>
+                                      <button type="button" onClick={clearUnit}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${isDark ? "border-[#2A2A35] text-[#888899]" : "border-[#9CA3AF] text-[#475569]"}`}>
+                                        Clear
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center justify-between gap-4 flex-wrap">
+                                    <div>
+                                      <p className={`text-sm font-bold ${textMain}`}>No unit selected</p>
+                                      <p className={`text-[11px] ${textMuted}`}>Choose the flat from inventory so it is reserved against this booking.</p>
+                                    </div>
+                                    <div className="flex items-center gap-2 flex-shrink-0">
+                                      <button type="button" onClick={() => setPickerOpen(true)}
+                                        className="px-4 py-2 rounded-lg text-xs font-bold bg-[#00AEEF] text-white">
+                                        Select Unit
+                                      </button>
+                                      <button type="button" onClick={() => setManualUnitEntry(true)}
+                                        className={`px-3 py-2 rounded-lg text-xs font-bold border ${isDark ? "border-[#2A2A35] text-[#888899]" : "border-[#9CA3AF] text-[#475569]"}`}>
+                                        Enter manually
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {manualUnitEntry && (
+                              <div className={`mb-4 rounded-xl border p-3 flex items-center justify-between gap-4 flex-wrap ${isDark ? "border-amber-500/40 bg-amber-500/5" : "border-amber-500/40 bg-amber-50"}`}>
+                                <p className={`text-[11px] ${textMuted}`}>
+                                  <span className="font-bold text-amber-500">Manual entry.</span>{" "}
+                                  This flat will be matched to inventory by name — a mismatch creates a new unit rather than reserving an existing one.
+                                </p>
+                                <button type="button" onClick={() => { setManualUnitEntry(false); setPickerOpen(true); }}
+                                  className="px-3 py-1.5 rounded-lg text-xs font-bold bg-[#00AEEF] text-white flex-shrink-0">
+                                  Pick from inventory
+                                </button>
+                              </div>
+                            )}
+
+                            {/* The fields themselves are unchanged in shape and still what gets
+                                submitted — they are just locked while a real unit is linked, so
+                                the text cannot drift away from the row it has to match. */}
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                               {[
                                 // Temporarily hidden — to be re-enabled later
@@ -1466,7 +1643,8 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                                     value={(form as any)[key]}
                                     onChange={e => set(key as keyof BookingFormData, e.target.value as any)}
                                     placeholder={placeholder}
-                                    className={`${inputCls} ${errors[key as keyof BookingFormData] ? "!border-red-500" : ""}`}
+                                    readOnly={!!selectedUnit}
+                                    className={`${inputCls} ${errors[key as keyof BookingFormData] ? "!border-red-500" : ""} ${selectedUnit ? "opacity-70 cursor-not-allowed" : ""}`}
                                   />
                                   {errors[key as keyof BookingFormData] && <p className={errCls}>{errors[key as keyof BookingFormData]}</p>}
                                 </div>
@@ -1489,7 +1667,8 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                                       set(key as keyof BookingFormData, val as any);
                                     }}
                                     placeholder={placeholder}
-                                    className={`${inputCls} ${errors[key as keyof BookingFormData] ? "!border-red-500" : ""}`}
+                                    readOnly={!!selectedUnit}
+                                    className={`${inputCls} ${errors[key as keyof BookingFormData] ? "!border-red-500" : ""} ${selectedUnit ? "opacity-70 cursor-not-allowed" : ""}`}
                                   />
                                   {errors[key as keyof BookingFormData] && <p className={errCls}>{errors[key as keyof BookingFormData]}</p>}
                                 </div>
@@ -2779,6 +2958,17 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
             )}
           </motion.div>
         </motion.div>
+      )}
+
+      {/* Inventory unit picker for Step 2, layered above this modal. */}
+      {pickerOpen && (
+        <UnitPicker
+          isDark={isDark}
+          selectedUnitId={selectedUnit?.id ?? null}
+          currentBookingId={existingBooking?.id ?? null}
+          onSelect={applyUnit}
+          onClose={() => setPickerOpen(false)}
+        />
       )}
 
       {/* Admin override for the disbursement gate, layered above this modal. */}

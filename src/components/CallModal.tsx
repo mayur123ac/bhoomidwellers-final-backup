@@ -13,6 +13,15 @@ interface CallModalProps {
   isVisible: boolean;
   onHide: () => void;   // minimise → show ON CALL badge
   onClose: () => void;  // fully close
+  // ── Call logging (Phase 2) ──
+  // The three post-call buttons used to be decoration: no onClick, so the
+  // outcome of every call was lost the moment the modal closed. Logging needs
+  // the lead to attach the follow-up to, and who to attribute it to.
+  leadId?: number | string;
+  actorName?: string;
+  actorRole?: string;
+  /** Called after a follow-up is written, so the parent can refresh its list. */
+  onLogged?: () => void;
 }
 
 // ─── CSS Animations (injected once) ──────────────────────────────────────────
@@ -120,6 +129,10 @@ export default function CallModal({
   isVisible,
   onHide,
   onClose,
+  leadId,
+  actorName,
+  actorRole,
+  onLogged,
 }: CallModalProps) {
   const [state, setState]       = useState<CallState>("select");
   const [muted, setMuted]       = useState(false);
@@ -127,6 +140,15 @@ export default function CallModal({
   const [seconds, setSeconds]   = useState(0);
   const [selectedPhone, setSelectedPhone] = useState("");
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ── Post-call logging (Phase 2) ──
+  const [noteOpen, setNoteOpen]   = useState(false);
+  const [noteText, setNoteText]   = useState("");
+  const [logging, setLogging]     = useState(false);
+  const [logError, setLogError]   = useState("");
+  // What has already been written for THIS call, so a double-click cannot file
+  // the same outcome twice. Reset when a new call starts.
+  const [loggedAs, setLoggedAs]   = useState<string | null>(null);
 
   // Twilio state
   const [device, setDevice] = useState<Device | null>(null);
@@ -208,6 +230,53 @@ export default function CallModal({
   const fmt = (s: number) =>
     `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 
+  // ── Write the call outcome as a follow-up ───────────────────────────────────
+  // A follow-up, not a new "call log" table, on purpose: the lead timeline the
+  // team already reads is in follow_ups, and a separate store would mean calls
+  // were recorded somewhere nobody looks. The duration and the number actually
+  // dialled go into the text so the record is self-contained.
+  const logCall = useCallback(async (outcome: string, extraNote?: string) => {
+    if (!leadId) {
+      setLogError("This call is not attached to a lead, so it cannot be logged.");
+      return false;
+    }
+    setLogging(true);
+    setLogError("");
+    try {
+      const dialled = selectedPhone || phone;
+      const parts = [`📞 Call — ${outcome}`, `duration ${fmt(seconds)}`];
+      if (dialled) parts.push(dialled);
+      const message = extraNote?.trim()
+        ? `${parts.join(" · ")}\n${extraNote.trim()}`
+        : parts.join(" · ");
+
+      const res = await fetch("/api/followups", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          leadId: String(leadId),
+          message,
+          salesManagerName: actorName || undefined,
+          createdBy: (actorRole || "").trim().toLowerCase() === "admin" ? "admin" : "sales",
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json?.success) throw new Error(json?.message || "Could not save the call log");
+
+      setLoggedAs(outcome);
+      setNoteOpen(false);
+      setNoteText("");
+      onLogged?.();
+      return true;
+    } catch (err: any) {
+      setLogError(err?.message || "Could not save the call log");
+      return false;
+    } finally {
+      setLogging(false);
+    }
+  }, [leadId, selectedPhone, phone, seconds, actorName, actorRole, onLogged]);
+
   // ── Call handler — connects via Twilio WebRTC ──
   const handleSelectNumber = async (num: string) => {
     const normalized = normalizePhone(num);
@@ -218,6 +287,13 @@ export default function CallModal({
        return;
     }
     
+    // A fresh call gets a fresh log: the previous call's outcome must not make
+    // this one look as though it has already been recorded.
+    setLoggedAs(null);
+    setLogError("");
+    setNoteOpen(false);
+    setNoteText("");
+
     setState("active");
     startTimer();
     
@@ -393,17 +469,79 @@ export default function CallModal({
               <p className="text-red-400 font-medium text-sm">Call Ended</p>
               <p className="font-mono text-2xl text-white/60">{fmt(seconds)}</p>
               <div className="w-full space-y-2 mt-2">
-                <button className="w-full py-2.5 rounded-2xl bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 text-sm font-medium border border-teal-500/30 transition-all">
-                  📝 Add Follow-up Note
-                </button>
-                <div className="flex gap-2">
-                  <button className="flex-1 py-2.5 rounded-2xl bg-green-500/20 hover:bg-green-500/30 text-green-300 text-xs font-medium border border-green-500/30 transition-all">
-                    ✅ Interested
-                  </button>
-                  <button className="flex-1 py-2.5 rounded-2xl bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-medium border border-red-500/20 transition-all">
-                    ❌ Not Interested
-                  </button>
-                </div>
+                {loggedAs ? (
+                  <div className="w-full py-2.5 rounded-2xl bg-green-500/15 text-green-300 text-xs font-medium border border-green-500/30 text-center">
+                    ✅ Logged as “{loggedAs}” on this lead
+                  </div>
+                ) : (
+                  <>
+                    {noteOpen ? (
+                      <div className="space-y-2">
+                        <textarea
+                          autoFocus
+                          rows={3}
+                          value={noteText}
+                          onChange={e => setNoteText(e.target.value)}
+                          placeholder="What came out of this call?"
+                          className="w-full rounded-2xl bg-white/5 border border-white/15 px-3 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-teal-400 resize-none"
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            disabled={logging || !noteText.trim()}
+                            onClick={() => logCall("Note", noteText)}
+                            className="flex-1 py-2.5 rounded-2xl bg-teal-500/20 hover:bg-teal-500/30 disabled:opacity-40 disabled:cursor-not-allowed text-teal-300 text-xs font-medium border border-teal-500/30 transition-all"
+                          >
+                            {logging ? "Saving…" : "Save Note"}
+                          </button>
+                          <button
+                            disabled={logging}
+                            onClick={() => { setNoteOpen(false); setNoteText(""); }}
+                            className="px-4 py-2.5 rounded-2xl text-white/40 text-xs hover:text-white/70 transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        disabled={logging}
+                        onClick={() => { setNoteOpen(true); setLogError(""); }}
+                        className="w-full py-2.5 rounded-2xl bg-teal-500/20 hover:bg-teal-500/30 disabled:opacity-40 text-teal-300 text-sm font-medium border border-teal-500/30 transition-all"
+                      >
+                        📝 Add Follow-up Note
+                      </button>
+                    )}
+
+                    {!noteOpen && (
+                      <div className="flex gap-2">
+                        <button
+                          disabled={logging}
+                          onClick={() => logCall("Interested")}
+                          className="flex-1 py-2.5 rounded-2xl bg-green-500/20 hover:bg-green-500/30 disabled:opacity-40 disabled:cursor-not-allowed text-green-300 text-xs font-medium border border-green-500/30 transition-all"
+                        >
+                          {logging ? "Saving…" : "✅ Interested"}
+                        </button>
+                        <button
+                          disabled={logging}
+                          onClick={() => logCall("Not Interested")}
+                          className="flex-1 py-2.5 rounded-2xl bg-red-500/10 hover:bg-red-500/20 disabled:opacity-40 disabled:cursor-not-allowed text-red-400 text-xs font-medium border border-red-500/20 transition-all"
+                        >
+                          {logging ? "Saving…" : "❌ Not Interested"}
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {logError && (
+                  <p className="text-red-400 text-[11px] text-center px-2">{logError}</p>
+                )}
+                {!leadId && !loggedAs && (
+                  <p className="text-amber-400/80 text-[11px] text-center px-2">
+                    Not attached to a lead — this call cannot be logged.
+                  </p>
+                )}
+
                 <button
                   onClick={handleClose}
                   className="w-full py-2 text-white/30 text-xs hover:text-white/60 transition-colors"

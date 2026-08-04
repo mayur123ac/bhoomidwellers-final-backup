@@ -437,7 +437,7 @@ function InterestBadge({ status, size = "md", isDark }: { status: string; size?:
   const sz = size === "sm" ? "text-[9px] px-2 py-0.5" : "text-[10px] px-3 py-1";
   const label = labelMap[status] ?? status;
   return (
-    <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider border inline-flex items-center justify-center gap-1 flex-shrink-0 leading-none ${cls}`}>
+    <span className={`px-2 py-0.5 rounded-4xl text-[9px] font-bold uppercase tracking-wider border inline-flex items-center justify-center gap-1 flex-shrink-0 leading-none ${cls}`}>
       {label}
     </span>
   );
@@ -452,7 +452,7 @@ function LoanStatusBadge({ status, isDark }: { status: string; isDark?: boolean 
   if (s === "rejected") cls = isDark ? "border-red-500/40 text-red-400 bg-red-500/10" : "border-red-300 text-red-700 bg-red-50";
   if (s === "in progress") cls = isDark ? "border-yellow-500/40 text-yellow-400 bg-yellow-500/10" : "border-yellow-300 text-yellow-700 bg-yellow-50";
   return (
-    <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider border flex items-center gap-1 flex-shrink-0 ${cls}`}>
+    <span className={`px-2 py-0.5 rounded-4xl text-[9px] font-bold uppercase tracking-wider border flex items-center gap-1 flex-shrink-0 ${cls}`}>
       {status}
     </span>
   );
@@ -1491,7 +1491,7 @@ function DashboardAnalytics({ leads, theme, isDark }: { leads: any[]; theme: any
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
       {/* BAR CHART */}
-      <div className={`${theme.card} rounded-xl p-5`} style={theme.cardGlass}>
+      <div className={`${theme.card} rounded-3xl p-5`} style={theme.cardGlass}>
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className={`${theme.text} font-bold text-sm flex items-center gap-2`}>
@@ -1560,7 +1560,7 @@ function DashboardAnalytics({ leads, theme, isDark }: { leads: any[]; theme: any
       </div>
 
       {/* PIE CHART */}
-      <div className={`${theme.card} rounded-xl p-5`} style={theme.cardGlass}>
+      <div className={`${theme.card} rounded-3xl p-5`} style={theme.cardGlass}>
         <div className="flex items-center justify-between mb-4">
           <h3 className={`${theme.text} font-bold text-sm flex items-center gap-2`}>
             <FaChartPie className="text-[#00AEEF] text-xs" />
@@ -2093,7 +2093,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
     <div className={`h-full flex flex-col p-8 overflow-y-auto ${theme.scroll}`}>
 
       {/* ── Welcome banner ── */}
-      <div className={`${theme.card} rounded-xl p-6 mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2`} style={theme.cardGlass}>
+      <div className={`${theme.card} rounded-3xl p-6 mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2`} style={theme.cardGlass}>
         <h2 className={`text-lg font-bold ${theme.text}`}>Welcome back, {user?.name || "Admin"}!</h2>
         <p className={`text-sm ${theme.textMuted}`}>Here is what's happening with your team today.</p>
       </div>
@@ -2122,7 +2122,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
               title={isActive
                 ? `Showing ${STAT_LABELS[id]} — click again to clear`
                 : `Filter the table to ${STAT_LABELS[id]}`}
-              className={`${theme.card} rounded-xl p-5 text-left w-full transition-all cursor-pointer hover:-translate-y-0.5 hover:shadow-lg ${isActive ? "ring-2 ring-[#9E217B] ring-offset-1 ring-offset-transparent" : ""
+              className={`${theme.card} rounded-3xl p-5 text-left w-full transition-all cursor-pointer hover:-translate-y-0.5 hover:shadow-lg ${isActive ? "ring-2 ring-[#9E217B] ring-offset-1 ring-offset-transparent" : ""
                 }`}
               style={theme.cardGlass}
             >
@@ -2140,7 +2140,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
 
       {/* ── Top performers + site visits ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-8">
-        <div className={`lg:col-span-2 ${theme.card} rounded-xl p-6 flex flex-col`} style={theme.cardGlass}>
+        <div className={`lg:col-span-2 ${theme.card} rounded-3xl p-6 flex flex-col`} style={theme.cardGlass}>
           <h2 className={`text-lg font-bold mb-1 flex items-center gap-2 ${theme.text}`}>
             <FaChartPie className="text-[#9E217B]" /> Top Performers
           </h2>
@@ -2170,7 +2170,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
           </div>
         </div>
 
-        <div className={`lg:col-span-1 ${theme.card} rounded-xl p-6 flex flex-col`} style={theme.cardGlass}>
+        <div className={`lg:col-span-1 ${theme.card} rounded-3xl p-6 flex flex-col`} style={theme.cardGlass}>
           <h2 className={`text-lg font-bold mb-1 flex items-center gap-2 ${theme.text}`}>
             <FaCalendarAlt className="text-orange-500" /> Site Visits
           </h2>
@@ -2208,7 +2208,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
       </div>
 
       {/* ── Team Performance Card ── */}
-      <div className={`${theme.card} rounded-xl p-6 mb-8`} style={theme.cardGlass}>
+      <div className={`${theme.card} rounded-3xl p-6 mb-8`} style={theme.cardGlass}>
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-5">
           <div>
             <h2 className={`text-lg font-bold flex items-center gap-2 ${theme.text}`}>
@@ -3794,7 +3794,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                   <div className="grid grid-cols-2 gap-2">
                     {sections.map(sec => (
                       <div key={sec.key} onClick={() => setActiveSection(sec.key as any)}
-                        className={`rounded-xl p-5 border cursor-pointer transition-all ${activeSection === sec.key ? (isDark ? "bg-[#9E217B]/20 border-[#9E217B]/50" : "bg-[#9E217B]/10 border-[#9E217B]") : `${theme.card} hover:opacity-90`}`}>
+                        className={`rounded-3xl p-5 border cursor-pointer transition-all ${activeSection === sec.key ? (isDark ? "bg-[#9E217B]/20 border-[#9E217B]/50" : "bg-[#9E217B]/10 border-[#9E217B]") : `${theme.card} hover:opacity-90`}`}>
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-lg">{sec.icon}</span>
                           <span className={`text-2xl font-black ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>{sec.count}</span>
@@ -4879,7 +4879,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                   <div className="grid grid-cols-2 gap-2">
                     {sections.map(sec => (
                       <div key={sec.key} onClick={() => setActiveSection(sec.key as any)}
-                        className={`rounded-xl p-5 border cursor-pointer transition-all ${activeSection === sec.key ? (isDark ? "bg-[#9E217B]/20 border-[#9E217B]/50" : "bg-[#9E217B]/10 border-[#9E217B]") : `${theme.card} hover:opacity-90`}`}>
+                        className={`rounded-3xl p-5 border cursor-pointer transition-all ${activeSection === sec.key ? (isDark ? "bg-[#9E217B]/20 border-[#9E217B]/50" : "bg-[#9E217B]/10 border-[#9E217B]") : `${theme.card} hover:opacity-90`}`}>
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-lg">{sec.icon}</span>
                           <span className={`text-2xl font-black ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>{sec.count}</span>
@@ -6341,7 +6341,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                   <div className="grid grid-cols-3 gap-2">
                     {sections.map(sec => (
                       <div key={sec.key} onClick={() => setActiveSection(sec.key)}
-                        className={`rounded-xl p-5 border cursor-pointer transition-all ${activeSection === sec.key ? isDark ? "bg-[#9E217B]/20 border-[#9E217B]/50" : "bg-[#9E217B]/10 border-[#9E217B]" : `${theme.card} hover:opacity-90`}`}
+                        className={`rounded-3xl p-5 border cursor-pointer transition-all ${activeSection === sec.key ? isDark ? "bg-[#9E217B]/20 border-[#9E217B]/50" : "bg-[#9E217B]/10 border-[#9E217B]" : `${theme.card} hover:opacity-90`}`}
                         style={activeSection !== sec.key ? theme.cardGlass : {}}>
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-lg">{sec.icon}</span>
@@ -7733,7 +7733,7 @@ function SiteVisitScheduler({
                         {new Date(v.visit_date).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })} · by {v.created_by}
                       </p>
                     </div>
-                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border uppercase flex-shrink-0 ${statusBadge(v.status)}`}>
+                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-4xl border uppercase flex-shrink-0 ${statusBadge(v.status)}`}>
                       {v.status}
                     </span>
                   </div>
@@ -7827,12 +7827,12 @@ function StaffCard({ s, isDark, theme, getRoleBadge, getBarColor }: any) {
   const hasNoActivity = s.totalLeads > 0 && s.followUpsToday === 0;
   const completedPct = s.requiredToday > 0 ? Math.round((s.followUpsToday / s.requiredToday) * 100) : 0;
   return (
-    <div className={`rounded-xl border p-5 transition-all ${hasNoActivity ? (isDark ? "border-red-500/30 bg-red-500/5" : "border-red-200 bg-red-50") : theme.card}`}
+    <div className={`rounded-4xl border p-5 transition-all ${hasNoActivity ? (isDark ? "border-red-500/30 bg-red-500/5" : "border-red-200 bg-red-50") : theme.card}`}
       style={!hasNoActivity ? theme.cardGlass : {}}>
       <div className="flex items-start justify-between mb-3">
         <div>
           <h4 className={`font-bold text-base ${theme.text}`}>{s.name}</h4>
-          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border mt-1 inline-block ${getRoleBadge(s.role)}`}>{s.role}</span>
+          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-4xl border mt-1 inline-block ${getRoleBadge(s.role)}`}>{s.role}</span>
         </div>
         <span className="text-lg">{hasNoActivity ? "⚠️" : completedPct >= 80 ? "✅" : "🔄"}</span>
       </div>
@@ -7861,8 +7861,8 @@ function StaffCard({ s, isDark, theme, getRoleBadge, getBarColor }: any) {
           <span className={theme.textFaint}>Progress</span>
           <span className={`font-bold ${completedPct >= 80 ? "text-green-500" : completedPct >= 40 ? "text-yellow-500" : "text-red-500"}`}>{completedPct}%</span>
         </div>
-        <div className={`w-full h-2 rounded-full ${isDark ? "bg-[#333]" : "bg-gray-200"}`}>
-          <div className={`h-2 rounded-full transition-all ${getBarColor(s.followUpsToday, s.requiredToday)}`}
+        <div className={`w-full h-2 rounded-4xl ${isDark ? "bg-[#333]" : "bg-gray-200"}`}>
+          <div className={`h-2 rounded-4xl transition-all ${getBarColor(s.followUpsToday, s.requiredToday)}`}
             style={{ width: `${Math.min(completedPct, 100)}%` }} />
         </div>
       </div>
@@ -7901,7 +7901,7 @@ function AlertSection({ title, subtitle, items, emptyMsg, badgeText, borderColor
     <div className={`rounded-xl border overflow-hidden ${borderColor}`}>
       <div className={`p-5 border-b flex items-center justify-between ${headerBg}`}>
         <h3 className={`font-bold flex items-center gap-2 ${titleColor}`}>{title}</h3>
-        <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${badgeColor}`}>
+        <span className={`text-xs font-bold px-2 py-0.5 rounded-4xl border ${badgeColor}`}>
           {items.length} {subtitle}
         </span>
       </div>
@@ -7914,7 +7914,7 @@ function AlertSection({ title, subtitle, items, emptyMsg, badgeText, borderColor
               <p className={`font-bold text-sm ${theme.text}`}>{s.name}</p>
               <p className={`text-xs ${theme.textFaint}`}>{s.role} · {s.totalLeads} leads assigned</p>
             </div>
-            <span className={`text-xs font-bold px-2 py-1 rounded-full border ${badgeColor}`}>
+            <span className={`text-xs font-bold px-2 py-1 rounded-4xl border ${badgeColor}`}>
               {badgeText(s)}
             </span>
           </div>

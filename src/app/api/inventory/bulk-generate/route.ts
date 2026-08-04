@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { transaction } from "@/lib/db";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
+import { resolveHierarchy } from "@/lib/inventoryHierarchy";
 
 export const dynamic = "force-dynamic";
 
@@ -44,8 +45,12 @@ export async function POST(req: NextRequest) {
       let created = 0;
       const skipped: { flat_no: string; reason: string }[] = [];
 
+      // A batch is one building, so the project/tower resolve once rather than
+      // per row — a 500-unit tower would otherwise issue 1000 redundant lookups.
+      const hierarchyCache = new Map<string, { projectId: number | null; towerId: number | null }>();
+
       for (const u of units) {
-        const apartment_name = String(u.apartment_name || "").trim();
+        // apartment_name retired — no longer sent, required, or written.
         const project_name = String(u.project_name || "").trim();
         const tower = String(u.tower || "").trim();
         const unit_type = String(u.unit_type || "").trim();
@@ -56,25 +61,35 @@ export async function POST(req: NextRequest) {
         let status = String(u.status || "available").toLowerCase().trim();
         if (!MANUAL_STATUSES.includes(status)) status = "available";
 
-        if (!apartment_name || !project_name || !tower || !unit_type || !flat_no || isNaN(floor) || !carpet) {
+        if (!project_name || !tower || !unit_type || !flat_no || isNaN(floor) || !carpet) {
           skipped.push({ flat_no: flat_no || "(blank)", reason: "missing required fields" });
           continue;
         }
 
+        const cacheKey = `${project_name.toLowerCase()}|${tower.toLowerCase()}`;
+        if (!hierarchyCache.has(cacheKey)) {
+          hierarchyCache.set(cacheKey, await resolveHierarchy(client, project_name, tower, user_name));
+        }
+        const { projectId, towerId } = hierarchyCache.get(cacheKey)!;
+
         const ins = await client.query(
           `INSERT INTO inventory_units (
-             apartment_name, project_name, tower, wing, unit_type, floor, flat_no,
+             project_name, tower, wing, unit_type, floor, flat_no,
              carpet_area_sqft, built_up_area_sqft, rate_per_sqft, base_price, facing,
-             status, source, created_by, updated_by
-           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'bulk_generated',$14,$14)
+             status, source, created_by, updated_by,
+             project_id, tower_id, is_corner, is_park_facing, parking_slots
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'bulk_generated',$13,$13,$14,$15,$16,$17,$18)
            ON CONFLICT (project_name, tower, COALESCE(wing,''), floor, flat_no) WHERE deleted_at IS NULL
            DO NOTHING
            RETURNING id`,
           [
-            apartment_name, project_name, tower, wing, unit_type, floor, flat_no,
+            project_name, tower, wing, unit_type, floor, flat_no,
             carpet, cleanNum(u.built_up_area_sqft), cleanNum(u.rate_per_sqft),
             cleanNum(u.base_price), u.facing ? String(u.facing).trim() : null,
             status, user_name,
+            projectId, towerId,
+            u.is_corner === true, u.is_park_facing === true,
+            Math.max(0, Math.trunc(cleanNum(u.parking_slots) ?? 0)),
           ],
         );
 

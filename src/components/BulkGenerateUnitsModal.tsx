@@ -9,6 +9,7 @@
 import React, { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaTimes, FaTrash, FaLayerGroup, FaArrowLeft, FaCheckCircle } from "react-icons/fa";
+import ProjectTowerPicker from "./ProjectTowerPicker";
 
 const STATUS_OPTS: { label: string; value: string }[] = [
   { label: "Available", value: "available" },
@@ -76,8 +77,10 @@ interface Props {
 
 type Row = { key: string; floor: number; flat_no: string; unit_type: string; carpet_area_sqft: string; status: string };
 
+// apartment_name intentionally absent — dropped from the booking form, so
+// inventory drops it too. See AddUnitModal for the same note.
 const blankConfig = {
-  apartment_name: "", project_name: "", tower: "", wing: "", unit_type: "2BHK",
+  project_name: "", tower: "", wing: "", unit_type: "2BHK",
   num_floors: "", units_per_floor: "", start_floor: "1",
   numbering_preset: NUMBERING_PRESETS[0].pattern, custom_pattern: "", ground_floor_mode: "zero",
   default_carpet: "", default_status: "available",
@@ -129,7 +132,7 @@ export default function BulkGenerateUnitsModal({ isOpen, onClose, onCreated, use
   // ── Step 1 → 2: build the matrix client-side ──
   const generatePreview = () => {
     setError(null);
-    for (const [k, label] of [["apartment_name", "Apartment name"], ["project_name", "Project name"], ["tower", "Tower"], ["unit_type", "Unit type"]] as const) {
+    for (const [k, label] of [["project_name", "Project name"], ["tower", "Tower"], ["unit_type", "Unit type"]] as const) {
       if (!String((config as any)[k]).trim()) { setError(`${label} is required.`); return; }
     }
     const nf = Number(config.num_floors), upf = Number(config.units_per_floor), sf = Number(config.start_floor);
@@ -168,7 +171,6 @@ export default function BulkGenerateUnitsModal({ isOpen, onClose, onCreated, use
     setBusy(true); setError(null);
     try {
       const units = rows.map(r => ({
-        apartment_name: config.apartment_name.trim(),
         project_name: config.project_name.trim(),
         tower: config.tower.trim(),
         wing: config.wing.trim() || null,
@@ -211,7 +213,7 @@ export default function BulkGenerateUnitsModal({ isOpen, onClose, onCreated, use
           <motion.div
             initial={{ scale: 0.93, y: 24 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.93, y: 24 }}
             transition={{ type: "spring", stiffness: 300, damping: 28 }}
-            className={`w-full max-w-4xl max-h-[92vh] flex flex-col rounded-2xl shadow-2xl border overflow-hidden ${isDark ? "bg-[#0D0D12] border-[#2A2A35]" : "bg-white border-[#9CA3AF]"}`}
+            className={`w-full max-w-4xl max-h-[92vh] flex flex-col rounded-4xl shadow-2xl border overflow-hidden ${isDark ? "bg-[#0D0D12] border-[#2A2A35]" : "bg-white border-[#9CA3AF]"}`}
           >
             {/* Header */}
             <div className={`flex items-center justify-between px-6 py-4 border-b flex-shrink-0 ${isDark ? "bg-[#121218] border-[#2A2A35]" : "bg-[#F8FAFC] border-[#E5E7EB]"}`}>
@@ -235,9 +237,12 @@ export default function BulkGenerateUnitsModal({ isOpen, onClose, onCreated, use
               {step === "config" && (
                 <>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div><label className={labelCls}>Apartment Name *</label><input value={config.apartment_name} onChange={e => setC({ apartment_name: e.target.value })} className={inputCls} placeholder="e.g. Colossal Mas" /></div>
-                    <div><label className={labelCls}>Project Name *</label><input value={config.project_name} onChange={e => setC({ project_name: e.target.value })} className={inputCls} placeholder="e.g. Phase 1" /></div>
-                    <div><label className={labelCls}>Tower *</label><input value={config.tower} onChange={e => setC({ tower: e.target.value })} className={inputCls} placeholder="e.g. A" /></div>
+                    <ProjectTowerPicker
+                      t={t}
+                      projectName={config.project_name}
+                      towerName={config.tower}
+                      onChange={patch => setC(patch as any)}
+                    />
                     <div><label className={labelCls}>Wing</label><input value={config.wing} onChange={e => setC({ wing: e.target.value })} className={inputCls} placeholder="Optional" /></div>
                     <div>
                       <label className={labelCls}>Default Unit Type *</label>

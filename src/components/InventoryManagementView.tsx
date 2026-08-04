@@ -8,20 +8,30 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   FaPlus, FaTable, FaThLarge, FaTimes, FaSort, FaSortUp, FaSortDown,
   FaHistory, FaExternalLinkAlt, FaChevronDown, FaLayerGroup, FaPen,
-  FaTrash, FaExclamationTriangle, FaBuilding, FaLock,
+  FaTrash, FaExclamationTriangle, FaBuilding, FaLock, FaTags, FaHandshake, FaChartBar,
 } from "react-icons/fa";
 import { formatCurrencyDisplay } from "@/lib/currency";
 import AddUnitModal from "./AddUnitModal";
 import BulkGenerateUnitsModal from "./BulkGenerateUnitsModal";
+import PricingRulesModal from "./PricingRulesModal";
+import OffersModal from "./OffersModal";
+import InventoryAnalyticsModal from "./InventoryAnalyticsModal";
 
 export interface InventoryUnit {
   id: number;
-  apartment_name: string; project_name: string; tower: string; wing: string | null;
+  // apartment_name is retired — no longer captured or shown. Kept optional on the
+  // type because the column still exists and pre-retirement rows still return it.
+  apartment_name?: string | null;
+  project_name: string; tower: string; wing: string | null;
   unit_type: string; floor: number; flat_no: string;
   carpet_area_sqft: string | number | null; built_up_area_sqft: string | number | null;
   rate_per_sqft: string | number | null; base_price: string | number | null;
   facing: string | null; status: string; hold_expires_at: string | null; source: string;
   lead_id: number | null; booking_id: number | null;
+  // Sell.Do parity additions. Optional because a cached/older payload may predate them.
+  project_id?: number | null; tower_id?: number | null;
+  held_by?: string | null; held_for_lead_id?: number | null; hold_reason?: string | null;
+  is_corner?: boolean | null; is_park_facing?: boolean | null; parking_slots?: number | null;
   created_by: string | null; updated_by: string | null;
   created_at: string; updated_at: string; deleted_at: string | null;
   lead_name?: string | null; lead_phone?: string | null; lead_email?: string | null;
@@ -71,7 +81,9 @@ const linkLabel = (u: InventoryUnit) => {
   if (u.booking_id) p.push(`booking #${u.booking_id}`);
   if (u.lead_id) p.push(`lead #${u.lead_id}`);
   if (p.length) return p.join(" / ");
-  if (u.status === "on_hold") return "on hold";
+  // Naming the holder is the point of hold ownership — "on hold" alone was the
+  // old, unattributable state that nobody dared release.
+  if (u.status === "on_hold") return u.held_by ? `held by ${u.held_by}` : "on hold";
   return u.status;
 };
 // Statuses a manager may set by hand (booked/registered are sync-only; on_hold needs an expiry; cancelled via booking flow).
@@ -88,7 +100,6 @@ const area = (v: any) => { const n = num(v); return n ? `${n.toLocaleString("en-
 
 interface Column { key: string; label: string; w: number; sortable: boolean; numeric?: boolean; }
 const COLUMNS: Column[] = [
-  { key: "apartment_name", label: "Apartment", w: 150, sortable: true },
   { key: "project_name", label: "Project", w: 130, sortable: true },
   { key: "tower", label: "Tower", w: 70, sortable: true },
   { key: "wing", label: "Wing", w: 64, sortable: true },
@@ -126,6 +137,9 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
   const [addMenu, setAddMenu] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [showBulk, setShowBulk] = useState(false);
+  const [showPricing, setShowPricing] = useState(false);
+  const [showOffers, setShowOffers] = useState(false);
+  const [showAnalytics, setShowAnalytics] = useState(false);
   const [drawerId, setDrawerId] = useState<number | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<InventoryUnit | null>(null); // single delete
   const [bulkDelOpen, setBulkDelOpen] = useState(false);
@@ -271,6 +285,25 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
               )}
             </div>
           )}
+          {/* Pricing rules — cost sheets are unusable until a project has one. */}
+          {canManage && (
+            <button onClick={() => setShowPricing(true)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border ${t.tableBorder} ${t.text} hover:border-[#00AEEF]`}>
+              <FaTags className="text-[10px] text-[#00AEEF]" /> Pricing
+            </button>
+          )}
+          {canManage && (
+            <button onClick={() => setShowOffers(true)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border ${t.tableBorder} ${t.text} hover:border-[#00AEEF]`}>
+              <FaHandshake className="text-[10px] text-[#00AEEF]" /> Offers
+            </button>
+          )}
+          {/* Analytics is read-only, so it is open to every role that can see
+              inventory — unlike Pricing and Offers, which change commercials. */}
+          <button onClick={() => setShowAnalytics(true)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border ${t.tableBorder} ${t.text} hover:border-[#00AEEF]`}>
+            <FaChartBar className="text-[10px] text-[#00AEEF]" /> Analytics
+          </button>
           {/* Whole-building delete (admin only) — separate from row/bulk-select */}
           {isAdminUser && (
             <button onClick={() => setBldDelOpen(true)} title="Delete a whole building/tower"
@@ -341,6 +374,13 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
       {canManage && (
         <BulkGenerateUnitsModal isOpen={showBulk} onClose={() => setShowBulk(false)} onCreated={afterCreate} user={user} isDark={isDark} t={t} />
       )}
+      {canManage && (
+        <PricingRulesModal isOpen={showPricing} onClose={() => setShowPricing(false)} user={user} isDark={isDark} t={t} />
+      )}
+      {canManage && (
+        <OffersModal isOpen={showOffers} onClose={() => setShowOffers(false)} user={user} isDark={isDark} t={t} onChanged={fetchUnits} />
+      )}
+      <InventoryAnalyticsModal isOpen={showAnalytics} onClose={() => setShowAnalytics(false)} isDark={isDark} t={t} />
 
       {/* ── Delete modals (admin only) ── */}
       {isAdminUser && deleteTarget && (
@@ -477,7 +517,7 @@ function ModalShell({ isDark, onClose, children, maxW = "max-w-lg" }: any) {
         className="fixed inset-0 z-[210] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}
         onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
         <motion.div initial={{ scale: 0.94, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.94, y: 20 }} transition={{ type: "spring", stiffness: 300, damping: 28 }}
-          className={`w-full ${maxW} rounded-2xl shadow-2xl border overflow-hidden ${isDark ? "bg-[#0D0D12] border-[#2A2A35]" : "bg-white border-[#9CA3AF]"}`}>
+          className={`w-full ${maxW} rounded-4xl shadow-2xl border overflow-hidden ${isDark ? "bg-[#0D0D12] border-[#2A2A35]" : "bg-white border-[#9CA3AF]"}`}>
           {children}
         </motion.div>
       </motion.div>
@@ -603,7 +643,7 @@ function BulkDeleteModal({ selectedUnits, user, isDark, t, onClose, onDeleted }:
 
 // Whole-building delete: scope inputs, live preview count (+ linked-blocked), type-to-confirm.
 function BuildingDeleteModal({ user, isDark, t, onClose, onDeleted, defaults }: any) {
-  const [scope, setScope] = useState({ apartment_name: "", project_name: defaults?.project_name || "", tower: defaults?.tower || "", wing: defaults?.wing || "" });
+  const [scope, setScope] = useState({ project_name: defaults?.project_name || "", tower: defaults?.tower || "", wing: defaults?.wing || "" });
   const [preview, setPreview] = useState<{ matched: number; linked: number } | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [typed, setTyped] = useState("");
@@ -623,7 +663,6 @@ function BuildingDeleteModal({ user, isDark, t, onClose, onDeleted, defaults }: 
         p.set("project_name", scope.project_name.trim());
         p.set("tower", scope.tower.trim());
         if (scope.wing.trim()) p.set("wing", scope.wing.trim());
-        if (scope.apartment_name.trim()) p.set("apartment_name", scope.apartment_name.trim());
         const res = await fetch(`/api/inventory/building?${p.toString()}`);
         const json = await res.json();
         if (json.success) setPreview({ matched: json.matched, linked: json.linked });
@@ -669,7 +708,6 @@ function BuildingDeleteModal({ user, isDark, t, onClose, onDeleted, defaults }: 
               <div><label className={`text-[11px] mb-1 block ${t.textMuted}`}>Project *</label><input value={scope.project_name} onChange={e => setScope(s => ({ ...s, project_name: e.target.value }))} className={inputCls} /></div>
               <div><label className={`text-[11px] mb-1 block ${t.textMuted}`}>Tower *</label><input value={scope.tower} onChange={e => setScope(s => ({ ...s, tower: e.target.value }))} className={inputCls} /></div>
               <div><label className={`text-[11px] mb-1 block ${t.textMuted}`}>Wing</label><input value={scope.wing} onChange={e => setScope(s => ({ ...s, wing: e.target.value }))} className={inputCls} placeholder="All wings" /></div>
-              <div><label className={`text-[11px] mb-1 block ${t.textMuted}`}>Apartment</label><input value={scope.apartment_name} onChange={e => setScope(s => ({ ...s, apartment_name: e.target.value }))} className={inputCls} placeholder="Optional" /></div>
             </div>
             {!ready ? <p className={`text-[11px] ${t.textFaint} mb-3`}>Enter project and tower to preview.</p> : (
               <div className={`rounded-lg border p-3 mb-3 ${t.innerBlock}`}>
@@ -706,6 +744,27 @@ function UnitDrawer({ unitId, onClose, user, canManage, isAdminUser, isDark, t, 
   const [newStatus, setNewStatus] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // ── Hold with ownership (Sell.Do parity, gap 2) ──
+  const [holdOpen, setHoldOpen] = useState(false);
+  const [holdHours, setHoldHours] = useState("48");
+  const [holdReason, setHoldReason] = useState("");
+  const [holdBusy, setHoldBusy] = useState(false);
+  const [holdErr, setHoldErr] = useState<string | null>(null);
+  // ── Cost sheet (Sell.Do parity, gap 3) ──
+  // `sheet` is a live PREVIEW recomputed server-side as the discount changes —
+  // never computed in the browser, so the figure on screen is exactly what would
+  // be persisted. `issued` is the saved history.
+  const [sheet, setSheet] = useState<any | null>(null);
+  const [issued, setIssued] = useState<any[]>([]);
+  const [discount, setDiscount] = useState("");
+  const [sheetBusy, setSheetBusy] = useState(false);
+  const [sheetErr, setSheetErr] = useState<string | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  // ── Offer (Sell.Do parity, gap 4) ──
+  const [offerPrice, setOfferPrice] = useState("");
+  const [offerOpen, setOfferOpen] = useState(false);
+  const [offerBusy, setOfferBusy] = useState(false);
+  const [offerMsg, setOfferMsg] = useState<string | null>(null);
   const roleClean = (user?.role || "").trim().toLowerCase();
   const isSalesManagerUser = ["sales manager", "sales_manager"].includes(roleClean);
   const isOwnLead = !!(unit?.lead_assigned_to && user?.name && unit.lead_assigned_to === user.name);
@@ -735,6 +794,126 @@ function UnitDrawer({ unitId, onClose, user, canManage, isAdminUser, isDark, t, 
       if (!json.success) throw new Error(json.message || "Failed to update status");
       setEditing(false); await load(); onChanged?.();
     } catch (e: any) { setErr(e.message); } finally { setBusy(false); }
+  };
+
+  // Place / release a hold. Both go through the dedicated endpoint rather than a
+  // plain status PATCH, because only that route records who holds it, for whom,
+  // and until when — and enforces that only the owner or an Admin may release.
+  const doHold = async () => {
+    if (!unit) return;
+    setHoldBusy(true); setHoldErr(null);
+    try {
+      const res = await fetch(`/api/inventory/${unit.id}/hold`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
+        body: JSON.stringify({
+          hours: Number(holdHours),
+          lead_id: unit.lead_id ?? null,
+          reason: holdReason.trim() || null,
+        }),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.message || "Could not hold this unit");
+      setHoldOpen(false); setHoldReason(""); await load(); onChanged?.();
+    } catch (e: any) { setHoldErr(e.message); } finally { setHoldBusy(false); }
+  };
+
+  const doRelease = async () => {
+    if (!unit) return;
+    setHoldBusy(true); setHoldErr(null);
+    try {
+      const res = await fetch(`/api/inventory/${unit.id}/hold`, {
+        method: "DELETE", credentials: "include",
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.message || "Could not release this hold");
+      await load(); onChanged?.();
+    } catch (e: any) { setHoldErr(e.message); } finally { setHoldBusy(false); }
+  };
+
+  // Preview is debounced and always server-computed. Doing the arithmetic in the
+  // browser would risk the number shown differing from the number stored.
+  const previewSheet = useCallback(async (discountAmount: string) => {
+    if (!unit) return;
+    setSheetBusy(true); setSheetErr(null);
+    try {
+      const res = await fetch(`/api/inventory/${unit.id}/cost-sheet`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
+        body: JSON.stringify({ preview: true, discount_amount: discountAmount || 0 }),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.message || "Could not build a cost sheet");
+      setSheet(json.data);
+    } catch (e: any) { setSheetErr(e.message); setSheet(null); } finally { setSheetBusy(false); }
+  }, [unit]);
+
+  const loadIssued = useCallback(async () => {
+    if (!unit) return;
+    try {
+      const res = await fetch(`/api/inventory/${unit.id}/cost-sheet`, { credentials: "include" });
+      const json = await res.json();
+      if (json.success) setIssued(json.data || []);
+    } catch { /* history is supplementary — never block the panel on it */ }
+  }, [unit]);
+
+  useEffect(() => {
+    if (!sheetOpen) return;
+    const id = setTimeout(() => previewSheet(discount), 350);
+    return () => clearTimeout(id);
+  }, [sheetOpen, discount, previewSheet]);
+
+  const issueSheet = async () => {
+    if (!unit) return;
+    setSheetBusy(true); setSheetErr(null);
+    try {
+      const res = await fetch(`/api/inventory/${unit.id}/cost-sheet`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
+        body: JSON.stringify({
+          discount_amount: discount || 0,
+          lead_id: unit.lead_id ?? null,
+        }),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.message || "Could not issue the cost sheet");
+      await loadIssued();
+    } catch (e: any) { setSheetErr(e.message); } finally { setSheetBusy(false); }
+  };
+
+  const money = (v: any) => `₹${Math.round(num(v)).toLocaleString("en-IN")}`;
+
+  // The list price is the CURRENT sheet's total, so the discount the server bands
+  // on is the one the agent is actually looking at. Deriving it from an older
+  // issued sheet would band against a number nobody quoted.
+  const raiseOffer = async () => {
+    if (!unit || !sheet) return;
+    setOfferBusy(true); setOfferMsg(null); setSheetErr(null);
+    try {
+      const res = await fetch("/api/inventory/offers", {
+        method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
+        body: JSON.stringify({
+          unit_id: unit.id,
+          lead_id: unit.lead_id ?? null,
+          project_id: unit.project_id ?? null,
+          list_price: sheet.total_amount,
+          offered_price: Number(offerPrice || 0),
+        }),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.message || "Could not raise the offer");
+      const o = json.data;
+      setOfferMsg(
+        o.status === "approved"
+          ? "Offer recorded at list price — no approval needed."
+          : `Sent for ${o.required_approver_role} approval (${o.discount_pct}% discount).`,
+      );
+      setOfferOpen(false); setOfferPrice("");
+    } catch (e: any) { setSheetErr(e.message); } finally { setOfferBusy(false); }
+  };
+
+  const fmtWhen = (v: any) => {
+    if (!v) return "—";
+    const d = new Date(v);
+    if (isNaN(d.getTime())) return "—";
+    return d.toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
   };
 
   const row = (label: string, val: any) => (
@@ -793,9 +972,74 @@ function UnitDrawer({ unitId, onClose, user, canManage, isAdminUser, isDark, t, 
                     </div>
                   )}
 
+                  {/* ── Hold (Sell.Do parity, gap 2) ──
+                      A hold used to be a status with an expiry and no owner, so the
+                      grid could say "on hold" and nobody could say whose. */}
+                  {unit.status === "on_hold" ? (
+                    <div className={`rounded-xl border p-3 mb-3 ${isDark ? "border-amber-500/40 bg-amber-500/5" : "border-amber-500/40 bg-amber-50"}`}>
+                      <div className="flex items-center justify-between gap-3 mb-1">
+                        <p className="text-[11px] font-bold uppercase tracking-wider text-amber-500">On Hold</p>
+                        {canManage && (
+                          <button onClick={doRelease} disabled={holdBusy}
+                            className="text-[11px] font-semibold text-red-500 hover:underline disabled:opacity-50">
+                            {holdBusy ? "Releasing…" : "Release"}
+                          </button>
+                        )}
+                      </div>
+                      {row("Held by", unit.held_by || "—")}
+                      {row("For lead", unit.held_for_lead_id ? `#${unit.held_for_lead_id}` : "—")}
+                      {row("Expires", fmtWhen(unit.hold_expires_at))}
+                      {unit.hold_reason && row("Reason", unit.hold_reason)}
+                      {holdErr && <p className="text-red-500 text-[11px] mt-1">{holdErr}</p>}
+                    </div>
+                  ) : unit.status === "available" && canManage ? (
+                    <div className="mb-3">
+                      {holdOpen ? (
+                        <div className={`rounded-xl border p-3 ${t.innerBlock}`}>
+                          <p className={`text-[11px] font-bold uppercase tracking-wider mb-2 ${t.textMuted}`}>Place a hold</p>
+                          <div className="flex gap-2 mb-2">
+                            <div className="flex-1">
+                              <label className={`text-[10px] block mb-1 ${t.textMuted}`}>Hours</label>
+                              <select value={holdHours} onChange={e => setHoldHours(e.target.value)}
+                                className={`w-full rounded-lg px-2.5 py-1.5 text-xs border cursor-pointer ${t.inputInner} ${t.text} ${t.inputFocus}`}>
+                                {["24", "48", "72", "168"].map(h => (
+                                  <option key={h} value={h}>{Number(h) >= 168 ? "7 days" : `${h} hours`}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div className="flex-[2]">
+                              <label className={`text-[10px] block mb-1 ${t.textMuted}`}>Reason (optional)</label>
+                              <input value={holdReason} onChange={e => setHoldReason(e.target.value)}
+                                placeholder="Token expected Friday"
+                                className={`w-full rounded-lg px-2.5 py-1.5 text-xs border ${t.inputInner} ${t.text} ${t.inputFocus}`} />
+                            </div>
+                          </div>
+                          {unit.lead_id && (
+                            <p className={`text-[10px] mb-2 ${t.textFaint}`}>Will be held for lead #{unit.lead_id}.</p>
+                          )}
+                          {holdErr && <p className="text-red-500 text-[11px] mb-2">{holdErr}</p>}
+                          <div className="flex gap-2">
+                            <button onClick={doHold} disabled={holdBusy}
+                              className="text-xs font-bold px-3 py-1.5 rounded-lg bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50">
+                              {holdBusy ? "Holding…" : "Hold Unit"}
+                            </button>
+                            <button onClick={() => { setHoldOpen(false); setHoldErr(null); }}
+                              className={`text-xs font-semibold px-3 py-1.5 rounded-lg border ${t.tableBorder} ${t.textMuted}`}>
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button onClick={() => { setHoldOpen(true); setHoldErr(null); }}
+                          className="text-[11px] font-semibold text-amber-500 hover:underline flex items-center gap-1">
+                          <FaLock className="text-[9px]" /> Hold this unit
+                        </button>
+                      )}
+                    </div>
+                  ) : null}
+
                   {/* Details */}
                   <div className={`rounded-xl border p-3 mb-3 ${t.innerBlock}`}>
-                    {row("Apartment", unit.apartment_name)}
                     {row("Type", unit.unit_type)}
                     {row("Carpet area", `${area(unit.carpet_area_sqft)} sqft`)}
                     {num(unit.built_up_area_sqft) ? row("Built-up area", `${area(unit.built_up_area_sqft)} sqft`) : null}
@@ -803,7 +1047,116 @@ function UnitDrawer({ unitId, onClose, user, canManage, isAdminUser, isDark, t, 
                     {num(unit.rate_per_sqft) ? row("Rate / sqft", formatCurrencyDisplay(unit.rate_per_sqft)) : null}
                     {num(unit.base_price) ? row("Base price", formatCurrencyDisplay(unit.base_price)) : null}
                     {row("Source", String(unit.source || "").replace("_", " "))}
+                    {unit.is_corner ? row("Corner unit", "Yes") : null}
+                    {unit.is_park_facing ? row("Park facing", "Yes") : null}
+                    {num(unit.parking_slots) ? row("Parking slots", String(unit.parking_slots)) : null}
                   </div>
+
+                  {/* ── Cost sheet (Sell.Do parity, gap 3) ──
+                      Every component is shown, not just the total: a cost sheet that
+                      cannot show its own arithmetic is useless in a negotiation. */}
+                  {canManage && (
+                    <div className={`rounded-xl border p-3 mb-3 ${t.innerBlock}`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className={`text-[10px] font-bold uppercase tracking-widest ${t.textMuted}`}>Cost Sheet</p>
+                        <button
+                          onClick={() => { const next = !sheetOpen; setSheetOpen(next); if (next) loadIssued(); }}
+                          className="text-[11px] font-semibold text-[#00AEEF] hover:underline"
+                        >
+                          {sheetOpen ? "Hide" : "Build"}
+                        </button>
+                      </div>
+
+                      {sheetOpen && (
+                        <>
+                          <div className="mb-2">
+                            <label className={`text-[10px] block mb-1 ${t.textMuted}`}>Discount (₹)</label>
+                            <input
+                              value={discount}
+                              onChange={e => setDiscount(e.target.value.replace(/[^\d]/g, ""))}
+                              placeholder="0"
+                              className={`w-full rounded-lg px-2.5 py-1.5 text-xs border ${t.inputInner} ${t.text} ${t.inputFocus}`}
+                            />
+                          </div>
+
+                          {sheetErr && <p className="text-red-500 text-[11px] mb-2">{sheetErr}</p>}
+                          {sheetBusy && !sheet && <p className={`text-[11px] italic ${t.textFaint}`}>Calculating…</p>}
+
+                          {sheet && (
+                            <>
+                              <div className={`rounded-lg border p-2.5 mb-2 ${isDark ? "border-[#2A2A35]" : "border-[#E5E7EB]"}`}>
+                                {(sheet.lines || []).map((l: any) => {
+                                  const strong = l.key === "agreement_value" || l.key === "total";
+                                  return (
+                                    <div key={l.key}
+                                      className={`flex justify-between gap-3 py-1 ${strong ? `border-t mt-1 pt-1.5 ${isDark ? "border-[#2A2A35]" : "border-[#E5E7EB]"}` : ""}`}>
+                                      <div className="min-w-0">
+                                        <span className={`text-[11px] ${strong ? `font-bold ${t.text}` : t.textMuted}`}>{l.label}</span>
+                                        {l.detail && <span className={`block text-[9px] ${t.textFaint}`}>{l.detail}</span>}
+                                      </div>
+                                      <span className={`text-xs whitespace-nowrap ${l.amount < 0 ? "text-red-500 font-semibold"
+                                          : strong ? `font-bold ${t.text}` : `font-semibold ${t.text}`}`}>
+                                        {l.amount < 0 ? `− ${money(Math.abs(l.amount))}` : money(l.amount)}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+
+                              <div className="flex gap-2 flex-wrap">
+                                <button onClick={issueSheet} disabled={sheetBusy}
+                                  className="text-xs font-bold px-3 py-1.5 rounded-lg bg-[#00AEEF] text-white hover:bg-[#0095cc] disabled:opacity-50">
+                                  {sheetBusy ? "Working…" : "Issue Cost Sheet"}
+                                </button>
+                                {!unit.booking_id && (
+                                  <button onClick={() => { setOfferOpen(v => !v); setOfferMsg(null); setOfferPrice(String(Math.round(num(sheet.total_amount)))); }}
+                                    className={`text-xs font-semibold px-3 py-1.5 rounded-lg border ${t.tableBorder} ${t.text}`}>
+                                    Raise Offer
+                                  </button>
+                                )}
+                              </div>
+                              <p className={`text-[9px] mt-1 ${t.textFaint}`}>
+                                Issuing saves a numbered version and supersedes the previous one.
+                              </p>
+
+                              {offerOpen && (
+                                <div className={`mt-2 rounded-lg border p-2.5 ${isDark ? "border-[#2A2A35]" : "border-[#E5E7EB]"}`}>
+                                  <label className={`text-[10px] block mb-1 ${t.textMuted}`}>Offered price (₹)</label>
+                                  <input value={offerPrice} onChange={e => setOfferPrice(e.target.value.replace(/[^\d]/g, ""))}
+                                    className={`w-full rounded-lg px-2.5 py-1.5 text-xs border mb-1 ${t.inputInner} ${t.text} ${t.inputFocus}`} />
+                                  <p className={`text-[9px] mb-2 ${t.textFaint}`}>
+                                    List price {money(sheet.total_amount)}. A discount routes to whichever
+                                    approval band it falls in; you cannot approve your own request.
+                                  </p>
+                                  <button onClick={raiseOffer} disabled={offerBusy || !offerPrice}
+                                    className="text-xs font-bold px-3 py-1.5 rounded-lg bg-emerald-500 text-white hover:bg-emerald-600 disabled:opacity-50">
+                                    {offerBusy ? "Sending…" : "Send Offer"}
+                                  </button>
+                                </div>
+                              )}
+
+                              {offerMsg && <p className="text-emerald-500 text-[11px] mt-2">{offerMsg}</p>}
+                            </>
+                          )}
+
+                          {issued.length > 0 && (
+                            <div className={`mt-3 pt-2 border-t ${isDark ? "border-[#2A2A35]" : "border-[#E5E7EB]"}`}>
+                              <p className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${t.textMuted}`}>Issued</p>
+                              {issued.map((s: any) => (
+                                <div key={s.id} className="flex justify-between gap-3 py-1">
+                                  <span className={`text-[11px] ${t.textMuted}`}>
+                                    v{s.version} · {fmtWhen(s.created_at)}
+                                    {s.status !== "issued" && <span className={t.textFaint}> · {s.status}</span>}
+                                  </span>
+                                  <span className={`text-xs font-semibold ${t.text}`}>{money(s.total_amount)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
 
                   {(unit.booking_id || unit.lead_id) && (
                     <div className={`rounded-xl border p-3 mb-3 ${t.innerBlock}`}>

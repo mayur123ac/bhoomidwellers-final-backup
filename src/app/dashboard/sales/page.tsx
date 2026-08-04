@@ -2507,6 +2507,10 @@ function SalesManagerView({
             isVisible={callOpen && !callHidden}
             onHide={() => { setCallHidden(true); setCallOpen(false); }}
             onClose={() => { setCallOpen(false); setCallHidden(false); }}
+            leadId={selectedLead.id}
+            actorName={adminUser?.name}
+            actorRole={adminUser?.role}
+            onLogged={refetch}
           />
         )}
         {/* ── WHATSAPP MODAL ── */}

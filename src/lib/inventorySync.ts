@@ -4,6 +4,7 @@
 // writes commit or roll back atomically with the booking write — a booking must never
 // succeed while its inventory link silently fails.
 import type { PoolClient } from "pg";
+import { resolveHierarchy } from "./inventoryHierarchy";
 
 const cleanNum = (v: any): number | null => {
   if (v === null || v === undefined || v === "") return null;
@@ -33,7 +34,6 @@ export interface BookingUnitInput {
   bookingId: number;
   leadId: number | string | null;
   actor: string | null;
-  apartment_name?: string | null;
   project_name?: string | null;
   tower?: string | null;
   wing?: string | null;
@@ -74,7 +74,7 @@ export async function syncBookingUnit(client: PoolClient, input: BookingUnitInpu
   const leadId = toIntOrNull(input.leadId);
 
   const existing = await client.query(
-    `SELECT id, status FROM inventory_units
+    `SELECT id, status, booking_id FROM inventory_units
       WHERE project_name = $1 AND tower = $2 AND COALESCE(wing,'') = COALESCE($3,'')
         AND floor = $4 AND flat_no = $5 AND deleted_at IS NULL
       LIMIT 1`,
@@ -86,6 +86,32 @@ export async function syncBookingUnit(client: PoolClient, input: BookingUnitInpu
   let created = false;
 
   if (existing.rows.length) {
+    // Refuse to steal a flat that another booking already holds.
+    //
+    // Without this the UPDATE below simply repointed the unit's booking_id at
+    // whoever saved last, so two bookings could both believe they owned the same
+    // flat and inventory would only ever show the newer one. The reactivate path
+    // in booking-applications/[id] already checked this; keeping the check here
+    // means create, flat-change and reactivate all enforce it identically rather
+    // than one path being safe by accident.
+    //
+    // FOR UPDATE is what makes it a real guard: two concurrent bookings for the
+    // same flat would otherwise both read booking_id IS NULL and both proceed.
+    const held = await client.query(
+      `SELECT booking_id FROM inventory_units WHERE id = $1 FOR UPDATE`,
+      [existing.rows[0].id],
+    );
+    const heldBy = held.rows[0]?.booking_id;
+    if (heldBy != null && Number(heldBy) !== Number(bookingId)) {
+      throw Object.assign(
+        new Error(
+          `Flat ${flat_no} (${tower}${wing ? "/" + wing : ""}, floor ${floor}) is already held by booking #${heldBy}. ` +
+          `Release that booking before assigning this flat.`,
+        ),
+        { httpStatus: 409 },
+      );
+    }
+
     unitId = existing.rows[0].id;
     oldStatus = existing.rows[0].status;
     await client.query(
@@ -99,15 +125,25 @@ export async function syncBookingUnit(client: PoolClient, input: BookingUnitInpu
     // Bulk generator never covered this flat — create it, filling NOT NULL columns
     // from the booking with safe fallbacks (decision: sync-if-keyable).
     const unit_type = (input.property_type || "").trim() || "Unspecified";
-    const apartment_name = (input.apartment_name || "").trim() || project_name;
     const carpet = cleanNum(input.carpet_area) ?? 0;
+    // apartment_name is no longer written — the field is retired on both sides,
+    // and the column is nullable, so the fallback that used to copy project_name
+    // into it would only manufacture data nobody asked for.
+    // Attach the FK hierarchy too, creating the project/tower if this is stock
+    // nobody set up yet — the same "sync-if-keyable" decision that lets this
+    // branch create the unit at all. Without it the new unit would have a NULL
+    // project_id and could never be priced.
+    const { projectId, towerId } = await resolveHierarchy(client, project_name, tower, actor);
+
     const ins = await client.query(
       `INSERT INTO inventory_units (
-         apartment_name, project_name, tower, wing, unit_type, floor, flat_no,
-         carpet_area_sqft, status, source, lead_id, booking_id, created_by, updated_by
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'booked','booking_sync',$9,$10,$11,$11)
+         project_name, tower, wing, unit_type, floor, flat_no,
+         carpet_area_sqft, status, source, lead_id, booking_id, created_by, updated_by,
+         project_id, tower_id
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,'booked','booking_sync',$8,$9,$10,$10,$11,$12)
        RETURNING id`,
-      [apartment_name, project_name, tower, wing, unit_type, floor, flat_no, carpet, leadId, bookingId, actor],
+      [project_name, tower, wing, unit_type, floor, flat_no, carpet, leadId, bookingId, actor,
+       projectId, towerId],
     );
     unitId = ins.rows[0].id;
     oldStatus = null;

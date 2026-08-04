@@ -11,10 +11,12 @@ export const dynamic = "force-dynamic";
 
 // Build the scoped WHERE clause shared by the preview COUNT and the actual delete.
 // Keeps the linked-status predicate identical to lib/inventoryDelete.isLinkedActive.
-function buildScope(project_name?: string, tower?: string, wing?: string, apartment_name?: string) {
+// apartment_name is no longer part of the scope — it is retired as an input, and
+// narrowing a DELETE by a field the UI can no longer set would silently shrink
+// the set the operator was shown in the preview.
+function buildScope(project_name?: string, tower?: string, wing?: string) {
   const where = ["deleted_at IS NULL", "project_name = $1", "tower = $2"];
   const vals: any[] = [String(project_name).trim(), String(tower).trim()];
-  if (apartment_name && String(apartment_name).trim()) { vals.push(String(apartment_name).trim()); where.push(`apartment_name = $${vals.length}`); }
   if (wing && String(wing).trim()) { vals.push(String(wing).trim()); where.push(`COALESCE(wing,'') = COALESCE($${vals.length},'')`); }
   return { whereSql: where.join(" AND "), vals };
 }
@@ -35,11 +37,10 @@ export async function GET(req: NextRequest) {
     const project_name = searchParams.get("project_name") || "";
     const tower = searchParams.get("tower") || "";
     const wing = searchParams.get("wing") || "";
-    const apartment_name = searchParams.get("apartment_name") || "";
     if (!project_name.trim() || !tower.trim())
       return NextResponse.json({ success: false, message: "project_name and tower are required." }, { status: 400 });
 
-    const { whereSql, vals } = buildScope(project_name, tower, wing, apartment_name);
+    const { whereSql, vals } = buildScope(project_name, tower, wing);
     const rows = await query<{ matched: number; linked: number }>(
       `SELECT COUNT(*)::int AS matched,
               COUNT(*) FILTER (WHERE ${LINKED_SQL})::int AS linked
@@ -64,13 +65,13 @@ export async function DELETE(req: NextRequest) {
     if (!gate.ok) return gate.response;
 
     const body = await req.json().catch(() => ({}));
-    const { apartment_name, project_name, tower, wing } = body;
+    const { project_name, tower, wing } = body;
 
     if (!project_name || !String(project_name).trim() || !tower || !String(tower).trim())
       return NextResponse.json({ success: false, message: "project_name and tower are required." }, { status: 400 });
 
     const actor = gate.session.name || "admin";
-    const { whereSql, vals } = buildScope(project_name, tower, wing, apartment_name);
+    const { whereSql, vals } = buildScope(project_name, tower, wing);
     const scopeLabel = `Tower ${String(tower).trim()}${wing && String(wing).trim() ? ` / Wing ${String(wing).trim()}` : ""}`;
 
     const result = await transaction(async (client) => {

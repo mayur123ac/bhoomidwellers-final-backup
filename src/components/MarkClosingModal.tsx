@@ -36,17 +36,17 @@ export default function MarkClosingModal({ isOpen, onClose, onConfirm, isDark = 
   return (
     <AnimatePresence>
       {isOpen && (
-        <motion.div 
-          initial={{ opacity: 0 }} 
-          animate={{ opacity: 1 }} 
-          exit={{ opacity: 0 }} 
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
           className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
         >
-          <motion.div 
-            initial={{ scale: 0.9, y: 20 }} 
-            animate={{ scale: 1, y: 0 }} 
-            exit={{ scale: 0.9, y: 20 }} 
-            className={`w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden border ${isDark ? "bg-[#111] border-[#222]" : "bg-white border-gray-200"}`}
+          <motion.div
+            initial={{ scale: 0.9, y: 20 }}
+            animate={{ scale: 1, y: 0 }}
+            exit={{ scale: 0.9, y: 20 }}
+            className={`w-full max-w-lg rounded-2xl shadow-4xl overflow-hidden border ${isDark ? "bg-[#111] border-[#222]" : "bg-white border-gray-200"}`}
           >
             {/* Header */}
             <div className={`flex justify-between items-center p-4 border-b ${isDark ? "border-[#222] bg-[#1a1a1a]" : "border-gray-100 bg-[#F8FAFC]"}`}>
@@ -82,23 +82,22 @@ export default function MarkClosingModal({ isOpen, onClose, onConfirm, isDark = 
 
               {/* Text Area */}
               <div>
-                <textarea 
+                <textarea
                   value={inputText}
                   onChange={(e) => {
                     setInputText(e.target.value);
                     if (error) setError(false);
                   }}
                   placeholder="Type here..."
-                  className={`w-full p-4 rounded-xl border outline-none min-h-[120px] resize-y transition-colors text-sm ${
-                    isDark 
-                      ? "bg-[#111] border-[#333] text-white focus:border-green-500" 
+                  className={`w-full p-4 rounded-xl border outline-none min-h-[120px] resize-y transition-colors text-sm ${isDark
+                      ? "bg-[#111] border-[#333] text-white focus:border-green-500"
                       : "bg-white border-gray-300 text-gray-900 focus:border-green-500"
-                  } ${error ? "!border-red-500" : ""}`}
+                    } ${error ? "!border-red-500" : ""}`}
                 />
-                
+
                 {/* Error Message */}
                 {error && (
-                  <motion.p 
+                  <motion.p
                     initial={{ opacity: 0, y: -5 }}
                     animate={{ opacity: 1, y: 0 }}
                     className="flex items-center gap-1.5 text-red-500 text-xs font-semibold mt-2"
@@ -111,18 +110,17 @@ export default function MarkClosingModal({ isOpen, onClose, onConfirm, isDark = 
 
             {/* Footer */}
             <div className={`p-4 border-t flex justify-end gap-3 ${isDark ? "border-[#222] bg-[#1a1a1a]" : "border-gray-100 bg-[#F8FAFC]"}`}>
-              <button 
-                onClick={onClose} 
-                className={`px-5 py-2.5 text-sm font-bold rounded-xl border transition-colors ${
-                  isDark 
-                    ? "border-[#444] text-gray-300 hover:bg-[#222]" 
+              <button
+                onClick={onClose}
+                className={`px-5 py-2.5 text-sm font-bold rounded-xl border transition-colors ${isDark
+                    ? "border-[#444] text-gray-300 hover:bg-[#222]"
                     : "border-gray-300 text-gray-700 hover:bg-gray-100"
-                }`}
+                  }`}
               >
                 Cancel
               </button>
-              <button 
-                onClick={handleConfirm} 
+              <button
+                onClick={handleConfirm}
                 className="px-5 py-2.5 text-sm font-bold bg-green-600 hover:bg-green-500 text-white rounded-xl shadow-lg transition-colors"
               >
                 Confirm & Mark Closing

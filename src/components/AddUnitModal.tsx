@@ -8,6 +8,7 @@ import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaTimes, FaPlus } from "react-icons/fa";
 import IndianCurrencyInput from "./IndianCurrencyInput";
+import ProjectTowerPicker from "./ProjectTowerPicker";
 
 // Manual-settable statuses only. booked/registered come from the booking-sync
 // flow; on_hold/cancelled are lifecycle-driven — none are offered here.
@@ -32,11 +33,14 @@ interface Props {
   // Current units, used for the inline duplicate pre-check (server still enforces).
   existingUnits?: ExistingUnit[];
   // Optional prefill so adding several units in one building isn't repetitive.
-  defaults?: Partial<Record<"apartment_name" | "project_name" | "tower" | "wing" | "unit_type", string>>;
+  defaults?: Partial<Record<"project_name" | "tower" | "wing" | "unit_type", string>>;
 }
 
+// apartment_name intentionally absent — the field was dropped from the booking
+// form, and inventory follows it so the two describe a unit the same way.
+// The column still exists (nullable) and older rows keep their values.
 const blankForm = {
-  apartment_name: "", project_name: "", tower: "", wing: "", unit_type: "",
+  project_name: "", tower: "", wing: "", unit_type: "",
   floor: "", flat_no: "", carpet_area_sqft: "", built_up_area_sqft: "",
   rate_per_sqft: "", base_price: "", facing: "", status: "available",
 };
@@ -78,7 +82,7 @@ export default function AddUnitModal({ isOpen, onClose, onCreated, user, isDark,
 
   const validate = (): string | null => {
     const required: [keyof typeof blankForm, string][] = [
-      ["apartment_name", "Apartment name"], ["project_name", "Project name"],
+      ["project_name", "Project name"],
       ["tower", "Tower"], ["unit_type", "Unit type"], ["flat_no", "Flat no."],
     ];
     for (const [k, label] of required) {
@@ -99,7 +103,6 @@ export default function AddUnitModal({ isOpen, onClose, onCreated, user, isDark,
     setBusy(true); setError(null); setNotice(null);
     try {
       const payload = {
-        apartment_name: form.apartment_name.trim(),
         project_name: form.project_name.trim(),
         tower: form.tower.trim(),
         wing: form.wing.trim() || null,
@@ -156,7 +159,7 @@ export default function AddUnitModal({ isOpen, onClose, onCreated, user, isDark,
           <motion.div
             initial={{ scale: 0.93, y: 24 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.93, y: 24 }}
             transition={{ type: "spring", stiffness: 300, damping: 28 }}
-            className={`w-full max-w-2xl max-h-[92vh] flex flex-col rounded-2xl shadow-2xl border overflow-hidden ${isDark ? "bg-[#0D0D12] border-[#2A2A35]" : "bg-white border-[#9CA3AF]"}`}
+            className={`w-full max-w-2xl max-h-[92vh] flex flex-col rounded-4xl shadow-2xl border overflow-hidden ${isDark ? "bg-[#0D0D12] border-[#2A2A35]" : "bg-white border-[#9CA3AF]"}`}
           >
             {/* Header */}
             <div className={`flex items-center justify-between px-6 py-4 border-b flex-shrink-0 ${isDark ? "bg-[#121218] border-[#2A2A35]" : "bg-[#F8FAFC] border-[#E5E7EB]"}`}>
@@ -172,9 +175,12 @@ export default function AddUnitModal({ isOpen, onClose, onCreated, user, isDark,
             {/* Body */}
             <div className={`flex-1 overflow-y-auto p-6 ${isDark ? "bg-[#0D0D12]" : "bg-white"}`}>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div><label className={labelCls}>Apartment Name *</label><input value={form.apartment_name} onChange={e => set({ apartment_name: e.target.value })} className={inputCls} placeholder="e.g. Colossal Mas" /></div>
-                <div><label className={labelCls}>Project Name *</label><input value={form.project_name} onChange={e => set({ project_name: e.target.value })} className={inputCls} placeholder="e.g. Phase 1" /></div>
-                <div><label className={labelCls}>Tower *</label><input value={form.tower} onChange={e => set({ tower: e.target.value })} className={inputCls} placeholder="e.g. A" /></div>
+                <ProjectTowerPicker
+                  t={t}
+                  projectName={form.project_name}
+                  towerName={form.tower}
+                  onChange={patch => set(patch as any)}
+                />
                 <div><label className={labelCls}>Wing</label><input value={form.wing} onChange={e => set({ wing: e.target.value })} className={inputCls} placeholder="Optional" /></div>
                 <div>
                   <label className={labelCls}>Unit Type *</label>

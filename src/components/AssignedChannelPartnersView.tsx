@@ -117,7 +117,7 @@ export default function AssignedChannelPartnersView({
     const digits = q.replace(/\D/g, "");
     const filtered = !q ? rows : rows.filter(r =>
       [r.name, r.company_name, r.owner_contact_person, r.gst_number,
-       r.rera_registration_no, r.city, r.pin_code, r.office_address]
+      r.rera_registration_no, r.city, r.pin_code, r.office_address]
         .some(v => String(v ?? "").toLowerCase().includes(q)) ||
       (digits.length >= 3 && String(r.phone ?? "").replace(/\D/g, "").includes(digits))
     );
@@ -133,7 +133,7 @@ export default function AssignedChannelPartnersView({
           return (Number(b.booking_count || 0) - Number(a.booking_count || 0)) || byName(a, b);
         case "recent":
           return new Date(b.assigned_sourcing_manager_at || b.created_at || 0).getTime()
-               - new Date(a.assigned_sourcing_manager_at || a.created_at || 0).getTime();
+            - new Date(a.assigned_sourcing_manager_at || a.created_at || 0).getTime();
         default:
           return byName(a, b);
       }
@@ -177,11 +177,10 @@ export default function AssignedChannelPartnersView({
   const fieldBlock = (heading: string, fields: [string, any][], highlight = false) => (
     <div
       key={heading}
-      className={`mb-4 rounded-xl p-4 border ${
-        highlight
-          ? isDark ? "bg-[#9E217B]/10 border-[#9E217B]/30" : "bg-[#9E217B]/5 border-[#9E217B]/25"
-          : `${t.modalBlock}`
-      }`}
+      className={`mb-4 rounded-xl p-4 border ${highlight
+        ? isDark ? "bg-[#9E217B]/10 border-[#9E217B]/30" : "bg-[#9E217B]/5 border-[#9E217B]/25"
+        : `${t.modalBlock}`
+        }`}
       style={highlight ? {} : t.modalBlockGl}
     >
       <p className={`text-xs font-bold uppercase tracking-wider mb-3 ${highlight ? t.accentText : t.sectionTitle}`}>
@@ -276,9 +275,8 @@ export default function AssignedChannelPartnersView({
         </div>
       )}
 
-      <div className={`mx-2 mb-3 rounded-lg px-3 py-2 text-[11px] ${
-        isDark ? "bg-[#14141B] border border-[#2A2A35] text-[#888899]"
-               : "bg-slate-50 border border-slate-200 text-slate-600"}`}>
+      <div className={`mx-2 mb-3 rounded-lg px-3 py-2 text-[11px] ${isDark ? "bg-[#14141B] border border-[#2A2A35] text-[#888899]"
+        : "bg-slate-50 border border-slate-200 text-slate-600"}`}>
         Channel Partners assigned to you, and the leads each has brought in. Click any row
         for their full profile, walk-in visits, site visits, follow-ups and bookings.
         A partner is matched by phone number, so every enquiry logged against a partner
@@ -286,7 +284,7 @@ export default function AssignedChannelPartnersView({
       </div>
 
       {/* ── Table ── */}
-      <div className={`flex-1 overflow-auto mx-2 rounded-xl ${t.card}`}>
+      <div className={`flex-1 overflow-auto mx-2 rounded-3xl ${t.card}`}>
         <table className="w-full text-left border-collapse">
           <thead className={`sticky top-0 z-10 ${t.tableHead || (isDark ? "bg-[#1a1a1a]" : "bg-slate-50")}`}>
             <tr className={`text-[10px] uppercase ${t.textMuted}`}>
@@ -331,8 +329,7 @@ export default function AssignedChannelPartnersView({
                     delivered reads differently from one who has only registered. */}
                 <td className="px-3 py-3 whitespace-nowrap">
                   {Number(p.lead_count || 0) > 0 ? (
-                    <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${
-                      isDark ? "bg-[#9E217B]/20 text-[#d946a8]" : "bg-[#9E217B]/10 text-[#9E217B]"}`}>
+                    <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${isDark ? "bg-[#9E217B]/20 text-[#d946a8]" : "bg-[#9E217B]/10 text-[#9E217B]"}`}>
                       {p.lead_count}
                     </span>
                   ) : (
@@ -354,8 +351,7 @@ export default function AssignedChannelPartnersView({
                   )}
                 </td>
                 <td className="px-3 py-3 whitespace-nowrap">
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                    p.status === "active" ? "bg-emerald-500/15 text-emerald-500" : "bg-gray-500/15 text-gray-500"}`}>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${p.status === "active" ? "bg-emerald-500/15 text-emerald-500" : "bg-gray-500/15 text-gray-500"}`}>
                     {p.status === "active" ? "Active" : "Inactive"}
                   </span>
                 </td>
@@ -411,9 +407,8 @@ export default function AssignedChannelPartnersView({
                       <button
                         key={tab.id}
                         onClick={() => setDetailTab(tab.id)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer transition-all ${
-                          detailTab === tab.id ? t.btnPrimary : `${t.textMuted} ${isDark ? "hover:bg-[#222]" : "hover:bg-slate-100"}`
-                        }`}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer transition-all ${detailTab === tab.id ? t.btnPrimary : `${t.textMuted} ${isDark ? "hover:bg-[#222]" : "hover:bg-slate-100"}`
+                          }`}
                       >
                         <span className="text-[9px]">{tab.icon}</span> {tab.label}
                       </button>

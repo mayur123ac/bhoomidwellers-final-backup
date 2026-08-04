@@ -524,7 +524,7 @@ export async function PUT(
         }
         await syncBookingUnit(client, {
           bookingId: Number(id), leadId: currentData.lead_id, actor: user_name,
-          apartment_name: currentData.apartment_name, project_name: currentData.project_name,
+          project_name: currentData.project_name,
           tower: currentData.tower, wing: currentData.wing, property_type: currentData.property_type,
           floor_number: currentData.floor_number, flat_number: currentData.flat_number, carpet_area: currentData.carpet_area,
         });
@@ -572,7 +572,6 @@ export async function PUT(
           bookingId: Number(id),
           leadId: currentData.lead_id,
           actor: user_name,
-          apartment_name: fields.apartment_name,
           project_name: fields.project_name,
           tower: fields.tower,
           wing: fields.wing,

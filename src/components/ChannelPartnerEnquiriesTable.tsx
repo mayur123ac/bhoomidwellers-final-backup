@@ -233,7 +233,7 @@ export default function ChannelPartnerEnquiriesTable({
 
       {notice && (
         <div className={`mx-2 mb-3 rounded-lg px-3 py-2 text-[11px] ${isDark ? "bg-emerald-500/10 border border-emerald-500/25 text-emerald-400"
-            : "bg-emerald-50 border border-emerald-200 text-emerald-700"}`}>
+          : "bg-emerald-50 border border-emerald-200 text-emerald-700"}`}>
           {notice}
         </div>
       )}
@@ -241,7 +241,7 @@ export default function ChannelPartnerEnquiriesTable({
       {/* Read-only roles are told so explicitly, rather than just finding no buttons. */}
       {!canReassign && (
         <div className={`mx-2 mb-3 rounded-lg px-3 py-2 text-[11px] ${isDark ? "bg-[#14141B] border border-[#2A2A35] text-[#888899]"
-            : "bg-slate-50 border border-slate-200 text-slate-600"}`}>
+          : "bg-slate-50 border border-slate-200 text-slate-600"}`}>
           {role === "sourcing manager"
             ? "Showing only the channel partners assigned to you. View only — contact an Admin to change an assignment."
             : "View only. The assigned Sourcing Manager is set at enquiry creation and can only be changed by an Admin."}
@@ -249,7 +249,7 @@ export default function ChannelPartnerEnquiriesTable({
       )}
 
       {/* ── Table ── */}
-      <div className={`flex-1 overflow-auto mx-2 rounded-xl ${t.card}`}>
+      <div className={`flex-1 overflow-auto mx-2 rounded-3xl ${t.card}`}>
         <table className="w-full text-left border-collapse">
           <thead className={`sticky top-0 z-10 ${t.tableHead || (isDark ? "bg-[#1a1a1a]" : "bg-slate-50")}`}>
             <tr className={`text-[10px] uppercase ${t.textMuted}`}>
@@ -474,8 +474,8 @@ export default function ChannelPartnerEnquiriesTable({
                 <div
                   key={section.heading}
                   className={`mb-5 rounded-xl p-4 border ${section.highlight
-                      ? isDark ? "bg-[#9E217B]/10 border-[#9E217B]/30" : "bg-[#9E217B]/5 border-[#9E217B]/25"
-                      : `${t.modalBlock}`
+                    ? isDark ? "bg-[#9E217B]/10 border-[#9E217B]/30" : "bg-[#9E217B]/5 border-[#9E217B]/25"
+                    : `${t.modalBlock}`
                     }`}
                   style={section.highlight ? {} : t.modalBlockGl}
                 >
