@@ -455,6 +455,60 @@ const DATE_FIELDS: (keyof BookingFormData)[] = [
 
 // ─── Main Modal ───────────────────────────────────────────────────────────────
 export default function BookingFormModal({ isOpen, onClose, lead, user, isDark = false, onSuccess, existingBooking, isEditMode }: BookingFormModalProps) {
+  // ── Edit-vs-create is decided HERE, not by the caller ───────────────────────
+  //
+  // The bug this fixes: the modal is opened from six places, and one of them —
+  // "Mark Closing" — passes isEditMode=false / existingBooking=null
+  // unconditionally. After a closed lead is REOPENED it leaves "Closing" status,
+  // the Mark Closing button reappears, and clicking it opened this form in CREATE
+  // mode even though a booking already existed. The form then showed defaults
+  // instead of the saved booking and, on save, POSTed a SECOND
+  // booking_applications row for the same lead. That had already happened in
+  // production (lead 134 → bookings 15 and 17, both Confirmed).
+  //
+  // Trusting every call site to pass the right flags is what failed. So the modal
+  // now looks the booking up itself: if the lead has one, this is an edit, no
+  // matter what was passed in. `POST /api/booking-applications` also refuses a
+  // duplicate server-side — this is the usable half, that is the guarantee.
+  const [resolvedBooking, setResolvedBooking] = useState<any | null>(null);
+  const [resolvingBooking, setResolvingBooking] = useState(false);
+  const [resolveError, setResolveError] = useState<string | null>(null);
+
+  // The booking actually being edited, and whether we are editing at all.
+  // Everything below reads these — never the raw props.
+  const effBooking = existingBooking?.id ? existingBooking : resolvedBooking;
+  const effEdit = !!effBooking?.id || !!isEditMode;
+
+  useEffect(() => {
+    if (!isOpen || !lead?.id) { setResolvedBooking(null); setResolveError(null); return; }
+    // A caller that already handed us the booking has done the work.
+    if (existingBooking?.id) { setResolvedBooking(null); setResolveError(null); return; }
+
+    let cancelled = false;
+    setResolvingBooking(true);
+    setResolveError(null);
+    (async () => {
+      try {
+        const res = await fetch(`/api/booking-applications?lead_id=${lead.id}`, { credentials: "include" });
+        const json = await res.json();
+        if (cancelled) return;
+        // Cancelled bookings are not "the" booking — a lead whose booking was
+        // cancelled may legitimately start a new one.
+        const live = (json?.data || []).find(
+          (b: any) => String(b.booking_status || "").toLowerCase() !== "cancelled",
+        );
+        setResolvedBooking(live ?? null);
+      } catch (err: any) {
+        // Fail LOUD, not open. Silently continuing in create mode is exactly how
+        // the duplicate booking got written, so the form refuses to guess.
+        if (!cancelled) setResolveError("Could not check whether this lead already has a booking. Close and retry.");
+      } finally {
+        if (!cancelled) setResolvingBooking(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isOpen, lead?.id, existingBooking?.id]);
+
   const [step, setStep] = useState(1);
   const [form, setForm] = useState<BookingFormData>(() => defaultForm(lead));
   const [errors, setErrors] = useState<Partial<Record<keyof BookingFormData, string>>>({});
@@ -506,6 +560,11 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
   // on-open pass must leave it alone. (The loan-editor round trip still refreshes
   // it: that one is the operator asking for the new numbers.)
   const restoredDraftRef = useRef(false);
+  // The (agreement_value, gst_rate) pair as hydrated from a saved booking. While
+  // the live form still matches it, the derived-figures effect must not overwrite
+  // persisted stamp duty / registration fee / GST amount. Null in create mode,
+  // where deriving from the start is correct.
+  const derivedBaselineRef = useRef<{ av: string; rate: string } | null>(null);
   // ── FOE: derived financial state for THIS booking (Phase 4) ────────────────
   // Only meaningful for a saved booking — a new one has no row to derive from,
   // so no request is made and the OCR section stays fully editable.
@@ -513,7 +572,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
   // Read-only display + gating. This never changes what the form submits; the
   // server-side gate in PUT /api/booking-applications/[id] remains the actual
   // enforcement, and this is the version of it the operator can see.
-  const foe = useFinancialStatus(isOpen && isEditMode ? existingBooking?.id ?? null : null);
+  const foe = useFinancialStatus(isOpen && effEdit ? effBooking?.id ?? null : null);
   // Fail OPEN: a failed fetch must never stop a legitimate booking being saved.
   const ocrLocked = foe.obligation ? foe.obligation.canAcceptMoreOCR === false : false;
   const foeCriticals = foe.obligation?.validationErrors.filter(e => e.severity === "critical") ?? [];
@@ -630,19 +689,26 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
   // Load draft from sessionStorage
   useEffect(() => {
     if (!isOpen || !lead?.id) return;
+    // Wait for the booking lookup. Hydrating from defaults first and correcting
+    // afterwards is the race in §10 — the operator would see (and could start
+    // editing) blank fields that then jump.
+    if (resolvingBooking) return;
+
     const key = `booking_draft_${lead.id}`;
     const stored = sessionStorage.getItem(key);
     // Fresh open → nothing is "touched" or "prefilled" yet.
     touchedRef.current = new Set();
     setLoanPrefilled({});
-    if (isEditMode && existingBooking) {
+    if (effEdit && effBooking) {
       // Map existing DB fields to form state
       const initialForm = defaultForm(lead);
       const safeBooking: any = {};
-      // Remove null values so they don't override initialForm defaults
-      Object.keys(existingBooking).forEach(k => {
-        if (existingBooking[k] !== null && existingBooking[k] !== undefined) {
-          safeBooking[k] = existingBooking[k];
+      // Only null/undefined fall through to the default. A persisted 0, false or
+      // "" is a real saved value and must survive — this is the `||` hazard in §9,
+      // and it is why the test is `!== null && !== undefined` rather than truthiness.
+      Object.keys(effBooking).forEach(k => {
+        if (effBooking[k] !== null && effBooking[k] !== undefined) {
+          safeBooking[k] = effBooking[k];
         }
       });
       // ── Date normalisation ────────────────────────────────────────────────
@@ -651,17 +717,60 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
       // We normalise every date field here so the form always receives the
       // correct format regardless of which API endpoint fed existingBooking.
       DATE_FIELDS.forEach(key => {
-        const raw = safeBooking[key] ?? existingBooking[key];
+        const raw = safeBooking[key] ?? effBooking[key];
         if (raw !== null && raw !== undefined) {
           safeBooking[key] = toDateStr(raw);
         }
       });
-      setForm({
+
+      // NUMERIC columns arrive as strings with scale ("5.00", "25000.00").
+      // Left as-is the GST rate box shows "5.00" and every money input shows a
+      // trailing ".00", so an untouched form looks edited. Trim the scale without
+      // changing the value — 0 stays 0.
+      const trimNum = (v: any) => {
+        const s = String(v ?? "").trim();
+        if (s === "" || !/^-?\d+(\.\d+)?$/.test(s)) return v;
+        return String(Number(s));
+      };
+      ["gst_rate", "gst_amount", "gst_paid", "agreement_value", "booking_amount",
+        "stamp_duty_amount", "registration_fee_amount", "legal_charges",
+        "maintenance_deposit", "possession_charges", "token_amount", "ocr_amount",
+        "sdr_amount", "cash_component", "loan_amount", "sanction_amount",
+        "disbursement_amount", "expected_disbursement_amount", "interest_rate",
+        "loan_tenure_months", "pre_emi_amount", "emi_amount", "carpet_area",
+      ].forEach(k => { if (safeBooking[k] !== undefined) safeBooking[k] = trimNum(safeBooking[k]); });
+
+      // custom_charges comes back from the shared SELECT as a JSON array of
+      // {charge_name, amount, remarks}. Restore each row individually (§5) rather
+      // than a single total — three saved charges must reopen as three editable rows.
+      const rawCharges = safeBooking.custom_charges;
+      const parsedCharges = typeof rawCharges === "string"
+        ? (() => { try { return JSON.parse(rawCharges); } catch { return null; } })()
+        : rawCharges;
+      const custom_charges = Array.isArray(parsedCharges)
+        ? parsedCharges.map((c: any) => ({
+            charge_name: String(c?.charge_name ?? ""),
+            amount: trimNum(c?.amount ?? ""),
+            remarks: String(c?.remarks ?? ""),
+          }))
+        : initialForm.custom_charges;
+
+      const hydrated = {
         ...initialForm,
         ...safeBooking,
+        custom_charges,
         joint_applicants: typeof safeBooking.joint_applicants === 'string' ? JSON.parse(safeBooking.joint_applicants) : (safeBooking.joint_applicants || initialForm.joint_applicants),
         payment_details: typeof safeBooking.payment_details === 'string' ? JSON.parse(safeBooking.payment_details) : (safeBooking.payment_details || initialForm.payment_details)
-      });
+      };
+      setForm(hydrated);
+
+      // Freeze the derived-figures effect at exactly these drivers. Until the
+      // operator changes agreement value or GST rate, the persisted stamp duty /
+      // registration fee / GST amount must not be recomputed over — see §10.
+      derivedBaselineRef.current = {
+        av: String(hydrated.agreement_value ?? ""),
+        rate: String(hydrated.gst_rate ?? ""),
+      };
       restoredDraftRef.current = false;
     } else if (stored) {
       let restored = true;
@@ -669,16 +778,24 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
       restoredDraftRef.current = restored;
     } else {
       setForm(defaultForm(lead));
+      derivedBaselineRef.current = null;
       restoredDraftRef.current = false;
     }
     setStep(1); setErrors({}); setTermsScrolled(false);
-  }, [isOpen, lead?.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, lead?.id, resolvingBooking, effBooking?.id, effEdit]);
 
-  // Save draft on form change
+  // Save draft on form change.
+  //
+  // CREATE MODE ONLY. The draft exists to protect unsaved work on a NEW booking.
+  // Writing it in edit mode put a full copy of a saved booking into
+  // sessionStorage under the same per-lead key, which a later create-mode open
+  // would then restore — resurrecting stale figures into what should be a blank
+  // form. The database is the source of truth for a saved booking; a draft is not.
   useEffect(() => {
-    if (!isOpen || !lead?.id) return;
+    if (!isOpen || !lead?.id || effEdit) return;
     sessionStorage.setItem(`booking_draft_${lead.id}`, JSON.stringify(form));
-  }, [form, isOpen, lead?.id]);
+  }, [form, isOpen, lead?.id, effEdit]);
 
   // Auto-fill value in words
   useEffect(() => {
@@ -696,11 +813,34 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
     const gst = String(calcGstAmount(av, rate));
     const stamp = String(autoStampDuty(av));
     const reg = String(autoRegistrationFee(av));
-    setForm(f => (
-      f.gst_amount === gst && f.stamp_duty_amount === stamp && f.registration_fee_amount === reg
+
+    // ── Do not recompute over persisted figures on load (§10, §14) ────────────
+    //
+    // This effect used to run unconditionally, including on the pass triggered by
+    // hydrating a saved booking. So opening an existing booking replaced its
+    // stored stamp duty and registration fee with the Maharashtra auto-estimate,
+    // and saving then wrote that estimate back over the real numbers — a silent
+    // overwrite of figures somebody had entered deliberately.
+    //
+    // The baseline is set at hydration. While the drivers still match it, the
+    // operator has not changed anything, so persisted values are left alone and
+    // only genuinely EMPTY derived fields are filled in. The moment agreement
+    // value or GST rate actually changes, the baseline stops matching and the
+    // figures derive normally again.
+    const baseline = derivedBaselineRef.current;
+    const frozen = !!baseline
+      && baseline.av === String(form.agreement_value ?? "")
+      && baseline.rate === String(form.gst_rate ?? "");
+
+    setForm(f => {
+      const blank = (v: any) => String(v ?? "").trim() === "";
+      const nextGst = frozen && !blank(f.gst_amount) ? f.gst_amount : gst;
+      const nextStamp = frozen && !blank(f.stamp_duty_amount) ? f.stamp_duty_amount : stamp;
+      const nextReg = frozen && !blank(f.registration_fee_amount) ? f.registration_fee_amount : reg;
+      return f.gst_amount === nextGst && f.stamp_duty_amount === nextStamp && f.registration_fee_amount === nextReg
         ? f
-        : { ...f, gst_amount: gst, stamp_duty_amount: stamp, registration_fee_amount: reg }
-    ));
+        : { ...f, gst_amount: nextGst, stamp_duty_amount: nextStamp, registration_fee_amount: nextReg };
+    });
   }, [form.agreement_value, form.gst_rate]);
 
   // Auto-compute Pre-EMI / EMI from loan figures.
@@ -860,7 +1000,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
             // can't gate it. Untouched means the form still holds a default the
             // operator never chose, which the loan form's rate should replace.
             if (current === incoming[k]) return;
-          } else if (current !== "" && !(force && !isEditMode)) {
+          } else if (current !== "" && !(force && !effEdit)) {
             return;
           }
           nextForm[k] = incoming[k] as string;
@@ -876,13 +1016,16 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
         });
       }
     } catch { /* prefill is a convenience; failure must never block the form */ }
-  }, [lead?.id, isEditMode]);
+  }, [lead?.id, effEdit]);
 
+  // effEdit, not isEditMode: a saved booking's own figures outrank the loan
+  // form's pre-booking estimates, and a reopened lead reaches here with
+  // isEditMode=false. Without this the estimate would overwrite the agreed value.
   useEffect(() => {
-    if (!isOpen || !lead?.id || isEditMode) return;
+    if (!isOpen || !lead?.id || effEdit || resolvingBooking) return;
     if (restoredDraftRef.current) return;
     applyLoanPrefill();
-  }, [isOpen, lead?.id, isEditMode, applyLoanPrefill]);
+  }, [isOpen, lead?.id, effEdit, resolvingBooking, applyLoanPrefill]);
 
   const openLoanEditor = useCallback(async () => {
     setShowLoanEditor(true);
@@ -1138,8 +1281,11 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
         if (ja.aadhaar_back_file) formData.append(`joint_${i}_aadhaar_back_file`, ja.aadhaar_back_file);
       });
 
-      const res = await fetch(isEditMode ? `/api/booking-applications/${existingBooking.id}` : "/api/booking-applications", {
-        method: isEditMode ? "PUT" : "POST",
+      // effEdit/effBooking, not the props: a reopened lead reaches this form with
+      // isEditMode=false but a real booking behind it, and POSTing there is what
+      // created duplicate bookings.
+      const res = await fetch(effEdit && effBooking?.id ? `/api/booking-applications/${effBooking.id}` : "/api/booking-applications", {
+        method: effEdit && effBooking?.id ? "PUT" : "POST",
         body: formData
       });
       const json = await res.json();
@@ -1242,9 +1388,14 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
   if (!isOpen) return null;
 
   return (
+    // Every direct child of AnimatePresence needs its own stable key — it tracks
+    // children by key to run exit animations, and keyless siblings all collapse to
+    // the same empty key. Four overlays can be mounted at once (form, unit picker,
+    // tranche override, loan editor), so each is named explicitly.
     <AnimatePresence>
       {isOpen && (
         <motion.div
+          key="booking-form"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -1265,8 +1416,17 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                   <h2 className={`text-lg font-bold ${textMain}`}>Booking Confirmed</h2>
                 ) : (
                   <>
-                    <h2 className={`text-lg font-bold ${textMain}`}>Booking Application Form</h2>
-                    <p className={`text-xs mt-0.5 ${textMuted}`}>Lead #{lead?.sr_no || lead?.id} — {lead?.name}</p>
+                    <h2 className={`text-lg font-bold ${textMain}`}>
+                      {effEdit ? "Edit Booking Application" : "Booking Application Form"}
+                    </h2>
+                    <p className={`text-xs mt-0.5 ${textMuted}`}>
+                      Lead #{lead?.sr_no || lead?.id} — {lead?.name}
+                      {/* Says out loud which record is being changed, so a reopened
+                          lead can never look like it is starting a fresh booking. */}
+                      {effEdit && effBooking?.booking_number && (
+                        <span className="ml-1">· editing {effBooking.booking_number}</span>
+                      )}
+                    </p>
                   </>
                 )}
               </div>
@@ -1275,8 +1435,25 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
               </button>
             </div>
 
-            {/* ── Confirmation Screen (replaces stepper + body when booking is saved) ── */}
-            {confirmedBooking ? (
+            {/* ── Booking lookup gate ──
+                The form must not render defaults while we are still finding out
+                whether this lead already has a booking. Showing an empty form for
+                a moment invites the operator to start typing into fields that are
+                about to be replaced by hydrated values. */}
+            {(resolvingBooking || resolveError) && !confirmedBooking ? (
+              <div className={`flex-1 flex items-center justify-center p-10 ${bg}`}>
+                {resolveError ? (
+                  <div className="text-center max-w-sm">
+                    <p className="text-red-500 text-sm font-semibold mb-1">{resolveError}</p>
+                    <p className={`text-xs ${textMuted}`}>
+                      The form stays closed rather than risk creating a second booking for this lead.
+                    </p>
+                  </div>
+                ) : (
+                  <p className={`text-sm italic ${textMuted}`}>Checking for an existing booking…</p>
+                )}
+              </div>
+            ) : confirmedBooking ? (
               <div className={`flex-1 overflow-y-auto p-8 flex flex-col items-center justify-center ${bg}`}>
                 <AnimatePresence>
                   <motion.div
@@ -2963,19 +3140,20 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
       {/* Inventory unit picker for Step 2, layered above this modal. */}
       {pickerOpen && (
         <UnitPicker
+          key="unit-picker"
           isDark={isDark}
           selectedUnitId={selectedUnit?.id ?? null}
-          currentBookingId={existingBooking?.id ?? null}
+          currentBookingId={effBooking?.id ?? null}
           onSelect={applyUnit}
           onClose={() => setPickerOpen(false)}
         />
       )}
 
       {/* Admin override for the disbursement gate, layered above this modal. */}
-      {showTrancheOverride && existingBooking?.id && foe.obligation && (
+      {showTrancheOverride && effBooking?.id && foe.obligation && (
         <TrancheOverrideModal
           key="tranche-override"
-          bookingId={existingBooking.id}
+          bookingId={effBooking.id}
           obligation={foe.obligation}
           isDark={isDark}
           t={buildTheme(isDark)}
@@ -3002,7 +3180,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
             ) : (
               <LoanDealForm
                 lead={lead}
-                booking={existingBooking || null}
+                booking={effBooking || null}
                 loanUpdate={loanEditorUpdate}
                 user={user}
                 isDark={isDark}

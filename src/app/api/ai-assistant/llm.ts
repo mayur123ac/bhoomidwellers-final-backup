@@ -190,6 +190,39 @@ export function buildLeadDigest(
   out.push(`Leads in scope: ${L}`);
   out.push(`Generated: ${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })} IST`);
   out.push("");
+
+  // ── Single-lead focus block ────────────────────────────────────────────────
+  // The lead-scoped assistant panel (Sales Manager view) always sends exactly one
+  // lead, but the rest of this digest is written for a portfolio: counts, tallies,
+  // averages. With one lead those read as trivia and the model has to infer which
+  // record the user means. Naming it explicitly, first, is what scopes the answer.
+  //
+  // Values come from `leads`, which the route has already re-read from Postgres via
+  // hydrateScope — so this states what is true in the database, not what the
+  // browser happened to be holding.
+  if (L === 1) {
+    const l: any = leads[0];
+    const val = (v: any) => {
+      const s = String(v ?? "").trim();
+      return s === "" || s.toLowerCase() === "n/a" ? "not recorded" : s;
+    };
+    out.push("CURRENT LEAD IN CONTEXT — answer about THIS lead unless asked otherwise:");
+    out.push(
+      `  #${val(l.sr_no ?? l.id)}, Name: ${val(l.name)}, ` +
+      `Phone: ${val(l.phone)}, Status: ${val(l.status)}, ` +
+      `Budget: ${val(l.sales_budget ?? l.salesBudget ?? l.budget)}, ` +
+      `Property Type: ${val(l.property_type ?? l.propertyType ?? l.configuration ?? l.config)}, ` +
+      `Address: ${val(l.address)}`
+    );
+    // Extras the panel's quick prompts ask about directly.
+    out.push(
+      `  Interest: ${val(l.lead_interest_status ?? l.leadInterestStatus)}, ` +
+      `Assigned to: ${val(l.assigned_to ?? l.assignedTo)}, ` +
+      `Source: ${val(l.source)}, ` +
+      `Loan planned: ${val(l.loan_planned ?? l.loanPlanned)}`
+    );
+    out.push("");
+  }
   out.push("COUNTS (already computed — quote verbatim, never recompute):");
   out.push(`  Interested: ${interested.length} (${pct(interested.length, L)})`);
   out.push(`  Not interested: ${notInterested.length}`);
@@ -326,7 +359,11 @@ export class LlmError extends Error {
 export async function askOpenAI(
   question: string,
   digest: string,
-  history: ChatTurn[] = []
+  history: ChatTurn[] = [],
+  // Optional override so a differently-scoped assistant (the Sales Manager dock)
+  // can supply its own rules without forking this transport — the retry, timeout,
+  // key-redaction and error mapping below are the parts worth sharing.
+  systemPromptOverride?: string
 ): Promise<{ answer: string; usage: unknown }> {
   const apiKey = (process.env.OPENAI_API_KEY || "").trim();
   if (!apiKey) throw new LlmError(503, "The assistant is not configured — OPENAI_API_KEY is missing on the server.");
@@ -343,7 +380,7 @@ export async function askOpenAI(
       body: JSON.stringify({
         model: MODEL,
         messages: [
-          { role: "system", content: AI_ASSISTANT_SYSTEM_PROMPT },
+          { role: "system", content: systemPromptOverride || AI_ASSISTANT_SYSTEM_PROMPT },
           { role: "system", content: `DATA BLOCK:\n\n${digest}` },
           ...trimmed,
           { role: "user", content: question },

@@ -14,8 +14,9 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
  * Zero new dependencies. CSS transforms + opacity only. No JS animation loop.
  */
 
-const LAST_OPENED_KEY = "bd:adminai:lastOpened:v1";
-const DISCOVERY_KEY = "bd:adminai:discovery:v1";
+const DEFAULT_NS = "adminai";
+const lastOpenedKey = (ns: string) => `bd:${ns}:lastOpened:v1`;
+const discoveryKey = (ns: string) => `bd:${ns}:discovery:v1`;
 
 const CONTENT_WINDOW_MS = 2 * 60 * 60 * 1000; // used within 2h  -> content
 const NEUTRAL_WINDOW_MS = 8 * 60 * 60 * 1000; // used within 8h  -> neutral
@@ -37,20 +38,32 @@ type Props = {
     hasInsight?: boolean;
     /** Overrides the default time-of-day hint shown during discovery. */
     hint?: string;
+    /** Button label. Defaults keep the Admin dock's wording untouched. */
+    title?: string;
+    subtitle?: string;
+    /**
+     * Namespace for the "last opened" and "discovery wave" keys.
+     *
+     * Two docks now use this launcher (Admin and Sales Manager). Sharing one key
+     * would mean opening the Admin dock marks the Sales one as recently used —
+     * the face would read "content" for an assistant that manager has never
+     * touched, and the discovery wave would be spent on the wrong button.
+     */
+    storageNamespace?: string;
 };
 
-function readLastOpened(): number {
+function readLastOpened(ns: string): number {
     try {
-        return Number(localStorage.getItem(LAST_OPENED_KEY) || 0);
+        return Number(localStorage.getItem(lastOpenedKey(ns)) || 0);
     } catch {
         return 0;
     }
 }
 
-function computeMood(hasInsight: boolean, active: boolean): Mood {
+function computeMood(hasInsight: boolean, active: boolean, ns: string): Mood {
     if (hasInsight) return "excited";
     if (active) return "content";
-    const last = readLastOpened();
+    const last = readLastOpened(ns);
     if (!last) return "neutral"; // never used yet — curious, not sulking
     const idle = Date.now() - last;
     if (idle < CONTENT_WINDOW_MS) return "content";
@@ -71,6 +84,9 @@ export default function AdminAssistantLauncher({
     active = false,
     hasInsight = false,
     hint,
+    title = "Admin AI",
+    subtitle = "Your AI Analyst",
+    storageNamespace = DEFAULT_NS,
 }: Props) {
     const [mood, setMood] = useState<Mood>("neutral");
     const [waving, setWaving] = useState(false);
@@ -86,13 +102,13 @@ export default function AdminAssistantLauncher({
 
     /* ---------------- mood ---------------- */
     useEffect(() => {
-        setMood(computeMood(hasInsight, active));
+        setMood(computeMood(hasInsight, active, storageNamespace));
         const id = window.setInterval(
-            () => setMood(computeMood(hasInsight, active)),
+            () => setMood(computeMood(hasInsight, active, storageNamespace)),
             MOOD_TICK_MS
         );
         return () => clearInterval(id);
-    }, [hasInsight, active]);
+    }, [hasInsight, active, storageNamespace]);
 
     /* ---------------- discovery wave (once per tab session) ---------------- */
     useEffect(() => {
@@ -103,8 +119,8 @@ export default function AdminAssistantLauncher({
         let seen = false;
         let usedRecently = false;
         try {
-            seen = sessionStorage.getItem(DISCOVERY_KEY) === "1";
-            const last = readLastOpened();
+            seen = sessionStorage.getItem(discoveryKey(storageNamespace)) === "1";
+            const last = readLastOpened(storageNamespace);
             usedRecently = last > 0 && Date.now() - last < CONTENT_WINDOW_MS;
         } catch {
             seen = true; // storage blocked — fail quiet, never nag
@@ -115,7 +131,7 @@ export default function AdminAssistantLauncher({
         timers.push(
             window.setTimeout(() => {
                 try {
-                    sessionStorage.setItem(DISCOVERY_KEY, "1");
+                    sessionStorage.setItem(discoveryKey(storageNamespace), "1");
                 } catch {
                     /* noop */
                 }
@@ -126,7 +142,7 @@ export default function AdminAssistantLauncher({
             }, DISCOVERY_DELAY_MS)
         );
         return () => timers.forEach(clearTimeout);
-    }, [active]);
+    }, [active, storageNamespace]);
 
     /* ---------------- eyes follow cursor while hovered ---------------- */
     const trackEyes = useCallback((e: React.MouseEvent) => {
@@ -162,7 +178,7 @@ export default function AdminAssistantLauncher({
 
     const handleClick = useCallback(() => {
         try {
-            localStorage.setItem(LAST_OPENED_KEY, String(Date.now()));
+            localStorage.setItem(lastOpenedKey(storageNamespace), String(Date.now()));
         } catch {
             /* noop */
         }
@@ -170,7 +186,7 @@ export default function AdminAssistantLauncher({
         setHinting(false);
         setMood("content");
         onOpen();
-    }, [onOpen]);
+    }, [onOpen, storageNamespace]);
 
     return (
         <>
@@ -201,8 +217,8 @@ export default function AdminAssistantLauncher({
                     onMouseLeave={() => { restEyes(); setPressed(false); }}
                     onMouseDown={() => setPressed(true)}
                     onMouseUp={() => setPressed(false)}
-                    aria-label="Open Admin AI"
-                    title="Open Admin AI"
+                    aria-label={`Open ${title}`}
+                    title={`Open ${title}`}
                     data-pressed={pressed || undefined}
                     data-active={active || undefined}
                     className="bdai-btn group flex h-[58px] items-center gap-2 rounded-full px-2.5 pr-3 text-white shadow-xl sm:pr-4"
@@ -275,18 +291,18 @@ export default function AdminAssistantLauncher({
 
                     {/* ---------- label ---------- */}
                     <span className="hidden min-w-0 flex-col items-start text-left leading-none sm:flex">
-                        <span className="text-[14px] font-semibold tracking-tight">Admin AI</span>
+                        <span className="text-[14px] font-semibold tracking-tight">{title}</span>
                         <span className="mt-[5px] text-[11.5px] font-medium tracking-tight text-white/70">
-                            {active ? "Active now" : "Your AI Analyst"}
+                            {active ? "Active now" : subtitle}
                         </span>
                     </span>
 
                     {/* ---------- online / insight dot ---------- */}
-                    <span
+                    {/* <span
                         className={`bdai-status ml-0.5 hidden h-[9px] w-[9px] shrink-0 rounded-full sm:block ${hasInsight ? "bdai-status-alert" : ""
                             }`}
                         aria-hidden="true"
-                    />
+                    /> */}
                 </button>
             </div>
         </>

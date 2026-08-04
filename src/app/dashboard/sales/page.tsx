@@ -42,6 +42,7 @@ import OnCallBadge from "@/components/OnCallBadge";
 import LoginTimerWidget from "@/components/LoginTimerWidget";
 import AttendanceBadge from "@/components/AttendanceBadge";
 import BookingFormModal from "@/components/BookingFormModal";
+import SMAssistantDock from "@/components/SMAssistantDock";
 import BookingApplicationView from "@/components/BookingApplicationView";
 import ClosedLeadBookingView from "@/components/ClosedLeadBookingView";
 import LostLeadModal from "@/components/LostLeadModal";
@@ -869,7 +870,7 @@ export default function SalesDashboard() {
           ) : activeView === "assistant" ? (
             <AssistantView
               allLeads={user.role === "admin" ? allLeads : allLeads.filter((l: any) => l.assigned_to === user.name)}
-              isDark={isDark} t={t}
+              isDark={isDark} t={t} user={user}
             />
           ) : activeView === "site_visits" ? (
             <SiteVisitOverview
@@ -2459,20 +2460,33 @@ function SalesManagerView({
                   </form>
                 </div>
 
-                {/* RIGHT PANEL: AI ASSISTANT (collapsible, lead-scoped) */}
-                <LeadAiAssistantPanel
-                  lead={selectedLead}
-                  followUps={currentLeadFollowUps}
-                  isDark={isDark}
-                  t={t}
-                  isOpen={aiPanelOpen}
-                  onToggle={() => setAiPanelOpen(o => !o)}
-                />
-
               </div>{/* end three-part body */}
             </div>
           )
         )}
+        {/* ── AI ASSISTANT (floating, same launcher as the Admin dock) ──
+            Mounted here, OUTSIDE the lead-detail branch, on purpose. It used to
+            live inside the detail view's three-column body, so it only existed
+            once a lead was open — invisible from the lead list and everywhere
+            else. It is position:fixed, so where it sits in the tree does not
+            affect where it renders; what matters is that it is always mounted.
+
+            /api/sm-ai-chat scopes every query to the signed-in manager in SQL,
+            so it answers about this manager's whole book, not just `lead`.
+            `lead` only tells it which record is on screen right now. */}
+        <SMAssistantDock
+          lead={selectedLead}
+          isDark={isDark}
+          t={t}
+          isOpen={aiPanelOpen}
+          onOpenLead={(leadId: number) => {
+            // What the AI's [#226 Name](lead:226) links call.
+            const l = allLeads.find((x: any) => Number(x.id) === Number(leadId));
+            if (l) { setSelectedLead(l); setSubView("detail"); }
+          }}
+          onToggle={() => setAiPanelOpen(o => !o)}
+        />
+
         {/* ── CALL MODAL ── */}
         {showLostModal && selectedLead && (
           <LostLeadModal
@@ -2558,6 +2572,78 @@ function SalesManagerView({
 }
 
 // ============================================================================
+// AI NUDGE — one-per-session pointer at the collapsed AI Assistant tab
+// ============================================================================
+// Shown once per browser session so people discover the panel, and never again
+// in that session. sessionStorage rather than localStorage on purpose: a nudge
+// that never returns is easy to miss forever, one that returns every day is
+// nagging; per-session is the middle.
+//
+// The flag is written at the moment the nudge is SHOWN, not on mount. Writing it
+// on mount would burn the one showing on a render that never displayed anything
+// — e.g. the operator opens the panel during the 3s delay, or navigates away.
+function AiNudge({ show }: { show: boolean }) {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    if (!show) return;
+    try { if (sessionStorage.getItem("ai_nudge_shown")) return; } catch { return; }
+
+    const showAt = setTimeout(() => {
+      try { sessionStorage.setItem("ai_nudge_shown", "1"); } catch { /* private mode */ }
+      setVisible(true);
+    }, 3000);
+
+    return () => clearTimeout(showAt);
+  }, [show]);
+
+  // Auto-dismiss is its own effect keyed on `visible`, so the 5s clock starts when
+  // the nudge actually appears rather than 5s after mount.
+  useEffect(() => {
+    if (!visible) return;
+    const hideAt = setTimeout(() => setVisible(false), 5000);
+    return () => clearTimeout(hideAt);
+  }, [visible]);
+
+  // The panel opening mid-countdown cancels the whole thing — pointing at a tab
+  // that is no longer there would be worse than not nudging at all.
+  useEffect(() => { if (!show) setVisible(false); }, [show]);
+
+  // framer-motion rather than the `animate-fadeIn` class used elsewhere in this
+  // file: that class has no keyframes defined anywhere in the project, so it
+  // animates nothing. motion is already imported here and gives a real exit too.
+  return (
+    <AnimatePresence>
+      {visible && (
+        <motion.div
+          key="ai-nudge"
+          role="status"
+          onClick={() => setVisible(false)}
+          initial={{ opacity: 0, x: 8 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: 8 }}
+          transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+          // right-full puts it to the LEFT of the vertical tab, which is what makes
+          // a right-pointing arrow coherent — the tab sits at the screen edge, so
+          // there is no room on its other side.
+          className="hidden lg:block absolute right-full top-3 mr-2 z-30 cursor-pointer select-none"
+        >
+          <div className="relative bg-purple-600 text-white text-sm rounded-xl px-3 py-2 shadow-lg whitespace-nowrap">
+            ✨ Ask AI about this lead!
+            {/* Arrow: a square rotated 45° and half-overlapped, so it reads as one
+                shape with the bubble rather than a separate triangle. */}
+            <span
+              aria-hidden
+              className="absolute top-1/2 -right-1 -translate-y-1/2 w-2.5 h-2.5 bg-purple-600 rotate-45 rounded-[2px]"
+            />
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+// ============================================================================
 // LEAD AI ASSISTANT PANEL — collapsible, lead-scoped AI helper
 // ============================================================================
 function LeadAiAssistantPanel({
@@ -2607,12 +2693,22 @@ function LeadAiAssistantPanel({
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(input); }
   };
 
+  // The lead's display number. sr_no is what the rest of the CRM shows the
+  // operator; id is the database key and only a fallback.
+  const leadNo = lead ? (lead.sr_no ?? lead.id) : null;
+  const leadName = lead?.name ?? "";
+
+  // ── Quick Ask ──
+  // The prompt text is written out in full rather than sent as the chip label:
+  // "Deep dive into this lead" alone gives the model no referent, and the digest's
+  // CURRENT LEAD IN CONTEXT block is easier to honour when the question names the
+  // same lead. Kept short so it reads naturally in the thread as a user message.
   const quickActions = lead ? [
-    { label: "Summarize this lead", prompt: `Summarize lead #${lead.id} — ${lead.name}, including status, budget and interest level.` },
-    { label: "Suggest next follow-up", prompt: `What should be my next follow-up step for ${lead.name}?` },
-    { label: "Draft a WhatsApp reply", prompt: `Draft a short, friendly WhatsApp message for ${lead.name} based on their current status.` },
-    { label: "What to ask next call?", prompt: `What should I ask ${lead.name} on the next call?` },
-    { label: "Loan check-in message", prompt: `Draft a short loan status check-in message for ${lead.name}.` },
+    { label: "🔍 Deep dive into this lead", prompt: `Give me a deep dive on lead #${leadNo} — ${leadName}: status, budget, interest level, what has happened so far, and where it stands.` },
+    { label: "📞 Who should I call next?", prompt: `Should I call ${leadName} next, and if so what is the reason and the best time?` },
+    { label: "📅 What's the follow-up history?", prompt: `Walk me through the follow-up history for ${leadName} in order, and tell me how long it has been since the last contact.` },
+    { label: "💡 Suggest next action", prompt: `What is the single best next action for ${leadName}, and why?` },
+    { label: "📊 Lead conversion chances", prompt: `How likely is ${leadName} to convert? Give me the signals for and against, based only on the recorded data.` },
   ] : [];
 
   if (!isOpen) {
@@ -2635,25 +2731,31 @@ function LeadAiAssistantPanel({
           <ChevronDown className={`w-4 h-4 flex-shrink-0 ${t.textFaint}`} />
         </button>
 
-        {/* Desktop — collapsed vertical strip */}
-        <button
-          type="button"
-          onClick={onToggle}
-          title="Open AI Assistant"
-          className={`hidden lg:flex flex-col items-center justify-between gap-3 w-12 flex-shrink-0 rounded-xl border shadow-sm cursor-pointer transition-colors h-[calc(100vh-185px)] sticky top-4 py-4 ${t.chatPanel} hover:opacity-90`}
-          style={t.chatPanelGl}
-        >
-          <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${isDark ? "bg-gradient-to-br from-purple-600 to-blue-600" : "bg-gradient-to-br from-[#00AEEF] to-[#9E217B]"}`}>
-            <Bot className="text-white w-4 h-4" />
-          </div>
-          <span
-            className={`text-[11px] font-bold uppercase tracking-wider ${t.accentText}`}
-            style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
+        {/* Desktop — collapsed vertical strip.
+            Wrapped in a relative, sticky container so the nudge can be positioned
+            against the tab. The sticky moved off the button and onto the wrapper —
+            leaving it on the button would scroll the tab away from its own nudge. */}
+        <div className="hidden lg:block relative flex-shrink-0 sticky top-4 h-[calc(100vh-185px)]">
+          <AiNudge show={!isOpen && !!lead} />
+          <button
+            type="button"
+            onClick={onToggle}
+            title="Open AI Assistant"
+            className={`flex flex-col items-center justify-between gap-3 w-12 h-full rounded-xl border shadow-sm cursor-pointer transition-colors py-4 ${t.chatPanel} hover:opacity-90`}
+            style={t.chatPanelGl}
           >
-            AI Assistant
-          </span>
-          <ChevronLeft className={`w-3.5 h-3.5 flex-shrink-0 ${t.textFaint}`} />
-        </button>
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${isDark ? "bg-gradient-to-br from-purple-600 to-blue-600" : "bg-gradient-to-br from-[#00AEEF] to-[#9E217B]"}`}>
+              <Bot className="text-white w-4 h-4" />
+            </div>
+            <span
+              className={`text-[11px] font-bold uppercase tracking-wider ${t.accentText}`}
+              style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
+            >
+              AI Assistant
+            </span>
+            <ChevronLeft className={`w-3.5 h-3.5 flex-shrink-0 ${t.textFaint}`} />
+          </button>
+        </div>
       </>
     );
   }
@@ -2664,7 +2766,10 @@ function LeadAiAssistantPanel({
         initial={{ opacity: 0, scale: 0.97 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-        className={`flex flex-col rounded-xl overflow-hidden shadow-2xl border w-full lg:w-0 lg:flex-1 flex-shrink-0 h-[540px]  lg:h-[calc(100vh-185px)] lg:sticky lg:top-4 ${t.chatPanel}`}
+        // lg:w-96 (384px) fixed instead of lg:w-0 lg:flex-1: as a flex child it
+        // used to absorb whatever the lead detail column left over, so the chat
+        // width moved around with the content beside it.
+        className={`flex flex-col rounded-xl overflow-hidden shadow-2xl border w-full lg:w-96 flex-shrink-0 h-[540px]  lg:h-[calc(100vh-185px)] lg:sticky lg:top-4 ${t.chatPanel}`}
         style={t.chatPanelGl}
       >
         {/* Header */}
@@ -2690,19 +2795,43 @@ function LeadAiAssistantPanel({
           </button>
         </div>
 
-        {/* Quick action chips */}
-        <div className={`flex gap-1.5 px-3 py-2 overflow-x-auto flex-shrink-0 border-b custom-scrollbar ${t.tableBorder}`}>
-          {quickActions.map(qa => (
-            <button
-              key={qa.label}
-              type="button"
-              onClick={() => sendMessage(qa.prompt)}
-              disabled={isLoading}
-              className={`flex-shrink-0 text-[10px] font-semibold px-2.5 py-1.5 rounded-full border whitespace-nowrap transition-all cursor-pointer disabled:opacity-40 ${t.textFaint} ${t.tableBorder} ${isDark ? "bg-[#111] hover:bg-[#1a1a1a] hover:text-white" : "bg-white hover:bg-[#F8FAFC] hover:text-[#1A1A1A]"}`}
-            >
-              {qa.label}
-            </button>
-          ))}
+        {/* ── Lead context banner ──
+            States which record the answers are about. The panel is docked beside a
+            list, so it is otherwise easy to read an answer against the wrong lead
+            after clicking around. */}
+        {lead && (
+          <div className={`px-3 pt-2.5 flex-shrink-0`}>
+            <div className={`rounded-lg px-3 py-2 text-[11px] truncate ${isDark ? "bg-[#141419] text-[#888899]" : "bg-gray-50 text-gray-500"}`}
+              title={`#${leadNo} ${leadName}`}>
+              You&apos;re viewing: <span className={`font-semibold ${isDark ? "text-[#c9c9d4]" : "text-gray-700"}`}>#{leadNo} {leadName}</span>
+            </div>
+          </div>
+        )}
+
+        {/* ── Quick Ask ──
+            Chips wrap rather than scroll horizontally: at w-96 all five fit in two
+            rows, and a horizontal scroller hides the last chips behind an edge
+            most people never drag. */}
+        <div className={`px-3 py-2 flex-shrink-0 border-b ${t.tableBorder}`}>
+          <p className={`text-[9px] font-bold uppercase tracking-widest mb-1.5 ${t.textFaint}`}>Quick Ask</p>
+          <div className="flex flex-wrap gap-1.5">
+            {quickActions.map(qa => (
+              <button
+                key={qa.label}
+                type="button"
+                // Put the prompt in the input first so the chip's effect is visible,
+                // then submit it — the same path a typed question takes.
+                onClick={() => { setInput(qa.prompt); sendMessage(qa.prompt); }}
+                disabled={isLoading}
+                className={`rounded-full text-xs px-3 py-1.5 border cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${isDark
+                  ? "bg-purple-500/10 border-purple-500/30 text-purple-300 hover:bg-purple-500/20"
+                  : "bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100"
+                  }`}
+              >
+                {qa.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Chat thread */}
@@ -2900,118 +3029,272 @@ function WaModalWithPicker({ lead, adminUser, waMessage, setWaMessage, isSending
 // ============================================================================
 // ASSISTANT VIEW
 // ============================================================================
-function AssistantView({ allLeads, isDark, t }: { allLeads: any[]; isDark: boolean; t: ReturnType<typeof buildTheme> }) {
-  const CACHE_KEY = "crm_ai_chat";
+
+
+function AssistantView({ allLeads, isDark, t, user }: {
+  allLeads: any[]; isDark: boolean;
+  t: ReturnType<typeof buildTheme>; user: any
+}) {
+  const CACHE_KEY = "crm_sm_ai_chat_v2";
   const CACHE_TTL = 2 * 24 * 60 * 60 * 1000;
+  const firstName = (user?.name || "").split(" ")[0] || "there";
+
   const [chatInput, setChatInput] = useState("");
-  const [chatMessages, setChatMessages] = useState<{ sender: string; text: string; ts?: string; typing?: boolean }[]>([]);
+  const [chatMessages, setChatMessages] = useState<{
+    sender: string; text: string; ts?: string; typing?: boolean
+  }[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chatMessages, isLoading]);
-  useEffect(() => { try { const raw = localStorage.getItem(CACHE_KEY); if (!raw) return; const { messages, savedAt } = JSON.parse(raw); if (Date.now() - savedAt > CACHE_TTL) { localStorage.removeItem(CACHE_KEY); return; } if (Array.isArray(messages)) setChatMessages(messages); } catch { localStorage.removeItem(CACHE_KEY); } }, []);
-  useEffect(() => { if (chatMessages.length === 0) return; try { localStorage.setItem(CACHE_KEY, JSON.stringify({ messages: chatMessages, savedAt: Date.now() })); } catch { } }, [chatMessages]);
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatMessages, isLoading]);
 
-  const getTime = () => new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(CACHE_KEY);
+      if (!raw) return;
+      const { messages, savedAt } = JSON.parse(raw);
+      if (Date.now() - savedAt > CACHE_TTL) {
+        localStorage.removeItem(CACHE_KEY); return;
+      }
+      if (Array.isArray(messages)) setChatMessages(messages);
+    } catch { localStorage.removeItem(CACHE_KEY); }
+  }, []);
+
+  useEffect(() => {
+    if (chatMessages.length === 0) return;
+    try {
+      localStorage.setItem(CACHE_KEY, JSON.stringify({
+        messages: chatMessages, savedAt: Date.now()
+      }));
+    } catch { }
+  }, [chatMessages]);
+
+  const getTime = () => new Date().toLocaleTimeString("en-IN", {
+    hour: "2-digit", minute: "2-digit"
+  });
+
   const sendMessage = async (text: string) => {
     if (!text.trim() || isLoading) return;
     setChatInput("");
     setChatMessages(prev => [...prev, { sender: "user", text, ts: getTime() }]);
     setIsLoading(true);
-    setChatMessages(prev => [...prev, { sender: "ai", text: "", ts: getTime(), typing: true }]);
+    setChatMessages(prev => [...prev, {
+      sender: "ai", text: "", ts: getTime(), typing: true
+    }]);
     try {
-      const res = await fetch("/api/ai-assistant/", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query: text, leads: allLeads }) });
+      const res = await fetch("/api/ai-assistant/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: text, leads: allLeads })
+      });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      await new Promise(r => setTimeout(r, 500));
-      setChatMessages(prev => prev.map((m, i) => i === prev.length - 1 && m.typing ? { sender: "ai", text: data.response, ts: getTime(), typing: false } : m));
+      await new Promise(r => setTimeout(r, 400));
+      setChatMessages(prev => prev.map((m, i) =>
+        i === prev.length - 1 && m.typing
+          ? { sender: "ai", text: data.response, ts: getTime(), typing: false }
+          : m
+      ));
     } catch (err) {
-      await new Promise(r => setTimeout(r, 500));
-      setChatMessages(prev => prev.map((m, i) => i === prev.length - 1 && m.typing ? { sender: "ai", text: `Something went wrong: ${err instanceof Error ? err.message : String(err)}`, ts: getTime(), typing: false } : m));
-    } finally { setIsLoading(false); inputRef.current?.focus(); }
+      setChatMessages(prev => prev.map((m, i) =>
+        i === prev.length - 1 && m.typing
+          ? { sender: "ai", text: `Something went wrong: ${err instanceof Error ? err.message : String(err)}`, ts: getTime(), typing: false }
+          : m
+      ));
+    } finally {
+      setIsLoading(false);
+      inputRef.current?.focus();
+    }
   };
 
-  const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); sendMessage(chatInput); };
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    sendMessage(chatInput);
+  };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(chatInput); } };
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage(chatInput);
+    }
+  };
 
-  const suggestions = [
-    { icon: <BarChart2 className="w-4 h-4" />, label: "Leads overview", prompt: "Leads overview", color: "text-purple-400" },
-    { icon: <Flame className="w-4 h-4" />, label: "High priority leads", prompt: "high priority leads", color: "text-red-400" },
-    { icon: <Landmark className="w-4 h-4" />, label: "Loan summary", prompt: "loan summary", color: "text-blue-400" },
-    { icon: <CalendarDays className="w-4 h-4" />, label: "Site visits", prompt: "site visits", color: "text-orange-400" },
-    { icon: <Lightbulb className="w-4 h-4" />, label: "What should I do next?", prompt: "suggest what should I do next", color: "text-yellow-400" },
-    { icon: <ClipboardList className="w-4 h-4" />, label: "Total lead count", prompt: "how many total leads", color: "text-green-400" },
-  ];
   const isEmpty = chatMessages.length === 0;
+
+  const chips = [
+    { emoji: "📋", label: "What's my work today?", prompt: "What is my work today? List my follow-ups and priorities." },
+    { emoji: "🔥", label: "Show high priority leads", prompt: "Show me my high priority leads" },
+    { emoji: "📞", label: "Who should I call next?", prompt: "Who should I call next and why?" },
+    { emoji: "📊", label: "My pipeline summary", prompt: "Give me a summary of my lead pipeline" },
+  ];
 
   return (
     <div
-      className={`flex flex-col h-full ${t.chatArea}`}
-      style={{
-        ...((!isDark) ? { background: "linear-gradient(135deg, #e8f6fd 0%, #f8fafc 30%, #faf0fb 62%, #f8fafc 78%, #e6fafe 100%)" } : {}),
-      }}
+      className="flex flex-col h-full relative overflow-hidden"
+      style={{ background: isDark ? "#0a0a0f" : "#f8fafc" }}
     >
-      {/* Chat header */}
-      <div className={`flex-shrink-0 flex items-center justify-between px-4 sm:px-8 py-3 sm:py-2.5 border-b ${t.tableBorder} ${isDark ? "bg-transparent" : "bg-white/60 backdrop-blur-sm"}`}>
-        <div className="flex items-center gap-2 sm:gap-3">
-          <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center shadow-lg flex-shrink-0 ${isDark ? "bg-gradient-to-br from-purple-600 to-blue-600" : "bg-gradient-to-br from-[#00AEEF] to-[#9E217B]"}`}><Bot className="text-white w-4 h-4" /></div>
+      {/* Radial glow — fades when chat is active */}
+      <div
+        className="pointer-events-none absolute inset-0 flex items-center justify-center transition-opacity duration-700"
+        style={{ opacity: isEmpty ? 1 : 0.35, zIndex: 0 }}
+      >
+        <div style={{
+          width: "640px", height: "420px", borderRadius: "50%",
+          background: isDark
+            ? "radial-gradient(ellipse at center, rgba(99,102,241,0.22) 0%, rgba(59,130,246,0.10) 40%, transparent 70%)"
+            : "radial-gradient(ellipse at center, rgba(0,174,239,0.12) 0%, rgba(158,33,123,0.06) 40%, transparent 70%)",
+        }} />
+      </div>
+
+      {/* Header bar */}
+      <div
+        className="flex-shrink-0 flex items-center justify-between px-5 py-3 relative z-10"
+        style={{
+          borderBottom: isDark ? "1px solid rgba(255,255,255,0.07)" : "1px solid rgba(0,0,0,0.08)",
+          background: "rgba(10,10,15,0.8)",
+          backdropFilter: "blur(12px)",
+        }}
+      >
+        <div className="flex items-center gap-2.5">
+          <div style={{
+            width: "34px", height: "34px", borderRadius: "10px", flexShrink: 0,
+            background: "linear-gradient(135deg, #7c3aed, #4f46e5)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <Bot className="text-white w-4 h-4" />
+          </div>
           <div>
-            <h2 className={`font-bold text-sm leading-tight ${t.text}`}>CRM AI Assistant</h2>
-            <p className={`text-[10px] sm:text-[11px] ${t.textFaint}`}>{allLeads.length > 0 ? `${allLeads.length} leads loaded` : "No leads loaded"}</p>
+            <p className="text-sm font-semibold text-white leading-tight">My AI</p>
+            <p className="text-[11px]" style={{ color: "rgba(255,255,255,0.4)" }}>
+              {allLeads.length} leads in scope
+            </p>
           </div>
         </div>
-        <div className="flex items-center gap-2 sm:gap-2">
+        <div className="flex items-center gap-3">
           {chatMessages.length > 0 && (
-            <button onClick={() => { setChatMessages([]); localStorage.removeItem(CACHE_KEY); }} className={`text-[10px] sm:text-[11px] transition-colors cursor-pointer border px-2 sm:px-3 py-1 rounded-full ${t.textFaint} hover:text-red-400 hover:border-red-500/30 ${t.tableBorder}`}>
+            <button
+              onClick={() => { setChatMessages([]); localStorage.removeItem(CACHE_KEY); }}
+              className="text-[11px] px-3 py-1 rounded-full cursor-pointer transition-colors"
+              style={{
+                color: "rgba(255,255,255,0.4)",
+                border: "1px solid rgba(255,255,255,0.10)"
+              }}
+              onMouseEnter={e => (e.currentTarget.style.color = "rgba(248,113,113,0.9)")}
+              onMouseLeave={e => (e.currentTarget.style.color = "rgba(255,255,255,0.4)")}
+            >
               Clear chat
             </button>
           )}
-          <div className="flex items-center gap-1 sm:gap-2"><Wifi className="w-3 h-3 text-green-500" /><span className="text-[10px] sm:text-[11px] text-green-500 font-semibold">Online</span></div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-2 h-2 rounded-full bg-green-400"
+              style={{ boxShadow: "0 0 6px rgba(74,222,128,0.7)" }} />
+            <span className="text-[11px] text-green-400 font-semibold">Online</span>
+          </div>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto custom-scrollbar">
+      {/* Scroll area */}
+      <div className="flex-1 overflow-y-auto custom-scrollbar relative z-10"
+        style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.08) transparent" }}>
+
         {isEmpty ? (
-          <div className="flex flex-col items-center justify-center h-full px-4 sm:px-8 py-8 sm:py-12">
-            <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-xl border flex items-center justify-center mb-4 sm:mb-6 ${isDark ? "bg-gradient-to-br from-purple-600/20 to-blue-600/20 border-purple-500/20" : "bg-gradient-to-br from-[#00AEEF]/10 to-[#9E217B]/10 border-[#00AEEF]/20"}`}><Bot className={`w-6 h-6 sm:w-8 sm:h-8 ${t.accentText}`} /></div>
-            <h1 className={`text-lg sm:text-2xl font-bold mb-2 text-center ${t.text}`}>How can I help you today?</h1>
-            <p className={`text-xs sm:text-sm text-center mb-8 sm:mb-10 max-w-md ${t.textMuted}`}>Ask me about your leads, stats, loan tracking, or type a client name for a full AI analysis.</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-2 w-full max-w-2xl px-4 sm:px-0">
-              {suggestions.map(s => (
-                <button key={s.prompt} onClick={() => sendMessage(s.prompt)} className={`group flex items-center gap-3 border rounded-xl p-3 sm:p-3 text-left transition-all cursor-pointer ${t.card}`} style={t.cardGlass}>
-                  <div className={`w-8 h-8 rounded-lg border flex items-center justify-center flex-shrink-0 ${s.color} ${t.settingsBg}`}>
-                    {s.prompt === "high priority leads" && (<span className="absolute -top-1 -right-1 flex h-2.5 w-2.5 relative"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" /><span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500" /></span>)}
-                    {s.icon}
-                  </div>
-                  <span className={`text-[11px] sm:text-xs font-medium leading-tight transition-colors ${t.textMuted} group-hover:${isDark ? "text-white" : "text-[#1A1A1A]"}`}>{s.label}</span>
+          /* ── IDLE / WELCOME STATE ── */
+          <div className="flex flex-col items-center justify-center h-full px-6 py-12 text-center">
+            <h1 className="font-light text-white text-center mb-10"
+              style={{ fontSize: "clamp(26px,3.5vw,40px)", letterSpacing: "-0.02em" }}>
+              What&apos;s on today, {firstName}?
+            </h1>
+            <div className="grid grid-cols-2 gap-3 w-full max-w-lg">
+              {chips.map(c => (
+                <button
+                  key={c.prompt}
+                  onClick={() => sendMessage(c.prompt)}
+                  className="text-left transition-all cursor-pointer"
+                  style={{
+                    background: isDark ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.9)",
+                    border: isDark ? "1px solid rgba(255,255,255,0.09)" : "1px solid rgba(0,0,0,0.08)",
+                    color: isDark ? "rgba(255,255,255,0.72)" : "#334155",
+                    borderRadius: "14px", padding: "14px 16px",
+                  }}
+                  onMouseEnter={e => {
+                    (e.currentTarget as HTMLElement).style.background = isDark ? "rgba(255,255,255,0.09)" : "rgba(0,174,239,0.08)";
+
+                    // FIND (chip hover leave):
+                  }}
+                  onMouseLeave={e => {
+                    (e.currentTarget as HTMLElement).style.background = isDark ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.9)";
+                  }}
+                >
+                  <span className="block text-lg mb-1">{c.emoji}</span>
+                  {c.label}
                 </button>
               ))}
             </div>
           </div>
         ) : (
-          <div className="max-w-3xl mx-auto px-4 sm:px-3 py-6 sm:py-8 space-y-4 sm:space-y-4">
+          /* ── ACTIVE CHAT MESSAGES ── */
+          <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
             {chatMessages.map((msg, idx) => (
-              <div key={idx} className={`flex gap-2 sm:gap-3 animate-fadeIn ${msg.sender === "user" ? "flex-row-reverse" : "flex-row"}`}>
-                <div className="flex-shrink-0 mt-1">
-                  {msg.sender === "ai"
-                    ? <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center shadow-md ${isDark ? "bg-gradient-to-br from-purple-600 to-blue-600" : "bg-gradient-to-br from-[#00AEEF] to-[#9E217B]"}`}><Bot className="text-white w-3.5 h-3.5" /></div>
-                    : <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg border flex items-center justify-center ${t.settingsBg} ${t.tableBorder}`}><User className={`w-3.5 h-3.5 ${t.textMuted}`} /></div>
-                  }
+              <div key={idx} className={`flex gap-3 ${msg.sender === "user" ? "flex-row-reverse" : "flex-row"}`}>
+                {/* Avatar */}
+                <div className="flex-shrink-0 mt-0.5">
+                  {msg.sender === "ai" ? (
+                    <div style={{
+                      width: "30px", height: "30px", borderRadius: "9px", flexShrink: 0,
+                      background: "linear-gradient(135deg, #7c3aed, #4f46e5)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>
+                      <Bot className="text-white w-3.5 h-3.5" />
+                    </div>
+                  ) : (
+                    <div style={{
+                      width: "30px", height: "30px", borderRadius: "9px", flexShrink: 0,
+                      background: isDark ? "rgba(255,255,255,0.08)" : "#f1f5f9",
+                      border: isDark ? "1px solid rgba(255,255,255,0.12)" : "1px solid #e2e8f0",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>
+                      <User className="w-3.5 h-3.5" style={{ color: "rgba(255,255,255,0.6)" }} />
+                    </div>
+                  )}
                 </div>
-                <div className={`flex flex-col gap-1 ${msg.sender === "user" ? "items-end max-w-[75%] sm:max-w-[65%]" : "items-start max-w-[85%] sm:max-w-[80%]"}`}>
-                  <div className={`px-3 py-2.5 sm:px-4 sm:py-3 rounded-xl text-xs sm:text-sm leading-relaxed sm:leading-7 ${msg.sender === "user" ? t.chatBubbleUser + " rounded-tr-sm" : t.chatBubbleAi + " rounded-tl-sm"}`}>
+
+                {/* Bubble */}
+                <div className={`flex flex-col gap-1 ${msg.sender === "user" ? "items-end max-w-[72%]" : "items-start max-w-[82%]"}`}>
+                  <div
+                    className="text-sm leading-relaxed"
+                    style={{
+                      padding: "10px 14px",
+                      borderRadius: msg.sender === "user" ? "18px 18px 4px 18px" : "4px 18px 18px 18px",
+                      ...(msg.sender === "user" ? {
+                        background: "linear-gradient(135deg, #7c3aed, #4f46e5)",
+                        color: "#fff",
+                      } : {
+                        background: isDark ? "rgba(255,255,255,0.06)" : "#f1f5f9",
+                        border: isDark ? "1px solid rgba(255,255,255,0.10)" : "1px solid #cbd5e1",
+                        color: isDark ? "rgba(255,255,255,0.9)" : "#0f172a",
+                      }),
+                    }}
+                  >
                     {msg.typing ? (
-                      <div className="flex items-center gap-2 sm:gap-3 py-0.5">
-                        <div className="flex items-end gap-[3px] h-3 sm:h-4">
-                          {[0, 100, 200, 100, 0].map((delay, i) => <div key={i} className={`w-[2px] sm:w-[3px] rounded-full animate-pulse ${isDark ? "bg-purple-400" : "bg-[#00AEEF]"}`} style={{ height: `${[6, 10, 14, 10, 6][i]}px`, animationDelay: `${delay}ms`, animationDuration: "0.8s" }} />)}
-                        </div>
-                        <span className={`text-[10px] sm:text-[11px] italic ${t.textFaint}`}>AI is thinking...</span>
+                      <div className="flex items-center gap-1.5 py-0.5">
+                        {[0, 200, 400].map((d, i) => (
+                          <span key={i} className="block w-1.5 h-1.5 rounded-full animate-bounce"
+                            style={{ background: "rgba(165,180,252,0.7)", animationDelay: `${d}ms` }} />
+                        ))}
                       </div>
-                    ) : <p className="whitespace-pre-wrap break-words">{msg.text}</p>}
+                    ) : (
+                      <p className="whitespace-pre-wrap break-words">{msg.text}</p>
+                    )}
                   </div>
-                  {msg.ts && !msg.typing && <span className={`text-[9px] sm:text-[10px] px-1 ${t.textFaint}`}>{msg.ts}</span>}
+                  {msg.ts && !msg.typing && (
+                    <span className="text-[10px] px-1"
+                      style={{ color: "rgba(255,255,255,0.22)" }}>
+                      {msg.ts}
+                    </span>
+                  )}
                 </div>
               </div>
             ))}
@@ -3020,36 +3303,96 @@ function AssistantView({ allLeads, isDark, t }: { allLeads: any[]; isDark: boole
         )}
       </div>
 
-      {/* Input area */}
-      <div className={`flex-shrink-0 border-t px-2 sm:px-4 py-2 sm:py-3 mb-2 sm:mb-0 ${t.tableBorder} ${isDark ? "bg-[#0a0a0a]" : "bg-white/80 backdrop-blur-sm"}`}>
-        <div className="max-w-3xl mx-auto">
+      {/* ── INPUT BAR ── */}
+      <div
+        className="flex-shrink-0 relative z-10"
+        style={{
+          padding: "14px 20px 16px",
+          borderTop: isDark ? "1px solid rgba(255,255,255,0.06)" : "1px solid #cbd5e1",
+          background: isDark ? "rgba(10,10,15,0.92)" : "rgba(255,255,255,0.95)",
+          backdropFilter: "blur(12px)",
+        }}
+      >
+        <div className="max-w-2xl mx-auto">
           <form onSubmit={handleSubmit}>
-            <div className={`flex items-end gap-2 sm:gap-3 rounded-xl px-3 sm:px-4 py-2 sm:py-3 transition-all border ${t.chatInput}`}>
+            <div className="relative flex items-end gap-2">
               <textarea
-                ref={inputRef} value={chatInput}
-                onChange={e => { setChatInput(e.target.value); e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 160) + "px"; }}
+                ref={inputRef}
+                value={chatInput}
+                onChange={e => {
+                  setChatInput(e.target.value);
+                  e.target.style.height = "auto";
+                  e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
+                }}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask about leads, loans..."
-                disabled={isLoading} rows={1}
-                className={`flex-1 bg-transparent text-xs sm:text-sm outline-none resize-none focus:ring-0 placeholder:${t.textFaint} disabled:opacity-50 leading-relaxed self-center pt-1 ${t.text}`}
-                style={{ maxHeight: "120px", minHeight: "24px" }}
+                placeholder="Ask about your leads, follow-ups..."
+                disabled={isLoading}
+                rows={1}
+                className="flex-1 text-sm outline-none resize-none transition-all"
+                style={{
+                  background: isDark ? "rgba(255,255,255,0.06)" : "#ffffff",
+                  border: isDark ? "1px solid rgba(255,255,255,0.08)" : "1px solid #94a3b8",
+                  color: isDark ? "rgba(255,255,255,0.88)" : "#1e293b",
+                  borderRadius: "24px",
+                  padding: "12px 52px 12px 18px",
+                  maxHeight: "120px", minHeight: "48px",
+                }}
+                onFocus={e => {
+                  e.currentTarget.style.borderColor = "rgba(99,102,241,0.6)";
+                  e.currentTarget.style.boxShadow = "0 0 0 3px rgba(99,102,241,0.12)";
+                }}
+                onBlur={e => {
+                  e.currentTarget.style.borderColor = "rgba(255,255,255,0.10)";
+                  e.currentTarget.style.boxShadow = "none";
+                }}
               />
-              <button type="submit" disabled={isLoading || !chatInput.trim()} className={`w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center transition-all cursor-pointer flex-shrink-0 mb-0.5 ${chatInput.trim() && !isLoading ? (isDark ? "bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-600/20" : "bg-[#00AEEF] hover:bg-[#0099d4] text-white shadow-lg shadow-[#00AEEF]/20") : `${t.settingsBg} ${t.textFaint} cursor-not-allowed`}`}>
-                <Send className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <button
+                type="submit"
+                disabled={isLoading || !chatInput.trim()}
+                className="absolute right-3 bottom-2.5 flex items-center justify-center cursor-pointer transition-all"
+                style={{
+                  width: "34px", height: "34px", borderRadius: "50%", border: "none",
+                  background: chatInput.trim() && !isLoading ? "#4f46e5" : "rgba(255,255,255,0.08)",
+                  opacity: chatInput.trim() && !isLoading ? 1 : 0.4,
+                }}
+              >
+                <Send className="w-3.5 h-3.5 text-white" />
               </button>
             </div>
           </form>
-          {!isEmpty && (
-            <div className="flex gap-2 mt-2 sm:mt-3 flex-wrap px-1">
-              {suggestions.slice(0, 3).map(s => (
-                <button key={s.prompt} onClick={() => sendMessage(s.prompt)} disabled={isLoading} className={`relative flex items-center gap-1.5 text-[9px] sm:text-[11px] border px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full transition-all cursor-pointer disabled:opacity-40 ${t.textFaint} hover:${isDark ? "text-white" : "text-[#1A1A1A]"} ${t.tableBorder} ${isDark ? "bg-[#111] hover:bg-[#1a1a1a]" : "bg-white hover:bg-[#F8FAFC]"}`}>
-                  <span className={`w-2.5 sm:w-3 h-auto flex-shrink-0 ${s.color}`}>{s.icon}</span>
-                  <span className="whitespace-nowrap">{s.label}</span>
-                </button>
-              ))}
-            </div>
-          )}
-          <p className={`text-center text-[9px] sm:text-[10px] mt-1 sm:mt-2 ${t.textFaint}`}>Press Enter to send · Shift+Enter for new line</p>
+
+          {/* Quick chips */}
+          <div className="flex gap-2 mt-3 overflow-x-auto pb-1"
+            style={{ scrollbarWidth: "none" }}>
+            {chips.map(c => (
+              <button
+                key={c.prompt}
+                onClick={() => sendMessage(c.prompt)}
+                disabled={isLoading}
+                className="flex items-center gap-1.5 text-xs whitespace-nowrap cursor-pointer transition-colors flex-shrink-0"
+                style={{
+                  border: isDark ? "1px solid rgba(255,255,255,0.11)" : "1px solid #94a3b8",
+                  borderRadius: "999px",
+                  padding: "5px 13px",
+                  color: isDark ? "rgba(255,255,255,0.55)" : "#64748b",
+                  background: "transparent",
+                }}
+                onMouseEnter={e => {
+                  (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.06)";
+                }}
+                onMouseLeave={e => {
+                  (e.currentTarget as HTMLElement).style.background = "transparent";
+                }}
+              >
+                {c.emoji} {c.label}
+              </button>
+            ))}
+          </div>
+
+          <p className="text-center mt-2 text-[10px]"
+            style={{ color: isDark ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.25)" }}>
+            Press Enter to send · Shift+Enter for new line
+          </p>
         </div>
       </div>
     </div>

@@ -292,7 +292,10 @@ export async function GET(req: NextRequest) {
       sql += ` WHERE b.lead_id = $1`;
       params.push(Number(leadId));
     }
-    sql += ` ORDER BY b.created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    // id DESC as tiebreaker: two bookings written in the same transaction share a
+    // created_at, and the booking form picks data[0] as "the" booking — an
+    // unstable order there would open a different record on each refresh.
+    sql += ` ORDER BY b.created_at DESC, b.id DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
     params.push(limit, offset);
 
     const rows = await query(sql, params);
@@ -317,6 +320,42 @@ export async function POST(req: NextRequest) {
 
     const lead_id = getStr("lead_id");
     if (!lead_id) return NextResponse.json({ success: false, message: "lead_id is required" }, { status: 400 });
+
+    // ── One live booking per lead ────────────────────────────────────────────
+    // A lead can only be sold one flat at a time, so a second booking is always a
+    // mistake — and it was a mistake this endpoint used to accept silently. The
+    // booking form is opened from six places; one of them ("Mark Closing") passes
+    // create-mode flags unconditionally, so a REOPENED closed lead came back
+    // through here and inserted a duplicate. Production already carries the
+    // damage: lead 134 has bookings 15 and 17, both Confirmed.
+    //
+    // The form now resolves edit mode itself, but that is a UI convenience. This
+    // is the actual guarantee, because it holds for any caller.
+    //
+    // Cancelled bookings are excluded: a lead whose booking was cancelled may
+    // legitimately book again.
+    const liveBooking = await query<{ id: number; booking_number: string; booking_status: string }>(
+      `SELECT id, booking_number, booking_status
+         FROM booking_applications
+        WHERE lead_id = $1
+          AND LOWER(COALESCE(booking_status, '')) <> 'cancelled'
+        -- Same order as GET, so the 409 names the booking the form will actually
+        -- open. Naming a different one would send the operator hunting.
+        ORDER BY created_at DESC, id DESC LIMIT 1`,
+      [Number(lead_id)],
+    );
+    if (liveBooking.length) {
+      const b = liveBooking[0];
+      return NextResponse.json(
+        {
+          success: false,
+          code: "BOOKING_EXISTS",
+          bookingId: b.id,
+          message: `This lead already has booking ${b.booking_number || `#${b.id}`} (${b.booking_status}). Edit that booking instead of creating a new one.`,
+        },
+        { status: 409 },
+      );
+    }
 
     // Strip commas/₹ before inserting into NUMERIC columns (form sends "50,00,000" style strings)
     const cleanNum = (val: string | null): number => {

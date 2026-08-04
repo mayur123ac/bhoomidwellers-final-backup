@@ -4948,10 +4948,10 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                   </div>
                 </div>
               ) : (
-                <div className={`flex-1 overflow-y-auto p-6 ${theme.scroll}`}>
+                <div className={`flex-1 overflow-y-auto p-2 ${theme.scroll}`}>
                   <div className="animate-fadeIn max-w-[1600px] mx-auto flex flex-col h-[calc(100vh-130px)]">
                     {/* Detail header */}
-                    <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 rounded-xl border p-5 sm:p-5 shadow-sm flex-shrink-0 ${selectedLead.is_lost_lead ? theme.cardLost : theme.card}`} style={theme.cardGlass}>
+                    <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2 rounded-xl border p-2 sm:p-2 shadow-sm flex-shrink-0 ${selectedLead.is_lost_lead ? theme.cardLost : theme.card}`} style={theme.cardGlass}>
                       <div className="flex items-center gap-2">
                         <button onClick={() => { setSubView("list"); setShowSalesForm(false); setShowLoanForm(false); }} className={`w-10 h-10 flex items-center justify-center border rounded-xl transition-colors cursor-pointer shadow-sm ${theme.textMuted} ${theme.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}><FaChevronLeft className="text-sm" /></button>
                         <h1 className={`text-lg md:text-2xl font-bold flex items-center gap-3 ${theme.text}`}>
@@ -5929,7 +5929,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
 
             {/* ── DETAIL VIEW (enquiry-style, read-only) ── */}
             {subView === "detail" && selectedLead && isEnquiryView && (
-              <div className="flex-1 overflow-y-auto p-6 animate-fadeIn">
+              <div className="flex-1 overflow-y-auto p-2 animate-fadeIn">
                 <div className={`flex items-center gap-2 mb-6`}>
                   <button
                     onClick={() => { setSubView("list"); setSelectedLead(null); setIsEnquiryView(false); }}
@@ -6045,7 +6045,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                   </div>
                 </div>
               ) : (
-                <div className={`flex-1 overflow-y-auto p-6 ${theme.scroll}`}>
+                <div className={`flex-1 overflow-y-auto p-2 ${theme.scroll}`}>
                   <div className="animate-fadeIn max-w-[1200px] mx-auto flex flex-col" style={{ minHeight: "500px" }}>
                     {(() => {
                       const isNGD = selectedLead.status === "NON GENUINE DEMAND (NGD)" || selectedLead.leadStatus === "NON GENUINE DEMAND (NGD)" || selectedLead.leadInterestStatus === "NON GENUINE DEMAND (NGD)";
@@ -6335,7 +6335,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
 
             {/* ── LIST VIEW (sections, stats, tables) ── */}
             {subView === "list" && (
-              <div className={`flex-1 overflow-y-auto p-6 ${theme.scroll}`}>
+              <div className={`flex-1 overflow-y-auto p-2 ${theme.scroll}`}>
                 <div className="animate-fadeIn space-y-4">
                   {/* Stats row */}
                   <div className="grid grid-cols-3 gap-2">
@@ -7273,7 +7273,7 @@ function DailyMonitoringPanel({
       </div>
 
       {/* ── Content ── */}
-      <div className={`flex-1 overflow-y-auto p-6 ${theme.scroll}`}>
+      <div className={`flex-1 overflow-y-auto p-2 ${theme.scroll}`}>
 
         {/* ════ OVERVIEW TAB ════ */}
         {activeTab === "overview" && (

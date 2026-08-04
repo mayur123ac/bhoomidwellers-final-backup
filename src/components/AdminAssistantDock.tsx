@@ -22,8 +22,10 @@ const STARTERS = [
     { label: "What is the balance receivable?", icon: "≡" },
 ];
 
-/* Same face as the launcher, sized for the header. */
-function BotMark({ size = 26 }: { size?: number }) {
+/* Same face as the launcher, sized for the header.
+   Exported so the Sales Manager dock wears the same face — copying the SVG would
+   let the two drift the first time either is touched. */
+export function BotMark({ size = 26 }: { size?: number }) {
     return (
         <svg viewBox="0 0 44 44" width={size} height={size} style={{ color: "#F6D7EC" }} aria-hidden="true">
             <line x1="22" y1="9.6" x2="22" y2="14" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" opacity="0.8" />
@@ -323,7 +325,10 @@ export default function AdminAssistantDock({ theme, isDark }: Props) {
     );
 }
 
-const PANEL_CSS = `
+/* Exported so the Sales Manager dock renders the exact same chrome in both
+   themes. One definition, two docks — the alternative is two copies that look
+   identical today and diverge on the first tweak. */
+export const PANEL_CSS = `
 .bdai-panel{
   animation: bdai-panel-in 220ms cubic-bezier(.22,.61,.36,1) both;
   background-image: radial-gradient(120% 60% at 50% 0%, rgba(195,58,158,.055), transparent 55%);
