@@ -36,6 +36,7 @@ import {
   HandCoins,
   Info,
   Landmark,
+  Loader,
   MessageSquarePlus,
   Plus,
   RefreshCcw,
@@ -1380,13 +1381,18 @@ function CaseDrawer({
             {bookingId && (
               <button
                 onClick={openBookingForm}
+                disabled={loadingBooking}
                 className={`mt-2 text-[10px] font-black px-2.5 py-1 rounded-full inline-flex items-center gap-1.5 border transition-colors ${isDark
-                  ? "border-white/15 text-gray-200 hover:bg-white/10"
-                  : "border-slate-200 text-slate-600 hover:bg-slate-100"
+                  ? "border-white/15 text-gray-200 hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                  : "border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
                   }`}
               >
-                <FileText className="w-3 h-3" />
-                View booking form
+                {loadingBooking ? (
+                  <Loader className="w-3 h-3 animate-spin" />
+                ) : (
+                  <FileText className="w-3 h-3" />
+                )}
+                {loadingBooking ? "Loading…" : "View booking form"}
               </button>
             )}
           </div>

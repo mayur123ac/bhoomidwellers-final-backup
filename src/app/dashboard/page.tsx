@@ -533,6 +533,25 @@ function AdminAtlasDashboardContent() {
   const [activeView, setActiveView] = useState("dashboard");
   // Deep-link target from the Inventory drawer → opens this lead's booking in the Sales view.
   const [invOpenLeadId, setInvOpenLeadId] = useState<number | null>(null);
+  const [invLinkError, setInvLinkError] = useState<string | null>(null);
+
+  // Inventory booking chips carry only a booking id, but every open-lead path in
+  // the Sales view is keyed by lead. booking_applications.lead_id is NOT NULL, so
+  // resolve it server-side and then reuse the existing lead deep-link.
+  const openBookingFromInventory = async (bookingId: number) => {
+    try {
+      const res = await fetch(`/api/booking-applications/${bookingId}`, { credentials: "include" });
+      const json = await res.json();
+      const leadId = json?.success ? json?.data?.lead_id : null;
+      if (!leadId) throw new Error(json?.message || "No lead linked to this booking");
+      setInvOpenLeadId(Number(leadId));
+      setActiveView("sales");
+    } catch (err: any) {
+      console.error("[inventory→booking deep-link]", err);
+      setInvLinkError(`Could not open booking #${bookingId}: ${err?.message || "request failed"}`);
+      setTimeout(() => setInvLinkError(null), 4000);
+    }
+  };
 
   useEffect(() => {
     const tab = searchParams.get("tab");
@@ -1266,7 +1285,8 @@ function AdminAtlasDashboardContent() {
           {activeView === "inventory" && (
             <div className="flex flex-col h-full overflow-hidden p-1">
               <InventoryManagementView user={user} isDark={isDark} t={theme}
-                onOpenLead={(leadId: number) => { setInvOpenLeadId(leadId); setActiveView("sales"); }} />
+                onOpenLead={(leadId: number) => { setInvOpenLeadId(leadId); setActiveView("sales"); }}
+                onOpenBooking={openBookingFromInventory} />
             </div>
           )}
           {activeView === "cp_management" && (
@@ -1348,6 +1368,15 @@ function AdminAtlasDashboardContent() {
           {isAdmin && <AdminAssistantDock theme={theme} isDark={isDark} />}
         </main>
       </div>
+
+      {/* Inventory deep-link failure — a dead chip click is the exact bug this wiring fixes,
+          so surface the reason instead of silently doing nothing. */}
+      {invLinkError && (
+        <div className="fixed top-6 left-1/2 transform -translate-x-1/2 z-[100] px-3 py-3 rounded-xl shadow-lg flex items-center gap-2 animate-fadeIn bg-red-600 border border-red-500 text-white">
+          <div className="text-lg"><FaTimes /></div>
+          <span className="text-sm font-bold">{invLinkError}</span>
+        </div>
+      )}
     </div>
   );
 }
