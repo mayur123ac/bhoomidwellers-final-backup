@@ -1,3 +1,5 @@
+import { clearTheme } from "@/lib/theme";
+
 export function getStoredCrmUser() {
   try {
     const stored = localStorage.getItem("crm_user");
@@ -12,7 +14,16 @@ export function getStoredCrmUser() {
 export function clearCrmSession() {
   localStorage.removeItem("crm_user");
   sessionStorage.clear();
-  
+
+  // The theme is per-user, so it goes with the session. Without this the next
+  // person to sign in on this machine inherits the previous user's theme — and
+  // if they never open Preferences it simply stays wrong, because their own
+  // stored preference would never get a chance to win.
+  //
+  // Only the working copy is dropped. `users.theme_preference` is untouched, so
+  // signing back in restores the choice via adoptServerTheme().
+  clearTheme();
+
   // Call the logout API to clear the cookie
   // We use fetch with keepalive or standard await depending on context, 
   // but since this might be called on unmount or before navigating, we can just fire it off

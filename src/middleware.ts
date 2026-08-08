@@ -40,7 +40,24 @@ export async function middleware(request: NextRequest) {
       return NextResponse.next();
     }
 
-    // 2. Sales Manager
+    // 2. Settings — reachable by every signed-in role.
+    //
+    // Settings used to be admin-only in practice: Site Head had it on an explicit
+    // forbidden list, and every other non-admin role is confined to a single path
+    // that isn't this one. That was fine when the page held nothing but admin
+    // toggles.
+    //
+    // It now also holds each person's own profile, password, timezone,
+    // notification and session controls, which everyone needs. The admin-only
+    // sections inside it are gated server-side by requireRoles(["admin"]) on
+    // their API routes and hidden from the sidebar, so opening the path up does
+    // not open up what those routes do — this check was never the thing
+    // protecting them.
+    if (pathname.startsWith("/dashboard/settings")) {
+      return NextResponse.next();
+    }
+
+    // 3. Sales Manager
     // Can only access /dashboard/sales
     if (role === "sales manager") {
       if (!pathname.startsWith("/dashboard/sales")) {
@@ -49,7 +66,7 @@ export async function middleware(request: NextRequest) {
       return NextResponse.next();
     }
 
-    // 3. Receptionist
+    // 4. Receptionist
     // Can only access /dashboard/receptionist
     if (role === "receptionist") {
       if (!pathname.startsWith("/dashboard/receptionist")) {
@@ -60,13 +77,14 @@ export async function middleware(request: NextRequest) {
       return NextResponse.next();
     }
 
-    // 4. Site Head
-    // Can access /dashboard (limited), but CANNOT access /dashboard/employees or /dashboard/settings
+    // 5. Site Head
+    // Can access /dashboard (limited), but CANNOT access /dashboard/employees
     // or /dashboard/sales or /dashboard/receptionist or caller panel etc.
+    // /dashboard/settings is handled above and is no longer forbidden — the
+    // admin-only sections within it are gated by their API routes.
     if (role === "site head") {
       const forbiddenPaths = [
         "/dashboard/employees",
-        "/dashboard/settings",
         "/dashboard/caller",
         "/dashboard/sales",
         "/dashboard/receptionist",
@@ -80,7 +98,7 @@ export async function middleware(request: NextRequest) {
       return NextResponse.next();
     }
 
-    // 5. Sourcing Manager
+    // 6. Sourcing Manager
     // Channel Partner management only — no lead, commission or attendance panels.
     if (role === "sourcing manager") {
       if (!pathname.startsWith("/dashboard/sourcing")) {
@@ -89,7 +107,7 @@ export async function middleware(request: NextRequest) {
       return NextResponse.next();
     }
 
-    // 6. Caller
+    // 7. Caller
     if (role === "caller") {
       if (!pathname.startsWith("/dashboard/caller")) {
         return NextResponse.redirect(new URL("/dashboard/caller", request.url));

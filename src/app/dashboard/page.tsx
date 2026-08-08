@@ -4,6 +4,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { clearCrmSession, getStoredCrmUser, installLoggedOutBackGuard } from "@/lib/authSession";
+import { useCrmTheme } from "@/lib/hooks/useCrmTheme";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FaThLarge, FaClipboardList, FaUsers, FaIdCard,
@@ -16,6 +17,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, Cell,
   CartesianGrid, PieChart, Pie,
 } from "recharts";
+import AdminSidebar from "@/components/admin/AdminSidebar";
 import LoginTimerWidget from "@/components/LoginTimerWidget";
 import AttendanceBadge from "@/components/AttendanceBadge";
 import BookingFormModal from "@/components/BookingFormModal";
@@ -34,6 +36,8 @@ import { canViewPartners } from "@/lib/cpRbac";
 import UploadLeadSheet from "@/components/UploadLeadSheet";
 import EnquiryOverviewSection from "@/components/Enquiryoverviewsection";
 import InlineContactField from "@/components/InlineContactField";
+import BolnaCallWidget from "@/components/BolnaCallWidget";
+import CallingButtons from "@/components/CallingButtons";
 import { contactFieldSave } from "@/lib/contactFieldSave";
 // import ActivityTimeline from "@/components/ActivityTimeline";
 
@@ -582,21 +586,16 @@ function AdminAtlasDashboardContent() {
   }, []);
 
   const [showPassword, setShowPassword] = useState(false);
-  const [isDark, setIsDark] = useState(false);
-
-  // Sync theme from localStorage after hydration (avoids SSR/client mismatch)
-  useEffect(() => {
-    try {
-      if (localStorage.getItem("crm_theme") === "dark") setIsDark(true);
-    } catch { }
-  }, []);
+  // The shared theme, from lib/theme.ts. One value for the whole CRM: the same
+  // one Preferences → Theme writes and every other header toggle reads, so a
+  // change anywhere repaints everywhere without a reload.
+  const { isDark, toggleTheme } = useCrmTheme();
 
   type CrmNotif = { id: string; line1: string; line2: string; type: "lead" | "visit" };
 
   const [notifQueue, setNotifQueue] = useState<CrmNotif[]>([]);
   const [activeNotif, setActiveNotif] = useState<CrmNotif | null>(null);
   const [notifCount, setNotifCount] = useState(0);
-  const [navSearch, setNavSearch] = useState("");
   const theme = useMemo(() => buildTheme(isDark), [isDark]);
   const { managers, receptionists, siteHeads, allLeads, followUps, isLoading, refetch } = useAdminData();
 
@@ -829,7 +828,12 @@ function AdminAtlasDashboardContent() {
     { id: "geo", icon: FaMapMarkerAlt, label: "Geo Analytics" },
     { id: "caller", icon: FaPhoneAlt, label: "Caller Panel" },
     { id: "employees", icon: FaIdCard, label: "Add Employee" },
-    { id: "ai", icon: FaWandMagicSparkles, label: "Bhoomi AI" },
+    // `pinned` entries render in the rail's bottom block, in this order — so
+    // Bhoomi AI keeps the place it has always had and Settings is the final
+    // button. (This used to be position-based: the sidebar pinned whatever item
+    // happened to be last, which made appending anything steal Bhoomi AI's slot.)
+    { id: "ai", icon: FaWandMagicSparkles, label: "Bhoomi AI", pinned: true },
+    { id: "settings", icon: FaCog, label: "Settings", pinned: true },
   ].filter(item => {
     if (isAdmin) return true;
 
@@ -866,6 +870,17 @@ function AdminAtlasDashboardContent() {
     return true;
   });
 
+  // Headings shown above the first item of each run in the expanded rail.
+  // The two pinned entries (Bhoomi AI, Settings) sit in the bottom block and
+  // carry no heading.
+  const menuGroups: Record<string, string> = {
+    dashboard: "Workspace", revenue_intelligence: "Workspace", inventory: "Workspace", channel_partners: "Workspace",
+    cp_management: "Workspace",
+    receptionist: "Team", sales: "Team", site_head: "Team",
+    site_visit_overview: "Insights", attendance: "Insights", monitoring: "Insights", live_activity: "Insights", geo: "Insights",
+    caller: "Admin", employees: "Admin",
+  };
+
   const handleMenuClick = (itemId: string) => {
     if (itemId === "employees") {
       router.push("/dashboard/employees");
@@ -873,6 +888,8 @@ function AdminAtlasDashboardContent() {
       router.push("/dashboard/employees?tab=callers");
     } else if (itemId === "ai") {
       router.push("/dashboard/employees?tab=ai");
+    } else if (itemId === "settings") {
+      router.push("/dashboard/settings");
     } else {
       setActiveView(itemId);
       setIsSidebarHovered(false);
@@ -884,201 +901,17 @@ function AdminAtlasDashboardContent() {
       className={`flex h-screen font-sans overflow-hidden relative transition-colors duration-300 ${theme.pageWrap}`}
       style={isDark ? {} : { background: "linear-gradient(135deg, #fdf0f8 0%, #f8fafc 30%, #faf0fb 62%, #f8fafc 78%, #fce8f6 100%)" }}
     >
-      <AnimatePresence>
-        {isSidebarHovered && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}
-            className="fixed inset-0 bg-black/60 z-40 pointer-events-none backdrop-blur-[1px]" />
-        )}
-      </AnimatePresence>
-
-      <motion.aside
-        initial={{ width: "72px" }} animate={{ width: isSidebarHovered ? "248px" : "72px" }} transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
-        onMouseEnter={() => setIsSidebarHovered(true)} onMouseLeave={() => setIsSidebarHovered(false)}
-        className="fixed left-0 top-0 h-screen z-50 flex flex-col overflow-hidden"
-        style={{
-          background: "linear-gradient(180deg, #0f0f1a 0%, #111128 40%, #0f0f1a 100%)",
-          borderRight: "1px solid rgba(158,33,123,0.15)",
-          boxShadow: "4px 0 24px rgba(0,0,0,0.4), inset -1px 0 0 rgba(158,33,123,0.08)",
-        }}
-      >
-        <div className="flex items-center px-4 py-5 mb-2 whitespace-nowrap flex-shrink-0">
-          <img
-            src="/assets/logobrowser_trans.png"
-            alt="Logo"
-            className="w-10 h-10 min-w-[40px] rounded-xl object-cover flex-shrink-0"
-          />
-          <motion.div
-            initial={{ opacity: 0, x: -8 }}
-            animate={{ opacity: isSidebarHovered ? 1 : 0, x: isSidebarHovered ? 0 : -8 }}
-            transition={{ duration: 0.25, ease: "easeOut" }}
-            className="ml-3 overflow-hidden"
-          >
-            <p className="font-black text-white text-[15px] leading-tight tracking-wide whitespace-nowrap">Bhoomi CRM</p>
-            <p className="text-[10px] font-medium whitespace-nowrap" style={{ color: "rgba(217,70,168,0.7)" }}>Admin Panel</p>
-          </motion.div>
-        </div>
-
-        <div className="mx-4 mb-4 flex-shrink-0" style={{ height: "1px", background: "linear-gradient(90deg, transparent, rgba(158,33,123,0.3), transparent)" }} />
-
-        {isSidebarHovered && (
-          <div className="px-4 mb-2 flex-shrink-0 animate-fadeIn">
-            <input
-              type="text"
-              value={navSearch}
-              onChange={(e) => setNavSearch(e.target.value)}
-              placeholder="Quick jump..."
-              autoFocus
-              className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-gray-300 placeholder:text-gray-600 outline-none focus:border-[#9E217B]/50"
-            />
-          </div>
-        )}
-
-        <nav className="flex flex-col gap-2 px-2 flex-1 overflow-y-auto overflow-x-hidden sidebar-scroll">
-          {/* Main nav items (all except last) */}
-          <div className="flex flex-col gap-2">
-            {menuItems.slice(0, -1).filter(i => i.label.toLowerCase().includes(navSearch.toLowerCase())).map((item, idx) => {
-              const isActive = activeView === item.id;
-              const groupOf: Record<string, string> = {
-                dashboard: "Workspace", revenue_intelligence: "Workspace", inventory: "Workspace", channel_partners: "Workspace",
-                receptionist: "Team", sales: "Team", site_head: "Team",
-                site_visit_overview: "Insights", attendance: "Insights", monitoring: "Insights", live_activity: "Insights", geo: "Insights",
-                caller: "Admin", employees: "Admin",
-                ai: "Tool",
-              };
-              const prevItem = menuItems[idx - 1];
-              const showGroupLabel = groupOf[item.id] && groupOf[item.id] !== groupOf[prevItem?.id];
-              return (
-                <div key={`wrap-${item.id}`}>
-                  {showGroupLabel && (
-                    <p
-                      className="text-[10px] font-bold uppercase tracking-wider text-gray-600 px-4 pt-3 pb-1 overflow-hidden whitespace-nowrap transition-opacity duration-200"
-                      style={{ opacity: isSidebarHovered ? 1 : 0 }}
-                    >
-                      {groupOf[item.id]}
-                    </p>
-                  )}
-                  <div
-                    key={item.id}
-                    onClick={() => handleMenuClick(item.id)}
-                    title={!isSidebarHovered ? item.label : undefined}
-                    className="relative cursor-pointer group"
-                  >
-                    {isActive && (
-                      <div
-                        className="absolute inset-0 rounded-xl pointer-events-none"
-                        style={{
-                          background: "radial-gradient(ellipse at left center, rgba(217,70,168,0.12) 0%, transparent 70%)",
-                          animation: "sm-glow-pulse 3s ease-in-out infinite",
-                        }}
-                      />
-                    )}
-                    <div
-                      className={`flex items-center gap-3 px-4.5 py-2.5 rounded-xl transition-all duration-200 relative overflow-hidden ${isActive ? "text-[#d946a8]" : "text-gray-500 hover:text-gray-200"
-                        }`}
-                      style={isActive ? {
-                        background: "linear-gradient(135deg, rgba(158,33,123,0.22) 0%, rgba(217,70,168,0.07) 100%)",
-                        boxShadow: "inset 0 0 0 1px rgba(217,70,168,0.28), 0 2px 16px rgba(158,33,123,0.12)",
-                      } : {}}
-                    >
-                      {isActive && (
-                        <div
-                          className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-[#d946a8]"
-                          style={{ boxShadow: "0 0 10px rgba(217,70,168,0.9), 0 0 4px rgba(217,70,168,0.6)" }}
-                        />
-                      )}
-                      {!isActive && (
-                        <div className="absolute inset-0 rounded-xl bg-white/0 group-hover:bg-white/[0.04] transition-colors duration-200" />
-                      )}
-                      <div
-                        className={`flex-shrink-0 transition-all duration-200 ${isActive ? "text-[#d946a8]" : "text-gray-600 group-hover:text-gray-300"
-                          }`}
-                        style={isActive ? { filter: "drop-shadow(0 0 5px rgba(217,70,168,0.65))" } : {}}
-                      >
-                        <item.icon style={{ width: "17px", height: "17px" }} />
-                      </div>
-                      <span
-                        className={`text-[12.5px] font-semibold whitespace-nowrap overflow-hidden transition-all duration-300 ${isActive ? "text-[#d946a8]" : "text-gray-400 group-hover:text-gray-100"
-                          }`}
-                        style={{
-                          maxWidth: isSidebarHovered ? "140px" : "0px",
-                          opacity: isSidebarHovered ? 1 : 0,
-                          transform: isSidebarHovered ? "translateX(0)" : "translateX(-6px)",
-                          letterSpacing: "0.01em",
-                        }}
-                      >
-                        {item.label}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Last item pinned to bottom */}
-          {(() => {
-            const item = menuItems[menuItems.length - 1];
-            const isActive = activeView === item.id;
-            return (
-              <div
-                key={item.id}
-                onClick={() => handleMenuClick(item.id)}
-                title={!isSidebarHovered ? item.label : undefined}
-                className="relative cursor-pointer group mt-auto"
-              >
-                {isActive && (
-                  <div
-                    className="absolute inset-0 rounded-xl pointer-events-none"
-                    style={{
-                      background: "radial-gradient(ellipse at left center, rgba(217,70,168,0.12) 0%, transparent 70%)",
-                      animation: "sm-glow-pulse 3s ease-in-out infinite",
-                    }}
-                  />
-                )}
-                <div
-                  className={`flex items-center gap-3 px-4 py-3 sm:py-4.5 rounded-xl transition-all duration-200 relative overflow-hidden ${isActive ? "text-[#d946a8]" : "text-gray-500 hover:text-gray-200"
-                    }`}
-                  style={isActive ? {
-                    background: "linear-gradient(135deg, rgba(158,33,123,0.22) 0%, rgba(217,70,168,0.07) 100%)",
-                    boxShadow: "inset 0 0 0 1px rgba(217,70,168,0.28), 0 2px 16px rgba(158,33,123,0.12)",
-                  } : {}}
-                >
-                  {isActive && (
-                    <div
-                      className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-[#d946a8]"
-                      style={{ boxShadow: "0 0 10px rgba(217,70,168,0.9), 0 0 4px rgba(217,70,168,0.6)" }}
-                    />
-                  )}
-                  {!isActive && (
-                    <div className="absolute inset-0 rounded-xl bg-white/0 group-hover:bg-white/[0.04] transition-colors duration-200" />
-                  )}
-                  <div
-                    className={`flex-shrink-0 transition-all duration-200 ${isActive ? "text-[#d946a8]" : "text-gray-600 group-hover:text-gray-300"
-                      }`}
-                    style={isActive ? { filter: "drop-shadow(0 0 5px rgba(217,70,168,0.65))" } : {}}
-                  >
-                    <item.icon style={{ width: "17px", height: "17px" }} />
-                  </div>
-                  <span
-                    className={`text-[12.5px] font-semibold whitespace-nowrap overflow-hidden transition-all duration-300 ${isActive ? "text-[#d946a8]" : "text-gray-400 group-hover:text-gray-100"
-                      }`}
-                    style={{
-                      maxWidth: isSidebarHovered ? "140px" : "0px",
-                      opacity: isSidebarHovered ? 1 : 0,
-                      transform: isSidebarHovered ? "translateX(0)" : "translateX(-6px)",
-                      letterSpacing: "0.01em",
-                    }}
-                  >
-                    {item.label}
-                  </span>
-                </div>
-              </div>
-            );
-          })()}
-        </nav>
-
-        <div className="flex-shrink-0" style={{ height: "60px", background: "linear-gradient(0deg, #0f0f1a 0%, transparent 100%)" }} />
-      </motion.aside>
+      {/* ── SIDEBAR ──
+          Shared with /dashboard/employees and the Settings panel so the rail
+          cannot drift between the three routes. */}
+      <AdminSidebar
+        items={menuItems}
+        activeId={activeView}
+        groups={menuGroups}
+        isHovered={isSidebarHovered}
+        onHoverChange={setIsSidebarHovered}
+        onSelect={(item) => handleMenuClick(item.id)}
+      />
 
       <style dangerouslySetInnerHTML={{
         __html: `
@@ -1090,7 +923,7 @@ function AdminAtlasDashboardContent() {
 
       <div className={`flex-1 flex flex-col pl-[72px] h-screen overflow-hidden ${theme.mainBg}`}>
         <header
-          className={`h-16 flex items-center justify-between px-8 z-[40] transition-colors duration-300 relative ${theme.header}`}
+          className={`h-14 flex items-center justify-between px-8 z-[40] transition-colors duration-300 relative ${theme.header}`}
           style={{
             borderBottom: isDark ? "1px solid rgba(158,33,123,0.12)" : "1px solid rgba(0,0,0,0.07)",
             backdropFilter: "blur(16px)",
@@ -1115,24 +948,16 @@ function AdminAtlasDashboardContent() {
           <div className="flex items-center gap-3 relative z-[50]" ref={topbarRef}>
             {/* <LoginTimerWidget isDark={isDark} /> */}
             <AttendanceBadge />
-            <button onClick={() => {
-              const next = !isDark;
-              setIsDark(next);
-              try {
-                localStorage.setItem("crm_theme", next ? "dark" : "light");
-              } catch { }
-            }} aria-label="Toggle theme"
+            <button onClick={toggleTheme}
+              aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+              aria-pressed={isDark}
               className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center cursor-pointer justify-center shadow-sm ${theme.toggleWrap}`}>
               {isDark ? <SunIcon /> : <MoonIcon />}
             </button>
 
-            {/* System Settings Icon */}
-            {isAdmin && (
-              <button onClick={() => router.push("/dashboard/settings")} aria-label="Settings"
-                className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center cursor-pointer justify-center shadow-sm ${theme.toggleWrap}`}>
-                <FaCog className="w-5 h-5" />
-              </button>
-            )}
+            {/* Settings moved out of the header — it is the last item in the
+                global sidebar now, so it sits with the rest of the navigation
+                instead of being a header control. */}
 
             {/* CRM System Updates */}
             <CrmUpdatesNotification user={user} theme={theme} isDark={isDark} isOpen={activePopup === "updates"} onToggle={() => setActivePopup(activePopup === "updates" ? null : "updates")} />
@@ -3773,7 +3598,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
         ) : (
           <div className="flex-1 flex flex-col h-full overflow-hidden">
             {/* Sub-header */}
-            <div className={`p-2 border-b flex justify-between items-center shadow-sm z-10 flex-shrink-0 gap-2 ${theme.header}`} style={theme.headerGlass}>
+            <div className={`pt-2 pb-2 px-2 border-b flex justify-between items-center shadow-sm z-10 flex-shrink-0 gap-2 ${theme.header}`} style={theme.headerGlass}>
               <div>
                 <h2 className={`text-lg font-bold flex items-center gap-2 ${theme.text}`}>
                   <FaUsers className={isDark ? "text-[#d946a8]" : "text-[#9E217B]"} /> {selectedManager.name}'s Division
@@ -3881,7 +3706,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                 <div className={`flex-1 overflow-y-auto p-3 ${theme.scroll}`}>
                   <div className="animate-fadeIn max-w-[1600px] mx-auto flex flex-col h-[calc(100vh-130px)]">
                     {/* Detail header — sticky compact action bar */}
-                    <div className={`sticky top-0 z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 rounded-xl border p-2 shadow-sm flex-shrink-0 ${selectedLead.is_lost_lead ? theme.cardLost : theme.card}`} style={theme.cardGlass}>
+                    <div className={`sticky top-0 z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-0 rounded-xl border p-2 shadow-sm flex-shrink-0 ${selectedLead.is_lost_lead ? theme.cardLost : theme.card}`} style={theme.cardGlass}>
                       <div className="flex items-center gap-2">
                         <button onClick={() => { setSubView("list"); setShowSalesForm(false); setShowLoanForm(false); }} className={`w-9 h-9 flex items-center justify-center border rounded-xl transition-colors cursor-pointer shadow-sm ${theme.textMuted} ${theme.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}><FaChevronLeft className="text-xs" /></button>
                         <h1 className={`text-base lg:text-lg font-bold flex items-center gap-2 ${theme.text}`}>
@@ -3946,9 +3771,21 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                       </div>
                     </div>
 
+                    {/* AI voice calling. Self-gating: renders nothing at all when
+                        Bolna is unconfigured, so it needs no capability guard here. */}
+                    <div className="mb-3 flex-shrink-0">
+                      <BolnaCallWidget
+                        leadId={Number(selectedLead.id)}
+                        leadName={selectedLead.name}
+                        phone={selectedLead.phone}
+                        userData={{ project: selectedLead.propType || selectedLead.configuration }}
+                        compact
+                      />
+                    </div>
+
                     <div className="flex flex-col lg:flex-row gap-2 flex-1 min-h-0 pb-2">
                       {/* LEFT PANEL — 35% on small laptops (lg), 40% on desktop (xl) */}
-                      <div className="w-full lg:w-[45%] xl:w-[50%] flex flex-col gap-3 h-full pb-2">
+                      <div className="w-full lg:w-[45%] xl:w-[45%] flex flex-col gap-3 h-full pb-2">
                         {showSalesForm ? (
                           <div className={`rounded-xl border p-3 shadow-xl flex-1 overflow-y-auto custom-scrollbar flex flex-col ${theme.modalCard}`} style={theme.modalGlass}>
                             <div className={`flex justify-between items-center mb-3 border-b pb-2 ${theme.tableBorder}`}>
@@ -4085,9 +3922,10 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                                 <LoanDealView lead={selectedLead} booking={loanDealBooking} loanUpdate={loanDealLatest} isDark={isDark} t={theme} />
                               )}
                             </div>
-                            <div className="grid grid-cols-2 gap-3 mt-3 flex-shrink-0">
+                            <div className="grid grid-cols-2 gap-2 mt-1 flex-shrink-0">
                               <button className={`border flex flex-col items-center justify-center py-2.5 rounded-xl transition-all cursor-pointer gap-1 ${isDark ? "bg-[#9E217B]/10 border-[#9E217B]/30 hover:bg-[#9E217B] text-[#d946a8] hover:text-white" : "bg-[#9E217B]/10 border-[#9E217B]/30 hover:bg-[#9E217B] text-[#9E217B] hover:text-white"}`}><FaMicrophone className="text-base" /><span className="font-bold text-[10px]">Browser Call</span></button>
                               <button onClick={() => setIsWaModalOpen(true)} className="bg-green-600/10 border border-green-500/30 hover:bg-green-600 text-green-400 hover:text-white flex flex-col items-center justify-center py-2.5 rounded-xl transition-all cursor-pointer gap-1"><FaWhatsapp className="text-base" /><span className="font-bold text-[10px]">WhatsApp</span></button>
+                              <CallingButtons leadId={selectedLead?.id ?? null} phone={selectedLead?.phone} leadName={selectedLead?.name} isDark={isDark} iconClass="text-base" paddingClass="py-2.5" />
                             </div>
                           </div>
                         )}
@@ -4858,12 +4696,12 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
         ) : (
           <div className="flex-1 flex flex-col h-full overflow-hidden">
             {/* Sub-header */}
-            <div className={`p-5 border-b flex justify-between items-center shadow-sm z-10 flex-shrink-0 gap-2 ${theme.header}`} style={theme.headerGlass}>
+            <div className={`p-2 border-b flex justify-between items-center shadow-sm z-10 flex-shrink-0 gap-2 ${theme.header}`} style={theme.headerGlass}>
               <div>
                 <h2 className={`text-lg font-bold flex items-center gap-2 ${theme.text}`}>
                   <FaUniversity className={isDark ? "text-[#d946a8]" : "text-[#9E217B]"} /> {selectedSiteHead.name}'s Division
                 </h2>
-                <p className={`text-xs mt-1 ${theme.textFaint}`}>Admin view — monitor Site Head activity</p>
+                {/* <p className={`text-xs mt-1 ${theme.textFaint}`}>Admin view — monitor Site Head activity</p> */}
               </div>
               <span className={`text-xs px-3 py-1 rounded-full border font-bold flex items-center gap-1.5 ${isDark ? "text-green-400 border-green-500/30 bg-green-500/10" : "text-green-700 border-green-200 bg-green-50"}`}>
                 🟢 Live Sync Active
@@ -4951,10 +4789,10 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                 <div className={`flex-1 overflow-y-auto p-2 ${theme.scroll}`}>
                   <div className="animate-fadeIn max-w-[1600px] mx-auto flex flex-col h-[calc(100vh-130px)]">
                     {/* Detail header */}
-                    <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2 rounded-xl border p-2 sm:p-2 shadow-sm flex-shrink-0 ${selectedLead.is_lost_lead ? theme.cardLost : theme.card}`} style={theme.cardGlass}>
+                    <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-0 rounded-xl border p-2 sm:p-2 shadow-sm flex-shrink-0 ${selectedLead.is_lost_lead ? theme.cardLost : theme.card}`} style={theme.cardGlass}>
                       <div className="flex items-center gap-2">
                         <button onClick={() => { setSubView("list"); setShowSalesForm(false); setShowLoanForm(false); }} className={`w-10 h-10 flex items-center justify-center border rounded-xl transition-colors cursor-pointer shadow-sm ${theme.textMuted} ${theme.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}><FaChevronLeft className="text-sm" /></button>
-                        <h1 className={`text-lg md:text-2xl font-bold flex items-center gap-3 ${theme.text}`}>
+                        <h1 className={`text-lg md:text-lg font-bold flex items-center gap-3 ${theme.text}`}>
                           <span className={isDark ? "text-[#d946a8]" : "text-[#9E217B]"}>#{selectedLead.sr_no || selectedLead.id}</span>
                           <span>{selectedLead.name}</span>
                           {selectedLead.status === "Closing" && (
@@ -5016,9 +4854,20 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                       </div>
                     </div>
 
+                    {/* AI voice calling — see the note in AdminSalesView. */}
+                    <div className="mb-2 flex-shrink-0">
+                      <BolnaCallWidget
+                        leadId={Number(selectedLead.id)}
+                        leadName={selectedLead.name}
+                        phone={selectedLead.phone}
+                        userData={{ project: selectedLead.propType || selectedLead.configuration }}
+                        compact
+                      />
+                    </div>
+
                     <div className="flex flex-col lg:flex-row gap-2 flex-1 min-h-0 pb-2">
                       {/* LEFT PANEL */}
-                      <div className="w-full lg:w-[65%] flex flex-col gap-3 h-full pb-2">
+                      <div className="w-full lg:w-[45%] flex flex-col gap-3 h-full pb-2">
                         {showSalesForm ? (
                           <div className={`rounded-xl border p-5 shadow-xl flex-1 overflow-y-auto custom-scrollbar flex flex-col ${theme.modalCard}`} style={theme.modalGlass}>
                             <div className={`flex justify-between items-center mb-4 border-b pb-3 ${theme.tableBorder}`}>
@@ -5074,7 +4923,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                           />
                         ) : (
                           <div className="flex flex-col h-full animate-fadeIn">
-                            <div className={`flex items-center gap-2 mb-4 border p-1.5 rounded-xl flex-shrink-0 ${theme.tableWrap}`}>
+                            <div className={`flex items-center gap-2 mb-1 border p-1.5 rounded-xl flex-shrink-0 ${theme.tableWrap}`}>
                               <button onClick={() => setDetailTab("personal")} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-colors cursor-pointer ${detailTab === "personal" ? theme.btnPrimary : `${theme.textMuted} hover:opacity-80`}`}>Personal Information</button>
                               <button onClick={() => setDetailTab("loan")} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-colors cursor-pointer ${detailTab === "loan" ? theme.btnSecondary : `${theme.textMuted} hover:opacity-80`}`}>Loan Tracking</button>
                             </div>
@@ -5152,16 +5001,17 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                                 <LoanDealView lead={selectedLead} booking={loanDealBooking} loanUpdate={loanDealLatest} isDark={isDark} t={theme} />
                               )}
                             </div>
-                            <div className="grid grid-cols-2 gap-3 mt-4 flex-shrink-0">
+                            <div className="grid grid-cols-2 gap-3 mt-2 flex-shrink-0">
                               <button className={`border flex flex-col items-center justify-center py-3 rounded-xl transition-all cursor-pointer gap-1 ${isDark ? "bg-[#9E217B]/10 border-[#9E217B]/30 hover:bg-[#9E217B] text-[#d946a8] hover:text-white" : "bg-[#9E217B]/10 border-[#9E217B]/30 hover:bg-[#9E217B] text-[#9E217B] hover:text-white"}`}><FaMicrophone className="text-lg" /><span className="font-bold text-[10px]">Browser Call</span></button>
                               <button onClick={() => setIsWaModalOpen(true)} className="bg-green-600/10 border border-green-500/30 hover:bg-green-600 text-green-400 hover:text-white flex flex-col items-center justify-center py-3 rounded-xl transition-all cursor-pointer gap-1"><FaWhatsapp className="text-lg" /><span className="font-bold text-[10px]">WhatsApp</span></button>
+                              <CallingButtons leadId={selectedLead?.id ?? null} phone={selectedLead?.phone} leadName={selectedLead?.name} isDark={isDark} iconClass="text-lg" paddingClass="py-3" />
                             </div>
                           </div>
                         )}
                       </div>
 
                       {/* RIGHT PANEL: FOLLOW-UPS */}
-                      <div className={`w-full lg:w-[50%] flex flex-col rounded-xl overflow-hidden shadow-2xl h-full min-h-0 border ${theme.chatPanel}`} style={theme.chatPanelGl}>
+                      <div className={`w-full lg:w-[60%] flex flex-col rounded-xl overflow-hidden shadow-2xl h-full min-h-0 border ${theme.chatPanel}`} style={theme.chatPanelGl}>
                         <div className={`flex-1 p-6 overflow-y-auto custom-scrollbar flex flex-col gap-3 ${theme.chatArea}`}>
                           {/* System message */}
                           <div className="flex justify-start">
@@ -6124,6 +5974,17 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                       );
                     })()}
 
+                    {/* AI voice calling — see the note in AdminSalesView. */}
+                    <div className="mb-3 flex-shrink-0">
+                      <BolnaCallWidget
+                        leadId={Number(selectedLead.id)}
+                        leadName={selectedLead.name}
+                        phone={selectedLead.phone}
+                        userData={{ project: selectedLead.propType || selectedLead.configuration }}
+                        compact
+                      />
+                    </div>
+
                     <div className="flex flex-col lg:flex-row gap-3 flex-1 min-h-0 pb-2">
                       <div className="w-full lg:w-[50%] flex flex-col gap-2 h-full pb-2 min-h-0">
                         {showSalesForm ? (
@@ -6267,13 +6128,14 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                                 <LoanDealView lead={selectedLead} booking={loanDealBooking} loanUpdate={loanDealLatest} isDark={isDark} t={theme} />
                               )}
                             </div>
-                            <div className="grid grid-cols-2 gap-3 mt-4 flex-shrink-0">
+                            <div className="grid grid-cols-2 gap-3 mt-1 flex-shrink-0">
                               <button className={`border flex flex-col items-center justify-center py-3 rounded-xl transition-all cursor-pointer gap-1 ${isDark ? "bg-[#9E217B]/10 border-[#9E217B]/30 hover:bg-[#9E217B] text-[#d946a8] hover:text-white" : "bg-[#9E217B]/10 border-[#9E217B]/30 hover:bg-[#9E217B] text-[#9E217B] hover:text-white"}`}>
                                 <FaMicrophone className="text-lg" /><span className="font-bold text-[10px]">Browser Call</span>
                               </button>
                               <button onClick={() => setIsWaModalOpen(true)} className="bg-green-50 dark:bg-green-600/10 border border-green-200 dark:border-green-500/30 hover:bg-green-100 dark:hover:bg-green-600 text-green-600 dark:text-green-400 flex flex-col items-center justify-center py-3 rounded-xl transition-all cursor-pointer gap-1">
                                 <FaWhatsapp className="text-lg" /><span className="font-bold text-[10px]">WhatsApp</span>
                               </button>
+                              <CallingButtons leadId={selectedLead?.id ?? null} phone={selectedLead?.phone} leadName={selectedLead?.name} isDark={isDark} iconClass="text-lg" paddingClass="py-3" />
                             </div>
                           </div>
                         )}

@@ -10,6 +10,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { clearCrmSession, getStoredCrmUser, installLoggedOutBackGuard } from "@/lib/authSession";
+import { useCrmTheme } from "@/lib/hooks/useCrmTheme";
 import { motion, AnimatePresence } from "framer-motion";
 import * as XLSX from "xlsx";
 import {
@@ -22,6 +23,8 @@ import {
   FaExchangeAlt, FaEye, FaExclamationTriangle, FaSignal, FaUserClock, FaWhatsapp
 } from "react-icons/fa";
 import { FaWandMagicSparkles } from 'react-icons/fa6'
+import AdminSidebar from "@/components/admin/AdminSidebar";
+import BhoomiAiPanel from "@/components/bhoomi-ai/BhoomiAiPanel";
 import NotificationsPanel from "@/components/NotificationsPanel";
 import { useCallerSync } from "@/lib/hooks/useCallerSync";
 import CrmUpdatesNotification from "@/components/CrmUpdatesNotification";
@@ -250,13 +253,10 @@ export default function EmployeesPage() {
   const router = useRouter();
   useActivityTracker();
 
-  const [isDark, setIsDark] = useState(() => {
-    try {
-      return localStorage.getItem("crm_theme") === "dark";
-    } catch {
-      return false;
-    }
-  });
+  // The shared theme, from lib/theme.ts. One value for the whole CRM: the same
+  // one Preferences → Theme writes and every other header toggle reads, so a
+  // change anywhere repaints everywhere without a reload.
+  const { isDark, toggleTheme } = useCrmTheme();
   const t = useMemo(() => buildTheme(isDark), [isDark]);
 
   const [activeSection, setActiveSection] = useState<"employees" | "callers" | "ai" | "notifications">("employees");
@@ -367,6 +367,7 @@ export default function EmployeesPage() {
     const params = new URLSearchParams(window.location.search);
     if (params.get("tab") === "callers") setActiveSection("callers");
     else if (params.get("tab") === "ai") setActiveSection("ai");
+    else if (params.get("tab") === "notifications") setActiveSection("notifications");
 
     const userRole = parsed.role?.toLowerCase() || "";
     if (userRole === "admin" || userRole === "site head" || userRole === "site_head") {
@@ -807,10 +808,21 @@ export default function EmployeesPage() {
     { id: "callers", icon: FaPhoneAlt, label: "Caller Panel", link: "/dashboard/employees", section: "callers" as const },
     { id: "employees", icon: FaIdCard, label: "Add Employee", link: "/dashboard/employees", section: "employees" as const },
     { id: "notifications", icon: FaWhatsapp, label: "WhatsApp Alerts", link: "/dashboard/employees", section: "notifications" as const },
-    // Must stay LAST: the sidebar renders menuItems.slice(0, -1) in the main
-    // list and pins this final entry to the bottom.
-    { id: "ai", icon: FaWandMagicSparkles, label: "Bhoomi AI", link: "/dashboard/employees", section: "ai" as const },
+    // `pinned` entries render in the rail's bottom block, in this order — so
+    // Bhoomi AI keeps the place it has always had and Settings is the last
+    // button. (It used to be position-based: whatever sat last got pinned.)
+    { id: "ai", icon: FaWandMagicSparkles, label: "Bhoomi AI", link: "/dashboard/employees", section: "ai" as const, pinned: true },
+    ...(user?.role?.toLowerCase() === "admin"
+      ? [{ id: "settings", icon: FaCog, label: "Settings", link: "/dashboard/settings", section: null, pinned: true }]
+      : []),
   ];
+
+  const menuGroups: Record<string, string> = {
+    dashboard: "Workspace",
+    receptionist: "Team", sales: "Team", site_head: "Team",
+    site_visit_overview: "Insights", attendance: "Insights", monitoring: "Insights", live_activity: "Insights", geo: "Insights",
+    callers: "Admin", employees: "Admin", notifications: "Admin",
+  };
 
   if (isAuthorized === null) return <div className="min-h-screen bg-[#0a0a0a]" />;
   const selectedManageUser = employees.find(e => e._id === selectedManageUserId);
@@ -820,229 +832,28 @@ export default function EmployeesPage() {
       className={`flex h-screen font-sans overflow-hidden relative transition-colors duration-300 ${t.pageWrap}`}
       style={t.pageStyle}
     >
-      <AnimatePresence>
-        {isSidebarHovered && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}
-            className="fixed inset-0 bg-black/60 z-40 pointer-events-none backdrop-blur-[1px]" />
-        )}
-      </AnimatePresence>
-
-      {/* ── SIDEBAR ── */}
-      <motion.aside
-        initial={{ width: "72px" }} animate={{ width: isSidebarHovered ? "248px" : "72px" }} transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
-        onMouseEnter={() => setIsSidebarHovered(true)} onMouseLeave={() => setIsSidebarHovered(false)}
-        className="fixed left-0 top-0 h-screen z-50 flex flex-col overflow-hidden"
-        style={{
-          background: "linear-gradient(180deg, #0f0f1a 0%, #111128 40%, #0f0f1a 100%)",
-          borderRight: "1px solid rgba(158,33,123,0.15)",
-          boxShadow: "4px 0 24px rgba(0,0,0,0.4), inset -1px 0 0 rgba(158,33,123,0.08)",
+      {/* ── SIDEBAR ──
+          Shared with the Admin Dashboard and the Settings panel so the rail
+          cannot drift between the three routes. */}
+      <AdminSidebar
+        items={menuItems}
+        activeId={menuItems.find((i) => i.section && i.section === activeSection)?.id ?? null}
+        groups={menuGroups}
+        isHovered={isSidebarHovered}
+        onHoverChange={setIsSidebarHovered}
+        logoSrc="/assets/logobrowser_trans.svg"
+        onSelect={(item) => {
+          setIsSidebarHovered(false);
+          if (item.section) {
+            setActiveSection(item.section);
+            if (item.section === "callers" && callerSubView === "control") setCallerSubView("table");
+          } else {
+            localStorage.setItem("return_tab", item.id);
+            router.push(item.link);
+          }
         }}
-      >
-        {/* Logo */}
-        <div className="flex items-center px-4 py-5 mb-2 whitespace-nowrap flex-shrink-0">
-          <img
-            src="/assets/logobrowser_trans.svg"
-            alt="Logo"
-            className="w-10 h-10 min-w-[40px] rounded-xl object-cover flex-shrink-0"
-          />
-          <motion.div
-            initial={{ opacity: 0, x: -8 }}
-            animate={{ opacity: isSidebarHovered ? 1 : 0, x: isSidebarHovered ? 0 : -8 }}
-            transition={{ duration: 0.25, ease: "easeOut" }}
-            className="ml-3 overflow-hidden"
-          >
-            <p className="font-black text-white text-[15px] leading-tight tracking-wide whitespace-nowrap">Bhoomi CRM</p>
-            <p className="text-[10px] font-medium whitespace-nowrap" style={{ color: "rgba(217,70,168,0.7)" }}>Admin Panel</p>
-          </motion.div>
-        </div>
+      />
 
-        {/* Divider */}
-        <div className="mx-4 mb-4 flex-shrink-0" style={{ height: "1px", background: "linear-gradient(90deg, transparent, rgba(158,33,123,0.3), transparent)" }} />
-
-        {isSidebarHovered && (
-          <div className="px-4 mb-2 flex-shrink-0 animate-fadeIn">
-            <input
-              type="text"
-              value={navSearch}
-              onChange={(e) => setNavSearch(e.target.value)}
-              placeholder="Quick jump..."
-              autoFocus
-              className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-gray-300 placeholder:text-gray-600 outline-none focus:border-[#9E217B]/50"
-            />
-          </div>
-        )}
-
-        <nav className="flex flex-col gap-2 px-2 flex-1 overflow-y-auto overflow-x-hidden sidebar-scroll">
-          {/* Main nav items (all except last) */}
-          <div className="flex flex-col gap-2">
-            {(() => {
-              const groupOf: Record<string, string> = {
-                dashboard: "Workspace",
-                receptionist: "Team", sales: "Team", site_head: "Team",
-                site_visit_overview: "Insights", attendance: "Insights", monitoring: "Insights", live_activity: "Insights", geo: "Insights",
-                callers: "Admin", employees: "Admin", notifications: "Admin",
-              };
-              const visibleItems = menuItems
-                .slice(0, -1)
-                .filter((i) => i.label.toLowerCase().includes(navSearch.toLowerCase()));
-
-              return visibleItems.map((item, idx) => {
-                const isActive = item.section ? activeSection === item.section : false;
-                const prevItem = visibleItems[idx - 1];
-                const showGroupLabel = groupOf[item.id] && groupOf[item.id] !== groupOf[prevItem?.id];
-                return (
-                  <div key={`wrap-${item.id}`}>
-                    {showGroupLabel && (
-                      <p
-                        className="text-[10px] font-bold uppercase tracking-wider text-gray-600 px-4 pt-3 pb-1 overflow-hidden whitespace-nowrap transition-opacity duration-200"
-                        style={{ opacity: isSidebarHovered ? 1 : 0 }}
-                      >
-                        {groupOf[item.id]}
-                      </p>
-                    )}
-                    <div
-                      key={item.id}
-                      title={!isSidebarHovered ? item.label : undefined}
-                      className="relative cursor-pointer group"
-                      onClick={() => {
-                        if (item.section) {
-                          setActiveSection(item.section!);
-                          setIsSidebarHovered(false);
-                          if (item.section === "callers" && callerSubView === "control") setCallerSubView("table");
-                        } else {
-                          localStorage.setItem("return_tab", item.id);
-                          router.push(item.link);
-                          setIsSidebarHovered(false);
-                        }
-                      }}
-                    >
-                      {isActive && (
-                        <div
-                          className="absolute inset-0 rounded-xl pointer-events-none"
-                          style={{
-                            background: "radial-gradient(ellipse at left center, rgba(217,70,168,0.12) 0%, transparent 70%)",
-                            animation: "sm-glow-pulse 3s ease-in-out infinite",
-                          }}
-                        />
-                      )}
-                      <div
-                        className={`flex items-center gap-3 px-4.5 py-2.5 rounded-xl transition-all duration-200 relative overflow-hidden ${isActive ? "text-[#d946a8]" : "text-gray-500 hover:text-gray-200"
-                          }`}
-                        style={isActive ? {
-                          background: "linear-gradient(135deg, rgba(158,33,123,0.22) 0%, rgba(217,70,168,0.07) 100%)",
-                          boxShadow: "inset 0 0 0 1px rgba(217,70,168,0.28), 0 2px 16px rgba(158,33,123,0.12)",
-                        } : {}}
-                      >
-                        {isActive && (
-                          <div
-                            className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-[#d946a8]"
-                            style={{ boxShadow: "0 0 10px rgba(217,70,168,0.9), 0 0 4px rgba(217,70,168,0.6)" }}
-                          />
-                        )}
-                        {!isActive && (
-                          <div className="absolute inset-0 rounded-xl bg-white/0 group-hover:bg-white/[0.04] transition-colors duration-200" />
-                        )}
-                        <div
-                          className={`flex-shrink-0 transition-all duration-200 ${isActive ? "text-[#d946a8]" : "text-gray-600 group-hover:text-gray-300"
-                            }`}
-                          style={isActive ? { filter: "drop-shadow(0 0 5px rgba(217,70,168,0.65))" } : {}}
-                        >
-                          <item.icon style={{ width: "17px", height: "17px" }} />
-                        </div>
-                        <span
-                          className={`text-[12.5px] font-semibold whitespace-nowrap overflow-hidden transition-all duration-300 ${isActive ? "text-[#d946a8]" : "text-gray-400 group-hover:text-gray-100"
-                            }`}
-                          style={{
-                            maxWidth: isSidebarHovered ? "140px" : "0px",
-                            opacity: isSidebarHovered ? 1 : 0,
-                            transform: isSidebarHovered ? "translateX(0)" : "translateX(-6px)",
-                            letterSpacing: "0.01em",
-                          }}
-                        >
-                          {item.label}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              });
-            })()}
-          </div>
-
-          {/* Last item (Bhoomi AI) pinned to bottom */}
-          {(() => {
-            const item = menuItems[menuItems.length - 1];
-            const isActive = item.section ? activeSection === item.section : false;
-            return (
-              <div
-                key={item.id}
-                title={!isSidebarHovered ? item.label : undefined}
-                className="relative cursor-pointer group mt-auto"
-                onClick={() => {
-                  if (item.section) {
-                    setActiveSection(item.section!);
-                    setIsSidebarHovered(false);
-                  } else {
-                    localStorage.setItem("return_tab", item.id);
-                    router.push(item.link);
-                    setIsSidebarHovered(false);
-                  }
-                }}
-              >
-                {isActive && (
-                  <div
-                    className="absolute inset-0 rounded-xl pointer-events-none"
-                    style={{
-                      background: "radial-gradient(ellipse at left center, rgba(217,70,168,0.12) 0%, transparent 70%)",
-                      animation: "sm-glow-pulse 3s ease-in-out infinite",
-                    }}
-                  />
-                )}
-                <div
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 relative overflow-hidden ${isActive ? "text-[#d946a8]" : "text-gray-500 hover:text-gray-200"
-                    }`}
-                  style={isActive ? {
-                    background: "linear-gradient(135deg, rgba(158,33,123,0.22) 0%, rgba(217,70,168,0.07) 100%)",
-                    boxShadow: "inset 0 0 0 1px rgba(217,70,168,0.28), 0 2px 16px rgba(158,33,123,0.12)",
-                  } : {}}
-                >
-                  {isActive && (
-                    <div
-                      className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-[#d946a8]"
-                      style={{ boxShadow: "0 0 10px rgba(217,70,168,0.9), 0 0 4px rgba(217,70,168,0.6)" }}
-                    />
-                  )}
-                  {!isActive && (
-                    <div className="absolute inset-0 rounded-xl bg-white/0 group-hover:bg-white/[0.04] transition-colors duration-200" />
-                  )}
-                  <div
-                    className={`flex-shrink-0 transition-all duration-200 ${isActive ? "text-[#d946a8]" : "text-gray-600 group-hover:text-gray-300"
-                      }`}
-                    style={isActive ? { filter: "drop-shadow(0 0 5px rgba(217,70,168,0.65))" } : {}}
-                  >
-                    <item.icon style={{ width: "17px", height: "17px" }} />
-                  </div>
-                  <span
-                    className={`text-[12.5px] font-semibold whitespace-nowrap overflow-hidden transition-all duration-300 ${isActive ? "text-[#d946a8]" : "text-gray-400 group-hover:text-gray-100"
-                      }`}
-                    style={{
-                      maxWidth: isSidebarHovered ? "140px" : "0px",
-                      opacity: isSidebarHovered ? 1 : 0,
-                      transform: isSidebarHovered ? "translateX(0)" : "translateX(-6px)",
-                      letterSpacing: "0.01em",
-                    }}
-                  >
-                    {item.label}
-                  </span>
-                </div>
-              </div>
-            );
-          })()}
-        </nav>
-
-        {/* Bottom gradient fade */}
-        <div className="flex-shrink-0" style={{ height: "60px", background: "linear-gradient(0deg, #0f0f1a 0%, transparent 100%)" }} />
-      </motion.aside>
 
       {/* ── MAIN ── */}
       <div className={`flex-1 flex flex-col pl-[72px] h-screen overflow-hidden transition-colors duration-300 ${t.mainBg}`}>
@@ -1076,24 +887,16 @@ export default function EmployeesPage() {
           <div className="flex items-center gap-6">
             {/* <LoginTimerWidget isDark={isDark} /> */}
             <AttendanceBadge />
-            <button onClick={() => {
-              const next = !isDark;
-              setIsDark(next);
-              try {
-                localStorage.setItem("crm_theme", next ? "dark" : "light");
-              } catch { }
-            }} aria-label="Toggle theme"
+            <button onClick={toggleTheme}
+              aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+              aria-pressed={isDark}
               className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center cursor-pointer justify-center shadow-sm ${t.toggleBtn}`}>
               {isDark ? <SunIcon /> : <MoonIcon />}
             </button>
 
-            {/* System Settings Icon */}
-            {user?.role?.toLowerCase() === "admin" && (
-              <button onClick={() => router.push("/dashboard/settings")} aria-label="Settings"
-                className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center cursor-pointer justify-center shadow-sm ${t.toggleBtn}`}>
-                <FaCog className="w-5 h-5" />
-              </button>
-            )}
+            {/* Settings moved out of the header — it is the last item in the
+                global sidebar now, so it sits with the rest of the navigation
+                instead of being a header control. */}
 
             {/* CRM System Updates */}
             <CrmUpdatesNotification user={user} theme={t} isDark={isDark} />
@@ -1496,64 +1299,10 @@ export default function EmployeesPage() {
 
         ) : activeSection === "ai" ? (
 
-          <main className={`flex-1 flex flex-col h-full overflow-hidden transition-colors duration-300 ${t.mainBg}`}>
-            {/* Chat History Area */}
-            <div className={`flex-1 overflow-y-auto p-8 ${t.scroll} custom-scrollbar`}>
-              <div className="max-w-4xl mx-auto space-y-8 pb-20">
-
-                {/* Intro Greeting */}
-                <div className="text-center mt-10">
-                  <div className="w-16 h-16 rounded-full bg-[#9E217B]/10 flex items-center justify-center mx-auto mb-4 border border-[#9E217B]/30 shadow-[0_0_30px_rgba(158,33,123,0.3)]">
-                    <FaWandMagicSparkles className="text-3xl text-[#d946a8]" />
-                  </div>
-                  <h1 className={`text-4xl font-black tracking-tight mb-2 ${isDark ? "text-white" : "text-gray-900"}`}>
-                    Hello, {user?.name?.split(' ')[0] || "Admin"}
-                  </h1>
-                  <p className={`text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-[#d946a8] to-orange-400`}>
-                    How can Bhoomi AI assist your sales pipeline today?
-                  </p>
-                </div>
-
-                {/* Example Mock AI Message (Replace with real state map later) */}
-                <div className="flex gap-4">
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#9E217B] to-orange-500 flex items-center justify-center flex-shrink-0 shadow-lg">
-                    <FaWandMagicSparkles className="text-white text-xs" />
-                  </div>
-                  <div className={`flex-1 rounded-2xl p-5 shadow-sm leading-relaxed ${isDark ? "bg-[#111111] border border-[#222] text-gray-300" : "bg-white border border-indigo-100 text-gray-700"}`}>
-                    <p><strong>System Ready.</strong> I have analyzed your CRM data. Would you like to see the top priority leads for today, or review the employee daily monitor report?</p>
-                  </div>
-                </div>
-
-              </div>
-            </div>
-
-            {/* Gemini-Style Input Bar */}
-            <div className={`p-6 flex-shrink-0 flex justify-center ${isDark ? "bg-[#0a0a0a]/80" : "bg-[#F8FAFC]/80"} backdrop-blur-md`}>
-              <div className="w-full max-w-4xl relative">
-                {/* Magenta Glow Container */}
-                <div className={`relative flex items-center rounded-2xl overflow-hidden transition-shadow duration-300
-                  ${isDark
-                    ? "bg-[#1a1a1a] border border-[#9E217B]/50 shadow-[0_0_20px_rgba(158,33,123,0.25)] focus-within:shadow-[0_0_35px_rgba(158,33,123,0.5)]"
-                    : "bg-white border border-[#9E217B]/50 shadow-[0_0_20px_rgba(158,33,123,0.15)] focus-within:shadow-[0_0_35px_rgba(158,33,123,0.4)]"
-                  }`}
-                >
-                  <input
-                    type="text"
-                    placeholder="Ask Bhoomi AI to analyze leads, check employee tasks, or find a customer..."
-                    className={`w-full py-4 pl-6 pr-14 outline-none text-sm font-medium bg-transparent
-                      ${isDark ? "text-white placeholder:text-gray-500" : "text-gray-900 placeholder:text-gray-400"}
-                    `}
-                  />
-                  <button className="absolute right-3 w-10 h-10 rounded-xl bg-gradient-to-r from-[#9E217B] to-[#c7299a] text-white flex items-center justify-center hover:opacity-90 transition-opacity shadow-lg">
-                    <FaWandMagicSparkles className="text-sm" />
-                  </button>
-                </div>
-                <p className="text-center text-[10px] text-gray-500 mt-3 font-medium">
-                  Bhoomi AI may occasionally make mistakes. Always verify critical lead data.
-                </p>
-              </div>
-            </div>
-          </main>
+          /* The Bhoomi AI tab. The chat lives in its own component: this file is
+             already 7k lines, and the panel is the only part of it that talks to
+             the assistant API. */
+          <BhoomiAiPanel isDark={isDark} t={t} user={user} />
 
         ) : callerSubView === "control" ? (
 

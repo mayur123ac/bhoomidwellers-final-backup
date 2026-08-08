@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { FaBuilding } from "react-icons/fa";
 import { MdPerson, MdLock, MdVisibility, MdVisibilityOff } from "react-icons/md";
+import { adoptServerTheme } from "@/lib/theme";
 
 export default function Login() {
   const router = useRouter();
@@ -30,6 +31,15 @@ export default function Login() {
       if (res.ok) {
         const data = await res.json();
         localStorage.setItem("crm_user", JSON.stringify(data.user));
+
+        // Restore the theme this user last chose, before navigating — so the
+        // dashboard paints in the right one rather than flashing the previous
+        // user's (or this browser's) theme first.
+        //
+        // `persist: false` inside adoptServerTheme: this value just came FROM
+        // the server, and echoing it straight back would be a pointless write
+        // on every single sign-in.
+        adoptServerTheme(data.theme);
 
         // Underscores normalized to spaces so "site_head" and "Site Head" (both
         // occur in the users table) take the same branch, as in middleware.ts.

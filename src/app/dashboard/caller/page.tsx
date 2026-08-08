@@ -17,6 +17,7 @@ import {
   FaTrash,
 } from "react-icons/fa";
 import { MdOutlinePhoneInTalk } from "react-icons/md";
+import CallingButtons from "@/components/CallingButtons";
 
 // ─────────────────────────────────────────────
 // TYPES
@@ -389,6 +390,9 @@ function LeadDetailView({ lead, onBack, onUpdateLead, callerName }: {
           <div className="grid grid-cols-2 gap-3">
             <button className="bg-blue-600/10 border border-blue-500/30 hover:bg-blue-600 text-blue-400 hover:text-white flex flex-col items-center justify-center py-3 rounded-xl cursor-pointer gap-1"><MdOutlinePhoneInTalk className="text-lg" /><span className="font-bold text-[10px]">Browser Call</span></button>
             <button className="bg-green-600/10 border border-green-500/30 hover:bg-green-600 text-green-400 hover:text-white flex flex-col items-center justify-center py-3 rounded-xl cursor-pointer gap-1"><FaWhatsapp className="text-xl" /><span className="font-bold text-[10px]">WhatsApp</span></button>
+            {/* callerLeadId, not leadId: this panel works the caller_leads
+                list, which is a separate table from walkin_enquiries. */}
+            <CallingButtons callerLeadId={lead.dbId ?? null} phone={lead.phone} leadName={lead.name} isDark iconClass="text-xl" paddingClass="py-3" />
           </div>
         </div>
 

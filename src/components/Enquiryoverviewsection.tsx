@@ -110,7 +110,9 @@ import {
     FaExchangeAlt,
     FaEye,
     FaSyncAlt,
+    FaPhoneAlt,
 } from "react-icons/fa";
+import type { BolnaStatusResponse } from "@/types/bolna.types";
 import {
     Checkbox,
     ToggleSwitch,
@@ -143,6 +145,11 @@ type Ctx = {
     onDeleteLead: (lead: Lead) => void;
     onNavigateToSales?: (lead: Lead) => void;
     InterestBadge: any;
+    /* Bolna calling is set up and switched on. Resolved once for the whole
+       table (see the effect in the component) and passed down here rather than
+       fetched per row — a status request per rendered row would be 25 identical
+       calls on every page change. */
+    bolnaReady: boolean;
 };
 
 type Column = {
@@ -496,7 +503,7 @@ const COLUMNS: Column[] = [
         key: "actions",
         label: "Actions",
         align: "center",
-        minWidth: "min-w-[64px]",
+        minWidth: "min-w-[96px]",
         locked: true,
         render: (l, ctx) => {
             const items: MenuItem[] = [];
@@ -522,7 +529,44 @@ const COLUMNS: Column[] = [
                     danger: true,
                 });
             }
-            return <ActionMenu items={items} isDark={ctx.isDark} />;
+
+            /* A navigation shortcut, not a dialler. It opens the same lead
+               detail view as a row click and the "View lead" menu item — the
+               call widget lives there, and firing a real call straight from a
+               table row would be a one-click irreversible action sitting
+               directly beside Delete.
+
+               Absent rather than disabled when unavailable: a greyed-out phone
+               on every row of a table belonging to a CRM that has never set up
+               Bolna is permanent clutter that teaches users to ignore it. */
+            const canCall =
+                ctx.bolnaReady && !isBlank(l.phone) && !!ctx.onNavigateToSales;
+
+            return (
+                <div className="flex items-center justify-center gap-1">
+                    {canCall && (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                ctx.onNavigateToSales!(l);
+                            }}
+                            title="AI Call Lead"
+                            aria-label={`AI call ${l.name || "lead"}`}
+                            className={`
+                w-8 h-8 grid place-items-center rounded-lg transition-all duration-200
+                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d946a8]
+                ${ctx.isDark
+                                    ? "text-gray-400 hover:bg-[#9E217B]/20 hover:text-[#d946a8]"
+                                    : "text-gray-500 hover:bg-[#9E217B]/10 hover:text-[#9E217B]"
+                                }
+              `}
+                        >
+                            <FaPhoneAlt className="text-[11px]" />
+                        </button>
+                    )}
+                    <ActionMenu items={items} isDark={ctx.isDark} />
+                </div>
+            );
         },
     },
 ];
@@ -571,6 +615,28 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
         UploadLeadSheet,
         InterestBadge,
     } = props;
+
+    /* ── Bolna calling availability ──
+       One request for the whole table, on mount. The per-row phone icon reads
+       the result through `ctx`; it must never fetch for itself. */
+    const [bolnaReady, setBolnaReady] = useState(false);
+
+    useEffect(() => {
+        let cancelled = false;
+        fetch("/api/bolna/status", { cache: "no-store" })
+            .then((r) => (r.ok ? (r.json() as Promise<BolnaStatusResponse>) : null))
+            .then((s) => {
+                if (!cancelled) setBolnaReady(Boolean(s?.configured && s?.enabled));
+            })
+            .catch(() => {
+                /* Leaves bolnaReady false, which hides the icon. Failing closed is
+                   right here: the alternative is a call button on a table that
+                   could not confirm calling works. */
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
     /* ── column visibility (persisted) ── */
     const [hiddenCols, setHiddenCols] = useState<Set<string>>(
@@ -700,6 +766,7 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
             onDeleteLead,
             onNavigateToSales,
             InterestBadge,
+            bolnaReady,
         }),
         [
             theme,
@@ -711,6 +778,7 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
             onDeleteLead,
             onNavigateToSales,
             InterestBadge,
+            bolnaReady,
         ]
     );
 

@@ -21,6 +21,7 @@ export const metadata: Metadata = {
 };
 
 import { AttendanceProvider } from "@/components/AttendanceContext";
+import { THEME_BOOTSTRAP_SCRIPT } from "@/lib/theme";
 
 export default function RootLayout({
   children,
@@ -28,7 +29,24 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    // suppressHydrationWarning because the script below stamps data-crm-theme
+    // onto <html> before React hydrates, so the client's attributes will not
+    // match the server-rendered markup. That mismatch is the intended
+    // behaviour — the server cannot know the theme — and this scopes the
+    // suppression to this one element rather than silencing it app-wide.
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        {/*
+          Runs before the first paint, so a dark-mode user does not get a white
+          flash on every navigation. It has to be inline and synchronous: an
+          external or deferred script runs after paint, which is the whole
+          problem. See lib/theme.ts for the script itself.
+
+          The content is a constant defined in our own source — no user input
+          reaches it — which is what makes dangerouslySetInnerHTML safe here.
+        */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >

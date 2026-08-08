@@ -13,6 +13,7 @@ import {
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { clearCrmSession, getStoredCrmUser, installLoggedOutBackGuard } from "@/lib/authSession";
+import { useCrmTheme } from "@/lib/hooks/useCrmTheme";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FaThLarge, FaCog, FaBell, FaTimes, FaClipboardList,
@@ -47,6 +48,8 @@ import AttendanceTimerWidget from "@/components/AttendanceTimerWidget";
 import AttendanceView from "@/components/AttendanceView";
 import LoanDealForm from "@/components/LoanDealForm";
 import LoanDealView from "@/components/LoanDealView";
+import BolnaCallWidget from "@/components/BolnaCallWidget";
+import CallingButtons from "@/components/CallingButtons";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -367,7 +370,10 @@ function ConfigCombobox({
 export default function ReceptionistDashboard() {
   const router = useRouter();
   useActivityTracker();
-  const [isDark, setIsDark] = useState(false);
+  // The shared theme, from lib/theme.ts. This used to be a local useState that
+  // reset to light on every navigation and was never stored anywhere; it now
+  // reads the same value Preferences → Theme writes.
+  const { isDark, toggleTheme } = useCrmTheme();
   const t = buildTheme(isDark);
 
   /* ── Table design tokens ────────────────────────────────────────────────────
@@ -1865,7 +1871,8 @@ export default function ReceptionistDashboard() {
           <div className="flex items-center space-x-4 relative" ref={topbarRef}>
             {/* <LoginTimerWidget isDark={isDark} /> */}
             <AttendanceBadge />
-            <button onClick={() => setIsDark(!isDark)} aria-label="Toggle theme"
+            <button onClick={toggleTheme} aria-pressed={isDark}
+              aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
               className={`w-9 h-9 rounded-xl border flex items-center justify-center transition-all duration-200 hover:scale-105 active:scale-95 shadow-sm ${t.toggleWrap}`}>
               {isDark ? <SunIcon /> : <MoonIcon />}
             </button>
@@ -3061,6 +3068,18 @@ export default function ReceptionistDashboard() {
                       </div>
                     </div>
 
+                    {/* AI voice calling. Self-gating: renders nothing at all when
+                        Bolna is unconfigured, so it needs no capability guard here. */}
+                    <div className="mb-4 flex-shrink-0">
+                      <BolnaCallWidget
+                        leadId={Number(selectedLead.id)}
+                        leadName={selectedLead.name}
+                        phone={selectedLead.phone}
+                        userData={{ project: selectedLead.propType || selectedLead.configuration }}
+                        compact
+                      />
+                    </div>
+
                     <div className="flex flex-col lg:flex-row gap-4 flex-1 min-h-0 pb-2">
                       {/* LEFT PANEL */}
                       <div className="w-full lg:w-[50%] flex flex-col gap-3 h-full pb-2">
@@ -3192,9 +3211,10 @@ export default function ReceptionistDashboard() {
 
 
 
-                            <div className="grid grid-cols-2 gap-3 mt-4 flex-shrink-0">
+                            <div className="grid grid-cols-2 gap-3 mt-2 flex-shrink-0">
                               <button className={`border flex flex-col items-center justify-center py-3 rounded-xl transition-all cursor-pointer gap-1 ${isDark ? "bg-[#00AEEF]/10 border-[#00AEEF]/30 hover:bg-[#00AEEF] text-[#00AEEF] hover:text-white" : "bg-[#00AEEF]/10 border-[#00AEEF]/30 hover:bg-[#00AEEF] text-[#00AEEF] hover:text-white"}`}><FaMicrophone className="text-lg" /><span className="font-bold text-[10px]">Browser Call</span></button>
                               <button onClick={() => setIsWaModalOpen(true)} className="bg-green-600/10 border border-green-500/30 hover:bg-green-600 text-green-400 hover:text-white flex flex-col items-center justify-center py-3 rounded-xl transition-all cursor-pointer gap-1"><FaWhatsapp className="text-xl" /><span className="font-bold text-[10px]">WhatsApp</span></button>
+                              <CallingButtons leadId={selectedLead?.id ?? null} phone={selectedLead?.phone} leadName={selectedLead?.name} isDark={isDark} iconClass="text-xl" paddingClass="py-3" />
                             </div>
                           </div>
                         )}

@@ -9,6 +9,7 @@ import AttendanceView from "@/components/AttendanceView";
 import dynamic from "next/dynamic";
 
 import { clearCrmSession, getStoredCrmUser, installLoggedOutBackGuard } from "@/lib/authSession";
+import { useCrmTheme } from "@/lib/hooks/useCrmTheme";
 import { useShiftTiming } from "@/hooks/useShiftTiming";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -36,9 +37,6 @@ import {
   PieChart, Pie, Cell, Tooltip as RTooltip, ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, CartesianGrid
 } from "recharts";
-import CallButton from "@/components/CallButton";
-import CallModal from "@/components/CallModal";
-import OnCallBadge from "@/components/OnCallBadge";
 import LoginTimerWidget from "@/components/LoginTimerWidget";
 import AttendanceBadge from "@/components/AttendanceBadge";
 import BookingFormModal from "@/components/BookingFormModal";
@@ -49,6 +47,8 @@ import LostLeadModal from "@/components/LostLeadModal";
 import PermanentLeadDeleteDialog from "@/components/PermanentLeadDeleteDialog";
 import LoanDealForm from "@/components/LoanDealForm";
 import LoanDealView from "@/components/LoanDealView";
+import BolnaCallWidget from "@/components/BolnaCallWidget";
+import CallingButtons from "@/components/CallingButtons";
 // import ActivityTimeline from "@/components/ActivityTimeline";
 import { handleMarkLostLead as markLostLeadApi, restoreLostLead, updateLeadLostState, useLostLeadEvents } from "@/lib/lostLeadSync";
 
@@ -322,7 +322,10 @@ function useAdminData() {
 export default function SalesDashboard() {
   const router = useRouter();
   useActivityTracker();
-  const [isDark, setIsDark] = useState(false);
+  // The shared theme, from lib/theme.ts. This used to be a local useState that
+  // reset to light on every navigation and was never stored anywhere; it now
+  // reads the same value Preferences → Theme writes.
+  const { isDark, toggleTheme } = useCrmTheme();
   const t = buildTheme(isDark);
   const getStatusStyle = (status: string) => {
     const s = status || "Assigned";
@@ -684,8 +687,9 @@ export default function SalesDashboard() {
 
             {/* ── Theme Toggle ── */}
             <button
-              onClick={() => setIsDark(!isDark)}
-              aria-label="Toggle theme"
+              onClick={toggleTheme}
+              aria-pressed={isDark}
+              aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
               className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl border flex items-center justify-center transition-all duration-200 hover:scale-105 active:scale-95 shadow-sm ${t.toggleWrap}`}
             >
               {isDark ? <SunIcon /> : <MoonIcon />}
@@ -1198,8 +1202,6 @@ function SalesManagerView({
 
   // ── WhatsApp States ──
   const [isWaModalOpen, setIsWaModalOpen] = useState(false);
-  const [callOpen, setCallOpen] = useState(false);
-  const [callHidden, setCallHidden] = useState(false);
   const [waMessage, setWaMessage] = useState("");
   const [isSendingWa, setIsSendingWa] = useState(false);
   const followUpEndRef = useRef<HTMLDivElement>(null);
@@ -2143,12 +2145,6 @@ function SalesManagerView({
                         <Ghost className="w-3 h-3" /> Lost Lead
                       </span>
                     )}
-                    {callHidden && (
-                      <OnCallBadge
-                        leadName={selectedLead.name}
-                        onClick={() => { setCallHidden(false); setCallOpen(true); }}
-                      />
-                    )}
                   </h1>
                 </div>
                 <div className="flex gap-2 sm:gap-3 flex-wrap justify-start md:justify-end flex-shrink-0">
@@ -2380,21 +2376,38 @@ function SalesManagerView({
 
                       </div>
 
-                      {/* Call / WhatsApp buttons */}
-                      <div className="grid grid-cols-2 gap-3 flex-shrink-0">
+                      {/* Contact actions. Sits where the Twilio "Browser Call"
+                          tile used to be, so the call affordance stays in the
+                          place users already reach for. Self-gating: the widget
+                          renders nothing when Bolna is unconfigured, and the
+                          WhatsApp button below is unaffected either way. */}
+                      <div className="flex-shrink-0 mb-3">
+                        <BolnaCallWidget
+                          leadId={Number(selectedLead.id)}
+                          leadName={selectedLead.name}
+                          phone={selectedLead.phone}
+                          userData={{ project: selectedLead.propType || selectedLead.configuration }}
+                          compact
+                        />
+                      </div>
 
-                        <button
-                          onClick={() => { setCallOpen(true); setCallHidden(false); }}
-                          className={`border flex flex-col items-center justify-center py-2 sm:py-3 rounded-xl transition-all cursor-pointer gap-1 min-h-[48px] ${isDark ? "bg-[#00AEEF]/10 border-[#00AEEF]/30 hover:bg-[#00AEEF] text-[#00AEEF] hover:text-white" : "bg-[#00AEEF]/10 border-[#00AEEF]/30 hover:bg-[#00AEEF] text-[#00AEEF] hover:text-white"}`}>
-                          <FaMicrophone className="text-base sm:text-lg" />
-                          <span className="font-bold text-[10px]">Browser Call</span>
-                        </button>
+                      {/* Two columns now that Manual Call and AI Call join the
+                          WhatsApp tile. */}
+                      <div className="grid grid-cols-2 gap-3 flex-shrink-0">
                         <button
                           onClick={() => setIsWaModalOpen(true)}
                           className="bg-green-600/10 border border-green-500/30 hover:bg-green-600 text-green-400 hover:text-white flex flex-col items-center justify-center py-2 sm:py-3 rounded-xl transition-all cursor-pointer gap-1 min-h-[48px]">
                           <FaWhatsapp className="text-lg sm:text-lg" />
                           <span className="font-bold text-[10px]">WhatsApp</span>
                         </button>
+                        <CallingButtons
+                          leadId={Number(selectedLead.id)}
+                          phone={selectedLead.phone}
+                          leadName={selectedLead.name}
+                          isDark
+                          iconClass="text-lg"
+                          paddingClass="py-3"
+                        />
                       </div>
                     </div>
                   )}
@@ -2513,20 +2526,6 @@ function SalesManagerView({
           existingBooking={isEditingBooking ? bookingData : null}
         />
 
-        {selectedLead && (
-          <CallModal
-            leadName={selectedLead.name}
-            phone={selectedLead.phone || selectedLead.contact_no || ""}
-            altPhone={selectedLead.altPhone && selectedLead.altPhone !== "N/A" ? selectedLead.altPhone : undefined}
-            isVisible={callOpen && !callHidden}
-            onHide={() => { setCallHidden(true); setCallOpen(false); }}
-            onClose={() => { setCallOpen(false); setCallHidden(false); }}
-            leadId={selectedLead.id}
-            actorName={adminUser?.name}
-            actorRole={adminUser?.role}
-            onLogged={refetch}
-          />
-        )}
         {/* ── WHATSAPP MODAL ── */}
         {isWaModalOpen && selectedLead && (() => {
           const phoneOptions = (() => {

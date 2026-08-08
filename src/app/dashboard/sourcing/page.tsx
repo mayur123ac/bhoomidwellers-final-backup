@@ -11,6 +11,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { clearCrmSession, getStoredCrmUser, installLoggedOutBackGuard } from "@/lib/authSession";
+import { useCrmTheme } from "@/lib/hooks/useCrmTheme";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FaThLarge, FaCog, FaEyeSlash, FaCalendarAlt,
@@ -58,7 +59,10 @@ const NAV_ITEMS = [
 export default function SourcingManagerDashboard() {
   const router = useRouter();
   useActivityTracker();
-  const [isDark, setIsDark] = useState(false);
+  // The shared theme, from lib/theme.ts. This used to be a local useState that
+  // reset to light on every navigation and was never stored anywhere; it now
+  // reads the same value Preferences → Theme writes.
+  const { isDark, toggleTheme } = useCrmTheme();
   const t = buildTheme(isDark);
 
   const [user, setUser] = useState<any>({ name: "Loading...", role: "Sourcing Manager", email: "", password: "" });
@@ -335,7 +339,8 @@ export default function SourcingManagerDashboard() {
           <div className="flex items-center space-x-4 relative" ref={topbarRef}>
             {/* <LoginTimerWidget isDark={isDark} />
             <AttendanceBadge /> */}
-            <button onClick={() => setIsDark(!isDark)} aria-label="Toggle theme"
+            <button onClick={toggleTheme} aria-pressed={isDark}
+              aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
               className={`w-9 h-9 rounded-xl border flex items-center justify-center transition-all duration-200 hover:scale-105 active:scale-95 shadow-sm ${t.toggleWrap}`}>
               {isDark ? <SunIcon /> : <MoonIcon />}
             </button>

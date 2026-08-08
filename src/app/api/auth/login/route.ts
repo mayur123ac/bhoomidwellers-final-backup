@@ -2,6 +2,10 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { signSession } from "@/lib/sessionCookie";
+import { isHashed, verifyPassword } from "@/lib/passwords";
+import { writeAuditLog } from "@/lib/auditLog";
+import { handleFailedLogin, notifyLogin } from "@/lib/loginNotification";
+import { clearFailedLogins } from "@/lib/loginSecurity";
 
 export async function POST(req: Request) {
   try {
@@ -16,12 +20,30 @@ export async function POST(req: Request) {
 
     const cleanIdentifier = identifier.trim();
 
-    // ✅ Removed username — your users table only has email and name
+    // Accepts the account email, the user's name, or the VERIFIED alternative
+    // notification address.
+    //
+    // ── Why the alternative address is a valid sign-in identifier ──
+    // Because someone who has proved they control that mailbox already receives
+    // this account's password-reset and security mail; being able to type it at
+    // the sign-in prompt grants nothing they could not already obtain. Refusing
+    // it would only be security theatre.
+    //
+    // ── Why `alternative_email_verified` is not optional here ──
+    // An unverified address is one nobody has proved they control. Accepting it
+    // would let any user type an arbitrary address into their settings and
+    // thereby create a second identifier for their account — or, worse, collide
+    // with an address belonging to someone else. The join demands the verified
+    // flag for exactly that reason.
     const rows = await query(
-      `SELECT * FROM users
-       WHERE LOWER(email) = LOWER($1)
-          OR LOWER(name)  = LOWER($1)
-       LIMIT 1`,
+      `SELECT u.*
+         FROM users u
+         LEFT JOIN notification_preferences np ON np.user_id = u.id
+        WHERE LOWER(u.email) = LOWER($1)
+           OR LOWER(u.name)  = LOWER($1)
+           OR (np.alternative_email_verified = true
+               AND LOWER(np.alternative_email) = LOWER($1))
+        LIMIT 1`,
       [cleanIdentifier],
     );
 
@@ -34,7 +56,52 @@ export async function POST(req: Request) {
 
     const user = rows[0];
 
-    if (!user.password || user.password.trim() !== password.trim()) {
+    // Request context is needed by both the failure and success paths below, so
+    // it is read once here rather than after the password check.
+    const ip = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "Unknown";
+    const userAgent = req.headers.get("user-agent") || "Unknown Device";
+
+    // Absolute origin for the links in the security email. Built from the
+    // forwarded headers rather than req.url: behind a reverse proxy req.url
+    // carries the INTERNAL address (http://localhost:3000), and a "Was this
+    // you?" link pointing at localhost is useless in someone's inbox.
+    const forwardedHost = req.headers.get("x-forwarded-host") || req.headers.get("host");
+    const forwardedProto = req.headers.get("x-forwarded-proto") || "http";
+    const origin = forwardedHost
+      ? `${forwardedProto}://${forwardedHost}`
+      : new URL(req.url).origin;
+
+    // Accepts both storage formats. Rows still holding plaintext — which is all
+    // of them until someone uses Settings → Account & Security — take the legacy
+    // branch inside verifyPassword and behave exactly as before. Rows written by
+    // the new password-change flow are scrypt hashes and are verified properly.
+    // See lib/passwords.ts for why there is no bulk migration.
+    if (!(await verifyPassword(password, user.password))) {
+      // Records the attempt, sends the per-attempt alert, and fires the burst
+      // alert if this is the fifth failure in fifteen minutes. Not awaited: see
+      // the header of lib/loginNotification.ts.
+      void handleFailedLogin({
+        userId: user.id,
+        name: user.name,
+        role: user.role,
+        accountEmail: user.email,
+        identifier: cleanIdentifier,
+        ip,
+        userAgent,
+        origin,
+      });
+
+      await writeAuditLog({
+        userId: user.id,
+        actorName: user.name,
+        action: "login.failed",
+        entityType: "user",
+        entityId: user.id,
+        newValue: { reason: "incorrect password", identifier: cleanIdentifier },
+        ipAddress: ip,
+        userAgent,
+      });
+
       return NextResponse.json(
         { message: "Incorrect password. Please try again." },
         { status: 401 },
@@ -56,10 +123,14 @@ export async function POST(req: Request) {
       isActive: user.is_active,
     };
 
-    // Extract IP and Device Info
-    const ip = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "Unknown";
-    const userAgent = req.headers.get("user-agent") || "Unknown Device";
-
+    // `ip` and `userAgent` are read once near the top of the handler, because
+    // the failed-password branch needs them too.
+    //
+    // This block builds the SHORT label stored on employee_sessions. It is kept
+    // as-is rather than replaced with describeDevice() from lib/emailRouting.ts:
+    // the Attendance Tracker and Active Sessions screens already display these
+    // exact strings, and changing them would rewrite how every historical
+    // session reads. describeDevice() is the richer parse used for the email.
     let device_info = userAgent;
     if (userAgent.includes("Windows")) device_info = "Windows PC";
     else if (userAgent.includes("Mac OS")) device_info = "Mac";
@@ -80,6 +151,56 @@ export async function POST(req: Request) {
     );
     const loginSessionId = sessionRes[0].id;
 
+    // Account & Security shows "Last login". employee_sessions already records
+    // every login, but that table is heavily written by the heartbeat and the
+    // MAX(session_start) lookup is not free; a stamped column keeps the panel a
+    // single-row read. Best-effort — a failure here must not fail the login.
+    try {
+      await query(
+        `UPDATE users
+            SET last_login_at = $1,
+                first_login_at = COALESCE(first_login_at, $1)
+          WHERE id = $2`,
+        [now, user.id],
+      );
+    } catch (err) {
+      console.error(
+        "[login] could not stamp last_login_at:",
+        err instanceof Error ? err.message : String(err)
+      );
+    }
+
+    await writeAuditLog({
+      userId: user.id,
+      actorName: user.name,
+      action: "login",
+      entityType: "user",
+      entityId: user.id,
+      ipAddress: ip,
+      userAgent,
+    });
+
+    // The sign-in alert, routed through the user's notification preferences.
+    // Not awaited — the response should not wait on an SMTP handshake. See the
+    // header of lib/loginNotification.ts for why that is safe in this app.
+    // A successful sign-in clears the burst history, so five fumbled attempts
+    // followed by a correct one do not leave the account one failure away from a
+    // spurious "someone is attacking you" alert next week.
+    void clearFailedLogins(cleanIdentifier);
+
+    void notifyLogin({
+      userId: user.id,
+      name: user.name,
+      role: user.role,
+      accountEmail: user.email,
+      identifierUsed: cleanIdentifier,
+      ip,
+      userAgent,
+      sessionId: loginSessionId,
+      status: "Successful",
+      origin,
+    });
+
     // Signed, not just encoded. Refuse to issue a session at all when no secret
     // is configured: an unverifiable cookie is one every route would have to
     // trust blindly, so failing the login is the safer outcome.
@@ -96,7 +217,22 @@ export async function POST(req: Request) {
     const response = NextResponse.json(
       {
         message: "Login successful.",
-        user: { ...userData, password: user.password },
+        // Several dashboards render the signed-in user's own password behind a
+        // show/hide toggle, reading it out of localStorage — which is why this
+        // field is here at all. Once a password has been hashed there is nothing
+        // meaningful to send, and shipping the scrypt digest would put a hash on
+        // screen where a password used to be. Those widgets already fall back to
+        // "N/A"/dots when the field is absent.
+        user: { ...userData, password: isHashed(user.password) ? null : user.password },
+        // The durable half of the theme preference, so the choice survives a
+        // sign-out — and follows the user to a machine whose localStorage has
+        // never heard of them. Returned as its own field rather than folded
+        // into `user`, which is signed into the session cookie and should not
+        // grow a field that changes every time someone flips a switch.
+        //
+        // Legacy "system" values are passed through untouched; the client
+        // resolves them, because only the client can see the OS preference.
+        theme: user.theme_preference ?? null,
       },
       { status: 200 },
     );
@@ -113,7 +249,7 @@ export async function POST(req: Request) {
     });
 
     return response;
-  } catch (error: any) {
+  } catch (error) {
     console.error("Login error:", error);
     return NextResponse.json({ message: "Login failed. Something went wrong." }, { status: 500 });
   }
