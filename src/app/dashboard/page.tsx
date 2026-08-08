@@ -52,6 +52,7 @@ import dynamic from "next/dynamic";
 import AttendanceView from "@/components/AttendanceView";
 import AdminAssistantDock from "@/components/AdminAssistantDock";
 import { CRMContextManager } from "@/lib/admin-ai/contextManager";
+import UserAvatar from "@/components/UserAvatar";
 
 const RevenueIntelligenceView = dynamic(() => import("./RevenueIntelligenceView"), { ssr: false });
 const GeoAnalyticsView = dynamic(() => import("./GeoAnalyticsView"), { ssr: false });
@@ -1023,7 +1024,7 @@ function AdminAtlasDashboardContent() {
               <div onClick={() => setActivePopup(activePopup === "profile" ? null : "profile")}
                 className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm cursor-pointer shadow-sm hover:opacity-80 transition-opacity border
                   ${isDark ? "border-[#9E217B]/40 text-[#d946a8] bg-[#9E217B]/15" : "border-[#9E217B]/40 text-[#9E217B] bg-[#9E217B]/10"}`}>
-                {String(user?.name || "A").charAt(0).toUpperCase()}
+                <UserAvatar name={user?.name} fallback="A" alt="" />
               </div>
               <AnimatePresence>
                 {activePopup === "profile" && (

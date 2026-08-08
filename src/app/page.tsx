@@ -6,6 +6,7 @@ import Link from "next/link";
 import { FaBuilding } from "react-icons/fa";
 import { MdPerson, MdLock, MdVisibility, MdVisibilityOff } from "react-icons/md";
 import { adoptServerTheme } from "@/lib/theme";
+import { adoptServerAvatar } from "@/lib/userAvatar";
 
 export default function Login() {
   const router = useRouter();
@@ -40,6 +41,11 @@ export default function Login() {
         // the server, and echoing it straight back would be a pointless write
         // on every single sign-in.
         adoptServerTheme(data.theme);
+
+        // Same idea for the profile picture: adopt it before navigating so the
+        // destination's header avatar paints the photo on its first frame
+        // instead of showing the initial and swapping a moment later.
+        adoptServerAvatar(data.avatarUrl);
 
         // Underscores normalized to spaces so "site_head" and "Site Head" (both
         // occur in the users table) take the same branch, as in middleware.ts.
@@ -105,16 +111,16 @@ export default function Login() {
       style={
         isDark
           ? {
-              backgroundColor: "#0A0A0F",
-              backgroundImage:
-                "radial-gradient(ellipse 60% 40% at 50% 0%, rgba(123,47,247,0.12) 0%, transparent 70%)",
-            }
+            backgroundColor: "#0A0A0F",
+            backgroundImage:
+              "radial-gradient(ellipse 60% 40% at 50% 0%, rgba(123,47,247,0.12) 0%, transparent 70%)",
+          }
           : {
-              backgroundImage: "url('/assets/bglo.png')",
-              backgroundSize: "cover",
-              backgroundPosition: "center",
-              backgroundRepeat: "no-repeat",
-            }
+            backgroundImage: "url('/assets/bglo.png')",
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+            backgroundRepeat: "no-repeat",
+          }
       }
     >
       {/* ── Sun/Moon Toggle ────────────────────────────────────────────────── */}
@@ -132,20 +138,20 @@ export default function Login() {
         {isDark ? (
           /* Sun icon */
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="5"/>
-            <line x1="12" y1="1" x2="12" y2="3"/>
-            <line x1="12" y1="21" x2="12" y2="23"/>
-            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
-            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-            <line x1="1" y1="12" x2="3" y2="12"/>
-            <line x1="21" y1="12" x2="23" y2="12"/>
-            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
-            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+            <circle cx="12" cy="12" r="5" />
+            <line x1="12" y1="1" x2="12" y2="3" />
+            <line x1="12" y1="21" x2="12" y2="23" />
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+            <line x1="1" y1="12" x2="3" y2="12" />
+            <line x1="21" y1="12" x2="23" y2="12" />
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
           </svg>
         ) : (
           /* Moon icon */
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
           </svg>
         )}
       </button>
@@ -194,10 +200,19 @@ export default function Login() {
             className={`w-10 h-10 sm:w-12 sm:h-12 ${theme.logoBg} rounded-xl flex items-center justify-center mb-3 transition-colors duration-300`}
             style={{ boxShadow: "0 0 0 1px rgba(123,47,247,0.2), 0 4px 16px rgba(123,47,247,0.15)" }}
           >
-            <FaBuilding className="text-[#9F5CFF] text-xl" />
+            <img
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "contain",
+              }}
+              src="/assets/logobrowser_trans.png"
+              alt="Bhoomi Dwellers Logo"
+            // className="w-7 h-7 sm:w-8 sm:h-8 object-contain"
+            />
           </div>
           <h1 className={`${theme.heading} text-[1.1rem] sm:text-[1.35rem] font-bold tracking-tight transition-colors duration-300`}
-              style={{ fontFamily: "'DM Sans', sans-serif" }}>
+            style={{ fontFamily: "'DM Sans', sans-serif" }}>
             Bhoomi Dwellers
           </h1>
           <p className={`${theme.subtext} text-xs mt-0.5 transition-colors duration-300`}>Real Estate CRM Portal</p>

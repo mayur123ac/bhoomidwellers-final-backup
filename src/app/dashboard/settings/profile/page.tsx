@@ -17,6 +17,7 @@ import {
   api,
   useToast,
 } from "@/components/Settings/ui";
+import { adoptServerAvatar, setAvatarUrl } from "@/lib/userAvatar";
 
 /* ── Timezone options ───────────────────────────────────────────────────────
    Built from Intl.supportedValuesOf, so the list is whatever the runtime can
@@ -398,7 +399,7 @@ function EmailChangeModal({
             value={newEmail}
             hasError={Boolean(error)}
             onChange={(e) => setNewEmail(e.target.value)}
-            placeholder="name@company.com"
+            placeholder="name@gmail.com"
             autoComplete="email"
           />
         </Field>
@@ -461,7 +462,14 @@ export default function ProfilePage() {
 
   useEffect(() => {
     api<{ user: any }>("/api/settings/profile")
-      .then((r) => applyUser(r.user))
+      .then((r) => {
+        applyUser(r.user);
+        // The authoritative answer just arrived, so the shared store adopts it.
+        // This is what reconciles a picture uploaded on another device: the
+        // working copy in this browser is corrected the moment the real record
+        // is read, without a dedicated sync endpoint.
+        adoptServerAvatar(r.user.avatarUrl);
+      })
       .catch((err) => toast("error", err.message))
       .finally(() => setLoading(false));
   }, [applyUser, toast]);
@@ -548,7 +556,15 @@ export default function ProfilePage() {
         <ProfilePictureUpload
           avatarUrl={user.avatarUrl}
           initials={user.initials}
-          onChanged={(url) => setUser((u: any) => ({ ...u, avatarUrl: url }))}
+          onChanged={(url) => {
+            setUser((u: any) => ({ ...u, avatarUrl: url }));
+            // The header avatars do not read this page's state — they read the
+            // shared store. Publishing here is what makes every one of them,
+            // and every other open tab, update on this tick instead of at the
+            // next full reload. Upload and removal both come through here, so
+            // clearing the picture reverts them to the initial just as fast.
+            setAvatarUrl(url);
+          }}
         />
       </Card>
 

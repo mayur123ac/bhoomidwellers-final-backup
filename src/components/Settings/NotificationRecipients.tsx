@@ -288,7 +288,7 @@ export default function NotificationRecipients({
         // Address problems belong beside the field, not in a toast that vanishes
         // before the user has looked back at what they typed.
         if (payload?.code === "INVALID" || payload?.code === "SAME_AS_PRIMARY" ||
-            payload?.code === "IN_USE" || payload?.code === "ALREADY_VERIFIED") {
+          payload?.code === "IN_USE" || payload?.code === "ALREADY_VERIFIED") {
           setFieldError(payload.message ?? "That address cannot be used.");
           return;
         }
@@ -466,7 +466,7 @@ export default function NotificationRecipients({
                     setDraft({ ...draft, alternativeEmail: e.target.value });
                     setFieldError(null);
                   }}
-                  placeholder="name@company.com"
+                  placeholder="name@gmail.com"
                   autoComplete="email"
                 />
               </Field>

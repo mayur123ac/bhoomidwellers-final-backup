@@ -25,6 +25,7 @@ import WhatsAppSettingsCard from "@/components/WhatsAppSettingsCard";
 import LoginTimerWidget from "@/components/LoginTimerWidget";
 import AttendanceBadge from "@/components/AttendanceBadge";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
+import UserAvatar from "@/components/UserAvatar";
 
 const SunIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -346,7 +347,7 @@ export default function SourcingManagerDashboard() {
             </button>
             <div onClick={() => setActivePopup(activePopup === "profile" ? null : "profile")}
               className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm cursor-pointer shadow-md hover:scale-105 transition-transform ${isDark ? "border border-[#9E217B]/40 text-[#d4006e] bg-[#9E217B]/15" : "border border-[#00AEEF]/40 text-[#00AEEF] bg-[#00AEEF]/10"}`}>
-              {String(user?.name || "U").charAt(0).toUpperCase()}
+              <UserAvatar name={user?.name} fallback="U" alt="" />
             </div>
             <AnimatePresence>
               {activePopup === "profile" && (

@@ -33,6 +33,7 @@ import { label } from "framer-motion/client";
 import AttendanceTimerWidget from "@/components/AttendanceTimerWidget";
 import LoginTimerWidget from "@/components/LoginTimerWidget";
 import AttendanceBadge from "@/components/AttendanceBadge";
+import UserAvatar from "@/components/UserAvatar";
 
 type RoleType = { _id: string; name: string };
 type EmployeeType = {
@@ -954,7 +955,7 @@ export default function EmployeesPage() {
               <div onClick={() => { setIsProfileOpen(!isProfileOpen); setIsNotifOpen(false); }}
                 className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm cursor-pointer shadow-sm hover:opacity-80 transition-opacity border
                   ${isDark ? "border-[#9E217B]/40 text-[#d946a8] bg-[#9E217B]/15" : "border-[#9E217B]/40 text-[#9E217B] bg-[#9E217B]/10"}`}>
-                {String(user?.name || "A").charAt(0).toUpperCase()}
+                <UserAvatar name={user?.name} fallback="A" alt="" />
               </div>
               {isProfileOpen && (
                 <div className={`absolute top-12 right-0 w-64 border rounded-xl shadow-2xl p-5 z-50 animate-fadeIn ${t.dropdown}`}>

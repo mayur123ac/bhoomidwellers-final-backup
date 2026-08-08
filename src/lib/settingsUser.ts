@@ -118,6 +118,27 @@ export const DASHBOARD_WIDGETS = [
 
 export const DEFAULT_WIDGET_IDS = DASHBOARD_WIDGETS.map((w) => w.id) as string[];
 
+/**
+ * The widget catalogue this role may configure.
+ *
+ * Every id above names a panel of the Admin dashboard at /dashboard. A Sales
+ * Manager never sees that page — middleware confines them to /dashboard/sales,
+ * whose sidebar is a fixed set of views (Assigned, Closed, Inventory, Visits,
+ * Attendance, AI) with no widget layer at all. Offering them "Revenue
+ * Dashboard" and "Geo Analytics" was offering to rearrange a screen they cannot
+ * open.
+ *
+ * Returning an empty list is what turns the section off: the Preferences screen
+ * hides the card when there is nothing to choose from, and the PATCH handler
+ * refuses widget writes on the same condition, so the rule is stated once here
+ * rather than duplicated as a role check in each.
+ */
+export function widgetCatalogueFor(role: string | null | undefined) {
+  const normalized = (role ?? "").toString().trim().toLowerCase().replace(/_/g, " ");
+  if (normalized === "sales manager") return [];
+  return DASHBOARD_WIDGETS as readonly { id: string; label: string }[];
+}
+
 /* ── Reading a user ─────────────────────────────────────────────────────────*/
 
 export interface SettingsUserRow {

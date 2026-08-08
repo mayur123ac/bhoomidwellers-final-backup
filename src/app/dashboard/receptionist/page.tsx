@@ -51,6 +51,7 @@ import LoanDealView from "@/components/LoanDealView";
 import BolnaCallWidget from "@/components/BolnaCallWidget";
 import CallingButtons from "@/components/CallingButtons";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
+import UserAvatar from "@/components/UserAvatar";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -1938,7 +1939,7 @@ export default function ReceptionistDashboard() {
             )} */}
             <div onClick={() => setActivePopup(activePopup === "profile" ? null : "profile")}
               className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm cursor-pointer shadow-md hover:scale-105 transition-transform ${isDark ? "border border-[#9E217B]/40 text-[#d4006e] bg-[#9E217B]/15" : "border border-[#00AEEF]/40 text-[#00AEEF] bg-[#00AEEF]/10"}`}>
-              {String(user?.name || "U").charAt(0).toUpperCase()}
+              <UserAvatar name={user?.name} fallback="U" alt="" />
             </div>
             <AnimatePresence>
               {activePopup === "profile" && (

@@ -9,6 +9,7 @@ import {
   DEFAULT_WIDGET_IDS,
   loadSettingsUser,
   serializeSettingsUser,
+  widgetCatalogueFor,
 } from "@/lib/settingsUser";
 
 export const dynamic = "force-dynamic";
@@ -46,7 +47,9 @@ export async function GET() {
   return NextResponse.json({
     success: true,
     user: serializeSettingsUser(row),
-    catalogue: { widgets: DASHBOARD_WIDGETS, languages: LANGUAGES, themes: THEMES },
+    // Scoped to the role: empty for anyone whose dashboard has no widget layer,
+    // which is how the Preferences screen knows to drop the section entirely.
+    catalogue: { widgets: widgetCatalogueFor(row.role), languages: LANGUAGES, themes: THEMES },
   });
 }
 
@@ -70,6 +73,21 @@ export async function PATCH(req: NextRequest) {
   }
 
   const updates: Record<string, any> = {};
+
+  // Widget writes are refused outright for a role with no catalogue, rather
+  // than being filtered down to an empty list — filtering would quietly store
+  // "no widgets at all", which is a different thing from "this role has no
+  // widgets" and would be indistinguishable later.
+  const allowedWidgets = widgetCatalogueFor(before.role);
+  if (
+    allowedWidgets.length === 0 &&
+    (body.dashboardWidgets !== undefined || body.resetDashboard === true)
+  ) {
+    return NextResponse.json(
+      { success: false, message: "Dashboard widgets are not configurable for your role." },
+      { status: 400 }
+    );
+  }
 
   if (body.theme !== undefined) {
     if (!THEMES.includes(body.theme) && !LEGACY_THEMES.includes(body.theme)) {

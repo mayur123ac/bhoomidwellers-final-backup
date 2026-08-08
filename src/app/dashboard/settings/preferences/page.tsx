@@ -185,47 +185,53 @@ export default function PreferencesPage() {
         </Field>
       </Card>
 
-      <Card title="Dashboard Layout" description="Choose which widgets appear on your dashboard.">
-        <div className="flex flex-wrap gap-3">
-          <Button
-            variant="secondary"
-            onClick={() => setWidgetsOpen((v) => !v)}
-            aria-expanded={widgetsOpen}
-          >
-            {widgetsOpen ? "Hide widgets" : "Customize visible widgets"}
-          </Button>
-          <Button variant="ghost" onClick={() => save({ resetDashboard: true })} loading={saving}>
-            Reset dashboard to defaults
-          </Button>
-        </div>
-
-        {widgetsOpen && (
-          <div className="mt-5 border-t pt-4" style={{ borderColor: T.border }}>
-            <div className="grid gap-x-6 sm:grid-cols-2">
-              {catalogue.widgets.map((widget: { id: string; label: string }) => (
-                <Checkbox
-                  key={widget.id}
-                  id={`widget-${widget.id}`}
-                  label={widget.label}
-                  checked={widgets.includes(widget.id)}
-                  onChange={(checked) =>
-                    setWidgets((current) =>
-                      checked
-                        ? [...current, widget.id]
-                        : current.filter((id) => id !== widget.id)
-                    )
-                  }
-                />
-              ))}
-            </div>
-            <div className="mt-4">
-              <Button onClick={() => save({ dashboardWidgets: widgets })} loading={saving}>
-                Save widget selection
-              </Button>
-            </div>
+      {/* Hidden entirely when the role has no widget catalogue — the widgets are
+          panels of the Admin dashboard, and a Sales Manager cannot open that
+          page. The server decides (widgetCatalogueFor), so this stays a
+          rendering condition rather than a second copy of the role rule. */}
+      {catalogue.widgets.length > 0 && (
+        <Card title="Dashboard Layout" description="Choose which widgets appear on your dashboard.">
+          <div className="flex flex-wrap gap-3">
+            <Button
+              variant="secondary"
+              onClick={() => setWidgetsOpen((v) => !v)}
+              aria-expanded={widgetsOpen}
+            >
+              {widgetsOpen ? "Hide widgets" : "Customize visible widgets"}
+            </Button>
+            <Button variant="ghost" onClick={() => save({ resetDashboard: true })} loading={saving}>
+              Reset dashboard to defaults
+            </Button>
           </div>
-        )}
-      </Card>
+
+          {widgetsOpen && (
+            <div className="mt-5 border-t pt-4" style={{ borderColor: T.border }}>
+              <div className="grid gap-x-6 sm:grid-cols-2">
+                {catalogue.widgets.map((widget: { id: string; label: string }) => (
+                  <Checkbox
+                    key={widget.id}
+                    id={`widget-${widget.id}`}
+                    label={widget.label}
+                    checked={widgets.includes(widget.id)}
+                    onChange={(checked) =>
+                      setWidgets((current) =>
+                        checked
+                          ? [...current, widget.id]
+                          : current.filter((id) => id !== widget.id)
+                      )
+                    }
+                  />
+                ))}
+              </div>
+              <div className="mt-4">
+                <Button onClick={() => save({ dashboardWidgets: widgets })} loading={saving}>
+                  Save widget selection
+                </Button>
+              </div>
+            </div>
+          )}
+        </Card>
+      )}
 
       <Card
         title="Data & Privacy"

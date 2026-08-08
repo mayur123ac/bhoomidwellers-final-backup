@@ -380,9 +380,8 @@ export default function AccountSecurityPage() {
             worth pressing. */}
         {!account.passwordHashed && (
           <InfoBanner tone="warning">
-            Your password is still stored in the CRM&apos;s original plaintext format. Changing it
-            here will store it as a salted scrypt hash instead. Until then, anyone with database
-            access can read it.
+            For your account security, please update your password to the latest secure format.
+            This will help protect your account and improve credential security.
           </InfoBanner>
         )}
       </Card>

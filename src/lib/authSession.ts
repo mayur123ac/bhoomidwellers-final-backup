@@ -1,4 +1,5 @@
 import { clearTheme } from "@/lib/theme";
+import { clearAvatar } from "@/lib/userAvatar";
 
 export function getStoredCrmUser() {
   try {
@@ -23,6 +24,12 @@ export function clearCrmSession() {
   // Only the working copy is dropped. `users.theme_preference` is untouched, so
   // signing back in restores the choice via adoptServerTheme().
   clearTheme();
+
+  // Same reasoning for the profile picture, and the same danger if it is left:
+  // a header still showing the previous user's face after someone else signs in
+  // is worse than a stale colour scheme. users.avatar_key/avatar_url are
+  // untouched, so signing back in restores it.
+  clearAvatar();
 
   // Call the logout API to clear the cookie
   // We use fetch with keepalive or standard await depending on context, 

@@ -4,6 +4,9 @@
 
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { useActivityTracker, emitActivity } from "@/hooks/useActivityTracker";
+import SalesSidebar, { SALES_NAV } from "@/components/sales/SalesSidebar";
+import { useFeaturePrefs } from "@/hooks/useFeaturePrefs";
+import { compareLeads } from "@/lib/featurePrefs";
 import { useRouter } from "next/navigation";
 import AttendanceView from "@/components/AttendanceView";
 import dynamic from "next/dynamic";
@@ -53,9 +56,27 @@ import CallingButtons from "@/components/CallingButtons";
 import { handleMarkLostLead as markLostLeadApi, restoreLostLead, updateLeadLostState, useLostLeadEvents } from "@/lib/lostLeadSync";
 
 import AttendanceTimerWidget from "@/components/AttendanceTimerWidget";
+import UserAvatar from "@/components/UserAvatar";
+import AppHeader from "@/components/AppHeader";
 
 const SiteVisitOverview = dynamic(() => import("../../dashboard/SiteVisitOverview"), { ssr: false });
 const CARDS_PER_PAGE = 20;
+// Views this page can be asked to open by name. Derived from the rail rather
+// than retyped, and filtered so a stale or hand-edited `return_tab` cannot set
+// activeView to something that renders nothing. "settings" is excluded because
+// it is a route, not a view of this page.
+const SALES_VIEW_IDS = new Set(SALES_NAV.filter((i) => i.id !== "settings").map((i) => i.id));
+
+// What the header shows for each view. Taken from the rail's own labels rather
+// than retyped, so the bar and the sidebar can never disagree about what the
+// current page is called. The two entries below are views with no rail item of
+// their own: a lead's detail page belongs to Assigned Leads, and "sales" is a
+// legacy alias for the overview.
+const SALES_CONTEXT: Record<string, string> = {
+  ...Object.fromEntries(SALES_NAV.map((i) => [i.id, i.label])),
+  detail: "Assigned Leads",
+  sales: "Dashboard",
+};
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December"
@@ -366,6 +387,10 @@ export default function SalesDashboard() {
 
   const { managers, receptionists, allLeads, followUps, isLoading, refetch } = useAdminData();
 
+  // Settings → Additional Features. Read once here and passed down, rather than
+  // called again inside SalesManagerView, so the two never disagree mid-render.
+  const featurePrefs = useFeaturePrefs();
+
   // Leads scoped to the logged-in user — Admin sees everything,
   // Sales Manager / Site Head only see leads assigned to them.
   // Used to scope the "Site Visits" tab to the logged-in manager's own visits.
@@ -376,6 +401,11 @@ export default function SalesDashboard() {
   }, [allLeads, user]);
 
   const followUpLeads = useMemo(() => {
+    // Settings → Additional Features → "Follow-up reminders". Off empties the
+    // list, which silences the badge and leaves the panel saying everything is
+    // up to date. The leads themselves are untouched — this is a notification
+    // preference, not a filter.
+    if (featurePrefs.toggles.followUpReminders === false) return [];
     const now = new Date();
     const myLeads = user.role === "admin" ? allLeads : allLeads.filter((l: any) => l.assigned_to === user.name);
     return myLeads.filter((lead: any) => {
@@ -394,9 +424,11 @@ export default function SalesDashboard() {
         : new Date(lead.created_at).getTime();
       return { ...lead, daysSince: Math.floor((now.getTime() - lastActivityMs) / (1000 * 60 * 60 * 24)) };
     }).sort((a: any, b: any) => b.daysSince - a.daysSince);
-  }, [allLeads, followUps, user]);
+  }, [allLeads, followUps, user, featurePrefs.toggles.followUpReminders]);
 
   const visitNotificationLeads = useMemo(() => {
+    // Settings → Additional Features → "Site visit alerts".
+    if (featurePrefs.toggles.siteVisitAlerts === false) return [];
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const myLeads = user.role === "admin" ? allLeads : allLeads.filter((l: any) => l.assigned_to === user.name);
@@ -416,7 +448,23 @@ export default function SalesDashboard() {
         return { ...lead, visitDiff: Math.round((visit.getTime() - today.getTime()) / 86400000) };
       })
       .sort((a: any, b: any) => a.visitDiff - b.visitDiff);
-  }, [allLeads, dismissedVisits]);
+  }, [allLeads, dismissedVisits, user, featurePrefs.toggles.siteVisitAlerts]);
+
+  // Restore the view a rail click asked for before it navigated here — the same
+  // `return_tab` convention the Admin dashboard has always used. Without it,
+  // choosing "Inventory" from the rail inside Settings would land on this page's
+  // default Dashboard view instead of Inventory.
+  useEffect(() => {
+    try {
+      const returnTab = localStorage.getItem("return_tab");
+      if (returnTab) {
+        localStorage.removeItem("return_tab");
+        if (SALES_VIEW_IDS.has(returnTab)) setActiveView(returnTab);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   useEffect(() => {
     const cleanupBackGuard = installLoggedOutBackGuard(() => router.replace("/"));
@@ -456,232 +504,34 @@ export default function SalesDashboard() {
         background: "linear-gradient(135deg, #e8f6fd 0%, #f8fafc 30%, #faf0fb 62%, #f8fafc 78%, #e6fafe 100%)",
       }}
     >
-      {/* ── SIDEBAR (always dark, like receptionist) ── */}
-      <aside
-        onMouseEnter={() => setSidebarExpanded(true)}
-        onMouseLeave={() => setSidebarExpanded(false)}
-        className="hidden md:flex flex-col py-5 px-1 z-50 overflow-hidden fixed left-0 top-0 h-full"
-        style={{
-          width: sidebarExpanded ? "248px" : "72px",
-          transition: "width 320ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 320ms ease",
-          background: "linear-gradient(180deg, #0f0f1a 0%, #111128 40%, #0f0f1a 100%)",
-          borderRight: "1px solid rgba(158,33,123,0.15)",
-          boxShadow: sidebarExpanded
-            ? "4px 0 24px rgba(0,0,0,0.4), inset -1px 0 0 rgba(158,33,123,0.08)"
-            : "2px 0 16px rgba(0,0,0,0.5)",
+      {/* ── SIDEBAR ──
+          The markup now lives in components/sales/SalesSidebar.tsx so the
+          Settings panel can mount the SAME rail instead of falling back to the
+          Admin one. Here a click switches the in-page view; there it navigates
+          back with the view queued. Nothing about the rail itself differs. */}
+      <SalesSidebar
+        activeId={activeView === "detail" ? "forms" : activeView}
+        onSelect={(item) => {
+          if (item.id === "settings") { router.push("/dashboard/settings/profile"); return; }
+          setActiveView(item.id);
         }}
-      >
-        <div
-          className="pointer-events-none absolute -top-10 left-1/2 -translate-x-1/2 w-32 h-32 rounded-full blur-3xl opacity-20 transition-opacity duration-500"
-          style={{
-            background: "radial-gradient(circle, #9E217B 0%, transparent 70%)",
-            opacity: sidebarExpanded ? 0.28 : 0.14,
-          }}
-        />
-        <div className="flex items-center px-3 mb-6 mt-1 overflow-hidden">
-          <img
-            src="/assets/logobrowser_trans.svg"
-            alt="Logo"
-            className={`w-10 h-10 rounded-xl object-cover flex-shrink-0 cursor-pointer transition-all duration-300`}
-          />
-          <div
-            className="ml-3 overflow-hidden transition-all duration-300"
-            style={{
-              maxWidth: sidebarExpanded ? "130px" : "0px",
-              opacity: sidebarExpanded ? 1 : 0,
-              transform: sidebarExpanded ? "translateX(0)" : "translateX(-8px)",
-            }}
-          >
-            <p className="text-white font-bold text-[16px] whitespace-nowrap leading-tight">Bhoomi CRM</p>
-            <p className="text-[#d946a8] text-[10px] font-semibold whitespace-nowrap opacity-80">Sales Manager</p>
-          </div>
-        </div>
-        <div
-          className="mx-3 mb-5 h-px transition-all duration-300"
-          style={{
-            background: "linear-gradient(90deg, transparent, rgba(158,33,123,0.4), transparent)",
-            opacity: sidebarExpanded ? 1 : 0.4,
-          }}
-        />
-        <nav className="flex flex-col gap-2 w-full px-2 flex-1">
-          {/* Main nav items */}
-          <div className="flex flex-col gap-2 flex-1">
-            {[
-
-              { view: "overview", icon: <FaThLarge className="w-[18px] h-[18px] flex-shrink-0" />, title: "Dashboard" },
-              { view: "forms", icon: <FaFileInvoice className="w-[18px] h-[18px] flex-shrink-0" />, title: "Assigned Leads" },
-              { view: "closed-leads", icon: <FaCheckCircle className="w-[18px] h-[18px] flex-shrink-0" />, title: "Closed Leads" },
-              { view: "inventory", icon: <FaBuilding className="w-[18px] h-[18px] flex-shrink-0" />, title: "Inventory" },
-              { view: "site_visits", icon: <FaCalendarAlt className="w-[18px] h-[18px] flex-shrink-0" />, title: "Site Visits" },
-              { view: "attendance", icon: <FaClock className="w-[18px] h-[18px] flex-shrink-0" />, title: "My Attendance" },
-              { view: "assistant", icon: <FaRobot className="w-[18px] h-[18px] flex-shrink-0" />, title: "Bhoomi AI" },
-
-            ].map(({ view, icon, title }) => {
-              const isActive = activeView === view || (view === "forms" && activeView === "detail");
-              return (
-                <div
-                  key={view}
-                  onClick={() => setActiveView(view)}
-                  title={!sidebarExpanded ? title : undefined}
-                  className="relative cursor-pointer group sm-nav-item"
-                >
-                  {isActive && (
-                    <div
-                      className="absolute inset-0 rounded-xl pointer-events-none"
-                      style={{
-                        background: "radial-gradient(ellipse at left center, rgba(217,70,168,0.12) 0%, transparent 70%)",
-                        animation: "sm-glow-pulse 3s ease-in-out infinite",
-                      }}
-                    />
-                  )}
-                  <div
-                    className={`flex items-center gap-3 px-3.5 py-3 rounded-xl transition-all duration-200 relative overflow-hidden ${isActive ? "text-[#d946a8]" : "text-gray-500 hover:text-gray-200"}`}
-                    style={isActive ? {
-                      background: "linear-gradient(135deg, rgba(158,33,123,0.22) 0%, rgba(217,70,168,0.07) 100%)",
-                      boxShadow: "inset 0 0 0 1px rgba(217,70,168,0.28), 0 2px 16px rgba(158,33,123,0.12)",
-                    } : {}}
-                  >
-                    {isActive && (
-                      <div
-                        className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-[#d946a8]"
-                        style={{ boxShadow: "0 0 10px rgba(217,70,168,0.9), 0 0 4px rgba(217,70,168,0.6)" }}
-                      />
-                    )}
-                    {!isActive && (
-                      <div className="absolute inset-0 rounded-xl bg-white/0 group-hover:bg-white/[0.04] transition-colors duration-200" />
-                    )}
-                    <div
-                      className={`flex-shrink-0 transition-all duration-200 ${isActive ? "text-[#d946a8]" : "text-gray-600 group-hover:text-gray-300"}`}
-                      style={isActive ? { filter: "drop-shadow(0 0 5px rgba(217,70,168,0.65))" } : {}}
-                    >
-                      {icon}
-                    </div>
-                    <span
-                      className={`text-[12.5px] font-semibold whitespace-nowrap overflow-hidden transition-all duration-300 ${isActive ? "text-[#d946a8]" : "text-gray-400 group-hover:text-gray-100"}`}
-                      style={{
-                        maxWidth: sidebarExpanded ? "140px" : "0px",
-                        opacity: sidebarExpanded ? 1 : 0,
-                        transform: sidebarExpanded ? "translateX(0)" : "translateX(-6px)",
-                        letterSpacing: "0.01em",
-                      }}
-                    >
-                      {title}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Settings pinned to bottom */}
-          {(() => {
-            const view = "settings";
-            const icon = <FaCog className="w-[20px] h-[20px] flex-shrink-0" />;
-            const title = "Settings";
-            const isActive = activeView === view;
-            return (
-              <div
-                key={view}
-                onClick={() => setActiveView(view)}
-                title={!sidebarExpanded ? title : undefined}
-                className="relative cursor-pointer group sm-nav-item mt-auto"
-              >
-                {isActive && (
-                  <div
-                    className="absolute inset-0 rounded-xl pointer-events-none"
-                    style={{
-                      background: "radial-gradient(ellipse at left center, rgba(217,70,168,0.12) 0%, transparent 70%)",
-                      animation: "sm-glow-pulse 3s ease-in-out infinite",
-                    }}
-                  />
-                )}
-                <div
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 relative overflow-hidden ${isActive ? "text-[#d946a8]" : "text-gray-500 hover:text-gray-200"}`}
-                  style={isActive ? {
-                    background: "linear-gradient(135deg, rgba(158,33,123,0.22) 0%, rgba(217,70,168,0.07) 100%)",
-                    boxShadow: "inset 0 0 0 1px rgba(217,70,168,0.28), 0 2px 16px rgba(158,33,123,0.12)",
-                  } : {}}
-                >
-                  {isActive && (
-                    <div
-                      className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-[#d946a8]"
-                      style={{ boxShadow: "0 0 10px rgba(217,70,168,0.9), 0 0 4px rgba(217,70,168,0.6)" }}
-                    />
-                  )}
-                  {!isActive && (
-                    <div className="absolute inset-0 rounded-xl bg-white/0 group-hover:bg-white/[0.04] transition-colors duration-200" />
-                  )}
-                  <div
-                    className={`flex-shrink-0 transition-all duration-200 ${isActive ? "text-[#d946a8]" : "text-gray-600 group-hover:text-gray-300"}`}
-                    style={isActive ? { filter: "drop-shadow(0 0 5px rgba(217,70,168,0.65))" } : {}}
-                  >
-                    {icon}
-                  </div>
-                  <span
-                    className={`text-[12.5px] font-semibold whitespace-nowrap overflow-hidden transition-all duration-300 ${isActive ? "text-[#d946a8]" : "text-gray-400 group-hover:text-gray-100"}`}
-                    style={{
-                      maxWidth: sidebarExpanded ? "140px" : "0px",
-                      opacity: sidebarExpanded ? 1 : 0,
-                      transform: sidebarExpanded ? "translateX(0)" : "translateX(-6px)",
-                      letterSpacing: "0.01em",
-                    }}
-                  >
-                    {title}
-                  </span>
-                </div>
-              </div>
-            );
-          })()}
-        </nav>
-        <div className="px-3 mt-4">
-          <div
-            className="h-px mb-3"
-            style={{
-              background: "linear-gradient(90deg, transparent, rgba(158,33,123,0.35), transparent)",
-            }}
-          />
-          <div
-            className="overflow-hidden transition-all duration-300 flex items-center justify-center"
-            style={{
-              opacity: sidebarExpanded ? 0.5 : 0,
-              maxHeight: sidebarExpanded ? "24px" : "0px",
-            }}
-          >
-            <span className="text-[8px] text-gray-300 whitespace-nowrap font-mono tracking-widest uppercase">
-              Bhoomi CRM · v2
-            </span>
-          </div>
-        </div>
-      </aside>
-      {/* ── SIDEBAR BLUR OVERLAY (desktop only, pointer-events off) ── */}
-      <div
-        className="hidden md:block fixed inset-0 pointer-events-none"
-        style={{
-          zIndex: 45,
-          left: "72px",
-          background: "rgba(0, 0, 0, 0.2)",
-          backdropFilter: "blur(3px)",
-          WebkitBackdropFilter: "blur(3px)",
-          opacity: sidebarExpanded ? 1 : 0,
-          transition: "opacity 320ms ease",
-        }}
+        expanded={sidebarExpanded}
+        onExpandedChange={setSidebarExpanded}
       />
 
       {/* ── MAIN ── */}
       <div className="flex-1 flex flex-col h-full overflow-hidden relative md:ml-[72px]">
 
 
-        {/* HEADER */}
-        <header
-          className={`h-14 sm:h-18 border-b flex items-center justify-between px-4 sm:px-3 lg:px-8 flex-shrink-0 z-30 shadow-sm ${t.header}`}
-          style={t.headerGlass}
+        {/* HEADER — the shared global bar. Every control below keeps its own
+            handler, popup and state; only the frame, the page context and the
+            control chrome are now common with the rest of the CRM. */}
+        <AppHeader
+          isDark={isDark}
+          context={SALES_CONTEXT[activeView] ?? SALES_CONTEXT.overview}
+          role={user?.role || "Sales Manager"}
         >
-          <h1 className={`font-semibold flex items-center flex-wrap gap-1 sm:gap-2 text-sm sm:text-base lg:text-lg tracking-wide ${t.text}`}>
-            <img src="/assets/bhoomidwellersLogo_trans.png" alt="Bhoomi CRM" className="h-20 md:h-18 w-auto object-contain" />
-            <span className={`text-xs sm:text-sm font-normal ${t.textFaint}`}>— Sales Manager</span>
-          </h1>
-
-          <div className="flex items-center gap-2 sm:gap-2 relative" ref={topbarRef}>
+          <div className="flex items-center gap-2 relative" ref={topbarRef}>
             {/* <LoginTimerWidget isDark={isDark} /> */}
             <AttendanceBadge />
 
@@ -690,7 +540,7 @@ export default function SalesDashboard() {
               onClick={toggleTheme}
               aria-pressed={isDark}
               aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
-              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl border flex items-center justify-center transition-all duration-200 hover:scale-105 active:scale-95 shadow-sm ${t.toggleWrap}`}
+              className={`h-9 w-9 flex-shrink-0 rounded-lg border flex items-center justify-center transition-colors duration-150 cursor-pointer ${t.toggleWrap}`}
             >
               {isDark ? <SunIcon /> : <MoonIcon />}
             </button>
@@ -699,11 +549,11 @@ export default function SalesDashboard() {
             <div className="relative">
               <button
                 onClick={() => { setActivePopup(activePopup === "visit" ? null : "visit"); }}
-                className={`relative w-9 h-9 sm:w-10 sm:h-10 rounded-xl border flex items-center justify-center transition-colors cursor-pointer ${t.toggleWrap} hover:border-orange-500/50 ${t.textMuted}`}
+                className={`relative h-9 w-9 flex-shrink-0 rounded-lg border flex items-center justify-center transition-colors duration-150 cursor-pointer ${t.toggleWrap} hover:border-orange-500/50 ${t.textMuted}`}
               >
                 <FaCalendarAlt className="text-sm sm:text-base" />
                 {visitNotificationLeads.length > 0 && (
-                  <span className="absolute -top-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-orange-500 rounded-full text-[9px] sm:text-[10px] font-black text-white flex items-center justify-center shadow">
+                  <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 bg-orange-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center">
                     {visitNotificationLeads.length > 9 ? "9+" : visitNotificationLeads.length}
                   </span>
                 )}
@@ -755,11 +605,11 @@ export default function SalesDashboard() {
             <div className="relative">
               <button
                 onClick={() => { setActivePopup(activePopup === "notifications" ? null : "notifications"); }}
-                className={`relative w-9 h-9 sm:w-10 sm:h-10 rounded-xl border flex items-center justify-center transition-colors cursor-pointer ${t.toggleWrap} hover:border-purple-500/50 ${t.textMuted}`}
+                className={`relative h-9 w-9 flex-shrink-0 rounded-lg border flex items-center justify-center transition-colors duration-150 cursor-pointer ${t.toggleWrap} hover:border-purple-500/50 ${t.textMuted}`}
               >
                 <FaBell className="text-sm sm:text-base" />
                 {followUpLeads.filter((l: any) => !dismissedFollowUps.has(String(l.id))).length > 0 && (
-                  <span className="absolute -top-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-red-500 rounded-full text-[9px] sm:text-[10px] font-black text-white flex items-center justify-center shadow">
+                  <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 bg-red-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center">
                     {followUpLeads.filter((l: any) => !dismissedFollowUps.has(String(l.id))).length > 9 ? "9+" : followUpLeads.filter((l: any) => !dismissedFollowUps.has(String(l.id))).length}
                   </span>
                 )}
@@ -819,12 +669,12 @@ export default function SalesDashboard() {
             <div className="relative">
               <div
                 onClick={() => { setActivePopup(activePopup === "profile" ? null : "profile"); }}
-                className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center font-bold text-sm sm:text-base cursor-pointer shadow-md hover:scale-105 transition-transform ${isDark
+                className={`h-9 w-9 flex-shrink-0 rounded-full flex items-center justify-center overflow-hidden font-semibold text-[13px] cursor-pointer border transition-colors duration-150 ${isDark
                   ? "border border-purple-500/40 text-purple-400 bg-purple-500/15"
                   : "border border-[#00AEEF]/40 bg-[#9E217B]/20 text-[#d946a8]"
                   }`}
               >
-                <FaUserCircle className="text-lg sm:text-lg" />
+                <UserAvatar name={user?.name} fallbackNode={<FaUserCircle className="text-lg sm:text-lg" />} alt="" />
               </div>
               <AnimatePresence>
                 {activePopup === "profile" && (
@@ -859,7 +709,7 @@ export default function SalesDashboard() {
               </AnimatePresence>
             </div>
           </div>
-        </header>
+        </AppHeader>
 
         <main className={`flex-1 overflow-hidden custom-scrollbar ${t.mainBg} ${activeView === "assistant" ? "p-0" : "p-1 sm:p-3 lg:p-3 overflow-y-auto"}`}>
           {(activeView === "sales" || activeView === "overview" || activeView === "forms" || activeView === "detail" || activeView === "closed-leads") ? (
@@ -868,6 +718,7 @@ export default function SalesDashboard() {
               isLoading={isLoading} adminUser={user} refetch={refetch}
               initialView={activeView} setMainView={setActiveView}
               isDark={isDark} t={t}
+              featurePrefs={featurePrefs}
               pendingLeadOpen={pendingLeadOpen}                              // ← NEW
               onPendingLeadOpenHandled={() => setPendingLeadOpen(null)}
             />
@@ -902,13 +753,6 @@ export default function SalesDashboard() {
               isDark={isDark}
               t={t}
               now={now}
-            />
-          ) : activeView === "settings" ? (
-            <SettingsView
-              adminUser={user}
-              isDark={isDark}
-              t={t}
-              onSaved={(number: string) => setUser(prev => ({ ...prev, whatsapp_number: number }))}
             />
           ) : (
             <div className={`text-center mt-20 ${t.textMuted}`}>...</div>
@@ -1139,7 +983,7 @@ function DashboardAnalytics({ leads, isDark, t }: { leads: any[]; isDark: boolea
 // ============================================================================
 function SalesManagerView({
   managers, allLeads, followUps, isLoading, adminUser, refetch,
-  initialView, setMainView, isDark, t,
+  initialView, setMainView, isDark, t, featurePrefs,
   pendingLeadOpen, onPendingLeadOpenHandled,        // ← NEW
 }: any) {
   const getStatusStyle = (status: string) => {
@@ -1315,7 +1159,36 @@ function SalesManagerView({
     return showLostLeads || !lead.is_lost_lead;
   };
 
-  const filteredLeads = useMemo(() => {
+  /* ── Lead ordering ──────────────────────────────────────────────────────
+     From Settings → Additional Features → Lead sorting. The comparator lives in
+     lib/featurePrefs.ts beside the option list it belongs to; what it cannot
+     work out on its own is "when did I last touch this lead", because that means
+     scanning the follow-up log — which this component has and that module does
+     not, so it is passed in.
+
+     Sorted after filtering rather than before: the filters are the expensive
+     part and the sort only has to order what survives them. */
+  const leadSort = featurePrefs?.leadSort ?? "newest";
+  const compactCards = featurePrefs?.toggles?.compactLeadCards === true;
+
+  const lastActivityAt = useCallback(
+    (lead: any) => {
+      const leadFups = (followUps ?? []).filter((f: any) => String(f.leadId) === String(lead?.id));
+      return leadFups.length > 0
+        ? Math.max(...leadFups.map((f: any) => new Date(f.createdAt).getTime()))
+        : new Date(lead?.created_at ?? 0).getTime();
+    },
+    [followUps]
+  );
+
+  const sortLeads = useCallback(
+    (leads: any[]) =>
+      // A copy, because these arrays are memoised upstream and .sort mutates.
+      [...leads].sort((a, b) => compareLeads(a, b, leadSort, lastActivityAt)),
+    [leadSort, lastActivityAt]
+  );
+
+  const filteredLeadsUnsorted = useMemo(() => {
     let leads = pipelineManagerLeads.filter(passLostFilter);
     if (!searchTerm.trim()) return leads;
     const lq = searchTerm.toLowerCase();
@@ -1339,7 +1212,12 @@ function SalesManagerView({
       }
     });
   }, [pipelineManagerLeads, searchTerm, columnFilter, passLostFilter]);
-  const filteredDatabaseLeads = useMemo(() => {
+  const filteredLeads = useMemo(
+    () => sortLeads(filteredLeadsUnsorted),
+    [filteredLeadsUnsorted, sortLeads]
+  );
+
+  const filteredDatabaseLeadsUnsorted = useMemo(() => {
     let leads = baseManagerLeads.filter(passLostFilter);
     if (!searchTerm.trim()) return leads;
     const lq = searchTerm.toLowerCase();
@@ -1363,6 +1241,11 @@ function SalesManagerView({
       }
     });
   }, [baseManagerLeads, searchTerm, columnFilter, passLostFilter]);
+  const filteredDatabaseLeads = useMemo(
+    () => sortLeads(filteredDatabaseLeadsUnsorted),
+    [filteredDatabaseLeadsUnsorted, sortLeads]
+  );
+
   const paginatedLeads = filteredLeads.slice(0, cardsPage * CARDS_PER_PAGE);
   const hasMoreCards = paginatedLeads.length < filteredLeads.length;
 
@@ -1936,7 +1819,17 @@ function SalesManagerView({
               : filteredLeads.length === 0
                 ? <div className={`text-center py-10 ${t.textMuted}`}>No leads available.</div>
                 : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-3">
+                  <div
+                    className={
+                      // Settings → Additional Features → "Compact lead cards".
+                      // Density only: the same cards, more of them per row. No
+                      // information is dropped, so the toggle cannot hide
+                      // something a manager needs to see.
+                      compactCards
+                        ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2"
+                        : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-3"
+                    }
+                  >
                     {paginatedLeads.map((lead: any) => {
                       const interest = lead.leadInterestStatus && lead.leadInterestStatus !== "Pending" ? lead.leadInterestStatus : null;
                       const loanSt = lead.loanStatus && lead.loanStatus !== "N/A" ? lead.loanStatus : null;
@@ -3655,160 +3548,11 @@ function SiteVisitScheduler({
     </div>
   );
 }
-function SettingsView({ adminUser, isDark, t, onSaved }: {
-  adminUser: any;
-  isDark: boolean;
-  t: ReturnType<typeof buildTheme>;
-  onSaved: (number: string) => void;
-}) {
-  const [whatsappNumber, setWhatsappNumber] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
-
-  useEffect(() => {
-    const fetchNumber = async () => {
-      try {
-        const res = await fetch(`/api/users/update-whatsapp?name=${encodeURIComponent(adminUser.name)}`);
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data.success) setWhatsappNumber(data.whatsapp_number || "");
-      } catch (e) { console.error(e); }
-      finally { setIsLoading(false); }
-    };
-    if (adminUser.name) fetchNumber();
-  }, [adminUser.name]);
-
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleaned = whatsappNumber.replace(/\D/g, "");
-    if (cleaned.length < 10 || cleaned.length > 15) {
-      setToast({ msg: "Enter a valid number with country code (e.g. 918369787919)", ok: false });
-      setTimeout(() => setToast(null), 3500);
-      return;
-    }
-    setIsSaving(true);
-    try {
-      const res = await fetch("/api/users/update-whatsapp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: adminUser.name, whatsapp_number: cleaned }),
-      });
-      if (!res.ok) { setToast({ msg: "❌ Server Error", ok: false }); return; }
-      const data = await res.json();
-      if (data.success) onSaved(cleaned); // update parent state instantly
-      setToast({ msg: data.success ? "✅ WhatsApp number saved!" : "❌ " + data.message, ok: data.success });
-      setTimeout(() => setToast(null), 3500);
-    } catch {
-      setToast({ msg: "❌ Network error. Try again.", ok: false });
-      setTimeout(() => setToast(null), 3500);
-    } finally { setIsSaving(false); }
-  };
-
-  return (
-    <div className="animate-fadeIn max-w-xl mx-auto space-y-4">
-
-      {/* Toast */}
-      {toast && (
-        <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[100] px-3 py-3 rounded-xl shadow-lg flex items-center gap-3 animate-fadeIn border ${toast.ok ? "bg-green-600 border-green-400 text-white" : "bg-red-600 border-red-400 text-white"}`}>
-          <span className="text-sm font-bold">{toast.msg}</span>
-        </div>
-      )}
-
-      <div>
-        <h1 className={`text-2xl font-bold ${t.text}`}>Settings</h1>
-        <p className={`text-sm mt-1 ${t.textFaint}`}>Manage your personal CRM preferences</p>
-      </div>
-
-      {/* WhatsApp Card */}
-      <div className={`rounded-xl border p-6 shadow-sm ${t.card}`} style={t.cardGlass}>
-        <div className={`flex items-center gap-3 mb-6 pb-4 border-b ${t.tableBorder}`}>
-          <div className="w-10 h-10 rounded-xl bg-green-500/10 border border-green-500/30 flex items-center justify-center">
-            <FaWhatsapp className="text-green-500 text-lg" />
-          </div>
-          <div>
-            <h2 className={`font-bold text-base ${t.text}`}>My WhatsApp Number</h2>
-            <p className={`text-xs ${t.textFaint}`}>Leads will receive messages from this number</p>
-          </div>
-        </div>
-
-        {isLoading ? (
-          <div className={`text-center py-6 text-sm ${t.textMuted}`}>Loading...</div>
-        ) : (
-          <form onSubmit={handleSave} className="space-y-4">
-
-            {/* Who is saving */}
-            <div className={`flex items-center justify-between p-3 rounded-xl border ${t.settingsBg}`}>
-              <span className={`text-xs ${t.textFaint}`}>Saving for</span>
-              <span className={`text-xs font-bold ${t.text}`}>{adminUser.name}</span>
-            </div>
-
-            {/* Number Input */}
-            <div>
-              <label className={`text-xs font-bold block mb-2 ${t.textMuted}`}>Your WhatsApp Number</label>
-              <div className="relative">
-                <span className={`absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono font-bold ${t.textFaint}`}>+</span>
-                <input
-                  type="tel"
-                  value={whatsappNumber}
-                  onChange={e => setWhatsappNumber(e.target.value.replace(/\D/g, ""))}
-                  placeholder="918369787919"
-                  maxLength={15}
-                  className={`w-full rounded-xl pl-7 pr-4 py-3 text-sm font-mono outline-none border transition-colors ${t.inputInner} ${t.text} ${t.inputFocus}`}
-                />
-              </div>
-              <p className={`text-[10px] mt-2 ${t.textFaint}`}>
-                Include country code, no spaces or symbols.
-                Example: <span className="font-mono font-bold">918369787919</span>
-              </p>
-            </div>
-
-            {/* Live Preview */}
-            {whatsappNumber.length >= 10 && (
-              <div className="p-3 rounded-xl border border-green-500/20 bg-green-500/5 text-xs">
-                <p className="text-green-500 font-bold mb-1">📱 Preview — WhatsApp will open as:</p>
-                <p className={`font-mono break-all ${t.textMuted}`}>
-                  https://wa.me/{whatsappNumber}?text=...
-                </p>
-              </div>
-            )}
-
-            {/* Current saved number */}
-            {adminUser.whatsapp_number && (
-              <div className={`p-3 rounded-xl border border-green-500/20 text-xs flex items-center justify-between ${t.settingsBg}`}>
-                <span className={t.textFaint}>Currently saved:</span>
-                <span className="font-mono font-bold text-green-500">+{adminUser.whatsapp_number}</span>
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={isSaving || whatsappNumber.length < 10}
-              className={`w-full font-bold py-3 rounded-xl transition-all flex items-center justify-center gap-2 ${isSaving || whatsappNumber.length < 10
-                ? "opacity-50 cursor-not-allowed bg-green-600/40 text-white"
-                : "bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-600/20 cursor-pointer"
-                }`}
-            >
-              <FaWhatsapp />
-              {isSaving ? "Saving..." : "Save WhatsApp Number"}
-            </button>
-          </form>
-        )}
-      </div>
-
-      {/* Info Box */}
-      <div className={`rounded-xl border p-3 text-xs space-y-2 ${t.settingsBg}`}>
-        <p className={`font-bold ${t.textMuted}`}>ℹ️ How this works</p>
-        <p className={t.textFaint}>
-          When you click "Send WhatsApp" on a lead, it opens WhatsApp Web/App
-          using <strong>your personal number</strong>. Each Sales Manager
-          sends from their own WhatsApp — not a shared company number.
-        </p>
-      </div>
-
-    </div>
-  );
-}
+// The Sales Manager Settings view has moved to /dashboard/settings, which the
+// Settings item in the rail now links to. It holds Profile, Account & Security,
+// Preferences, Notifications, Activity Logs, Additional Features and WhatsApp
+// Integration — the WhatsApp number field that used to be here is the last of
+// those.
 // ============================================================================
 // ATTENDANCE VIEW — Sales Manager self-attendance tracker
 // ============================================================================

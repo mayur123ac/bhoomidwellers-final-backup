@@ -6,6 +6,7 @@ import { isHashed, verifyPassword } from "@/lib/passwords";
 import { writeAuditLog } from "@/lib/auditLog";
 import { handleFailedLogin, notifyLogin } from "@/lib/loginNotification";
 import { clearFailedLogins } from "@/lib/loginSecurity";
+import { avatarSrc } from "@/lib/settingsUser";
 
 export async function POST(req: Request) {
   try {
@@ -233,6 +234,20 @@ export async function POST(req: Request) {
         // Legacy "system" values are passed through untouched; the client
         // resolves them, because only the client can see the OS preference.
         theme: user.theme_preference ?? null,
+        // The profile picture, for the same reason and by the same route as the
+        // theme: it is what makes the header avatar correct on the very first
+        // paint after signing in, on a machine whose localStorage has never
+        // heard of this user. Also a sibling of `user` rather than part of it —
+        // `user` is signed into the session cookie, and a field that changes
+        // every time someone uploads a photo does not belong in a signed token.
+        //
+        // avatarSrc() resolves which of the two storage columns is in play, so
+        // the client receives one ready-to-use URL and never has to know that
+        // R2 and local uploads are different things.
+        avatarUrl: avatarSrc({
+          avatar_key: user.avatar_key ?? null,
+          avatar_url: user.avatar_url ?? null,
+        }),
       },
       { status: 200 },
     );

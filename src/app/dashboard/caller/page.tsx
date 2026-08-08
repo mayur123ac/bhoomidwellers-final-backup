@@ -18,6 +18,7 @@ import {
 } from "react-icons/fa";
 import { MdOutlinePhoneInTalk } from "react-icons/md";
 import CallingButtons from "@/components/CallingButtons";
+import UserAvatar from "@/components/UserAvatar";
 
 // ─────────────────────────────────────────────
 // TYPES
@@ -994,7 +995,7 @@ export default function PresalesCallerPanel() {
             </div>
             {uploadError && <span className="text-red-400 text-xs flex items-center gap-1"><FaExclamationTriangle />{uploadError}</span>}
             <div className="relative">
-              <div onClick={() => setIsProfileOpen(!isProfileOpen)} className="w-9 h-9 rounded-full bg-purple-900/30 text-purple-400 border border-purple-500/50 flex items-center justify-center font-bold text-sm cursor-pointer hover:bg-purple-900/50">{user.name.charAt(0).toUpperCase()}</div>
+              <div onClick={() => setIsProfileOpen(!isProfileOpen)} className="w-9 h-9 rounded-full bg-purple-900/30 text-purple-400 border border-purple-500/50 flex items-center justify-center font-bold text-sm cursor-pointer hover:bg-purple-900/50"><UserAvatar name={user?.name} fallback="U" alt="" /></div>
               {isProfileOpen && (
                 <div className="absolute top-12 right-0 w-56 bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl shadow-2xl p-4 z-50 animate-fadeIn">
                   <h3 className="text-white font-bold">{user.name}</h3>

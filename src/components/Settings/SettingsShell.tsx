@@ -54,9 +54,12 @@ import {
 } from "react-icons/fa";
 import { FaWandMagicSparkles } from "react-icons/fa6";
 
-import AdminSidebar, { type AdminNavItem } from "@/components/admin/AdminSidebar";
+import { type AdminNavItem } from "@/components/admin/AdminSidebar";
+import RoleSidebar, { type RailTarget } from "@/components/RoleSidebar";
 import AttendanceBadge from "@/components/AttendanceBadge";
 import CrmUpdatesNotification from "@/components/CrmUpdatesNotification";
+import UserAvatar from "@/components/UserAvatar";
+import AppHeader, { HeaderControl } from "@/components/AppHeader";
 import { clearCrmSession, getStoredCrmUser } from "@/lib/authSession";
 import { SectionErrorBoundary, SETTINGS_THEME_CSS, T, ToastProvider } from "./ui";
 
@@ -78,11 +81,16 @@ export const NAV: { group: string; items: NavItem[] }[] = [
       { href: "/dashboard/settings/preferences", label: "Preferences", icon: FaSlidersH },
       { href: "/dashboard/settings/notifications", label: "Notifications", icon: FaBell },
       { href: "/dashboard/settings/activity-logs", label: "Activity Logs", icon: FaHistory },
+      { href: "/dashboard/settings/additional-features", label: "Additional Features", icon: FaWandMagicSparkles },
     ],
   },
   {
     group: "Integrations & APIs",
     items: [
+      // Not adminOnly: this is where a Sales Manager sets the number their own
+      // leads are messaged from, and it is the screen that explains why that
+      // number stops sending once the Business API is connected.
+      { href: "/dashboard/settings/whatsapp-integration", label: "WhatsApp Integration", icon: FaWhatsapp },
       { href: "/dashboard/settings/developer-api", label: "Developer API", icon: FaPlug, adminOnly: true },
       { href: "/dashboard/settings/connected-accounts", label: "Connected Accounts", icon: FaPuzzlePiece, adminOnly: true, status: "planned" },
       { href: "/dashboard/settings/email-senders", label: "Email Senders", icon: FaEnvelope, adminOnly: true, status: "planned" },
@@ -131,11 +139,18 @@ const RAIL: RailItem[] = [
 ];
 
 /**
- * Settings is reachable by every signed-in role (middleware lets it through so
- * people can manage their own profile and password), but the rest of the rail
- * is not. Offering a Sales Manager a "Geo Analytics" button that middleware
- * bounces straight back would be worse than not offering it, so the rail is cut
- * down to what each role can actually open. This mirrors middleware.ts; that
+ * The ADMIN rail's item list, cut to what each role that gets the admin rail can
+ * actually open.
+ *
+ * A Sales Manager no longer reaches this function at all — they get their own
+ * rail via RoleSidebar, which is the point of this change. It still applies to
+ * Site Head, Receptionist, Sourcing Manager and Caller, whose own dashboards
+ * render their navigation inline exactly as the Sales dashboard used to. Until
+ * those are extracted the same way, the cut-down admin rail remains their
+ * existing Settings navigation and is deliberately left as-is.
+ *
+ * Offering someone a "Geo Analytics" button that middleware bounces straight
+ * back would be worse than not offering it. This mirrors middleware.ts; that
  * file remains the enforcement, this is only presentation.
  */
 function railForRole(role: unknown): RailItem[] {
@@ -154,7 +169,6 @@ function railForRole(role: unknown): RailItem[] {
   // Every remaining role is confined to a single path. Give them the way back
   // to it, plus Settings.
   const home: Record<string, string> = {
-    "sales manager": "/dashboard/sales",
     receptionist: "/dashboard/receptionist",
     "sourcing manager": "/dashboard/sourcing",
     caller: "/dashboard/caller",
@@ -266,17 +280,23 @@ export default function SettingsShell({ children }: { children: React.ReactNode 
     setDrawerOpen(false);
   }, [pathname]);
 
-  const railSelect = (item: RailItem) => {
+  // One handler for either rail. RoleSidebar normalises both rails' clicks into
+  // a RailTarget, so this does not need to know which one is mounted — that is
+  // what stops "which rail am I on" leaking back into the host.
+  const railSelect = (target: RailTarget) => {
     setIsSidebarHovered(false);
-    if (item.id === "settings") return; // already here
-    // The dashboard restores this tab on mount; the rail's dashboard links have
-    // always set it before navigating.
+    if (target.id === "settings") return; // already here
+
+    // The dashboards restore this on mount, so a rail item that names an
+    // in-page view (Assigned Leads, Inventory, …) lands on that view rather
+    // than dumping the user on the destination's default tab. The admin rail
+    // has always used `id`; the sales rail passes its view id as `tab`.
     try {
-      localStorage.setItem("return_tab", item.id);
+      localStorage.setItem("return_tab", target.tab ?? target.id);
     } catch {
       /* ignore */
     }
-    router.push(item.link);
+    router.push(target.link);
   };
 
   const handleLogout = () => {
@@ -387,110 +407,87 @@ export default function SettingsShell({ children }: { children: React.ReactNode 
         }`}
         style={pageStyle}
       >
-        {/* ── Global Admin rail ── */}
-        <AdminSidebar
-          items={railForRole(user?.role)}
+        {/* ── Global rail, chosen by role rather than by route ──
+            A Sales Manager keeps their own rail here; everyone else keeps the
+            admin one they already had. `activeId="settings"` is the id of the
+            Settings item in BOTH rails, so it highlights either way. */}
+        <RoleSidebar
+          role={user?.role}
           activeId="settings"
-          onSelect={railSelect}
-          isHovered={isSidebarHovered}
-          onHoverChange={setIsSidebarHovered}
-          groups={RAIL_GROUPS}
-          logoSrc="/assets/logobrowser_trans.svg"
+          onNavigate={railSelect}
+          expanded={isSidebarHovered}
+          onExpandedChange={setIsSidebarHovered}
+          adminItems={railForRole(user?.role)}
+          adminGroups={RAIL_GROUPS}
+          adminLogoSrc="/assets/logobrowser_trans.svg"
+          // Settings has no bottom nav bar, so the rail stays on at every width
+          // — the body already reserves 72px for it unconditionally.
+          hideOnMobile={false}
         />
 
         {/* ── Main ── */}
         <div className="flex-1 flex flex-col pl-[72px] h-screen overflow-hidden">
-          {/* ── Admin header ── */}
-          <header
-            className="h-16 flex items-center justify-between px-4 sm:px-8 z-30 flex-shrink-0 transition-colors duration-300"
-            style={{
-              borderBottom: isDark
-                ? "1px solid rgba(158,33,123,0.12)"
-                : "1px solid rgba(0,0,0,0.08)",
-              backdropFilter: "blur(12px)",
-              WebkitBackdropFilter: "blur(12px)",
-              background: isDark ? "rgba(10,10,15,0.85)" : "rgba(255,255,255,0.9)",
-            }}
-          >
-            <h1
-              className={`font-bold text-lg tracking-wide flex items-center gap-3 min-w-0 ${
-                isDark ? "text-white" : "text-[#1A1A1A]"
-              }`}
-            >
-              <img
-                src="/assets/bhoomidwellersLogo_trans.png"
-                alt="Bhoomi CRM"
-                className="h-20 md:h-18 w-auto object-contain -ml-2"
-              />
-              <span
-                className={`hidden sm:inline text-xs sm:text-sm font-normal truncate ${
-                  isDark ? "text-gray-500" : "text-[#9CA3AF]"
-                }`}
-              >
-                — Settings{currentSection ? ` · ${currentSection.label}` : ""}
-              </span>
-              <span
-                className="hidden md:inline text-xs font-semibold px-2.5 py-0.5 rounded-full capitalize whitespace-nowrap"
-                style={{
-                  background: "rgba(158,33,123,0.12)",
-                  border: "1px solid rgba(158,33,123,0.3)",
-                  color: isDark ? "#d946a8" : "#9E217B",
-                }}
-              >
-                {user?.role || "Admin"}
-              </span>
-            </h1>
-
-            <div className="flex items-center gap-4 sm:gap-6">
-              {/* Opens the Settings local nav on narrow screens, where the
-                  sections column is hidden. */}
-              <button
-                type="button"
+          {/* ── Global header ──
+              The bar is now the shared AppHeader; only the page context and the
+              controls below are Settings' own. Every control keeps the handler
+              and popup it already had. */}
+          <AppHeader
+            isDark={isDark}
+            context={`Settings${currentSection ? ` · ${currentSection.label}` : ""}`}
+            role={user?.role}
+            leading={
+              // Opens the Settings local nav on narrow screens, where the
+              // sections column is hidden.
+              <HeaderControl
+                isDark={isDark}
                 onClick={() => setDrawerOpen(true)}
-                aria-label="Open settings sections"
-                className={`w-9 h-9 rounded-xl flex items-center cursor-pointer justify-center shadow-sm border lg:hidden ${
-                  isDark
-                    ? "bg-[#1C1C2A] border-[#2A2A38] text-[#d946a8]"
-                    : "bg-white border-indigo-200 text-[#9E217B]"
-                }`}
+                label="Open settings sections"
+                className="lg:hidden"
               >
-                <FaSlidersH className="w-4 h-4" />
-              </button>
-
+                <FaSlidersH className="w-3.5 h-3.5" />
+              </HeaderControl>
+            }
+          >
+            <>
               <AttendanceBadge />
 
-              <button
+              <HeaderControl
+                isDark={isDark}
                 onClick={toggleTheme}
-                aria-label="Toggle theme"
-                className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center cursor-pointer justify-center shadow-sm border ${
-                  isDark
-                    ? "bg-[#1C1C2A] border-[#2A2A38] text-yellow-300"
-                    : "bg-white border-indigo-200 text-[#9E217B]"
-                }`}
+                label={isDark ? "Switch to light mode" : "Switch to dark mode"}
               >
                 {isDark ? <SunIcon /> : <MoonIcon />}
-              </button>
+              </HeaderControl>
 
-              <CrmUpdatesNotification user={user} theme={chrome} isDark={isDark} />
+              {/* The bell used to be a bare glyph between two bordered buttons.
+                  Wrapping it gives it the same chrome without touching what it
+                  does — the component still owns its own popup and unread
+                  count, and renders its badge over this frame. */}
+              <div className="relative flex items-center">
+                <CrmUpdatesNotification user={user} theme={chrome} isDark={isDark} />
+              </div>
 
               <div className="relative">
-                <div
+                <button
+                  type="button"
                   onClick={() => setIsProfileOpen(!isProfileOpen)}
-                  className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm cursor-pointer shadow-sm hover:opacity-80 transition-opacity border
-                    ${isDark
-                      ? "border-[#9E217B]/40 text-[#d946a8] bg-[#9E217B]/15"
-                      : "border-[#9E217B]/40 text-[#9E217B] bg-[#9E217B]/10"}`}
+                  aria-label="Account menu"
+                  className={`h-9 w-9 flex-shrink-0 rounded-full flex items-center justify-center overflow-hidden font-semibold text-[13px] cursor-pointer transition-colors duration-150 border ${
+                    isDark
+                      ? "border-white/10 text-[#e879c4] bg-[#9E217B]/20 hover:bg-[#9E217B]/30"
+                      : "border-[#E5E7EB] text-[#9E217B] bg-[#9E217B]/10 hover:bg-[#9E217B]/15"
+                  }`}
                 >
-                  {String(user?.name || "A").charAt(0).toUpperCase()}
-                </div>
+                  <UserAvatar name={user?.name} fallback="A" alt="" />
+                </button>
                 {isProfileOpen && (
                   <div
                     className={`absolute top-12 right-0 w-64 border rounded-xl shadow-2xl p-5 z-50 animate-fadeIn ${chrome.dropdown}`}
                   >
                     <div className="mb-4">
-                      <h3 className={`font-bold text-lg ${chrome.text}`}>{user?.name || "Admin"}</h3>
+                      <h3 className={`font-bold text-lg ${chrome.text}`}>{user?.name || "Account"}</h3>
                       <p className={`text-sm truncate ${chrome.textMuted}`}>
-                        {user?.email || "admin@bhoomi.com"}
+                        {user?.email || ""}
                       </p>
                     </div>
                     <hr className={`mb-4 ${chrome.tableBorder}`} />
@@ -504,7 +501,7 @@ export default function SettingsShell({ children }: { children: React.ReactNode 
                               : "text-[#9E217B] bg-[#9E217B]/10 border-[#9E217B]/30"
                           }`}
                         >
-                          {user?.role || "Admin"}
+                          {user?.role || "Member"}
                         </span>
                       </p>
                       <div>
@@ -540,8 +537,8 @@ export default function SettingsShell({ children }: { children: React.ReactNode 
                   </div>
                 )}
               </div>
-            </div>
-          </header>
+            </>
+          </AppHeader>
 
           {/* ── Settings body ──
               The page shell owns the only vertical scroller; the columns inside
