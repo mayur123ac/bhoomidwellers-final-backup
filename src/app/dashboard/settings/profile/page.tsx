@@ -18,6 +18,15 @@ import {
   useToast,
 } from "@/components/Settings/ui";
 import { adoptServerAvatar, setAvatarUrl } from "@/lib/userAvatar";
+import {
+  APP_TIMEZONE,
+  APP_TIMEZONE_LABEL,
+  APP_TIMEZONE_OFFSET,
+  DEFAULT_WEEK_START_DAY,
+  TIMEZONE_LOCKED,
+  WEEK_START_OPTIONS,
+} from "@/lib/timePreferences";
+import { setWeekStartDay } from "@/lib/hooks/useTimePreferences";
 
 /* ── Timezone options ───────────────────────────────────────────────────────
    Built from Intl.supportedValuesOf, so the list is whatever the runtime can
@@ -444,8 +453,8 @@ export default function ProfilePage() {
     lastName: "",
     phone: "",
     whatsappNumber: "",
-    timezone: "Asia/Kolkata",
-    weekStartDay: 1,
+    timezone: APP_TIMEZONE,
+    weekStartDay: DEFAULT_WEEK_START_DAY,
   });
 
   const applyUser = useCallback((next: any) => {
@@ -455,8 +464,11 @@ export default function ProfilePage() {
       lastName: next.lastName ?? "",
       phone: next.phone ?? "",
       whatsappNumber: next.whatsappNumber ?? "",
-      timezone: next.timezone ?? "Asia/Kolkata",
-      weekStartDay: next.weekStartDay ?? 1,
+      // While the zone is locked the form always carries the workspace zone, so
+      // a legacy row saved with some other zone is corrected on the next save
+      // rather than sitting in the database contradicting what the CRM renders.
+      timezone: TIMEZONE_LOCKED ? APP_TIMEZONE : next.timezone ?? APP_TIMEZONE,
+      weekStartDay: next.weekStartDay ?? DEFAULT_WEEK_START_DAY,
     });
   }, []);
 
@@ -501,6 +513,11 @@ export default function ProfilePage() {
         json: form,
       });
       applyUser(result.user);
+
+      // Week start is read by calendars and weekly reports through
+      // lib/timePreferences, which caches it. Push the new value in so those
+      // surfaces follow this save instead of waiting for a reload.
+      setWeekStartDay(result.user.weekStartDay);
 
       // The header and several dashboards read the cached user out of
       // localStorage; leaving it stale would show the old name until re-login.
@@ -667,25 +684,50 @@ export default function ProfilePage() {
           </>
         }
       >
-        <Field label="Preferred Timezone" htmlFor="timezone">
-          <SearchableSelect
-            id="timezone"
-            value={form.timezone}
-            onChange={(tz) => setForm((f) => ({ ...f, timezone: tz }))}
-            options={timezones}
-            placeholder="Search timezones…"
-          />
+        <Field
+          label="Preferred Timezone"
+          htmlFor="timezone"
+          hint={
+            TIMEZONE_LOCKED
+              ? `All timestamps, calendars and reports across the CRM are shown in ${APP_TIMEZONE_LABEL} (${APP_TIMEZONE_OFFSET}). This is fixed for the workspace and cannot be changed.`
+              : undefined
+          }
+        >
+          {TIMEZONE_LOCKED ? (
+            // Locked rather than removed: the value the CRM actually uses stays
+            // visible and labelled, which is the point of the card. The picker
+            // returns automatically if ALLOWED_TIMEZONES ever widens.
+            <Select id="timezone" value={APP_TIMEZONE} disabled aria-readonly>
+              <option value={APP_TIMEZONE}>
+                {`${APP_TIMEZONE.replace(/_/g, " ")} — ${APP_TIMEZONE_LABEL} (${APP_TIMEZONE_OFFSET})`}
+              </option>
+            </Select>
+          ) : (
+            <SearchableSelect
+              id="timezone"
+              value={form.timezone}
+              onChange={(tz) => setForm((f) => ({ ...f, timezone: tz }))}
+              options={timezones}
+              placeholder="Search timezones…"
+            />
+          )}
         </Field>
 
-        <Field label="Start week on" htmlFor="weekStart">
+        <Field
+          label="Start week on"
+          htmlFor="weekStart"
+          hint="Used as the first day of the week in calendars and weekly reporting ranges."
+        >
           <Select
             id="weekStart"
             value={String(form.weekStartDay)}
             onChange={(e) => setForm((f) => ({ ...f, weekStartDay: Number(e.target.value) }))}
           >
-            <option value="1">Monday</option>
-            <option value="0">Sunday</option>
-            <option value="6">Saturday</option>
+            {WEEK_START_OPTIONS.map((o) => (
+              <option key={o.value} value={String(o.value)}>
+                {o.label}
+              </option>
+            ))}
           </Select>
         </Field>
       </Card>

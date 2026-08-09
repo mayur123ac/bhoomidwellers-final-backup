@@ -26,6 +26,8 @@ import LoginTimerWidget from "@/components/LoginTimerWidget";
 import AttendanceBadge from "@/components/AttendanceBadge";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import UserAvatar from "@/components/UserAvatar";
+import HeaderClock from "@/components/HeaderClock";
+import { APP_HEADER_HEIGHT, APP_HEADER_PADDING, AppLogo } from "@/components/AppHeader";
 
 const SunIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -335,9 +337,10 @@ export default function SourcingManagerDashboard() {
       ════════════════════════════════════════════════════ */}
       <div className="flex-1 flex flex-col overflow-hidden relative md:ml-[72px]">
 
-        <header className={`h-16 border-b flex items-center justify-between px-6 flex-shrink-0 z-30 ${t.header}`} style={t.headerGlass}>
-          <img src="/assets/bhoomidwellersLogo_trans.png" alt="Bhoomi CRM" className="h-20 md:h-18 w-auto object-contain" />
+        <header className={`${APP_HEADER_HEIGHT} ${APP_HEADER_PADDING} border-b flex items-center justify-between flex-shrink-0 z-30 ${t.header}`} style={t.headerGlass}>
+          <AppLogo />
           <div className="flex items-center space-x-4 relative" ref={topbarRef}>
+            <HeaderClock isDark={isDark} />
             {/* <LoginTimerWidget isDark={isDark} />
             <AttendanceBadge /> */}
             <button onClick={toggleTheme} aria-pressed={isDark}

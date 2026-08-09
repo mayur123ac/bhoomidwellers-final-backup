@@ -15,6 +15,12 @@ import {
   serializeSettingsUser,
 } from "@/lib/settingsUser";
 import { describePropagation, propagateUserRename } from "@/lib/renameUserReferences";
+import {
+  APP_TIMEZONE,
+  TIMEZONE_LOCKED,
+  isAllowedTimezone,
+  isValidWeekStartDay,
+} from "@/lib/timePreferences";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +45,10 @@ export async function GET() {
 /**
  * Valid IANA zone check via the Intl API — no timezone table to maintain, and it
  * agrees with whatever the runtime will actually use to format dates.
+ *
+ * Still used as the second gate below: while TIMEZONE_LOCKED holds, the
+ * allow-list is the binding constraint and this only matters if that lock is
+ * ever lifted.
  */
 function isValidTimezone(tz: string): boolean {
   try {
@@ -154,13 +164,26 @@ export async function PATCH(req: NextRequest) {
         { status: 400 }
       );
     }
+    // The UI locks this field, but the endpoint is reachable directly and the
+    // rest of the CRM formats everything in APP_TIMEZONE. Accepting some other
+    // zone here would store a preference nothing honours — the exact problem
+    // the lock exists to remove. See lib/timePreferences.ts.
+    if (TIMEZONE_LOCKED && !isAllowedTimezone(tz)) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: `This workspace operates in ${APP_TIMEZONE} and the timezone cannot be changed.`,
+        },
+        { status: 400 }
+      );
+    }
     updates.timezone = tz;
   }
 
   if (body.weekStartDay !== undefined) {
     const day = Number(body.weekStartDay);
     // Only the three the spec offers: Sunday, Monday, Saturday.
-    if (![0, 1, 6].includes(day)) {
+    if (!isValidWeekStartDay(day)) {
       return NextResponse.json(
         { success: false, message: "Week can start on Sunday, Monday or Saturday." },
         { status: 400 }

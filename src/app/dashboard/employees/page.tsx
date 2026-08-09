@@ -34,6 +34,8 @@ import AttendanceTimerWidget from "@/components/AttendanceTimerWidget";
 import LoginTimerWidget from "@/components/LoginTimerWidget";
 import AttendanceBadge from "@/components/AttendanceBadge";
 import UserAvatar from "@/components/UserAvatar";
+import HeaderClock from "@/components/HeaderClock";
+import { APP_HEADER_HEIGHT, APP_HEADER_PADDING, AppLogo } from "@/components/AppHeader";
 
 type RoleType = { _id: string; name: string };
 type EmployeeType = {
@@ -861,7 +863,7 @@ export default function EmployeesPage() {
 
         {/* HEADER */}
         <header
-          className={`h-16 flex items-center justify-between px-8 z-30 flex-shrink-0 transition-colors duration-300 ${t.header}`}
+          className={`${APP_HEADER_HEIGHT} ${APP_HEADER_PADDING} flex items-center justify-between z-30 flex-shrink-0 transition-colors duration-300 ${t.header}`}
           style={{
             borderBottom: isDark ? "1px solid rgba(158,33,123,0.12)" : "1px solid rgba(0,0,0,0.08)",
             backdropFilter: "blur(12px)",
@@ -870,7 +872,7 @@ export default function EmployeesPage() {
           }}
         >
           <h1 className={`font-bold text-lg tracking-wide flex items-center gap-3 ${t.headerTitle}`}>
-            <img src="/assets/bhoomidwellersLogo_trans.png" alt="Bhoomi CRM" className="h-20 md:h-18 w-auto object-contain -ml-2" />
+            <AppLogo />
             <span className={`text-xs sm:text-sm font-normal ${t.textFaint}`}>— {activeSection === "callers"
               ? callerSubView === "control" ? "Caller Control Mode" : "Caller Panel"
               : activeSection === "ai" ? "Bhoomi AI"
@@ -887,6 +889,7 @@ export default function EmployeesPage() {
           </h1>
           <div className="flex items-center gap-6">
             {/* <LoginTimerWidget isDark={isDark} /> */}
+            <HeaderClock isDark={isDark} />
             <AttendanceBadge />
             <button onClick={toggleTheme}
               aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}

@@ -52,6 +52,8 @@ import BolnaCallWidget from "@/components/BolnaCallWidget";
 import CallingButtons from "@/components/CallingButtons";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import UserAvatar from "@/components/UserAvatar";
+import HeaderClock from "@/components/HeaderClock";
+import { APP_HEADER_HEIGHT, APP_HEADER_PADDING, AppLogo } from "@/components/AppHeader";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -1867,10 +1869,11 @@ export default function ReceptionistDashboard() {
       <div className="flex-1 flex flex-col overflow-hidden relative md:ml-[72px]">
 
         {/* HEADER */}
-        <header className={`h-16 border-b flex items-center justify-between px-6 flex-shrink-0 z-30 ${t.header}`} style={t.headerGlass}>
-          <img src="/assets/bhoomidwellersLogo_trans.png" alt="Bhoomi CRM" className="h-20 md:h-18 w-auto object-contain" />
+        <header className={`${APP_HEADER_HEIGHT} ${APP_HEADER_PADDING} border-b flex items-center justify-between flex-shrink-0 z-30 ${t.header}`} style={t.headerGlass}>
+          <AppLogo />
           <div className="flex items-center space-x-4 relative" ref={topbarRef}>
             {/* <LoginTimerWidget isDark={isDark} /> */}
+            <HeaderClock isDark={isDark} />
             <AttendanceBadge />
             <button onClick={toggleTheme} aria-pressed={isDark}
               aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}

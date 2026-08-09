@@ -89,9 +89,10 @@ function StatCard({ label, value, color, bg, icon: Icon, isDark }: any) {
       className="rounded-4xl p-5 flex items-center gap-4 flex-shrink-0"
       style={{
         background: isDark ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.9)",
-        border: `1px solid ${color}40`,
+        border: `1px solid ${isDark ? "rgba(66, 64, 64, 0.5)" : "rgba(139, 138, 138, 0.5)"}`,
         boxShadow: isDark ? `0 4px 20px ${color}20` : `0 4px 20px rgba(0,0,0,0.06), 0 0 0 1px ${color}20`,
         backdropFilter: "blur(12px)",
+
       }}
     >
       <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: bg }}>
@@ -878,7 +879,7 @@ export default function SiteVisitOverview({
                           <span
                             className={`text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full mb-1.5 ${day.isToday ? "text-white" : ""}`}
                             style={{
-                              color: day.isToday ? "#fff" : day.isCurrentMonth ? isDark ? "rgba(255,255,255,0.8)" : "#374151" : isDark ? "rgba(255,255,255,0.2)" : "#D1D5DB",
+                              color: day.isToday ? "#fff" : day.isCurrentMonth ? isDark ? "rgba(255,255,255,0.8)" : "#7689a8ff" : isDark ? "rgba(255,255,255,0.2)" : "#D1D5DB",
                               background: day.isToday ? "linear-gradient(135deg,#9E217B,#d946a8)" : "transparent",
                             }}
                           >{day.date.getDate()}</span>

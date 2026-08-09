@@ -7,7 +7,7 @@
 
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import AppHeader, { APP_HEADER_HEIGHT, HeaderControl } from "./AppHeader";
+import AppHeader, { APP_HEADER_HEIGHT, AppLogo, HeaderControl } from "./AppHeader";
 
 describe("page context", () => {
   it("shows whatever the host passes, verbatim", () => {
@@ -60,9 +60,27 @@ describe("branding and role", () => {
     const logo = screen.getByAltText("Bhoomi Dwellers");
     // The previous rule was `h-20 md:h-18` inside an h-16 bar — a 5rem logo in
     // a 4rem header, which is what made the branding look oversized.
-    expect(logo.className).toContain("h-8");
+    expect(logo.className).toContain("h-12");
     expect(logo.className).not.toMatch(/h-(1[6-9]|20)/);
     expect(APP_HEADER_HEIGHT).toBe("h-16");
+  });
+
+  it("renders the same logo element the standalone dashboards use", () => {
+    // The four dashboards that still build their own bar import <AppLogo />
+    // rather than repeating an <img>. Rendering it here alongside the header's
+    // own is what catches the two drifting apart again — which is exactly how
+    // the logo ended up three different sizes in the first place.
+    const { container } = render(<AppLogo />);
+    const standalone = container.querySelector("img")!;
+
+    render(
+      <AppHeader isDark={false} context="Dashboard">
+        <span />
+      </AppHeader>
+    );
+    const inHeader = screen.getAllByAltText("Bhoomi Dwellers").at(-1)!;
+
+    expect(standalone.className).toBe(inHeader.className);
   });
 
   it("shows the role badge", () => {

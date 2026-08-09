@@ -53,6 +53,8 @@ import AttendanceView from "@/components/AttendanceView";
 import AdminAssistantDock from "@/components/AdminAssistantDock";
 import { CRMContextManager } from "@/lib/admin-ai/contextManager";
 import UserAvatar from "@/components/UserAvatar";
+import HeaderClock from "@/components/HeaderClock";
+import { APP_HEADER_HEIGHT, APP_HEADER_PADDING, AppLogo } from "@/components/AppHeader";
 
 const RevenueIntelligenceView = dynamic(() => import("./RevenueIntelligenceView"), { ssr: false });
 const GeoAnalyticsView = dynamic(() => import("./GeoAnalyticsView"), { ssr: false });
@@ -924,7 +926,10 @@ function AdminAtlasDashboardContent() {
 
       <div className={`flex-1 flex flex-col pl-[72px] h-screen overflow-hidden ${theme.mainBg}`}>
         <header
-          className={`h-14 flex items-center justify-between px-8 z-[40] transition-colors duration-300 relative ${theme.header}`}
+          // APP_HEADER_HEIGHT rather than a literal: this bar was h-14 while
+          // every other bar in the CRM is h-16, so the whole header changed
+          // height when you walked from Overview into Settings.
+          className={`${APP_HEADER_HEIGHT} ${APP_HEADER_PADDING} flex items-center justify-between z-[40] transition-colors duration-300 relative ${theme.header}`}
           style={{
             borderBottom: isDark ? "1px solid rgba(158,33,123,0.12)" : "1px solid rgba(0,0,0,0.07)",
             backdropFilter: "blur(16px)",
@@ -934,7 +939,7 @@ function AdminAtlasDashboardContent() {
           }}
         >
           <h1 className={`font-bold text-lg capitalize tracking-wide flex items-center gap-3 ${theme.text}`}>
-            <img src="/assets/bhoomidwellersLogo_trans.png" alt="Bhoomi CRM" className="h-20 md:h-18 w-auto object-contain -ml-2" />
+            <AppLogo />
             <span className={`text-xs sm:text-sm font-normal ${theme.textFaint}`}>— {activeView.replace("_", " ")}</span>
             <span
               className="text-xs font-semibold px-2.5 py-1 rounded-full capitalize"
@@ -947,6 +952,7 @@ function AdminAtlasDashboardContent() {
           </h1>
 
           <div className="flex items-center gap-3 relative z-[50]" ref={topbarRef}>
+            <HeaderClock isDark={isDark} />
             {/* <LoginTimerWidget isDark={isDark} /> */}
             <AttendanceBadge />
             <button onClick={toggleTheme}

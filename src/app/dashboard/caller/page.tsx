@@ -19,6 +19,8 @@ import {
 import { MdOutlinePhoneInTalk } from "react-icons/md";
 import CallingButtons from "@/components/CallingButtons";
 import UserAvatar from "@/components/UserAvatar";
+import HeaderClock from "@/components/HeaderClock";
+import { APP_HEADER_HEIGHT, APP_HEADER_PADDING } from "@/components/AppHeader";
 
 // ─────────────────────────────────────────────
 // TYPES
@@ -979,13 +981,17 @@ export default function PresalesCallerPanel() {
 
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* HEADER */}
-        <header className="h-16 bg-[#111111]/80 backdrop-blur-md border-b border-[#222] flex items-center justify-between px-8 z-30 flex-shrink-0">
+        <header className={`${APP_HEADER_HEIGHT} ${APP_HEADER_PADDING} bg-[#111111]/80 backdrop-blur-md border-b border-[#222] flex items-center justify-between z-30 flex-shrink-0`}>
           <h1 className="text-white font-bold text-base tracking-wide flex items-center gap-2">
             Presales — Caller Panel
             <span className="bg-[#222] text-gray-400 px-2 py-0.5 rounded text-xs border border-[#333]">{section === "dashboard" ? "Overview" : section === "forms" ? "Forms" : section === "interested" ? "Interested" : "Not Interested"}</span>
           </h1>
           <div className="flex items-center gap-3">
-            {dbState !== "idle" && <span className={`flex items-center gap-1.5 text-[11px] font-semibold px-3 py-1.5 rounded-lg border ${dbState === "saving" ? "text-blue-400 bg-blue-500/10 border-blue-500/20" : dbState === "saved" ? "text-green-400 bg-green-500/10 border-green-500/20" : "text-red-400 bg-red-500/10 border-red-500/20"}`}>{dbMessage}</span>}
+            {/* The caller panel has no light theme — it is dark-only by design,
+                so the clock is told so directly rather than reading a toggle
+                this page does not have. */}
+            <HeaderClock isDark />
+            {dbState !== "idle" &&<span className={`flex items-center gap-1.5 text-[11px] font-semibold px-3 py-1.5 rounded-lg border ${dbState === "saving" ? "text-blue-400 bg-blue-500/10 border-blue-500/20" : dbState === "saved" ? "text-green-400 bg-green-500/10 border-green-500/20" : "text-red-400 bg-red-500/10 border-red-500/20"}`}>{dbMessage}</span>}
             <button onClick={exportTemplate} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold cursor-pointer border bg-[#1a1a1a] border-[#333] text-gray-300 hover:border-green-500/50 hover:text-green-400 transition-all"><FaDownload className="text-green-400" />Template</button>
             <div onDragOver={e => { e.preventDefault(); setIsDragging(true); }} onDragLeave={() => setIsDragging(false)} onDrop={handleDrop}>
               <button onClick={() => fileInputRef.current?.click()} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold cursor-pointer border transition-all ${isDragging ? "bg-green-600 border-green-400 text-white" : "bg-[#1a1a1a] border-[#333] text-gray-300 hover:border-purple-500/50 hover:text-white"}`}>
