@@ -98,3 +98,379 @@ body {
 .scroll-on-left>* {
   direction: ltr;
 }
+
+/* ==========================================================================
+   RECEPTIONIST PANEL — Apple/iOS design discipline, scoped.
+   ==========================================================================
+
+   Everything below is namespaced under `.recep-panel`, which is applied to the
+   root element of /dashboard/receptionist ONLY. Nothing here leaks into the
+   Admin, Sales, Sourcing or Employees panels, even though those panels share
+   components (BookingFormModal, ChannelPartnerEnquiriesTable, SearchBar …) and
+   share lib/crmTheme.ts with this one.
+
+   This file deliberately sets NO colours. The Bhoomi Dwellers palette lives in
+   lib/crmTheme.ts and is treated as a locked token set — the rules here only
+   move typography, spacing, hierarchy, touch targets and interaction feel.
+   The two `currentColor` focus rings are the sole colour-adjacent rules, and
+   they inherit whatever accent the theme already put on the element.
+
+   CASCADE — read before adding a rule here.
+
+   Tailwind v4 emits its utilities inside `@layer utilities`. Everything below
+   is unlayered, and unlayered styles beat *any* layered style regardless of
+   specificity or order. So a rule here silently overrides `px-3`, `mb-1.5`,
+   `font-bold` and friends on the same element — it is not a tie broken by
+   source order.
+
+   That is intentional for the structural rules (label rhythm, edge insets,
+   touch targets), which is exactly what they are for. It is a hazard for
+   anything a component sets deliberately, so:
+
+     • Padding and tracking for table column headers stay on the `thCls`
+       token in the page component; there is no rule for them here.
+     • Every `.rp-*` type class carries its own final weight and must be used
+       WITHOUT a competing weight utility next to it — `rp-eyebrow`, not
+       `rp-label font-bold`, which would render at 500.
+
+   Selectors use :where() to keep specificity at `.recep-panel` alone, so
+   overriding one from a component needs only a slightly heavier selector
+   rather than !important.
+   ========================================================================== */
+
+.recep-panel {
+  /* ── Type ─────────────────────────────────────────────────────────────
+     The system stack, so the panel renders in SF Pro on macOS/iOS, Segoe UI
+     Variable on Windows and Roboto on Android — a native UI face on every
+     machine the front desk actually uses, rather than one webfont everywhere. */
+  --rp-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+    "Segoe UI Variable Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  /* ── Spacing scale ───────────────────────────────────────────────────
+     4 → 40. Every margin/padding rule below picks from this ladder instead of
+     inventing a value, which is what keeps the vertical rhythm predictable. */
+  --rp-1: 4px;
+  --rp-2: 8px;
+  --rp-3: 12px;
+  --rp-4: 16px;
+  --rp-5: 20px;
+  --rp-6: 24px;
+  --rp-8: 32px;
+  --rp-10: 40px;
+
+  /* ── Touch targets ──────────────────────────────────────────────────
+     44px is Apple's HIG minimum and is what the header/nav/form controls get.
+     Controls sitting inside a table row use --rp-hit-compact: a 44px button in
+     every row would push the row past 60px and cost the receptionist a screen
+     of leads, which rule 7 explicitly warns against. 36px still clears the
+     "comfortably clickable" bar for a pointer-driven desktop CRM. */
+  --rp-hit: 44px;
+  --rp-hit-compact: 36px;
+
+  /* Fast and short. iOS-like feedback is immediate; anything slower than
+     ~200ms on a data-dense CRM reads as lag, not polish. */
+  --rp-ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --rp-dur: 180ms;
+
+  font-family: var(--rp-font);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-synthesis-weight: none;
+  text-rendering: optimizeLegibility;
+}
+
+.recep-panel :where(input, select, textarea, button, h1, h2, h3, h4, p, span, td, th, label, li) {
+  font-family: inherit;
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   TYPE RAMP
+   Apple's hierarchy is built from size + weight + tracking + leading, not
+   from making everything bold. Optical tracking tightens as size grows,
+   which is the single change that makes headings stop looking like
+   blown-up body text.
+   ────────────────────────────────────────────────────────────────────── */
+
+.recep-panel .rp-title-lg {
+  font-size: 28px;
+  line-height: 34px;
+  font-weight: 700;
+  letter-spacing: -0.022em;
+}
+
+.recep-panel .rp-title {
+  font-size: 20px;
+  line-height: 25px;
+  font-weight: 700;
+  letter-spacing: -0.017em;
+}
+
+.recep-panel .rp-section {
+  font-size: 15px;
+  line-height: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* Metadata, subtitles, "last synced" — one step down in size AND weight, so
+   it recedes without needing a lighter colour (colours are locked). */
+.recep-panel .rp-secondary {
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 400;
+  letter-spacing: -0.003em;
+}
+
+/* Uppercase section heading inside a card or form block ("Personal
+   Information", "Requirement & Budget"). Carries its own weight rather than
+   being composed as `<ramp class> font-bold` — see the CASCADE note at the top
+   of this block for why a weight utility next to a ramp class loses. */
+.recep-panel .rp-eyebrow {
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Text inside a button or toolbar control. */
+.recep-panel .rp-control-label {
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 600;
+  letter-spacing: -0.003em;
+}
+
+/* KPIs read as numbers, not as shouting: tabular figures so digits line up
+   between cards, tight tracking, and 600 rather than 800/900. */
+.recep-panel .rp-kpi {
+  font-size: 26px;
+  line-height: 30px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* Any figure the receptionist compares down a column gets tabular figures.
+   The tables already tag those cells `tabular-nums`; this adds the OpenType
+   feature alongside the property for fonts that need the explicit flag. */
+.recep-panel :where(.tabular-nums) {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   HEADER / SECTION RHYTHM
+   ────────────────────────────────────────────────────────────────────── */
+
+.recep-panel .rp-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--rp-4);
+  flex-wrap: wrap;
+  margin-bottom: var(--rp-6);
+}
+
+.recep-panel .rp-page-header-titles {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rp-1);
+  min-width: 0;
+}
+
+.recep-panel .rp-page-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--rp-2);
+  flex-wrap: wrap;
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   TOUCH TARGETS
+   Browsers vertically centre a <button>'s content by default, so min-height
+   alone is enough — no display change, which would risk relayout in the
+   dozens of existing flex buttons.
+   ────────────────────────────────────────────────────────────────────── */
+
+/* `[role="switch"]` is excluded deliberately. A switch is a fixed-geometry
+   control — the shared ToggleSwitch in components/Tableui.tsx is a 20x36 pill
+   with a knob positioned against that exact height — so forcing a 36px
+   min-height would inflate the track into a lozenge. Switches get their hit
+   area from the <label> that wraps them, which is clickable across its full
+   width including the text. Checkboxes and radios are excluded for the same
+   reason. */
+.recep-panel :where(button, [role="button"], select):not([role="switch"]) {
+  min-height: var(--rp-hit-compact);
+}
+
+/* Form controls get the full 44px. */
+.recep-panel :where(form) :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea),
+.recep-panel :where(nav) :where(button):not([role="switch"]) {
+  min-height: var(--rp-hit);
+}
+
+.recep-panel :where(textarea) {
+  min-height: 88px;
+}
+
+/* The header bar is the one place that does NOT get 44px, and the reason is
+   worth recording. Two of its controls are shared components used by every
+   panel — HeaderClock and AttendanceBadge — and both are built to h-9 (36px).
+   They cannot be raised to 44 without changing every other panel's header, so
+   a 44px rule here would leave 44px buttons sitting beside 36px non-buttons
+   and the bar would read as misaligned. One shared 36px baseline beats a
+   mixed bar, and 36px is still a comfortable pointer target. The min-width
+   keeps the icon-only controls (bell, theme toggle) square rather than
+   collapsing to the width of a 20px glyph. */
+.recep-panel :where(header) :where(button):not([role="switch"]) {
+  /* 32px, not --rp-hit-compact (36). The header controls are HeaderControl
+     size="sm", i.e. h-8 = 32px, and a 36px min-height here would silently win
+     over that class and pin them back to 36 — the rule would quietly undo the
+     size the markup asks for. The min-width still keeps icon-only controls
+     square rather than collapsing to the width of a 12px glyph. */
+  min-height: 32px;
+  min-width: 32px;
+}
+
+/* Controls inside a table row stay compact — see --rp-hit-compact above. */
+.recep-panel :where(td) :where(button, select, [role="button"]):not([role="switch"]) {
+  min-height: var(--rp-hit-compact);
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   FORM RHYTHM
+   Label → 8px → input → 6px → helper/error, then 20px before the next
+   field. This is the fix for the packed Label/Input/Label/Input stack:
+   the gap *within* a field is always smaller than the gap *between*
+   fields, so the eye groups them correctly without any extra borders.
+   ────────────────────────────────────────────────────────────────────── */
+
+.recep-panel :where(form) :where(label) {
+  display: block;
+  margin-bottom: var(--rp-2);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+  letter-spacing: 0;
+  /* The stray pl-2 on these labels left them misaligned with their own input
+     by 8px. Flush is the whole point of a label. */
+  padding-left: 0;
+}
+
+/* A label wrapping its own control is not a field caption and must not get
+   the block/margin treatment — that would stack the control above its text.
+   `button` and `[role="switch"]` are in the list because the shared
+   ToggleSwitch wraps a <button role="switch"> in its <label>, not an <input>;
+   matching on input alone would break it anywhere it appears inside a form. */
+.recep-panel :where(form) :where(label):has(input, select, textarea, button, [role="switch"]) {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--rp-2);
+  margin-bottom: 0;
+}
+
+.recep-panel :where(form) :where(input, select, textarea) {
+  padding-top: var(--rp-3);
+  padding-bottom: var(--rp-3);
+}
+
+/* The between-field (20) and between-section (32) steps are applied as
+   `gap-5` and `space-y-8` on the enquiry form itself, so the three-step
+   rhythm is visible in the markup rather than hidden in a class here. */
+
+/* ──────────────────────────────────────────────────────────────────────
+   TABLE RHYTHM
+   Comfortable, not sparse. Rule 7 cuts both ways: readable rows, but this
+   is still a CRM and the receptionist must see a lead's basics without
+   clicking. Row padding goes to 14px vertical / 16px horizontal, and the
+   first/last cells get edge padding so content is not flush to the card.
+   ────────────────────────────────────────────────────────────────────── */
+
+/* Column-header padding and tracking stay on the `thCls` token in the page
+   component — these rules are unlayered and would override it silently. Only
+   the edge inset, which no utility expresses, is set here. */
+.recep-panel :where(table) :where(th):first-child,
+.recep-panel :where(table) :where(td):first-child {
+  padding-left: var(--rp-5);
+}
+
+.recep-panel :where(table) :where(th):last-child,
+.recep-panel :where(table) :where(td):last-child {
+  padding-right: var(--rp-5);
+}
+
+/* Status chips and pills: consistent height and optical padding wherever
+   they appear, so a column of them lines up. */
+.recep-panel .rp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 22px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   INTERACTION
+   Subtle hover, a real pressed state, and a visible focus ring. The ring
+   uses currentColor so it picks up whatever accent the theme already put
+   on the control — no new colour is introduced.
+   ────────────────────────────────────────────────────────────────────── */
+
+.recep-panel :where(button, [role="button"], a, select, input, textarea) {
+  transition:
+    background-color var(--rp-dur) var(--rp-ease),
+    border-color var(--rp-dur) var(--rp-ease),
+    color var(--rp-dur) var(--rp-ease),
+    transform var(--rp-dur) var(--rp-ease),
+    opacity var(--rp-dur) var(--rp-ease),
+    box-shadow var(--rp-dur) var(--rp-ease);
+}
+
+.recep-panel :where(button, [role="button"]):active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.recep-panel :where(button, [role="button"], a, select, input, textarea):focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+  border-radius: inherit;
+}
+
+/* Mouse users should not see the ring on click — only keyboard navigation. */
+.recep-panel :where(button, [role="button"]):focus:not(:focus-visible) {
+  outline: none;
+}
+
+.recep-panel :where(button, [role="button"]):disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Rows are clickable in three of these tables; make that legible on hover
+   without a colour change (the theme already supplies the hover tint). */
+.recep-panel :where(tbody tr) {
+  transition: background-color var(--rp-dur) var(--rp-ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  .recep-panel *,
+  .recep-panel *::before,
+  .recep-panel *::after {
+    transition-duration: 1ms !important;
+    animation-duration: 1ms !important;
+  }
+
+  .recep-panel :where(button, [role="button"]):active:not(:disabled) {
+    transform: none;
+  }
+}

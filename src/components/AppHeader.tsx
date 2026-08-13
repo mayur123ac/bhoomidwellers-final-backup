@@ -85,6 +85,7 @@ export function HeaderControl({
   isDark,
   onClick,
   label,
+  size = "md",
   className = "",
   children,
   ...rest
@@ -92,6 +93,19 @@ export function HeaderControl({
   isDark: boolean;
   onClick?: () => void;
   label: string;
+  /**
+   * "md" (36px) is the shared size and the default — Settings, Sales and every
+   * other host get it without asking.
+   *
+   * "sm" (32px) exists for the Receptionist panel, which wants a tighter bar.
+   * It is a named step rather than a free `className` override because the two
+   * sizes have to stay a short, known list: a bar where each control can be any
+   * height is the drift this component was written to end. Note that Tailwind
+   * emits `h-8` before `h-9`, so an `h-8` passed via className would LOSE to the
+   * base `h-9` regardless of the order in the class string — which is exactly
+   * why this is a prop and not a documentation note.
+   */
+  size?: "sm" | "md";
   className?: string;
   children: React.ReactNode;
 } & Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "onClick" | "className">) {
@@ -102,7 +116,8 @@ export function HeaderControl({
       aria-label={label}
       title={label}
       className={[
-        "h-9 w-9 flex-shrink-0 rounded-lg border flex items-center justify-center",
+        size === "sm" ? "h-8 w-8" : "h-9 w-9",
+        "flex-shrink-0 rounded-lg border flex items-center justify-center",
         // No scale transforms and no drop shadows: a control that jumps under
         // the cursor reads as a toy, and this bar has four of them side by side.
         "transition-colors duration-150 cursor-pointer",
@@ -136,6 +151,8 @@ export default function AppHeader({
   leading,
   children,
   logoSrc = "/assets/bhoomidwellersLogo_trans.png",
+  surfaceClassName,
+  surfaceStyle,
 }: {
   isDark: boolean;
   /** Where the user is, e.g. "Inventory" or "Settings · Notifications". */
@@ -147,17 +164,52 @@ export default function AppHeader({
   /** The right-hand controls, in order: attendance, theme, notifications, profile. */
   children: React.ReactNode;
   logoSrc?: string;
+  /**
+   * Surface override — the bar's background, border and shadow only.
+   *
+   * ── Why this exists ────────────────────────────────────────────────────────
+   * A panel adopting this header should inherit its STRUCTURE — the frame
+   * metrics, the control sizes, the icon system, the spacing scale — without
+   * being forced onto the flat surface below. The Receptionist panel has its
+   * own locked palette (lib/crmTheme.ts `header` / `headerGlass`) that predates
+   * this component, and "use the shared bar" must not mean "and also repaint
+   * your CRM".
+   *
+   * Passing EITHER of these replaces the default surface entirely; passing
+   * neither keeps it. That is deliberate: a host either owns its surface or it
+   * does not, and a half-overridden background is how you get a themed colour
+   * with someone else's border still under it.
+   *
+   * This changes nothing for existing hosts. Settings and the Sales dashboard
+   * pass neither and are byte-identical to before.
+   *
+   * Layout is NOT overridable here. Height, inset, alignment and gap stay on
+   * the component, because those are exactly what the hosts are adopting it
+   * for — a `className` that could reach them would reopen the drift this
+   * component was built to close.
+   */
+  surfaceClassName?: string;
+  surfaceStyle?: React.CSSProperties;
 }) {
+  const hostOwnsSurface = surfaceClassName !== undefined || surfaceStyle !== undefined;
+
   return (
     <header
-      className={`${APP_HEADER_HEIGHT} ${APP_HEADER_PADDING} flex items-center justify-between gap-3 z-30 flex-shrink-0`}
-      style={{
-        background: isDark ? "#0d0d14" : "#FFFFFF",
-        // A flat hairline instead of the previous blur-and-translucency. The
-        // page scrolls under this bar, and a semi-transparent header over a
-        // gradient page was the reason the text contrast moved as you scrolled.
-        borderBottom: isDark ? "1px solid rgba(255,255,255,0.08)" : "1px solid #ECEDF1",
-      }}
+      className={`${APP_HEADER_HEIGHT} ${APP_HEADER_PADDING} flex items-center justify-between gap-3 z-30 flex-shrink-0${
+        surfaceClassName ? ` ${surfaceClassName}` : ""
+      }`}
+      style={
+        hostOwnsSurface
+          ? surfaceStyle
+          : {
+              background: isDark ? "#0d0d14" : "#FFFFFF",
+              // A flat hairline instead of the previous blur-and-translucency.
+              // The page scrolls under this bar, and a semi-transparent header
+              // over a gradient page was the reason the text contrast moved as
+              // you scrolled.
+              borderBottom: isDark ? "1px solid rgba(255,255,255,0.08)" : "1px solid #ECEDF1",
+            }
+      }
     >
       {/* ── Left: brand → context → role ── */}
       <div className="flex items-center gap-3 min-w-0">

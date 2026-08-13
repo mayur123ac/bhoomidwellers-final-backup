@@ -25,6 +25,10 @@
 import { useMemo } from "react";
 import AdminSidebar, { type AdminNavItem } from "@/components/admin/AdminSidebar";
 import SalesSidebar, { SALES_NAV, type SalesNavItem } from "@/components/sales/SalesSidebar";
+import ReceptionistSidebar, {
+  RECEPTIONIST_NAV,
+  type ReceptionistNavItem,
+} from "@/components/receptionist/ReceptionistSidebar";
 
 /** Underscores and casing vary in the users table — "site_head" and "Site Head". */
 export function normalizeRoleName(role: unknown): string {
@@ -32,10 +36,16 @@ export function normalizeRoleName(role: unknown): string {
 }
 
 /** Which rail component a role gets. Presentation only — RBAC is middleware. */
-export type RailKind = "admin" | "sales";
+export type RailKind = "admin" | "sales" | "receptionist";
 
 export function railKindForRole(role: unknown): RailKind {
-  return normalizeRoleName(role) === "sales manager" ? "sales" : "admin";
+  const r = normalizeRoleName(role);
+  if (r === "sales manager") return "sales";
+  // The Receptionist had the same bug this file was created to fix: their eight
+  // nav items were replaced by the cut-down admin rail the moment they opened
+  // Settings. Now that their rail is a mountable component, they keep it.
+  if (r === "receptionist") return "receptionist";
+  return "admin";
 }
 
 /**
@@ -100,6 +110,20 @@ export default function RoleSidebar({
     return map;
   }, []);
 
+  // Same shape as salesTargets: rail ids are the dashboard's `activeTab` values,
+  // so a click carries its tab home. Settings is the exception in both rails —
+  // it is a route, not a tab of the dashboard.
+  const receptionistTargets = useMemo<Record<string, RailTarget>>(() => {
+    const map: Record<string, RailTarget> = {};
+    for (const item of RECEPTIONIST_NAV) {
+      map[item.id] =
+        item.id === "settings"
+          ? { id: item.id, label: item.label, link: "/dashboard/settings/profile" }
+          : { id: item.id, label: item.label, link: "/dashboard/receptionist", tab: item.id };
+    }
+    return map;
+  }, []);
+
   if (kind === "sales") {
     return (
       <SalesSidebar
@@ -107,6 +131,26 @@ export default function RoleSidebar({
         onSelect={(item: SalesNavItem) =>
           onNavigate(
             salesTargets[item.id] ?? { id: item.id, label: item.label, link: "/dashboard/sales" }
+          )
+        }
+        expanded={expanded}
+        onExpandedChange={onExpandedChange}
+        hideOnMobile={hideOnMobile}
+      />
+    );
+  }
+
+  if (kind === "receptionist") {
+    return (
+      <ReceptionistSidebar
+        activeId={activeId}
+        onSelect={(item: ReceptionistNavItem) =>
+          onNavigate(
+            receptionistTargets[item.id] ?? {
+              id: item.id,
+              label: item.label,
+              link: "/dashboard/receptionist",
+            }
           )
         }
         expanded={expanded}

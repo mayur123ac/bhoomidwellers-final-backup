@@ -9,6 +9,7 @@
 import { describe, expect, it } from "vitest";
 import { railKindForRole, normalizeRoleName } from "./RoleSidebar";
 import { SALES_NAV } from "./sales/SalesSidebar";
+import { RECEPTIONIST_NAV } from "./receptionist/ReceptionistSidebar";
 
 describe("railKindForRole", () => {
   it("gives a Sales Manager the sales rail, however the role is spelled", () => {
@@ -19,8 +20,18 @@ describe("railKindForRole", () => {
     }
   });
 
+  it("gives a Receptionist the receptionist rail, however the role is spelled", () => {
+    // Same bug as the Sales Manager's, found later: opening Settings replaced
+    // the Receptionist's eight nav items with the cut-down admin rail. This
+    // expectation used to read "receptionist" → "admin"; that was the old
+    // behaviour being pinned, and it is the behaviour that was wrong.
+    for (const spelling of ["Receptionist", "receptionist", " RECEPTIONIST "]) {
+      expect(railKindForRole(spelling)).toBe("receptionist");
+    }
+  });
+
   it("leaves every other role on the admin rail", () => {
-    for (const role of ["admin", "site head", "receptionist", "sourcing manager", "caller"]) {
+    for (const role of ["admin", "site head", "sourcing manager", "caller"]) {
       expect(railKindForRole(role)).toBe("admin");
     }
   });
@@ -57,5 +68,44 @@ describe("SALES_NAV", () => {
     // the highlight depends on this id matching in both. The admin rail's
     // Settings item uses the same one.
     expect(SALES_NAV.some((i) => i.id === "settings")).toBe(true);
+  });
+});
+
+describe("RECEPTIONIST_NAV", () => {
+  it("is the Receptionist sidebar, in order", () => {
+    expect(RECEPTIONIST_NAV.map((i) => i.label)).toEqual([
+      "Dashboard",
+      "Analytics",
+      "Receptionist Leads",
+      "Channel Partner Enquiries",
+      "Closed Leads",
+      "My Attendance",
+      "CRM AI Assistant",
+      "Settings",
+    ]);
+  });
+
+  it("pins Settings to the bottom and nothing else", () => {
+    expect(RECEPTIONIST_NAV.filter((i) => i.pinned).map((i) => i.id)).toEqual(["settings"]);
+  });
+
+  it("carries the shared Settings id so the rail highlights inside Settings", () => {
+    expect(RECEPTIONIST_NAV.some((i) => i.id === "settings")).toBe(true);
+  });
+
+  it("uses ids the dashboard can restore as tabs", () => {
+    // These double as the dashboard's `activeTab` values and as the `return_tab`
+    // handed back when a rail item is clicked from inside Settings. A renamed id
+    // here would silently drop the user on the default tab instead.
+    expect(RECEPTIONIST_NAV.map((i) => i.id)).toEqual([
+      "overview",
+      "analytics",
+      "recep-leads",
+      "cp-enquiries",
+      "closed-leads",
+      "attendance",
+      "assistant",
+      "settings",
+    ]);
   });
 });

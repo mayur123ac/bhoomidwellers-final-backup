@@ -533,7 +533,11 @@ export default function SalesDashboard() {
         >
           <div className="flex items-center gap-2 relative" ref={topbarRef}>
             {/* <LoginTimerWidget isDark={isDark} /> */}
-            <AttendanceBadge />
+            {/* Switches to the My Attendance view in place. Without a handler the
+                badge navigates to /dashboard?tab=attendance, which middleware
+                bounces to /dashboard/sales — dropping the tab and landing the
+                user back on Dashboard, so the button appeared to do nothing. */}
+            <AttendanceBadge onNavigate={() => setActiveView("attendance")} />
 
             {/* ── Theme Toggle ── */}
             <button

@@ -55,7 +55,7 @@ import {
 import { FaWandMagicSparkles } from "react-icons/fa6";
 
 import { type AdminNavItem } from "@/components/admin/AdminSidebar";
-import RoleSidebar, { type RailTarget } from "@/components/RoleSidebar";
+import RoleSidebar, { normalizeRoleName, type RailTarget } from "@/components/RoleSidebar";
 import AttendanceBadge from "@/components/AttendanceBadge";
 import CrmUpdatesNotification from "@/components/CrmUpdatesNotification";
 import UserAvatar from "@/components/UserAvatar";
@@ -142,12 +142,12 @@ const RAIL: RailItem[] = [
  * The ADMIN rail's item list, cut to what each role that gets the admin rail can
  * actually open.
  *
- * A Sales Manager no longer reaches this function at all — they get their own
- * rail via RoleSidebar, which is the point of this change. It still applies to
- * Site Head, Receptionist, Sourcing Manager and Caller, whose own dashboards
- * render their navigation inline exactly as the Sales dashboard used to. Until
- * those are extracted the same way, the cut-down admin rail remains their
- * existing Settings navigation and is deliberately left as-is.
+ * Neither a Sales Manager nor a Receptionist reaches this function any more —
+ * both have their own rail component, chosen by RoleSidebar, so opening Settings
+ * leaves their navigation intact. It still applies to Site Head, Sourcing
+ * Manager and Caller, whose dashboards still render their navigation inline
+ * exactly as the Sales dashboard used to. Until those are extracted the same
+ * way, the cut-down admin rail remains their existing Settings navigation.
  *
  * Offering someone a "Geo Analytics" button that middleware bounces straight
  * back would be worse than not offering it. This mirrors middleware.ts; that
@@ -297,6 +297,39 @@ export default function SettingsShell({ children }: { children: React.ReactNode 
       /* ignore */
     }
     router.push(target.link);
+  };
+
+  /**
+   * Where "Mark Attendance" goes from inside Settings.
+   *
+   * AttendanceBadge's own default is `/dashboard?tab=attendance`, which is right
+   * for Admin and Site Head — they can open /dashboard. It is wrong for a role
+   * middleware confines to its own path: a Receptionist is redirected to
+   * /dashboard/receptionist and the `?tab=` is dropped en route, so the click
+   * landed them on their default tab having done nothing.
+   *
+   * These two roles get their own panel plus `return_tab`, the same convention
+   * railSelect above uses and that both dashboards already read on mount.
+   * Sourcing Manager and Caller are deliberately absent — neither panel has an
+   * attendance view, so there is nowhere better to send them than the default.
+   */
+  const ATTENDANCE_HOME: Record<string, string> = {
+    "sales manager": "/dashboard/sales",
+    receptionist: "/dashboard/receptionist",
+  };
+
+  const goToAttendance = () => {
+    const path = ATTENDANCE_HOME[normalizeRoleName(user?.role)];
+    if (!path) {
+      window.location.href = "/dashboard?tab=attendance";
+      return;
+    }
+    try {
+      localStorage.setItem("return_tab", "attendance");
+    } catch {
+      /* ignore */
+    }
+    router.push(path);
   };
 
   const handleLogout = () => {
@@ -449,7 +482,7 @@ export default function SettingsShell({ children }: { children: React.ReactNode 
             }
           >
             <>
-              <AttendanceBadge />
+              <AttendanceBadge onNavigate={goToAttendance} />
 
               <HeaderControl
                 isDark={isDark}

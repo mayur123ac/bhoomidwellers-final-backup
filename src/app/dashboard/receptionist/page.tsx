@@ -32,10 +32,12 @@ import LoginTimerWidget from "@/components/LoginTimerWidget";
 import AttendanceBadge from "@/components/AttendanceBadge";
 import CrmUpdatesNotification from "@/components/CrmUpdatesNotification";
 import LostLeadModal from "@/components/LostLeadModal";
-// buildTheme and WhatsAppSettingsCard used to be defined in this file; they moved
-// out unchanged so the Sourcing Manager panel shares them instead of forking.
+// buildTheme used to be defined in this file; it moved out unchanged so the
+// Sourcing Manager panel shares it instead of forking.
+// WhatsAppSettingsCard went with the in-page Settings tab — the WhatsApp number
+// is now edited in Settings › WhatsApp Integration. The component itself is
+// untouched and still used by the panels that render it inline.
 import { buildTheme } from "@/lib/crmTheme";
-import WhatsAppSettingsCard from "@/components/WhatsAppSettingsCard";
 import ChannelPartnerFormModal from "@/components/ChannelPartnerFormModal";
 import ChannelPartnerEnquiriesTable from "@/components/ChannelPartnerEnquiriesTable";
 import SearchableSelect from "@/components/SearchableSelect";
@@ -52,8 +54,8 @@ import BolnaCallWidget from "@/components/BolnaCallWidget";
 import CallingButtons from "@/components/CallingButtons";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import UserAvatar from "@/components/UserAvatar";
-import HeaderClock from "@/components/HeaderClock";
-import { APP_HEADER_HEIGHT, APP_HEADER_PADDING, AppLogo } from "@/components/AppHeader";
+import AppHeader, { HeaderControl } from "@/components/AppHeader";
+import ReceptionistSidebar, { RECEPTIONIST_NAV } from "@/components/receptionist/ReceptionistSidebar";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -99,7 +101,10 @@ function DraggableTableContainer({ children, className, isDark }: { children: Re
 
   return (
     <div className={`relative ${className || ""}`}>
-      {showLeftShadow && <div className={`absolute top-0 bottom-0 left-[230px] w-8 bg-gradient-to-r ${shadowColor} to-transparent pointer-events-none z-[15] opacity-100`} />}
+      {/* 268px = the two frozen columns (96 + 172). Keep this in step with the
+          `left-[96px]` offset and the minWidth/maxWidth pairs on those cells, or
+          the scroll shadow detaches from the freeze edge. */}
+      {showLeftShadow && <div className={`absolute top-0 bottom-0 left-[268px] w-8 bg-gradient-to-r ${shadowColor} to-transparent pointer-events-none z-[15] opacity-100`} />}
       {showRightShadow && <div className={`absolute top-0 bottom-0 right-0 w-8 bg-gradient-to-l ${shadowColor} to-transparent pointer-events-none z-[15] opacity-100`} />}
       <div
         ref={scrollRef}
@@ -133,16 +138,26 @@ const MONTH_NAMES = [
   "July", "August", "September", "October", "November", "December"
 ];
 
-const NAV_ITEMS = [
-  { id: "overview", icon: <FaThLarge className="w-5 h-5" />, title: "Dashboard" },
-  { id: "analytics", icon: <FaChartPie className="w-5 h-5" />, title: "Analytics" },
-  // { id: "assigned", icon: <FaFileInvoice className="w-5 h-5" />, title: "Assigned Forms" },
-  { id: "recep-leads", icon: <FaUsers className="w-5 h-5" />, title: "Receptionist Leads" },
-  { id: "cp-enquiries", icon: <FaHandshake className="w-5 h-5" />, title: "Channel Partner Enquiries" },
-  { id: "closed-leads", icon: <FaCheckCircle className="w-5 h-5" />, title: "Closed Leads" },
-  { id: "attendance", icon: <FaClock className="w-5 h-5" />, title: "My Attendance" },
-  { id: "assistant", icon: <FaRobot className="w-5 h-5" />, title: "CRM AI Assistant" },
-];
+// NAV_ITEMS moved to components/receptionist/ReceptionistSidebar.tsx as
+// RECEPTIONIST_NAV. It has to live somewhere Settings can import it too, or the
+// rail says one thing here and another there — which is how the Receptionist
+// ended up with the admin rail inside Settings in the first place.
+//
+// Views this page can be asked to open by name, filtered so a stale or
+// hand-edited `return_tab` cannot set activeTab to something that renders
+// nothing. "settings" is excluded because it is a route, not a tab.
+const RECEPTIONIST_TAB_IDS = new Set(
+  RECEPTIONIST_NAV.filter((i) => i.id !== "settings").map((i) => i.id)
+);
+
+// What the header shows for each tab, taken from the rail's own labels rather
+// than retyped, so the bar and the sidebar cannot disagree about what the
+// current page is called. This is the same `context` slot Settings fills with
+// "Settings · Profile". "detail" is a lead's page, which belongs to Dashboard.
+const RECEPTIONIST_CONTEXT: Record<string, string> = {
+  ...Object.fromEntries(RECEPTIONIST_NAV.map((i) => [i.id, i.label])),
+  detail: "Dashboard",
+};
 
 const LEAD_SOURCES = [
   "Advertisement", "Referral", "Exhibition", "Channel Partner", "Website", "Call Center", "Others"
@@ -196,8 +211,15 @@ const CONFIG_KEYS: string[] = [...CONFIG_OPTIONS];
 // ─────────────────────────────────────────────────────────────────────────────
 // SVG ICONS
 // ─────────────────────────────────────────────────────────────────────────────
+// 12px, matching the 32px HeaderControl size="sm" this panel's header uses.
+// These two consts are local to the Receptionist page — Settings and Sales each
+// declare their own pair at 14px, so changing the size here reaches nothing else.
+//
+// They must stay equal to each other: the sun was 16 and the moon 14, so the
+// icon grew by 2px when you switched to dark mode and shrank on the way back,
+// in the same button.
 const SunIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="12" cy="12" r="5" />
     <line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" />
     <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
@@ -206,7 +228,7 @@ const SunIcon = () => (
   </svg>
 );
 const MoonIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
   </svg>
 );
@@ -367,6 +389,47 @@ function ConfigCombobox({
   );
 }
 
+/**
+ * One page header for every Receptionist tab.
+ *
+ * The five tabs previously each hand-rolled their own: `text-xl md:text-3xl`
+ * here, a bare `text-xl` there, `mb-8` on three of them and `mb-4` on the
+ * assistant, subtitles present on two and missing on the rest. Switching tabs
+ * moved the title and shifted the content below it, which is exactly the
+ * "where am I?" ambiguity rule 4 is about.
+ *
+ * The Apple hierarchy is title → subtitle → actions, with the actions right
+ * aligned and never competing with the title for weight. Colours come from the
+ * caller's theme tokens; this component chooses no colours of its own.
+ */
+function RpPageHeader({
+  title, subtitle, titleClass, subtitleClass, badge, leading, children,
+}: {
+  title: React.ReactNode;
+  subtitle?: React.ReactNode;
+  titleClass: string;
+  subtitleClass: string;
+  badge?: React.ReactNode;
+  leading?: React.ReactNode;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="rp-page-header px-5 pt-5">
+      <div className="flex items-center gap-3 min-w-0">
+        {leading}
+        <div className="rp-page-header-titles">
+          <h1 className={`rp-title-lg flex items-center flex-wrap gap-2.5 ${titleClass}`}>
+            {title}
+            {badge}
+          </h1>
+          {subtitle && <p className={`rp-secondary ${subtitleClass}`}>{subtitle}</p>}
+        </div>
+      </div>
+      {children && <div className="rp-page-header-actions">{children}</div>}
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // MAIN DASHBOARD
 // ─────────────────────────────────────────────────────────────────────────────
@@ -400,11 +463,18 @@ export default function ReceptionistDashboard() {
   const tblHeadStyle: React.CSSProperties = {};
   /** Column header. `text-[10px]` sits on the th so it beats the `text-xs`
    *  inherited from t.textHeader on the thead — same trick EnquiryOverview uses. */
-  const thCls = `px-3 py-3 whitespace-nowrap border-b text-[10px] font-bold uppercase tracking-[0.09em] ${isDark ? "border-white/[0.08]" : "border-gray-300"
+  const thCls = `px-4 py-3 whitespace-nowrap border-b text-[10px] font-bold uppercase tracking-[0.09em] ${isDark ? "border-white/[0.08]" : "border-gray-300"
     }`;
   /** Body cell. py-3.5 is the reference row height; the old `md:p-4` made these
-   *  rows 4px taller than the admin table at desktop width. */
-  const tdCls = `px-3 py-3.5 align-middle ${isDark ? "border-white/[0.045]" : "border-indigo-300"}`;
+   *  rows 4px taller than the admin table at desktop width.
+   *
+   *  px went 12 → 16 (the spacing scale's --rp-4). At 12px the column gutter was
+   *  narrower than the word spacing inside a cell, so "CP Company" and "CP Phone"
+   *  read as one run of text. The first and last cells get 20px instead, from
+   *  the `.recep-panel table td:first-child/:last-child` rules in globals.css,
+   *  so content is not flush against the card edge. Row height is unchanged —
+   *  this widens gutters without costing a single visible row. */
+  const tdCls = `px-4 py-3.5 align-middle ${isDark ? "border-white/[0.045]" : "border-indigo-300"}`;
   const tblDivide = isDark ? "divide-white/[0.045]" : "divide-indigo-300";
 
   /**
@@ -440,8 +510,24 @@ export default function ReceptionistDashboard() {
   const [user, setUser] = useState<any>({ name: "Loading...", role: "Receptionist", email: "", password: "" });
   const [activeTab, setActiveTab] = useState("overview");
   const [showPassword, setShowPassword] = useState(false);
-  const [currentTime, setCurrentTime] = useState(new Date());
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
+
+  // Restore the tab a rail click asked for before it navigated here — the same
+  // `return_tab` convention the Admin and Sales dashboards use, written by
+  // SettingsShell's railSelect. Without it, choosing "Closed Leads" from the
+  // rail inside Settings would land on this page's default Dashboard tab.
+  useEffect(() => {
+    try {
+      const returnTab = localStorage.getItem("return_tab");
+      if (returnTab) {
+        localStorage.removeItem("return_tab");
+        if (RECEPTIONIST_TAB_IDS.has(returnTab)) setActiveTab(returnTab);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   // ── Attendance: live clock tick (1-second interval for AttendanceView live timer) ──
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
@@ -754,10 +840,10 @@ export default function ReceptionistDashboard() {
     const timer = setTimeout(() => setActiveNotif(null), 2000);
     return () => clearTimeout(timer);
   }, [activeNotif, notifQueue]);
-  useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
+  /* The `currentTime` 1-second interval was removed with the in-page Settings
+     tab: its only readers were that tab's clock card, so it was re-rendering
+     this whole component every second to update nothing. The header's live
+     clock is HeaderClock, which owns its own tick. */
 
   useEffect(() => {
     if (activeTab === "assistant") chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -1663,7 +1749,10 @@ export default function ReceptionistDashboard() {
 
   return (
     <div
-      className={`flex flex-col md:flex-row h-screen font-sans overflow-hidden ${t.pageWrap}`}
+      /* `recep-panel` scopes the Apple-discipline type/spacing/touch-target
+         layer in globals.css to this panel only — see the block there. It
+         replaces `font-sans` (Geist) with the native system stack. */
+      className={`recep-panel flex flex-col md:flex-row h-screen overflow-hidden ${t.pageWrap}`}
       style={isDark ? {} : { background: "linear-gradient(135deg, #e8f6fd 0%, #f8fafc 30%, #faf0fb 62%, #f8fafc 78%, #e6fafe 100%)" }}
     >
       {/* ── TOAST ── */}
@@ -1676,191 +1765,19 @@ export default function ReceptionistDashboard() {
 
       {/* ════════════════════════════════════════════════════
           SIDEBAR (DESKTOP)
+          Mounted from components/receptionist/ReceptionistSidebar.tsx rather
+          than written inline. Settings mounts the same component through
+          RoleSidebar, which is what stops the rail from being replaced by the
+          cut-down admin one when a Receptionist opens Settings.
       ════════════════════════════════════════════════════ */}
-      <aside
-        onMouseEnter={() => setSidebarExpanded(true)}
-        onMouseLeave={() => setSidebarExpanded(false)}
-        className={`hidden md:flex flex-col py-5 px-1 z-50 overflow-hidden fixed left-0 top-0 h-full ${t.sidebar}`}
-        style={{
-          width: sidebarExpanded ? "248px" : "72px",
-          transition: "width 320ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 320ms ease",
-          background: "linear-gradient(180deg, #0f0f1a 0%, #111128 40%, #0f0f1a 100%)",
-          borderRight: "1px solid rgba(158,33,123,0.15)",
-          boxShadow: sidebarExpanded
-            ? "4px 0 24px rgba(0,0,0,0.4), inset -1px 0 0 rgba(158,33,123,0.08)"
-            : "2px 0 16px rgba(0,0,0,0.5)",
+      <ReceptionistSidebar
+        activeId={activeTab === "detail" ? "overview" : activeTab}
+        onSelect={(item) => {
+          if (item.id === "settings") router.push("/dashboard/settings/profile");
+          else setActiveTab(item.id);
         }}
-      >
-        <div className="flex items-center px-3 mb-6 mt-1 overflow-hidden">
-          <img
-            src="/assets/logobrowser_trans.svg"
-            alt="Logo"
-            className={`w-10 h-10 rounded-xl object-cover flex-shrink-0 cursor-pointer transition-all duration-300`}
-          />
-          <div
-            className="ml-3 overflow-hidden transition-all duration-300"
-            style={{
-              maxWidth: sidebarExpanded ? "130px" : "0px",
-              opacity: sidebarExpanded ? 1 : 0,
-              transform: sidebarExpanded ? "translateX(0)" : "translateX(-8px)",
-            }}
-          >
-            <p className="text-white font-bold text-[16px] whitespace-nowrap leading-tight">Bhoomi CRM</p>
-            <p className="text-[#d946a8] text-[10px] font-semibold whitespace-nowrap opacity-80">Receptionist</p>
-          </div>
-        </div>
-        <div
-          className="mx-3 mb-5 h-px transition-all duration-300"
-          style={{
-            background: "linear-gradient(90deg, transparent, rgba(158,33,123,0.4), transparent)",
-            opacity: sidebarExpanded ? 1 : 0.4,
-          }}
-        />
-        <nav className="flex flex-col gap-2 w-full px-2 flex-1">
-          <div className="flex flex-col gap-2 flex-1">
-            {NAV_ITEMS.map(({ id, icon, title }) => {
-              const isActive = activeTab === id || (id === "overview" && activeTab === "detail");
-              return (
-                <div
-                  key={id}
-                  onClick={() => setActiveTab(id)}
-                  title={!sidebarExpanded ? title : undefined}
-                  className="relative cursor-pointer group"
-                >
-                  {isActive && (
-                    <div
-                      className="absolute inset-0 rounded-xl pointer-events-none"
-                      style={{
-                        background: "radial-gradient(ellipse at left center, rgba(217,70,168,0.12) 0%, transparent 70%)",
-                      }}
-                    />
-                  )}
-                  <div
-                    className={`flex items-center gap-3 px-3.5 py-3 rounded-xl transition-all duration-200 relative overflow-hidden ${isActive ? "text-[#d946a8]" : "text-gray-500 hover:text-gray-200"}`}
-                    style={isActive ? {
-                      background: "linear-gradient(135deg, rgba(158,33,123,0.22) 0%, rgba(217,70,168,0.07) 100%)",
-                      boxShadow: "inset 0 0 0 1px rgba(217,70,168,0.28), 0 2px 16px rgba(158,33,123,0.12)",
-                    } : {}}
-                  >
-                    {isActive && (
-                      <div
-                        className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-[#d946a8]"
-                        style={{ boxShadow: "0 0 10px rgba(217,70,168,0.9), 0 0 4px rgba(217,70,168,0.6)" }}
-                      />
-                    )}
-                    {!isActive && (
-                      <div className="absolute inset-0 rounded-xl bg-white/0 group-hover:bg-white/[0.04] transition-colors duration-200" />
-                    )}
-                    <div
-                      className={`flex-shrink-0 transition-all duration-200 ${isActive ? "text-[#d946a8]" : "text-gray-600 group-hover:text-gray-300"}`}
-                      style={isActive ? { filter: "drop-shadow(0 0 5px rgba(217,70,168,0.65))" } : {}}
-                    >
-                      {icon}
-                    </div>
-                    <span
-                      className={`text-[12.5px] font-semibold whitespace-nowrap overflow-hidden transition-all duration-300 ${isActive ? "text-[#d946a8]" : "text-gray-400 group-hover:text-gray-100"}`}
-                      style={{
-                        maxWidth: sidebarExpanded ? "140px" : "0px",
-                        opacity: sidebarExpanded ? 1 : 0,
-                        transform: sidebarExpanded ? "translateX(0)" : "translateX(-6px)",
-                        letterSpacing: "0.01em",
-                      }}
-                    >
-                      {title}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Settings pinned to bottom */}
-          {(() => {
-            const isActive = activeTab === "settings";
-            return (
-              <div
-                onClick={() => setActiveTab("settings")}
-                title={!sidebarExpanded ? "Settings" : undefined}
-                className="relative cursor-pointer group mt-auto"
-              >
-                {isActive && (
-                  <div
-                    className="absolute inset-0 rounded-xl pointer-events-none"
-                    style={{
-                      background: "radial-gradient(ellipse at left center, rgba(217,70,168,0.12) 0%, transparent 70%)",
-                    }}
-                  />
-                )}
-                <div
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 relative overflow-hidden ${isActive ? "text-[#d946a8]" : "text-gray-500 hover:text-gray-200"}`}
-                  style={isActive ? {
-                    background: "linear-gradient(135deg, rgba(158,33,123,0.22) 0%, rgba(217,70,168,0.07) 100%)",
-                    boxShadow: "inset 0 0 0 1px rgba(217,70,168,0.28), 0 2px 16px rgba(158,33,123,0.12)",
-                  } : {}}
-                >
-                  {isActive && (
-                    <div
-                      className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-[#d946a8]"
-                      style={{ boxShadow: "0 0 10px rgba(217,70,168,0.9), 0 0 4px rgba(217,70,168,0.6)" }}
-                    />
-                  )}
-                  {!isActive && (
-                    <div className="absolute inset-0 rounded-xl bg-white/0 group-hover:bg-white/[0.04] transition-colors duration-200" />
-                  )}
-                  <div
-                    className={`flex-shrink-0 transition-all duration-200 ${isActive ? "text-[#d946a8]" : "text-gray-600 group-hover:text-gray-300"}`}
-                    style={isActive ? { filter: "drop-shadow(0 0 5px rgba(217,70,168,0.65))" } : {}}
-                  >
-                    <FaCog className="w-[20px] h-[20px]" />
-                  </div>
-                  <span
-                    className={`text-[12.5px] font-semibold whitespace-nowrap overflow-hidden transition-all duration-300 ${isActive ? "text-[#d946a8]" : "text-gray-400 group-hover:text-gray-100"}`}
-                    style={{
-                      maxWidth: sidebarExpanded ? "140px" : "0px",
-                      opacity: sidebarExpanded ? 1 : 0,
-                      transform: sidebarExpanded ? "translateX(0)" : "translateX(-6px)",
-                      letterSpacing: "0.01em",
-                    }}
-                  >
-                    Settings
-                  </span>
-                </div>
-              </div>
-            );
-          })()}
-        </nav>
-
-        {/* Version tag */}
-        <div className="px-3 mt-4">
-          <div
-            className="h-px mb-3"
-            style={{ background: "linear-gradient(90deg, transparent, rgba(158,33,123,0.35), transparent)" }}
-          />
-          <div
-            className="overflow-hidden transition-all duration-300 flex items-center justify-center"
-            style={{
-              opacity: sidebarExpanded ? 0.5 : 0,
-              maxHeight: sidebarExpanded ? "24px" : "0px",
-            }}
-          >
-            <span className="text-[8px] text-gray-300 whitespace-nowrap font-mono tracking-widest uppercase">
-              Bhoomi CRM · v2
-            </span>
-          </div>
-        </div>
-      </aside>
-      {/* Sidebar blur overlay — desktop only */}
-      <div
-        className="hidden md:block fixed inset-0 pointer-events-none"
-        style={{
-          zIndex: 45,
-          left: "72px",
-          background: "rgba(0, 0, 0, 0.2)",
-          backdropFilter: "blur(3px)",
-          WebkitBackdropFilter: "blur(3px)",
-          opacity: sidebarExpanded ? 1 : 0,
-          transition: "opacity 320ms ease",
-        }}
+        expanded={sidebarExpanded}
+        onExpandedChange={setSidebarExpanded}
       />
 
       {/* ════════════════════════════════════════════════════
@@ -1868,31 +1785,67 @@ export default function ReceptionistDashboard() {
       ════════════════════════════════════════════════════ */}
       <div className="flex-1 flex flex-col overflow-hidden relative md:ml-[72px]">
 
-        {/* HEADER */}
-        <header className={`${APP_HEADER_HEIGHT} ${APP_HEADER_PADDING} border-b flex items-center justify-between flex-shrink-0 z-30 ${t.header}`} style={t.headerGlass}>
-          <AppLogo />
-          <div className="flex items-center space-x-4 relative" ref={topbarRef}>
-            {/* <LoginTimerWidget isDark={isDark} /> */}
-            <HeaderClock isDark={isDark} />
-            <AttendanceBadge />
-            <button onClick={toggleTheme} aria-pressed={isDark}
-              aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
-              className={`w-9 h-9 rounded-xl border flex items-center justify-center transition-all duration-200 hover:scale-105 active:scale-95 shadow-sm ${t.toggleWrap}`}>
+        {/* HEADER — the shared AppHeader, i.e. literally the bar the Settings
+            page renders. It was hand-rolled here before, which is why its
+            controls kept drifting from Settings no matter how many times the
+            sizes were matched by hand: two copies of a bar cannot be kept equal
+            by editing one of them. AppHeader owns the frame, the logo and the
+            clock; the controls below stay this page's own, with their handlers,
+            popups and state untouched. */}
+        <AppHeader
+          isDark={isDark}
+          context={RECEPTIONIST_CONTEXT[activeTab]}
+          role={user?.role}
+          // Structure comes from AppHeader; colour stays on this panel's own
+          // locked tokens. `border-b ${t.header}` and `t.headerGlass` are the
+          // exact class and style this header carried before the migration, so
+          // the bar's background, border colour and light-mode shadow are
+          // unchanged — only its metrics and controls moved.
+          surfaceClassName={`border-b ${t.header}`}
+          surfaceStyle={t.headerGlass}
+        >
+          <div className="flex items-center gap-2 relative" ref={topbarRef}>
+            {/* HeaderClock is rendered by AppHeader itself — the copy that used
+                to be here is gone, not moved, or the bar would show two clocks. */}
+            {/* Switches to the My Attendance tab in place. Without a handler the
+                badge navigates to /dashboard?tab=attendance, which middleware
+                bounces to /dashboard/receptionist — dropping the tab and landing
+                the user back on Dashboard, so the button appeared to do nothing. */}
+            <AttendanceBadge onNavigate={() => setActiveTab("attendance")} />
+            {/* HeaderControl is the Settings bar's control: 36px square, one
+                border, one radius, colour transitions only. Using the component
+                rather than restating its classes is what makes "the same size as
+                Settings" true by construction instead of by inspection. */}
+            <HeaderControl
+              isDark={isDark}
+              size="sm"
+              onClick={toggleTheme}
+              aria-pressed={isDark}
+              label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+            >
               {isDark ? <SunIcon /> : <MoonIcon />}
-            </button>
+            </HeaderControl>
             {/* ── NOTIFICATION BELL & DROPDOWN ── */}
             <div className="relative">
-              <button
+              {/* Same HeaderControl as the theme button, so the bell is no longer
+                  the one control in this bar with its own size and no chrome.
+                  `relative` is passed explicitly: HeaderControl does not set it,
+                  and the unread badge is absolutely positioned against this
+                  button rather than against the wrapper. */}
+              <HeaderControl
+                isDark={isDark}
+                size="sm"
+                label="Notifications"
+                className="relative"
                 onClick={() => { setActivePopup(activePopup === "notifications" ? null : "notifications"); setNotifCount(0); }}
-                className={`${t.textMuted} transition-colors relative cursor-pointer`}
               >
-                <FaBell className="w-5 h-5" />
+                <FaBell className="w-3 h-3" />
                 {notifCount > 0 && (
                   <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-[#9E217B] rounded-full text-[9px] font-black text-white flex items-center justify-center">
                     {notifCount > 9 ? "9+" : notifCount}
                   </span>
                 )}
-              </button>
+              </HeaderControl>
 
               <AnimatePresence>
                 {activePopup === "notifications" && (
@@ -1940,10 +1893,20 @@ export default function ReceptionistDashboard() {
                 )}
               </div>
             )} */}
-            <div onClick={() => setActivePopup(activePopup === "profile" ? null : "profile")}
-              className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm cursor-pointer shadow-md hover:scale-105 transition-transform ${isDark ? "border border-[#9E217B]/40 text-[#d4006e] bg-[#9E217B]/15" : "border border-[#00AEEF]/40 text-[#00AEEF] bg-[#00AEEF]/10"}`}>
+            {/* Was a click-handling <div>: not reachable by keyboard, and not
+                sized by the touch-target rule, so it would have sat 8px shorter
+                than the two buttons beside it. Same colours, same avatar.
+                overflow-hidden matches the Settings avatar button so an uploaded
+                picture is clipped to the circle by the button, not only by the
+                <img>'s own rounding. */}
+            <button
+              type="button"
+              aria-label="Account menu"
+              aria-expanded={activePopup === "profile"}
+              onClick={() => setActivePopup(activePopup === "profile" ? null : "profile")}
+              className={`w-8 h-8 flex-shrink-0 rounded-full overflow-hidden flex items-center justify-center font-semibold text-[13px] cursor-pointer transition-colors duration-150 ${isDark ? "border border-[#9E217B]/40 text-[#d4006e] bg-[#9E217B]/15" : "border border-[#00AEEF]/40 text-[#00AEEF] bg-[#00AEEF]/10"}`}>
               <UserAvatar name={user?.name} fallback="U" alt="" />
-            </div>
+            </button>
             <AnimatePresence>
               {activePopup === "profile" && (
                 <motion.div
@@ -1994,75 +1957,56 @@ export default function ReceptionistDashboard() {
             )}
           </div>
 
-        </header>
+        </AppHeader>
 
         {/* ── MAIN SCROLL AREA ── */}
-        <main className={`flex-1 overflow-y-auto p-4 md:p-6 custom-scrollbar relative ${t.mainBg}`}>
+        {/* Content inset comes off the spacing scale (20 → 32) instead of the
+            old 16/24, which matches the 20px the table toolbars already use and
+            stops the page edge from shifting between tabs. */}
+        <main className={`flex-1 overflow-y-auto p-2 md:p-2 custom-scrollbar relative ${t.mainBg}`}>
 
           {/* ────────────────────────────────────────────────────────────
-              SETTINGS
+              SETTINGS — no longer an in-page tab.
+              The three cards that used to live here are all superseded by the
+              real Settings area, which the rail now opens:
+                Account Details  → Settings › Profile (editable, not read-only)
+                System Password  → Settings › Account & Security (change it,
+                                   rather than reveal it in plain text)
+                WhatsApp Number  → Settings › WhatsApp Integration (same field,
+                                   plus the API/manual state that explains when
+                                   the number stops sending)
+              Nothing was dropped; every control moved to a screen that does more.
           ──────────────────────────────────────────────────────────── */}
-          {activeTab === "settings" && (
-            <div className="animate-fadeIn max-w-4xl mx-auto">
-              <h1 className={`text-3xl font-bold mb-8 ${t.text}`}>Settings & Profile</h1>
-              <div className="w-full lg:w-2/3 grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className={`rounded-2xl p-8 border flex flex-col items-center justify-center ${t.card}`} style={t.cardGlass}>
-                  <FaCalendarAlt className={`text-5xl mb-4 ${t.accentText}`} />
-                  <h2 className={`text-3xl lg:text-4xl font-black tracking-tight mb-2 ${t.text}`}>{currentTime.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</h2>
-                  <p className={`font-medium text-sm lg:text-lg ${t.textMuted}`}>{currentTime.toLocaleDateString("en-IN", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</p>
-                </div>
-                <div className={`rounded-2xl p-8 border ${t.card}`} style={t.cardGlass}>
-                  <h3 className={`text-lg font-bold border-b pb-2 mb-6 uppercase tracking-wider ${t.sectionTitle} ${t.tableBorder}`}>Account Details</h3>
-                  <div className="space-y-6">
-                    <div><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Full Name</p><p className={`font-semibold text-lg ${t.text}`}>{user?.name}</p></div>
-                    <div><p className={`text-xs font-medium mb-1 ${t.textFaint}`}>Registered Email</p><p className={`font-medium ${t.text}`}>{user?.email || "No Email"}</p></div>
-                    <div>
-                      <p className={`text-xs font-medium mb-1 ${t.textFaint}`}>System Password</p>
-                      <div className={`flex items-center justify-between p-3 rounded-lg border ${t.settingsBg}`} style={t.settingsBgGl}>
-                        <span className={`font-mono tracking-widest ${t.text}`}>{showPassword ? user.password : "••••••••••••"}</span>
-                        <button onClick={() => setShowPassword(!showPassword)} className={`${t.textMuted} cursor-pointer`}><FaEyeSlash /></button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className={`rounded-2xl p-8 border ${t.card}`} style={t.cardGlass}>
-                  <h3 className={`text-lg font-bold border-b pb-2 mb-6 uppercase tracking-wider ${t.sectionTitle} ${t.tableBorder}`}>
-                    WhatsApp Number
-                  </h3>
-                  <WhatsAppSettingsCard user={user} setUser={setUser} isDark={isDark} t={t} />
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* ────────────────────────────────────────────────────────────
               AI ASSISTANT
           ──────────────────────────────────────────────────────────── */}
           {activeTab === "assistant" && (
             <div className="animate-fadeIn h-[calc(100vh-130px)] flex flex-col pb-2">
-              {/* ── Gemini-style Header ── */}
-              <div className="flex items-center gap-4 mb-4 flex-shrink-0">
-                <div style={{
-                  width: 44, height: 44, borderRadius: 14, flexShrink: 0,
-                  background: "linear-gradient(135deg, #4285f4 0%, #34a853 40%, #fbbc04 70%, #ea4335 100%)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 20, boxShadow: "0 4px 16px rgba(66,133,244,0.35)",
-                }}>✦</div>
-                <div>
-                  <h1 className={`text-xl font-bold tracking-tight ${t.text}`}
-                    style={{ fontFamily: "'DM Sans', sans-serif", letterSpacing: "-0.02em" }}>
-                    CRM AI Assistant
-                  </h1>
-                  <p className={`text-xs mt-0.5 ${t.textMuted}`}>
-                    Ask about leads, stats, or client details
-                  </p>
-                </div>
+              {/* Same header component as every other tab. The avatar keeps its
+                  gradient — that mark is part of the assistant's identity, not a
+                  theme colour — but the title no longer opts out of the panel's
+                  type ramp into DM Sans at its own size. */}
+              <RpPageHeader
+                title="CRM AI Assistant"
+                subtitle="Ask about leads, stats, or client details"
+                titleClass={t.text}
+                subtitleClass={t.textMuted}
+                leading={
+                  <div style={{
+                    width: 44, height: 44, borderRadius: 14, flexShrink: 0,
+                    background: "linear-gradient(135deg, #4285f4 0%, #34a853 40%, #fbbc04 70%, #ea4335 100%)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 20, boxShadow: "0 4px 16px rgba(66,133,244,0.35)",
+                  }}>✦</div>
+                }
+              >
                 {/* Live indicator */}
-                <div className="ml-auto flex items-center gap-2">
+                <div className="flex items-center gap-2">
                   <span className={`w-2 h-2 rounded-full animate-pulse ${isDark ? "bg-green-400" : "bg-green-500"}`} />
                   <span className={`text-[10px] font-semibold uppercase tracking-widest ${t.textMuted}`}>Live</span>
                 </div>
-              </div>
+              </RpPageHeader>
 
               {/* ── Chat container ── */}
               <div className="flex-1 flex flex-col overflow-hidden rounded-2xl border min-h-0"
@@ -2369,24 +2313,27 @@ export default function ReceptionistDashboard() {
 
           {/* ── SHARED PAGE HEADER ── */}
           {!["settings", "detail", "assistant", "assigned", "recep-leads", "closed-leads", "attendance", "analytics", "cp-enquiries"].includes(activeTab) && (
-            <div className="flex justify-between items-center mb-8">
-              <h1 className={`text-xl md:text-3xl font-bold flex items-center flex-wrap gap-2 md:gap-3 ${t.text}`}>
-                Hi, {String(user?.name || "User").split(" ")[0]}
-                <span className={`text-xs md:text-sm font-medium px-2 py-0.5 md:px-3 md:py-1 rounded-full capitalize ${isDark ? "text-[#9E217B] bg-white/80 border border-[#9E217B]/40" : "text-[#9E217B] bg-[#9E217B]/10 border border-[#9E217B]/20"}`}>Front Desk</span>
-              </h1>
-              <div className="flex items-center gap-2">
-                <button onClick={() => setIsCpVisitModalOpen(true)}
-                  className={`text-xs md:text-sm font-semibold flex items-center gap-1 md:gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-lg transition-all shadow-sm ${t.btnSecondary}`}>
-                  <FaUserTie className="text-[11px]" />
-                  <span className="md:hidden">CP</span>
-                  <span className="hidden md:inline">CP Office Visit</span>
-                </button>
-                <button onClick={refetchAll} className={`text-white text-xs md:text-sm font-semibold flex items-center gap-1 md:gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-lg transition-all shadow-sm ${t.btnPrimary}`}>
-                  <span className="md:hidden">↻ Sync</span>
-                  <span className="hidden md:inline">↻ Refresh Live Data</span>
-                </button>
-              </div>
-            </div>
+            <RpPageHeader
+              title={`Hi, ${String(user?.name || "User").split(" ")[0]}`}
+              subtitle="Walk-ins and enquiries logged at the front desk"
+              titleClass={t.text}
+              subtitleClass={t.textFaint}
+              badge={
+                <span className={`rp-chip capitalize ${isDark ? "text-[#9E217B] bg-white/80 border border-[#9E217B]/40" : "text-[#9E217B] bg-[#9E217B]/10 border border-[#9E217B]/20"}`}>Front Desk</span>
+              }
+            >
+              <button onClick={() => setIsCpVisitModalOpen(true)}
+                className={`rp-control-label flex items-center justify-center gap-2 px-4 rounded-lg shadow-sm ${t.btnSecondary}`}>
+                <FaUserTie className="text-[11px]" />
+                <span className="md:hidden">CP</span>
+                <span className="hidden md:inline">CP Office Visit</span>
+              </button>
+              <button onClick={refetchAll} className={`rp-control-label text-white flex items-center justify-center gap-2 px-4 rounded-lg shadow-sm ${t.btnPrimary}`}>
+                <FaSyncAlt className="text-[11px]" />
+                <span className="md:hidden">Sync</span>
+                <span className="hidden md:inline">Refresh Live Data</span>
+              </button>
+            </RpPageHeader>
           )}
 
           {/* ── CP Office Visit Registration (create-only for Receptionist) ── */}
@@ -2422,7 +2369,7 @@ export default function ReceptionistDashboard() {
                 <div className={`px-5 pt-4 pb-3.5 flex flex-wrap items-center gap-3 border-b ${t.tableHead} ${isDark ? "border-white/[0.06]" : "border-indigo-300"}`}>
                   <div className="flex items-center gap-2.5 shrink-0">
                     <FaClipboardList className="text-[#00AEEF] text-sm" />
-                    <h2 className={`font-bold text-[15px] tracking-tight ${t.text}`}>Front Desk Log</h2>
+                    <h2 className={`rp-section ${t.text}`}>Front Desk Log</h2>
                     <span
                       className={`text-[10px] font-bold px-2 py-1 rounded-md tabular-nums ${t.btnClosingBadge}`}
                       title={receptionistLeads.length !== totalCount ? `${receptionistLeads.length} of ${totalCount} leads loaded` : undefined}
@@ -2447,11 +2394,11 @@ export default function ReceptionistDashboard() {
                     <thead className={tblHeadCls} style={tblHeadStyle}><tr>
                       {["Lead No.", "Client Name", "Source", "CP Name", "CP Company", "CP Phone", "Budget", "Phone", "Alt. Phone", "Date Created", "Backdated Entry", "Sales Manager"].map(h => (
                         <th key={h} className={`${thCls} ${h === "Lead No." ? `sticky left-0 z-20 ${isDark ? "bg-[#1A1A28]" : "bg-[#F1F5F9]"}` :
-                          h === "Client Name" ? `sticky left-[80px] z-20 ${isDark ? "bg-[#1A1A28]" : "bg-[#F1F5F9]"}` : ""
+                          h === "Client Name" ? `sticky left-[96px] z-20 ${isDark ? "bg-[#1A1A28]" : "bg-[#F1F5F9]"}` : ""
                           }`}
                           style={
-                            h === "Lead No." ? { minWidth: '80px', maxWidth: '80px' } :
-                              h === "Client Name" ? { minWidth: '150px', maxWidth: '150px', boxShadow: isDark ? "1px 0 0 #2A2A35" : "1px 0 0 #9CA3AF" } : {}
+                            h === "Lead No." ? { minWidth: '96px', maxWidth: '96px' } :
+                              h === "Client Name" ? { minWidth: '172px', maxWidth: '172px', boxShadow: isDark ? "1px 0 0 #2A2A35" : "1px 0 0 #9CA3AF" } : {}
                           }>{h}</th>
                       ))}
                     </tr></thead>
@@ -2466,8 +2413,8 @@ export default function ReceptionistDashboard() {
                         const rowBgClass = zebraBg(rowIdx);
                         return (
                           <tr key={enquiry.id} className={`${rowCls} cursor-pointer ${rowBgClass}`} onClick={() => { setSelectedLead(enquiry); setActiveTab("detail"); }}>
-                            <td className={`${tdCls} text-[13px] font-bold ${t.accentText} sticky left-0 z-10 bg-inherit`} style={{ minWidth: '80px', maxWidth: '80px' }}>#{enquiry.sr_no || enquiry.id}</td>
-                            <td className={`${tdCls} text-[13px] font-bold ${t.text} sticky left-[80px] z-10 bg-inherit`} style={{ minWidth: '150px', maxWidth: '150px', boxShadow: isDark ? "1px 0 0 #2A2A35" : "1px 0 0 #9CA3AF" }}>{enquiry.name}</td>
+                            <td className={`${tdCls} text-[13px] font-bold ${t.accentText} sticky left-0 z-10 bg-inherit`} style={{ minWidth: '96px', maxWidth: '96px' }}>#{enquiry.sr_no || enquiry.id}</td>
+                            <td className={`${tdCls} text-[13px] font-bold ${t.text} sticky left-[96px] z-10 bg-inherit`} style={{ minWidth: '172px', maxWidth: '172px', boxShadow: isDark ? "1px 0 0 #2A2A35" : "1px 0 0 #9CA3AF" }}>{enquiry.name}</td>
 
                             <td className={`${tdCls} text-xs ${t.textMuted}`}>
                               {enquiry.source || <span className="text-xs italic opacity-35">—</span>}
@@ -2506,15 +2453,16 @@ export default function ReceptionistDashboard() {
           ════════════════════════════════════════════════════ */}
           {activeTab === "analytics" && (
             <div className="animate-fadeIn pb-10">
-              <div className="flex justify-between items-center mb-8">
-                <div>
-                  <h1 className={`text-xl md:text-3xl font-bold ${t.text}`}>Analytics</h1>
-                  <p className={`text-xs mt-1 ${t.textFaint}`}>Charts and breakdowns for your enquiries</p>
-                </div>
-                <button onClick={refetchAll} className={`text-white text-xs md:text-sm font-semibold flex items-center gap-1 md:gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-lg transition-all shadow-sm ${t.btnPrimary}`}>
-                  ↻ Refresh Live Data
+              <RpPageHeader
+                title="Analytics"
+                subtitle="Charts and breakdowns for your enquiries"
+                titleClass={t.text}
+                subtitleClass={t.textFaint}
+              >
+                <button onClick={refetchAll} className={`rp-control-label text-white flex items-center justify-center gap-2 px-4 rounded-lg shadow-sm ${t.btnPrimary}`}>
+                  <FaSyncAlt className="text-[11px]" /> Refresh Live Data
                 </button>
-              </div>
+              </RpPageHeader>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
@@ -3016,7 +2964,7 @@ export default function ReceptionistDashboard() {
                 ) : (
                   <div className="animate-fadeIn max-w-[1600px] mx-auto flex flex-col h-[calc(100vh-130px)]">
                     {/* Detail header */}
-                    <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 rounded-2xl border p-2 sm:p-2 shadow-sm flex-shrink-0 ${t.card}`} style={t.cardGlass}>
+                    <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-1 rounded-2xl border p-3 sm:p-3 shadow-sm flex-shrink-0 ${t.card}`} style={t.cardGlass}>
                       <div className="flex items-center gap-4">
                         <button onClick={() => { setAssignedSubView("cards"); }} className={`w-10 h-10 flex items-center justify-center border rounded-xl transition-colors cursor-pointer shadow-sm ${t.textMuted} ${t.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}><FaChevronLeft className="text-sm" /></button>
                         <h1 className={`text-xl md:text-2xl font-bold flex items-center gap-3 ${t.text}`}>
@@ -3074,7 +3022,7 @@ export default function ReceptionistDashboard() {
 
                     {/* AI voice calling. Self-gating: renders nothing at all when
                         Bolna is unconfigured, so it needs no capability guard here. */}
-                    <div className="mb-4 flex-shrink-0">
+                    <div className="mb-1 flex-shrink-0">
                       <BolnaCallWidget
                         leadId={Number(selectedLead.id)}
                         leadName={selectedLead.name}
@@ -3086,7 +3034,7 @@ export default function ReceptionistDashboard() {
 
                     <div className="flex flex-col lg:flex-row gap-4 flex-1 min-h-0 pb-2">
                       {/* LEFT PANEL */}
-                      <div className="w-full lg:w-[50%] flex flex-col gap-3 h-full pb-2">
+                      <div className="w-full lg:w-[50%] flex flex-col gap-3 h-[calc(100vh-150px)] pb-2">
                         {showSalesForm ? (
                           <div className={`rounded-xl border p-5 shadow-xl flex-1 overflow-y-auto custom-scrollbar flex flex-col ${t.modalCard}`} style={t.modalGlass}>
                             <div className={`flex justify-between items-center mb-4 border-b pb-3 ${t.tableBorder}`}>
@@ -3138,7 +3086,7 @@ export default function ReceptionistDashboard() {
                         ) : (
                           <div className="flex flex-col h-full animate-fadeIn">
                             {/* Tab switcher */}
-                            <div className={`flex items-center gap-2 mb-4 border p-1.5 rounded-xl flex-shrink-0 ${t.tableWrap}`}>
+                            <div className={`flex items-center gap-2 mb-2 border p-1.5 rounded-xl flex-shrink-0 ${t.tableWrap}`}>
                               <button onClick={() => setDetailTab("personal")} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-colors cursor-pointer ${detailTab === "personal" ? t.btnPrimary : `${t.textMuted} ${isDark ? "hover:text-white hover:bg-[#222]" : "hover:text-[#1A1A1A] hover:bg-[#F1F5F9]"}`}`}>Personal Information</button>
                               <button onClick={() => setDetailTab("loan")} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-colors cursor-pointer ${detailTab === "loan" ? t.btnSecondary : `${t.textMuted} ${isDark ? "hover:text-white hover:bg-[#222]" : "hover:text-[#1A1A1A] hover:bg-[#F1F5F9]"}`}`}>Loan Tracking</button>
                               {bookingData && (
@@ -3225,8 +3173,8 @@ export default function ReceptionistDashboard() {
                       </div>
 
                       {/* RIGHT PANEL: FOLLOW-UPS */}
-                      <div className={`w-full lg:w-[50%] flex flex-col rounded-2xl overflow-hidden shadow-2xl h-full min-h-0 border ${t.chatPanel}`} style={t.chatPanelGl}>
-                        <div className={`flex-1 p-6 overflow-y-auto custom-scrollbar flex flex-col gap-6 ${t.chatArea}`}>
+                      <div className={`w-full lg:w-[50%] flex flex-col rounded-2xl overflow-hidden shadow-2xl h-[calc(100vh-150px)] min-h-0 border ${t.chatPanel}`} style={t.chatPanelGl}>
+                        <div className={`flex-1 p-6 overflow-y-auto custom-scrollbar flex flex-col gap-3 ${t.chatArea}`}>
                           {/* System message */}
                           <div className="flex justify-start">
                             <div className={`rounded-2xl rounded-tl-none p-4 max-w-[85%] shadow-md ${t.fupSalesform}`}>
@@ -3301,27 +3249,26 @@ export default function ReceptionistDashboard() {
           ════════════════════════════════════════════════════ */}
           {activeTab === "recep-leads" && (
             <div className="animate-fadeIn pb-10">
-              <div className="flex justify-between items-center mb-8">
-                <div>
-                  <h1 className={`text-xl md:text-3xl font-bold ${t.text}`}>Receptionist Leads</h1>
-                  <p className={`text-xs mt-1 ${t.textFaint}`}>Leads you have personally handled or captured</p>
-                </div>
-                <div className="relative flex items-center gap-2 flex-wrap">
-                  <ToolbarButton
-                    onClick={() => downloadCSV(filteredRecepLeads.map((l: any) => ({ "Lead No.": l.sr_no || l.id, "Client Name": l.name, "CP Company": l.cp_company || "N/A", "Budget": l.salesBudget || l.budget || "N/A", "Phone": l.phone || "N/A", "Alt Phone": l.altPhone || "N/A", "Date Created": l.date, "Assigned to Receptionist": l.assignedReceptionist || user.name, "Status": l.status || "Assigned" })), "Receptionist_Leads.csv")}
-                    icon={<FaDownload className="text-[11px]" />} isDark={isDark} title="Download these leads as CSV">
-                    Export
-                  </ToolbarButton>
-                  <ToolbarButton onClick={refetchAll} icon={<FaSyncAlt className="text-[11px]" />} isDark={isDark} title="Refresh leads" />
-                </div>
-              </div>
+              <RpPageHeader
+                title="Receptionist Leads"
+                subtitle="Leads you have personally handled or captured"
+                titleClass={t.text}
+                subtitleClass={t.textFaint}
+              >
+                <ToolbarButton
+                  onClick={() => downloadCSV(filteredRecepLeads.map((l: any) => ({ "Lead No.": l.sr_no || l.id, "Client Name": l.name, "CP Company": l.cp_company || "N/A", "Budget": l.salesBudget || l.budget || "N/A", "Phone": l.phone || "N/A", "Alt Phone": l.altPhone || "N/A", "Date Created": l.date, "Assigned to Receptionist": l.assignedReceptionist || user.name, "Status": l.status || "Assigned" })), "Receptionist_Leads.csv")}
+                  icon={<FaDownload className="text-[11px]" />} isDark={isDark} title="Download these leads as CSV">
+                  Export
+                </ToolbarButton>
+                <ToolbarButton onClick={refetchAll} icon={<FaSyncAlt className="text-[11px]" />} isDark={isDark} title="Refresh leads" />
+              </RpPageHeader>
 
               <div className={`rounded-3xl border overflow-hidden ${t.tableWrap}`} style={t.tableGlass}>
                 {/* Toolbar row 1: title + search */}
                 <div className={`px-5 pt-4 pb-3 flex flex-wrap items-center gap-3 ${t.tableHead}`}>
                   <div className="flex items-center gap-2.5 shrink-0">
                     <FaUserTie className="text-[#00AEEF] text-sm" />
-                    <h3 className={`font-bold text-[15px] tracking-tight ${t.text}`}>Your Leads</h3>
+                    <h3 className={`rp-section ${t.text}`}>Your Leads</h3>
                     <span className={`text-[10px] font-bold px-2 py-1 rounded-md tabular-nums ${t.btnClosingBadge}`}>
                       {filteredRecepLeads.length.toLocaleString("en-IN")}
                     </span>
@@ -3359,11 +3306,11 @@ export default function ReceptionistDashboard() {
                     <thead className={tblHeadCls} style={tblHeadStyle}><tr>
                       {["Lead No.", "Client Name", "CP Details", "Budget", "Phone", "Alt. Phone", "Date Created", "Assigned to", "Site Visits", "Status", "Actions"].map(h => (
                         <th key={h} className={`${thCls} ${h === "Lead No." ? `sticky left-0 z-20 ${isDark ? "bg-[#1A1A28]" : "bg-[#F1F5F9]"}` :
-                          h === "Client Name" ? `sticky left-[80px] z-20 ${isDark ? "bg-[#1A1A28]" : "bg-[#F1F5F9]"}` : ""
+                          h === "Client Name" ? `sticky left-[96px] z-20 ${isDark ? "bg-[#1A1A28]" : "bg-[#F1F5F9]"}` : ""
                           } ${h === "Status" || h === "Actions" ? "text-center" : ""}`}
                           style={
-                            h === "Lead No." ? { minWidth: '80px', maxWidth: '80px' } :
-                              h === "Client Name" ? { minWidth: '150px', maxWidth: '150px', boxShadow: isDark ? "1px 0 0 #2A2A35" : "1px 0 0 #9CA3AF" } : {}
+                            h === "Lead No." ? { minWidth: '96px', maxWidth: '96px' } :
+                              h === "Client Name" ? { minWidth: '172px', maxWidth: '172px', boxShadow: isDark ? "1px 0 0 #2A2A35" : "1px 0 0 #9CA3AF" } : {}
                           }>
                           {h}
                         </th>
@@ -3396,10 +3343,10 @@ export default function ReceptionistDashboard() {
                             className={`group transition-colors duration-200 ${isLost ? t.rowLost : isNGD ? t.rowNGD : t.tableRow} ${rowBgClass}`}>
 
                             {/* 1. Lead No. */}
-                            <td className={`${tdCls} text-[13px] font-bold ${t.accentText} sticky left-0 z-10 bg-inherit`} style={{ minWidth: '80px', maxWidth: '80px' }}>#{lead.sr_no || lead.id}</td>
+                            <td className={`${tdCls} text-[13px] font-bold ${t.accentText} sticky left-0 z-10 bg-inherit`} style={{ minWidth: '96px', maxWidth: '96px' }}>#{lead.sr_no || lead.id}</td>
 
                             {/* 2. Client Name */}
-                            <td className={`${tdCls} text-[13px] font-bold ${t.text} sticky left-[80px] z-10 bg-inherit`} style={{ minWidth: '150px', maxWidth: '150px', boxShadow: isDark ? "1px 0 0 #2A2A35" : "1px 0 0 #9CA3AF" }}>{lead.name}</td>
+                            <td className={`${tdCls} text-[13px] font-bold ${t.text} sticky left-[96px] z-10 bg-inherit`} style={{ minWidth: '172px', maxWidth: '172px', boxShadow: isDark ? "1px 0 0 #2A2A35" : "1px 0 0 #9CA3AF" }}>{lead.name}</td>
 
                             {/* 3. CP Details */}
                             <td className={`${tdCls} text-xs ${t.textMuted}`}>
@@ -3442,15 +3389,15 @@ export default function ReceptionistDashboard() {
                             {/* 9. Status */}
                             <td className={`${tdCls} text-center`}>
                               {lead.is_lost_lead ? (
-                                <span className={`inline-flex items-center gap-1.5 rounded-full border font-bold uppercase whitespace-nowrap tracking-wide px-2.5 py-[5px] text-[10px] ${t.statusLost}`}>
+                                <span className={`rp-chip border uppercase ${t.statusLost}`}>
                                   <Ghost className="w-3 h-3" /> Lost
                                 </span>
                               ) : isNGD ? (
-                                <span className={`inline-flex items-center gap-1.5 rounded-full border font-bold uppercase whitespace-nowrap tracking-wide px-2.5 py-[5px] text-[10px] ${t.statusNGD}`}>
+                                <span className={`rp-chip border uppercase ${t.statusNGD}`}>
                                   NGD
                                 </span>
                               ) : (
-                                <span className={`inline-flex items-center gap-1.5 rounded-full border font-bold uppercase whitespace-nowrap tracking-wide px-2.5 py-[5px] text-[10px] ${getStatusStyle(lead.status)
+                                <span className={`rp-chip border uppercase ${getStatusStyle(lead.status)
                                   }`}>{lead.status || "Assigned"}</span>
                               )}
                             </td>
@@ -3480,34 +3427,33 @@ export default function ReceptionistDashboard() {
               {/* ── TABLE VIEW ── */}
               {closedLeadView === "table" && (
                 <>
-                  <div className="flex justify-between items-center mb-8">
-                    <div>
-                      <h1 className={`text-xl md:text-3xl font-bold ${t.text}`}>Closed Leads</h1>
-                      <p className={`text-xs mt-1 ${t.textFaint}`}>Leads that have reached the Closing stage</p>
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <ToolbarButton
-                        onClick={() => downloadCSV(filteredClosedLeads.map((l: any) => ({
-                          "Lead No.": l.sr_no || l.id,
-                          "Client Name": l.name,
-                          "Budget": l.salesBudget || l.budget || "N/A",
-                          "Status": l.status,
-                          "Assigned To": l.assignedTo || "Unassigned",
-                          "Closing Date": l.closingDate ? formatDate(l.closingDate) : "N/A",
-                          "Date Created": l.date,
-                        })), "Closed_Leads.csv")}
-                        icon={<FaDownload className="text-[11px]" />} isDark={isDark} title="Download closed leads as CSV">
-                        Export
-                      </ToolbarButton>
-                      <ToolbarButton onClick={refetchAll} icon={<FaSyncAlt className="text-[11px]" />} isDark={isDark} title="Refresh leads" />
-                    </div>
-                  </div>
+                  <RpPageHeader
+                    title="Closed Leads"
+                    subtitle="Leads that have reached the Closing stage"
+                    titleClass={t.text}
+                    subtitleClass={t.textFaint}
+                  >
+                    <ToolbarButton
+                      onClick={() => downloadCSV(filteredClosedLeads.map((l: any) => ({
+                        "Lead No.": l.sr_no || l.id,
+                        "Client Name": l.name,
+                        "Budget": l.salesBudget || l.budget || "N/A",
+                        "Status": l.status,
+                        "Assigned To": l.assignedTo || "Unassigned",
+                        "Closing Date": l.closingDate ? formatDate(l.closingDate) : "N/A",
+                        "Date Created": l.date,
+                      })), "Closed_Leads.csv")}
+                      icon={<FaDownload className="text-[11px]" />} isDark={isDark} title="Download closed leads as CSV">
+                      Export
+                    </ToolbarButton>
+                    <ToolbarButton onClick={refetchAll} icon={<FaSyncAlt className="text-[11px]" />} isDark={isDark} title="Refresh leads" />
+                  </RpPageHeader>
 
                   <div className={`rounded-3xl border overflow-hidden ${t.tableWrap}`} style={t.tableGlass}>
                     <div className={`px-5 pt-4 pb-3.5 flex flex-wrap items-center gap-3 border-b ${t.tableHead} ${isDark ? "border-white/[0.06]" : "border-indigo-300"}`}>
                       <div className="flex items-center gap-2.5 shrink-0">
                         <FaHandshake className="text-[#00AEEF] text-sm" />
-                        <h3 className={`font-bold text-[15px] tracking-tight ${t.text}`}>Closed Leads</h3>
+                        <h3 className={`rp-section ${t.text}`}>Closed Leads</h3>
                         <span className={`text-[10px] font-bold px-2 py-1 rounded-md tabular-nums ${t.btnClosingBadge}`}>
                           {filteredClosedLeads.length.toLocaleString("en-IN")}
                         </span>
@@ -3520,11 +3466,11 @@ export default function ReceptionistDashboard() {
                         <thead className={tblHeadCls} style={tblHeadStyle}><tr>
                           {["Lead No.", "Client Name", "Budget", "Property", "Status", "Assigned To", "Site Visit", "Closing Date", "Actions"].map(h => (
                             <th key={h} className={`${thCls} ${h === "Lead No." ? `sticky left-0 z-20 ${isDark ? "bg-[#1A1A28]" : "bg-[#F1F5F9]"}` :
-                              h === "Client Name" ? `sticky left-[80px] z-20 ${isDark ? "bg-[#1A1A28]" : "bg-[#F1F5F9]"}` : ""
+                              h === "Client Name" ? `sticky left-[96px] z-20 ${isDark ? "bg-[#1A1A28]" : "bg-[#F1F5F9]"}` : ""
                               } ${h === "Status" || h === "Actions" ? "text-center" : ""}`}
                               style={
-                                h === "Lead No." ? { minWidth: '80px', maxWidth: '80px' } :
-                                  h === "Client Name" ? { minWidth: '150px', maxWidth: '150px', boxShadow: isDark ? "1px 0 0 #2A2A35" : "1px 0 0 #9CA3AF" } : {}
+                                h === "Lead No." ? { minWidth: '96px', maxWidth: '96px' } :
+                                  h === "Client Name" ? { minWidth: '172px', maxWidth: '172px', boxShadow: isDark ? "1px 0 0 #2A2A35" : "1px 0 0 #9CA3AF" } : {}
                               }>{h}</th>
                           ))}
                         </tr></thead>
@@ -3546,12 +3492,12 @@ export default function ReceptionistDashboard() {
                             return (
                               <tr key={lead.id} className={`${rowCls} cursor-pointer ${rowBgClass}`}
                                 onClick={() => { setSelectedClosedLead(lead); setClosedLeadView("detail"); }}>
-                                <td className={`${tdCls} text-[13px] font-bold ${t.accentText} sticky left-0 z-10 bg-inherit`} style={{ minWidth: '80px', maxWidth: '80px' }}>#{lead.sr_no || lead.id}</td>
-                                <td className={`${tdCls} text-[13px] font-bold ${t.text} sticky left-[80px] z-10 bg-inherit`} style={{ minWidth: '150px', maxWidth: '150px', boxShadow: isDark ? "1px 0 0 #2A2A35" : "1px 0 0 #9CA3AF" }}>{lead.name}</td>
+                                <td className={`${tdCls} text-[13px] font-bold ${t.accentText} sticky left-0 z-10 bg-inherit`} style={{ minWidth: '96px', maxWidth: '96px' }}>#{lead.sr_no || lead.id}</td>
+                                <td className={`${tdCls} text-[13px] font-bold ${t.text} sticky left-[96px] z-10 bg-inherit`} style={{ minWidth: '172px', maxWidth: '172px', boxShadow: isDark ? "1px 0 0 #2A2A35" : "1px 0 0 #9CA3AF" }}>{lead.name}</td>
                                 <td className={`${tdCls} text-[13px] font-semibold tabular-nums ${isDark ? "text-emerald-400" : "text-emerald-600"}`}>{lead.salesBudget || lead.budget}</td>
                                 <td className={`${tdCls} text-xs ${t.textMuted}`}>{(lead.propType && lead.propType !== "Pending" && lead.propType !== "N/A" ? lead.propType : lead.configuration && lead.configuration !== "Pending" && lead.configuration !== "N/A" ? lead.configuration : "N/A")}</td>
                                 <td className={`${tdCls} text-center`}>
-                                  <span className={`inline-flex items-center gap-1.5 rounded-full border font-bold uppercase whitespace-nowrap tracking-wide px-2.5 py-[5px] text-[10px] ${t.statusClosing}`}>
+                                  <span className={`rp-chip border uppercase ${t.statusClosing}`}>
                                     {lead.status}
                                   </span>
                                 </td>
@@ -3708,19 +3654,29 @@ export default function ReceptionistDashboard() {
           BOTTOM NAV (MOBILE)
       ════════════════════════════════════════════════════ */}
       <nav className={`md:hidden flex w-full h-16 border-t items-center justify-around flex-shrink-0 z-40 ${t.sidebar}`}>
-        {NAV_ITEMS.map(({ id, icon, title }) => {
+        {/* Same list as the desktop rail — Settings is filtered out because it
+            is rendered separately below as a route rather than a tab. */}
+        {RECEPTIONIST_NAV.filter(i => i.id !== "settings").map(({ id, icon: Icon, label }) => {
           const active = activeTab === id || (id === "overview" && activeTab === "detail");
           return (
-            <div key={id} onClick={() => setActiveTab(id)} className="relative flex justify-center items-center h-full flex-1 cursor-pointer" title={title}>
+            <div key={id} onClick={() => setActiveTab(id)} className="relative flex justify-center items-center h-full flex-1 cursor-pointer" title={label}>
               {active && <div className={`absolute top-0 left-1/2 -translate-x-1/2 h-1 w-8 rounded-b ${t.navIndicator}`} />}
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${active ? t.navActive : t.navInactive}`}>{icon}</div>
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${active ? t.navActive : t.navInactive}`}><Icon className="w-5 h-5" /></div>
             </div>
           );
         })}
-        <div onClick={() => setActiveTab("settings")} className="relative flex justify-center items-center h-full flex-1 cursor-pointer">
-          {activeTab === "settings" && <div className={`absolute top-0 left-1/2 -translate-x-1/2 h-1 w-8 rounded-b ${t.navIndicator}`} />}
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${activeTab === "settings" ? t.navActive : t.navInactive}`}><FaCog className="w-5 h-5" /></div>
-        </div>
+        {/* Navigates rather than switching tab — same destination as the desktop
+            rail's Settings item, so both entry points land on the same screen. It
+            never shows an active state because leaving this route unmounts the
+            bar; Settings has its own rail and marks itself active there. */}
+        <button
+          type="button"
+          aria-label="Settings"
+          onClick={() => router.push("/dashboard/settings/profile")}
+          className="relative flex justify-center items-center h-full flex-1 cursor-pointer"
+        >
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${t.navInactive}`}><FaCog className="w-5 h-5" /></div>
+        </button>
       </nav>
 
       {/* ════════════════════════════════════════════════════
@@ -3731,16 +3687,21 @@ export default function ReceptionistDashboard() {
           <div className={`rounded-4xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl border ${t.modalCard}`} style={t.modalGlass}>
             <div className={`p-4 md:p-6 border-b flex justify-between items-center ${t.modalHeader} ${t.tableBorder}`}>
               <div>
-                <h2 className={`text-lg md:text-xl font-bold flex items-center gap-2 ${t.text}`}><FaUserCircle className={t.accentText} /> Client Enquiry Form</h2>
+                <h2 className={`rp-title flex items-center gap-2 ${t.text}`}><FaUserCircle className={t.accentText} /> Client Enquiry Form</h2>
                 <p className={`text-xs mt-1 ${t.textMuted}`}>Fill all details accurately to route to the Sales Manager.</p>
               </div>
               <button onClick={() => setIsEnquiryModalOpen(false)} className={`hover:text-red-500 transition-colors cursor-pointer p-2 ${t.textMuted}`}><FaTimes className="text-xl" /></button>
             </div>
             <div className={`p-4 md:p-6 overflow-y-auto custom-scrollbar flex-1 ${t.modalInner}`}>
-              <form id="enquiryForm" onSubmit={handleEnquirySubmit} className="space-y-6 md:space-y-8">
-                <div className={`p-5 md:p-6 rounded-xl border ${t.modalBlock}`} style={t.modalBlockGl}>
-                  <h3 className={`text-sm font-bold mb-4 uppercase tracking-wider border-b pb-2 ${t.sectionTitle} ${t.sectionBorder}`}>Personal Information</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6">
+              {/* space-y-8 (32) between the bordered sections, gap-5 (20) between
+                  fields inside one, and label→input at 8 from the .recep-panel
+                  form rules. Three distinct steps, so grouping is legible from
+                  spacing alone — the previous 24/32 → 16/24 pairs put the gap
+                  between two sections within 8px of the gap between two fields. */}
+              <form id="enquiryForm" onSubmit={handleEnquirySubmit} className="space-y-8">
+                <div className={`p-6 rounded-xl border ${t.modalBlock}`} style={t.modalBlockGl}>
+                  <h3 className={`rp-eyebrow mb-5 border-b pb-3 ${t.sectionTitle} ${t.sectionBorder}`}>Personal Information</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                     <div className="sm:col-span-2">
                       <label className={`block text-xs mb-1.5 font-medium pl-2 ${t.textMuted}`}>Full Name *</label>
                       <input type="text" required value={enquiryForm.fullName} onChange={e => setEnquiryForm({ ...enquiryForm, fullName: e.target.value })}
@@ -3850,6 +3811,13 @@ export default function ReceptionistDashboard() {
                           </div>
                           <button
                             type="button"
+                            /* role="switch" matches the shared ToggleSwitch and,
+                               beyond the a11y win, exempts this control from the
+                               panel's 36px min-height rule — a switch has fixed
+                               geometry (h-6 w-11 with a knob positioned against
+                               that height) and would otherwise inflate. */
+                            role="switch"
+                            aria-checked={autoDate}
                             onClick={() => setAutoDate(!autoDate)}
                             className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-300 focus:outline-none cursor-pointer flex-shrink-0"
                             style={{
@@ -3893,9 +3861,9 @@ export default function ReceptionistDashboard() {
                   </div>
                 </div>
 
-                <div className={`p-5 md:p-6 rounded-xl border ${t.modalBlock}`} style={t.modalBlockGl}>
-                  <h3 className={`text-sm font-bold mb-4 uppercase tracking-wider border-b pb-2 ${t.sectionTitle} ${t.sectionBorder}`}>Requirement & Budget</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-5">
+                <div className={`p-6 rounded-xl border ${t.modalBlock}`} style={t.modalBlockGl}>
+                  <h3 className={`rp-eyebrow mb-5 border-b pb-3 ${t.sectionTitle} ${t.sectionBorder}`}>Requirement & Budget</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
                     <div>
                       <label className={`block text-xs mb-1.5 font-medium pl-2 ${t.textMuted}`}>Budget *</label>
                       <input type="text" required value={enquiryForm.budget} onChange={e => setEnquiryForm({ ...enquiryForm, budget: e.target.value })}
@@ -3931,9 +3899,9 @@ export default function ReceptionistDashboard() {
                   </div>
                 </div>
 
-                <div className={`p-5 md:p-6 rounded-xl border ${isDark ? "border-[#9E217B]/20" : "border-[#00AEEF]/20"} ${t.modalBlock}`} style={t.modalBlockGl}>
-                  <h3 className={`text-sm font-bold mb-4 uppercase tracking-wider border-b pb-2 ${isDark ? "text-[#d4006e] border-[#9E217B]/20" : "text-[#00AEEF] border-[#00AEEF]/20"}`}>Routing & Source</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6">
+                <div className={`p-6 rounded-xl border ${isDark ? "border-[#9E217B]/20" : "border-[#00AEEF]/20"} ${t.modalBlock}`} style={t.modalBlockGl}>
+                  <h3 className={`rp-eyebrow mb-5 border-b pb-3 ${isDark ? "text-[#d4006e] border-[#9E217B]/20" : "text-[#00AEEF] border-[#00AEEF]/20"}`}>Routing & Source</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                     <div>
                       <label className={`block text-xs mb-1.5 font-medium pl-2 ${t.textMuted}`}>Source *</label>
                       <select required value={enquiryForm.source} onChange={e => {

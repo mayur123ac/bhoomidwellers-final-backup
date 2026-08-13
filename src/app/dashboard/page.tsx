@@ -954,7 +954,11 @@ function AdminAtlasDashboardContent() {
           <div className="flex items-center gap-3 relative z-[50]" ref={topbarRef}>
             <HeaderClock isDark={isDark} />
             {/* <LoginTimerWidget isDark={isDark} /> */}
-            <AttendanceBadge />
+            {/* Admin already reached the right place via the badge's default,
+                but by reloading /dashboard — the page it is already on — which
+                threw away every loaded view for a switch this page can do in
+                state. Same destination, no round trip. */}
+            <AttendanceBadge onNavigate={() => setActiveView("attendance")} />
             <button onClick={toggleTheme}
               aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
               aria-pressed={isDark}

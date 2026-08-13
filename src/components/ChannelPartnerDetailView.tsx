@@ -184,7 +184,7 @@ export default function ChannelPartnerDetailView({ partner, onBack, user, isDark
       )}
 
       {/* ── Commissions table ── */}
-      <div className={`flex-1 overflow-auto mx-2 rounded-xl ${t.card}`}>
+      <div className={`flex-1 overflow-auto mx-2 rounded-3xl ${t.card}`}>
         <table className="w-full text-left border-collapse">
           <thead className={`sticky top-0 z-10 ${t.tableHead || (isDark ? "bg-[#1a1a1a]" : "bg-slate-50")}`}>
             <tr className={`text-[11px] uppercase ${t.textMuted}`}>
