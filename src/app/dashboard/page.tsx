@@ -12,7 +12,7 @@ import {
   FaCheckCircle, FaCalendarAlt, FaTimes,
   FaFileInvoice, FaFileInvoiceDollar, FaPaperPlane, FaMicrophone, FaWhatsapp, FaTable, FaChartPie, FaEyeSlash, FaUniversity, FaHandshake, FaExchangeAlt, FaBriefcase, FaDownload, FaCog, FaMapMarkerAlt, FaSignal, FaUserClock, FaTrashAlt, FaBoxes, FaUserTie
 } from "react-icons/fa";
-import { FaWandMagicSparkles } from "react-icons/fa6";
+import { BhoomiAiGlyph } from "@/components/bhoomi-ai/BhoomiAiIcon";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, Cell,
   CartesianGrid, PieChart, Pie,
@@ -831,11 +831,16 @@ function AdminAtlasDashboardContent() {
     { id: "geo", icon: FaMapMarkerAlt, label: "Geo Analytics" },
     { id: "caller", icon: FaPhoneAlt, label: "Caller Panel" },
     { id: "employees", icon: FaIdCard, label: "Add Employee" },
+    // Lives on /dashboard/employees?tab=notifications, like Caller Panel and
+    // Add Employee above it. It was present in the employees page's own copy of
+    // this list and missing here, so the Admin rail gained and lost a WhatsApp
+    // Alerts button depending on which route you happened to be on.
+    { id: "notifications", icon: FaWhatsapp, label: "WhatsApp Alerts" },
     // `pinned` entries render in the rail's bottom block, in this order — so
     // Bhoomi AI keeps the place it has always had and Settings is the final
     // button. (This used to be position-based: the sidebar pinned whatever item
     // happened to be last, which made appending anything steal Bhoomi AI's slot.)
-    { id: "ai", icon: FaWandMagicSparkles, label: "Bhoomi AI", pinned: true },
+    { id: "ai", icon: BhoomiAiGlyph, label: "Bhoomi AI", pinned: true },
     { id: "settings", icon: FaCog, label: "Settings", pinned: true },
   ].filter(item => {
     if (isAdmin) return true;
@@ -860,13 +865,15 @@ function AdminAtlasDashboardContent() {
       return false;
     }
 
-    // Site head cannot see caller, employees
-    if (isSiteHead && (item.id === "caller" || item.id === "employees")) {
+    // Site head cannot see caller, employees, notifications — all three live on
+    // /dashboard/employees, which middleware puts on Site Head's forbidden list.
+    // Offering a button that bounces straight back is worse than not offering it.
+    if (isSiteHead && (item.id === "caller" || item.id === "employees" || item.id === "notifications")) {
       return false;
     }
 
     // Other non-admin roles logic can be added here
-    if (!isAdmin && (item.id === "employees" || item.id === "settings")) {
+    if (!isAdmin && (item.id === "employees" || item.id === "notifications" || item.id === "settings")) {
       return false;
     }
 
@@ -881,7 +888,7 @@ function AdminAtlasDashboardContent() {
     cp_management: "Workspace",
     receptionist: "Team", sales: "Team", site_head: "Team",
     site_visit_overview: "Insights", attendance: "Insights", monitoring: "Insights", live_activity: "Insights", geo: "Insights",
-    caller: "Admin", employees: "Admin",
+    caller: "Admin", employees: "Admin", notifications: "Admin",
   };
 
   const handleMenuClick = (itemId: string) => {
@@ -889,6 +896,10 @@ function AdminAtlasDashboardContent() {
       router.push("/dashboard/employees");
     } else if (itemId === "caller") {
       router.push("/dashboard/employees?tab=callers");
+    } else if (itemId === "notifications") {
+      // Without this branch the id would fall through to setActiveView() and
+      // this page would render nothing — there is no "notifications" view here.
+      router.push("/dashboard/employees?tab=notifications");
     } else if (itemId === "ai") {
       router.push("/dashboard/employees?tab=ai");
     } else if (itemId === "settings") {
@@ -958,6 +969,7 @@ function AdminAtlasDashboardContent() {
                 but by reloading /dashboard — the page it is already on — which
                 threw away every loaded view for a switch this page can do in
                 state. Same destination, no round trip. */}
+
             <AttendanceBadge onNavigate={() => setActiveView("attendance")} />
             <button onClick={toggleTheme}
               aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}

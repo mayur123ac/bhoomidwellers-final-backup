@@ -54,6 +54,7 @@ import {
 } from "react-icons/fa";
 import { FaWandMagicSparkles } from "react-icons/fa6";
 
+import { BhoomiAiGlyph } from "@/components/bhoomi-ai/BhoomiAiIcon";
 import { type AdminNavItem } from "@/components/admin/AdminSidebar";
 import RoleSidebar, { normalizeRoleName, type RailTarget } from "@/components/RoleSidebar";
 import AttendanceBadge from "@/components/AttendanceBadge";
@@ -134,7 +135,7 @@ const RAIL: RailItem[] = [
   { id: "callers", icon: FaPhoneAlt, label: "Caller Panel", link: "/dashboard/employees?tab=callers" },
   { id: "employees", icon: FaIdCard, label: "Add Employee", link: "/dashboard/employees" },
   { id: "notifications", icon: FaWhatsapp, label: "WhatsApp Alerts", link: "/dashboard/employees?tab=notifications" },
-  { id: "ai", icon: FaWandMagicSparkles, label: "Bhoomi AI", link: "/dashboard/employees?tab=ai", pinned: true },
+  { id: "ai", icon: BhoomiAiGlyph, label: "Bhoomi AI", link: "/dashboard/employees?tab=ai", pinned: true },
   { id: "settings", icon: FaCog, label: "Settings", link: "/dashboard/settings", pinned: true },
 ];
 

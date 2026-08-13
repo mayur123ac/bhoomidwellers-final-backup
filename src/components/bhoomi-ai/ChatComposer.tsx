@@ -10,6 +10,7 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { FaArrowUp } from "react-icons/fa6";
+import { AI_GRADIENT, BhoomiAiGlyph } from "./BhoomiAiIcon";
 import type { AiTheme } from "./theme";
 
 export interface ComposerHandle {
@@ -64,14 +65,20 @@ const ChatComposer = forwardRef<ComposerHandle, Props>(function ChatComposer(
 
   return (
     <div className="w-full">
+      {/* The floating conversational control. It sits directly on the canvas —
+          deliberately not nested inside another card — with a 30px radius and
+          generous padding so it reads as one object rather than a form field. */}
       <div
-        className="flex items-end gap-2 rounded-[22px] border px-3 py-2 transition-shadow duration-200"
+        className="flex items-end gap-2 rounded-[30px] border px-4 py-2.5 transition-all duration-200"
         style={{
           background: t.surfaceRaised,
-          borderColor: focused ? t.accent : t.border,
+          // Focus is a slightly brighter hairline plus a soft lift, not a
+          // magenta ring — the brief asks for a subtle translucent white border,
+          // and a coloured ring here would compete with the send button.
+          borderColor: focused ? "rgba(255,255,255,0.22)" : t.border,
           boxShadow: focused
-            ? `0 0 0 3px ${t.ring}, 0 4px 20px rgba(36,10,30,${isDark ? "0.4" : "0.07"})`
-            : `0 1px 3px rgba(36,10,30,${isDark ? "0.35" : "0.05"})`,
+            ? "0 0 0 3px rgba(255,255,255,0.05), 0 8px 28px rgba(0,0,0,0.45)"
+            : "0 2px 10px rgba(0,0,0,0.30)",
           opacity: disabled ? 0.6 : 1,
         }}
       >
@@ -93,7 +100,7 @@ const ChatComposer = forwardRef<ComposerHandle, Props>(function ChatComposer(
           }}
           placeholder={placeholder}
           aria-label="Message Bhoomi AI"
-          className="max-h-[180px] min-h-[36px] flex-1 resize-none bg-transparent px-2 py-1.5 text-[14.5px] leading-[1.55] outline-none disabled:cursor-not-allowed"
+          className="bdai-input max-h-[180px] min-h-[38px] flex-1 resize-none bg-transparent px-2 py-2 text-[14.5px] leading-[1.55] outline-none disabled:cursor-not-allowed"
           style={{ color: t.text }}
         />
 
@@ -102,21 +109,25 @@ const ChatComposer = forwardRef<ComposerHandle, Props>(function ChatComposer(
           disabled={!canSend}
           aria-label={busy ? "Waiting for response" : "Send message"}
           title="Send  ·  Enter"
-          className="mb-0.5 grid h-9 w-9 flex-shrink-0 place-items-center rounded-full transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 disabled:cursor-not-allowed"
+          className={`bdai-send mb-0.5 grid h-9 w-9 flex-shrink-0 place-items-center rounded-full transition-all duration-200 focus-visible:outline-none disabled:cursor-not-allowed ${
+            busy ? "bdai-send-busy" : ""
+          }`}
           style={{
-            // Idle is a flat tint; the gradient only appears once there is
-            // something to send, so the button reads as "armed".
-            background: canSend
-              ? "linear-gradient(135deg,#9E217B 0%,#c7299a 100%)"
-              : isDark
-                ? "rgba(255,255,255,0.06)"
-                : "rgba(158,33,123,0.08)",
-            color: canSend ? "#fff" : t.textFaint,
-            boxShadow: canSend ? "0 2px 10px rgba(158,33,123,0.35)" : "none",
+            // Idle is a flat tint; the magenta→blue gradient appears once there
+            // is something to send, so the button reads as "armed". While the
+            // request is in flight the same gradient animates rather than being
+            // replaced by a spinner.
+            backgroundImage: canSend || busy ? AI_GRADIENT : "none",
+            backgroundColor: canSend || busy ? undefined : "rgba(255,255,255,0.07)",
+            backgroundSize: busy ? "200% 200%" : "100% 100%",
+            color: canSend || busy ? "#fff" : t.textFaint,
+            boxShadow: canSend ? "0 2px 12px rgba(158,33,123,0.35)" : "none",
           }}
         >
+          {/* The Bhoomi AI mark while working, the send arrow otherwise — the
+              same symbol used everywhere else in the workspace. */}
           {busy ? (
-            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+            <BhoomiAiGlyph className="h-[15px] w-[15px]" />
           ) : (
             <FaArrowUp className="text-[13px]" />
           )}

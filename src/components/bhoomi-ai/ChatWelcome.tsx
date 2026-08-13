@@ -16,7 +16,7 @@ import {
   FaFileSignature,
   FaTriangleExclamation,
 } from "react-icons/fa6";
-import { AiAvatar } from "./ChatMessage";
+import BhoomiAiIcon from "./BhoomiAiIcon";
 import type { AiTheme } from "./theme";
 
 const SUGGESTIONS: { icon: IconType; label: string }[] = [
@@ -41,7 +41,10 @@ export default function ChatWelcome({
 }) {
   return (
     <div className="flex flex-col items-center py-10 text-center sm:py-16">
-      <AiAvatar size={46} />
+      {/* Gently appears on entry — opacity 0→1, scale 0.9→1, once. This is the
+          "AI workspace activating inside the CRM" moment; the shell around it
+          does not move. */}
+      <BhoomiAiIcon size={46} animateIn />
 
       <h1 className="mt-5 text-[26px] font-bold tracking-tight" style={{ color: t.text }}>
         Bhoomi AI
@@ -74,7 +77,10 @@ export default function ChatWelcome({
               <span
                 className="grid h-7 w-7 flex-shrink-0 place-items-center rounded-lg"
                 style={{
-                  background: isDark ? "rgba(217,70,168,0.11)" : "rgba(158,33,123,0.07)",
+                  // Restrained magenta tint on the dark canvas — the suggestion
+                  // icons are supporting detail, not AI-activity signals, so they
+                  // do not carry the gradient.
+                  background: "rgba(217,70,168,0.13)",
                   color: t.accent,
                 }}
               >

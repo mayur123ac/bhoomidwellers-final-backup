@@ -9,6 +9,11 @@ import { contactFieldSave } from "@/lib/contactFieldSave";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
+import BhoomiAiPanel from "@/components/bhoomi-ai/BhoomiAiPanel";
+import { BhoomiAiGlyph } from "@/components/bhoomi-ai/BhoomiAiIcon";
+// The canvas colour, imported rather than retyped, so the header and the
+// workspace below it cannot drift to two slightly different darks.
+import { CANVAS as AI_CANVAS } from "@/components/bhoomi-ai/theme";
 import { clearCrmSession, getStoredCrmUser, installLoggedOutBackGuard } from "@/lib/authSession";
 import { motion, AnimatePresence } from "framer-motion";
 import * as XLSX from "xlsx";
@@ -19,14 +24,14 @@ import {
   FaFileExcel, FaDesktop, FaCheckCircle, FaTimes, FaPaperPlane,
   FaCalendarAlt, FaHeart, FaTimesCircle, FaAngleLeft, FaCommentAlt,
   FaMoneyBillWave, FaMapMarkerAlt, FaBullseye, FaSave, FaUniversity, FaBriefcase, FaChartPie,
-  FaExchangeAlt, FaEye, FaExclamationTriangle, FaSignal, FaUserClock, FaWhatsapp
+  FaExchangeAlt, FaEye, FaExclamationTriangle, FaSignal, FaUserClock, FaWhatsapp,
+  FaFileInvoiceDollar, FaBoxes, FaHandshake
 } from "react-icons/fa";
-import { FaWandMagicSparkles } from 'react-icons/fa6'
 import NotificationsPanel from "@/components/NotificationsPanel";
 import { useCallerSync } from "@/lib/hooks/useCallerSync";
 import CrmUpdatesNotification from "@/components/CrmUpdatesNotification";
 import { label } from "framer-motion/client";
-
+import HeaderClock from "@/components/HeaderClock";
 import AttendanceTimerWidget from "@/components/AttendanceTimerWidget";
 import LoginTimerWidget from "@/components/LoginTimerWidget";
 import AttendanceBadge from "@/components/AttendanceBadge";
@@ -280,7 +285,7 @@ export default function EmployeesPage() {
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState("");
   const [selectedManageUserId, setSelectedManageUserId] = useState("");
-
+  const topbarRef = useRef<HTMLDivElement>(null);
   // 👇 1. CLEAN NOTIFICATION STATES 👇
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   type CrmNotif = { id: string; line1: string; line2: string; type: "lead" | "visit" };
@@ -364,9 +369,15 @@ export default function EmployeesPage() {
     }
     setUser(parsed);
 
+    // Every section this page can be linked into must be listed here. The
+    // "notifications" branch was missing, so the Settings rail's existing
+    // "/dashboard/employees?tab=notifications" link — and now the Admin
+    // dashboard's — silently landed on the default Add Employee section.
     const params = new URLSearchParams(window.location.search);
-    if (params.get("tab") === "callers") setActiveSection("callers");
-    else if (params.get("tab") === "ai") setActiveSection("ai");
+    const tab = params.get("tab");
+    if (tab === "callers") setActiveSection("callers");
+    else if (tab === "ai") setActiveSection("ai");
+    else if (tab === "notifications") setActiveSection("notifications");
 
     const userRole = parsed.role?.toLowerCase() || "";
     if (userRole === "admin" || userRole === "site head" || userRole === "site_head") {
@@ -793,8 +804,31 @@ export default function EmployeesPage() {
 
   const filteredCallers = callerStats.filter((c: any) => c.name?.toLowerCase().includes(callerSearch.toLowerCase()));
 
+  /* ── Bhoomi AI header state ─────────────────────────────────────────────
+     True only while the AI tab is open. It darkens the header so the bar meets
+     the AI canvas instead of ending in a white edge above it, and hides the
+     theme toggle. Nothing else in this file reads it, and it is false for
+     Add Employee, Caller Panel and WhatsApp Alerts — those keep the white CRM
+     header unchanged. The rail is deliberately not included: it is already the
+     CRM's dark navy in both states. */
+  const aiHeader = activeSection === "ai";
+  /* CrmUpdatesNotification colours its glyph from `theme.textMuted`. On the dark
+     bar the light-mode value is nearly invisible, so it gets the canvas's muted
+     tone — the same override the bell beside it uses. */
+  const aiHeaderTheme = aiHeader ? { ...t, textMuted: "text-[#C4C7C5]" } : t;
+
   const menuItems = [
     { id: "dashboard", icon: FaThLarge, label: "Overview", link: "/dashboard", section: null },
+    // The four Workspace views. They were in /dashboard's copy of this list and
+    // not in this one, so an Admin standing on /dashboard/employees lost Revenue
+    // Intelligence, Inventory, Channel Partners and CP Management from the rail
+    // until they navigated back — the same drift that hid WhatsApp Alerts on
+    // /dashboard. Ids match /dashboard's `activeView` values, so `?tab=` opens
+    // the right view on arrival.
+    { id: "revenue_intelligence", icon: FaFileInvoiceDollar, label: "Revenue Intelligence", link: "/dashboard?tab=revenue_intelligence", section: null },
+    { id: "inventory", icon: FaBoxes, label: "Inventory", link: "/dashboard?tab=inventory", section: null },
+    { id: "channel_partners", icon: FaUserTie, label: "Channel Partners", link: "/dashboard?tab=channel_partners", section: null },
+    { id: "cp_management", icon: FaHandshake, label: "CP Management", link: "/dashboard?tab=cp_management", section: null },
     { id: "receptionist", icon: FaClipboardList, label: "Receptionist", link: "/dashboard?tab=receptionist", section: null },
     { id: "sales", icon: FaUsers, label: "Sales Managers", link: "/dashboard?tab=sales", section: null },
     { id: "site_head", icon: FaUniversity, label: "Site Heads", link: "/dashboard?tab=site_head", section: null },
@@ -807,9 +841,17 @@ export default function EmployeesPage() {
     { id: "callers", icon: FaPhoneAlt, label: "Caller Panel", link: "/dashboard/employees", section: "callers" as const },
     { id: "employees", icon: FaIdCard, label: "Add Employee", link: "/dashboard/employees", section: "employees" as const },
     { id: "notifications", icon: FaWhatsapp, label: "WhatsApp Alerts", link: "/dashboard/employees", section: "notifications" as const },
-    // Must stay LAST: the sidebar renders menuItems.slice(0, -1) in the main
-    // list and pins this final entry to the bottom.
-    { id: "ai", icon: FaWandMagicSparkles, label: "Bhoomi AI", link: "/dashboard/employees", section: "ai" as const },
+    // `pinned` puts an item in the rail's bottom block, in array order — Bhoomi
+    // AI first, Settings last. Position no longer decides this, so appending a
+    // new item here can no longer steal the pinned slot.
+    { id: "ai", icon: BhoomiAiGlyph, label: "Bhoomi AI", link: "/dashboard/employees", section: "ai" as const, pinned: true },
+    // Settings moved out of the header, where it was a lone gear, into the rail
+    // — the same place and order /dashboard puts it. `section: null` so the
+    // click routes rather than switching an in-page section. Admin-only, which
+    // is the gate the header button carried.
+    ...(user?.role?.toLowerCase() === "admin"
+      ? [{ id: "settings", icon: FaCog, label: "Settings", link: "/dashboard/settings", section: null, pinned: true }]
+      : []),
   ];
 
   if (isAuthorized === null) return <div className="min-h-screen bg-[#0a0a0a]" />;
@@ -877,13 +919,17 @@ export default function EmployeesPage() {
           <div className="flex flex-col gap-2">
             {(() => {
               const groupOf: Record<string, string> = {
-                dashboard: "Workspace",
+                dashboard: "Workspace", revenue_intelligence: "Workspace", inventory: "Workspace",
+                channel_partners: "Workspace", cp_management: "Workspace",
                 receptionist: "Team", sales: "Team", site_head: "Team",
                 site_visit_overview: "Insights", attendance: "Insights", monitoring: "Insights", live_activity: "Insights", geo: "Insights",
                 callers: "Admin", employees: "Admin", notifications: "Admin",
               };
               const visibleItems = menuItems
-                .slice(0, -1)
+                // Was `.slice(0, -1)` — position-based, so only ever one item
+                // could be pinned. Filtering on the flag lets Bhoomi AI and
+                // Settings both sit in the bottom block.
+                .filter((i) => !i.pinned)
                 .filter((i) => i.label.toLowerCase().includes(navSearch.toLowerCase()));
 
               return visibleItems.map((item, idx) => {
@@ -969,15 +1015,22 @@ export default function EmployeesPage() {
             })()}
           </div>
 
-          {/* Last item (Bhoomi AI) pinned to bottom */}
-          {(() => {
-            const item = menuItems[menuItems.length - 1];
+          {/* Bottom-pinned block: Bhoomi AI, then Settings.
+              This used to render exactly one item — menuItems[length-1] — which
+              is why Settings could not live here and had to be a gear in the
+              header. It now renders every item flagged `pinned`, matching the
+              convention AdminSidebar already uses on /dashboard, so the two
+              rails agree on what sits at the bottom and in what order. */}
+          {menuItems.filter((i) => i.pinned).map((item, pinIdx) => {
             const isActive = item.section ? activeSection === item.section : false;
             return (
               <div
                 key={item.id}
                 title={!isSidebarHovered ? item.label : undefined}
-                className="relative cursor-pointer group mt-auto"
+                /* Only the first pinned item takes mt-auto — that is what pushes
+                   the whole block to the bottom. Putting it on every item would
+                   spread them apart down the rail instead of stacking them. */
+                className={`relative cursor-pointer group${pinIdx === 0 ? " mt-auto" : ""}`}
                 onClick={() => {
                   if (item.section) {
                     setActiveSection(item.section!);
@@ -1037,7 +1090,7 @@ export default function EmployeesPage() {
                 </div>
               </div>
             );
-          })()}
+          })}
         </nav>
 
         {/* Bottom gradient fade */}
@@ -1048,18 +1101,35 @@ export default function EmployeesPage() {
       <div className={`flex-1 flex flex-col pl-[72px] h-screen overflow-hidden transition-colors duration-300 ${t.mainBg}`}>
 
         {/* HEADER */}
+        {/* ── Header ──
+            In the Bhoomi AI section the bar joins the workspace: same #131314,
+            same hairline, so the dark canvas does not start at an abrupt white
+            edge. Every other section keeps the white CRM header exactly as it
+            was — `aiHeader` is the only thing that changes it, and it is false
+            everywhere except this one tab. The logo, the Admin Root badge and
+            Mark Attendance keep their own colours in both states. */}
         <header
-          className={`h-16 flex items-center justify-between px-8 z-30 flex-shrink-0 transition-colors duration-300 ${t.header}`}
+          className={`h-16 flex items-center justify-between px-8 z-30 flex-shrink-0 transition-colors duration-300 ${aiHeader ? "" : t.header}`}
           style={{
-            borderBottom: isDark ? "1px solid rgba(158,33,123,0.12)" : "1px solid rgba(0,0,0,0.08)",
-            backdropFilter: "blur(12px)",
-            WebkitBackdropFilter: "blur(12px)",
-            background: isDark ? "rgba(10,10,15,0.85)" : "rgba(255,255,255,0.9)",
+            borderBottom: aiHeader
+              ? "1px solid rgba(255,255,255,0.08)"
+              : isDark ? "1px solid rgba(158,33,123,0.12)" : "1px solid rgba(0,0,0,0.08)",
+            backdropFilter: aiHeader ? undefined : "blur(12px)",
+            WebkitBackdropFilter: aiHeader ? undefined : "blur(12px)",
+            background: aiHeader
+              ? AI_CANVAS
+              : isDark ? "rgba(10,10,15,0.85)" : "rgba(255,255,255,0.9)",
           }}
         >
-          <h1 className={`font-bold text-lg tracking-wide flex items-center gap-3 ${t.headerTitle}`}>
+          <h1
+            className={`font-bold text-lg tracking-wide flex items-center gap-3 ${aiHeader ? "" : t.headerTitle}`}
+            style={aiHeader ? { color: "#E3E3E3" } : undefined}
+          >
             <img src="/assets/bhoomidwellersLogo_trans.png" alt="Bhoomi CRM" className="h-20 md:h-18 w-auto object-contain -ml-2" />
-            <span className={`text-xs sm:text-sm font-normal ${t.textFaint}`}>— {activeSection === "callers"
+            <span
+              className={`text-xs sm:text-sm font-normal ${aiHeader ? "" : t.textFaint}`}
+              style={aiHeader ? { color: "#C4C7C5" } : undefined}
+            >— {activeSection === "callers"
               ? callerSubView === "control" ? "Caller Control Mode" : "Caller Panel"
               : activeSection === "ai" ? "Bhoomi AI"
                 : activeSection === "notifications" ? "WhatsApp Alerts" : "Add Employee"}</span>
@@ -1073,7 +1143,8 @@ export default function EmployeesPage() {
               {callerSubView === "control" ? "Admin Acting as Caller" : "Admin Root"}
             </span>
           </h1>
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-3 relative z-[50]" ref={topbarRef}>
+            <HeaderClock isDark={isDark} />
             {/* <LoginTimerWidget isDark={isDark} /> */}
             {/* This page has no attendance view of its own, so unlike the other
                 panels it really does navigate — but through the router its own
@@ -1081,31 +1152,38 @@ export default function EmployeesPage() {
                 Admin reaches this page, and Admin can open /dashboard, so the
                 destination was already correct; only the round trip was not. */}
             <AttendanceBadge onNavigate={() => router.push("/dashboard?tab=attendance")} />
-            <button onClick={() => {
-              const next = !isDark;
-              setIsDark(next);
-              try {
-                localStorage.setItem("crm_theme", next ? "dark" : "light");
-              } catch { }
-            }} aria-label="Toggle theme"
-              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center cursor-pointer justify-center shadow-sm ${t.toggleBtn}`}>
-              {isDark ? <SunIcon /> : <MoonIcon />}
-            </button>
-
-            {/* System Settings Icon */}
-            {user?.role?.toLowerCase() === "admin" && (
-              <button onClick={() => router.push("/dashboard/settings")} aria-label="Settings"
+            {/* The light/dark toggle is hidden inside Bhoomi AI. The workspace
+                is always the dark canvas regardless of the CRM preference, so
+                the control would sit there claiming to change something it no
+                longer affects. The preference itself is untouched — leaving this
+                tab restores whatever it was set to. */}
+            {!aiHeader && (
+              <button onClick={() => {
+                const next = !isDark;
+                setIsDark(next);
+                try {
+                  localStorage.setItem("crm_theme", next ? "dark" : "light");
+                } catch { }
+              }} aria-label="Toggle theme"
                 className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center cursor-pointer justify-center shadow-sm ${t.toggleBtn}`}>
-                <FaCog className="w-5 h-5" />
+                {isDark ? <SunIcon /> : <MoonIcon />}
               </button>
             )}
 
+            {/* The Settings gear that used to sit here has moved into the rail's
+                bottom block, below Bhoomi AI — the same position /dashboard and
+                the Settings panel already use. It was the only navigation
+                destination reachable from the header rather than the rail. */}
+
             {/* CRM System Updates */}
-            <CrmUpdatesNotification user={user} theme={t} isDark={isDark} />
+            <CrmUpdatesNotification user={user} theme={aiHeaderTheme} isDark={isDark || aiHeader} />
 
             <div className="relative">
               <div className="relative cursor-pointer" onClick={() => { setIsNotifOpen(!isNotifOpen); setIsProfileOpen(false); setNotifCount(0); }}>
-                <FaBell className={`${t.textMuted} hover:text-[#9E217B] transition-colors w-5 h-5`} />
+                <FaBell
+                  className={`${aiHeader ? "" : t.textMuted} hover:text-[#9E217B] transition-colors w-5 h-5`}
+                  style={aiHeader ? { color: "#C4C7C5" } : undefined}
+                />
                 {notifCount > 0 && (
                   <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-[#9E217B] rounded-full text-[9px] font-black text-white flex items-center justify-center">
                     {notifCount > 9 ? "9+" : notifCount}
@@ -1501,64 +1579,12 @@ export default function EmployeesPage() {
 
         ) : activeSection === "ai" ? (
 
-          <main className={`flex-1 flex flex-col h-full overflow-hidden transition-colors duration-300 ${t.mainBg}`}>
-            {/* Chat History Area */}
-            <div className={`flex-1 overflow-y-auto p-8 ${t.scroll} custom-scrollbar`}>
-              <div className="max-w-4xl mx-auto space-y-8 pb-20">
-
-                {/* Intro Greeting */}
-                <div className="text-center mt-10">
-                  <div className="w-16 h-16 rounded-full bg-[#9E217B]/10 flex items-center justify-center mx-auto mb-4 border border-[#9E217B]/30 shadow-[0_0_30px_rgba(158,33,123,0.3)]">
-                    <FaWandMagicSparkles className="text-3xl text-[#d946a8]" />
-                  </div>
-                  <h1 className={`text-4xl font-black tracking-tight mb-2 ${isDark ? "text-white" : "text-gray-900"}`}>
-                    Hello, {user?.name?.split(' ')[0] || "Admin"}
-                  </h1>
-                  <p className={`text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-[#d946a8] to-orange-400`}>
-                    How can Bhoomi AI assist your sales pipeline today?
-                  </p>
-                </div>
-
-                {/* Example Mock AI Message (Replace with real state map later) */}
-                <div className="flex gap-4">
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#9E217B] to-orange-500 flex items-center justify-center flex-shrink-0 shadow-lg">
-                    <FaWandMagicSparkles className="text-white text-xs" />
-                  </div>
-                  <div className={`flex-1 rounded-2xl p-5 shadow-sm leading-relaxed ${isDark ? "bg-[#111111] border border-[#222] text-gray-300" : "bg-white border border-indigo-100 text-gray-700"}`}>
-                    <p><strong>System Ready.</strong> I have analyzed your CRM data. Would you like to see the top priority leads for today, or review the employee daily monitor report?</p>
-                  </div>
-                </div>
-
-              </div>
-            </div>
-
-            {/* Gemini-Style Input Bar */}
-            <div className={`p-6 flex-shrink-0 flex justify-center ${isDark ? "bg-[#0a0a0a]/80" : "bg-[#F8FAFC]/80"} backdrop-blur-md`}>
-              <div className="w-full max-w-4xl relative">
-                {/* Magenta Glow Container */}
-                <div className={`relative flex items-center rounded-2xl overflow-hidden transition-shadow duration-300
-                  ${isDark
-                    ? "bg-[#1a1a1a] border border-[#9E217B]/50 shadow-[0_0_20px_rgba(158,33,123,0.25)] focus-within:shadow-[0_0_35px_rgba(158,33,123,0.5)]"
-                    : "bg-white border border-[#9E217B]/50 shadow-[0_0_20px_rgba(158,33,123,0.15)] focus-within:shadow-[0_0_35px_rgba(158,33,123,0.4)]"
-                  }`}
-                >
-                  <input
-                    type="text"
-                    placeholder="Ask Bhoomi AI to analyze leads, check employee tasks, or find a customer..."
-                    className={`w-full py-4 pl-6 pr-14 outline-none text-sm font-medium bg-transparent
-                      ${isDark ? "text-white placeholder:text-gray-500" : "text-gray-900 placeholder:text-gray-400"}
-                    `}
-                  />
-                  <button className="absolute right-3 w-10 h-10 rounded-xl bg-gradient-to-r from-[#9E217B] to-[#c7299a] text-white flex items-center justify-center hover:opacity-90 transition-opacity shadow-lg">
-                    <FaWandMagicSparkles className="text-sm" />
-                  </button>
-                </div>
-                <p className="text-center text-[10px] text-gray-500 mt-3 font-medium">
-                  Bhoomi AI may occasionally make mistakes. Always verify critical lead data.
-                </p>
-              </div>
-            </div>
-          </main>
+          /* The real assistant, not the old inline mock. That mock had a dead
+             <input> (no value, no onChange), a dead button and a hardcoded
+             "System Ready…" line, while this fully wired panel sat unused in
+             components/bhoomi-ai/. It owns the /api/admin/ai/chat calls,
+             history, abort, retry and error handling. */
+          <BhoomiAiPanel isDark={isDark} t={t} user={user} />
 
         ) : callerSubView === "control" ? (
 

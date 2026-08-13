@@ -15,10 +15,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { FaPlus } from "react-icons/fa6";
 import { FaExclamationTriangle, FaTimes } from "react-icons/fa";
 import { CRMContextManager } from "@/lib/admin-ai/contextManager";
+import BhoomiAiIcon, { AI_ICON_CSS } from "./BhoomiAiIcon";
 import ChatComposer, { type ComposerHandle } from "./ChatComposer";
 import ChatWelcome from "./ChatWelcome";
 import { AssistantMessage, ThinkingIndicator, UserMessage, type Turn } from "./ChatMessage";
-import { aiTheme } from "./theme";
+import { aiTheme, CANVAS } from "./theme";
 
 const CHAT_ENDPOINT = "/api/admin/ai/chat";
 
@@ -160,20 +161,38 @@ export default function BhoomiAiPanel({ isDark, t: pageTheme, user }: Props) {
   const lastIndex = turns.length - 1;
 
   return (
-    <main className="flex h-full flex-1 flex-col overflow-hidden" style={{ background: isDark ? "#0A0A0C" : "#FAF8FC" }}>
+    /* ── The AI workspace boundary ──────────────────────────────────────────
+       The dark canvas starts HERE and nowhere above it. Everything outside
+       this element — the Admin header, the rail, the logo, Mark Attendance,
+       the notification badges — keeps the Bhoomi magenta/blue/white identity
+       and is not touched by this file or by theme.ts.
+
+       `.bhoomi-ai-workspace` is the scope for the few CSS rules the surface
+       needs (the mark's keyframes, the composer's placeholder colour). There
+       is no global rule anywhere: a `body { background: #131314 }` would take
+       the whole CRM down with it. */
+    <main
+      className="bhoomi-ai-workspace flex h-full flex-1 flex-col overflow-hidden"
+      style={{ background: CANVAS, color: t.text }}
+    >
       {/* ── Page header ── the New Chat home, so it no longer competes with the
           composer for attention. Not a navbar: the Admin header is right above. */}
       <div
         className="flex flex-shrink-0 items-center justify-between gap-4 border-b px-6 py-3.5"
         style={{ borderColor: t.borderSoft }}
       >
-        <div className="min-w-0 leading-tight">
-          <h1 className="text-[15px] font-bold tracking-tight" style={{ color: t.text }}>
-            Bhoomi AI
-          </h1>
-          <p className="text-[11.5px]" style={{ color: t.textFaint }}>
-            AI Business Analyst for your CRM
-          </p>
+        <div className="flex min-w-0 items-center gap-2.5 leading-tight">
+          {/* The same mark as the rail item and the greeting — one Bhoomi AI
+              symbol, used everywhere it identifies the assistant. */}
+          <BhoomiAiIcon size={26} />
+          <div className="min-w-0">
+            <h1 className="text-[15px] font-bold tracking-tight" style={{ color: t.text }}>
+              Bhoomi AI
+            </h1>
+            <p className="text-[11.5px]" style={{ color: t.textFaint }}>
+              AI Business Analyst for your CRM
+            </p>
+          </div>
         </div>
 
         <button
@@ -279,7 +298,7 @@ export default function BhoomiAiPanel({ isDark, t: pageTheme, user }: Props) {
         />
         <div
           className="mx-auto w-full max-w-[960px] px-5 pb-4 pt-1 sm:px-8"
-          style={{ background: isDark ? "#0A0A0C" : "#FAF8FC" }}
+          style={{ background: CANVAS }}
         >
           <ChatComposer
             ref={composerRef}
@@ -297,7 +316,22 @@ export default function BhoomiAiPanel({ isDark, t: pageTheme, user }: Props) {
         </div>
       </div>
 
-      <style>{`@keyframes bdai-dot{0%,80%,100%{transform:translateY(0);opacity:.35}40%{transform:translateY(-3px);opacity:1}}`}</style>
+      {/* Workspace-scoped CSS. Every selector below is either a `bdai-` class
+          or nested under `.bhoomi-ai-workspace`, so nothing here can reach the
+          CRM shell around it. */}
+      <style>{`
+        @keyframes bdai-dot{0%,80%,100%{transform:translateY(0);opacity:.35}40%{transform:translateY(-3px);opacity:1}}
+        ${AI_ICON_CSS}
+        .bhoomi-ai-workspace .bdai-input::placeholder{color:${t.textMuted};opacity:1}
+        .bhoomi-ai-workspace .bdai-send-busy{animation:bdai-sweep 2.2s ease-in-out infinite}
+        .bhoomi-ai-workspace .bdai-send:hover:not(:disabled){filter:brightness(1.12)}
+        .bhoomi-ai-workspace .bdai-send:focus-visible{box-shadow:0 0 0 3px rgba(255,255,255,0.16)}
+        /* The canvas fades in when the workspace mounts — the AI surface
+           activating inside a CRM shell that does not move. */
+        .bhoomi-ai-workspace{animation:bdai-canvas-in 260ms ease-out both}
+        @keyframes bdai-canvas-in{from{opacity:0}to{opacity:1}}
+        @media (prefers-reduced-motion:reduce){.bhoomi-ai-workspace{animation:none}}
+      `}</style>
     </main>
   );
 }

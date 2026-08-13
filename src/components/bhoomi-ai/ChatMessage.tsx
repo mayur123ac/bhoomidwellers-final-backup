@@ -10,10 +10,10 @@
 // what makes the thread scannable.
 
 import { useState } from "react";
-import { FaWandMagicSparkles } from "react-icons/fa6";
 import { FaRegCopy, FaCheck, FaRotateRight } from "react-icons/fa6";
+import BhoomiAiIcon from "./BhoomiAiIcon";
 import Markdown from "./Markdown";
-import { moduleLabel, type AiTheme } from "./theme";
+import { CANVAS_RAISED, moduleLabel, type AiTheme } from "./theme";
 
 export interface Turn {
   role: "user" | "assistant";
@@ -23,23 +23,14 @@ export interface Turn {
 
 /* ── Avatar ─────────────────────────────────────────────────────────────────*/
 
-export function AiAvatar({ size = 32 }: { size?: number }) {
-  return (
-    <div
-      className="flex flex-shrink-0 items-center justify-center rounded-[10px]"
-      style={{
-        width: size,
-        height: size,
-        background: "linear-gradient(135deg,#9E217B 0%,#d946a8 55%,#f97316 130%)",
-        // One soft ring rather than a spread glow — enough to lift it off the
-        // page without the neon look.
-        boxShadow: "0 1px 6px rgba(158,33,123,0.30)",
-      }}
-      aria-hidden
-    >
-      <FaWandMagicSparkles style={{ fontSize: size * 0.44, color: "#fff" }} />
-    </div>
-  );
+/**
+ * Thin wrapper over the single Bhoomi AI mark, kept because several call sites
+ * already import `AiAvatar`. The old gradient ran magenta → orange; orange is
+ * not a brand colour and made the mark read as a third palette. It is now the
+ * magenta → blue pair, and the glyph is a spark rather than a wand.
+ */
+export function AiAvatar({ size = 32, thinking = false }: { size?: number; thinking?: boolean }) {
+  return <BhoomiAiIcon size={size} state={thinking ? "thinking" : "idle"} />;
 }
 
 /* ── User ───────────────────────────────────────────────────────────────────*/
@@ -48,10 +39,15 @@ export function UserMessage({ content }: { content: string }) {
   return (
     <div className="flex justify-end">
       <div
-        className="max-w-[85%] whitespace-pre-wrap break-words rounded-[20px] px-4 py-2.5 text-[14.5px] leading-[1.6] text-white sm:max-w-[72%]"
+        className="max-w-[85%] whitespace-pre-wrap break-words rounded-[20px] px-4 py-2.5 text-[14.5px] leading-[1.6] sm:max-w-[72%]"
         style={{
-          background: "linear-gradient(135deg,#9E217B 0%,#b3278c 100%)",
-          boxShadow: "0 1px 2px rgba(36,10,30,0.16)",
+          // #1E1F20 per the brief, not the old magenta gradient. On a #131314
+          // canvas a saturated bubble every other turn is the loudest thing on
+          // screen; the raised surface separates the turns without shouting, and
+          // leaves magenta→blue to mean "AI activity" and nothing else.
+          background: CANVAS_RAISED,
+          color: "#E3E3E3",
+          border: "1px solid rgba(255,255,255,0.06)",
         }}
       >
         {content}
@@ -169,7 +165,10 @@ export function ThinkingIndicator({ t }: { t: AiTheme }) {
   return (
     <div>
       <div className="mb-2 flex items-center gap-2.5">
-        <AiAvatar />
+        {/* The mark itself carries the thinking state — a gradient sweep and a
+            slow breath. No spinner ring and no rotation: those read as "loading
+            forever" rather than "the assistant is working". */}
+        <AiAvatar thinking />
         <div className="leading-tight">
           <div className="text-[13px] font-semibold" style={{ color: t.text }}>
             Bhoomi AI
