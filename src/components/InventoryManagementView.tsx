@@ -17,6 +17,7 @@ import BulkGenerateUnitsModal from "./BulkGenerateUnitsModal";
 import PricingRulesModal from "./PricingRulesModal";
 import OffersModal from "./OffersModal";
 import InventoryAnalyticsModal from "./InventoryAnalyticsModal";
+import BuildingContextTag, { BuildingContext } from "./BuildingContextTag";
 import { Radius } from "lucide-react";
 
 export interface InventoryUnit {
@@ -39,6 +40,10 @@ export interface InventoryUnit {
   lead_name?: string | null; lead_phone?: string | null; lead_email?: string | null;
   lead_assigned_to?: string | null;   // ← NEW
   booking_number?: string | null; booking_status?: string | null; booking_primary_name?: string | null;
+  // Joined from booking_registration_details / booking_loan_details by the row
+  // endpoint. NULL means "no such record", which is not the same as "pending".
+  registration_status?: string | null; actual_registration_date?: string | null;
+  disbursement_status?: string | null; actual_disbursement_date?: string | null;
 }
 interface HistoryRow { id: number; old_status: string | null; new_status: string; changed_by: string | null; reason: string | null; changed_at: string; }
 
@@ -65,6 +70,125 @@ const STATUS_KEYS = Object.keys(STATUS);
 const DUPLICATE_HEX = "#ef4444";
 
 // ═══════════════════════════════════════════════════════════════════════════
+// TILE STATE — what the floor-matrix tile's own colour means
+// ═══════════════════════════════════════════════════════════════════════════
+// The business colour scheme. This is deliberately NOT the same axis as the
+// 8-value `status` column: it answers "where is this flat in the sale?", which
+// is a question about the booking's registration and disbursement, not about
+// the unit row. Two of the five states cannot be derived from `status` at all.
+//
+// Where the inputs come from (verified against the live schema — none of this
+// is on inventory_units):
+//   registration_status  → booking_registration_details, via booking_id
+//   disbursement_status  → booking_loan_details,          via booking_id
+//   refuge area          → inventory_units.status = 'refuge_area'
+//
+// Resolution order is a priority ladder, not a lookup: refuge area outranks
+// everything, then the registration/disbursement pair, then plain availability.
+export type TileStateKey =
+  | "available" | "reg_disb_complete" | "reg_in_process"
+  | "reg_complete_disb_pending" | "refuge_area";
+
+type TileState = { key: TileStateKey; label: string; fill: string; border: string; text: string };
+
+// One definition per state, for both themes. Nothing else in this file may
+// invent a colour for these five — the legend, the grid and the table all read
+// from here, which is what stops the legend drifting from the tiles.
+const TILE_STATES: Record<TileStateKey, { label: string; light: TileState; dark: TileState }> = {
+  // WHITE. Available stock is the neutral ground the other states stand out
+  // against — it is the absence of commitment, so it gets the absence of colour.
+  available: {
+    label: "Available",
+    light: { key: "available", label: "Available", fill: "#ffffff", border: "#d4d4d8", text: "#18181b" },
+    // Still reads as "white" against a #0D0D12 page, without glaring.
+    dark: { key: "available", label: "Available", fill: "#f4f4f5", border: "#a1a1aa", text: "#18181b" },
+  },
+  reg_disb_complete: {
+    label: "Registration + Disbursement Complete",
+    light: { key: "reg_disb_complete", label: "Registration + Disbursement Complete", fill: "#2563eb", border: "#1d4ed8", text: "#ffffff" },
+    dark: { key: "reg_disb_complete", label: "Registration + Disbursement Complete", fill: "#3b82f6", border: "#60a5fa", text: "#ffffff" },
+  },
+  reg_in_process: {
+    label: "Registration In Process",
+    light: { key: "reg_in_process", label: "Registration In Process", fill: "#9ca3af", border: "#6b7280", text: "#111827" },
+    dark: { key: "reg_in_process", label: "Registration In Process", fill: "#6b7280", border: "#9ca3af", text: "#f9fafb" },
+  },
+  reg_complete_disb_pending: {
+    label: "Registration Complete / Disbursement Pending",
+    // Dark text on orange: white on #f97316 is about 2.9:1, which fails at this
+    // tile's text size.
+    light: { key: "reg_complete_disb_pending", label: "Registration Complete / Disbursement Pending", fill: "#f97316", border: "#ea580c", text: "#431407" },
+    dark: { key: "reg_complete_disb_pending", label: "Registration Complete / Disbursement Pending", fill: "#ea580c", border: "#fb923c", text: "#ffffff" },
+  },
+  refuge_area: {
+    label: "Refuge Area",
+    light: { key: "refuge_area", label: "Refuge Area", fill: "#dc2626", border: "#b91c1c", text: "#ffffff" },
+    dark: { key: "refuge_area", label: "Refuge Area", fill: "#ef4444", border: "#f87171", text: "#ffffff" },
+  },
+};
+
+export const TILE_STATE_KEYS = Object.keys(TILE_STATES) as TileStateKey[];
+
+/** The one place a tile state becomes a colour. */
+export const getTileStateColor = (key: TileStateKey, isDark = false): TileState =>
+  isDark ? TILE_STATES[key].dark : TILE_STATES[key].light;
+
+const normStatus = (v: unknown) => String(v ?? "").trim().toLowerCase();
+
+// "Completed" in this system is spelled several ways across the booking tables
+// (see isCompletedStatus in lib/revenueCalculations). Anything else — Pending,
+// Scheduled, Partial — is explicitly NOT complete.
+const isStageComplete = (v: unknown) =>
+  ["completed", "complete", "done", "received", "disbursed", "registered"].includes(normStatus(v));
+
+/** The fields the tile colour is resolved from. */
+export interface TileScoped {
+  status?: string | null;
+  booking_id?: number | null;
+  registration_status?: string | null;
+  disbursement_status?: string | null;
+}
+
+/**
+ * Resolve a unit to its business tile state, or null when none of the five
+ * apply and the tile should fall back to the ordinary `status` colour
+ * (on hold, blocked, cancelled, unfinished).
+ */
+export function resolveTileState(u: TileScoped): TileStateKey | null {
+  // 1. Refuge area always wins — it is a physical classification of the floor,
+  //    true regardless of any sale, and the one state that must never be missed.
+  if (normStatus(u.status) === "refuge_area") return "refuge_area";
+
+  // 2. The registration/disbursement pair, read from the booking's own records.
+  const reg = normStatus(u.registration_status);
+  if (reg) {
+    if (!isStageComplete(reg)) return "reg_in_process";
+    return isStageComplete(u.disbursement_status) ? "reg_disb_complete" : "reg_complete_disb_pending";
+  }
+
+  // 3. A sold flat whose registration has not been opened yet is still "in
+  //    process" — the sale is underway. Without this, such a unit would fall
+  //    through to the `booked` status colour, which is blue, and blue already
+  //    means "registration AND disbursement complete" — the most misleading
+  //    collision available. See the note in the handover.
+  if (u.booking_id != null) return "reg_in_process";
+
+  // 4. Otherwise only plain availability is a business state.
+  if (normStatus(u.status) === "available") return "available";
+  return null;
+}
+
+/** Tile appearance for any unit: business state if it has one, else its status. */
+export function getTileAppearance(u: TileScoped, isDark = false): { fill: string; border: string; text: string; label: string } {
+  const key = resolveTileState(u);
+  if (key) return getTileStateColor(key, isDark);
+  const c = sc(normStatus(u.status));
+  // Unresolved statuses keep the tint treatment they already had, so nothing
+  // silently loses the meaning it has today.
+  return { fill: `${c.hex}26`, border: `${c.hex}80`, text: c.hex, label: c.label };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Unit-type colours — a SECOND, independent visual channel
 // ═══════════════════════════════════════════════════════════════════════════
 // Type and status answer different questions ("what is this flat?" vs "can I sell
@@ -80,21 +204,46 @@ type UnitTypeColor = { ink: string; darkInk: string };
 
 // Keys are NORMALISED (upper-case, spaces stripped) because live data spells the
 // same type three ways — "2 BHK", "2BHK", "1Bhk" all exist in inventory_units.
+//
+// The four types that make up almost all stock get four MAXIMALLY separated hues
+// — green / blue / purple / amber, roughly 90° apart on the wheel — because the
+// question the grid answers at a glance is "how much of this floor is 2BHK?".
+// The half-steps (1.5/2.5/3.5) sit deliberately between their neighbours: they
+// are rare, and reading one as "about a 2BHK" is the right first impression.
 const UNIT_TYPE_COLORS: Record<string, UnitTypeColor> = {
-  "1RK": { ink: "#64748b", darkInk: "#94a3b8" },       // slate
-  "1BHK": { ink: "#0d9488", darkInk: "#2dd4bf" },      // teal
-  "1.5BHK": { ink: "#0284c7", darkInk: "#38bdf8" },    // sky
-  "2BHK": { ink: "#4f46e5", darkInk: "#818cf8" },      // indigo
-  "2.5BHK": { ink: "#7c3aed", darkInk: "#a78bfa" },    // violet
-  "3BHK": { ink: "#c026d3", darkInk: "#e879f9" },      // fuchsia
-  "3.5BHK": { ink: "#db2777", darkInk: "#f472b6" },    // pink
-  "4BHK": { ink: "#ea580c", darkInk: "#fb923c" },      // orange
+  "1RK": { ink: "#475569", darkInk: "#94a3b8" },       // slate
+  "1BHK": { ink: "#16a34a", darkInk: "#4ade80" },      // green
+  "1.5BHK": { ink: "#0d9488", darkInk: "#2dd4bf" },    // teal   (green → blue)
+  "2BHK": { ink: "#2563eb", darkInk: "#60a5fa" },      // blue
+  "2.5BHK": { ink: "#4f46e5", darkInk: "#818cf8" },    // indigo (blue → purple)
+  "3BHK": { ink: "#7e22ce", darkInk: "#c084fc" },      // purple
+  "3.5BHK": { ink: "#c026d3", darkInk: "#e879f9" },    // fuchsia (purple → amber)
+  "4BHK": { ink: "#ea580c", darkInk: "#fb923c" },      // amber / orange
+  "4.5BHK": { ink: "#c2410c", darkInk: "#f97316" },    // deeper orange — still "4BHK+"
+  "5BHK": { ink: "#b45309", darkInk: "#fbbf24" },      // amber
   "PENTHOUSE": { ink: "#a16207", darkInk: "#eab308" }, // yellow
-  "SHOP": { ink: "#047857", darkInk: "#34d399" },      // emerald
-  "OFFICE": { ink: "#0369a1", darkInk: "#7dd3fc" },    // deep sky
+  "SHOP": { ink: "#be123c", darkInk: "#fb7185" },      // rose
+  "OFFICE": { ink: "#0e7490", darkInk: "#22d3ee" },    // cyan
 };
 
 export const normalizeUnitType = (v: unknown) => String(v ?? "").toUpperCase().replace(/\s+/g, "").trim();
+
+// The canonical SPELLING for a normalised key. Normalisation is lossy on purpose
+// ("2 BHK" → "2BHK"), so a display label cannot simply be the key: "PENTHOUSE"
+// is not how anyone writes it. Everything the user reads — chip, legend, card,
+// table — goes through here, which is why "2BHK: 45" and "2 BHK: 1" can no
+// longer appear as two entries.
+const UNIT_TYPE_LABELS: Record<string, string> = {
+  "1RK": "1 RK", "1BHK": "1BHK", "1.5BHK": "1.5BHK", "2BHK": "2BHK", "2.5BHK": "2.5BHK",
+  "3BHK": "3BHK", "3.5BHK": "3.5BHK", "4BHK": "4BHK", "4.5BHK": "4.5BHK", "5BHK": "5BHK",
+  "PENTHOUSE": "Penthouse", "SHOP": "Shop", "OFFICE": "Office",
+};
+
+/** Display spelling for a unit type — one label per normalised type. */
+export const unitTypeLabel = (v: unknown): string => {
+  const key = normalizeUnitType(v);
+  return UNIT_TYPE_LABELS[key] || String(v ?? "").trim() || "—";
+};
 
 // Deterministic fallback for a type nobody has assigned a colour to — a new
 // configuration must still be distinguishable in the grid the day it is created,
@@ -120,45 +269,71 @@ const hslToHex = (h: number, s: number, l: number) => {
  * grid cell, table chip, legend — reads it from here, so adding a type is one
  * line above and nothing else.
  */
-export function getUnitTypeColor(unitType: string, isDark = false): { ink: string; fill: string; border: string; label: string } {
+export function getUnitTypeColor(unitType: string, isDark = false): { key: string; ink: string; fill: string; border: string; label: string } {
   const key = normalizeUnitType(unitType);
   const found = UNIT_TYPE_COLORS[key];
   const ink = found
     ? (isDark ? found.darkInk : found.ink)
     : hslToHex(hashHue(key || "?"), 42, isDark ? 65 : 42);
   return {
+    key,
     ink,
     fill: `${ink}1A`,      // 10% — a tint, never a block of colour
     border: `${ink}59`,    // 35%
-    label: String(unitType ?? "").trim() || "—",
+    // The NORMALISED spelling, not the raw column value: two rows spelled
+    // "2 BHK" and "2BHK" must not read as two different things on screen.
+    label: unitTypeLabel(unitType),
   };
 }
 
-// ── Duplicate flat numbers (detection logic unchanged — only relocated) ──
+// ── Duplicate flat numbers ──
 // Compared case- and space-insensitively, so "B-1204" and "b-1204 " are one number.
 const normFlat = (v: unknown) => String(v ?? "").trim().toLowerCase();
 
-/** Flat numbers that occur more than once in the given set of units. */
-export function findDuplicateFlats(units: { flat_no?: string | null }[]): Set<string> {
+/** The unit shape duplicate detection needs — anything with these three fields. */
+export interface DuplicateScoped { flat_no?: string | null; tower?: string | null; wing?: string | null }
+
+// A flat number is only ambiguous WITHIN one tower+wing. "Tower A / Wing A / 101"
+// and "Tower A / Wing B / 101" are two different, correctly-numbered flats — the
+// DB's unique index says so too, since it keys on
+// (project_name, tower, COALESCE(wing,''), floor, flat_no).
+//
+// Floor is deliberately NOT part of the scope. The index permits the same number
+// on two floors of one wing, which is exactly the numbering mistake worth
+// catching — scoping to floor as well would make this warning unreachable.
+const dupScope = (u: DuplicateScoped) =>
+  `${String(u.tower ?? "").trim().toLowerCase()}|${String(u.wing ?? "").trim().toLowerCase()}`;
+
+const dupKey = (u: DuplicateScoped) => `${dupScope(u)}|${normFlat(u.flat_no)}`;
+
+/** Keys of flat numbers repeated within their own tower+wing. */
+export function findDuplicateFlats(units: DuplicateScoped[]): Set<string> {
   const seen = new Map<string, number>();
   for (const u of units) {
-    const k = normFlat(u.flat_no);
-    if (!k) continue;
+    if (!normFlat(u.flat_no)) continue;
+    const k = dupKey(u);
     seen.set(k, (seen.get(k) || 0) + 1);
   }
   return new Set([...seen.entries()].filter(([, n]) => n > 1).map(([k]) => k));
 }
 
-/** Is this flat number one of the duplicates found above? */
-export const isDuplicateFlat = (flatNo: unknown, duplicates: Set<string>) => duplicates.has(normFlat(flatNo));
+/** Is this unit's flat number repeated inside its own tower+wing? */
+export const isDuplicateFlat = (unit: DuplicateScoped, duplicates: Set<string>) => duplicates.has(dupKey(unit));
 
 /** Tooltip shared by both views: "Duplicate flat number — 101 · 2BHK · Available". */
-const unitTooltip = (u: InventoryUnit, duplicate: boolean) =>
-  [
+const unitTooltip = (u: InventoryUnit, duplicate: boolean) => {
+  // The tile's own state comes first, because it is what the colour is saying.
+  // The raw status stays too — they are different questions, and a tile that
+  // reads "Registration In Process" should still admit the unit is `booked`.
+  const state = resolveTileState(u);
+  const stateLabel = state ? getTileStateColor(state).label : null;
+  const status = sc(u.status).label;
+  return [
     duplicate ? "Duplicate flat number —" : null,
-    `${u.flat_no} · ${u.unit_type} · ${sc(u.status).label}`,
+    `${u.flat_no} · ${unitTypeLabel(u.unit_type)} · ${stateLabel && stateLabel !== status ? `${stateLabel} · ${status}` : status}`,
     u.wing ? `· Wing ${u.wing}` : null,
   ].filter(Boolean).join(" ");
+};
 
 /** Type pill used in the table's Type column and in the legend. */
 function UnitTypeChip({ unitType, isDark }: { unitType: string; isDark: boolean }) {
@@ -213,6 +388,18 @@ function StatusBadge({ status }: { status: string }) {
   return <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider border inline-flex items-center flex-shrink-0 ${c.text} ${c.border} ${c.bg}`}>{c.label}</span>;
 }
 
+/** Table equivalent of a grid tile: the tile's colour, then the exact status. */
+function TileStateCell({ u, isDark }: { u: InventoryUnit; isDark: boolean }) {
+  const state = resolveTileState(u);
+  const tile = getTileAppearance(u, isDark);
+  return (
+    <span className="inline-flex items-center gap-1.5 min-w-0" title={state ? `${tile.label} · ${sc(u.status).label}` : sc(u.status).label}>
+      <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: tile.fill, border: `1px solid ${tile.border}` }} />
+      <StatusBadge status={u.status} />
+    </span>
+  );
+}
+
 const num = (v: any): number => { const n = Number(String(v ?? "").replace(/[,\s₹]/g, "")); return isNaN(n) ? 0 : n; };
 const area = (v: any) => { const n = num(v); return n ? `${n.toLocaleString("en-IN")}` : "—"; };
 
@@ -256,6 +443,13 @@ interface TowerSummary {
   floors: number; total: number; available: number; booked: number; on_hold: number; blocked: number;
 }
 interface TypeSummary { key: string; tower: string; unit_type: string; units: number; }
+// A wing is free text on the unit, not a row in a table — so a "wing" here is
+// simply a distinct value this tower's stock uses. wing === "" means the units
+// carry no wing at all, which is a legitimate state, not missing data.
+interface WingSummary {
+  key: string; tower: string; wing: string; floors: number;
+  total: number; available: number; booked: number; on_hold: number; blocked: number;
+}
 interface BuildingSummary {
   key: string;                 // LOWER(TRIM(project_name)) — the grouping key
   project_name: string;        // canonical display name
@@ -264,6 +458,7 @@ interface BuildingSummary {
   total: number; available: number; booked: number; on_hold: number; blocked: number;
   towers: TowerSummary[];
   unit_types: TypeSummary[];
+  wings: WingSummary[];
   project_status?: string | null;   // from inventory_projects (upcoming/active/…)
 }
 
@@ -286,6 +481,12 @@ const normaliseBuilding = (r: any): BuildingSummary => ({
     key: String(x.key), tower: String(x.tower ?? "").trim(),
     unit_type: String(x.unit_type ?? "").trim() || "—", units: n0(x.units),
   })),
+  wings: (r.wings || []).map((x: any) => ({
+    key: String(x.key), tower: String(x.tower ?? "").trim(),
+    wing: String(x.wing ?? "").trim(), floors: n0(x.floors),
+    total: n0(x.total), available: n0(x.available), booked: n0(x.booked),
+    on_hold: n0(x.on_hold), blocked: n0(x.blocked),
+  })),
 });
 
 // A project that exists in inventory_projects but has no stock yet. It still gets
@@ -297,17 +498,33 @@ const emptyBuilding = (key: string, p: any): BuildingSummary => ({
   project_id: p.id == null ? null : Number(p.id),
   floors: 0, tower_count: n0(p.tower_count),
   total: 0, available: 0, booked: 0, on_hold: 0, blocked: 0,
-  towers: [], unit_types: [], project_status: p.status ?? null,
+  towers: [], unit_types: [], wings: [], project_status: p.status ?? null,
 });
 
 // Roll per-(tower, type) rows up to a single breakdown, optionally for one tower.
+// Grouped on the NORMALISED type, so the aggregate's separate "2BHK" and "2 BHK"
+// rows — which are the same configuration typed two ways — add up to one chip
+// reading "2BHK: 46" rather than two chips reading 45 and 1.
 const rollupTypes = (rows: TypeSummary[], tower: string) =>
   Object.entries(
     rows.filter(r => !tower || r.tower === tower)
-      .reduce<Record<string, number>>((acc, r) => { acc[r.unit_type] = (acc[r.unit_type] || 0) + r.units; return acc; }, {}),
-  ).map(([unit_type, units]) => ({ unit_type, units })).sort((a, b) => b.units - a.units);
+      .reduce<Record<string, { units: number; raw: string }>>((acc, r) => {
+        const k = normalizeUnitType(r.unit_type);
+        // The raw spelling is kept only as the fallback label for a type nobody
+        // has curated — a mapped type always shows its canonical spelling.
+        if (!acc[k]) acc[k] = { units: 0, raw: r.unit_type };
+        acc[k].units += r.units;
+        return acc;
+      }, {}),
+  ).map(([key, v]) => ({ key, unit_type: unitTypeLabel(v.raw), units: v.units }))
+    .sort((a, b) => b.units - a.units);
 
 const floorLabel = (f: number) => (f === 0 ? "Ground" : `Floor ${f}`);
+
+// Selecting "the units that have no wing" needs a value that is not "" — "" is
+// already taken by "all wings". Sent to the API as an explicit empty wing.
+const NO_WING = "__none__";
+const wingTabLabel = (w: string) => (w ? `Wing ${w}` : "No wing");
 
 // Landing-page status filter — "show me buildings that still have X". Limited to
 // the four buckets the aggregate counts (registered is folded into booked), so a
@@ -326,6 +543,13 @@ function BuildingCard({ b, t, onOpen }: { b: BuildingSummary; t: any; onOpen: ()
   const towerLine = b.towers.length === 0 ? "No towers yet"
     : b.towers.length <= 3 ? b.towers.map(x => `Tower ${x.tower}`).join(" · ")
       : `${b.towers.length} towers`;
+  // Named wings only — a building whose units carry no wing should not be
+  // labelled with a phantom one.
+  const namedWings = [...new Set(b.wings.map(w => w.wing).filter(Boolean))]
+    .sort((a, b2) => a.localeCompare(b2, undefined, { numeric: true }));
+  const wingLine = namedWings.length === 0 ? ""
+    : namedWings.length <= 3 ? namedWings.map(w => `Wing ${w}`).join(" · ")
+      : `${namedWings.length} wings`;
   const types = rollupTypes(b.unit_types, "").slice(0, 3);
 
   return (
@@ -335,7 +559,9 @@ function BuildingCard({ b, t, onOpen }: { b: BuildingSummary; t: any; onOpen: ()
         <FaBuilding className="text-[#00AEEF] mt-0.5 flex-shrink-0" />
         <div className="min-w-0">
           <h3 className={`text-sm font-bold truncate ${t.text}`}>{b.project_name}</h3>
-          <p className={`text-[11px] truncate ${t.textMuted}`}>{towerLine}</p>
+          <p className={`text-[11px] truncate ${t.textMuted}`}>
+            {towerLine}{wingLine ? `  •  ${wingLine}` : ""}
+          </p>
         </div>
       </div>
 
@@ -398,6 +624,10 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
   // themselves from the refreshed aggregate after every create/delete.
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [activeTower, setActiveTower] = useState("");
+  // "" = all wings. Distinct from the wing whose VALUE is "" (units with no wing),
+  // which is selected as NO_WING below — the two must not collapse, or "show me
+  // the un-winged stock" becomes unexpressible.
+  const [activeWing, setActiveWing] = useState("");
   const [bldMenu, setBldMenu] = useState(false);
 
   const [units, setUnits] = useState<InventoryUnit[]>([]);
@@ -480,8 +710,13 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
     if (!building) return p;
     p.set("project_name", building.project_name);
     if (activeTower) p.set("tower", activeTower);
+    // The wing tab wins over the (now redundant) wing filter field. NO_WING is
+    // sent as an explicit empty value so the API narrows to un-winged stock
+    // rather than treating it as "no wing filter".
+    if (activeWing === NO_WING) p.set("wing", "");
+    else if (activeWing) p.set("wing", activeWing);
+    else if (filters.wing) p.set("wing", filters.wing);
     if (filters.search) p.set("search", filters.search);
-    if (filters.wing) p.set("wing", filters.wing);
     if (filters.floor) p.set("floor", filters.floor);
     if (filters.unit_type) p.set("unit_type", filters.unit_type);
     if (filters.status) p.set("status", filters.status);
@@ -489,7 +724,7 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
     if (filters.max_area) p.set("max_area", filters.max_area);
     p.set("limit", "500");
     return p;
-  }, [building, activeTower, filters]);
+  }, [building, activeTower, activeWing, filters]);
 
   const fetchUnits = useCallback(async () => {
     if (!building) { setUnits([]); setTotal(0); setLoading(false); return; }
@@ -528,12 +763,13 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
   const openBuilding = (b: BuildingSummary) => {
     setOpenKey(b.key);
     setActiveTower(b.towers.length === 1 ? b.towers[0].tower : "");
+    setActiveWing("");
     setFilters({ ...blankFilters });
     setSelected(new Set());
     setViewMode("grid");
   };
   const backToList = () => {
-    setOpenKey(null); setActiveTower(""); setBldMenu(false);
+    setOpenKey(null); setActiveTower(""); setActiveWing(""); setBldMenu(false);
     setFilters({ ...blankFilters }); setSelected(new Set()); setUnits([]); setTotal(0);
     fetchBuildings();
   };
@@ -542,12 +778,54 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
   // they stay right for a tower with more than one page of stock.
   const scope = useMemo(() => {
     if (!building) return null;
+    // A selected wing is the narrowest scope, so it wins over the tower — the
+    // header must report the wing's 105 units, not the tower's 210.
+    if (activeWing) {
+      const want = activeWing === NO_WING ? "" : activeWing;
+      const rows = building.wings.filter(w => w.wing === want && (!activeTower || w.tower === activeTower));
+      if (rows.length) {
+        return rows.reduce((acc, w) => ({
+          ...acc,
+          floors: Math.max(acc.floors, w.floors),
+          total: acc.total + w.total, available: acc.available + w.available,
+          booked: acc.booked + w.booked, on_hold: acc.on_hold + w.on_hold, blocked: acc.blocked + w.blocked,
+        }), { floors: 0, total: 0, available: 0, booked: 0, on_hold: 0, blocked: 0 });
+      }
+    }
     if (!activeTower) return building;
     return building.towers.find(x => x.tower === activeTower) || building;
-  }, [building, activeTower]);
+  }, [building, activeTower, activeWing]);
   const typeChips = useMemo(
     () => (building ? rollupTypes(building.unit_types, activeTower) : []),
     [building, activeTower],
+  );
+
+  // Wings of the CURRENT tower only. With "All towers" selected the wings of
+  // every tower are merged by name, because at that zoom "Wing B" means "the B
+  // wings", and picking one still narrows the stock usefully.
+  const wingsForTower = useMemo(() => {
+    if (!building) return [] as { wing: string; total: number }[];
+    const rows = building.wings.filter(w => !activeTower || w.tower === activeTower);
+    const byWing = rows.reduce<Record<string, number>>((acc, w) => {
+      acc[w.wing] = (acc[w.wing] || 0) + w.total; return acc;
+    }, {});
+    return Object.entries(byWing)
+      .map(([wing, total]) => ({ wing, total }))
+      .sort((a, b) => a.wing.localeCompare(b.wing, undefined, { numeric: true }));
+  }, [building, activeTower]);
+
+  // Switching tower must not leave a wing selected that the new tower has no
+  // stock in — that combination would show an empty grid and look like data loss.
+  useEffect(() => {
+    if (!activeWing) return;
+    const want = activeWing === NO_WING ? "" : activeWing;
+    if (wingsForTower.length && !wingsForTower.some(w => w.wing === want)) setActiveWing("");
+  }, [wingsForTower, activeWing]);
+
+  // The wing the user is effectively inside — for the header tag and prefills.
+  const wingCtx = useMemo(
+    () => (activeWing === NO_WING ? "" : activeWing) || (wingsForTower.length === 1 ? wingsForTower[0].wing : ""),
+    [activeWing, wingsForTower],
   );
   // Floor options for the in-building filter come from the loaded units.
   const floorOptions = useMemo(
@@ -564,10 +842,15 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
 
   // Inside a building the project column is the building you are already in, and
   // the tower column repeats the tab you are on — both are noise that pushes the
-  // flat number off the left of a narrow screen.
+  // flat number off the left of a narrow screen. The wing column drops out on the
+  // same rule, but ONLY when a single wing is selected: with "All wings" showing,
+  // the wing is what tells two identically-numbered flats apart.
   const tableColumns = useMemo(
-    () => COLUMNS.filter(c => c.key !== "project_name" && !(c.key === "tower" && !!towerCtx)),
-    [towerCtx],
+    () => COLUMNS.filter(c =>
+      c.key !== "project_name"
+      && !(c.key === "tower" && !!towerCtx)
+      && !(c.key === "wing" && !!activeWing)),
+    [towerCtx, activeWing],
   );
 
   // ── Sorting (client-side) ──
@@ -630,7 +913,7 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
   // "b-1204 " count as the same number.
   const duplicateFlats = useMemo(() => findDuplicateFlats(units), [units]);
   const isDuplicate = useCallback(
-    (u: InventoryUnit) => isDuplicateFlat(u.flat_no, duplicateFlats),
+    (u: InventoryUnit) => isDuplicateFlat(u, duplicateFlats),
     [duplicateFlats],
   );
   const duplicateCount = useMemo(() => units.filter(isDuplicate).length, [units, isDuplicate]);
@@ -852,6 +1135,14 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
         </div>
       </div>
 
+      {/* ── Which building, tower and wing this screen is showing ── */}
+      <BuildingContextTag
+        ctx={{ project_name: building.project_name, tower: towerCtx, wing: wingCtx }}
+        t={t}
+        meta={`${n0(scope?.floors)} floor${n0(scope?.floors) === 1 ? "" : "s"}  •  ${n0(scope?.total)} unit${n0(scope?.total) === 1 ? "" : "s"}`}
+        className="mb-3"
+      />
+
       {/* ── Building statistics (from the aggregate, never the capped row list) ── */}
       <div className={`flex items-center gap-2 flex-wrap mb-3 p-3 rounded-xl border ${t.innerBlock}`}>
         <Stat label="Total Units" value={n0(scope?.total)} t={t} />
@@ -859,13 +1150,19 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
         <Stat label="Booked" value={n0(scope?.booked)} t={t} hex={STATUS.booked.hex} />
         <Stat label="On Hold" value={n0(scope?.on_hold)} t={t} hex={STATUS.on_hold.hex} />
         <Stat label="Blocked" value={n0(scope?.blocked)} t={t} hex={STATUS.blocked.hex} />
+        {/* Type chips carry the same ink as the grid cells below, so a chip and
+            the flats it counts are recognisably the same thing. */}
         {typeChips.length > 0 && (
           <div className={`flex items-center gap-1.5 flex-wrap pl-3 ml-1 border-l ${t.tableBorder}`}>
-            {typeChips.map(c => (
-              <span key={c.unit_type} className={`text-[10px] font-semibold px-2 py-1 rounded-full border ${t.tableBorder} ${t.textMuted}`}>
-                {c.unit_type}: <b className={t.text}>{c.units}</b>
-              </span>
-            ))}
+            {typeChips.map(c => {
+              const col = getUnitTypeColor(c.unit_type, isDark);
+              return (
+                <span key={c.key} className="text-[10px] font-semibold px-2 py-1 rounded-full border"
+                  style={{ color: col.ink, backgroundColor: col.fill, borderColor: col.border }}>
+                  {col.label}: <b>{c.units}</b>
+                </span>
+              );
+            })}
           </div>
         )}
       </div>
@@ -886,6 +1183,27 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
         </div>
       )}
 
+      {/* ── Wing tabs — only when this tower's stock is actually split by wing.
+          A single un-winged tower gets no row at all, so towers that never used
+          wings look exactly as they did before. ── */}
+      {(wingsForTower.length > 1 || (wingsForTower.length === 1 && !!wingsForTower[0].wing)) && (
+        <div className="flex items-center gap-1.5 flex-wrap mb-3">
+          <button onClick={() => setActiveWing("")}
+            className={`px-3 py-1.5 rounded-full text-[11px] font-bold border ${activeWing === "" ? "bg-[#00AEEF] text-white border-[#00AEEF]" : `${t.tableBorder} ${t.textMuted}`}`}>
+            All wings
+          </button>
+          {wingsForTower.map(w => {
+            const val = w.wing || NO_WING;
+            return (
+              <button key={val} onClick={() => setActiveWing(val)}
+                className={`px-3 py-1.5 rounded-full text-[11px] font-bold border ${activeWing === val ? "bg-[#00AEEF] text-white border-[#00AEEF]" : `${t.tableBorder} ${t.textMuted}`}`}>
+                {wingTabLabel(w.wing)} <span className="opacity-70">({w.total})</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* ── Filters — scoped to this building; no project/tower retyping ── */}
       <div className={`flex items-center gap-2 flex-wrap mb-3 p-2.5 rounded-xl border ${t.innerBlock}`}>
         <input value={filters.search} onChange={e => setFilter({ search: e.target.value })} placeholder="Search flat…" className={`${inputCls} w-48`} />
@@ -893,7 +1211,8 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
           <option value="">All floors</option>
           {floorOptions.map(f => <option key={f} value={String(f)}>{floorLabel(f)}</option>)}
         </select>
-        <input value={filters.wing} onChange={e => setFilter({ wing: e.target.value })} placeholder="Wing" className={`${inputCls} w-20`} />
+        {/* Wing is chosen from the tab row above — it is tower-scoped there, and a
+            free-text box could ask for a wing this tower does not have. */}
         <select value={filters.unit_type} onChange={e => setFilter({ unit_type: e.target.value })} className={`${selectCls} w-28`}>
           <option value="">All types</option>{UNIT_TYPES.map(o => <option key={o} value={o}>{o}</option>)}
         </select>
@@ -934,7 +1253,7 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
       )}
 
       {/* ── Body ── */}
-      <div className="flex-1 overflow-auto rounded-3xl p-3">
+      <div className="flex-1 overflow-auto rounded-3xl p-3  h-[calc(100vh-140px)] overflow-auto">
         {loading && units.length === 0 ? (
           <p className={`text-sm italic ${t.textFaint} p-4`}>Loading inventory…</p>
         ) : units.length === 0 ? (
@@ -952,7 +1271,8 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
             isDuplicate={isDuplicate} isDark={isDark}
           />
         ) : (
-          <GridView floorsGrouped={floorsGrouped} t={t} onCellClick={(id) => setDrawerId(id)} isDuplicate={isDuplicate} isDark={isDark} />
+          <GridView floorsGrouped={floorsGrouped} t={t} onCellClick={(id) => setDrawerId(id)} isDuplicate={isDuplicate} isDark={isDark}
+            ctx={{ project_name: building.project_name, tower: towerCtx, wing: wingCtx }} />
         )}
 
         {units.length > 0 && total > units.length && (
@@ -975,7 +1295,7 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
       )}
       {canManage && (
         <BulkGenerateUnitsModal isOpen={showBulk} onClose={() => setShowBulk(false)} onCreated={afterCreate} user={user} isDark={isDark} t={t}
-          defaults={{ project_name: building.project_name, tower: towerCtx }} />
+          defaults={{ project_name: building.project_name, tower: towerCtx, wing: wingCtx }} />
       )}
       {canManage && (
         <PricingRulesModal isOpen={showPricing} onClose={() => setShowPricing(false)} user={user} isDark={isDark} t={t} />
@@ -994,7 +1314,7 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
       )}
       {isAdminUser && bldDelOpen && (
         <BuildingDeleteModal user={user} isDark={isDark} t={t} onClose={() => setBldDelOpen(false)} onDeleted={afterDelete}
-          defaults={{ project_name: building.project_name, tower: towerCtx, wing: filters.wing }}
+          defaults={{ project_name: building.project_name, tower: towerCtx, wing: wingCtx }}
           building={building} />
       )}
 
@@ -1025,7 +1345,10 @@ function TableView({ columns, colW, sort, sorted, t, allSelected, selected, togg
     // Type gets the same ink as the grid; status keeps its own badge. The two
     // columns read as two systems because they are two systems.
     if (key === "unit_type") return <UnitTypeChip unitType={u.unit_type} isDark={isDark} />;
-    if (key === "status") return <StatusBadge status={u.status} />;
+    // The Status cell keeps the status badge, and gains the tile's own colour as
+    // a leading swatch — so a row in the table and its tile in the grid are
+    // recognisably the same thing, without the badge losing its exact status.
+    if (key === "status") return <TileStateCell u={u} isDark={isDark} />;
     if (key === "linked") return linkChip(u);
     if (key === "carpet_area_sqft") return area(u.carpet_area_sqft);
     if (key === "source") return <span className={`text-[10px] ${t.textMuted}`}>{String(u.source || "").replace("_", " ")}</span>;
@@ -1086,9 +1409,8 @@ function TableView({ columns, colW, sort, sorted, t, allSelected, selected, togg
                 key={u.id}
                 onClick={() => onRowClick(u.id)}
                 title={isDuplicate?.(u) ? "Duplicate flat number" : undefined}
-                className={`border-t ${t.tableBorder} ${t.tableRow} cursor-pointer ${
-                  isDuplicate?.(u) ? "bg-red-500/5" : selected.has(u.id) ? "bg-[#00AEEF]/5" : ""
-                }`}
+                className={`border-t ${t.tableBorder} ${t.tableRow} cursor-pointer ${isDuplicate?.(u) ? "bg-red-500/5" : selected.has(u.id) ? "bg-[#00AEEF]/5" : ""
+                  }`}
               >
                 <td className="px-2 py-1.5" onClick={e => e.stopPropagation()}>
                   <input
@@ -1146,29 +1468,38 @@ function TableView({ columns, colW, sort, sorted, t, allSelected, selected, togg
 // the duplicate.
 function UnitCell({ u, t, isDark, duplicate, onClick }: { u: InventoryUnit; t: any; isDark: boolean; duplicate: boolean; onClick: () => void }) {
   const type = getUnitTypeColor(u.unit_type, isDark);
-  const status = sc(u.status);
+  const tile = getTileAppearance(u, isDark);
+  const stateKey = resolveTileState(u);
+  // On a saturated business tile the unit-type ink (indigo, fuchsia…) is
+  // unreadable, so the type label borrows the tile's own text colour. On the
+  // white Available tile — where the great majority of stock sits, and where
+  // telling a 1BHK from a 3BHK actually matters — the type keeps its own ink.
+  const saturated = stateKey !== null && stateKey !== "available";
+
   return (
     <button
       type="button"
       onClick={onClick}
       title={unitTooltip(u, duplicate)}
-      className="relative w-[68px] h-[52px] rounded-lg flex flex-col items-center justify-center leading-tight transition-transform hover:scale-105"
+      className="relative w-[68px] h-[52px] rounded-lg flex flex-col items-center justify-center leading-tight transition-[transform,box-shadow] hover:scale-105 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00AEEF]"
       style={{
-        backgroundColor: duplicate ? `${DUPLICATE_HEX}14` : type.fill,
-        border: duplicate ? `1.5px solid ${DUPLICATE_HEX}` : `1px solid ${type.border}`,
+        backgroundColor: tile.fill,
+        // A duplicate keeps its red frame, but no longer takes the fill: the
+        // fill is the business state now, and hiding "registration complete"
+        // behind a numbering warning trades a large error for a small one.
+        border: duplicate ? `2px solid ${DUPLICATE_HEX}` : `1px solid ${tile.border}`,
       }}
     >
-      {duplicate && (
-        <FaExclamationTriangle className="absolute top-1 left-1 text-[8px] text-red-500" aria-hidden />
-      )}
-      {/* Status stays legible on a duplicate — it is a separate channel. */}
+      <span className="inline-flex items-center gap-0.5 text-[11px] font-bold" style={{ color: duplicate && !saturated ? DUPLICATE_HEX : tile.text }}>
+        {duplicate && <FaExclamationTriangle className="text-[8px] flex-shrink-0" aria-hidden />}
+        {u.flat_no}
+      </span>
       <span
-        className="absolute top-1 right-1 w-[7px] h-[7px] rounded-full"
-        style={{ backgroundColor: status.hex }}
-        title={status.label}
-      />
-      <span className={`text-[11px] font-bold ${duplicate ? "text-red-500" : t.text}`}>{u.flat_no}</span>
-      <span className="text-[9px] font-bold" style={{ color: type.ink }}>{type.label}</span>
+        className="text-[9px] font-bold"
+        style={{ color: saturated ? tile.text : type.ink, opacity: saturated ? 0.9 : 1 }}
+      >
+        {type.label}
+      </span>
     </button>
   );
 }
@@ -1176,41 +1507,75 @@ function UnitCell({ u, t, isDark, duplicate, onClick }: { u: InventoryUnit; t: a
 // ═══════════════════════════════════════════════════════════════════════════
 // Grid / heatmap view
 // ═══════════════════════════════════════════════════════════════════════════
-function GridView({ floorsGrouped, t, onCellClick, isDuplicate, isDark }: { floorsGrouped: [number, InventoryUnit[]][]; t: any; onCellClick: (id: number) => void; isDuplicate?: (u: InventoryUnit) => boolean; isDark: boolean }) {
+function GridView({ floorsGrouped, t, onCellClick, isDuplicate, isDark, ctx }: { floorsGrouped: [number, InventoryUnit[]][]; t: any; onCellClick: (id: number) => void; isDuplicate?: (u: InventoryUnit) => boolean; isDark: boolean; ctx?: BuildingContext }) {
   const anyDuplicate = floorsGrouped.some(([, us]) => us.some(u => isDuplicate?.(u)));
+  const allUnits = floorsGrouped.flatMap(([, us]) => us);
+  // The five business states are always listed, in their priority order — the
+  // legend is a key to the scheme, and a colour missing from it because today's
+  // filter happens to exclude it is worse than a row of five.
+  // The ordinary statuses below it are listed only when a tile actually falls
+  // back to one, so the legend does not claim colours that are not on screen.
+  const fallbackStatusesPresent = [...new Set(
+    allUnits.filter(u => resolveTileState(u) === null).map(u => u.status),
+  )].sort();
   // Only the types actually standing in this building — a legend listing every
   // configuration the system knows about would be longer than most towers' stock.
-  const typesPresent = [...new Set(floorsGrouped.flatMap(([, us]) => us.map(u => u.unit_type)))]
-    .filter(Boolean)
-    .sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true }));
+  // Deduped on the NORMALISED key, so a tower holding both "2BHK" and "2 BHK"
+  // gets one swatch, not two identically-coloured ones.
+  const typesPresent = [...new Map(
+    floorsGrouped.flatMap(([, us]) => us.map(u => u.unit_type))
+      .filter(Boolean)
+      .map(ut => [normalizeUnitType(ut), unitTypeLabel(ut)] as [string, string]),
+  ).entries()].sort((a, b) => a[1].localeCompare(b[1], undefined, { numeric: true }));
 
   return (
     <div>
+      {/* The matrix repeats the same flat numbers for every wing, so it says which
+          one these floors belong to before the first row. */}
+      {ctx && <BuildingContextTag ctx={ctx} t={t} compact className="mb-3" />}
+
       {/* ── Legend: two independent channels, plus the override ── */}
       <div className={`flex items-start gap-x-6 gap-y-2 flex-wrap mb-3 pb-3 border-b ${t.tableBorder}`}>
         {typesPresent.length > 0 && (
           <div className="flex items-center gap-2 flex-wrap">
             <span className={`text-[9px] font-bold uppercase tracking-widest ${t.textFaint}`}>Unit types</span>
-            {typesPresent.map(ut => {
-              const c = getUnitTypeColor(ut, isDark);
+            {typesPresent.map(([key, label]) => {
+              const c = getUnitTypeColor(key, isDark);
               return (
-                <span key={ut} className="inline-flex items-center gap-1.5 text-[10px]">
+                <span key={key} className="inline-flex items-center gap-1.5 text-[10px]">
                   <span className="w-3 h-3 rounded" style={{ backgroundColor: c.fill, border: `1px solid ${c.ink}` }} />
-                  <span className={t.textMuted}>{ut}</span>
+                  <span className="font-semibold" style={{ color: c.ink }}>{label}</span>
                 </span>
               );
             })}
           </div>
         )}
+        {/* The tile scheme itself — same swatch treatment as the tiles, read from
+            the same table, so the legend cannot drift from the grid. */}
         <div className="flex items-center gap-2 flex-wrap">
-          <span className={`text-[9px] font-bold uppercase tracking-widest ${t.textFaint}`}>Status</span>
-          {STATUS_KEYS.map(s => (
-            <span key={s} className="inline-flex items-center gap-1.5 text-[10px]">
-              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: STATUS[s].hex }} />
-              <span className={t.textMuted}>{STATUS[s].label}</span>
-            </span>
-          ))}
+          <span className={`text-[9px] font-bold uppercase tracking-widest ${t.textFaint}`}>Tile colour</span>
+          {TILE_STATE_KEYS.map(k => {
+            const c = getTileStateColor(k, isDark);
+            return (
+              <span key={k} className="inline-flex items-center gap-1.5 text-[10px]">
+                <span className="w-3 h-3 rounded" style={{ backgroundColor: c.fill, border: `1px solid ${c.border}` }} />
+                <span className={t.textMuted}>{c.label}</span>
+              </span>
+            );
+          })}
         </div>
+
+        {fallbackStatusesPresent.length > 0 && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={`text-[9px] font-bold uppercase tracking-widest ${t.textFaint}`}>Other status</span>
+            {fallbackStatusesPresent.map(s => (
+              <span key={s} className="inline-flex items-center gap-1.5 text-[10px]">
+                <span className="w-3 h-3 rounded" style={{ backgroundColor: `${sc(s).hex}26`, border: `1px solid ${sc(s).hex}80` }} />
+                <span className={t.textMuted}>{sc(s).label}</span>
+              </span>
+            ))}
+          </div>
+        )}
         {anyDuplicate && (
           <div className="flex items-center gap-2 flex-wrap">
             <span className={`text-[9px] font-bold uppercase tracking-widest ${t.textFaint}`}>Special</span>

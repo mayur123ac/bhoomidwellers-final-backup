@@ -28,6 +28,7 @@ import {
   FaChevronDown, FaChevronRight, FaExclamationTriangle, FaTable, FaThLarge,
 } from "react-icons/fa";
 import ProjectTowerPicker from "./ProjectTowerPicker";
+import BuildingContextTag from "./BuildingContextTag";
 
 const STATUS_OPTS: { label: string; value: string }[] = [
   { label: "Available", value: "available" },
@@ -506,9 +507,10 @@ export default function BulkGenerateUnitsModal({ isOpen, onClose, onCreated, use
                       t={t}
                       projectName={config.project_name}
                       towerName={config.tower}
+                      wingName={config.wing}
+                      withWing
                       onChange={patch => setC(patch as any)}
                     />
-                    <div><label className={labelCls}>Wing</label><input value={config.wing} onChange={e => setC({ wing: e.target.value })} className={inputCls} placeholder="Optional" /></div>
                     <div>
                       <label className={labelCls}>Default Status</label>
                       <select value={config.default_status} onChange={e => setC({ default_status: e.target.value })} className={selectCls}>
@@ -690,6 +692,13 @@ export default function BulkGenerateUnitsModal({ isOpen, onClose, onCreated, use
                     <div className={`mt-4 pt-4 border-t ${t.tableBorder}`}>
                       <p className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${t.textMuted}`}>Generated Pattern</p>
                       <p className={`text-[11px] mb-3 ${t.textFaint}`}>↓ the positions above, repeated on every floor ↓</p>
+                      {/* Which building these flats land in — the matrix shows the
+                          same numbers for every wing, so the tag is what tells
+                          Wing B's preview apart from Wing C's. */}
+                      <BuildingContextTag
+                        ctx={{ project_name: config.project_name, tower: config.tower, wing: config.wing }}
+                        t={t} compact className="mb-3"
+                      />
                       <Matrix rs={livePreview} limit={6} />
                     </div>
                   )}
@@ -699,6 +708,12 @@ export default function BulkGenerateUnitsModal({ isOpen, onClose, onCreated, use
               {/* ── STEP 2: PREVIEW ── */}
               {step === "preview" && (
                 <>
+                  <BuildingContextTag
+                    ctx={{ project_name: config.project_name, tower: config.tower, wing: config.wing }}
+                    t={t}
+                    meta={`${numFloors} floor${numFloors === 1 ? "" : "s"}  •  ${rows.length} unit${rows.length === 1 ? "" : "s"}`}
+                    className="mb-3"
+                  />
                   <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
                     <p className={`text-[11px] ${t.textFaint}`}>
                       {existingCount > 0

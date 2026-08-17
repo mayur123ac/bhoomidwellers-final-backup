@@ -116,6 +116,108 @@ describe("flat position pattern", () => {
   });
 });
 
+// ── Tower / wing as building identity ───────────────────────────────────────
+// The requirement these pin down: wing must reach the generated rows as its own
+// column, and must NOT be smuggled into flat_no unless the numbering pattern
+// explicitly asks for it. Tower must never appear in flat_no at all.
+describe("tower and wing", () => {
+  /** Configure a 12-floor / 7-position tower in the given wing. */
+  async function configureWinged(wing: string) {
+    render(<BulkGenerateUnitsModal isOpen onClose={() => {}} user={user} isDark={false} t={t}
+      defaults={{ project_name: "Colossal", tower: "A", wing }} />);
+    await waitFor(() => expect(screen.getByPlaceholderText("e.g. 12")).toBeTruthy());
+    fireEvent.change(screen.getByPlaceholderText("e.g. 12"), { target: { value: "12" } });
+
+    const types = ["2BHK", "2BHK", "1BHK", "1BHK", "1BHK", "2BHK", "1BHK"];   // §11
+    while (screen.getAllByPlaceholderText("01").length < types.length) {
+      fireEvent.click(screen.getByText("Add Position"));
+    }
+    const typeSelects = screen.getAllByDisplayValue("2BHK");
+    const carpets = screen.getAllByPlaceholderText("650");
+    types.forEach((type, i) => {
+      fireEvent.change(typeSelects[i], { target: { value: type } });
+      fireEvent.change(carpets[i], { target: { value: "650" } });
+    });
+  }
+
+  /** Pick a numbering preset by its pattern — the dropdown's option values. */
+  const selectPattern = (pattern: string) => {
+    const select = screen.getAllByRole("combobox").find(s =>
+      Array.from((s as HTMLSelectElement).options).some(o => o.value === pattern),
+    ) as HTMLSelectElement;
+    fireEvent.change(select, { target: { value: pattern } });
+  };
+
+  const submittedUnits = () => {
+    const call = fetchMock.mock.calls.find(c => String(c[0]).includes("bulk-generate"))!;
+    return JSON.parse((call[1] as any).body).units;
+  };
+
+  it("keeps wing out of flat_no by default, and carries it as its own field", async () => {
+    await configureWinged("B");
+    fireEvent.click(screen.getByText(/Generate Preview/));
+    await waitFor(() => expect(screen.getByText(/Confirm & Create 84 Units/)).toBeTruthy());
+    fireEvent.click(screen.getByText(/Confirm & Create 84 Units/));
+
+    await waitFor(() => expect(fetchMock.mock.calls.some(c => String(c[0]).includes("bulk-generate"))).toBe(true));
+    const units = submittedUnits();
+
+    expect(units).toHaveLength(84);                              // 12 × 7
+    // Identity travels in its own columns…
+    expect(units.every((u: any) => u.project_name === "Colossal" && u.tower === "A" && u.wing === "B")).toBe(true);
+    // …and NOT inside the number, because the default pattern has no {WING}.
+    expect(units.map((u: any) => u.flat_no).slice(0, 7))
+      .toEqual(["101", "102", "103", "104", "105", "106", "107"]);
+    expect(units.some((u: any) => String(u.flat_no).includes("A"))).toBe(false);
+    expect(units.some((u: any) => String(u.flat_no).includes("B"))).toBe(false);
+
+    // §11: the pattern repeats down the floors, unaffected by the wing.
+    const floor12 = units.filter((u: any) => u.floor === 12).map((u: any) => u.flat_no);
+    expect(floor12).toEqual(["1201", "1202", "1203", "1204", "1205", "1206", "1207"]);
+    const types12 = units.filter((u: any) => u.floor === 12).map((u: any) => u.unit_type);
+    expect(types12).toEqual(["2BHK", "2BHK", "1BHK", "1BHK", "1BHK", "2BHK", "1BHK"]);
+  });
+
+  it("puts the wing into flat_no when the numbering pattern asks for it", async () => {
+    await configureWinged("B");
+    selectPattern("{WING}-{FLOOR:02}{UNIT:02}");   // the "B-1204" preset
+    fireEvent.click(screen.getByText(/Generate Preview/));
+    await waitFor(() => expect(screen.getByText(/Confirm & Create 84 Units/)).toBeTruthy());
+    fireEvent.click(screen.getByText(/Confirm & Create 84 Units/));
+
+    await waitFor(() => expect(fetchMock.mock.calls.some(c => String(c[0]).includes("bulk-generate"))).toBe(true));
+    const units = submittedUnits();
+
+    expect(units.filter((u: any) => u.floor === 1).map((u: any) => u.flat_no))
+      .toEqual(["B-0101", "B-0102", "B-0103", "B-0104", "B-0105", "B-0106", "B-0107"]);
+    // Even then, wing stays a real column — the number is a label, not the data.
+    expect(units.every((u: any) => u.wing === "B")).toBe(true);
+  });
+
+  it("drops the wing token cleanly when the tower has no wing", async () => {
+    await configureWinged("");
+    selectPattern("{WING}-{FLOOR:02}{UNIT:02}");
+    fireEvent.click(screen.getByText(/Generate Preview/));
+    await waitFor(() => expect(screen.getByText(/Confirm & Create 84 Units/)).toBeTruthy());
+    fireEvent.click(screen.getByText(/Confirm & Create 84 Units/));
+
+    await waitFor(() => expect(fetchMock.mock.calls.some(c => String(c[0]).includes("bulk-generate"))).toBe(true));
+    const units = submittedUnits();
+
+    // "{WING}-{FLOOR:02}{UNIT:02}" must not leave a leading separator behind.
+    expect(units.filter((u: any) => u.floor === 1).map((u: any) => u.flat_no))
+      .toEqual(["0101", "0102", "0103", "0104", "0105", "0106", "0107"]);
+    expect(units.every((u: any) => u.wing === null)).toBe(true);
+  });
+
+  it("shows the building context above the preview matrix", async () => {
+    await configureWinged("B");
+    fireEvent.click(screen.getByText(/Generate Preview/));
+    await waitFor(() => expect(screen.getByText(/Confirm & Create 84 Units/)).toBeTruthy());
+    expect(screen.getAllByTitle(/^Colossal\s+•\s+Tower A\s+•\s+Wing B$/).length).toBeGreaterThan(0);
+  });
+});
+
 describe("position validation", () => {
   it("refuses a duplicate position", async () => {
     await configure(["2BHK", "2BHK"]);

@@ -63,8 +63,47 @@ describe("status colours are untouched", () => {
 describe("duplicate helpers", () => {
   it("finds every conflicting number, case- and space-insensitively", () => {
     const dups = findDuplicateFlats([{ flat_no: "101" }, { flat_no: " 101 " }, { flat_no: "102" }]);
-    expect(isDuplicateFlat("101", dups)).toBe(true);
-    expect(isDuplicateFlat("102", dups)).toBe(false);
+    expect(isDuplicateFlat({ flat_no: "101" }, dups)).toBe(true);
+    expect(isDuplicateFlat({ flat_no: "102" }, dups)).toBe(false);
+  });
+
+  // §9. The DB's unique index keys on (project, tower, COALESCE(wing,''), floor,
+  // flat_no) — so the same number in two wings is legal, correct data, and
+  // flagging it was a false positive that made the warning untrustworthy.
+  it("does not flag the same number in two different wings", () => {
+    const dups = findDuplicateFlats([
+      { flat_no: "101", tower: "A", wing: "A" },
+      { flat_no: "101", tower: "A", wing: "B" },
+    ]);
+    expect(isDuplicateFlat({ flat_no: "101", tower: "A", wing: "A" }, dups)).toBe(false);
+    expect(isDuplicateFlat({ flat_no: "101", tower: "A", wing: "B" }, dups)).toBe(false);
+  });
+
+  it("does not flag the same number in two different towers", () => {
+    const dups = findDuplicateFlats([
+      { flat_no: "101", tower: "A", wing: "" },
+      { flat_no: "101", tower: "B", wing: "" },
+    ]);
+    expect(isDuplicateFlat({ flat_no: "101", tower: "A", wing: "" }, dups)).toBe(false);
+  });
+
+  it("still flags a repeat inside one tower+wing, across floors", () => {
+    // Floor is deliberately outside the scope: the index allows this, and it is
+    // the numbering mistake the warning exists to catch.
+    const dups = findDuplicateFlats([
+      { flat_no: "101", tower: "A", wing: "A" },
+      { flat_no: "101", tower: "A", wing: "A" },
+    ]);
+    expect(isDuplicateFlat({ flat_no: "101", tower: "A", wing: "A" }, dups)).toBe(true);
+  });
+
+  it("treats a null wing and an empty wing as the same wing", () => {
+    // COALESCE(wing,'') in the index means these are one scope, not two.
+    const dups = findDuplicateFlats([
+      { flat_no: "101", tower: "A", wing: null },
+      { flat_no: "101", tower: "A", wing: "" },
+    ]);
+    expect(isDuplicateFlat({ flat_no: "101", tower: "A", wing: null }, dups)).toBe(true);
   });
 });
 
@@ -141,29 +180,35 @@ describe("grid cell — type, status and duplicate coexist", () => {
     ["204", "3BHK", "On Hold", true],
   ];
 
+  // NOTE: the tile's FILL now carries the business state (white/blue/grey/
+  // orange/red), not the unit type — see InventoryManagementView.tilecolors.
+  // What survives from the old two-channel design is that the type stays
+  // readable on the tile and the duplicate frame stays independent of both.
   for (const [flat, type, status, duplicate] of cases) {
-    it(`${duplicate ? "duplicate " : ""}${type} + ${status} shows all three signals`, async () => {
+    it(`${duplicate ? "duplicate " : ""}${type} + ${status} keeps type, state and duplicate legible`, async () => {
       await openGrid();
       const c = cell(flat);
 
-      // 1. type label, inked with that type's colour
+      // 1. the type is still named on the tile
       const label = within(c).getByText(type);
       expect(label.style.color).toBeTruthy();
 
-      // 2. status survives — as its own dot, whatever the type or duplicate state
-      expect(statusDot(c, status)).toBeTruthy();
+      // 2. the state reaches the tooltip, whatever the type or duplicate state
+      expect(c.title).toContain(status);
 
       // 3. duplicate framing, only where it belongs
       expect(framedRed(c)).toBe(duplicate);
       expect(/^Duplicate flat number/.test(c.title)).toBe(duplicate);
-      if (duplicate) expect(c.title).toContain(`${flat} · ${type} · ${status}`);
+      if (duplicate) expect(c.title).toContain(`${flat} · ${type}`);
     });
   }
 
-  it("keeps each unit type's fill distinct within one floor", async () => {
+  it("keeps the type label's ink distinct per type on available tiles", async () => {
+    // Available is the white tile, so the type keeps its own ink there — which
+    // is where telling 1BHK from 3BHK at a glance actually matters.
     await openGrid();
-    const fills = ["101", "102", "103"].map(f => cell(f).style.backgroundColor);
-    expect(new Set(fills).size).toBe(3);
+    const inks = ["101", "102", "103"].map(f => within(cell(f)).getByText(/BHK/).style.color);
+    expect(new Set(inks).size).toBe(3);
   });
 
   it("does not let the duplicate frame overwrite the type ink", async () => {
@@ -175,10 +220,10 @@ describe("grid cell — type, status and duplicate coexist", () => {
 });
 
 describe("legend", () => {
-  it("separates unit types, status and the duplicate warning", async () => {
+  it("separates unit types, tile colour and the duplicate warning", async () => {
     await openGrid();
     expect(screen.getByText("Unit types")).toBeTruthy();
-    expect(screen.getByText("Status")).toBeTruthy();
+    expect(screen.getByText("Tile colour")).toBeTruthy();
     expect(screen.getByText("Special")).toBeTruthy();
     expect(screen.getByText("Duplicate flat number")).toBeTruthy();
   });

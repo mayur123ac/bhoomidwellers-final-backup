@@ -87,7 +87,7 @@ export async function GET(req: NextRequest) {
         COUNT(*) FILTER (WHERE status = 'on_hold')::int                AS on_hold,
         COUNT(*) FILTER (WHERE status = 'blocked')::int                AS blocked`;
 
-      const [projects, towers, types] = await Promise.all([
+      const [projects, towers, types, wings] = await Promise.all([
         query(
           `SELECT LOWER(TRIM(project_name)) AS key,
                   MIN(project_name)          AS project_name,
@@ -116,12 +116,31 @@ export async function GET(req: NextRequest) {
             GROUP BY LOWER(TRIM(project_name)), tower, unit_type
             ORDER BY units DESC`,
         ),
+        // Wings, per tower. There is no inventory_wings table — the 2026-08-04
+        // parity migration deliberately left wing as free text on the unit, because
+        // live data spells one wing several ways ("B", "B wing") and the unit-level
+        // unique index already keys on it. So the set of wings a tower HAS is a
+        // property of its stock, discoverable only by grouping the units.
+        //
+        // A NULL and an empty wing are the same thing (the unique index collapses
+        // them with COALESCE), so they fold into one "" row here rather than
+        // offering the user two indistinguishable blank options.
+        query(
+          `SELECT LOWER(TRIM(project_name)) AS key, tower,
+                  COALESCE(NULLIF(TRIM(wing), ''), '') AS wing,
+                  COUNT(DISTINCT floor)::int AS floors,
+                  ${statusCols}
+             ${live}
+            GROUP BY LOWER(TRIM(project_name)), tower, COALESCE(NULLIF(TRIM(wing), ''), '')
+            ORDER BY wing ASC`,
+        ),
       ]);
 
       const data = (projects as any[]).map((p) => ({
         ...p,
         towers: (towers as any[]).filter((r) => r.key === p.key),
         unit_types: (types as any[]).filter((r) => r.key === p.key),
+        wings: (wings as any[]).filter((r) => r.key === p.key),
       }));
 
       return NextResponse.json({ success: true, data, total: data.length }, { status: 200 });
@@ -140,12 +159,21 @@ export async function GET(req: NextRequest) {
 
     for (const [param, col] of [
       ["tower", "tower"],
-      ["wing", "wing"],
       ["unit_type", "unit_type"],
       ["status", "status"],
     ] as const) {
       const v = searchParams.get(param);
       if (v) where.push(`${col} = ${push(v)}`);
+    }
+
+    // Wing is the one filter where "present but empty" is a real question —
+    // "show me the units that have no wing" — and it is distinct from omitting
+    // the parameter, which means "any wing". NULL and '' are the same absence
+    // here, matching COALESCE(wing,'') in the unique index.
+    const wing = searchParams.get("wing");
+    if (wing !== null) {
+      if (wing.trim() === "") where.push(`COALESCE(NULLIF(TRIM(wing), ''), '') = ''`);
+      else where.push(`wing = ${push(wing)}`);
     }
 
     const floor = searchParams.get("floor");
@@ -168,9 +196,13 @@ export async function GET(req: NextRequest) {
 
     const sortBy = searchParams.get("sort_by") || "";
     const sortDir = (searchParams.get("sort_dir") || "asc").toLowerCase() === "desc" ? "DESC" : "ASC";
-    const orderSql = SORTABLE.has(sortBy)
-      ? `ORDER BY ${sortBy} ${sortDir} NULLS LAST, id ASC`
-      : `ORDER BY tower ASC, wing ASC NULLS FIRST, floor ASC, flat_no ASC`;
+    // Emitted twice — once inside the filtered subquery, once outside it — so the
+    // prefix is a parameter. `id` and `created_at` exist on the joined booking
+    // tables too, so the outer copy MUST be qualified or Postgres rejects it.
+    const orderBy = (p: string) => (SORTABLE.has(sortBy)
+      ? `ORDER BY ${p}${sortBy} ${sortDir} NULLS LAST, ${p}id ASC`
+      : `ORDER BY ${p}tower ASC, ${p}wing ASC NULLS FIRST, ${p}floor ASC, ${p}flat_no ASC`);
+    const orderSql = orderBy("");
 
     const limit = Math.min(Number(searchParams.get("limit") ?? 100), 500);
     const offset = Math.max(0, Number(searchParams.get("offset") ?? 0));
@@ -182,8 +214,28 @@ export async function GET(req: NextRequest) {
 
     const limP = push(limit);
     const offP = push(offset);
+    // Registration and disbursement state, for the floor matrix's tile colours.
+    //
+    // Neither lives on the unit: registration is on booking_registration_details
+    // and disbursement on booking_loan_details, both reachable only through
+    // inventory_units.booking_id. Verified 1:1 per booking, so these LEFT JOINs
+    // cannot multiply rows — but they are applied AFTER the filtered, paginated
+    // subquery anyway, so the row count and paging stay exactly as they were.
+    //
+    // Read-only enrichment: a unit with no booking simply gets NULLs, which the
+    // UI reads as "no registration state", not as "pending".
     const rows = await query(
-      `SELECT * FROM inventory_units ${whereSql} ${orderSql} LIMIT ${limP} OFFSET ${offP}`,
+      `SELECT u.*,
+              rd.registration_status,
+              rd.actual_registration_date,
+              ld.disbursement_status,
+              ld.actual_disbursement_date
+         FROM (
+           SELECT * FROM inventory_units ${whereSql} ${orderSql} LIMIT ${limP} OFFSET ${offP}
+         ) u
+         LEFT JOIN booking_registration_details rd ON rd.booking_id = u.booking_id
+         LEFT JOIN booking_loan_details        ld ON ld.booking_id = u.booking_id
+        ${orderBy("u.")}`,
       vals,
     );
 
