@@ -65,12 +65,80 @@ export async function GET(req: NextRequest) {
     await revertExpiredHolds();
     const { searchParams } = new URL(req.url);
 
+    // ── view=buildings — the building-first landing page's aggregate ──
+    // Deliberately an extra MODE of this route rather than a new endpoint: it
+    // reads the same inventory_units rows under the same session gate, it is just
+    // grouped instead of listed. The landing page cannot use the row list — that
+    // is capped at 500 units, so its counts would silently be wrong for any
+    // portfolio bigger than the cap.
+    //
+    // Grouping is on LOWER(TRIM(project_name)), matching the unique index on
+    // inventory_projects, so a legacy "Malad " and "Malad" collapse into the one
+    // building card rather than showing as two. project_id is carried along for
+    // routing/pricing, but the NAME stays the grouping key because it is the
+    // column that is populated on every row (project_id is NULL on pre-backfill
+    // stock) and the one booking sync matches on.
+    if (searchParams.get("view") === "buildings") {
+      const live = `FROM inventory_units WHERE deleted_at IS NULL`;
+      const statusCols = `
+        COUNT(*)::int                                                  AS total,
+        COUNT(*) FILTER (WHERE status = 'available')::int              AS available,
+        COUNT(*) FILTER (WHERE status IN ('booked','registered'))::int AS booked,
+        COUNT(*) FILTER (WHERE status = 'on_hold')::int                AS on_hold,
+        COUNT(*) FILTER (WHERE status = 'blocked')::int                AS blocked`;
+
+      const [projects, towers, types] = await Promise.all([
+        query(
+          `SELECT LOWER(TRIM(project_name)) AS key,
+                  MIN(project_name)          AS project_name,
+                  MAX(project_id)            AS project_id,
+                  COUNT(DISTINCT floor)::int AS floors,
+                  COUNT(DISTINCT tower)::int AS tower_count,
+                  ${statusCols}
+             ${live}
+            GROUP BY LOWER(TRIM(project_name))
+            ORDER BY MIN(project_name) ASC`,
+        ),
+        query(
+          `SELECT LOWER(TRIM(project_name)) AS key,
+                  tower,
+                  MAX(tower_id)              AS tower_id,
+                  COUNT(DISTINCT floor)::int AS floors,
+                  ${statusCols}
+             ${live}
+            GROUP BY LOWER(TRIM(project_name)), tower
+            ORDER BY tower ASC`,
+        ),
+        query(
+          `SELECT LOWER(TRIM(project_name)) AS key, tower, unit_type,
+                  COUNT(*)::int AS units
+             ${live}
+            GROUP BY LOWER(TRIM(project_name)), tower, unit_type
+            ORDER BY units DESC`,
+        ),
+      ]);
+
+      const data = (projects as any[]).map((p) => ({
+        ...p,
+        towers: (towers as any[]).filter((r) => r.key === p.key),
+        unit_types: (types as any[]).filter((r) => r.key === p.key),
+      }));
+
+      return NextResponse.json({ success: true, data, total: data.length }, { status: 200 });
+    }
+
     const where: string[] = ["deleted_at IS NULL"];
     const vals: any[] = [];
     const push = (v: any) => { vals.push(v); return `$${vals.length}`; };
 
+    // project_name is matched case/space-insensitively, the same way the building
+    // aggregate (view=buildings) and inventory_projects' unique index group it.
+    // An exact match would drop a legacy "Malad " row from the very building card
+    // whose counts already include it.
+    const projectName = searchParams.get("project_name");
+    if (projectName) where.push(`LOWER(TRIM(project_name)) = LOWER(TRIM(${push(projectName)}))`);
+
     for (const [param, col] of [
-      ["project_name", "project_name"],
       ["tower", "tower"],
       ["wing", "wing"],
       ["unit_type", "unit_type"],

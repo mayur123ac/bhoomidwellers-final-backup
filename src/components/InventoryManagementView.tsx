@@ -9,6 +9,7 @@ import {
   FaPlus, FaTable, FaThLarge, FaTimes, FaSort, FaSortUp, FaSortDown,
   FaHistory, FaExternalLinkAlt, FaChevronDown, FaLayerGroup, FaPen,
   FaTrash, FaExclamationTriangle, FaBuilding, FaLock, FaTags, FaHandshake, FaChartBar,
+  FaArrowLeft, FaArrowRight,
 } from "react-icons/fa";
 import { formatCurrencyDisplay } from "@/lib/currency";
 import AddUnitModal from "./AddUnitModal";
@@ -54,7 +55,123 @@ const STATUS: Record<string, SC> = {
   cancelled: { label: "Cancelled", text: "text-red-500", border: "border-red-500/30", bg: "bg-red-500/10", hex: "#ef4444" },
 };
 const sc = (s: string): SC => STATUS[s] || { label: s, text: "text-gray-500", border: "border-gray-400/30", bg: "bg-gray-500/10", hex: "#9ca3af" };
+/** Canonical accessor for a status' colours. `sc` remains as the short alias. */
+export const getStatusColor = sc;
 const STATUS_KEYS = Object.keys(STATUS);
+
+// Duplicate-flat-number red. Deliberately the same red as `cancelled`: the palette
+// already reads red as "something is wrong here". A duplicate outranks the unit-type
+// tint on a cell, but never replaces the status indicator — see UnitCell.
+const DUPLICATE_HEX = "#ef4444";
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Unit-type colours — a SECOND, independent visual channel
+// ═══════════════════════════════════════════════════════════════════════════
+// Type and status answer different questions ("what is this flat?" vs "can I sell
+// it?"), so they get different channels rather than competing for one: the type
+// owns the cell's fill, the status owns a dot/badge on top of it. Overwriting one
+// with the other is what made the old grid unable to show both at once.
+//
+// Each entry is the INK — the colour used for text and border. Fills are derived
+// from it at low alpha, so a type is one value here, not three scattered ones.
+// `dark` is a lightened ink for dark surfaces, because a 45%-lightness ink that
+// reads well on white is unreadable on #0D0D12.
+type UnitTypeColor = { ink: string; darkInk: string };
+
+// Keys are NORMALISED (upper-case, spaces stripped) because live data spells the
+// same type three ways — "2 BHK", "2BHK", "1Bhk" all exist in inventory_units.
+const UNIT_TYPE_COLORS: Record<string, UnitTypeColor> = {
+  "1RK": { ink: "#64748b", darkInk: "#94a3b8" },       // slate
+  "1BHK": { ink: "#0d9488", darkInk: "#2dd4bf" },      // teal
+  "1.5BHK": { ink: "#0284c7", darkInk: "#38bdf8" },    // sky
+  "2BHK": { ink: "#4f46e5", darkInk: "#818cf8" },      // indigo
+  "2.5BHK": { ink: "#7c3aed", darkInk: "#a78bfa" },    // violet
+  "3BHK": { ink: "#c026d3", darkInk: "#e879f9" },      // fuchsia
+  "3.5BHK": { ink: "#db2777", darkInk: "#f472b6" },    // pink
+  "4BHK": { ink: "#ea580c", darkInk: "#fb923c" },      // orange
+  "PENTHOUSE": { ink: "#a16207", darkInk: "#eab308" }, // yellow
+  "SHOP": { ink: "#047857", darkInk: "#34d399" },      // emerald
+  "OFFICE": { ink: "#0369a1", darkInk: "#7dd3fc" },    // deep sky
+};
+
+export const normalizeUnitType = (v: unknown) => String(v ?? "").toUpperCase().replace(/\s+/g, "").trim();
+
+// Deterministic fallback for a type nobody has assigned a colour to — a new
+// configuration must still be distinguishable in the grid the day it is created,
+// without an edit here. Saturation and lightness are FIXED so a generated colour
+// lands in the same professional register as the curated ones; only the hue moves.
+const hashHue = (s: string) => {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360;
+  return h;
+};
+const hslToHex = (h: number, s: number, l: number) => {
+  const a = (s / 100) * Math.min(l / 100, 1 - l / 100);
+  const f = (n: number) => {
+    const k = (n + h / 30) % 12;
+    const v = l / 100 - a * Math.max(-1, Math.min(k - 3, Math.min(9 - k, 1)));
+    return Math.round(255 * v).toString(16).padStart(2, "0");
+  };
+  return `#${f(0)}${f(8)}${f(4)}`;
+};
+
+/**
+ * The one place a unit type becomes a colour. Everything that paints a type —
+ * grid cell, table chip, legend — reads it from here, so adding a type is one
+ * line above and nothing else.
+ */
+export function getUnitTypeColor(unitType: string, isDark = false): { ink: string; fill: string; border: string; label: string } {
+  const key = normalizeUnitType(unitType);
+  const found = UNIT_TYPE_COLORS[key];
+  const ink = found
+    ? (isDark ? found.darkInk : found.ink)
+    : hslToHex(hashHue(key || "?"), 42, isDark ? 65 : 42);
+  return {
+    ink,
+    fill: `${ink}1A`,      // 10% — a tint, never a block of colour
+    border: `${ink}59`,    // 35%
+    label: String(unitType ?? "").trim() || "—",
+  };
+}
+
+// ── Duplicate flat numbers (detection logic unchanged — only relocated) ──
+// Compared case- and space-insensitively, so "B-1204" and "b-1204 " are one number.
+const normFlat = (v: unknown) => String(v ?? "").trim().toLowerCase();
+
+/** Flat numbers that occur more than once in the given set of units. */
+export function findDuplicateFlats(units: { flat_no?: string | null }[]): Set<string> {
+  const seen = new Map<string, number>();
+  for (const u of units) {
+    const k = normFlat(u.flat_no);
+    if (!k) continue;
+    seen.set(k, (seen.get(k) || 0) + 1);
+  }
+  return new Set([...seen.entries()].filter(([, n]) => n > 1).map(([k]) => k));
+}
+
+/** Is this flat number one of the duplicates found above? */
+export const isDuplicateFlat = (flatNo: unknown, duplicates: Set<string>) => duplicates.has(normFlat(flatNo));
+
+/** Tooltip shared by both views: "Duplicate flat number — 101 · 2BHK · Available". */
+const unitTooltip = (u: InventoryUnit, duplicate: boolean) =>
+  [
+    duplicate ? "Duplicate flat number —" : null,
+    `${u.flat_no} · ${u.unit_type} · ${sc(u.status).label}`,
+    u.wing ? `· Wing ${u.wing}` : null,
+  ].filter(Boolean).join(" ");
+
+/** Type pill used in the table's Type column and in the legend. */
+function UnitTypeChip({ unitType, isDark }: { unitType: string; isDark: boolean }) {
+  const c = getUnitTypeColor(unitType, isDark);
+  return (
+    <span
+      className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold border max-w-full truncate"
+      style={{ color: c.ink, backgroundColor: c.fill, borderColor: c.border }}
+    >
+      {c.label}
+    </span>
+  );
+}
 
 
 // ── Booking protection (mirrors lib/inventoryDelete.isBookingProtected) ──
@@ -121,16 +238,174 @@ interface Props {
   onOpenBooking?: (bookingId: number) => void;
 }
 
+// project_name / tower stay in the filter shape because the fetch still sends
+// them — but inside a building they come from the opened building, not from a
+// box the user has to retype.
 const blankFilters = { search: "", project_name: "", tower: "", wing: "", floor: "", unit_type: "", status: "", min_area: "", max_area: "" };
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Building level (GET /api/inventory?view=buildings)
+// ═══════════════════════════════════════════════════════════════════════════
+// A "building" is a PROJECT — the parent row in inventory_projects — and its
+// towers are the level below it, exactly as the schema and the FK chain
+// (inventory_projects → inventory_towers → inventory_units) define it. Towers
+// are NOT separate buildings: a project with Tower A and Tower B is one card
+// with two towers inside, not two cards.
+interface TowerSummary {
+  key: string; tower: string; tower_id: number | null;
+  floors: number; total: number; available: number; booked: number; on_hold: number; blocked: number;
+}
+interface TypeSummary { key: string; tower: string; unit_type: string; units: number; }
+interface BuildingSummary {
+  key: string;                 // LOWER(TRIM(project_name)) — the grouping key
+  project_name: string;        // canonical display name
+  project_id: number | null;
+  floors: number; tower_count: number;
+  total: number; available: number; booked: number; on_hold: number; blocked: number;
+  towers: TowerSummary[];
+  unit_types: TypeSummary[];
+  project_status?: string | null;   // from inventory_projects (upcoming/active/…)
+}
+
+const n0 = (v: any) => { const x = Number(v); return Number.isFinite(x) ? x : 0; };
+
+const normaliseBuilding = (r: any): BuildingSummary => ({
+  key: String(r.key),
+  project_name: String(r.project_name ?? "").trim() || "(Unnamed project)",
+  project_id: r.project_id == null ? null : Number(r.project_id),
+  floors: n0(r.floors), tower_count: n0(r.tower_count),
+  total: n0(r.total), available: n0(r.available), booked: n0(r.booked),
+  on_hold: n0(r.on_hold), blocked: n0(r.blocked),
+  towers: (r.towers || []).map((x: any) => ({
+    key: String(x.key), tower: String(x.tower ?? "").trim(),
+    tower_id: x.tower_id == null ? null : Number(x.tower_id),
+    floors: n0(x.floors), total: n0(x.total), available: n0(x.available),
+    booked: n0(x.booked), on_hold: n0(x.on_hold), blocked: n0(x.blocked),
+  })),
+  unit_types: (r.unit_types || []).map((x: any) => ({
+    key: String(x.key), tower: String(x.tower ?? "").trim(),
+    unit_type: String(x.unit_type ?? "").trim() || "—", units: n0(x.units),
+  })),
+});
+
+// A project that exists in inventory_projects but has no stock yet. It still gets
+// a card — otherwise "Add Building" would appear to do nothing until the first
+// unit is generated, and there would be nowhere to launch the generator from.
+const emptyBuilding = (key: string, p: any): BuildingSummary => ({
+  key,
+  project_name: String(p.name ?? "").trim() || "(Unnamed project)",
+  project_id: p.id == null ? null : Number(p.id),
+  floors: 0, tower_count: n0(p.tower_count),
+  total: 0, available: 0, booked: 0, on_hold: 0, blocked: 0,
+  towers: [], unit_types: [], project_status: p.status ?? null,
+});
+
+// Roll per-(tower, type) rows up to a single breakdown, optionally for one tower.
+const rollupTypes = (rows: TypeSummary[], tower: string) =>
+  Object.entries(
+    rows.filter(r => !tower || r.tower === tower)
+      .reduce<Record<string, number>>((acc, r) => { acc[r.unit_type] = (acc[r.unit_type] || 0) + r.units; return acc; }, {}),
+  ).map(([unit_type, units]) => ({ unit_type, units })).sort((a, b) => b.units - a.units);
+
+const floorLabel = (f: number) => (f === 0 ? "Ground" : `Floor ${f}`);
+
+// Landing-page status filter — "show me buildings that still have X". Limited to
+// the four buckets the aggregate counts (registered is folded into booked), so a
+// dropdown never offers a filter the data behind the cards cannot answer.
+const BUILDING_STATUS_FILTERS = [
+  { value: "available", label: "Has available" },
+  { value: "booked", label: "Has booked" },
+  { value: "on_hold", label: "Has on hold" },
+  { value: "blocked", label: "Has blocked" },
+];
+
+// ── Building card (landing page) ──
+// Enough to decide which building to open, and deliberately no more — the card
+// is a doorway, not a dashboard.
+function BuildingCard({ b, t, onOpen }: { b: BuildingSummary; t: any; onOpen: () => void }) {
+  const towerLine = b.towers.length === 0 ? "No towers yet"
+    : b.towers.length <= 3 ? b.towers.map(x => `Tower ${x.tower}`).join(" · ")
+      : `${b.towers.length} towers`;
+  const types = rollupTypes(b.unit_types, "").slice(0, 3);
+
+  return (
+    <button type="button" onClick={onOpen}
+      className={`text-left w-full rounded-3xl border p-4 transition-colors ${t.innerBlock} hover:border-[#00AEEF]`}>
+      <div className="flex items-start gap-2 mb-2">
+        <FaBuilding className="text-[#00AEEF] mt-0.5 flex-shrink-0" />
+        <div className="min-w-0">
+          <h3 className={`text-sm font-bold truncate ${t.text}`}>{b.project_name}</h3>
+          <p className={`text-[11px] truncate ${t.textMuted}`}>{towerLine}</p>
+        </div>
+      </div>
+
+      <p className={`text-[11px] mb-2 ${t.textMuted}`}>
+        {b.floors} floor{b.floors === 1 ? "" : "s"} · <b className={t.text}>{b.total}</b> unit{b.total === 1 ? "" : "s"}
+      </p>
+
+      {types.length > 0 && (
+        <p className={`text-[11px] mb-3 truncate ${t.textMuted}`}>
+          {types.map(c => `${c.units} × ${c.unit_type}`).join("  ·  ")}
+        </p>
+      )}
+
+      <div className="flex items-center gap-3 flex-wrap mb-3">
+        {([
+          ["Available", b.available, STATUS.available.hex],
+          ["Booked", b.booked, STATUS.booked.hex],
+          ["On Hold", b.on_hold, STATUS.on_hold.hex],
+          ["Blocked", b.blocked, STATUS.blocked.hex],
+        ] as [string, number, string][]).map(([label, value, hex]) => (
+          <span key={label} className="inline-flex items-center gap-1.5 text-[11px]">
+            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: hex }} />
+            <span className={t.textMuted}>{label}:</span>
+            <b className={t.text}>{value}</b>
+          </span>
+        ))}
+      </div>
+
+      <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#00AEEF]">
+        Open <FaArrowRight className="text-[9px]" />
+      </span>
+    </button>
+  );
+}
+
+// One figure in the building header strip.
+function Stat({ label, value, t, hex }: { label: string; value: number; t: any; hex?: string }) {
+  return (
+    <div className="min-w-[86px]">
+      <p className={`text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 ${t.textMuted}`}>
+        {hex && <span className="w-2 h-2 rounded-full" style={{ backgroundColor: hex }} />}{label}
+      </p>
+      <p className={`text-base font-bold ${t.text}`}>{value}</p>
+    </div>
+  );
+}
 
 export default function InventoryManagementView({ user, isDark, t, onOpenLead, onOpenBooking }: Props) {
   const canManage = ["admin", "sales manager", "sales_manager"].includes((user?.role || "").trim().toLowerCase())
   const isAdminUser = (user?.role || "").trim().toLowerCase() === "admin"; // delete is admin-only
 
+  // ── Level 1: the building list (landing) ──
+  const [buildings, setBuildings] = useState<BuildingSummary[]>([]);
+  const [bLoading, setBLoading] = useState(true);
+  const [bFilters, setBFilters] = useState({ search: "", project: "", tower: "", status: "" });
+  const [showAddBuilding, setShowAddBuilding] = useState(false);
+
+  // ── Level 2: the opened building (null = landing) ──
+  // Held as the grouping key, not the object, so the header statistics re-read
+  // themselves from the refreshed aggregate after every create/delete.
+  const [openKey, setOpenKey] = useState<string | null>(null);
+  const [activeTower, setActiveTower] = useState("");
+  const [bldMenu, setBldMenu] = useState(false);
+
   const [units, setUnits] = useState<InventoryUnit[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState<"table" | "grid">("table");
+  // Inside a building the floor grid is the primary read — it is the view that
+  // shows the building → floor → flat shape. The table stays one click away.
+  const [viewMode, setViewMode] = useState<"table" | "grid">("grid");
   const [filters, setFilters] = useState({ ...blankFilters });
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "tower", dir: "asc" });
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -149,34 +424,151 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
   const inputCls = `rounded-lg px-2.5 py-1.5 text-xs outline-none border ${t.inputInner} ${t.text} ${t.inputFocus}`;
   const selectCls = `${inputCls} cursor-pointer`;
 
-  // ── Fetch (server-side filters; sorting is client-side so every column sorts) ──
+  // ── Building list fetch ──
+  // Two existing endpoints, no new one: the grouped mode of /api/inventory for
+  // live unit statistics, and /api/inventory/projects so a project with no stock
+  // yet still gets a card to generate into.
+  const fetchBuildings = useCallback(async () => {
+    setBLoading(true);
+    try {
+      const [aggRes, projRes] = await Promise.all([
+        fetch("/api/inventory?view=buildings", { credentials: "include" }),
+        fetch("/api/inventory/projects", { credentials: "include" }),
+      ]);
+      const agg = await aggRes.json();
+      const proj = await projRes.json().catch(() => ({ success: false }));
+
+      const byKey = new Map<string, BuildingSummary>();
+      if (agg?.success) for (const r of agg.data || []) {
+        const b = normaliseBuilding(r);
+        byKey.set(b.key, b);
+      }
+      if (proj?.success) for (const p of proj.data || []) {
+        const key = String(p.name ?? "").trim().toLowerCase();
+        if (!key) continue;
+        const found = byKey.get(key);
+        if (found) {
+          // The units carry the name; the project row carries the id and status.
+          if (found.project_id == null && p.id != null) found.project_id = Number(p.id);
+          found.project_status = p.status ?? null;
+        } else {
+          byKey.set(key, emptyBuilding(key, p));
+        }
+      }
+      setBuildings([...byKey.values()].sort((a, b) => a.project_name.localeCompare(b.project_name)));
+    } catch { /* non-blocking */ } finally { setBLoading(false); }
+  }, []);
+
+  useEffect(() => { fetchBuildings(); }, [fetchBuildings]);
+
+  const building = useMemo(() => buildings.find(b => b.key === openKey) || null, [buildings, openKey]);
+
+  // A building whose last unit was deleted and that has no project row left has
+  // nothing to show — fall back to the list rather than an empty detail page.
+  useEffect(() => {
+    if (openKey && !bLoading && !building) { setOpenKey(null); setActiveTower(""); }
+  }, [openKey, bLoading, building]);
+
+  // ── Unit fetch — only ever runs inside a building ──
+  // The landing page deliberately loads no units at all: that request is what the
+  // old flat screen opened with, and it is what this redesign exists to remove.
+  const unitsRef = useRef<InventoryUnit[]>([]);
+  useEffect(() => { unitsRef.current = units; }, [units]);
+
+  const unitParams = useCallback(() => {
+    const p = new URLSearchParams();
+    if (!building) return p;
+    p.set("project_name", building.project_name);
+    if (activeTower) p.set("tower", activeTower);
+    if (filters.search) p.set("search", filters.search);
+    if (filters.wing) p.set("wing", filters.wing);
+    if (filters.floor) p.set("floor", filters.floor);
+    if (filters.unit_type) p.set("unit_type", filters.unit_type);
+    if (filters.status) p.set("status", filters.status);
+    if (filters.min_area) p.set("min_area", filters.min_area);
+    if (filters.max_area) p.set("max_area", filters.max_area);
+    p.set("limit", "500");
+    return p;
+  }, [building, activeTower, filters]);
+
   const fetchUnits = useCallback(async () => {
+    if (!building) { setUnits([]); setTotal(0); setLoading(false); return; }
     setLoading(true);
     try {
-      const p = new URLSearchParams();
-      if (filters.search) p.set("search", filters.search);
-      if (filters.project_name) p.set("project_name", filters.project_name);
-      if (filters.tower) p.set("tower", filters.tower);
-      if (filters.wing) p.set("wing", filters.wing);
-      if (filters.floor) p.set("floor", filters.floor);
-      if (filters.unit_type) p.set("unit_type", filters.unit_type);
-      if (filters.status) p.set("status", filters.status);
-      if (filters.min_area) p.set("min_area", filters.min_area);
-      if (filters.max_area) p.set("max_area", filters.max_area);
-      p.set("limit", "500");
+      const p = unitParams();
       const res = await fetch(`/api/inventory?${p.toString()}`);
       const json = await res.json();
       if (json.success) { setUnits(json.data); setTotal(json.total ?? json.data.length); }
     } catch { /* non-blocking */ } finally { setLoading(false); }
-  }, [filters]);
+  }, [building, unitParams]);
 
-  // Debounced refetch on filter change.
+  // Debounced refetch on filter / building / tower change.
   useEffect(() => {
     const id = setTimeout(fetchUnits, 250);
     return () => clearTimeout(id);
   }, [fetchUnits]);
 
+  // Page 2+ of a large tower. The server caps a page at 500, so more stock is
+  // reached by offset rather than by asking for a bigger page.
+  const [loadingMore, setLoadingMore] = useState(false);
+  const loadMore = async () => {
+    if (!building) return;
+    setLoadingMore(true);
+    try {
+      const p = unitParams();
+      p.set("offset", String(unitsRef.current.length));
+      const res = await fetch(`/api/inventory?${p.toString()}`);
+      const json = await res.json();
+      if (json.success) setUnits(u => [...u, ...json.data]);
+    } catch { /* non-blocking */ } finally { setLoadingMore(false); }
+  };
+
   const setFilter = (patch: Partial<typeof blankFilters>) => setFilters(f => ({ ...f, ...patch }));
+
+  const openBuilding = (b: BuildingSummary) => {
+    setOpenKey(b.key);
+    setActiveTower(b.towers.length === 1 ? b.towers[0].tower : "");
+    setFilters({ ...blankFilters });
+    setSelected(new Set());
+    setViewMode("grid");
+  };
+  const backToList = () => {
+    setOpenKey(null); setActiveTower(""); setBldMenu(false);
+    setFilters({ ...blankFilters }); setSelected(new Set()); setUnits([]); setTotal(0);
+    fetchBuildings();
+  };
+
+  // Statistics are read from the aggregate, never from the (capped) unit list, so
+  // they stay right for a tower with more than one page of stock.
+  const scope = useMemo(() => {
+    if (!building) return null;
+    if (!activeTower) return building;
+    return building.towers.find(x => x.tower === activeTower) || building;
+  }, [building, activeTower]);
+  const typeChips = useMemo(
+    () => (building ? rollupTypes(building.unit_types, activeTower) : []),
+    [building, activeTower],
+  );
+  // Floor options for the in-building filter come from the loaded units.
+  const floorOptions = useMemo(
+    () => [...new Set(units.map(u => u.floor))].sort((a, b) => b - a),
+    [units],
+  );
+
+  // The tower the user is effectively inside: the selected tab, or the only
+  // tower this building has. Drives the creator prefills and the delete scope.
+  const towerCtx = useMemo(
+    () => activeTower || (building && building.towers.length === 1 ? building.towers[0].tower : ""),
+    [activeTower, building],
+  );
+
+  // Inside a building the project column is the building you are already in, and
+  // the tower column repeats the tab you are on — both are noise that pushes the
+  // flat number off the left of a narrow screen.
+  const tableColumns = useMemo(
+    () => COLUMNS.filter(c => c.key !== "project_name" && !(c.key === "tower" && !!towerCtx)),
+    [towerCtx],
+  );
 
   // ── Sorting (client-side) ──
   const sorted = useMemo(() => {
@@ -221,11 +613,28 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
   const toggleAll = () => setSelected(allSelected ? new Set() : new Set(sorted.map(u => u.id)));
   const toggleOne = (id: number) => setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
-  const afterCreate = () => { setSelected(new Set()); fetchUnits(); };
-  const afterDelete = () => { setSelected(new Set()); setDeleteTarget(null); setBulkDelOpen(false); setBldDelOpen(false); fetchUnits(); };
+  // Both refresh the building aggregate as well as the unit list — the header
+  // statistics and the card counts come from the aggregate, so refreshing only
+  // the rows would leave "126 units" on screen after 126 became 130.
+  const afterCreate = () => { setSelected(new Set()); fetchUnits(); fetchBuildings(); };
+  const afterDelete = () => { setSelected(new Set()); setDeleteTarget(null); setBulkDelOpen(false); setBldDelOpen(false); fetchUnits(); fetchBuildings(); };
   const selectedUnits = useMemo(() => sorted.filter(u => selected.has(u.id)), [sorted, selected]);
 
   // ── Heatmap grouping (floors desc, flats sorted within a floor) ──
+  // ── Duplicate flat numbers ──
+  // The unique index only stops a repeat within (project, tower, wing, floor),
+  // so the same flat_no CAN legitimately end up on two floors or two wings of
+  // one building — usually a numbering-pattern mistake, and always something
+  // that makes a flat ambiguous to talk about on a call. Compared across the
+  // units currently loaded, case- and space-insensitively, so "B-1204" and
+  // "b-1204 " count as the same number.
+  const duplicateFlats = useMemo(() => findDuplicateFlats(units), [units]);
+  const isDuplicate = useCallback(
+    (u: InventoryUnit) => isDuplicateFlat(u.flat_no, duplicateFlats),
+    [duplicateFlats],
+  );
+  const duplicateCount = useMemo(() => units.filter(isDuplicate).length, [units, isDuplicate]);
+
   const floorsGrouped = useMemo(() => {
     const byFloor = new Map<number, InventoryUnit[]>();
     for (const u of sorted) { if (!byFloor.has(u.floor)) byFloor.set(u.floor, []); byFloor.get(u.floor)!.push(u); }
@@ -255,21 +664,131 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
     return <span className={`text-[10px] ${t.textFaint}`}>—</span>;
   };
 
-  return (
-    <div className="flex flex-col h-full overflow-hidden ">
-      {/* ── Toolbar ── */}
-      <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
-        <div>
-          <h1 className={`text-lg font-bold ${t.text}`}>Inventory</h1>
-          <p className={`text-[11px] ${t.textMuted}`}>{loading ? "Loading…" : `${total} unit${total === 1 ? "" : "s"}`}{total > units.length ? ` (showing ${units.length})` : ""}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* View toggle */}
-          <div className={`flex items-center rounded-3xl border overflow-hidden ${t.tableBorder}`}>
-            <button onClick={() => setViewMode("table")} className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold ${viewMode === "table" ? "bg-[#00AEEF] text-white" : `${t.textMuted}`}`}><FaTable className="text-[10px]" /> Table</button>
-            <button onClick={() => setViewMode("grid")} className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold ${viewMode === "grid" ? "bg-[#00AEEF] text-white" : `${t.textMuted}`}`}><FaThLarge className="text-[10px]" /> Grid</button>
+  // ═════════════════════════════════════════════════════════════════════════
+  // Level 1 — the building list. This screen answers "which buildings do I
+  // have?", so it loads no unit rows at all.
+  // ═════════════════════════════════════════════════════════════════════════
+  if (!building) {
+    const q = bFilters.search.trim().toLowerCase();
+    const towerNames = [...new Set(buildings.flatMap(b => b.towers.map(x => x.tower)).filter(Boolean))].sort();
+    const visible = buildings.filter(b => {
+      if (q && !(b.project_name.toLowerCase().includes(q) || b.towers.some(x => x.tower.toLowerCase().includes(q)))) return false;
+      if (bFilters.project && b.key !== bFilters.project) return false;
+      if (bFilters.tower && !b.towers.some(x => x.tower === bFilters.tower)) return false;
+      if (bFilters.status && n0((b as any)[bFilters.status]) === 0) return false;
+      return true;
+    });
+    const anyBFilter = Object.values(bFilters).some(Boolean);
+
+    return (
+      <div className="flex flex-col h-full overflow-hidden">
+        <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
+          <div>
+            <h1 className={`text-lg font-bold ${t.text}`}>Inventory</h1>
+            <p className={`text-[11px] ${t.textMuted}`}>
+              {bLoading ? "Loading…" : `${buildings.length} building${buildings.length === 1 ? "" : "s"}`}
+            </p>
           </div>
-          {/* Add Unit menu (managers only) */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Analytics is read-only, so it stays open to every role that can
+                see inventory — unlike Pricing and Offers, which change commercials. */}
+            <button onClick={() => setShowAnalytics(true)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border ${t.tableBorder} ${t.text} hover:border-[#00AEEF]`}>
+              <FaChartBar className="text-[10px] text-[#00AEEF]" /> Analytics
+            </button>
+            {canManage && (
+              <button onClick={() => setShowAddBuilding(true)}
+                className="flex items-center gap-1.5 text-xs font-bold px-3.5 py-1.5 rounded-lg bg-[#00AEEF] text-white hover:bg-[#0095cc]">
+                <FaPlus className="text-[10px]" /> Add Building
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* ── Building filters ── */}
+        <div className={`flex items-center gap-2 flex-wrap mb-3 p-2.5 rounded-xl border ${t.innerBlock}`}>
+          <input value={bFilters.search} onChange={e => setBFilters(f => ({ ...f, search: e.target.value }))}
+            placeholder="Search buildings…" className={`${inputCls} w-56`} />
+          <select value={bFilters.project} onChange={e => setBFilters(f => ({ ...f, project: e.target.value }))} className={`${selectCls} w-40`}>
+            <option value="">All projects</option>
+            {buildings.map(b => <option key={b.key} value={b.key}>{b.project_name}</option>)}
+          </select>
+          <select value={bFilters.tower} onChange={e => setBFilters(f => ({ ...f, tower: e.target.value }))} className={`${selectCls} w-32`}>
+            <option value="">All towers</option>
+            {towerNames.map(x => <option key={x} value={x}>{x}</option>)}
+          </select>
+          <select value={bFilters.status} onChange={e => setBFilters(f => ({ ...f, status: e.target.value }))} className={`${selectCls} w-40`}>
+            <option value="">Any stock</option>
+            {BUILDING_STATUS_FILTERS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+          </select>
+          {anyBFilter && (
+            <button onClick={() => setBFilters({ search: "", project: "", tower: "", status: "" })}
+              className={`text-[11px] font-semibold px-2 py-1.5 rounded-lg ${t.textMuted} hover:text-red-500`}>Clear</button>
+          )}
+        </div>
+
+        {/* ── Building cards ── */}
+        <div className="flex-1 overflow-auto p-1">
+          {bLoading && buildings.length === 0 ? (
+            <p className={`text-sm italic ${t.textFaint} p-4`}>Loading buildings…</p>
+          ) : visible.length === 0 ? (
+            <p className={`text-sm italic ${t.textFaint} p-4`}>
+              {buildings.length === 0
+                ? `No buildings yet. ${canManage ? "Use Add Building to create one, then generate its inventory." : ""}`
+                : "No buildings match these filters."}
+            </p>
+          ) : (
+            <div className="grid gap-3 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
+              {visible.map(b => (
+                <BuildingCard key={b.key} b={b} t={t} onOpen={() => openBuilding(b)} />
+              ))}
+            </div>
+          )}
+        </div>
+
+        <InventoryAnalyticsModal isOpen={showAnalytics} onClose={() => setShowAnalytics(false)} isDark={isDark} t={t} />
+        {canManage && showAddBuilding && (
+          <AddBuildingModal isDark={isDark} t={t} onClose={() => setShowAddBuilding(false)}
+            onCreated={() => { setShowAddBuilding(false); fetchBuildings(); }} />
+        )}
+      </div>
+    );
+  }
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // Level 2 — one building: its towers, floors and flats.
+  // ═════════════════════════════════════════════════════════════════════════
+  const scopeLabel = activeTower ? `Tower ${activeTower}`
+    : building.towers.length === 1 ? `Tower ${building.towers[0].tower}`
+      : `${building.towers.length} tower${building.towers.length === 1 ? "" : "s"}`;
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* ── Breadcrumb + back ── */}
+      <button onClick={backToList}
+        className={`self-start flex items-center gap-1.5 mb-2 text-[11px] font-semibold ${t.textMuted} hover:text-[#00AEEF]`}>
+        <FaArrowLeft className="text-[9px]" /> Back to Inventory
+      </button>
+
+      {/* ── Building header ── */}
+      <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
+        <div className="min-w-0">
+          <h1 className={`text-lg font-bold flex items-center gap-2 ${t.text}`}>
+            <FaBuilding className="text-[#00AEEF] text-sm" /> {building.project_name}
+          </h1>
+          <p className={`text-[11px] ${t.textMuted}`}>
+            {scopeLabel} · {n0(scope?.floors)} floor{n0(scope?.floors) === 1 ? "" : "s"} · {n0(scope?.total)} unit{n0(scope?.total) === 1 ? "" : "s"}
+            {total > units.length ? ` · showing ${units.length} of ${total} matching` : ""}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className={`flex items-center rounded-3xl border overflow-hidden ${t.tableBorder}`}>
+            <button onClick={() => setViewMode("grid")} className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold ${viewMode === "grid" ? "bg-[#00AEEF] text-white" : `${t.textMuted}`}`}><FaThLarge className="text-[10px]" /> Floors</button>
+            <button onClick={() => setViewMode("table")} className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold ${viewMode === "table" ? "bg-[#00AEEF] text-white" : `${t.textMuted}`}`}><FaTable className="text-[10px]" /> Table</button>
+          </div>
+
+          {/* Add Unit menu (managers only) — scoped to THIS building. */}
           {canManage && (
             <div className="relative">
               <button onClick={() => setAddMenu(v => !v)} className="flex items-center gap-1.5 text-xs font-bold px-3.5 py-1.5 rounded-lg bg-[#00AEEF] text-white hover:bg-[#0095cc]">
@@ -278,15 +797,15 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
               {addMenu && (
                 <>
                   <div className="fixed inset-0 z-[60]" onClick={() => setAddMenu(false)} />
-                  <div className={`absolute right-0 mt-1 w-52 rounded-xl border shadow-xl z-[61] overflow-hidden ${t.modalCard}`}>
-                    <button onClick={() => { setAddMenu(false); setShowAdd(true); }} className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs font-semibold text-left hover:bg-[#00AEEF]/10 ${t.text}`}><FaPen className="text-[10px] text-[#00AEEF]" /> Manual entry</button>
-                    <button onClick={() => { setAddMenu(false); setShowBulk(true); }} className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs font-semibold text-left hover:bg-[#00AEEF]/10 border-t ${t.tableBorder} ${t.text}`}><FaLayerGroup className="text-[10px] text-[#00AEEF]" /> Bulk generate building</button>
+                  <div className={`absolute right-0 mt-1 w-56 rounded-xl border shadow-xl z-[61] overflow-hidden ${t.modalCard}`}>
+                    <button onClick={() => { setAddMenu(false); setShowAdd(true); }} className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs font-semibold text-left hover:bg-[#00AEEF]/10 ${t.text}`}><FaPen className="text-[10px] text-[#00AEEF]" /> Add single unit</button>
+                    <button onClick={() => { setAddMenu(false); setShowBulk(true); }} className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs font-semibold text-left hover:bg-[#00AEEF]/10 border-t ${t.tableBorder} ${t.text}`}><FaLayerGroup className="text-[10px] text-[#00AEEF]" /> Generate whole building</button>
                   </div>
                 </>
               )}
             </div>
           )}
-          {/* Pricing rules — cost sheets are unusable until a project has one. */}
+
           {canManage && (
             <button onClick={() => setShowPricing(true)}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border ${t.tableBorder} ${t.text} hover:border-[#00AEEF]`}>
@@ -299,29 +818,82 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
               <FaHandshake className="text-[10px] text-[#00AEEF]" /> Offers
             </button>
           )}
-          {/* Analytics is read-only, so it is open to every role that can see
-              inventory — unlike Pricing and Offers, which change commercials. */}
           <button onClick={() => setShowAnalytics(true)}
             className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border ${t.tableBorder} ${t.text} hover:border-[#00AEEF]`}>
             <FaChartBar className="text-[10px] text-[#00AEEF]" /> Analytics
           </button>
-          {/* Whole-building delete (admin only) — separate from row/bulk-select */}
-          {isAdminUser && (
-            <button onClick={() => setBldDelOpen(true)} title="Delete a whole building/tower"
-              className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border border-red-500/40 text-red-500 hover:bg-red-500/10">
-              <FaBuilding className="text-[10px]" /> Delete building
-            </button>
-          )}
+
+          {/* Building-scoped action menu. Whole-building delete lives in here —
+              never as a standing button on the list screen. */}
+          <div className="relative">
+            <button onClick={() => setBldMenu(v => !v)} title="Building actions"
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg border ${t.tableBorder} ${t.text} hover:border-[#00AEEF]`}>⋯</button>
+            {bldMenu && (
+              <>
+                <div className="fixed inset-0 z-[60]" onClick={() => setBldMenu(false)} />
+                <div className={`absolute right-0 mt-1 w-56 rounded-xl border shadow-xl z-[61] overflow-hidden ${t.modalCard}`}>
+                  {canManage && (
+                    <button onClick={() => { setBldMenu(false); setShowBulk(true); }} className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs font-semibold text-left hover:bg-[#00AEEF]/10 ${t.text}`}><FaLayerGroup className="text-[10px] text-[#00AEEF]" /> Generate inventory</button>
+                  )}
+                  {canManage && (
+                    <button onClick={() => { setBldMenu(false); setShowPricing(true); }} className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs font-semibold text-left hover:bg-[#00AEEF]/10 border-t ${t.tableBorder} ${t.text}`}><FaTags className="text-[10px] text-[#00AEEF]" /> Pricing</button>
+                  )}
+                  {canManage && (
+                    <button onClick={() => { setBldMenu(false); setShowOffers(true); }} className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs font-semibold text-left hover:bg-[#00AEEF]/10 border-t ${t.tableBorder} ${t.text}`}><FaHandshake className="text-[10px] text-[#00AEEF]" /> Offers</button>
+                  )}
+                  <button onClick={() => { setBldMenu(false); setShowAnalytics(true); }} className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs font-semibold text-left hover:bg-[#00AEEF]/10 border-t ${t.tableBorder} ${t.text}`}><FaChartBar className="text-[10px] text-[#00AEEF]" /> Analytics</button>
+                  {isAdminUser && (
+                    <button onClick={() => { setBldMenu(false); setBldDelOpen(true); }} className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs font-bold text-left text-red-500 hover:bg-red-500/10 border-t ${t.tableBorder}`}><FaTrash className="text-[10px]" /> Delete building</button>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* ── Filters ── */}
+      {/* ── Building statistics (from the aggregate, never the capped row list) ── */}
+      <div className={`flex items-center gap-2 flex-wrap mb-3 p-3 rounded-xl border ${t.innerBlock}`}>
+        <Stat label="Total Units" value={n0(scope?.total)} t={t} />
+        <Stat label="Available" value={n0(scope?.available)} t={t} hex={STATUS.available.hex} />
+        <Stat label="Booked" value={n0(scope?.booked)} t={t} hex={STATUS.booked.hex} />
+        <Stat label="On Hold" value={n0(scope?.on_hold)} t={t} hex={STATUS.on_hold.hex} />
+        <Stat label="Blocked" value={n0(scope?.blocked)} t={t} hex={STATUS.blocked.hex} />
+        {typeChips.length > 0 && (
+          <div className={`flex items-center gap-1.5 flex-wrap pl-3 ml-1 border-l ${t.tableBorder}`}>
+            {typeChips.map(c => (
+              <span key={c.unit_type} className={`text-[10px] font-semibold px-2 py-1 rounded-full border ${t.tableBorder} ${t.textMuted}`}>
+                {c.unit_type}: <b className={t.text}>{c.units}</b>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── Tower tabs (only when the building actually has more than one) ── */}
+      {building.towers.length > 1 && (
+        <div className="flex items-center gap-1.5 flex-wrap mb-3">
+          <button onClick={() => setActiveTower("")}
+            className={`px-3 py-1.5 rounded-full text-[11px] font-bold border ${activeTower === "" ? "bg-[#00AEEF] text-white border-[#00AEEF]" : `${t.tableBorder} ${t.textMuted}`}`}>
+            All towers
+          </button>
+          {building.towers.map(x => (
+            <button key={x.tower} onClick={() => setActiveTower(x.tower)}
+              className={`px-3 py-1.5 rounded-full text-[11px] font-bold border ${activeTower === x.tower ? "bg-[#00AEEF] text-white border-[#00AEEF]" : `${t.tableBorder} ${t.textMuted}`}`}>
+              Tower {x.tower} <span className="opacity-70">({x.total})</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* ── Filters — scoped to this building; no project/tower retyping ── */}
       <div className={`flex items-center gap-2 flex-wrap mb-3 p-2.5 rounded-xl border ${t.innerBlock}`}>
-        <input value={filters.search} onChange={e => setFilter({ search: e.target.value })} placeholder="Search flat / apartment / project…" className={`${inputCls} w-56`} />
-        <input value={filters.project_name} onChange={e => setFilter({ project_name: e.target.value })} placeholder="Project" className={`${inputCls} w-28`} />
-        <input value={filters.tower} onChange={e => setFilter({ tower: e.target.value })} placeholder="Tower" className={`${inputCls} w-20`} />
+        <input value={filters.search} onChange={e => setFilter({ search: e.target.value })} placeholder="Search flat…" className={`${inputCls} w-48`} />
+        <select value={filters.floor} onChange={e => setFilter({ floor: e.target.value })} className={`${selectCls} w-32`}>
+          <option value="">All floors</option>
+          {floorOptions.map(f => <option key={f} value={String(f)}>{floorLabel(f)}</option>)}
+        </select>
         <input value={filters.wing} onChange={e => setFilter({ wing: e.target.value })} placeholder="Wing" className={`${inputCls} w-20`} />
-        <input value={filters.floor} onChange={e => setFilter({ floor: e.target.value })} placeholder="Floor" className={`${inputCls} w-20`} />
         <select value={filters.unit_type} onChange={e => setFilter({ unit_type: e.target.value })} className={`${selectCls} w-28`}>
           <option value="">All types</option>{UNIT_TYPES.map(o => <option key={o} value={o}>{o}</option>)}
         </select>
@@ -349,31 +921,61 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
         </div>
       )}
 
+      {/* Duplicate flat numbers — surfaced as a count so the red cells below are
+          explained rather than just alarming. */}
+      {duplicateCount > 0 && (
+        <div className="flex items-center gap-2 mb-2 px-3 py-2 rounded-lg border border-red-500/30 bg-red-500/5">
+          <FaExclamationTriangle className="text-red-500 text-[11px] flex-shrink-0" />
+          <span className={`text-[11px] ${t.text}`}>
+            <b>{duplicateCount}</b> unit{duplicateCount === 1 ? " uses a" : "s use"} duplicate flat number
+            {duplicateFlats.size === 1 ? "" : "s"} — highlighted in red below.
+          </span>
+        </div>
+      )}
+
       {/* ── Body ── */}
-      <div className="flex-1 overflow-auto  rounded-3xl  p-3 ">
+      <div className="flex-1 overflow-auto rounded-3xl p-3">
         {loading && units.length === 0 ? (
           <p className={`text-sm italic ${t.textFaint} p-4`}>Loading inventory…</p>
         ) : units.length === 0 ? (
-          <p className={`text-sm italic ${t.textFaint} p-4`}>No units match. {canManage ? "Add units with the button above." : ""}</p>
+          <p className={`text-sm italic ${t.textFaint} p-4`}>
+            {n0(scope?.total) === 0
+              ? `This building has no units yet. ${canManage ? "Use Add Unit → Generate whole building." : ""}`
+              : "No units match these filters."}
+          </p>
         ) : viewMode === "table" ? (
           <TableView
-            columns={COLUMNS} colW={colW} sort={sort} sorted={sorted} t={t}
+            columns={tableColumns} colW={colW} sort={sort} sorted={sorted} t={t}
             allSelected={allSelected} selected={selected} toggleAll={toggleAll} toggleOne={toggleOne}
             toggleSort={toggleSort} onResizeStart={onResizeStart} onRowClick={(id: number) => setDrawerId(id)} linkChip={linkChip}
             canDelete={isAdminUser} onDeleteUnit={(u: InventoryUnit) => setDeleteTarget(u)}
+            isDuplicate={isDuplicate} isDark={isDark}
           />
         ) : (
-          <GridView floorsGrouped={floorsGrouped} t={t} onCellClick={(id) => setDrawerId(id)} />
+          <GridView floorsGrouped={floorsGrouped} t={t} onCellClick={(id) => setDrawerId(id)} isDuplicate={isDuplicate} isDark={isDark} />
+        )}
+
+        {units.length > 0 && total > units.length && (
+          <div className="flex justify-center mt-3">
+            <button onClick={loadMore} disabled={loadingMore}
+              className={`text-xs font-semibold px-4 py-2 rounded-lg border ${t.tableBorder} ${t.text} hover:border-[#00AEEF] disabled:opacity-50`}>
+              {loadingMore ? "Loading…" : `Load more (${total - units.length} left)`}
+            </button>
+          </div>
         )}
       </div>
 
       {/* ── Modals ── */}
+      {/* Both creators are launched from inside a building, so the building is
+          prefilled — the user never re-picks the project they are already in. */}
       {canManage && (
         <AddUnitModal isOpen={showAdd} onClose={() => setShowAdd(false)} onCreated={afterCreate} user={user} isDark={isDark} t={t}
-          existingUnits={units.map(u => ({ project_name: u.project_name, tower: u.tower, wing: u.wing, floor: u.floor, flat_no: u.flat_no }))} />
+          existingUnits={units.map(u => ({ project_name: u.project_name, tower: u.tower, wing: u.wing, floor: u.floor, flat_no: u.flat_no }))}
+          defaults={{ project_name: building.project_name, tower: towerCtx }} />
       )}
       {canManage && (
-        <BulkGenerateUnitsModal isOpen={showBulk} onClose={() => setShowBulk(false)} onCreated={afterCreate} user={user} isDark={isDark} t={t} />
+        <BulkGenerateUnitsModal isOpen={showBulk} onClose={() => setShowBulk(false)} onCreated={afterCreate} user={user} isDark={isDark} t={t}
+          defaults={{ project_name: building.project_name, tower: towerCtx }} />
       )}
       {canManage && (
         <PricingRulesModal isOpen={showPricing} onClose={() => setShowPricing(false)} user={user} isDark={isDark} t={t} />
@@ -392,7 +994,8 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
       )}
       {isAdminUser && bldDelOpen && (
         <BuildingDeleteModal user={user} isDark={isDark} t={t} onClose={() => setBldDelOpen(false)} onDeleted={afterDelete}
-          defaults={{ project_name: filters.project_name, tower: filters.tower, wing: filters.wing }} />
+          defaults={{ project_name: building.project_name, tower: towerCtx, wing: filters.wing }}
+          building={building} />
       )}
 
       {/* ── Detail drawer ── */}
@@ -406,10 +1009,22 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
 // ═══════════════════════════════════════════════════════════════════════════
 // Table view
 // ═══════════════════════════════════════════════════════════════════════════
-function TableView({ columns, colW, sort, sorted, t, allSelected, selected, toggleAll, toggleOne, toggleSort, onResizeStart, onRowClick, linkChip, canDelete, onDeleteUnit }: any) {
+function TableView({ columns, colW, sort, sorted, t, allSelected, selected, toggleAll, toggleOne, toggleSort, onResizeStart, onRowClick, linkChip, canDelete, onDeleteUnit, isDuplicate, isDark }: any) {
   const totalW = 40 + columns.reduce((s: number, c: Column) => s + colW[c.key], 0) + (canDelete ? 56 : 0);
   const sortIcon = (key: string) => sort.key !== key ? <FaSort className="text-[8px] opacity-40" /> : sort.dir === "asc" ? <FaSortUp className="text-[8px]" /> : <FaSortDown className="text-[8px]" />;
   const cell = (u: InventoryUnit, key: string) => {
+    // The flat number is the only cell that turns red: the status badge keeps
+    // its own colour, because a duplicate says nothing about whether the flat is
+    // available.
+    if (key === "flat_no" && isDuplicate?.(u)) return (
+      <span title={unitTooltip(u, true)} className="inline-flex items-center gap-1 font-bold text-red-500">
+        <FaExclamationTriangle className="text-[9px] flex-shrink-0" />
+        {u.flat_no}
+      </span>
+    );
+    // Type gets the same ink as the grid; status keeps its own badge. The two
+    // columns read as two systems because they are two systems.
+    if (key === "unit_type") return <UnitTypeChip unitType={u.unit_type} isDark={isDark} />;
     if (key === "status") return <StatusBadge status={u.status} />;
     if (key === "linked") return linkChip(u);
     if (key === "carpet_area_sqft") return area(u.carpet_area_sqft);
@@ -470,7 +1085,10 @@ function TableView({ columns, colW, sort, sorted, t, allSelected, selected, togg
               <tr
                 key={u.id}
                 onClick={() => onRowClick(u.id)}
-                className={`border-t ${t.tableBorder} ${t.tableRow} cursor-pointer ${selected.has(u.id) ? "bg-[#00AEEF]/5" : ""}`}
+                title={isDuplicate?.(u) ? "Duplicate flat number" : undefined}
+                className={`border-t ${t.tableBorder} ${t.tableRow} cursor-pointer ${
+                  isDuplicate?.(u) ? "bg-red-500/5" : selected.has(u.id) ? "bg-[#00AEEF]/5" : ""
+                }`}
               >
                 <td className="px-2 py-1.5" onClick={e => e.stopPropagation()}>
                   <input
@@ -517,37 +1135,101 @@ function TableView({ columns, colW, sort, sorted, t, allSelected, selected, togg
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// One flat in the floor grid
+// ═══════════════════════════════════════════════════════════════════════════
+// Three pieces of information, three channels that cannot mask each other:
+//   fill + type label ink → what the flat IS   (unit type)
+//   dot, top-right       → what the flat is DOING (status)
+//   red frame + ⚠        → the flat number is ambiguous (duplicate)
+// The duplicate frame outranks the type fill, but takes neither the type label
+// nor the status dot with it — a duplicate that hides the booking is worse than
+// the duplicate.
+function UnitCell({ u, t, isDark, duplicate, onClick }: { u: InventoryUnit; t: any; isDark: boolean; duplicate: boolean; onClick: () => void }) {
+  const type = getUnitTypeColor(u.unit_type, isDark);
+  const status = sc(u.status);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={unitTooltip(u, duplicate)}
+      className="relative w-[68px] h-[52px] rounded-lg flex flex-col items-center justify-center leading-tight transition-transform hover:scale-105"
+      style={{
+        backgroundColor: duplicate ? `${DUPLICATE_HEX}14` : type.fill,
+        border: duplicate ? `1.5px solid ${DUPLICATE_HEX}` : `1px solid ${type.border}`,
+      }}
+    >
+      {duplicate && (
+        <FaExclamationTriangle className="absolute top-1 left-1 text-[8px] text-red-500" aria-hidden />
+      )}
+      {/* Status stays legible on a duplicate — it is a separate channel. */}
+      <span
+        className="absolute top-1 right-1 w-[7px] h-[7px] rounded-full"
+        style={{ backgroundColor: status.hex }}
+        title={status.label}
+      />
+      <span className={`text-[11px] font-bold ${duplicate ? "text-red-500" : t.text}`}>{u.flat_no}</span>
+      <span className="text-[9px] font-bold" style={{ color: type.ink }}>{type.label}</span>
+    </button>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Grid / heatmap view
 // ═══════════════════════════════════════════════════════════════════════════
-function GridView({ floorsGrouped, t, onCellClick }: { floorsGrouped: [number, InventoryUnit[]][]; t: any; onCellClick: (id: number) => void }) {
+function GridView({ floorsGrouped, t, onCellClick, isDuplicate, isDark }: { floorsGrouped: [number, InventoryUnit[]][]; t: any; onCellClick: (id: number) => void; isDuplicate?: (u: InventoryUnit) => boolean; isDark: boolean }) {
+  const anyDuplicate = floorsGrouped.some(([, us]) => us.some(u => isDuplicate?.(u)));
+  // Only the types actually standing in this building — a legend listing every
+  // configuration the system knows about would be longer than most towers' stock.
+  const typesPresent = [...new Set(floorsGrouped.flatMap(([, us]) => us.map(u => u.unit_type)))]
+    .filter(Boolean)
+    .sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true }));
+
   return (
     <div>
-      {/* Legend */}
-      <div className="flex items-center gap-3 flex-wrap mb-3">
-        {STATUS_KEYS.map(s => (
-          <span key={s} className="inline-flex items-center gap-1.5 text-[10px]">
-            <span className="w-3 h-3 rounded" style={{ backgroundColor: STATUS[s].hex + "33", border: `1px solid ${STATUS[s].hex}` }} />
-            <span className={t.textMuted}>{STATUS[s].label}</span>
-          </span>
-        ))}
+      {/* ── Legend: two independent channels, plus the override ── */}
+      <div className={`flex items-start gap-x-6 gap-y-2 flex-wrap mb-3 pb-3 border-b ${t.tableBorder}`}>
+        {typesPresent.length > 0 && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={`text-[9px] font-bold uppercase tracking-widest ${t.textFaint}`}>Unit types</span>
+            {typesPresent.map(ut => {
+              const c = getUnitTypeColor(ut, isDark);
+              return (
+                <span key={ut} className="inline-flex items-center gap-1.5 text-[10px]">
+                  <span className="w-3 h-3 rounded" style={{ backgroundColor: c.fill, border: `1px solid ${c.ink}` }} />
+                  <span className={t.textMuted}>{ut}</span>
+                </span>
+              );
+            })}
+          </div>
+        )}
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className={`text-[9px] font-bold uppercase tracking-widest ${t.textFaint}`}>Status</span>
+          {STATUS_KEYS.map(s => (
+            <span key={s} className="inline-flex items-center gap-1.5 text-[10px]">
+              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: STATUS[s].hex }} />
+              <span className={t.textMuted}>{STATUS[s].label}</span>
+            </span>
+          ))}
+        </div>
+        {anyDuplicate && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={`text-[9px] font-bold uppercase tracking-widest ${t.textFaint}`}>Special</span>
+            <span className="inline-flex items-center gap-1.5 text-[10px]">
+              <span className="w-3 h-3 rounded flex items-center justify-center" style={{ backgroundColor: DUPLICATE_HEX + "1A", border: `1.5px solid ${DUPLICATE_HEX}` }} />
+              <span className="text-red-500 font-semibold">Duplicate flat number</span>
+            </span>
+          </div>
+        )}
       </div>
       <div className="space-y-1.5">
         {floorsGrouped.map(([floor, us]) => (
           <div key={floor} className="flex items-center gap-2">
             <div className={`w-14 flex-shrink-0 text-right text-[11px] font-bold ${t.textMuted}`}>{floor === 0 ? "Ground" : `Fl ${floor}`}</div>
             <div className="flex items-center gap-1.5 flex-wrap">
-              {us.map(u => {
-                const c = sc(u.status);
-                return (
-                  <button key={u.id} type="button" onClick={() => onCellClick(u.id)}
-                    title={`${u.flat_no} · ${u.unit_type} · ${c.label}${u.wing ? " · Wing " + u.wing : ""}`}
-                    className="w-14 h-11 rounded-md flex flex-col items-center justify-center text-[9px] font-bold leading-tight transition-transform hover:scale-105"
-                    style={{ backgroundColor: c.hex + "26", border: `1px solid ${c.hex}80`, color: c.hex }}>
-                    <span>{u.flat_no}</span>
-                    <span className="opacity-70 font-semibold">{u.unit_type}</span>
-                  </button>
-                );
-              })}
+              {us.map(u => (
+                <UnitCell key={u.id} u={u} t={t} isDark={isDark}
+                  duplicate={!!isDuplicate?.(u)} onClick={() => onCellClick(u.id)} />
+              ))}
             </div>
           </div>
         ))}
@@ -690,8 +1372,99 @@ function BulkDeleteModal({ selectedUnits, user, isDark, t, onClose, onDeleted }:
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Add Building (Admin / Sales Manager)
+// ═══════════════════════════════════════════════════════════════════════════
+// Creates the project row — and optionally its first tower — through the
+// existing hierarchy endpoints. No inventory is generated here: a building
+// starts empty and its stock is generated from inside it, which is what keeps
+// "add a building" and "generate 126 flats" two separate, reversible decisions.
+function AddBuildingModal({ isDark, t, onClose, onCreated }: any) {
+  const [name, setName] = useState("");
+  const [tower, setTower] = useState("");
+  const [city, setCity] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const inputCls = `w-full rounded-lg px-3 py-2 text-sm border ${t.inputInner} ${t.text} ${t.inputFocus}`;
+
+  const submit = async () => {
+    if (!name.trim()) { setErr("Building / project name is required."); return; }
+    setBusy(true); setErr(null);
+    try {
+      const res = await fetch("/api/inventory/projects", {
+        method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
+        body: JSON.stringify({ name: name.trim(), city: city.trim() || null }),
+      });
+      const json = await res.json();
+
+      let projectId: number | null = json?.data?.id ?? null;
+      if (!json.success) {
+        // 409 = the case-insensitive unique index. Adding a tower to a building
+        // that already exists is a reasonable thing to be doing, so resolve the
+        // existing project rather than making the user go and find it.
+        if (res.status === 409 && tower.trim()) {
+          const listRes = await fetch("/api/inventory/projects", { credentials: "include" });
+          const list = await listRes.json();
+          const found = (list?.data || []).find(
+            (p: any) => String(p.name || "").trim().toLowerCase() === name.trim().toLowerCase(),
+          );
+          if (!found) throw new Error(json.message || "Could not create the building");
+          projectId = Number(found.id);
+        } else {
+          throw new Error(json.message || "Could not create the building");
+        }
+      }
+
+      if (tower.trim() && projectId) {
+        const tRes = await fetch("/api/inventory/towers", {
+          method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
+          body: JSON.stringify({ project_id: projectId, name: tower.trim() }),
+        });
+        const tJson = await tRes.json();
+        // A duplicate tower is not a failure of "add building" — the tower the
+        // user asked for exists, which is the outcome they wanted.
+        if (!tJson.success && tRes.status !== 409) throw new Error(tJson.message || "Building created, but the tower could not be added.");
+      }
+      onCreated();
+    } catch (e: any) { setErr(e.message); } finally { setBusy(false); }
+  };
+
+  return (
+    <ModalShell isDark={isDark} onClose={onClose} maxW="max-w-md">
+      <div className="p-6">
+        <div className="flex items-center gap-2 mb-3">
+          <FaBuilding className="text-[#00AEEF]" />
+          <h2 className={`text-base font-bold ${t.text}`}>Add building</h2>
+        </div>
+        <div className="space-y-2.5 mb-3">
+          <div>
+            <label className={`text-[11px] mb-1 block ${t.textMuted}`}>Building / project name *</label>
+            <input value={name} onChange={e => setName(e.target.value)} className={inputCls} placeholder="VR Buildcom" />
+          </div>
+          <div>
+            <label className={`text-[11px] mb-1 block ${t.textMuted}`}>First tower (optional)</label>
+            <input value={tower} onChange={e => setTower(e.target.value)} className={inputCls} placeholder="A" />
+          </div>
+          <div>
+            <label className={`text-[11px] mb-1 block ${t.textMuted}`}>City (optional)</label>
+            <input value={city} onChange={e => setCity(e.target.value)} className={inputCls} placeholder="Mumbai" />
+          </div>
+        </div>
+        <p className={`text-[11px] mb-3 ${t.textFaint}`}>The building starts empty — open it and use Add Unit to generate its flats.</p>
+        {err && <p className="text-red-500 text-[11px] mb-2">{err}</p>}
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} className={`text-xs font-semibold px-4 py-2 rounded-lg border ${t.tableBorder} ${t.textMuted}`}>Cancel</button>
+          <button onClick={submit} disabled={busy || !name.trim()} className="text-xs font-bold px-4 py-2 rounded-lg bg-[#00AEEF] text-white hover:bg-[#0095cc] disabled:opacity-40">
+            {busy ? "Creating…" : "Create building"}
+          </button>
+        </div>
+      </div>
+    </ModalShell>
+  );
+}
+
 // Whole-building delete: scope inputs, live preview count (+ linked-blocked), type-to-confirm.
-function BuildingDeleteModal({ user, isDark, t, onClose, onDeleted, defaults }: any) {
+function BuildingDeleteModal({ user, isDark, t, onClose, onDeleted, defaults, building }: any) {
   const [scope, setScope] = useState({ project_name: defaults?.project_name || "", tower: defaults?.tower || "", wing: defaults?.wing || "" });
   const [preview, setPreview] = useState<{ matched: number; linked: number } | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
@@ -740,7 +1513,12 @@ function BuildingDeleteModal({ user, isDark, t, onClose, onDeleted, defaults }: 
   return (
     <ModalShell isDark={isDark} onClose={onClose} maxW="max-w-lg">
       <div className="p-6">
-        <div className="flex items-center gap-2 mb-3"><FaBuilding className="text-red-500" /><h2 className={`text-base font-bold ${t.text}`}>Delete whole building / tower</h2></div>
+        <div className="flex items-center gap-2 mb-3">
+          <FaBuilding className="text-red-500" />
+          <h2 className={`text-base font-bold ${t.text}`}>
+            {building ? `Delete ${building.project_name}?` : "Delete whole building / tower"}
+          </h2>
+        </div>
         {result ? (
           <>
             <p className={`text-sm mb-3 ${t.text}`}><b>{result.deleted}</b> deleted{result.skipped ? <>, <b>{result.skipped}</b> skipped (linked)</> : null}.</p>
@@ -753,11 +1531,51 @@ function BuildingDeleteModal({ user, isDark, t, onClose, onDeleted, defaults }: 
           </>
         ) : (
           <>
+            {building && (
+              <>
+                <p className={`text-xs leading-relaxed mb-2 ${t.text}`}>
+                  This building contains <b>{building.total}</b> inventory unit{building.total === 1 ? "" : "s"}. Deleting it may affect:
+                </p>
+                <ul className={`text-[11px] leading-relaxed mb-3 pl-4 list-disc ${t.textMuted}`}>
+                  <li>Inventory records</li>
+                  <li>Booking links</li>
+                  <li>Pricing</li>
+                  <li>Offers</li>
+                  <li>Historical records</li>
+                </ul>
+              </>
+            )}
             <div className="grid grid-cols-2 gap-2.5 mb-3">
-              <div><label className={`text-[11px] mb-1 block ${t.textMuted}`}>Project *</label><input value={scope.project_name} onChange={e => setScope(s => ({ ...s, project_name: e.target.value }))} className={inputCls} /></div>
-              <div><label className={`text-[11px] mb-1 block ${t.textMuted}`}>Tower *</label><input value={scope.tower} onChange={e => setScope(s => ({ ...s, tower: e.target.value }))} className={inputCls} /></div>
+              <div>
+                <label className={`text-[11px] mb-1 block ${t.textMuted}`}>Project *</label>
+                {/* Locked when opened from inside a building — the scope is the
+                    building you are in, not something to retype. */}
+                <input value={scope.project_name} readOnly={!!building}
+                  onChange={e => setScope(s => ({ ...s, project_name: e.target.value }))}
+                  className={`${inputCls} ${building ? "opacity-70 cursor-not-allowed" : ""}`} />
+              </div>
+              <div>
+                <label className={`text-[11px] mb-1 block ${t.textMuted}`}>Tower *</label>
+                {/* The backend scopes a building delete by project + tower, so a
+                    multi-tower project is deleted one tower at a time. */}
+                {building?.towers?.length ? (
+                  <select value={scope.tower} onChange={e => setScope(s => ({ ...s, tower: e.target.value }))} className={`${inputCls} cursor-pointer`}>
+                    <option value="">Select a tower…</option>
+                    {building.towers.map((x: TowerSummary) => (
+                      <option key={x.tower} value={x.tower}>Tower {x.tower} ({x.total} units)</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input value={scope.tower} onChange={e => setScope(s => ({ ...s, tower: e.target.value }))} className={inputCls} />
+                )}
+              </div>
               <div><label className={`text-[11px] mb-1 block ${t.textMuted}`}>Wing</label><input value={scope.wing} onChange={e => setScope(s => ({ ...s, wing: e.target.value }))} className={inputCls} placeholder="All wings" /></div>
             </div>
+            {building && building.towers.length > 1 && (
+              <p className={`text-[11px] mb-2 ${t.textFaint}`}>
+                This project has {building.towers.length} towers. Deletion is scoped to one tower at a time.
+              </p>
+            )}
             {!ready ? <p className={`text-[11px] ${t.textFaint} mb-3`}>Enter project and tower to preview.</p> : (
               <div className={`rounded-lg border p-3 mb-3 ${t.innerBlock}`}>
                 {loadingPreview ? <p className={`text-[11px] ${t.textFaint}`}>Counting…</p> : preview ? (
