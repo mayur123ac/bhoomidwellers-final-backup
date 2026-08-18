@@ -9,7 +9,7 @@ import {
   FaPlus, FaTable, FaThLarge, FaTimes, FaSort, FaSortUp, FaSortDown,
   FaHistory, FaExternalLinkAlt, FaChevronDown, FaLayerGroup, FaPen,
   FaTrash, FaExclamationTriangle, FaBuilding, FaLock, FaTags, FaHandshake, FaChartBar,
-  FaArrowLeft, FaArrowRight,
+  FaArrowLeft, FaArrowRight, FaExpand, FaCompress,
 } from "react-icons/fa";
 import { formatCurrencyDisplay } from "@/lib/currency";
 import AddUnitModal from "./AddUnitModal";
@@ -40,10 +40,6 @@ export interface InventoryUnit {
   lead_name?: string | null; lead_phone?: string | null; lead_email?: string | null;
   lead_assigned_to?: string | null;   // ← NEW
   booking_number?: string | null; booking_status?: string | null; booking_primary_name?: string | null;
-  // Joined from booking_registration_details / booking_loan_details by the row
-  // endpoint. NULL means "no such record", which is not the same as "pending".
-  registration_status?: string | null; actual_registration_date?: string | null;
-  disbursement_status?: string | null; actual_disbursement_date?: string | null;
 }
 interface HistoryRow { id: number; old_status: string | null; new_status: string; changed_by: string | null; reason: string | null; changed_at: string; }
 
@@ -68,125 +64,6 @@ const STATUS_KEYS = Object.keys(STATUS);
 // already reads red as "something is wrong here". A duplicate outranks the unit-type
 // tint on a cell, but never replaces the status indicator — see UnitCell.
 const DUPLICATE_HEX = "#ef4444";
-
-// ═══════════════════════════════════════════════════════════════════════════
-// TILE STATE — what the floor-matrix tile's own colour means
-// ═══════════════════════════════════════════════════════════════════════════
-// The business colour scheme. This is deliberately NOT the same axis as the
-// 8-value `status` column: it answers "where is this flat in the sale?", which
-// is a question about the booking's registration and disbursement, not about
-// the unit row. Two of the five states cannot be derived from `status` at all.
-//
-// Where the inputs come from (verified against the live schema — none of this
-// is on inventory_units):
-//   registration_status  → booking_registration_details, via booking_id
-//   disbursement_status  → booking_loan_details,          via booking_id
-//   refuge area          → inventory_units.status = 'refuge_area'
-//
-// Resolution order is a priority ladder, not a lookup: refuge area outranks
-// everything, then the registration/disbursement pair, then plain availability.
-export type TileStateKey =
-  | "available" | "reg_disb_complete" | "reg_in_process"
-  | "reg_complete_disb_pending" | "refuge_area";
-
-type TileState = { key: TileStateKey; label: string; fill: string; border: string; text: string };
-
-// One definition per state, for both themes. Nothing else in this file may
-// invent a colour for these five — the legend, the grid and the table all read
-// from here, which is what stops the legend drifting from the tiles.
-const TILE_STATES: Record<TileStateKey, { label: string; light: TileState; dark: TileState }> = {
-  // WHITE. Available stock is the neutral ground the other states stand out
-  // against — it is the absence of commitment, so it gets the absence of colour.
-  available: {
-    label: "Available",
-    light: { key: "available", label: "Available", fill: "#ffffff", border: "#d4d4d8", text: "#18181b" },
-    // Still reads as "white" against a #0D0D12 page, without glaring.
-    dark: { key: "available", label: "Available", fill: "#f4f4f5", border: "#a1a1aa", text: "#18181b" },
-  },
-  reg_disb_complete: {
-    label: "Registration + Disbursement Complete",
-    light: { key: "reg_disb_complete", label: "Registration + Disbursement Complete", fill: "#2563eb", border: "#1d4ed8", text: "#ffffff" },
-    dark: { key: "reg_disb_complete", label: "Registration + Disbursement Complete", fill: "#3b82f6", border: "#60a5fa", text: "#ffffff" },
-  },
-  reg_in_process: {
-    label: "Registration In Process",
-    light: { key: "reg_in_process", label: "Registration In Process", fill: "#9ca3af", border: "#6b7280", text: "#111827" },
-    dark: { key: "reg_in_process", label: "Registration In Process", fill: "#6b7280", border: "#9ca3af", text: "#f9fafb" },
-  },
-  reg_complete_disb_pending: {
-    label: "Registration Complete / Disbursement Pending",
-    // Dark text on orange: white on #f97316 is about 2.9:1, which fails at this
-    // tile's text size.
-    light: { key: "reg_complete_disb_pending", label: "Registration Complete / Disbursement Pending", fill: "#f97316", border: "#ea580c", text: "#431407" },
-    dark: { key: "reg_complete_disb_pending", label: "Registration Complete / Disbursement Pending", fill: "#ea580c", border: "#fb923c", text: "#ffffff" },
-  },
-  refuge_area: {
-    label: "Refuge Area",
-    light: { key: "refuge_area", label: "Refuge Area", fill: "#dc2626", border: "#b91c1c", text: "#ffffff" },
-    dark: { key: "refuge_area", label: "Refuge Area", fill: "#ef4444", border: "#f87171", text: "#ffffff" },
-  },
-};
-
-export const TILE_STATE_KEYS = Object.keys(TILE_STATES) as TileStateKey[];
-
-/** The one place a tile state becomes a colour. */
-export const getTileStateColor = (key: TileStateKey, isDark = false): TileState =>
-  isDark ? TILE_STATES[key].dark : TILE_STATES[key].light;
-
-const normStatus = (v: unknown) => String(v ?? "").trim().toLowerCase();
-
-// "Completed" in this system is spelled several ways across the booking tables
-// (see isCompletedStatus in lib/revenueCalculations). Anything else — Pending,
-// Scheduled, Partial — is explicitly NOT complete.
-const isStageComplete = (v: unknown) =>
-  ["completed", "complete", "done", "received", "disbursed", "registered"].includes(normStatus(v));
-
-/** The fields the tile colour is resolved from. */
-export interface TileScoped {
-  status?: string | null;
-  booking_id?: number | null;
-  registration_status?: string | null;
-  disbursement_status?: string | null;
-}
-
-/**
- * Resolve a unit to its business tile state, or null when none of the five
- * apply and the tile should fall back to the ordinary `status` colour
- * (on hold, blocked, cancelled, unfinished).
- */
-export function resolveTileState(u: TileScoped): TileStateKey | null {
-  // 1. Refuge area always wins — it is a physical classification of the floor,
-  //    true regardless of any sale, and the one state that must never be missed.
-  if (normStatus(u.status) === "refuge_area") return "refuge_area";
-
-  // 2. The registration/disbursement pair, read from the booking's own records.
-  const reg = normStatus(u.registration_status);
-  if (reg) {
-    if (!isStageComplete(reg)) return "reg_in_process";
-    return isStageComplete(u.disbursement_status) ? "reg_disb_complete" : "reg_complete_disb_pending";
-  }
-
-  // 3. A sold flat whose registration has not been opened yet is still "in
-  //    process" — the sale is underway. Without this, such a unit would fall
-  //    through to the `booked` status colour, which is blue, and blue already
-  //    means "registration AND disbursement complete" — the most misleading
-  //    collision available. See the note in the handover.
-  if (u.booking_id != null) return "reg_in_process";
-
-  // 4. Otherwise only plain availability is a business state.
-  if (normStatus(u.status) === "available") return "available";
-  return null;
-}
-
-/** Tile appearance for any unit: business state if it has one, else its status. */
-export function getTileAppearance(u: TileScoped, isDark = false): { fill: string; border: string; text: string; label: string } {
-  const key = resolveTileState(u);
-  if (key) return getTileStateColor(key, isDark);
-  const c = sc(normStatus(u.status));
-  // Unresolved statuses keep the tint treatment they already had, so nothing
-  // silently loses the meaning it has today.
-  return { fill: `${c.hex}26`, border: `${c.hex}80`, text: c.hex, label: c.label };
-}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Unit-type colours — a SECOND, independent visual channel
@@ -321,19 +198,12 @@ export function findDuplicateFlats(units: DuplicateScoped[]): Set<string> {
 export const isDuplicateFlat = (unit: DuplicateScoped, duplicates: Set<string>) => duplicates.has(dupKey(unit));
 
 /** Tooltip shared by both views: "Duplicate flat number — 101 · 2BHK · Available". */
-const unitTooltip = (u: InventoryUnit, duplicate: boolean) => {
-  // The tile's own state comes first, because it is what the colour is saying.
-  // The raw status stays too — they are different questions, and a tile that
-  // reads "Registration In Process" should still admit the unit is `booked`.
-  const state = resolveTileState(u);
-  const stateLabel = state ? getTileStateColor(state).label : null;
-  const status = sc(u.status).label;
-  return [
+const unitTooltip = (u: InventoryUnit, duplicate: boolean) =>
+  [
     duplicate ? "Duplicate flat number —" : null,
-    `${u.flat_no} · ${unitTypeLabel(u.unit_type)} · ${stateLabel && stateLabel !== status ? `${stateLabel} · ${status}` : status}`,
+    `${u.flat_no} · ${unitTypeLabel(u.unit_type)} · ${sc(u.status).label}`,
     u.wing ? `· Wing ${u.wing}` : null,
   ].filter(Boolean).join(" ");
-};
 
 /** Type pill used in the table's Type column and in the legend. */
 function UnitTypeChip({ unitType, isDark }: { unitType: string; isDark: boolean }) {
@@ -386,18 +256,6 @@ const UNIT_TYPES = ["1 RK", "1BHK", "1.5BHK", "2BHK", "2.5BHK", "3BHK", "3.5BHK"
 function StatusBadge({ status }: { status: string }) {
   const c = sc(status);
   return <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider border inline-flex items-center flex-shrink-0 ${c.text} ${c.border} ${c.bg}`}>{c.label}</span>;
-}
-
-/** Table equivalent of a grid tile: the tile's colour, then the exact status. */
-function TileStateCell({ u, isDark }: { u: InventoryUnit; isDark: boolean }) {
-  const state = resolveTileState(u);
-  const tile = getTileAppearance(u, isDark);
-  return (
-    <span className="inline-flex items-center gap-1.5 min-w-0" title={state ? `${tile.label} · ${sc(u.status).label}` : sc(u.status).label}>
-      <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: tile.fill, border: `1px solid ${tile.border}` }} />
-      <StatusBadge status={u.status} />
-    </span>
-  );
 }
 
 const num = (v: any): number => { const n = Number(String(v ?? "").replace(/[,\s₹]/g, "")); return isNaN(n) ? 0 : n; };
@@ -653,6 +511,51 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
 
   const inputCls = `rounded-lg px-2.5 py-1.5 text-xs outline-none border ${t.inputInner} ${t.text} ${t.inputFocus}`;
   const selectCls = `${inputCls} cursor-pointer`;
+  // A pinned strip sits over scrolling content, so it needs its own surface —
+  // `t.mainBg` is transparent in light mode (the gradient lives on an ancestor),
+  // which would let flat tiles show through the building name.
+  const stickySurface = isDark ? "bg-[#0D0D12]/95 backdrop-blur-sm" : "bg-white/95 backdrop-blur-sm";
+  const solidSurface = isDark ? "bg-[#0D0D12]" : "bg-white";
+
+  // ── Full-screen availability workspace ──
+  // The dashboard's own sidebar and top bar cost ~140px of width and ~68px of
+  // height that the matrix cannot use, and no amount of layout work inside this
+  // component can reclaim them. Full screen lifts the view out of the dashboard
+  // shell entirely: a fixed overlay covers the app chrome, and the native
+  // Fullscreen API is asked for on top of that so the browser and OS chrome go
+  // too. The overlay is what does the real work — if the browser refuses
+  // fullscreen (permission, iframe, older engine), the view still fills the tab.
+  const [fullScreen, setFullScreen] = useState(false);
+
+  const toggleFullScreen = useCallback(() => {
+    setFullScreen(v => {
+      const next = !v;
+      try {
+        if (next && !document.fullscreenElement) void document.documentElement.requestFullscreen?.();
+        else if (!next && document.fullscreenElement) void document.exitFullscreen?.();
+      } catch { /* overlay alone is enough */ }
+      return next;
+    });
+  }, []);
+
+  // Esc leaves the workspace. When the browser IS in native fullscreen it eats
+  // Esc itself, so the fullscreenchange listener is what returns us to normal in
+  // that case — both paths end at the same state.
+  useEffect(() => {
+    if (!fullScreen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setFullScreen(false); };
+    const onChange = () => { if (!document.fullscreenElement) setFullScreen(false); };
+    window.addEventListener("keydown", onKey);
+    document.addEventListener("fullscreenchange", onChange);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.removeEventListener("fullscreenchange", onChange);
+    };
+  }, [fullScreen]);
+
+  // Leaving the building must not stall the browser in a fullscreen view of a
+  // screen that no longer exists.
+  useEffect(() => () => { if (document.fullscreenElement) void document.exitFullscreen?.().catch(() => {}); }, []);
 
   // ── Building list fetch ──
   // Two existing endpoints, no new one: the grouped mode of /api/inventory for
@@ -1046,23 +949,36 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
       : `${building.towers.length} tower${building.towers.length === 1 ? "" : "s"}`;
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      {/* ── Breadcrumb + back ── */}
-      <button onClick={backToList}
-        className={`self-start flex items-center gap-1.5 mb-2 text-[11px] font-semibold ${t.textMuted} hover:text-[#00AEEF]`}>
-        <FaArrowLeft className="text-[9px]" /> Back to Inventory
-      </button>
+    <div className={fullScreen
+      // Fixed to the viewport, above the dashboard's sidebar and top bar, so the
+      // matrix gets the whole glass instead of the panel it was allotted.
+      ? `fixed inset-0 z-[100] flex flex-col overflow-hidden px-3 pb-1 ${solidSurface}`
+      : "flex flex-col h-full overflow-hidden"}>
+      {/* ── ONE scroll container for the whole building view ──
+          The statistics, tabs, filters and legend used to sit OUTSIDE the
+          scroller, so ~350px of chrome was subtracted from the viewport on every
+          floor the operator scrolled past — the matrix could never be more than a
+          letterbox. They now scroll away with the content; only the identity
+          strip is pinned, because a wall of flat numbers is unreadable without
+          knowing which tower and wing it belongs to. */}
+      <div className="flex-1 overflow-y-auto overflow-x-hidden px-1">
 
-      {/* ── Building header ── */}
-      <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
-        <div className="min-w-0">
-          <h1 className={`text-lg font-bold flex items-center gap-2 ${t.text}`}>
-            <FaBuilding className="text-[#00AEEF] text-sm" /> {building.project_name}
-          </h1>
-          <p className={`text-[11px] ${t.textMuted}`}>
-            {scopeLabel} · {n0(scope?.floors)} floor{n0(scope?.floors) === 1 ? "" : "s"} · {n0(scope?.total)} unit{n0(scope?.total) === 1 ? "" : "s"}
-            {total > units.length ? ` · showing ${units.length} of ${total} matching` : ""}
-          </p>
+        {/* ── Pinned identity + primary actions ── */}
+        <div className={`sticky top-0 z-30 -mx-1 px-1 py-2 mb-2 flex items-start justify-between gap-3 flex-wrap border-b ${t.tableBorder} ${stickySurface}`}>
+        <div className="min-w-0 flex items-start gap-2.5">
+          <button onClick={backToList} title="Back to Inventory"
+            className={`mt-1 flex items-center gap-1 text-[11px] font-semibold flex-shrink-0 ${t.textMuted} hover:text-[#00AEEF]`}>
+            <FaArrowLeft className="text-[10px]" /> Back
+          </button>
+          <div className="min-w-0">
+            <h1 className={`text-lg font-bold flex items-center gap-2 ${t.text}`}>
+              <FaBuilding className="text-[#00AEEF] text-sm" /> {building.project_name}
+            </h1>
+            <p className={`text-[11px] ${t.textMuted}`}>
+              {scopeLabel} · {n0(scope?.floors)} floor{n0(scope?.floors) === 1 ? "" : "s"} · {n0(scope?.total)} unit{n0(scope?.total) === 1 ? "" : "s"}
+              {total > units.length ? ` · showing ${units.length} of ${total} matching` : ""}
+            </p>
+          </div>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
@@ -1070,6 +986,14 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
             <button onClick={() => setViewMode("grid")} className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold ${viewMode === "grid" ? "bg-[#00AEEF] text-white" : `${t.textMuted}`}`}><FaThLarge className="text-[10px]" /> Floors</button>
             <button onClick={() => setViewMode("table")} className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold ${viewMode === "table" ? "bg-[#00AEEF] text-white" : `${t.textMuted}`}`}><FaTable className="text-[10px]" /> Table</button>
           </div>
+
+          {/* Full screen — the availability wall, with nothing else on the glass. */}
+          <button onClick={toggleFullScreen}
+            title={fullScreen ? "Exit full screen (Esc)" : "Full screen availability"}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border ${fullScreen ? "bg-[#00AEEF] text-white border-[#00AEEF]" : `${t.tableBorder} ${t.text} hover:border-[#00AEEF]`}`}>
+            {fullScreen ? <FaCompress className="text-[10px]" /> : <FaExpand className="text-[10px]" />}
+            {fullScreen ? "Exit" : "Full screen"}
+          </button>
 
           {/* Add Unit menu (managers only) — scoped to THIS building. */}
           {canManage && (
@@ -1133,18 +1057,19 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
             )}
           </div>
         </div>
-      </div>
+        </div>
+        {/* ── end pinned strip ── */}
 
       {/* ── Which building, tower and wing this screen is showing ── */}
-      <BuildingContextTag
+      {/* <BuildingContextTag
         ctx={{ project_name: building.project_name, tower: towerCtx, wing: wingCtx }}
         t={t}
         meta={`${n0(scope?.floors)} floor${n0(scope?.floors) === 1 ? "" : "s"}  •  ${n0(scope?.total)} unit${n0(scope?.total) === 1 ? "" : "s"}`}
         className="mb-3"
-      />
+      /> */}
 
       {/* ── Building statistics (from the aggregate, never the capped row list) ── */}
-      <div className={`flex items-center gap-2 flex-wrap mb-3 p-3 rounded-xl border ${t.innerBlock}`}>
+      <div className={`flex items-center gap-2 flex-wrap rounded-xl border ${fullScreen ? "mb-1.5 p-2" : "mb-3 p-3"} ${t.innerBlock}`}>
         <Stat label="Total Units" value={n0(scope?.total)} t={t} />
         <Stat label="Available" value={n0(scope?.available)} t={t} hex={STATUS.available.hex} />
         <Stat label="Booked" value={n0(scope?.booked)} t={t} hex={STATUS.booked.hex} />
@@ -1169,7 +1094,7 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
 
       {/* ── Tower tabs (only when the building actually has more than one) ── */}
       {building.towers.length > 1 && (
-        <div className="flex items-center gap-1.5 flex-wrap mb-3">
+        <div className={`flex items-center gap-1.5 flex-wrap ${fullScreen ? "mb-1.5" : "mb-3"}`}>
           <button onClick={() => setActiveTower("")}
             className={`px-3 py-1.5 rounded-full text-[11px] font-bold border ${activeTower === "" ? "bg-[#00AEEF] text-white border-[#00AEEF]" : `${t.tableBorder} ${t.textMuted}`}`}>
             All towers
@@ -1187,7 +1112,7 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
           A single un-winged tower gets no row at all, so towers that never used
           wings look exactly as they did before. ── */}
       {(wingsForTower.length > 1 || (wingsForTower.length === 1 && !!wingsForTower[0].wing)) && (
-        <div className="flex items-center gap-1.5 flex-wrap mb-3">
+        <div className={`flex items-center gap-1.5 flex-wrap ${fullScreen ? "mb-1.5" : "mb-3"}`}>
           <button onClick={() => setActiveWing("")}
             className={`px-3 py-1.5 rounded-full text-[11px] font-bold border ${activeWing === "" ? "bg-[#00AEEF] text-white border-[#00AEEF]" : `${t.tableBorder} ${t.textMuted}`}`}>
             All wings
@@ -1205,7 +1130,7 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
       )}
 
       {/* ── Filters — scoped to this building; no project/tower retyping ── */}
-      <div className={`flex items-center gap-2 flex-wrap mb-3 p-2.5 rounded-xl border ${t.innerBlock}`}>
+      <div className={`flex items-center gap-2 flex-wrap rounded-xl border ${fullScreen ? "mb-1.5 p-1.5" : "mb-3 p-2.5"} ${t.innerBlock}`}>
         <input value={filters.search} onChange={e => setFilter({ search: e.target.value })} placeholder="Search flat…" className={`${inputCls} w-48`} />
         <select value={filters.floor} onChange={e => setFilter({ floor: e.target.value })} className={`${selectCls} w-32`}>
           <option value="">All floors</option>
@@ -1252,8 +1177,18 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
         </div>
       )}
 
-      {/* ── Body ── */}
-      <div className="flex-1 overflow-auto rounded-3xl p-3  h-[calc(100vh-140px)] overflow-auto">
+      {/* ── Body ──
+          No longer a scroll container of its own: it is a section of the one
+          scroller above, so there is no scroll box nested inside a scrolling
+          page. Padding is minimal — the matrix is the workspace, not a card.
+
+          `min-h-full` is the whole point of the section: it resolves against the
+          scroll container's height (definite, because the scroller is a flex-1
+          child of a fixed-height column), so the matrix is ALWAYS at least one
+          full viewport tall — never the ~436px half-panel it used to get. The
+          chrome above it is then guaranteed to be scrollable out of the way,
+          whether the tower has 18 floors or three. */}
+      <div className="min-h-full pb-4">
         {loading && units.length === 0 ? (
           <p className={`text-sm italic ${t.textFaint} p-4`}>Loading inventory…</p>
         ) : units.length === 0 ? (
@@ -1271,8 +1206,11 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
             isDuplicate={isDuplicate} isDark={isDark}
           />
         ) : (
+          /* In full screen the pinned strip already names the building, tower and
+             wing a few pixels above, so the context tag would be the same
+             sentence twice — and it costs a floor of tiles. */
           <GridView floorsGrouped={floorsGrouped} t={t} onCellClick={(id) => setDrawerId(id)} isDuplicate={isDuplicate} isDark={isDark}
-            ctx={{ project_name: building.project_name, tower: towerCtx, wing: wingCtx }} />
+            ctx={fullScreen ? undefined : { project_name: building.project_name, tower: towerCtx, wing: wingCtx }} />
         )}
 
         {units.length > 0 && total > units.length && (
@@ -1284,6 +1222,8 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
           </div>
         )}
       </div>
+      </div>
+      {/* ── end scroll container ── */}
 
       {/* ── Modals ── */}
       {/* Both creators are launched from inside a building, so the building is
@@ -1345,10 +1285,7 @@ function TableView({ columns, colW, sort, sorted, t, allSelected, selected, togg
     // Type gets the same ink as the grid; status keeps its own badge. The two
     // columns read as two systems because they are two systems.
     if (key === "unit_type") return <UnitTypeChip unitType={u.unit_type} isDark={isDark} />;
-    // The Status cell keeps the status badge, and gains the tile's own colour as
-    // a leading swatch — so a row in the table and its tile in the grid are
-    // recognisably the same thing, without the badge losing its exact status.
-    if (key === "status") return <TileStateCell u={u} isDark={isDark} />;
+    if (key === "status") return <StatusBadge status={u.status} />;
     if (key === "linked") return linkChip(u);
     if (key === "carpet_area_sqft") return area(u.carpet_area_sqft);
     if (key === "source") return <span className={`text-[10px] ${t.textMuted}`}>{String(u.source || "").replace("_", " ")}</span>;
@@ -1466,40 +1403,38 @@ function TableView({ columns, colW, sort, sorted, t, allSelected, selected, togg
 // The duplicate frame outranks the type fill, but takes neither the type label
 // nor the status dot with it — a duplicate that hides the booking is worse than
 // the duplicate.
+//
+// The tile fills its grid column rather than carrying a fixed width, so the
+// matrix grows with the viewport — the COLUMN is what gets clamped, not the tile.
 function UnitCell({ u, t, isDark, duplicate, onClick }: { u: InventoryUnit; t: any; isDark: boolean; duplicate: boolean; onClick: () => void }) {
   const type = getUnitTypeColor(u.unit_type, isDark);
-  const tile = getTileAppearance(u, isDark);
-  const stateKey = resolveTileState(u);
-  // On a saturated business tile the unit-type ink (indigo, fuchsia…) is
-  // unreadable, so the type label borrows the tile's own text colour. On the
-  // white Available tile — where the great majority of stock sits, and where
-  // telling a 1BHK from a 3BHK actually matters — the type keeps its own ink.
-  const saturated = stateKey !== null && stateKey !== "available";
-
+  const status = sc(u.status);
   return (
     <button
       type="button"
       onClick={onClick}
       title={unitTooltip(u, duplicate)}
-      className="relative w-[68px] h-[52px] rounded-lg flex flex-col items-center justify-center leading-tight transition-[transform,box-shadow] hover:scale-105 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00AEEF]"
+      className="relative w-full min-w-0 h-[56px] px-1.5 rounded-lg flex flex-col items-center justify-center leading-tight transition-transform hover:scale-105"
       style={{
-        backgroundColor: tile.fill,
-        // A duplicate keeps its red frame, but no longer takes the fill: the
-        // fill is the business state now, and hiding "registration complete"
-        // behind a numbering warning trades a large error for a small one.
-        border: duplicate ? `2px solid ${DUPLICATE_HEX}` : `1px solid ${tile.border}`,
+        // A duplicate takes the fill and the frame — a very light red wash that
+        // survives being scanned past — but nothing else on the cell.
+        backgroundColor: duplicate ? `${DUPLICATE_HEX}14` : type.fill,
+        border: duplicate ? `1.5px solid ${DUPLICATE_HEX}` : `1px solid ${type.border}`,
       }}
     >
-      <span className="inline-flex items-center gap-0.5 text-[11px] font-bold" style={{ color: duplicate && !saturated ? DUPLICATE_HEX : tile.text }}>
-        {duplicate && <FaExclamationTriangle className="text-[8px] flex-shrink-0" aria-hidden />}
-        {u.flat_no}
-      </span>
+      {/* Status stays legible on a duplicate — it is a separate channel. */}
       <span
-        className="text-[9px] font-bold"
-        style={{ color: saturated ? tile.text : type.ink, opacity: saturated ? 0.9 : 1 }}
-      >
-        {type.label}
+        className="absolute top-1 right-1 w-[7px] h-[7px] rounded-full"
+        style={{ backgroundColor: status.hex }}
+        title={status.label}
+      />
+      <span className={`inline-flex items-center gap-0.5 max-w-full text-[12px] font-bold ${duplicate ? "text-red-500" : t.text}`}>
+        {duplicate && <FaExclamationTriangle className="text-[8px] flex-shrink-0" aria-hidden />}
+        <span className="truncate">{u.flat_no}</span>
       </span>
+      {/* The type ink is never suppressed by the duplicate wash: a duplicate that
+          hides what the flat is costs more than it saves. */}
+      <span className="text-[9px] font-bold" style={{ color: type.ink }}>{type.label}</span>
     </button>
   );
 }
@@ -1507,17 +1442,23 @@ function UnitCell({ u, t, isDark, duplicate, onClick }: { u: InventoryUnit; t: a
 // ═══════════════════════════════════════════════════════════════════════════
 // Grid / heatmap view
 // ═══════════════════════════════════════════════════════════════════════════
+// Tile geometry. A tile is elastic between TILE_MIN and TILE_MAX rather than
+// fixed: TILE_MIN is the narrowest a "B-1801 / 2BHK" tile stays readable at, and
+// TILE_MAX is where growing further stops adding information and just makes a
+// seven-flat floor look like a toolbar. Between them the matrix takes whatever
+// width the viewport offers.
+const TILE_MIN = 88;
+const TILE_MAX = 168;
+const TILE_GAP = 6;
+const FLOOR_LABEL_W = 56;
+
 function GridView({ floorsGrouped, t, onCellClick, isDuplicate, isDark, ctx }: { floorsGrouped: [number, InventoryUnit[]][]; t: any; onCellClick: (id: number) => void; isDuplicate?: (u: InventoryUnit) => boolean; isDark: boolean; ctx?: BuildingContext }) {
   const anyDuplicate = floorsGrouped.some(([, us]) => us.some(u => isDuplicate?.(u)));
-  const allUnits = floorsGrouped.flatMap(([, us]) => us);
-  // The five business states are always listed, in their priority order — the
-  // legend is a key to the scheme, and a colour missing from it because today's
-  // filter happens to exclude it is worse than a row of five.
-  // The ordinary statuses below it are listed only when a tile actually falls
-  // back to one, so the legend does not claim colours that are not on screen.
-  const fallbackStatusesPresent = [...new Set(
-    allUnits.filter(u => resolveTileState(u) === null).map(u => u.status),
-  )].sort();
+  // One column count for the whole matrix — the widest floor — so every floor
+  // shares a template and the flats align into vertical stacks.
+  const cols = Math.max(1, ...floorsGrouped.map(([, us]) => us.length));
+  // The pinned floor label needs an opaque backing, or tiles scroll under it.
+  const surface = isDark ? "bg-[#0D0D12]" : "bg-white";
   // Only the types actually standing in this building — a legend listing every
   // configuration the system knows about would be longer than most towers' stock.
   // Deduped on the NORMALISED key, so a tower holding both "2BHK" and "2 BHK"
@@ -1550,32 +1491,15 @@ function GridView({ floorsGrouped, t, onCellClick, isDuplicate, isDark, ctx }: {
             })}
           </div>
         )}
-        {/* The tile scheme itself — same swatch treatment as the tiles, read from
-            the same table, so the legend cannot drift from the grid. */}
         <div className="flex items-center gap-2 flex-wrap">
-          <span className={`text-[9px] font-bold uppercase tracking-widest ${t.textFaint}`}>Tile colour</span>
-          {TILE_STATE_KEYS.map(k => {
-            const c = getTileStateColor(k, isDark);
-            return (
-              <span key={k} className="inline-flex items-center gap-1.5 text-[10px]">
-                <span className="w-3 h-3 rounded" style={{ backgroundColor: c.fill, border: `1px solid ${c.border}` }} />
-                <span className={t.textMuted}>{c.label}</span>
-              </span>
-            );
-          })}
+          <span className={`text-[9px] font-bold uppercase tracking-widest ${t.textFaint}`}>Status</span>
+          {STATUS_KEYS.map(s => (
+            <span key={s} className="inline-flex items-center gap-1.5 text-[10px]">
+              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: STATUS[s].hex }} />
+              <span className={t.textMuted}>{STATUS[s].label}</span>
+            </span>
+          ))}
         </div>
-
-        {fallbackStatusesPresent.length > 0 && (
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className={`text-[9px] font-bold uppercase tracking-widest ${t.textFaint}`}>Other status</span>
-            {fallbackStatusesPresent.map(s => (
-              <span key={s} className="inline-flex items-center gap-1.5 text-[10px]">
-                <span className="w-3 h-3 rounded" style={{ backgroundColor: `${sc(s).hex}26`, border: `1px solid ${sc(s).hex}80` }} />
-                <span className={t.textMuted}>{sc(s).label}</span>
-              </span>
-            ))}
-          </div>
-        )}
         {anyDuplicate && (
           <div className="flex items-center gap-2 flex-wrap">
             <span className={`text-[9px] font-bold uppercase tracking-widest ${t.textFaint}`}>Special</span>
@@ -1586,18 +1510,42 @@ function GridView({ floorsGrouped, t, onCellClick, isDuplicate, isDark, ctx }: {
           </div>
         )}
       </div>
-      <div className="space-y-1.5">
-        {floorsGrouped.map(([floor, us]) => (
-          <div key={floor} className="flex items-center gap-2">
-            <div className={`w-14 flex-shrink-0 text-right text-[11px] font-bold ${t.textMuted}`}>{floor === 0 ? "Ground" : `Fl ${floor}`}</div>
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {us.map(u => (
-                <UnitCell key={u.id} u={u} t={t} isDark={isDark}
-                  duplicate={!!isDuplicate?.(u)} onClick={() => onCellClick(u.id)} />
-              ))}
+      {/* ── The matrix ──
+          Rows were `flex-wrap` over fixed 68px tiles, which had two costs: the
+          matrix could never use more than ~480px of a 1800px screen, and flat 3
+          of one floor did not line up under flat 3 of the next, so "which stack
+          is this?" could not be answered by looking down a column.
+          One grid template, shared by every floor, fixes both: columns = the
+          widest floor, each free to grow between a readable floor and a cap that
+          stops seven flats stretching into seven billboards. */}
+      <div className="overflow-x-auto">
+        <div className="space-y-1.5" style={{ minWidth: FLOOR_LABEL_W + cols * (TILE_MIN + TILE_GAP) }}>
+          {floorsGrouped.map(([floor, us]) => (
+            <div key={floor} className="flex items-stretch" style={{ gap: TILE_GAP }}>
+              {/* Pinned left so the floor stays identifiable if a very narrow
+                  screen forces the matrix to scroll sideways. */}
+              <div
+                className={`flex-shrink-0 sticky left-0 z-10 flex items-center justify-end pr-2 text-[11px] font-bold ${t.textMuted} ${surface}`}
+                style={{ width: FLOOR_LABEL_W }}
+              >
+                {floor === 0 ? "Ground" : `Fl ${floor}`}
+              </div>
+              <div
+                className="grid flex-1"
+                style={{
+                  gap: TILE_GAP,
+                  gridTemplateColumns: `repeat(${cols}, minmax(${TILE_MIN}px, 1fr))`,
+                  maxWidth: cols * TILE_MAX + (cols - 1) * TILE_GAP,
+                }}
+              >
+                {us.map(u => (
+                  <UnitCell key={u.id} u={u} t={t} isDark={isDark}
+                    duplicate={!!isDuplicate?.(u)} onClick={() => onCellClick(u.id)} />
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
     </div>
   );
