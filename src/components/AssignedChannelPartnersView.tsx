@@ -163,7 +163,10 @@ export default function AssignedChannelPartnersView({
     "RERA", "GST", "Leads", "Bookings", "Profile", "Status", "Assigned On",
   ];
 
-  const inputCls = `rounded-lg px-2.5 py-1.5 text-xs outline-none border ${t.inputInner} ${t.text} ${t.inputFocus}`;
+  const inputCls = `rounded-xl px-3 py-2 text-xs outline-none transition-all ${isDark
+    ? "bg-[#1C1C1E] text-white placeholder-gray-500 focus:bg-[#2C2C2E] border border-white/5"
+    : "bg-black/5 text-black placeholder-gray-500 focus:bg-black/10 border border-black/5"
+    }`;
   const cell = `px-3 py-3 whitespace-nowrap ${t.textMuted}`;
 
   const detailTabs = [
@@ -177,9 +180,13 @@ export default function AssignedChannelPartnersView({
   const fieldBlock = (heading: string, fields: [string, any][], highlight = false) => (
     <div
       key={heading}
-      className={`mb-4 rounded-xl p-4 border ${highlight
-        ? isDark ? "bg-[#9E217B]/10 border-[#9E217B]/30" : "bg-[#9E217B]/5 border-[#9E217B]/25"
-        : `${t.modalBlock}`
+      className={`mb-4 rounded-2xl p-4 transition-colors ${highlight
+        ? isDark
+          ? "bg-[#9E217B]/20 border border-[#9E217B]/30"
+          : "bg-[#9E217B]/10 border border-[#9E217B]/20"
+        : isDark
+          ? "bg-white/5 border border-white/5"
+          : "bg-black/5 border border-transparent"
         }`}
       style={highlight ? {} : t.modalBlockGl}
     >
@@ -259,7 +266,12 @@ export default function AssignedChannelPartnersView({
               hint: totals.top ? totals.top.name : "no leads yet",
             },
           ].map(card => (
-            <div key={card.label} className={`rounded-xl px-3 py-2.5 border ${t.modalBlock}`} style={t.modalBlockGl}>
+            <div
+              key={card.label}
+              className={`rounded-2xl px-4 py-3 shadow-sm transition-all ${isDark
+                ? "bg-[#1C1C1E] border border-white/5 shadow-black/50"
+                : "bg-white border border-black/5 shadow-gray-200/50"
+                }`}>
               <p className={`text-[10px] font-bold uppercase tracking-wider ${t.textMuted}`}>{card.label}</p>
               <p className={`text-xl font-black leading-tight ${t.text}`}>{card.value}</p>
               <p className={`text-[10px] truncate ${t.textFaint}`} title={String(card.hint)}>{card.hint}</p>
@@ -286,7 +298,10 @@ export default function AssignedChannelPartnersView({
       {/* ── Table ── */}
       <div className={`flex-1 overflow-auto mx-2 rounded-3xl ${t.card}`}>
         <table className="w-full text-left border-collapse">
-          <thead className={`sticky top-0 z-10 ${t.tableHead || (isDark ? "bg-[#1a1a1a]" : "bg-slate-50")}`}>
+          <thead className={`sticky top-0 z-10 backdrop-blur-xl ${isDark
+            ? "bg-[#000000]/70 border-b border-white/10"
+            : "bg-white/70 border-b border-black/5"
+            }`}>
             <tr className={`text-[10px] uppercase ${t.textMuted}`}>
               {columns.map((h, i) => (
                 <th key={`${h}-${i}`} className="px-3 py-3 whitespace-nowrap font-bold">{h}</th>
@@ -351,7 +366,10 @@ export default function AssignedChannelPartnersView({
                   )}
                 </td>
                 <td className="px-3 py-3 whitespace-nowrap">
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${p.status === "active" ? "bg-emerald-500/15 text-emerald-500" : "bg-gray-500/15 text-gray-500"}`}>
+                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-semibold tracking-wide ${p.status === "active"
+                    ? isDark ? "bg-emerald-500/20 text-emerald-400" : "bg-emerald-500/10 text-emerald-700"
+                    : isDark ? "bg-gray-500/20 text-gray-400" : "bg-gray-500/10 text-gray-700"
+                    }`}>
                     {p.status === "active" ? "Active" : "Inactive"}
                   </span>
                 </td>
@@ -367,13 +385,16 @@ export default function AssignedChannelPartnersView({
         {detailFor && (
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+            className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 backdrop-blur-md p-4"
             onClick={() => setDetailFor(null)}
           >
             <motion.div
               initial={{ scale: 0.96, y: 12 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.96, y: 12 }}
               onClick={e => e.stopPropagation()}
-              className={`w-full max-w-4xl max-h-[88vh] overflow-y-auto custom-scrollbar rounded-2xl p-6 ${t.modalCard || t.card}`}
+              className={`w-full max-w-4xl max-h-[88vh] overflow-y-auto custom-scrollbar rounded-[2rem] p-6 shadow-2xl ${isDark
+                ? "bg-[#1C1C1E]/85 backdrop-blur-3xl border border-white/10"
+                : "bg-white/85 backdrop-blur-3xl border border-black/5"
+                }`}
             >
               <div className="flex items-start justify-between mb-4">
                 <div>

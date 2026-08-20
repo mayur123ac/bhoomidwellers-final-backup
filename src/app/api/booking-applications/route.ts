@@ -7,7 +7,7 @@ import { syncBookingUnit } from "@/lib/inventorySync";
 import { computeCPCommission } from "@/lib/cpCommissionEngine";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 import { resolveGstRate, calcGstAmount } from "@/lib/gst";
-import { resolveStampDutyRate, resolveRegistrationFeeRate, calcStampDuty, calcRegistrationFee } from "@/lib/charges";
+import { resolveStampDutyRate, resolveRegistrationFeeRate, calcStampDuty } from "@/lib/charges";
 // Single definition of the fully-joined booking shape, shared by GET, POST and
 // the PUT in [id]/route.ts — see lib/bookingQuery.ts for why.
 import { BOOKING_SELECT_SQL, fetchBookingById } from "@/lib/bookingQuery";
@@ -598,17 +598,20 @@ export async function POST(req: NextRequest) {
       // numeric 0 from a non-form caller cannot regress to 5.
       const gstRate = resolveGstRate(gst_rate_input);
       const gstAmount = calcGstAmount(agreementVal, gstRate);
-      // Same treatment for the two statutory charges: resolve the rate (0 survives,
-      // absent falls back to the Maharashtra default), then derive the amount from
-      // it unless the client sent an explicit figure.
+      // Same treatment for stamp duty: resolve the rate (0 survives, absent falls
+      // back to the Maharashtra default), then derive the amount from it unless the
+      // client sent an explicit figure. The registration fee rate is still resolved
+      // and stored for continuity, but no longer decides the amount.
       const stampDutyRate = resolveStampDutyRate(stamp_duty_rate_input);
       const registrationFeeRate = resolveRegistrationFeeRate(registration_fee_rate_input);
       const stampDutyAmount = stamp_duty_amount_input
         ? cleanNum(stamp_duty_amount_input)
         : calcStampDuty(agreementVal, stampDutyRate);
-      const registrationFeeAmount = registration_fee_amount_input
-        ? cleanNum(registration_fee_amount_input)
-        : calcRegistrationFee(agreementVal, registrationFeeRate);
+      // Registration fee is the exception: it is entered directly rather than
+      // derived, so it is stored exactly as sent, with no percentage fallback and
+      // no ₹30,000 cap. Nothing supplied means ₹0, not "estimate it from the
+      // agreement value".
+      const registrationFeeAmount = cleanNum(registration_fee_amount_input);
 
       await client.query(`
         UPDATE booking_applications SET

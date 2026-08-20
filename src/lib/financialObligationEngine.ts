@@ -241,8 +241,15 @@ export function computeFinancialObligation(snapshot: FinancialSnapshot): Financi
   const cashComponent = num(snapshot.cashComponent);
 
   const tokenIsPivot = snapshot.tokenIsPivot !== false; // default true
+  // No cap by default. The registration fee is now typed in by the operator on the
+  // booking form rather than derived from a percentage, so a figure above ₹30,000
+  // is a deliberate entry, not a miscalculation to be clamped. Defaulting to 30000
+  // meant a ₹45,000 fee was silently charged as ₹30,000 in every obligation total.
+  //
+  // Still honoured when a caller passes one explicitly, so an org that does want
+  // the statutory ceiling enforced can opt in.
   const registrationFeeCap = snapshot.registrationFeeCap === undefined
-    ? 30000
+    ? Number.POSITIVE_INFINITY
     : num(snapshot.registrationFeeCap);
 
   // ── Rule 1: qualifying customer contribution ──

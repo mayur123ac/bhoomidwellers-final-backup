@@ -31,6 +31,7 @@ import LoanDealForm from "@/components/LoanDealForm";
 import LoanDealView from "@/components/LoanDealView";
 import InventoryManagementView from "@/components/InventoryManagementView";
 import ChannelPartnerListView from "@/components/ChannelPartnerListView";
+import CpChatPanel from "@/components/CpChatPanel";
 import ChannelPartnerEnquiriesTable from "@/components/ChannelPartnerEnquiriesTable";
 import { canViewPartners } from "@/lib/cpRbac";
 import UploadLeadSheet from "@/components/UploadLeadSheet";
@@ -821,6 +822,7 @@ function AdminAtlasDashboardContent() {
     { id: "inventory", icon: FaBoxes, label: "Inventory" },
     { id: "channel_partners", icon: FaUserTie, label: "Channel Partners" },
     { id: "cp_management", icon: FaHandshake, label: "CP Management" },
+    { id: "cp_chat", icon: FaComments, label: "CP Chat" },
     { id: "receptionist", icon: FaClipboardList, label: "Receptionist" },
     { id: "sales", icon: FaUsers, label: "Sales Managers" },
     { id: "site_head", icon: FaUniversity, label: "Site Heads" },
@@ -859,6 +861,13 @@ function AdminAtlasDashboardContent() {
       return false;
     }
 
+    // CP Chat is the same conversation the Sourcing Manager sees. It carries
+    // client names and follow-up notes, so it rides on the same read gate as
+    // the partner registry; the API applies that gate independently.
+    if (item.id === "cp_chat" && !canViewPartners(userRole)) {
+      return false;
+    }
+
     // CP Management is the assignment/reassignment console — Admin only, since
     // reassigning a Sourcing Manager is an Admin-exclusive right (Part 7).
     if (item.id === "cp_management" && !isAdmin) {
@@ -885,7 +894,7 @@ function AdminAtlasDashboardContent() {
   // carry no heading.
   const menuGroups: Record<string, string> = {
     dashboard: "Workspace", revenue_intelligence: "Workspace", inventory: "Workspace", channel_partners: "Workspace",
-    cp_management: "Workspace",
+    cp_management: "Workspace", cp_chat: "Workspace",
     receptionist: "Team", sales: "Team", site_head: "Team",
     site_visit_overview: "Insights", attendance: "Insights", monitoring: "Insights", live_activity: "Insights", geo: "Insights",
     caller: "Admin", employees: "Admin", notifications: "Admin",
@@ -1136,6 +1145,23 @@ function AdminAtlasDashboardContent() {
                 onOpenLead={(leadId: number) => { setInvOpenLeadId(leadId); setActiveView("sales"); }}
                 onOpenBooking={openBookingFromInventory} />
             </div>
+          )}
+          {/* The Channel Partner conversation, rendered from the same component
+              the Sourcing Manager panel uses and fed by the same organization-
+              scoped endpoints — Admin reads the identical thread: visit cards,
+              messages, customer updates and booking updates. */}
+          {activeView === "cp_chat" && (
+            canViewPartners(userRole) ? (
+              <div className="h-full">
+                <CpChatPanel user={user} isDark={isDark} t={theme} isAdmin />
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-full flex-col gap-2">
+                <FaTimes className="text-red-500 w-16 h-16" />
+                <h2 className="text-2xl font-bold text-red-500">Access Denied</h2>
+                <p className={theme.textMuted}>You do not have permission to access this module.</p>
+              </div>
+            )
           )}
           {activeView === "cp_management" && (
             <div className="h-full">

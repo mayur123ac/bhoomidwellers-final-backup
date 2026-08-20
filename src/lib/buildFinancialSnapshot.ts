@@ -234,7 +234,9 @@ export async function buildFinancialSnapshot(
     registrationFeePaid:
       String(row.registration_fee_status || "").toLowerCase() === "paid" ? registrationFee : 0,
 
-    // Engine defaults: tokenIsPivot true, registrationFeeCap 30000.
+    // Engine defaults: tokenIsPivot true, registrationFeeCap none — the
+    // registration fee is entered directly on the booking form, so the stored
+    // amount is used as-is rather than clamped to the old ₹30,000 ceiling.
   };
 }
 

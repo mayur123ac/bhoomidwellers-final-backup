@@ -15,9 +15,8 @@ import { formatCurrencyDisplay, formatCurrencyDecimal, toStorageValue } from "@/
 // is meaningful.
 import { resolveGstRate, calcGstAmount, parseGstRate, GST_RATE_PRESETS } from "@/lib/gst";
 import {
-  resolveStampDutyRate, resolveRegistrationFeeRate, calcStampDuty, calcRegistrationFee,
-  isRegistrationFeeCapped, parseRatePercent,
-  STAMP_DUTY_RATE_PRESETS, REGISTRATION_FEE_RATE_PRESETS,
+  resolveStampDutyRate, resolveRegistrationFeeRate, calcStampDuty, parseRatePercent,
+  STAMP_DUTY_RATE_PRESETS,
 } from "@/lib/charges";
 import LoanDealForm from "@/components/LoanDealForm";
 import { buildTheme } from "@/lib/crmTheme";
@@ -284,7 +283,8 @@ function computeFinancials(form: BookingFormData): FinancialSummary {
 // ─── Cost breakdown ─────────────────────────────────────────────────────────
 // Total Cost to Customer = Agreement + GST + Stamp Duty + Registration Fee
 // + Legal + Maintenance + Possession + Custom Charges. Auto amounts follow
-// Maharashtra defaults (GST 5%, Stamp Duty 5%, Registration 1% capped ₹30K).
+// Maharashtra defaults (GST 5%, Stamp Duty 5%). Registration Fee is not derived:
+// it is entered directly, like Legal Charges and Custom Charges.
 interface CostBreakdown {
   agreementValue: number; gstRate: number; gstAmount: number;
   stampDutyRate: number; registrationFeeRate: number;
@@ -315,11 +315,15 @@ function computeCostBreakdown(form: BookingFormData): CostBreakdown {
   const stampDuty = enteredStampDuty === ""
     ? calcStampDuty(agreementValue, stampDutyRate)
     : toNumber(enteredStampDuty);
+  // Registration fee does NOT follow the GST / stamp duty rule above. It is typed
+  // in directly, like Legal Charges and Custom Charges: never derived from
+  // agreement value, never capped at ₹30,000. Empty or unparseable means ₹0 —
+  // there is no percentage left to fall back to.
+  //
+  // The rate is still resolved and persisted so historic bookings keep whatever
+  // rate they were saved with, but nothing computes from it any more.
   const registrationFeeRate = resolveRegistrationFeeRate(form.registration_fee_rate);
-  const enteredRegistrationFee = String(form.registration_fee_amount ?? "").trim();
-  const registrationFee = enteredRegistrationFee === ""
-    ? calcRegistrationFee(agreementValue, registrationFeeRate)
-    : toNumber(enteredRegistrationFee);
+  const registrationFee = toNumber(form.registration_fee_amount);
   const legalCharges = toNumber(form.legal_charges);
   const maintenanceDeposit = toNumber(form.maintenance_deposit);
   const possessionCharges = toNumber(form.possession_charges);
@@ -843,14 +847,18 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
     }
   }, [form.consideration_value]);
 
-  // Auto-compute GST / Stamp Duty / Registration Fee from agreement value.
+  // Auto-compute GST / Stamp Duty from agreement value.
   // These are "Est." fields — always kept in sync so they never drift.
+  //
+  // Registration fee is deliberately NOT in here any more. It is now typed in
+  // directly, so deriving it from agreement value would overwrite the operator's
+  // figure on every keystroke in Agreement Value — the exact silent-overwrite
+  // this effect's own freeze logic below was written to prevent.
   useEffect(() => {
     const av = toNumber(form.agreement_value);
     const rate = resolveGstRate(form.gst_rate);
     const gst = String(calcGstAmount(av, rate));
     const stamp = String(calcStampDuty(av, resolveStampDutyRate(form.stamp_duty_rate)));
-    const reg = String(calcRegistrationFee(av, resolveRegistrationFeeRate(form.registration_fee_rate)));
 
     // ── Do not recompute over persisted figures on load (§10, §14) ────────────
     //
@@ -866,26 +874,24 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
     // value or a rate actually changes, the baseline stops matching and the
     // figures derive normally again.
     //
-    // Frozen is evaluated PER FIGURE, not once for all three. Each amount has its
+    // Frozen is evaluated PER FIGURE, not once for both. Each amount has its
     // own rate driver now, and a shared flag would mean nudging the stamp duty
     // rate also unfroze — and so silently recomputed — the persisted GST amount.
-    // Agreement value is a driver of all three, so it unfreezes all three.
+    // Agreement value is a driver of both, so it unfreezes both.
     const baseline = derivedBaselineRef.current;
     const avFrozen = !!baseline && baseline.av === String(form.agreement_value ?? "");
     const gstFrozen = avFrozen && baseline!.rate === String(form.gst_rate ?? "");
     const stampFrozen = avFrozen && baseline!.sdRate === String(form.stamp_duty_rate ?? "");
-    const regFrozen = avFrozen && baseline!.regRate === String(form.registration_fee_rate ?? "");
 
     setForm(f => {
       const blank = (v: any) => String(v ?? "").trim() === "";
       const nextGst = gstFrozen && !blank(f.gst_amount) ? f.gst_amount : gst;
       const nextStamp = stampFrozen && !blank(f.stamp_duty_amount) ? f.stamp_duty_amount : stamp;
-      const nextReg = regFrozen && !blank(f.registration_fee_amount) ? f.registration_fee_amount : reg;
-      return f.gst_amount === nextGst && f.stamp_duty_amount === nextStamp && f.registration_fee_amount === nextReg
+      return f.gst_amount === nextGst && f.stamp_duty_amount === nextStamp
         ? f
-        : { ...f, gst_amount: nextGst, stamp_duty_amount: nextStamp, registration_fee_amount: nextReg };
+        : { ...f, gst_amount: nextGst, stamp_duty_amount: nextStamp };
     });
-  }, [form.agreement_value, form.gst_rate, form.stamp_duty_rate, form.registration_fee_rate]);
+  }, [form.agreement_value, form.gst_rate, form.stamp_duty_rate]);
 
   // Auto-compute Pre-EMI / EMI from loan figures.
   useEffect(() => {
@@ -2078,7 +2084,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                               // rate-error affordances.
                               const RateRow = ({
                                 label, presets, presetTitle, rate, onRate, ariaLabel, placeholder,
-                                step = 0.5, value, prefilled, capped, capLabel,
+                                step = 0.5, value, prefilled,
                               }: {
                                 label: string;
                                 presets: readonly number[];
@@ -2090,8 +2096,6 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                                 step?: number;
                                 value: number;
                                 prefilled?: boolean;
-                                capped?: boolean;
-                                capLabel?: string;
                               }) => (
                                 <div className={`flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 border-b ${divider}`}>
                                   <span className={`text-xs ${textMuted} flex items-center gap-2 flex-wrap`}>
@@ -2130,9 +2134,6 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                                       />
                                       <span className={`absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] pointer-events-none ${textMuted}`}>%</span>
                                     </span>
-                                    {capped && capLabel && (
-                                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border text-amber-500 border-amber-500/30 bg-amber-500/10">{capLabel}</span>
-                                    )}
                                     {prefilled && (
                                       <span className={`text-[10px] ${textMuted}`}>Prefilled from Loan Form — you can edit</span>
                                     )}
@@ -2210,20 +2211,16 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                                     value={cost.stampDuty}
                                     prefilled={!!loanPrefilled.stamp_duty_rate}
                                   />
-                                  <RateRow
-                                    label="+ Registration Fee"
-                                    presets={REGISTRATION_FEE_RATE_PRESETS}
-                                    presetTitle={p => p === 0.5 ? "0.5% (capped at ₹30,000)" : "1% (capped at ₹30,000)"}
-                                    rate={form.registration_fee_rate}
-                                    onRate={v => set("registration_fee_rate", v)}
-                                    ariaLabel="Registration fee rate percentage"
-                                    placeholder="1"
-                                    step={0.1}
-                                    value={cost.registrationFee}
-                                    prefilled={!!loanPrefilled.registration_fee_rate}
-                                    capped={isRegistrationFeeCapped(cost.agreementValue, cost.registrationFeeRate)}
-                                    capLabel="Capped at ₹30,000"
-                                  />
+                                  {/* Registration Fee is typed in directly, exactly like
+                                      Legal Charges and Custom Charges below — no preset
+                                      percentages, no derivation from agreement value and
+                                      no ₹30,000 cap. Whatever is entered here is what
+                                      lands in Total Cost and what gets saved; an empty
+                                      box is ₹0. */}
+                                  <div className={`flex items-center justify-between px-4 py-2 border-b ${divider}`}>
+                                    <span className={`text-xs ${textMuted}`}>+ Registration Fee</span>
+                                    <IndianCurrencyInput value={form.registration_fee_amount} onChange={val => set("registration_fee_amount", val)} placeholder="0" className={`${inputCls} text-xs py-1.5 w-40 text-right`} />
+                                  </div>
                                   <div className={`flex items-center justify-between px-4 py-2 border-b ${divider}`}>
                                     <span className={`text-xs ${textMuted}`}>+ Legal Charges</span>
                                     <IndianCurrencyInput value={form.legal_charges} onChange={val => set("legal_charges", val)} placeholder="0" className={`${inputCls} text-xs py-1.5 w-40 text-right`} />
@@ -2232,7 +2229,45 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                                     <span className={`text-xs ${textMuted}`}>+ Maintenance Deposit</span>
                                     <IndianCurrencyInput value={form.maintenance_deposit} onChange={val => set("maintenance_deposit", val)} placeholder="0" className={`${inputCls} text-xs py-1.5 w-40 text-right`} />
                                   </div>
-                                  <Row label="+ Custom Charges" value={cost.customChargesTotal} hint="(from below)" />
+                                  {/* Custom charges are stored as a LIST of named items
+                                      ({charge_name, amount, remarks}); the itemised editor further
+                                      down this same step maintains it, and the API persists it to
+                                      booking_custom_charges. This row therefore edits THAT array
+                                      rather than introducing a second field: with no items, typing
+                                      here creates one; with exactly one, it edits that one in place.
+                                      Nothing new is stored and the itemised editor keeps working.
+
+                                      Two or more named items cannot be represented by a single box —
+                                      there is no answer to which one it would write to — so the row
+                                      falls back to the read-only total and points at the editor,
+                                      which is the only place that can express them. */}
+                                  {form.custom_charges.length <= 1 ? (
+                                    <div className={`flex items-center justify-between px-4 py-2 border-b ${divider}`}>
+                                      <span className={`text-xs ${textMuted}`}>+ Custom Charges</span>
+                                      <IndianCurrencyInput
+                                        value={form.custom_charges[0]?.amount ?? ""}
+                                        onChange={val => {
+                                          const existing = form.custom_charges[0];
+                                          // Clearing the box removes the item rather than leaving a
+                                          // ₹0 line behind, so the itemised list stays clean.
+                                          if (toStorageValue(val).trim() === "") { set("custom_charges", []); return; }
+                                          set("custom_charges", [{
+                                            charge_name: existing?.charge_name || "Custom Charges",
+                                            amount: val,
+                                            remarks: existing?.remarks || "",
+                                          }]);
+                                        }}
+                                        placeholder="0"
+                                        className={`${inputCls} text-xs py-1.5 w-40 text-right`}
+                                      />
+                                    </div>
+                                  ) : (
+                                    <Row
+                                      label="+ Custom Charges"
+                                      value={cost.customChargesTotal}
+                                      hint={`(${form.custom_charges.length} items below)`}
+                                    />
+                                  )}
                                   <div className={isDark ? "bg-[#14141B]" : "bg-[#F8FAFC]"}>
                                     <Row label="Total Cost to Customer" value={cost.totalCost} strong />
                                   </div>
@@ -2424,7 +2459,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                           </div>
 
                           {/* ── Section 5: Additional Direct Payment (collapsible, optional) ── */}
-                          <div className={`border-t pt-6 ${divider}`}>
+                          {/* <div className={`border-t pt-6 ${divider}`}>
                             <button
                               type="button"
                               onClick={() => setShowAdditionalPayment(v => !v)}
@@ -2454,7 +2489,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                                 </p>
                               </div>
                             )}
-                          </div>
+                          </div> */}
 
                           {/* Bank Loan Details */}
                           <div className={`border-t pt-6 ${divider}`}>
@@ -2529,7 +2564,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                                 </div>
 
                                 {/* Disbursement */}
-                                <div className={`border-t pt-4 mt-2 ${divider}`}>
+                                {/* <div className={`border-t pt-4 mt-2 ${divider}`}>
                                   <p className={`text-xs font-bold uppercase tracking-wider mb-3 ${accent}`}>Disbursement</p>
                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div>
@@ -2563,22 +2598,22 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                                     <span>ℹ</span>
                                     <span>Disbursement tranches are tracked in the Loan &amp; Deal section after the booking is confirmed. This captures the initial/first disbursement only.</span>
                                   </p>
-                                </div>
+                                </div> */}
 
                                 {/* EMI Details */}
-                                <div className={`border-t pt-4 mt-2 ${divider}`}>
+                                {/* <div className={`border-t pt-4 mt-2 ${divider}`}>
                                   <p className={`text-xs font-bold uppercase tracking-wider mb-3 ${accent}`}>EMI Details</p>
                                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                     <div>
                                       <label className={labelCls}>Interest Rate (%)</label>
                                       <input type="number" step="0.01" value={form.interest_rate} onChange={e => set("interest_rate", e.target.value)} placeholder="8.5" className={inputCls} />
                                     </div>
-                                    {/* Temporarily hidden — to be re-enabled later
+                                    Temporarily hidden — to be re-enabled later
                                     <div>
                                       <label className={labelCls}>Tenure (months)</label>
                                       <input type="number" value={form.loan_tenure_months} onChange={e => set("loan_tenure_months", e.target.value)} placeholder="240" className={inputCls} />
                                     </div>
-                                    */}
+                                   
                                     <div>
                                       <label className={labelCls}>EMI Start Date</label>
                                       <input type="date" value={form.emi_start_date} onChange={e => set("emi_start_date", e.target.value)} className={inputCls} />
@@ -2601,7 +2636,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                                       </select>
                                     </div>
                                   </div>
-                                </div>
+                                </div> */}
                               </div>
                             )}
                           </div>
@@ -2609,7 +2644,13 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                           {/* Custom Charges */}
                           <div className={`border-t pt-6 ${divider}`}>
                             <div className="flex items-center justify-between mb-4">
-                              <p className={sectionTitle} style={{ marginBottom: 0 }}>Custom Charges</p>
+                              <div>
+                                <p className={sectionTitle} style={{ marginBottom: 0 }}>Custom Charges</p>
+                                <p className={`text-xs ${textMuted} mt-1`}>
+                                  Same figure as the Custom Charges row in the breakdown above. Add
+                                  more than one to name and itemise them.
+                                </p>
+                              </div>
                               <button
                                 onClick={() => set("custom_charges", [...form.custom_charges, { charge_name: "", amount: "", remarks: "" }])}
                                 className={`text-xs px-3 py-1.5 rounded transition-colors ${btnSecondary}`}

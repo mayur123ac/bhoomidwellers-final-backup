@@ -991,7 +991,7 @@ export default function PresalesCallerPanel() {
                 so the clock is told so directly rather than reading a toggle
                 this page does not have. */}
             <HeaderClock isDark />
-            {dbState !== "idle" &&<span className={`flex items-center gap-1.5 text-[11px] font-semibold px-3 py-1.5 rounded-lg border ${dbState === "saving" ? "text-blue-400 bg-blue-500/10 border-blue-500/20" : dbState === "saved" ? "text-green-400 bg-green-500/10 border-green-500/20" : "text-red-400 bg-red-500/10 border-red-500/20"}`}>{dbMessage}</span>}
+            {dbState !== "idle" && <span className={`flex items-center gap-1.5 text-[11px] font-semibold px-3 py-1.5 rounded-lg border ${dbState === "saving" ? "text-blue-400 bg-blue-500/10 border-blue-500/20" : dbState === "saved" ? "text-green-400 bg-green-500/10 border-green-500/20" : "text-red-400 bg-red-500/10 border-red-500/20"}`}>{dbMessage}</span>}
             <button onClick={exportTemplate} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold cursor-pointer border bg-[#1a1a1a] border-[#333] text-gray-300 hover:border-green-500/50 hover:text-green-400 transition-all"><FaDownload className="text-green-400" />Template</button>
             <div onDragOver={e => { e.preventDefault(); setIsDragging(true); }} onDragLeave={() => setIsDragging(false)} onDrop={handleDrop}>
               <button onClick={() => fileInputRef.current?.click()} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold cursor-pointer border transition-all ${isDragging ? "bg-green-600 border-green-400 text-white" : "bg-[#1a1a1a] border-[#333] text-gray-300 hover:border-purple-500/50 hover:text-white"}`}>

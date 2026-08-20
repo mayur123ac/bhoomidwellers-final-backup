@@ -6,7 +6,7 @@ import { uploadBufferToR2 } from "@/lib/r2";
 import { syncBookingUnit, releaseUnitForBooking, flatIdentityChanged, parseFloor } from "@/lib/inventorySync";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 import { resolveGstRate, calcGstAmount } from "@/lib/gst";
-import { resolveStampDutyRate, resolveRegistrationFeeRate, calcStampDuty, calcRegistrationFee } from "@/lib/charges";
+import { resolveStampDutyRate, resolveRegistrationFeeRate, calcStampDuty } from "@/lib/charges";
 // Shared so a saved booking returns the same shape a fetched one does.
 import { fetchBookingById } from "@/lib/bookingQuery";
 import { buildFinancialSnapshot, BookingNotFoundError, fmtINR } from "@/lib/buildFinancialSnapshot";
@@ -329,8 +329,19 @@ export async function PUT(
       : resolveRegistrationFeeRate(currentData.registration_fee_rate);
     const stampDutyInput = cleanNum(getStr("stamp_duty_amount"));
     const stampDutyAmount = stampDutyInput > 0 ? stampDutyInput : calcStampDuty(agreementValue, stampDutyRate);
-    const registrationFeeInput = cleanNum(getStr("registration_fee_amount"));
-    const registrationFeeAmount = registrationFeeInput > 0 ? registrationFeeInput : calcRegistrationFee(agreementValue, registrationFeeRate);
+    // Registration fee is entered directly by the operator, so whatever the form
+    // sent is stored verbatim — no percentage fallback and no ₹30,000 cap.
+    //
+    // `> 0 ? input : calc(...)` could not express this: clearing the box, or
+    // deliberately entering ₹0, both read as "nothing supplied" and silently
+    // restored the percentage estimate over the operator's figure on save.
+    //
+    // Presence is the test, not truthiness. A caller that omits the field entirely
+    // (the loan form's PUT does) must keep the stored amount rather than zero it;
+    // the booking form always sends the key, so an empty box is a real ₹0.
+    const registrationFeeAmount = formData.has("registration_fee_amount")
+      ? cleanNum(getStr("registration_fee_amount"))
+      : cleanNum(String(currentData.registration_fee_amount ?? ""));
 
     // Extract all strings
     const fields = {
@@ -689,11 +700,20 @@ export async function PUT(
       await upsertLedger('cash_component', 'CREDIT', finFields.cash_component, finFields.cash_component_date, 'YES', 'Customer', null, null, finFields.cash_component_remarks);
       await upsertLedger('loan_disbursement', 'CREDIT', loanFields.disbursement_amount, loanFields.actual_disbursement_date, 'YES', 'Bank', loanFields.bank_name, null, null);
 
-      // 5. Update Custom Charges
-      let custom_charges: any[] = [];
-      try { custom_charges = JSON.parse(getStr("custom_charges") || "[]"); } catch { }
-      if (custom_charges && custom_charges.length > 0) {
-        // Simple replace for custom charges
+      // 5. Update Custom Charges — replace-all when the field was submitted.
+      //
+      // The condition is "was custom_charges part of this submission", NOT "does it
+      // contain anything". Keying off length meant an emptied list never reached the
+      // DELETE, so removing the last custom charge silently left the old row in
+      // booking_custom_charges and it reappeared on reload. Distinguishing an absent
+      // field from an empty one keeps partial updates safe: a submission that never
+      // mentions custom_charges still leaves them untouched.
+      const rawCustomCharges = getStr("custom_charges");
+      if (rawCustomCharges !== "") {
+        let custom_charges: any[] = [];
+        try { custom_charges = JSON.parse(rawCustomCharges); } catch { custom_charges = []; }
+        if (!Array.isArray(custom_charges)) custom_charges = [];
+
         await client.query(`DELETE FROM booking_custom_charges WHERE booking_id = $1`, [Number(id)]);
         for (const charge of custom_charges) {
           await client.query(`

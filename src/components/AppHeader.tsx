@@ -1,60 +1,16 @@
 "use client";
 
-// components/AppHeader.tsx — the CRM's global header bar.
-//
-// ── Why this is a new file ──────────────────────────────────────────────────
-// There was no shared header to edit. Every surface carried its own copy of the
-// same bar, and they had drifted: Settings ran at h-16 with a blurred white
-// background, the Sales dashboard at `h-14 sm:h-18` with a themed one, and both
-// rendered a 5rem-tall logo inside a 3.5–4rem-tall bar — which is why the
-// branding looked oversized and the bar looked crowded. Polishing one copy
-// would have widened that gap rather than closing it.
-//
-// So the bar itself lives here once, and each host passes what differs: the
-// page context, and the controls on the right.
-//
-// ── What it does NOT own ────────────────────────────────────────────────────
-// Nothing below the header. No sidebar, no page content, no routing, no data.
-// The right-hand controls stay owned by their hosts — their popups, state and
-// click handlers are untouched and are passed in as children. This component
-// contributes the frame, the spacing scale and the control chrome, and that is
-// deliberately all it contributes.
-
 import type React from "react";
 import HeaderClock from "@/components/HeaderClock";
 
 /** Single source for the bar's height. Hosts do not restate it. */
 export const APP_HEADER_HEIGHT = "h-16";
 
-/**
- * Single source for the bar's horizontal inset.
- *
- * The hand-rolled bars used px-8, px-6 and px-4 sm:px-6 between them, so the
- * logo sat at three different distances from the left edge and appeared to
- * shift sideways as you moved between panels — the same drift as the height and
- * the logo size, just less obvious.
- */
+/** Single source for the bar's horizontal inset. */
 export const APP_HEADER_PADDING = "px-4 sm:px-6";
 
 /**
  * The brand mark, at the one size every bar uses.
- *
- * Exported because four dashboards still build their own header rather than
- * hosting <AppHeader>, and the logo was the most visible thing they disagreed
- * about: they rendered `h-20 md:h-18` — an 80px logo inside a 64px bar, so it
- * overflowed and read as oversized — while the shared bar rendered h-8, which
- * read as undersized next to it. Walking from Overview into Settings therefore
- * resized the logo mid-journey.
- *
- * h-12 is the settled size: the asset is 3:1, so 48px tall is 144px wide, which
- * fills the 64px bar with an 8px margin above and below — as large as the mark
- * can go while still sitting *inside* its bar, which is the constraint the old
- * h-20 broke. `max-w` is sized past that width so it stays a guard against a
- * future asset with a different ratio rather than a cap this one runs into and
- * gets letterboxed by.
- *
- * Hosts pass nothing. That is the point — a size prop here would just be the
- * old drift with a nicer syntax.
  */
 export function AppLogo({
   src = "/assets/bhoomidwellersLogo_trans.png",
@@ -62,24 +18,21 @@ export function AppLogo({
 }: {
   src?: string;
   className?: string;
+  style?: React.CSSProperties;
 }) {
   return (
     <img
       src={src}
       alt="Bhoomi Dwellers"
-      className={`h-16 w-auto max-w-[190px] object-contain flex-shrink-0 ${className}`}
+      className={`h-12 w-auto max-w-[190px] object-contain flex-shrink-0 transition-opacity duration-200 hover:opacity-80 ${className}`}
     />
   );
 }
 
 /**
- * A 36px square control — theme toggle, notification bell, profile avatar.
- *
- * These used to be three different sizes with three different borders (and the
- * bell had no chrome at all, sitting as a bare glyph between two bordered
- * buttons). One size and one border is the whole of the "consistent controls"
- * requirement; the interesting part of each control is still whatever the host
- * puts inside it.
+ * A seamless 36px/32px square control — theme toggle, notification bell, profile avatar.
+ * Redesigned to HIG standards: borderless by default, perfectly rounded, with a subtle 
+ * background fill on hover/active states.
  */
 export function HeaderControl({
   isDark,
@@ -93,18 +46,6 @@ export function HeaderControl({
   isDark: boolean;
   onClick?: () => void;
   label: string;
-  /**
-   * "md" (36px) is the shared size and the default — Settings, Sales and every
-   * other host get it without asking.
-   *
-   * "sm" (32px) exists for the Receptionist panel, which wants a tighter bar.
-   * It is a named step rather than a free `className` override because the two
-   * sizes have to stay a short, known list: a bar where each control can be any
-   * height is the drift this component was written to end. Note that Tailwind
-   * emits `h-8` before `h-9`, so an `h-8` passed via className would LOSE to the
-   * base `h-9` regardless of the order in the class string — which is exactly
-   * why this is a prop and not a documentation note.
-   */
   size?: "sm" | "md";
   className?: string;
   children: React.ReactNode;
@@ -117,13 +58,11 @@ export function HeaderControl({
       title={label}
       className={[
         size === "sm" ? "h-8 w-8" : "h-9 w-9",
-        "flex-shrink-0 rounded-lg border flex items-center justify-center",
-        // No scale transforms and no drop shadows: a control that jumps under
-        // the cursor reads as a toy, and this bar has four of them side by side.
-        "transition-colors duration-150 cursor-pointer",
+        "flex-shrink-0 rounded-full flex items-center justify-center outline-none",
+        "transition-all duration-200 cursor-pointer",
         isDark
-          ? "border-white/10 bg-white/[0.04] text-gray-300 hover:bg-white/[0.08] hover:text-white"
-          : "border-[#E5E7EB] bg-white text-[#4B5563] hover:bg-[#F9FAFB] hover:text-[#111827]",
+          ? "text-[#98989D] hover:bg-white/10 hover:text-white active:bg-white/20"
+          : "text-[#86868B] hover:bg-black/5 hover:text-[#1D1D1F] active:bg-black/10",
         className,
       ].join(" ")}
       {...rest}
@@ -138,8 +77,8 @@ function Divider({ isDark }: { isDark: boolean }) {
   return (
     <span
       aria-hidden
-      className="hidden sm:block h-5 w-px flex-shrink-0"
-      style={{ background: isDark ? "rgba(255,255,255,0.12)" : "rgba(17,24,39,0.10)" }}
+      className="hidden sm:block h-4 w-px flex-shrink-0 rounded-full"
+      style={{ background: isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.15)" }}
     />
   );
 }
@@ -155,39 +94,11 @@ export default function AppHeader({
   surfaceStyle,
 }: {
   isDark: boolean;
-  /** Where the user is, e.g. "Inventory" or "Settings · Notifications". */
   context?: string;
-  /** Shown as the badge beside the context. */
   role?: string | null;
-  /** Host-specific control placed before the right cluster (e.g. a drawer button). */
   leading?: React.ReactNode;
-  /** The right-hand controls, in order: attendance, theme, notifications, profile. */
   children: React.ReactNode;
   logoSrc?: string;
-  /**
-   * Surface override — the bar's background, border and shadow only.
-   *
-   * ── Why this exists ────────────────────────────────────────────────────────
-   * A panel adopting this header should inherit its STRUCTURE — the frame
-   * metrics, the control sizes, the icon system, the spacing scale — without
-   * being forced onto the flat surface below. The Receptionist panel has its
-   * own locked palette (lib/crmTheme.ts `header` / `headerGlass`) that predates
-   * this component, and "use the shared bar" must not mean "and also repaint
-   * your CRM".
-   *
-   * Passing EITHER of these replaces the default surface entirely; passing
-   * neither keeps it. That is deliberate: a host either owns its surface or it
-   * does not, and a half-overridden background is how you get a themed colour
-   * with someone else's border still under it.
-   *
-   * This changes nothing for existing hosts. Settings and the Sales dashboard
-   * pass neither and are byte-identical to before.
-   *
-   * Layout is NOT overridable here. Height, inset, alignment and gap stay on
-   * the component, because those are exactly what the hosts are adopting it
-   * for — a `className` that could reach them would reopen the drift this
-   * component was built to close.
-   */
   surfaceClassName?: string;
   surfaceStyle?: React.CSSProperties;
 }) {
@@ -195,20 +106,18 @@ export default function AppHeader({
 
   return (
     <header
-      className={`${APP_HEADER_HEIGHT} ${APP_HEADER_PADDING} flex items-center justify-between gap-3 z-30 flex-shrink-0${
-        surfaceClassName ? ` ${surfaceClassName}` : ""
-      }`}
+      className={`${APP_HEADER_HEIGHT} ${APP_HEADER_PADDING} flex items-center justify-between gap-3 z-30 flex-shrink-0 transition-colors duration-300 ${surfaceClassName ? ` ${surfaceClassName}` : ""
+        }`}
       style={
         hostOwnsSurface
           ? surfaceStyle
           : {
-              background: isDark ? "#0d0d14" : "#FFFFFF",
-              // A flat hairline instead of the previous blur-and-translucency.
-              // The page scrolls under this bar, and a semi-transparent header
-              // over a gradient page was the reason the text contrast moved as
-              // you scrolled.
-              borderBottom: isDark ? "1px solid rgba(255,255,255,0.08)" : "1px solid #ECEDF1",
-            }
+            // Apple's translucent background materials with heavy blur
+            background: isDark ? "rgba(28, 28, 30, 0.75)" : "rgba(250, 250, 252, 0.75)",
+            backdropFilter: "blur(20px) saturate(180%)",
+            WebkitBackdropFilter: "blur(20px) saturate(180%)",
+            borderBottom: isDark ? "1px solid rgba(255,255,255,0.08)" : "1px solid rgba(0,0,0,0.06)",
+          }
       }
     >
       {/* ── Left: brand → context → role ── */}
@@ -219,8 +128,8 @@ export default function AppHeader({
           <>
             <Divider isDark={isDark} />
             <h1
-              className="text-[13px] sm:text-sm font-semibold tracking-tight truncate"
-              style={{ color: isDark ? "#F3F4F6" : "#111827" }}
+              className="text-[14px] sm:text-[15px] font-semibold tracking-tight truncate"
+              style={{ color: isDark ? "#FFFFFF" : "#1D1D1F" }}
             >
               {context}
             </h1>
@@ -229,12 +138,11 @@ export default function AppHeader({
 
         {role && (
           <span
-            className="hidden md:inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium capitalize whitespace-nowrap flex-shrink-0"
+            className="hidden md:inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium capitalize whitespace-nowrap flex-shrink-0 tracking-wide"
             style={{
-              // Tinted rather than outlined, so the badge sits behind the page
-              // title in the hierarchy instead of competing with it.
-              background: isDark ? "rgba(217,70,168,0.14)" : "rgba(158,33,123,0.08)",
-              color: isDark ? "#e879c4" : "#9E217B",
+              // Neutral, subtle tinting typical of iOS/macOS labels
+              background: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)",
+              color: isDark ? "#E5E5EA" : "#1D1D1F",
             }}
           >
             {role}
@@ -242,17 +150,10 @@ export default function AppHeader({
         )}
       </div>
 
-      {/* ── Right: controls ──
-          gap-2 throughout, so the four controls read as one cluster rather than
-          as four things that happen to be near each other. */}
-      <div className="flex items-center gap-2 flex-shrink-0">
+      {/* ── Right: controls ── */}
+      <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
         {leading}
-        {/* The clock is the bar's own, not a host control: it is the same in
-            every panel and reads its zone from lib/timePreferences, so hosts
-            have nothing to pass and nothing to keep in sync. It leads the
-            cluster because it is display, not a button — the interactive
-            controls stay grouped together on the right. */}
-        <HeaderClock isDark={isDark} />
+        {/* <HeaderClock isDark={isDark} /> */}
         {children}
       </div>
     </header>

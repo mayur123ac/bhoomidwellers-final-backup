@@ -51,7 +51,7 @@ export function buildTheme(isDark: boolean) {
     chatArea: isDark ? "bg-[#0A0A0F]" : "bg-[#F1F5F9]",
     chatBubbleAi: isDark ? "bg-[#1A1A28] text-white border border-[#2A2A35]" : "bg-[#F3F4F6] border border-[#CBD5E1] text-gray-900 font-medium shadow-sm",
     chatInput: isDark ? "bg-[#14141B] border-[#2A2A35]" : "bg-[#F3F4F6] border border-[#64748B] hover:border-[#475569] focus-within:bg-white focus-within:border-[#475569] shadow-inner",
-    chatPanel: isDark ? "bg-[#121218] border-[#2A2A35]" : "bg-white border border-[#94A3B8]",
+    chatPanel: isDark ? "bg-[#121218] border border-[#2A2A35]" : "bg-white border border-gray-200",
     chatPanelGl: isDark ? {} : { boxShadow: "0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(158,33,123,0.06), 0 16px 36px rgba(0,0,0,0.09)" },
 
     fupDefault: isDark ? "bg-[#2a2135] border border-[#4c1d95]" : "bg-indigo-50 border border-indigo-200",

@@ -142,12 +142,20 @@ export async function GET(
         [cpId, cpOrgId]
       ),
       query(
-        `SELECT b.id, b.booking_number, b.lead_id, b.created_at
+        // The two expected dates live in the booking's child tables, not on the
+        // application row — joined here so the CP chat's BOOKING UPDATE card can
+        // state them instead of leaving the partner to ask.
+        `SELECT b.id, b.booking_number, b.lead_id, b.created_at,
+                b.booking_status, b.booking_date,
+                r.expected_registration_date,
+                l.expected_disbursement_date
            FROM booking_applications b
-          WHERE b.sourced_by_channel_partner_id = $1
+           LEFT JOIN booking_registration_details r ON r.booking_id = b.id
+           LEFT JOIN booking_loan_details          l ON l.booking_id = b.id
+          WHERE b.sourced_by_channel_partner_id = $1 AND b.organization_id = $2
           ORDER BY b.created_at DESC
           LIMIT ${ACTIVITY_LIMIT}`,
-        [cpId]
+        [cpId, cpOrgId]
       ),
     ]);
 
