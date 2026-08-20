@@ -215,9 +215,67 @@ export default function SourcingManagerDashboard() {
       ════════════════════════════════════════════════════ */}
       <div className={`flex-1 flex flex-col overflow-hidden relative md:ml-[76px]`}>
 
-        {/* Hide header on mobile if in CP Chat to maximize vertical space */}
+        {/* ── HEADER BLOCK (Cleaned) ── */}
+        <div className={`relative z-15 bg-white/95 ${isChat ? "hidden md:block" : "block"}`}>
+          <AppHeader
+            isDark={isDark}
+            context={NAV_ITEMS.find(n => n.id === activeTab)?.title || "Settings"}
+            role={user?.role || "Sourcing Manager"}
+          >
+            {/* Removed the redundant extra logo and fixed the duplicated wrapper div */}
+            <div className="flex items-center gap-1.5 md:gap-2 relative" ref={topbarRef}>
+              <HeaderClock isDark={isDark} />
 
+              <HeaderControl
+                isDark={isDark}
+                onClick={toggleTheme}
+                label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+              >
+                {isDark ? <IoSunnyOutline size={16} /> : <IoMoonOutline size={16} />}
+              </HeaderControl>
 
+              <HeaderControl
+                isDark={isDark}
+                onClick={() => setActivePopup(activePopup === "profile" ? null : "profile")}
+                label="Profile"
+                className="overflow-hidden p-0"
+              >
+                <UserAvatar name={user?.name} fallback="U" alt="" />
+              </HeaderControl>
+
+              <AnimatePresence>
+                {activePopup === "profile" && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.98 }}
+                    transition={{ duration: 0.2 }}
+                    className={`absolute top-12 right-0 w-52 rounded-[1.25rem] shadow-2xl p-4 z-50 border ${isDark ? "bg-[#1C1C1E] border-white/10" : "bg-white border-black/10"}`}
+                  >
+                    <div className="mb-3">
+                      <h3 className="font-semibold text-[13px] tracking-tight leading-tight">{user?.name || "User"}</h3>
+                      <p className={`text-[10px] truncate mt-0.5 ${textSecondary}`}>{user?.email || "No email"}</p>
+                    </div>
+
+                    <hr className={`mb-3 border-0 border-t ${isDark ? "border-white/10" : "border-black/5"}`} />
+
+                    <div className="space-y-3 mb-4 text-[11px]">
+                      <div className="flex justify-between items-center">
+                        <span className={textSecondary}>Role</span>
+                        <span className={`font-medium px-2 py-0.5 rounded-md text-[9px] uppercase tracking-wider ${bgSubtle}`}>{user?.role}</span>
+                      </div>
+                    </div>
+
+                    <button onClick={handleLogout} className="w-full py-2 rounded-xl font-medium text-[11px] text-red-500 bg-red-50 dark:bg-red-500/10 transition-colors active:scale-95">
+                      Log Out
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </AppHeader>
+        </div>
+        {/* ── END HEADER BLOCK ── */}
 
         <main className={`flex-1 flex flex-col overflow-y-auto ${isChat ? "p-0 pb-0" : "p-0 pb-[calc(env(safe-area-inset-bottom)+84px)]"} md:pb-0 custom-scrollbar relative`}>
 
@@ -225,7 +283,7 @@ export default function SourcingManagerDashboard() {
               DASHBOARD
           ════════════════════════════════════════════════════ */}
           {activeTab === "overview" && (
-            <div className="animate-fadeIn max-w-7xl mx-auto px-4 md:px-6">
+            <div className="animate-fadeIn max-w-7xl mx-auto px-4 md:px-6 z-0">
               <div className="flex flex-col md:flex-row md:justify-between md:items-end gap-3 mb-6 mt-6">
                 <div>
                   <h1 className="text-xl md:text-2xl font-semibold tracking-tight mb-1">

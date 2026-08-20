@@ -162,10 +162,9 @@ export default function AssignedChannelPartnersView({
     "CP Name", "Company", "Owner / Contact", "Phone", "City", "Pin",
     "RERA", "GST", "Leads", "Bookings", "Profile", "Status", "Assigned On",
   ];
-
-  const inputCls = `rounded-xl px-3 py-2 text-xs outline-none transition-all ${isDark
-    ? "bg-[#1C1C1E] text-white placeholder-gray-500 focus:bg-[#2C2C2E] border border-white/5"
-    : "bg-black/5 text-black placeholder-gray-500 focus:bg-black/10 border border-black/5"
+  const inputCls = `rounded-xl px-3 py-2 text-xs outline-none transition-all w-[170px] sm:w-56 max-w-full ${isDark
+    ? "bg-[#1C1C1E] text-white placeholder-gray-500 border border-[#38383A] focus:bg-[#2C2C2E] focus:border-[#9E217B] focus:ring-2 focus:ring-[#9E217B]/10"
+    : "bg-white text-gray-900 placeholder-gray-400 border border-gray-200 focus:bg-white focus:border-[#9E217B] focus:ring-2 focus:ring-[#9E217B]/10"
     }`;
   const cell = `px-3 py-3 whitespace-nowrap ${t.textMuted}`;
 
