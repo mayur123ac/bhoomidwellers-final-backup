@@ -5,6 +5,34 @@ import { verifySession } from "@/lib/sessionCookie";
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // ─── Super Admin — platform level, outside the tenant tree ────────────────
+  //
+  // Handled before the /dashboard check because /super-admin is deliberately
+  // not under /dashboard: it operates ON tenants rather than inside one, and
+  // the role gates below are all tenant roles.
+  //
+  // This is the coarse gate. It reads the role from the HMAC-verified cookie,
+  // which is enough to keep a tenant Admin out of the page, but a cookie's copy
+  // of a role can be stale — so app/super-admin/layout.tsx re-verifies against
+  // the live users row, and every /api/platform route calls requireSuperAdmin()
+  // independently. Middleware alone is never the authorization.
+  if (pathname.startsWith("/super-admin")) {
+    const cookie = request.cookies.get("crm_session")?.value;
+    if (!cookie) return NextResponse.redirect(new URL("/", request.url));
+    try {
+      const user = await verifySession<any>(cookie);
+      const role = (user?.role ?? "").toString().trim().toLowerCase().replace(/_/g, " ");
+      if (role !== "super admin") {
+        // Tenant roles are sent back to login rather than to /dashboard: a
+        // redirect into the tenant app would confirm the platform route exists.
+        return NextResponse.redirect(new URL("/", request.url));
+      }
+      return NextResponse.next();
+    } catch {
+      return NextResponse.redirect(new URL("/", request.url));
+    }
+  }
+
   // We only care about /dashboard and its subpaths
   if (!pathname.startsWith("/dashboard")) {
     return NextResponse.next();
@@ -125,5 +153,7 @@ export async function middleware(request: NextRequest) {
 
 // See "Matching Paths" below to learn more
 export const config = {
-  matcher: ["/dashboard/:path*"],
+  // /super-admin joins the matcher so the platform panel is gated at the edge
+  // too. Tenant matching is unchanged.
+  matcher: ["/dashboard/:path*", "/super-admin/:path*"],
 };

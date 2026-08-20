@@ -50,7 +50,12 @@ export default function Login() {
         // Underscores normalized to spaces so "site_head" and "Site Head" (both
         // occur in the users table) take the same branch, as in middleware.ts.
         const userRole = data.user.role.toLowerCase().trim().replace(/_/g, " ");
-        if (userRole === "receptionist") {
+        // Platform level, so it is routed before the tenant roles and lands
+        // outside /dashboard entirely. The destination re-verifies server-side;
+        // this branch only decides where to send the browser.
+        if (userRole === "super admin") {
+          router.push("/super-admin");
+        } else if (userRole === "receptionist") {
           router.push("/dashboard/receptionist");
         } else if (userRole === "admin") {
           router.push("/dashboard");

@@ -50,8 +50,6 @@ const fmtDate = (raw: any, withTime = false) => {
   } catch { return null; }
 };
 
-
-
 /** Partner-master value first, falling back to what reception typed on the enquiry.
  *  A CP enquiry whose cp_name never resolved to a partner row still shows a name. */
 const cpField = (row: any, masterKey: string, enquiryKey?: string) =>
@@ -181,7 +179,12 @@ export default function ChannelPartnerEnquiriesTable({
     ...(canReassign ? [""] : []),
   ];
 
-  const inputCls = `rounded-lg px-2.5 py-1.5 text-xs outline-none border ${t.inputInner} ${t.text} ${t.inputFocus}`;
+  // APPLE UI: Softer rounded inputs with translucent fills
+  const inputCls = `rounded-xl px-3 py-2 text-xs outline-none transition-all ${isDark
+    ? "bg-[#1C1C1E] text-white placeholder-gray-500 focus:bg-[#2C2C2E] border border-white/5"
+    : "bg-black/5 text-black placeholder-gray-500 focus:bg-black/10 border border-black/5"
+    }`;
+
   const cell = `px-3 py-3 whitespace-nowrap ${t.textMuted}`;
 
   const requirementOf = (r: any) => {
@@ -198,18 +201,16 @@ export default function ChannelPartnerEnquiriesTable({
         <div className="flex items-center gap-2">
           <FaHandshake className={t.accentText} />
           <div>
-            <h2 className={`text-base font-bold ${t.text}`}>{title || "Channel Partner Enquiries"}</h2>
+            <h2 className={`text-base font-bold tracking-tight ${t.text}`}>{title || "Channel Partner Enquiries"}</h2>
             {subtitle && <p className={`text-[11px] ${t.textFaint}`}>{subtitle}</p>}
           </div>
           <span className={`text-xs ${t.textFaint}`}>({rows.length})</span>
 
-          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${isDark ? "bg-amber-500/15 text-amber-400" : "bg-amber-50 text-amber-700 border border-amber-200"
-            }`}>
+          <span className={`px-2.5 py-1 rounded-full text-[10px] font-semibold tracking-wide ${isDark ? "bg-amber-500/20 text-amber-400" : "bg-amber-500/10 text-amber-700"}`}>
             {counts.closing} Closing
           </span>
 
-          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${isDark ? "bg-emerald-500/15 text-emerald-400" : "bg-emerald-50 text-emerald-700 border border-emerald-200"
-            }`}>
+          <span className={`px-2.5 py-1 rounded-full text-[10px] font-semibold tracking-wide ${isDark ? "bg-emerald-500/20 text-emerald-400" : "bg-emerald-500/10 text-emerald-700"}`}>
             {counts.active} Active
           </span>
         </div>
@@ -226,22 +227,22 @@ export default function ChannelPartnerEnquiriesTable({
           <div className="relative">
             <FaSearch className={`absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] ${t.textFaint}`} />
             <input type="text" value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Search CP, client, phone…" className={`${inputCls} pl-7 w-56`} />
+              placeholder="Search CP, client, phone…" className={`${inputCls} pl-8 w-56`} />
           </div>
         </div>
       </div>
 
       {notice && (
-        <div className={`mx-2 mb-3 rounded-lg px-3 py-2 text-[11px] ${isDark ? "bg-emerald-500/10 border border-emerald-500/25 text-emerald-400"
-          : "bg-emerald-50 border border-emerald-200 text-emerald-700"}`}>
+        <div className={`mx-2 mb-3 rounded-2xl px-4 py-3 text-[11px] transition-all ${isDark ? "bg-emerald-500/10 border border-emerald-500/25 text-emerald-400"
+          : "bg-emerald-50 border border-emerald-200/50 text-emerald-700"}`}>
           {notice}
         </div>
       )}
 
       {/* Read-only roles are told so explicitly, rather than just finding no buttons. */}
       {!canReassign && (
-        <div className={`mx-2 mb-3 rounded-lg px-3 py-2 text-[11px] ${isDark ? "bg-[#14141B] border border-[#2A2A35] text-[#888899]"
-          : "bg-slate-50 border border-slate-200 text-slate-600"}`}>
+        <div className={`mx-2 mb-3 rounded-2xl px-4 py-3 text-[11px] transition-all ${isDark ? "bg-white/5 border border-white/5 text-[#888899]"
+          : "bg-black/5 border border-transparent text-slate-600"}`}>
           {role === "sourcing manager"
             ? "Showing only the channel partners assigned to you. View only — contact an Admin to change an assignment."
             : "View only. The assigned Sourcing Manager is set at enquiry creation and can only be changed by an Admin."}
@@ -251,10 +252,11 @@ export default function ChannelPartnerEnquiriesTable({
       {/* ── Table ── */}
       <div className={`flex-1 overflow-auto mx-2 rounded-3xl ${t.card}`}>
         <table className="w-full text-left border-collapse">
-          <thead className={`sticky top-0 z-10 ${t.tableHead || (isDark ? "bg-[#1a1a1a]" : "bg-slate-50")}`}>
-            <tr className={`text-[10px] uppercase ${t.textMuted}`}>
+          {/* APPLE UI: Frosted glass sticky header */}
+          <thead className={`sticky top-0 z-10 backdrop-blur-xl ${isDark ? "bg-[#000000]/70 border-b border-white/10" : "bg-white/70 border-b border-black/5"}`}>
+            <tr className={`text-[10px] uppercase tracking-wider ${t.textMuted}`}>
               {columns.map((h, i) => (
-                <th key={`${h}-${i}`} className="px-3 py-3 whitespace-nowrap font-bold">{h}</th>
+                <th key={`${h}-${i}`} className="px-3 py-3 whitespace-nowrap font-semibold">{h}</th>
               ))}
             </tr>
           </thead>
@@ -267,7 +269,7 @@ export default function ChannelPartnerEnquiriesTable({
               <tr>
                 <td colSpan={columns.length} className="px-4 py-16 text-center">
                   <FaUserTie className={`mx-auto mb-3 text-2xl ${t.textFaint}`} />
-                  <p className={`text-sm font-bold mb-1 ${t.text}`}>
+                  <p className={`text-sm font-semibold tracking-tight mb-1 ${t.text}`}>
                     {search ? "No enquiries match your search"
                       : role === "sourcing manager" ? "Nothing assigned to you yet"
                         : smFilter ? "No enquiries for this filter"
@@ -287,17 +289,17 @@ export default function ChannelPartnerEnquiriesTable({
 
             {!loading && visible.map((r, i) => (
               <tr key={r.id} onClick={() => setDetail(r)}
-                className={`text-xs cursor-pointer ${t.tableRow} ${isDark ? "border-b border-[#222]" : "border-b border-slate-100"}`}>
+                className={`text-xs cursor-pointer transition-colors ${t.tableRow} ${isDark ? "border-b border-white/5 hover:bg-white/5" : "border-b border-black/5 hover:bg-black/5"}`}>
                 {/* Position on screen, not an identifier — muted so it doesn't
                     compete with the lead number sitting next to it. */}
                 {showSerial && (
                   <td className={`px-3 py-3 whitespace-nowrap ${t.textMuted}`}>{i + 1}</td>
                 )}
-                <td className={`px-3 py-3 font-bold whitespace-nowrap ${t.text}`}>
+                <td className={`px-3 py-3 font-semibold whitespace-nowrap ${t.text}`}>
                   #{String(r.sr_no || r.id).padStart(3, "0")}
                 </td>
                 <td className={cell}>{fmtDate(r.created_at) || dash(t)}</td>
-                <td className={`px-3 py-3 font-semibold whitespace-nowrap ${t.text}`}>
+                <td className={`px-3 py-3 font-medium whitespace-nowrap ${t.text}`}>
                   {cpField(r, "partner_name", "cp_name") || dash(t)}
                 </td>
                 <td className={cell}>{cpField(r, "partner_company", "cp_company") || dash(t)}</td>
@@ -312,7 +314,7 @@ export default function ChannelPartnerEnquiriesTable({
                 <td className={cell}>{r.rera_registration_no || dash(t)}</td>
                 <td className={cell}>{r.partner_city || dash(t)}</td>
                 <td className={cell}>{r.partner_pin_code || dash(t)}</td>
-                <td className={`px-3 py-3 font-semibold whitespace-nowrap ${t.text}`}>{r.client_name || dash(t)}</td>
+                <td className={`px-3 py-3 font-medium whitespace-nowrap ${t.text}`}>{r.client_name || dash(t)}</td>
                 <td className={cell}>{r.client_phone || dash(t)}</td>
                 <td className={cell}>{r.alt_phone || dash(t)}</td>
                 <td className={cell}>{r.email && r.email !== "N/A" ? r.email : dash(t)}</td>
@@ -322,22 +324,22 @@ export default function ChannelPartnerEnquiriesTable({
                 <td className="px-3 py-3 whitespace-nowrap">
                   {r.sourcing_manager_name ? (
                     <>
-                      <span className={`font-semibold ${t.text}`}>{r.sourcing_manager_name}</span>
+                      <span className={`font-medium ${t.text}`}>{r.sourcing_manager_name}</span>
                       {/* Inherited from the partner rather than set on this enquiry.
                           Worth marking: it means reassigning the partner moves this
                           lead too, which a per-enquiry assignment would not. */}
                       {r.sourcing_manager_inherited && (
-                        <span className={`block text-[9px] ${t.textFaint}`}>via partner</span>
+                        <span className={`block text-[9px] mt-0.5 ${t.textFaint}`}>via partner</span>
                       )}
                     </>
                   ) : (
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-500">
+                    <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-500">
                       Unassigned
                     </span>
                   )}
                 </td>
                 <td className="px-3 py-3 whitespace-nowrap">
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${t.statusAssigned}`}>
+                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-semibold border ${t.statusAssigned}`}>
                     {r.status || "Assigned"}
                   </span>
                 </td>
@@ -353,7 +355,9 @@ export default function ChannelPartnerEnquiriesTable({
                         setReassignTo(r.effective_sourcing_manager_id ? String(r.effective_sourcing_manager_id) : "");
                         setReassignTarget(r);
                       }}
-                      className={`px-3 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer whitespace-nowrap ${r.effective_sourcing_manager_id ? `${t.textMuted} ${isDark ? "hover:bg-[#222]" : "hover:bg-slate-100"}` : t.btnPrimary
+                      className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold cursor-pointer whitespace-nowrap transition-colors ${r.effective_sourcing_manager_id
+                        ? isDark ? "text-white hover:bg-white/10" : "text-black hover:bg-black/5"
+                        : t.btnPrimary
                         }`}
                     >
                       <FaExchangeAlt className="inline text-[9px] mr-1" />
@@ -372,24 +376,25 @@ export default function ChannelPartnerEnquiriesTable({
         {detail && (
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+            className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 backdrop-blur-md p-4"
             onClick={() => setDetail(null)}
           >
             <motion.div
               initial={{ scale: 0.96, y: 12 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.96, y: 12 }}
               onClick={e => e.stopPropagation()}
-              className={`w-full max-w-3xl max-h-[88vh] overflow-y-auto custom-scrollbar rounded-2xl p-6 ${t.modalCard || t.card}`}
+              className={`w-full max-w-3xl max-h-[88vh] overflow-y-auto custom-scrollbar rounded-[2rem] p-6 shadow-2xl ${isDark ? "bg-[#1C1C1E]/85 border-white/10 backdrop-blur-3xl" : "bg-white/85 border-black/5 backdrop-blur-3xl"
+                }`}
             >
               <div className="flex items-start justify-between mb-5">
                 <div>
-                  <h2 className={`text-lg font-bold ${t.text}`}>
+                  <h2 className={`text-lg font-bold tracking-tight ${t.text}`}>
                     Enquiry #{String(detail.sr_no || detail.id).padStart(3, "0")} — {detail.client_name}
                   </h2>
                   <p className={`text-[11px] mt-0.5 ${t.textMuted}`}>
                     Channel Partner enquiry · created {fmtDate(detail.created_at, true) || "—"}
                   </p>
                 </div>
-                <button onClick={() => setDetail(null)} className={`p-1.5 rounded-lg cursor-pointer ${t.textMuted}`}>
+                <button onClick={() => setDetail(null)} className={`p-1.5 rounded-full cursor-pointer transition-colors ${isDark ? "hover:bg-white/10" : "hover:bg-black/5"} ${t.textMuted}`}>
                   <FaTimes />
                 </button>
               </div>
@@ -473,13 +478,12 @@ export default function ChannelPartnerEnquiriesTable({
               ].map(section => (
                 <div
                   key={section.heading}
-                  className={`mb-5 rounded-xl p-4 border ${section.highlight
-                    ? isDark ? "bg-[#9E217B]/10 border-[#9E217B]/30" : "bg-[#9E217B]/5 border-[#9E217B]/25"
-                    : `${t.modalBlock}`
+                  className={`mb-5 rounded-2xl p-4 transition-colors ${section.highlight
+                    ? isDark ? "bg-[#9E217B]/20 border border-[#9E217B]/30" : "bg-[#9E217B]/10 border border-[#9E217B]/20"
+                    : isDark ? "bg-white/5 border border-white/5" : "bg-black/5 border border-transparent"
                     }`}
-                  style={section.highlight ? {} : t.modalBlockGl}
                 >
-                  <p className={`text-xs font-bold uppercase tracking-wider mb-3 ${section.highlight ? t.accentText : t.sectionTitle}`}>
+                  <p className={`text-[11px] font-bold uppercase tracking-wider mb-3 ${section.highlight ? t.accentText : t.textMuted}`}>
                     {section.heading}
                   </p>
                   {/* Read-only throughout — no role edits an enquiry from this drawer. */}
@@ -505,30 +509,31 @@ export default function ChannelPartnerEnquiriesTable({
         {reassignTarget && (
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[130] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+            className="fixed inset-0 z-[130] flex items-center justify-center bg-black/40 backdrop-blur-md p-4"
             onClick={() => !reassignBusy && setReassignTarget(null)}
           >
             <motion.div
               initial={{ scale: 0.96, y: 12 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.96, y: 12 }}
               onClick={e => e.stopPropagation()}
-              className={`w-full max-w-md rounded-2xl p-6 ${t.modalCard || t.card}`}
+              className={`w-full max-w-md rounded-[2rem] p-6 shadow-2xl ${isDark ? "bg-[#1C1C1E]/85 border-white/10 backdrop-blur-3xl" : "bg-white/85 border-black/5 backdrop-blur-3xl"
+                }`}
             >
               <div className="flex items-start justify-between mb-4">
-                <h3 className={`text-base font-bold ${t.text}`}>Assign Sourcing Manager</h3>
-                <button onClick={() => !reassignBusy && setReassignTarget(null)} className={`p-1.5 rounded-lg cursor-pointer ${t.textMuted}`}>
+                <h3 className={`text-base font-bold tracking-tight ${t.text}`}>Assign Sourcing Manager</h3>
+                <button onClick={() => !reassignBusy && setReassignTarget(null)} className={`p-1.5 rounded-full cursor-pointer transition-colors ${isDark ? "hover:bg-white/10" : "hover:bg-black/5"} ${t.textMuted}`}>
                   <FaTimes />
                 </button>
               </div>
 
-              <p className={`text-xs mb-4 ${t.textMuted}`}>
+              <p className={`text-xs mb-4 leading-relaxed ${t.textMuted}`}>
                 Enquiry #{String(reassignTarget.sr_no || reassignTarget.id).padStart(3, "0")} ·{" "}
-                <span className={`font-bold ${t.text}`}>
+                <span className={`font-semibold ${t.text}`}>
                   {cpField(reassignTarget, "partner_name", "cp_name") || "Unnamed partner"}
                 </span>
                 {reassignTarget.sourcing_manager_name && ` · currently ${reassignTarget.sourcing_manager_name}`}
               </p>
 
-              <label className={`block text-xs mb-1.5 font-medium ${t.textMuted}`}>Sourcing Manager</label>
+              <label className={`block text-[11px] uppercase tracking-wider mb-1.5 font-bold ${t.textMuted}`}>Sourcing Manager</label>
               <SearchableSelect
                 value={reassignTo}
                 onChange={setReassignTo}
@@ -540,33 +545,33 @@ export default function ChannelPartnerEnquiriesTable({
                 ariaLabel="Sourcing Manager"
               />
               <button onClick={() => setReassignTo("")}
-                className={`mt-2 text-[10px] underline cursor-pointer ${t.textFaint}`}>
+                className={`mt-2 text-[10px] underline cursor-pointer transition-opacity hover:opacity-70 ${t.textFaint}`}>
                 Clear assignment instead
               </button>
 
               {/* Assigning an inherited lead pins it, which is a one-way change worth
                   stating: it stops following the partner from here on. */}
               {reassignTarget.sourcing_manager_inherited && (
-                <p className={`text-[10px] mt-2 ${isDark ? "text-amber-400" : "text-amber-600"}`}>
+                <div className={`mt-3 p-3 rounded-xl text-[10px] leading-relaxed ${isDark ? "bg-amber-500/10 text-amber-400" : "bg-amber-50 text-amber-700"}`}>
                   This enquiry currently follows its Channel Partner&apos;s owner. Setting a
                   manager here pins it to this enquiry only — it will no longer move when the
                   partner is reassigned.
-                </p>
+                </div>
               )}
 
               {reassignError && (
-                <div className="mt-4 rounded-lg px-3 py-2 text-xs bg-red-500/10 border border-red-500/30 text-red-500">
+                <div className="mt-4 rounded-xl px-4 py-3 text-xs bg-red-500/10 border border-red-500/25 text-red-500">
                   {reassignError}
                 </div>
               )}
 
               <div className="mt-6 flex items-center justify-end gap-3">
                 <button onClick={() => setReassignTarget(null)}
-                  className={`px-4 py-2 rounded-lg text-xs font-bold cursor-pointer ${t.textMuted}`}>
+                  className={`px-4 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-colors ${isDark ? "hover:bg-white/5 text-white" : "hover:bg-black/5 text-black"}`}>
                   Cancel
                 </button>
                 <button onClick={submitReassign} disabled={reassignBusy}
-                  className={`px-5 py-2 rounded-lg text-xs font-bold cursor-pointer ${t.btnPrimary} ${reassignBusy ? "opacity-50 cursor-not-allowed" : ""}`}>
+                  className={`px-5 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-opacity ${t.btnPrimary} ${reassignBusy ? "opacity-50 cursor-not-allowed" : "hover:opacity-90"}`}>
                   {reassignBusy ? "Saving…" : reassignTo === "" ? "Clear Assignment" : "Save Assignment"}
                 </button>
               </div>

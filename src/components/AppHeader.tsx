@@ -3,14 +3,20 @@
 import type React from "react";
 import HeaderClock from "@/components/HeaderClock";
 
-/** Single source for the bar's height. Hosts do not restate it. */
-export const APP_HEADER_HEIGHT = "h-16";
+/** 
+ * Apple standard navigation bar heights: 
+ * Mobile is traditionally 44px, Desktop/iPad is slightly taller. 
+ */
+export const APP_HEADER_HEIGHT = "h-[44px] sm:h-[52px]";
 
 /** Single source for the bar's horizontal inset. */
 export const APP_HEADER_PADDING = "px-4 sm:px-6";
 
+/** Apple system font stack ensures SF Pro renders on Apple devices */
+const appleFontStack = `-apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif`;
+
 /**
- * The brand mark, at the one size every bar uses.
+ * The brand mark.
  */
 export function AppLogo({
   src = "/assets/bhoomidwellersLogo_trans.png",
@@ -24,15 +30,13 @@ export function AppLogo({
     <img
       src={src}
       alt="Bhoomi Dwellers"
-      className={`h-12 w-auto max-w-[190px] object-contain flex-shrink-0 transition-opacity duration-200 hover:opacity-80 ${className}`}
+      className={`h-6 sm:h-7 w-auto max-w-[120px] sm:max-w-[120px] object-contain flex-shrink-0 transition-opacity duration-200 hover:opacity-80 ${className}`}
     />
   );
 }
 
 /**
- * A seamless 36px/32px square control — theme toggle, notification bell, profile avatar.
- * Redesigned to HIG standards: borderless by default, perfectly rounded, with a subtle 
- * background fill on hover/active states.
+ * Circular icon buttons for Theme, Profile, Notifications.
  */
 export function HeaderControl({
   isDark,
@@ -57,12 +61,12 @@ export function HeaderControl({
       aria-label={label}
       title={label}
       className={[
-        size === "sm" ? "h-8 w-8" : "h-9 w-9",
+        size === "sm" ? "h-7 w-7" : "h-8 w-8 sm:h-9 sm:w-9",
         "flex-shrink-0 rounded-full flex items-center justify-center outline-none",
-        "transition-all duration-200 cursor-pointer",
+        "transition-all duration-200 cursor-pointer active:scale-95", // Apple-style click scale
         isDark
-          ? "text-[#98989D] hover:bg-white/10 hover:text-white active:bg-white/20"
-          : "text-[#86868B] hover:bg-black/5 hover:text-[#1D1D1F] active:bg-black/10",
+          ? "text-[#EBEBF5] hover:bg-white/15 active:bg-white/20"
+          : "text-[#3C3C43] hover:bg-black/5 active:bg-black/10",
         className,
       ].join(" ")}
       {...rest}
@@ -72,13 +76,13 @@ export function HeaderControl({
   );
 }
 
-/** Hairline separator between the logo and the page context. */
+/** Apple UI hairline divider */
 function Divider({ isDark }: { isDark: boolean }) {
   return (
     <span
       aria-hidden
-      className="hidden sm:block h-4 w-px flex-shrink-0 rounded-full"
-      style={{ background: isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.15)" }}
+      className="hidden sm:block h-5 w-px flex-shrink-0"
+      style={{ background: isDark ? "rgba(84, 84, 88, 0.65)" : "rgba(60, 60, 67, 0.29)" }}
     />
   );
 }
@@ -106,30 +110,37 @@ export default function AppHeader({
 
   return (
     <header
-      className={`${APP_HEADER_HEIGHT} ${APP_HEADER_PADDING} flex items-center justify-between gap-3 z-30 flex-shrink-0 transition-colors duration-300 ${surfaceClassName ? ` ${surfaceClassName}` : ""
+      className={`${APP_HEADER_HEIGHT} ${APP_HEADER_PADDING} flex items-center justify-between gap-2 sm:gap-4 z-30 flex-shrink-0 transition-colors duration-300 ${surfaceClassName ? ` ${surfaceClassName}` : ""
         }`}
-      style={
-        hostOwnsSurface
+      style={{
+        fontFamily: appleFontStack,
+        ...(hostOwnsSurface
           ? surfaceStyle
           : {
-            // Apple's translucent background materials with heavy blur
-            background: isDark ? "rgba(28, 28, 30, 0.75)" : "rgba(250, 250, 252, 0.75)",
-            backdropFilter: "blur(20px) saturate(180%)",
-            WebkitBackdropFilter: "blur(20px) saturate(180%)",
-            borderBottom: isDark ? "1px solid rgba(255,255,255,0.08)" : "1px solid rgba(0,0,0,0.06)",
-          }
-      }
+            // Apple System Colors for surfaces
+            background: isDark ? "#1C1C1E" : "#FFFFFF",
+            // Apple standard hairline borders
+            borderBottom: isDark
+              ? "0.5px solid rgba(84, 84, 88, 0.65)"
+              : "0.5px solid rgba(60, 60, 67, 0.29)",
+          }),
+      }}
     >
       {/* ── Left: brand → context → role ── */}
-      <div className="flex items-center gap-3 min-w-0">
+      <div className="flex items-center gap-3 sm:gap-4 min-w-0">
         <AppLogo src={logoSrc} />
 
         {context && (
           <>
             <Divider isDark={isDark} />
             <h1
-              className="text-[14px] sm:text-[15px] font-semibold tracking-tight truncate"
-              style={{ color: isDark ? "#FFFFFF" : "#1D1D1F" }}
+              className="font-semibold truncate"
+              style={{
+                // Apple standard: 17px for mobile inline titles, tight tracking
+                fontSize: "clamp(17px, 2vw, 19px)",
+                letterSpacing: "-0.41px",
+                color: isDark ? "#FFFFFF" : "#000000"
+              }}
             >
               {context}
             </h1>
@@ -138,11 +149,11 @@ export default function AppHeader({
 
         {role && (
           <span
-            className="hidden md:inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium capitalize whitespace-nowrap flex-shrink-0 tracking-wide"
+            // Apple standard: fully rounded capsule for tags, small semibold text
+            className="hidden md:inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] sm:text-[12px] font-medium tracking-wide capitalize whitespace-nowrap flex-shrink-0"
             style={{
-              // Neutral, subtle tinting typical of iOS/macOS labels
-              background: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)",
-              color: isDark ? "#E5E5EA" : "#1D1D1F",
+              background: isDark ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.06)",
+              color: isDark ? "rgba(235, 235, 245, 0.6)" : "rgba(60, 60, 67, 0.6)",
             }}
           >
             {role}
@@ -151,9 +162,8 @@ export default function AppHeader({
       </div>
 
       {/* ── Right: controls ── */}
-      <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+      <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
         {leading}
-        {/* <HeaderClock isDark={isDark} /> */}
         {children}
       </div>
     </header>
