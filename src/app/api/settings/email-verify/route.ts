@@ -18,6 +18,8 @@ const MAX_ATTEMPTS = 5;
 export async function POST(req: NextRequest) {
   const gate = await requireSession();
   if (!gate.ok) return gate.response;
+  // (no organization-scoped query remains in this handler: name and email are
+  //  platform-wide login identifiers — decision 2026-08-19)
   if (!gate.userId) {
     return NextResponse.json({ success: false, message: "Session carries no user id." }, { status: 400 });
   }
@@ -125,6 +127,7 @@ export async function POST(req: NextRequest) {
   // It was free when the code was issued up to ten minutes ago; someone else may
   // have taken it since.
   const taken = await query<{ id: number }>(
+    // Platform-wide email identity (decision 2026-08-19) — see settings/email-change.
     `SELECT id FROM users WHERE LOWER(email) = LOWER($1) AND id <> $2 LIMIT 1`,
     [record.new_email, gate.userId]
   );

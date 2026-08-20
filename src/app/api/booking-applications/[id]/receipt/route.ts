@@ -6,6 +6,8 @@
 // and the reversal chain remains intact.
 import { NextRequest, NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
+import { assertParentOrganization } from "@/lib/tenantGuard";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
@@ -106,14 +108,20 @@ export async function POST(
         }
 
         const bookingRes = await query<{ id: number }>(
-            `SELECT id FROM booking_applications WHERE id = $1`,
-            [Number(id)],
+            // MT-06: ownership gate for the receipt write path.
+            `SELECT id FROM booking_applications WHERE id = $1 AND organization_id = $2`,
+            [Number(id), await getOrganizationId()],
         );
         if (!bookingRes.length) {
             return NextResponse.json({ success: false, message: "Booking not found" }, { status: 404 });
         }
 
         const saved = await transaction(async (client) => {
+            // MT-05: resolved once per transaction. The booking id comes from the
+            // URL, so the parent's ownership is checked rather than assumed —
+            // otherwise a caller could hang a receipt off another tenant's booking.
+            const orgId = await getOrganizationId(client);
+            await assertParentOrganization(client, "booking_applications", Number(id), orgId);
             // One financial account per booking; create it on first receipt so this
             // route works for bookings made before the ledger existed.
             const accountRes = await client.query(
@@ -123,8 +131,14 @@ export async function POST(
             let accountId = accountRes.rows[0]?.id;
             if (!accountId) {
                 const created = await client.query(
-                    `INSERT INTO financial_accounts (booking_id, created_by) VALUES ($1, $2) RETURNING id`,
-                    [Number(id), user_name],
+                    // PRE-EXISTING BUG, found by the MT-05 PREPARE harness:
+                    // financial_accounts has no created_by column, so this
+                    // statement has always been invalid and would 500 on the
+                    // first receipt for a booking with no account yet. Column
+                    // removed so the statement matches the schema and the two
+                    // sibling inserts in booking-applications/{route,[id]}.
+                    `INSERT INTO financial_accounts (booking_id, organization_id) VALUES ($1, $2) RETURNING id`,
+                    [Number(id), orgId],
                 );
                 accountId = created.rows[0].id;
             }
@@ -132,13 +146,15 @@ export async function POST(
             const ins = await client.query(
                 `INSERT INTO financial_ledger
            (account_id, transaction_type, transaction_direction, amount, transaction_date,
-            status, received_from, payment_mode, reference_no, remarks, milestone_id, created_by)
-         VALUES ($1, $2, 'CREDIT', $3, $4, 'Received', 'Customer', $5, $6, $7, $8, $9)
+            status, received_from, payment_mode, reference_no, remarks, milestone_id, created_by,
+            organization_id)
+         VALUES ($1, $2, 'CREDIT', $3, $4, 'Received', 'Customer', $5, $6, $7, $8, $9, $10)
          RETURNING *`,
                 [
                     accountId, type, cleanAmount, transaction_date,
                     payment_mode || null, reference_no || null, remarks || null,
                     milestone_id ? Number(milestone_id) : null, user_name,
+                    orgId,
                 ],
             );
 
@@ -155,11 +171,12 @@ export async function POST(
             }
 
             await client.query(
-                `INSERT INTO booking_history (booking_id, updated_by, user_role, changed_fields)
-         VALUES ($1, $2, $3, $4)`,
+                `INSERT INTO booking_history (booking_id, updated_by, user_role, changed_fields, organization_id)
+         VALUES ($1, $2, $3, $4, $5)`,
                 [
                     Number(id), user_name, user_role,
                     JSON.stringify({ receipt: { type, amount: cleanAmount, transaction_date, payment_mode: payment_mode || null } }),
+                    orgId,
                 ],
             );
 

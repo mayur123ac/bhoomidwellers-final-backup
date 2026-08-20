@@ -3,6 +3,7 @@
 // lead-scoped list, filtered to those migrated onto this booking.
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
@@ -18,8 +19,10 @@ export async function GET(
     if (!gate.ok) return gate.response;
 
     const rows = await query(
-      `SELECT * FROM loan_applications WHERE booking_id = $1 ORDER BY created_at ASC`,
-      [Number(id)],
+      // MT-06: caller-supplied booking id — scoped so a foreign booking returns
+      // an empty list rather than another tenant's loan applications.
+      `SELECT * FROM loan_applications WHERE booking_id = $1 AND organization_id = $2 ORDER BY created_at ASC`,
+      [Number(id), await getOrganizationId()],
     );
     return NextResponse.json({ success: true, data: rows }, { status: 200 });
   } catch (err: any) {

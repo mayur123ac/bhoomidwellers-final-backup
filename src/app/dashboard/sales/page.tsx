@@ -2002,14 +2002,14 @@ function SalesManagerView({
                   const notApproved = bookingData?.booking_status !== "Approved";
                   const canEdit = isAdminRole || (isOwner && notApproved);
                   if (!canEdit) return null;
-                  return (
-                    <button
-                      onClick={() => setIsEditingBooking(true)}
-                      className={`px-4 py-1.5 text-xs font-bold flex items-center gap-1.5 rounded-lg transition-colors cursor-pointer shadow-sm text-white ${isDark ? "bg-[#9E217B] hover:bg-[#7a1960]" : "bg-[#00AEEF] hover:bg-[#0088bb]"}`}
-                    >
-                      <FaEdit /> Edit Booking Form
-                    </button>
-                  );
+                  // return (
+                  //   <button
+                  //     onClick={() => setIsEditingBooking(true)}
+                  //     className={`px-4 py-1.5 text-xs font-bold flex items-center gap-1.5 rounded-lg transition-colors cursor-pointer shadow-sm text-white ${isDark ? "bg-[#9E217B] hover:bg-[#7a1960]" : "bg-[#00AEEF] hover:bg-[#0088bb]"}`}
+                  //   >
+                  //     <FaEdit /> Edit Booking Form
+                  //   </button>
+                  // );
                 })()}
               </div>
               <div className="flex-1 overflow-hidden">

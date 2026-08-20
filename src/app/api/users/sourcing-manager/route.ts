@@ -6,6 +6,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
+import { getOrganizationId } from "@/lib/tenantContext";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +22,9 @@ export async function GET() {
          FROM users
         WHERE REPLACE(LOWER(TRIM(role)), '_', ' ') = 'sourcing manager'
           AND is_active = true
-        ORDER BY name ASC`
+          AND organization_id = $1
+        ORDER BY name ASC`,
+      [await getOrganizationId()]
     );
 
     return NextResponse.json({ success: true, data: managers }, { status: 200 });

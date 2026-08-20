@@ -209,7 +209,7 @@ function Tile({
 }) {
   const [open, setOpen] = useState(false);
   const tipId = useId();
-  const theme = isDark ? "dark" : "light";
+  const theme = isDark ? "light" : "light";
 
   return (
     // The span, not the button, carries the pointer handlers — see the note at

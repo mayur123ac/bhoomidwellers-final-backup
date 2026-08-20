@@ -1,6 +1,7 @@
 // app/api/caller-leads/[id]/route.ts
 import { NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { broadcastUpdate } from "../events/route";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 
@@ -38,9 +39,12 @@ export async function PATCH(
       return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
     }
 
+    // id comes from the URL; organization appended after it so the dynamic SET
+    // clause numbering is untouched.
     values.push(parseInt(id, 10));
+    values.push(await getOrganizationId());
     const rows = await query(
-      `UPDATE caller_leads SET ${setClauses.join(", ")} WHERE id = $${p} RETURNING *`,
+      `UPDATE caller_leads SET ${setClauses.join(", ")} WHERE id = $${p} AND organization_id = $${p + 1} RETURNING *`,
       values
     );
 
@@ -76,20 +80,25 @@ export async function DELETE(
     const leadId = parseInt(id, 10);
 
     await transaction(async (client) => {
+      // Every statement carries its own organization predicate. caller_leads has an
+      // explicit organization_id, so tenancy is NOT derived from upload_batch —
+      // which is nullable and would leave batchless leads unscoped.
+      const callerOrgId = await getOrganizationId(client);
+
       const { rows: leadRows } = await client.query(
-        `SELECT upload_batch FROM caller_leads WHERE id = $1`, [leadId]
+        `SELECT upload_batch FROM caller_leads WHERE id = $1 AND organization_id = $2`, [leadId, callerOrgId]
       );
       const batchId = leadRows[0]?.upload_batch;
 
-      await client.query(`DELETE FROM caller_follow_ups WHERE lead_id = $1`, [leadId]);
-      await client.query(`DELETE FROM caller_leads WHERE id = $1`, [leadId]);
+      await client.query(`DELETE FROM caller_follow_ups WHERE lead_id = $1 AND organization_id = $2`, [leadId, callerOrgId]);
+      await client.query(`DELETE FROM caller_leads WHERE id = $1 AND organization_id = $2`, [leadId, callerOrgId]);
 
       if (batchId) {
         const { rows: remaining } = await client.query(
-          `SELECT COUNT(*) as cnt FROM caller_leads WHERE upload_batch = $1`, [batchId]
+          `SELECT COUNT(*) as cnt FROM caller_leads WHERE upload_batch = $1 AND organization_id = $2`, [batchId, callerOrgId]
         );
         if (parseInt(remaining[0].cnt) === 0) {
-          await client.query(`DELETE FROM caller_upload_batches WHERE id = $1`, [batchId]);
+          await client.query(`DELETE FROM caller_upload_batches WHERE id = $1 AND organization_id = $2`, [batchId, callerOrgId]);
         }
       }
     });

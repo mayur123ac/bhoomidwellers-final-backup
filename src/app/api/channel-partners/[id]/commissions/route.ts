@@ -2,6 +2,7 @@
 // Commission history for one partner, plus their running FY total.
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { getFinancialYearWindow, TDS_THRESHOLD_INR } from "@/lib/cpCommissionEngine";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 
@@ -21,13 +22,15 @@ export async function GET(
       return NextResponse.json({ success: false, message: "Invalid partner id." }, { status: 400 });
     }
 
+    const cpCommOrgId = await getOrganizationId();
     const rows = await query(
       `SELECT c.*, b.booking_number, b.primary_name AS buyer_name
          FROM cp_commissions c
-         LEFT JOIN booking_applications b ON b.id = c.booking_id
-        WHERE c.channel_partner_id = $1
+         LEFT JOIN booking_applications b
+           ON b.id = c.booking_id AND b.organization_id = c.organization_id
+        WHERE c.channel_partner_id = $1 AND c.organization_id = $2
         ORDER BY c.created_at DESC, c.id DESC`,
-      [cpId]
+      [cpId, cpCommOrgId]
     );
 
     // Mirrors the engine's threshold query exactly: sums gross across ALL sources
@@ -40,8 +43,9 @@ export async function GET(
         WHERE channel_partner_id = $1
           AND status <> 'reversed'
           AND created_at >= $2::timestamp
-          AND created_at <  $3::timestamp`,
-      [cpId, fy.start, fy.end]
+          AND created_at <  $3::timestamp
+          AND organization_id = $4`,
+      [cpId, fy.start, fy.end, cpCommOrgId]
     );
 
     return NextResponse.json(

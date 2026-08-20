@@ -22,6 +22,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { transaction } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { requireRoles } from "@/lib/serverAuth";
 import { requestContext, writeAuditLog } from "@/lib/auditLog";
 import { errorText, generateApiKey } from "@/lib/apiKeys";
@@ -66,7 +67,7 @@ export async function POST(
     result = await transaction(async (client) => {
       const existingRes = await client.query(
         `SELECT id, name, key_prefix, scopes, rate_limit_per_min, ip_whitelist,
-                expires_at, revoked_at
+                expires_at, revoked_at, organization_id
            FROM api_keys
           WHERE id = $1
           FOR UPDATE`,
@@ -75,13 +76,19 @@ export async function POST(
 
       const existing = existingRes.rows[0];
       if (!existing) throw new Error("NOT_FOUND");
+      // MT-05: the key id comes from the URL. Rotating another tenant's key
+      // would mint a working credential for their data, so a key outside the
+      // caller's organization is reported as missing rather than as forbidden —
+      // saying "exists but not yours" would confirm the id is real.
+      if (existing.organization_id !== (await getOrganizationId(client))) throw new Error("NOT_FOUND");
       if (existing.revoked_at) throw new Error("ALREADY_REVOKED");
 
       const insertRes = await client.query(
+        // The rotated key inherits the organization of the key it replaces.
         `INSERT INTO api_keys
            (name, key_prefix, key_hash, scopes, rate_limit_per_min, ip_whitelist,
-            created_by, expires_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            created_by, expires_at, organization_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          RETURNING id`,
         [
           existing.name,
@@ -92,6 +99,7 @@ export async function POST(
           existing.ip_whitelist,
           gate.userId,
           existing.expires_at,
+          existing.organization_id,
         ]
       );
 

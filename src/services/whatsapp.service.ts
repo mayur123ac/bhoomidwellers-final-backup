@@ -24,6 +24,7 @@
 
 import type { PoolClient } from "pg";
 import { query, transaction } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { SOURCING_MANAGER_ROLE_PREDICATE } from "@/lib/sourcingAssignment";
 import { toE164, toMetaRecipient, maskPhone, describeE164Failure } from "@/lib/phone";
 import { sendTemplate, sendText } from "@/lib/whatsapp-client";
@@ -114,14 +115,20 @@ interface Recipient {
  * a bare `role` column, so the table must not be aliased here.
  */
 async function resolveRecipient(userId: number): Promise<Recipient | null> {
+  // The organization predicate belongs here for the same reason the role and
+  // is_active checks do: this decides who a partner's details get sent to. The id
+  // travels in from a record's assignee field, and without the predicate a stale
+  // or mistaken id pointing into another tenant would page that tenant's manager
+  // with this tenant's partner details.
   const rows = await query<Recipient>(
     `SELECT id, name, whatsapp_number
        FROM users
       WHERE id = $1
+        AND organization_id = $2
         AND is_active = true
         AND ${SOURCING_MANAGER_ROLE_PREDICATE}
       LIMIT 1`,
-    [userId]
+    [userId, await getOrganizationId()]
   );
   return rows[0] ?? null;
 }
@@ -170,11 +177,16 @@ async function insertLog(i: InsertRowInput): Promise<number | null> {
     `INSERT INTO notification_logs (
        channel, type, receiver, receiver_user_id, receiver_phone,
        subject_type, subject_id, template_name, status, payload,
-       last_error, last_error_code, next_retry_at, max_retries
+       last_error, last_error_code, next_retry_at, max_retries,
+       organization_id
      ) VALUES (
        'whatsapp', $1, $2, $3, $4,
        $5, $6, $7, $8, $9::jsonb,
-       $10, $11, CASE WHEN $12::boolean THEN now() ELSE NULL END, $13
+       $10, $11, CASE WHEN $12::boolean THEN now() ELSE NULL END, $13,
+       -- receiver_user_id is nullable (messages to raw phone numbers), so the
+       -- organization comes from the recipient when there is one and from the
+       -- caller's own tenant otherwise. Never NULL.
+       COALESCE((SELECT u.organization_id FROM users u WHERE u.id = $3), $14)
      )
      ON CONFLICT (type, subject_id) WHERE subject_id IS NOT NULL DO NOTHING
      RETURNING id`,
@@ -192,6 +204,7 @@ async function insertLog(i: InsertRowInput): Promise<number | null> {
       i.lastErrorCode,
       i.nextRetryAt,
       readConfig().config?.maxRetries ?? 3,
+      await getOrganizationId(),
     ]
   );
   return rows[0]?.id ?? null;
@@ -476,6 +489,13 @@ export async function sendNow(logId: number): Promise<NotificationStatus | null>
   let row: any;
   try {
     row = await transaction(async (client: PoolClient) => {
+      // MT-05 EXCEPTION (accepted): claims by primary key, with no organization
+      // predicate. logId never comes from a client — it is minted by insertLog and
+      // handed straight to scheduleAttempt's timer inside this process, so there is
+      // no id here for a caller to guess or substitute. There is also no session to
+      // scope against: this runs from a setTimeout, after the response has already
+      // been flushed. RETURNING * carries the row's organization_id out to
+      // sendClaimed, which pins every subsequent statement to it.
       const res = await client.query(
         `UPDATE notification_logs
             SET status = 'sending', locked_at = now()
@@ -511,8 +531,22 @@ async function sendClaimed(row: any): Promise<NotificationStatus> {
   const attemptNumber = Number(row.retry_count ?? 0) + 1;
   const request = row.payload?.request;
 
+  // ── Tenancy in the delivery pipeline (MT-05) ──────────────────────────────
+  //
+  // Everything below runs OUTSIDE a request — a setTimeout retry, the sweep, a
+  // Meta webhook — so there is no session and no org claim to read. The claimed
+  // row is the trusted source: it was written with an organization_id by
+  // insertLog, and that value is carried into every statement that touches it.
+  // Nothing is resolved from a session here and nothing is guessed.
+  //
+  // IS NOT DISTINCT FROM, not =: rows written before MT-04 backfilled can still
+  // hold NULL, and `= NULL` would silently match nothing and strand them
+  // permanently in 'sending'. The predicate pins the statement to the row it
+  // already read, which is what it is for.
+  const rowOrgId: string | null = row.organization_id ?? null;
+
   if (!request) {
-    await settleDead(row.id, "Log row has no request payload to send.", "UNKNOWN", attemptNumber);
+    await settleDead(row.id, "Log row has no request payload to send.", "UNKNOWN", attemptNumber, rowOrgId);
     return "dead";
   }
 
@@ -527,8 +561,8 @@ async function sendClaimed(row: any): Promise<NotificationStatus> {
               last_error = NULL, last_error_code = NULL,
               retry_count = $3,
               payload = COALESCE(payload, '{}'::jsonb) || jsonb_build_object('response', $4::jsonb)
-        WHERE id = $1`,
-      [row.id, result.messageId, attemptNumber, JSON.stringify(redactDeep(result.raw))]
+        WHERE id = $1 AND organization_id IS NOT DISTINCT FROM $5`,
+      [row.id, result.messageId, attemptNumber, JSON.stringify(redactDeep(result.raw)), rowOrgId]
     );
     return "sent";
   } catch (err) {
@@ -537,7 +571,7 @@ async function sendClaimed(row: any): Promise<NotificationStatus> {
     const canRetry = wa.retryable && attemptNumber < maxRetries;
 
     if (!canRetry) {
-      await settleDead(row.id, wa.toLogString(), wa.code, attemptNumber, wa);
+      await settleDead(row.id, wa.toLogString(), wa.code, attemptNumber, rowOrgId, wa);
       return "dead";
     }
 
@@ -551,7 +585,7 @@ async function sendClaimed(row: any): Promise<NotificationStatus> {
                 payload = COALESCE(payload, '{}'::jsonb) ||
                           jsonb_build_object('attempts',
                             COALESCE(payload->'attempts', '[]'::jsonb) || $6::jsonb)
-          WHERE id = $1`,
+          WHERE id = $1 AND organization_id IS NOT DISTINCT FROM $7`,
         [
           row.id,
           attemptNumber,
@@ -561,6 +595,7 @@ async function sendClaimed(row: any): Promise<NotificationStatus> {
           JSON.stringify([
             { at: new Date().toISOString(), code: wa.code, httpStatus: wa.httpStatus ?? null },
           ]),
+          rowOrgId,
         ]
       );
     } catch (dbErr) {
@@ -577,6 +612,7 @@ async function settleDead(
   message: string,
   code: string,
   attemptNumber: number,
+  orgId: string | null,
   wa?: WhatsAppError
 ): Promise<void> {
   try {
@@ -588,7 +624,7 @@ async function settleDead(
               payload = COALESCE(payload, '{}'::jsonb) ||
                         jsonb_build_object('attempts',
                           COALESCE(payload->'attempts', '[]'::jsonb) || $5::jsonb)
-        WHERE id = $1`,
+        WHERE id = $1 AND organization_id IS NOT DISTINCT FROM $6`,
       [
         id,
         attemptNumber,
@@ -602,6 +638,7 @@ async function settleDead(
             message: redactSecrets(message),
           },
         ]),
+        orgId,
       ]
     );
   } catch (err) {
@@ -621,7 +658,30 @@ async function settleDead(
  * is far beyond the 10-second timeout, so this only fires on a genuinely dead
  * process, and one duplicate alert beats a permanently lost one.
  */
-export async function reapStaleLocks(): Promise<number> {
+// MT-05 CLASSIFICATION — DUAL-MODE QUEUE WORKER.
+//
+// The queue is shared by every organization on the platform, and draining it is
+// not an act performed on behalf of any one tenant. But /api/notifications/
+// retry-sweep can be triggered two ways, and they are not the same thing:
+//
+//   cron (x-sweep-token)  the platform worker. Must drain EVERY tenant, or the
+//                         organizations that did not happen to trigger it stop
+//                         receiving notifications altogether.
+//   admin session         one tenant's administrator pressing a button. Must be
+//                         confined to their own organization — otherwise they
+//                         drive delivery for other tenants and the returned
+//                         SweepReport counts other tenants' queue activity back
+//                         to them.
+//
+// So orgId is optional and the predicate is written `$n IS NULL OR
+// organization_id = $n`: passing an organization scopes the statement, passing
+// nothing is the platform-wide worker. The caller decides, and the route decides
+// from HOW it was authorized — never from anything in the request body.
+//
+// Rows claimed here are handed to sendClaimed, which pins every statement it
+// issues to that row's own organization_id (see the note there), so no row
+// crosses a tenant boundary in either mode.
+export async function reapStaleLocks(orgId?: string | null): Promise<number> {
   try {
     const rows = await query<{ id: number }>(
       `UPDATE notification_logs
@@ -630,7 +690,9 @@ export async function reapStaleLocks(): Promise<number> {
               last_error_code = 'STALE_LOCK'
         WHERE status = 'sending'
           AND locked_at < now() - interval '5 minutes'
-        RETURNING id`
+          AND ($1::uuid IS NULL OR organization_id = $1::uuid)
+        RETURNING id`,
+      [orgId ?? null]
     );
     return rows.length;
   } catch (err) {
@@ -653,22 +715,27 @@ export interface SweepReport {
  * batch sequentially — Meta rate-limits per phone number id, and the sweep is
  * not latency-sensitive, so parallelism would only buy 429s.
  */
-export async function processDue(limit = 25): Promise<SweepReport> {
+export async function processDue(limit = 25, orgId?: string | null): Promise<SweepReport> {
   const started = Date.now();
   const report: SweepReport = { reaped: 0, claimed: 0, sent: 0, failed: 0, dead: 0, durationMs: 0 };
 
-  report.reaped = await reapStaleLocks();
+  report.reaped = await reapStaleLocks(orgId ?? null);
 
   let rows: any[] = [];
   try {
     rows = await transaction(async (client: PoolClient) => {
       const res = await client.query(
+        // The organization predicate sits INSIDE the `due` CTE, ahead of its
+        // ORDER BY and LIMIT. Filtering after the LIMIT would let another
+        // tenant's older rows consume this sweep's whole batch and then be
+        // discarded, so a scoped sweep would report work it never did.
         `WITH due AS (
            SELECT id FROM notification_logs
             WHERE status IN ('pending','failed')
               AND next_retry_at IS NOT NULL
               AND next_retry_at <= now()
               AND retry_count < max_retries
+              AND ($2::uuid IS NULL OR organization_id = $2::uuid)
             ORDER BY next_retry_at ASC
             LIMIT $1
             FOR UPDATE SKIP LOCKED
@@ -678,7 +745,7 @@ export async function processDue(limit = 25): Promise<SweepReport> {
            FROM due
           WHERE n.id = due.id
           RETURNING n.*`,
-        [Math.max(1, Math.min(limit, 100))]
+        [Math.max(1, Math.min(limit, 100)), orgId ?? null]
       );
       return res.rows;
     });
@@ -739,6 +806,12 @@ if (typeof window === "undefined") {
  */
 export async function applyStatusUpdate(u: WebhookStatusUpdate): Promise<boolean> {
   try {
+    // MT-05: webhook path — no session, so no org claim. message_id is issued by
+    // Meta and carries a UNIQUE constraint (uq_notification_logs_message_id), so
+    // it identifies exactly one row and therefore exactly one organization. The
+    // row is the trusted tenant source here, the same way execution_id is in
+    // lib/bolnaCalls.ts. Nothing tenant-scoped is read back out to the caller:
+    // both statements return only whether a row changed.
     if (u.status === "failed") {
       // A delivery failure is terminal and does NOT re-enter the retry ladder.
       // At this stage the causes are 131026 (recipient cannot receive), 131047
@@ -799,7 +872,11 @@ export async function listNotifications(f: ListFilters) {
   const limit = Math.max(1, Math.min(Number(f.limit) || 50, 200));
   const offset = Math.max(0, Number(f.offset) || 0);
 
-  const params: any[] = [];
+  // The organization predicate is pushed FIRST and unconditionally, before any
+  // optional filter. Building it as one more optional clause is how a dynamic
+  // WHERE builder ends up emitting an unscoped statement whenever the caller
+  // passes no filters — the common case for an admin list screen.
+  const params: any[] = [await getOrganizationId()];
   const where: string[] = [];
 
   if (f.status) {
@@ -817,15 +894,23 @@ export async function listNotifications(f: ListFilters) {
         OR cp.name ILIKE $${params.length} OR w.name ILIKE $${params.length})`
     );
   }
-  const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+  // Written as a literal in the statement rather than as where[0], so the tenant
+  // filter is visible in the SQL of BOTH the page query and the count query and
+  // cannot be dropped by a later edit to the optional-filter builder.
+  const whereSql = where.length ? `AND ${where.join(" AND ")}` : "";
 
   // payload can run to several KB per row, so it is excluded from the list
   // projection unless explicitly requested.
   const payloadCol = f.includePayload ? "n.payload," : "";
 
+  // The subject joins carry their own tenant predicate as well, so a subject id
+  // that happens to exist in another organization cannot supply a name into this
+  // tenant's list.
   const joins = `
     LEFT JOIN channel_partners cp ON n.subject_type = 'channel_partner' AND cp.id = n.subject_id
-    LEFT JOIN walkin_enquiries w  ON n.subject_type = 'walkin_enquiry'  AND w.id  = n.subject_id`;
+                                 AND cp.organization_id = n.organization_id
+    LEFT JOIN walkin_enquiries w  ON n.subject_type = 'walkin_enquiry'  AND w.id  = n.subject_id
+                                 AND w.organization_id  = n.organization_id`;
 
   params.push(limit, offset);
   const rows = await query(
@@ -840,6 +925,7 @@ export async function listNotifications(f: ListFilters) {
             COALESCE(cp.name, w.name) AS subject_name
        FROM notification_logs n
        ${joins}
+       WHERE n.organization_id = $1
        ${whereSql}
       ORDER BY n.created_at DESC
       LIMIT $${params.length - 1} OFFSET $${params.length}`,
@@ -847,7 +933,8 @@ export async function listNotifications(f: ListFilters) {
   );
 
   const totalRows = await query<{ c: number }>(
-    `SELECT COUNT(*)::int AS c FROM notification_logs n ${joins} ${whereSql}`,
+    `SELECT COUNT(*)::int AS c FROM notification_logs n ${joins}
+      WHERE n.organization_id = $1 ${whereSql}`,
     params.slice(0, params.length - 2)
   );
 
@@ -890,20 +977,31 @@ export async function readiness(): Promise<ReadinessReport> {
   };
 
   try {
+    // readiness() answers an admin screen, so every figure is this organization's
+    // own. The filter is applied before each COUNT/GROUP BY, so another tenant's
+    // backlog can never be reported as this one's.
+    const readinessOrgId = await getOrganizationId();
+
     const counts = await query<{ status: string; c: number }>(
-      `SELECT status, COUNT(*)::int AS c FROM notification_logs GROUP BY status`
+      `SELECT status, COUNT(*)::int AS c FROM notification_logs
+        WHERE organization_id = $1 GROUP BY status`,
+      [readinessOrgId]
     );
     for (const r of counts) base.counts[r.status] = Number(r.c);
 
     const due = await query<{ c: number }>(
       `SELECT COUNT(*)::int AS c FROM notification_logs
-        WHERE status IN ('pending','failed') AND next_retry_at IS NOT NULL
-          AND next_retry_at <= now() AND retry_count < max_retries`
+        WHERE organization_id = $1
+          AND status IN ('pending','failed') AND next_retry_at IS NOT NULL
+          AND next_retry_at <= now() AND retry_count < max_retries`,
+      [readinessOrgId]
     );
     base.due_now = Number(due[0]?.c ?? 0);
 
     const stuck = await query<{ c: number }>(
-      `SELECT COUNT(*)::int AS c FROM notification_logs WHERE status = 'sending'`
+      `SELECT COUNT(*)::int AS c FROM notification_logs
+        WHERE organization_id = $1 AND status = 'sending'`,
+      [readinessOrgId]
     );
     base.stuck_sending = Number(stuck[0]?.c ?? 0);
   } catch (err) {
@@ -919,9 +1017,11 @@ export async function readiness(): Promise<ReadinessReport> {
     base.managers_missing_whatsapp = await query<{ id: number; name: string }>(
       `SELECT id, name FROM users
         WHERE is_active = true
+          AND organization_id = $1
           AND ${SOURCING_MANAGER_ROLE_PREDICATE}
           AND COALESCE(TRIM(whatsapp_number), '') = ''
-        ORDER BY name`
+        ORDER BY name`,
+      [await getOrganizationId()]
     );
   } catch (err) {
     swallow("readiness-managers", err);
@@ -1023,15 +1123,15 @@ export async function sendAdHocMessage(args: {
             SET status = 'sent', message_id = $2, sent_at = now(), retry_count = 1,
                 locked_at = NULL,
                 payload = COALESCE(payload, '{}'::jsonb) || jsonb_build_object('response', $3::jsonb)
-          WHERE id = $1`,
-        [logId, result.messageId, JSON.stringify(redactDeep(result.raw))]
+          WHERE id = $1 AND organization_id IS NOT DISTINCT FROM $4`,
+        [logId, result.messageId, JSON.stringify(redactDeep(result.raw)), await getOrganizationId()]
       ).catch((err) => swallow("adhoc-settle", err));
     }
     console.log(`[whatsapp] manual send to ${maskPhone(phone.e164)} by ${args.actor}`);
     return { logId, messageId: result.messageId };
   } catch (err) {
     const wa = WhatsAppError.from(err);
-    if (logId) await settleDead(logId, wa.toLogString(), wa.code, 1, wa);
+    if (logId) await settleDead(logId, wa.toLogString(), wa.code, 1, await getOrganizationId(), wa);
     throw wa;
   }
 }

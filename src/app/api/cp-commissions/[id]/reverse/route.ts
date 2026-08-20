@@ -1,6 +1,7 @@
 // api/cp-commissions/[id]/reverse/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { transaction } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { reverseCPCommission, CPCommissionError } from "@/lib/cpCommissionEngine";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 
@@ -31,9 +32,10 @@ export async function POST(
       // The engine keys on booking_id (a booking has at most one commission), while
       // the route is addressed by commission id — resolve inside the transaction so
       // the lookup and the reversal see the same snapshot.
-      const found = await client.query(`SELECT booking_id FROM cp_commissions WHERE id = $1`, [
-        Number(id),
-      ]);
+      const found = await client.query(
+        `SELECT booking_id FROM cp_commissions WHERE id = $1 AND organization_id = $2`,
+        [Number(id), await getOrganizationId(client)],
+      );
       if (found.rows.length === 0) {
         throw new CPCommissionError(`Commission ${id} not found.`, "COMMISSION_NOT_FOUND", 404);
       }

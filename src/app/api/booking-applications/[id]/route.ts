@@ -1,10 +1,12 @@
 // app/api/booking-applications/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { uploadBufferToR2 } from "@/lib/r2";
 import { syncBookingUnit, releaseUnitForBooking, flatIdentityChanged, parseFloor } from "@/lib/inventorySync";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 import { resolveGstRate, calcGstAmount } from "@/lib/gst";
+import { resolveStampDutyRate, resolveRegistrationFeeRate, calcStampDuty, calcRegistrationFee } from "@/lib/charges";
 // Shared so a saved booking returns the same shape a fetched one does.
 import { fetchBookingById } from "@/lib/bookingQuery";
 import { buildFinancialSnapshot, BookingNotFoundError, fmtINR } from "@/lib/buildFinancialSnapshot";
@@ -62,6 +64,7 @@ export async function GET(
               l.interest_rate, l.loan_tenure_months, TO_CHAR(l.emi_start_date, 'YYYY-MM-DD') AS emi_start_date, l.payment_type, l.pre_emi_amount, l.emi_amount,
               TO_CHAR(r.expected_registration_date, 'YYYY-MM-DD') AS expected_registration_date, TO_CHAR(r.actual_registration_date, 'YYYY-MM-DD') AS actual_registration_date, r.registration_status,
               r.registration_number, r.registration_remarks,
+              r.stamp_duty_rate, r.registration_fee_rate,
               r.stamp_duty_amount, TO_CHAR(r.stamp_duty_paid_date, 'YYYY-MM-DD') AS stamp_duty_paid_date, r.stamp_duty_status, r.stamp_duty_payment_mode, r.stamp_duty_receipt_no,
               r.registration_fee_amount, TO_CHAR(r.registration_fee_paid_date, 'YYYY-MM-DD') AS registration_fee_paid_date, r.registration_fee_status, r.registration_fee_payment_mode,
               COALESCE(
@@ -105,14 +108,15 @@ export async function GET(
                'total_loan_disbursed', tcv.total_loan_disbursed
              ) AS financial_summary
        FROM booking_applications b
-       LEFT JOIN walkin_enquiries w ON w.id = b.lead_id
+       LEFT JOIN walkin_enquiries w
+              ON w.id = b.lead_id AND w.organization_id = b.organization_id
        LEFT JOIN booking_financials f ON f.booking_id = b.id
        LEFT JOIN booking_loan_details l ON l.booking_id = b.id
        LEFT JOIN booking_registration_details r ON r.booking_id = b.id
        LEFT JOIN customer_ledger_view clv ON clv.booking_id = b.id
        LEFT JOIN booking_total_cost_view tcv ON tcv.booking_id = b.id
-       WHERE b.id = $1`,
-      [Number(id)]
+       WHERE b.id = $1 AND b.organization_id = $2`,
+      [Number(id), await getOrganizationId()]
     );
     if (!rows.length) {
       return NextResponse.json({ success: false, message: "Booking not found" }, { status: 404 });
@@ -165,17 +169,19 @@ export async function PUT(
               l.interest_rate, l.loan_tenure_months, TO_CHAR(l.emi_start_date, 'YYYY-MM-DD') AS emi_start_date, l.payment_type, l.pre_emi_amount, l.emi_amount,
               TO_CHAR(r.expected_registration_date, 'YYYY-MM-DD') AS expected_registration_date, TO_CHAR(r.actual_registration_date, 'YYYY-MM-DD') AS actual_registration_date, r.registration_status,
               r.registration_number, r.registration_remarks,
+              r.stamp_duty_rate, r.registration_fee_rate,
               r.stamp_duty_amount, TO_CHAR(r.stamp_duty_paid_date, 'YYYY-MM-DD') AS stamp_duty_paid_date, r.stamp_duty_status, r.stamp_duty_payment_mode, r.stamp_duty_receipt_no,
               r.registration_fee_amount, TO_CHAR(r.registration_fee_paid_date, 'YYYY-MM-DD') AS registration_fee_paid_date, r.registration_fee_status, r.registration_fee_payment_mode,
               TO_CHAR(b.booking_date, 'YYYY-MM-DD') AS booking_date,
               TO_CHAR(b.application_date, 'YYYY-MM-DD') AS application_date
        FROM booking_applications b
-       LEFT JOIN walkin_enquiries w ON b.lead_id = w.id
+       LEFT JOIN walkin_enquiries w
+              ON b.lead_id = w.id AND w.organization_id = b.organization_id
        LEFT JOIN booking_financials f ON f.booking_id = b.id
        LEFT JOIN booking_loan_details l ON l.booking_id = b.id
        LEFT JOIN booking_registration_details r ON r.booking_id = b.id
-       WHERE b.id = $1`,
-      [Number(id)]
+       WHERE b.id = $1 AND b.organization_id = $2`,
+      [Number(id), await getOrganizationId()]
     );
     if (!existing.length) {
       return NextResponse.json({ success: false, message: "Booking not found" }, { status: 404 });
@@ -310,10 +316,21 @@ export async function PUT(
       ? cleanNum(getStr("gst_rate"))
       : resolveGstRate(currentData.gst_rate);
     const gstAmount = calcGstAmount(agreementValue, gstRate);
+    // Stamp duty / registration fee rates get the same treatment gst_rate does
+    // just above: a rate sent by the client wins, otherwise the one already stored
+    // is kept, and only a genuinely absent rate falls back to the statutory
+    // default. Without the currentData leg, any save that omitted the field (the
+    // loan form's PUT, for one) would silently reset a 4% booking to 5%.
+    const stampDutyRate = getStr("stamp_duty_rate")
+      ? cleanNum(getStr("stamp_duty_rate"))
+      : resolveStampDutyRate(currentData.stamp_duty_rate);
+    const registrationFeeRate = getStr("registration_fee_rate")
+      ? cleanNum(getStr("registration_fee_rate"))
+      : resolveRegistrationFeeRate(currentData.registration_fee_rate);
     const stampDutyInput = cleanNum(getStr("stamp_duty_amount"));
-    const stampDutyAmount = stampDutyInput > 0 ? stampDutyInput : agreementValue * 0.05;
+    const stampDutyAmount = stampDutyInput > 0 ? stampDutyInput : calcStampDuty(agreementValue, stampDutyRate);
     const registrationFeeInput = cleanNum(getStr("registration_fee_amount"));
-    const registrationFeeAmount = registrationFeeInput > 0 ? registrationFeeInput : Math.min(agreementValue * 0.01, 30000);
+    const registrationFeeAmount = registrationFeeInput > 0 ? registrationFeeInput : calcRegistrationFee(agreementValue, registrationFeeRate);
 
     // Extract all strings
     const fields = {
@@ -422,6 +439,8 @@ export async function PUT(
       registration_status: getStr("registration_status") || 'Pending',
       registration_number: getStr("registration_number"),
       registration_remarks: getStr("registration_remarks"),
+      stamp_duty_rate: stampDutyRate,
+      registration_fee_rate: registrationFeeRate,
       stamp_duty_amount: stampDutyAmount,
       stamp_duty_paid_date: getStr("stamp_duty_paid_date") || null,
       stamp_duty_status: getStr("stamp_duty_status") || currentData.stamp_duty_status || 'Pending',
@@ -464,6 +483,10 @@ export async function PUT(
     diff(regFields, currentData);
 
     const updatedRow = await transaction(async (client) => {
+      // MT-05: tenant for every row written in this transaction. Resolved once,
+      // on this client so it shares the open transaction.
+      const orgId = await getOrganizationId(client);
+
       // ── Cancellation short-circuit ──
       // A cancel action sends only booking_status; running the normal full-form update
       // below would blank every field the client didn't resend (plus the financial / loan
@@ -495,9 +518,9 @@ export async function PUT(
         );
         await releaseUnitForBooking(client, Number(id), `booking #${id} cancelled`, user_name);
         await client.query(
-          `INSERT INTO booking_history (booking_id, updated_by, user_role, changed_fields)
-           VALUES ($1, $2, $3, $4)`,
-          [Number(id), user_name, user_role, JSON.stringify({ booking_status: { from: cur, to: "Cancelled" }, cancellation_reason: reason })],
+          `INSERT INTO booking_history (booking_id, updated_by, user_role, changed_fields, organization_id)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [Number(id), user_name, user_role, JSON.stringify({ booking_status: { from: cur, to: "Cancelled" }, cancellation_reason: reason }), orgId],
         );
         return (await client.query(`SELECT * FROM booking_applications WHERE id = $1`, [Number(id)])).rows[0];
       }
@@ -534,9 +557,9 @@ export async function PUT(
           [Number(id)],
         );
         await client.query(
-          `INSERT INTO booking_history (booking_id, updated_by, user_role, changed_fields)
-           VALUES ($1, $2, $3, $4)`,
-          [Number(id), user_name, user_role, JSON.stringify({ booking_status: { from: "Cancelled", to: "Confirmed" }, action: "reactivated" })],
+          `INSERT INTO booking_history (booking_id, updated_by, user_role, changed_fields, organization_id)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [Number(id), user_name, user_role, JSON.stringify({ booking_status: { from: "Cancelled", to: "Confirmed" }, action: "reactivated" }), orgId],
         );
         return (await client.query(`SELECT * FROM booking_applications WHERE id = $1`, [Number(id)])).rows[0];
       }
@@ -593,8 +616,11 @@ export async function PUT(
       fVals.push(Number(id));
       const fRes = await client.query(`UPDATE booking_financials SET ${fSet.join(", ")} WHERE booking_id = $${fVals.length}`, fVals);
       if (fRes.rowCount === 0) {
-        const cols = Object.keys(finFields);
-        const vals = Object.values(finFields);
+        // MT-05: organization_id joins the runtime column list rather than being
+        // bolted on after it, so the placeholders below still number
+        // contiguously from $2 and the params array stays in lockstep.
+        const cols = [...Object.keys(finFields), "organization_id"];
+        const vals = [...Object.values(finFields), orgId];
         const placeholders = vals.map((_, i) => `$${i + 2}`);
         await client.query(`INSERT INTO booking_financials (booking_id, ${cols.join(", ")}) VALUES ($1, ${placeholders.join(", ")})`, [Number(id), ...vals]);
       }
@@ -610,8 +636,9 @@ export async function PUT(
       lVals.push(Number(id));
       const lRes = await client.query(`UPDATE booking_loan_details SET ${lSet.join(", ")} WHERE booking_id = $${lVals.length}`, lVals);
       if (lRes.rowCount === 0) {
-        const cols = Object.keys(loanFields);
-        const vals = Object.values(loanFields);
+        // MT-05: see the booking_financials insert above.
+        const cols = [...Object.keys(loanFields), "organization_id"];
+        const vals = [...Object.values(loanFields), orgId];
         const placeholders = vals.map((_, i) => `$${i + 2}`);
         await client.query(`INSERT INTO booking_loan_details (booking_id, ${cols.join(", ")}) VALUES ($1, ${placeholders.join(", ")})`, [Number(id), ...vals]);
       }
@@ -627,8 +654,9 @@ export async function PUT(
       rVals.push(Number(id));
       const rRes = await client.query(`UPDATE booking_registration_details SET ${rSet.join(", ")} WHERE booking_id = $${rVals.length}`, rVals);
       if (rRes.rowCount === 0) {
-        const cols = Object.keys(regFields);
-        const vals = Object.values(regFields);
+        // MT-05: see the booking_financials insert above.
+        const cols = [...Object.keys(regFields), "organization_id"];
+        const vals = [...Object.values(regFields), orgId];
         const placeholders = vals.map((_, i) => `$${i + 2}`);
         await client.query(`INSERT INTO booking_registration_details (booking_id, ${cols.join(", ")}) VALUES ($1, ${placeholders.join(", ")})`, [Number(id), ...vals]);
       }
@@ -639,18 +667,18 @@ export async function PUT(
       if (accountQuery.rows.length > 0) {
         account_id = accountQuery.rows[0].id;
       } else {
-        const accInsert = await client.query(`INSERT INTO financial_accounts (booking_id) VALUES ($1) RETURNING id`, [Number(id)]);
+        const accInsert = await client.query(`INSERT INTO financial_accounts (booking_id, organization_id) VALUES ($1, $2) RETURNING id`, [Number(id), orgId]);
         account_id = accInsert.rows[0].id;
       }
 
       const upsertLedger = async (type: string, direction: string, amount: number, date: any, affectsRevenue: string, receivedFrom: string, bankName: string | null = null, paymentMode: string | null = null, remarks: string | null = null) => {
         if (amount > 0) {
           await client.query(`
-            INSERT INTO financial_ledger (account_id, transaction_type, transaction_direction, amount, transaction_date, status, affects_revenue, received_from, transaction_source, bank_name, payment_mode, notes, created_by)
-            VALUES ($1, $2, $3, $4, $5, 'Received', $6, $7, 'UI_Update', $8, $9, $10, $11)
+            INSERT INTO financial_ledger (account_id, transaction_type, transaction_direction, amount, transaction_date, status, affects_revenue, received_from, transaction_source, bank_name, payment_mode, notes, created_by, organization_id)
+            VALUES ($1, $2, $3, $4, $5, 'Received', $6, $7, 'UI_Update', $8, $9, $10, $11, $12)
             ON CONFLICT (account_id, transaction_type, transaction_source) DO UPDATE 
             SET amount = EXCLUDED.amount, transaction_date = EXCLUDED.transaction_date, bank_name = EXCLUDED.bank_name, payment_mode = EXCLUDED.payment_mode, notes = EXCLUDED.notes
-          `, [account_id, type, direction, amount, date || new Date(), affectsRevenue, receivedFrom, bankName, paymentMode, remarks, user_name]);
+          `, [account_id, type, direction, amount, date || new Date(), affectsRevenue, receivedFrom, bankName, paymentMode, remarks, user_name, orgId]);
         }
       };
 
@@ -669,17 +697,17 @@ export async function PUT(
         await client.query(`DELETE FROM booking_custom_charges WHERE booking_id = $1`, [Number(id)]);
         for (const charge of custom_charges) {
           await client.query(`
-            INSERT INTO booking_custom_charges (booking_id, charge_name, amount, remarks)
-            VALUES ($1, $2, $3, $4)
-          `, [Number(id), charge.charge_name, charge.amount || 0, charge.remarks]);
+            INSERT INTO booking_custom_charges (booking_id, charge_name, amount, remarks, organization_id)
+            VALUES ($1, $2, $3, $4, $5)
+          `, [Number(id), charge.charge_name, charge.amount || 0, charge.remarks, orgId]);
         }
       }
 
       if (Object.keys(changed_fields).length > 0) {
         await client.query(
-          `INSERT INTO booking_history (booking_id, updated_by, user_role, changed_fields)
-           VALUES ($1, $2, $3, $4)`,
-          [Number(id), user_name, user_role, JSON.stringify(changed_fields)]
+          `INSERT INTO booking_history (booking_id, updated_by, user_role, changed_fields, organization_id)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [Number(id), user_name, user_role, JSON.stringify(changed_fields), orgId]
         );
       }
 

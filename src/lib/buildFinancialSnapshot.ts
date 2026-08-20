@@ -56,6 +56,7 @@
 
 import type { Pool, PoolClient } from "pg";
 import { query } from "./db";
+import { getOrganizationId } from "./tenantContext";
 import type { FinancialSnapshot } from "./financialObligationEngine";
 
 /** Rupee formatting for API error messages. Whole rupees — paise never appear in this system. */
@@ -152,7 +153,13 @@ const SNAPSHOT_SQL = `
   LEFT JOIN booking_financials f            ON f.booking_id = b.id
   LEFT JOIN booking_registration_details r  ON r.booking_id = b.id
   LEFT JOIN booking_loan_details l          ON l.booking_id = b.id
-  WHERE b.id = $1
+  -- MT-06: bookingId reaches this helper straight from a caller-supplied [id]
+  -- route parameter, through five different endpoints. The organization
+  -- predicate is what makes a foreign booking id indistinguishable from a
+  -- non-existent one: the row is not returned, so the caller gets
+  -- BookingNotFoundError either way and learns nothing about whether the
+  -- booking exists in another tenant.
+  WHERE b.id = $1 AND b.organization_id = $2
 `;
 
 /**
@@ -177,9 +184,15 @@ export async function buildFinancialSnapshot(
     bookingId = resolved;
   }
 
+  // Resolved on the caller's own connection when one was supplied, so a caller
+  // already inside a transaction does not deadlock against itself.
+  const orgId = await getOrganizationId(
+    client && "release" in client ? (client as PoolClient) : undefined
+  );
+
   const rows = client
-    ? (await client.query(SNAPSHOT_SQL, [bookingId])).rows
-    : await query<any>(SNAPSHOT_SQL, [bookingId]);
+    ? (await client.query(SNAPSHOT_SQL, [bookingId, orgId])).rows
+    : await query<any>(SNAPSHOT_SQL, [bookingId, orgId]);
 
   const row = rows[0];
   if (!row) throw new BookingNotFoundError(bookingId);
@@ -235,13 +248,18 @@ export async function resolveBookingIdForLead(leadId: number): Promise<number | 
   // the real column ('Confirmed' in live data); cancelled_at is set by the
   // cancellation flow.
   const rows = await query<{ id: number }>(
+    // MT-06: the predicate sits in the WHERE, ahead of ORDER BY and LIMIT 1.
+    // Applied after the pick, another tenant's newer booking for a colliding lead
+    // id would win the row and then be discarded, reporting "no booking" for a
+    // lead that has one.
     `SELECT id FROM booking_applications
       WHERE lead_id = $1
+        AND organization_id = $2
         AND cancelled_at IS NULL
         AND LOWER(COALESCE(booking_status, '')) <> 'cancelled'
       ORDER BY created_at DESC
       LIMIT 1`,
-    [leadId]
+    [leadId, await getOrganizationId()]
   );
   return rows[0]?.id ?? null;
 }

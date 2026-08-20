@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { requireRole } from "@/lib/serverAuth";
+import { getOrganizationId } from "@/lib/tenantContext";
 
 export const dynamic = "force-dynamic";
 
@@ -20,20 +21,28 @@ export async function GET(req: Request) {
     // 3. Module Usage %
     // 4. Most active employee
     
+    // Every statement in this route was "global" when no userId was supplied —
+    // i.e. it aggregated across the whole table. Post-MT-05, "global" means the
+    // whole of THIS organization: the organization predicate is unconditional and
+    // always $1, so the optional user filter can never be the only predicate.
+    // It is applied before GROUP BY, so another tenant's rows cannot be folded
+    // into these counts, percentages or rankings.
+    const orgId = await getOrganizationId();
+
     // ==========================================
-    // 1. Module Usage (Global or Per User)
+    // 1. Module Usage (Whole organization, or per user)
     // ==========================================
     let moduleUsageFilter = "";
-    const moduleParams: any[] = [];
+    const moduleParams: any[] = [orgId];
     if (userId) {
-      moduleUsageFilter = "WHERE user_id = $1";
+      moduleUsageFilter = "AND user_id = $2";
       moduleParams.push(userId);
     }
     
     const moduleQuery = await query(`
       SELECT module, COUNT(*) as count 
       FROM employee_activity_logs 
-      ${moduleUsageFilter}
+      WHERE organization_id = $1 ${moduleUsageFilter}
       GROUP BY module
       ORDER BY count DESC
     `, moduleParams);
@@ -48,13 +57,13 @@ export async function GET(req: Request) {
     // ==========================================
     // 2. Weekly Heatmap (Last 7 days)
     // ==========================================
-    const heatmapFilter = userId ? "AND user_id = $1" : "";
-    const heatmapParams = userId ? [userId] : [];
+    const heatmapFilter = userId ? "AND user_id = $2" : "";
+    const heatmapParams = userId ? [orgId, userId] : [orgId];
     
     const heatmapQuery = await query(`
       SELECT DATE(timestamp) as day, COUNT(*) as activity_count
       FROM employee_activity_logs
-      WHERE timestamp > NOW() - INTERVAL '7 days' ${heatmapFilter}
+      WHERE organization_id = $1 AND timestamp > NOW() - INTERVAL '7 days' ${heatmapFilter}
       GROUP BY DATE(timestamp)
       ORDER BY day ASC
     `, heatmapParams);
@@ -76,11 +85,11 @@ export async function GET(req: Request) {
     // 3. Top-level KPIs
     // ==========================================
     // Active time today
-    const liveStateParams = userId ? [userId] : [];
+    const liveStateParams = userId ? [orgId, userId] : [orgId];
     const activeTimeQuery = await query(`
       SELECT SUM(session_duration_seconds) as total_duration, SUM(idle_duration_seconds) as total_idle
       FROM employee_sessions
-      WHERE DATE(session_start) = CURRENT_DATE ${userId ? "AND user_id = $1" : ""}
+      WHERE organization_id = $1 AND DATE(session_start) = CURRENT_DATE ${userId ? "AND user_id = $2" : ""}
     `, liveStateParams);
 
     const totalDuration = Number(activeTimeQuery[0]?.total_duration || 0);
@@ -92,14 +101,17 @@ export async function GET(req: Request) {
     let highestIdleEmployee = null;
     
     if (!userId) {
+      // Ranking employees by name: the JOIN carries its own tenant predicate so a
+      // same-named user in another organization cannot be merged into one row by
+      // the GROUP BY.
       const activeRankQuery = await query(`
         SELECT u.name, SUM(s.session_duration_seconds - s.idle_duration_seconds) as active_time, SUM(s.idle_duration_seconds) as idle_time
         FROM employee_sessions s
-        JOIN users u ON s.user_id = u.id
-        WHERE DATE(s.session_start) = CURRENT_DATE
+        JOIN users u ON s.user_id = u.id AND u.organization_id = s.organization_id
+        WHERE s.organization_id = $1 AND DATE(s.session_start) = CURRENT_DATE
         GROUP BY u.name
         ORDER BY active_time DESC
-      `);
+      `, [orgId]);
       if (activeRankQuery.length > 0) {
         mostActiveEmployee = { name: activeRankQuery[0].name, time: Number(activeRankQuery[0].active_time) };
         

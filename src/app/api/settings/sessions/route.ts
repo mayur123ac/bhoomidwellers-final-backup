@@ -20,6 +20,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { requireSession } from "@/lib/serverAuth";
 import { requestContext, writeAuditLog } from "@/lib/auditLog";
+import { getOrganizationId } from "@/lib/tenantContext";
 
 export const dynamic = "force-dynamic";
 
@@ -43,10 +44,10 @@ export async function GET() {
   const rows = await query<SessionRow>(
     `SELECT id, session_start, last_heartbeat, session_end, ip_address, device_info, is_active
        FROM employee_sessions
-      WHERE user_id = $1
+      WHERE user_id = $1 AND organization_id = $2
       ORDER BY is_active DESC, session_start DESC
       LIMIT 25`,
-    [gate.userId]
+    [gate.userId, await getOrganizationId()]
   );
 
   // The newest active row is this browser, near enough: the login that created
@@ -87,20 +88,22 @@ export async function DELETE(req: NextRequest) {
 
   // user_id is always in the WHERE clause, so a guessed session id from another
   // account matches nothing rather than ending a stranger's session.
+  const sessionsOrgId = await getOrganizationId();
+
   const closed = sessionId
     ? await query<{ id: number }>(
         `UPDATE employee_sessions
             SET is_active = false, session_end = NOW(), session_end_reason = 'signed_out_remotely'
-          WHERE id = $1 AND user_id = $2 AND is_active = true
+          WHERE id = $1 AND user_id = $2 AND organization_id = $3 AND is_active = true
         RETURNING id`,
-        [sessionId, gate.userId]
+        [sessionId, gate.userId, sessionsOrgId]
       )
     : await query<{ id: number }>(
         `UPDATE employee_sessions
             SET is_active = false, session_end = NOW(), session_end_reason = 'signed_out_all'
-          WHERE user_id = $1 AND is_active = true
+          WHERE user_id = $1 AND organization_id = $2 AND is_active = true
         RETURNING id`,
-        [gate.userId]
+        [gate.userId, sessionsOrgId]
       );
 
   const { ip, userAgent } = requestContext(req);

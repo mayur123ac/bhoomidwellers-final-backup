@@ -16,6 +16,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { query } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { requireRoles } from "@/lib/serverAuth";
 import { diffFields, requestContext, writeAuditLog } from "@/lib/auditLog";
 import { hashPassword, passwordMeetsRules } from "@/lib/passwords";
@@ -38,7 +39,12 @@ const DEPARTMENTS = ["Sales", "Management", "Support", "Operations", "Other"];
  * to the login screen by the "unrecognised role" fallback.
  */
 async function validRoles(): Promise<string[]> {
-  const rows = await query<{ name: string }>(`SELECT name FROM roles ORDER BY id`);
+  // MT-05: roles are organization-specific. Without this filter the employees
+  // screen would offer another builder's role names as valid choices.
+  const rows = await query<{ name: string }>(
+    `SELECT name FROM roles WHERE organization_id = $1 ORDER BY id`,
+    [await getOrganizationId()],
+  );
   return rows.map((r) => r.name);
 }
 
@@ -108,13 +114,16 @@ const SELECT_DIRECTORY = `
          u.avatar_key, u.avatar_url, u.reporting_manager_id,
          m.name AS manager_name
     FROM users u
-    LEFT JOIN users m ON m.id = u.reporting_manager_id
+    -- The manager join is organization-scoped too: without it a manager from
+    -- another organization could surface as a name on this organization's row.
+    LEFT JOIN users m ON m.id = u.reporting_manager_id AND m.organization_id = u.organization_id
 `;
 
 // ── GET: the directory ───────────────────────────────────────────────────────
 export async function GET(req: NextRequest) {
   const gate = await requireRoles(["admin"]);
   if (!gate.ok) return gate.response;
+  const orgId = await getOrganizationId();
 
   const params = req.nextUrl.searchParams;
   const search = (params.get("search") ?? "").trim();
@@ -125,11 +134,12 @@ export async function GET(req: NextRequest) {
   const rows = await query<DirectoryRow>(
     `${SELECT_DIRECTORY}
       WHERE u.deleted_at IS NULL
+        AND u.organization_id = $4
         AND ($1 = '' OR u.name ILIKE '%' || $1 || '%' OR u.email ILIKE '%' || $1 || '%')
         AND ($2 = 'all' OR u.role = $2)
         AND ($3 = 'all' OR COALESCE(u.department, '') = $3)
       ORDER BY u.name`,
-    [search, role, department]
+    [search, role, department, orgId]
   );
 
   // Status is derived from three columns, so it is filtered after mapping rather
@@ -168,6 +178,7 @@ async function loadOne(id: number): Promise<DirectoryRow | null> {
 export async function POST(req: NextRequest) {
   const gate = await requireRoles(["admin"]);
   if (!gate.ok) return gate.response;
+  const orgId = await getOrganizationId();
 
   let body: any;
   try {
@@ -227,9 +238,11 @@ export async function POST(req: NextRequest) {
   }
 
   if (reportingManagerId) {
-    const manager = await query<{ id: number }>(`SELECT id FROM users WHERE id = $1`, [
-      reportingManagerId,
-    ]);
+    // A reporting manager must belong to the same organization as the employee.
+    const manager = await query<{ id: number }>(
+      `SELECT id FROM users WHERE id = $1 AND organization_id = $2`,
+      [reportingManagerId, orgId],
+    );
     if (manager.length === 0) {
       return NextResponse.json(
         { success: false, message: "Selected reporting manager does not exist." },
@@ -273,8 +286,9 @@ export async function POST(req: NextRequest) {
   const inserted = await query<{ id: number }>(
     `INSERT INTO users
        (name, email, phone, role, department, reporting_manager_id, password,
-        is_active, username, invite_token, invite_sent_at, invite_expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8, $9, $10, $11)
+        is_active, username, invite_token, invite_sent_at, invite_expires_at,
+        organization_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8, $9, $10, $11, $12)
      RETURNING id`,
     [
       name,
@@ -288,6 +302,7 @@ export async function POST(req: NextRequest) {
       inviteToken,
       inviteSentAt,
       inviteExpiresAt,
+      await getOrganizationId(),
     ]
   );
 
@@ -352,6 +367,7 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   const gate = await requireRoles(["admin"]);
   if (!gate.ok) return gate.response;
+  const orgId = await getOrganizationId();
 
   let body: any;
   try {
@@ -385,10 +401,13 @@ export async function PATCH(req: NextRequest) {
         );
       }
       const remaining = await query<{ count: string }>(
+        // The "last admin" guard must count only THIS organization's admins —
+        // another organization's admin is no protection against locking this one out.
         `SELECT COUNT(*)::text AS count FROM users
           WHERE LOWER(role) = 'admin' AND is_active = true AND deleted_at IS NULL
+            AND organization_id = $2
             AND NOT (id = ANY($1::int[]))`,
-        [ids]
+        [ids, orgId]
       );
       if (Number(remaining[0]?.count ?? 0) === 0) {
         return NextResponse.json(
@@ -403,17 +422,17 @@ export async function PATCH(req: NextRequest) {
           SET is_active = $1,
               deactivated_at = CASE WHEN $1 THEN NULL ELSE NOW() END,
               updated_at = NOW()
-        WHERE id = ANY($2::int[]) AND deleted_at IS NULL
+        WHERE id = ANY($2::int[]) AND deleted_at IS NULL AND organization_id = $3
       RETURNING id`,
-      [activate, ids]
+      [activate, ids, orgId]
     );
 
     if (!activate) {
       await query(
         `UPDATE employee_sessions
             SET is_active = false, session_end = NOW(), session_end_reason = 'deactivated_by_admin'
-          WHERE user_id = ANY($1::int[]) AND is_active = true`,
-        [ids]
+          WHERE user_id = ANY($1::int[]) AND organization_id = $2 AND is_active = true`,
+        [ids, orgId]
       );
     }
 
@@ -453,8 +472,8 @@ export async function PATCH(req: NextRequest) {
 
     await query(
       `UPDATE users SET invite_token = $1, invite_sent_at = NOW(), invite_expires_at = $2, updated_at = NOW()
-        WHERE id = $3`,
-      [token, expires, id]
+        WHERE id = $3 AND organization_id = $4`,
+      [token, expires, id, orgId]
     );
 
     const mail = before.email
@@ -508,8 +527,9 @@ export async function PATCH(req: NextRequest) {
       if ((before.role ?? "").toLowerCase() === "admin") {
         const others = await query<{ count: string }>(
           `SELECT COUNT(*)::text AS count FROM users
-            WHERE LOWER(role) = 'admin' AND is_active = true AND deleted_at IS NULL AND id <> $1`,
-          [id]
+            WHERE LOWER(role) = 'admin' AND is_active = true AND deleted_at IS NULL
+              AND organization_id = $2 AND id <> $1`,
+          [id, orgId]
         );
         if (Number(others[0]?.count ?? 0) === 0) {
           return NextResponse.json(
@@ -525,16 +545,16 @@ export async function PATCH(req: NextRequest) {
           SET is_active = $1,
               deactivated_at = CASE WHEN $1 THEN NULL ELSE NOW() END,
               updated_at = NOW()
-        WHERE id = $2`,
-      [activate, id]
+        WHERE id = $2 AND organization_id = $3`,
+      [activate, id, orgId]
     );
 
     if (!activate) {
       await query(
         `UPDATE employee_sessions
             SET is_active = false, session_end = NOW(), session_end_reason = 'deactivated_by_admin'
-          WHERE user_id = $1 AND is_active = true`,
-        [id]
+          WHERE user_id = $1 AND organization_id = $2 AND is_active = true`,
+        [id, orgId]
       );
     }
 
@@ -569,6 +589,10 @@ export async function PATCH(req: NextRequest) {
     }
     const name = [firstName, lastName].filter(Boolean).join(" ");
     const clash = await query<{ id: number }>(
+      // Name and email are LOGIN IDENTIFIERS and are unique PLATFORM-WIDE
+      // (decision 2026-08-19), so these clash checks are deliberately not
+      // organization-scoped — scoping them would let two organizations hold the
+      // same identifier and make the login lookup ambiguous.
       `SELECT id FROM users WHERE LOWER(name) = LOWER($1) AND id <> $2 LIMIT 1`,
       [name, id]
     );
@@ -587,6 +611,7 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ success: false, message: "Enter a valid email." }, { status: 400 });
     }
     const clash = await query<{ id: number }>(
+      // Platform-wide email identity — see the name check above.
       `SELECT id FROM users WHERE LOWER(email) = $1 AND id <> $2 LIMIT 1`,
       [email, id]
     );
@@ -619,9 +644,12 @@ export async function PATCH(req: NextRequest) {
     // just as surely as deactivating them does.
     if ((before.role ?? "").toLowerCase() === "admin" && body.role.toLowerCase() !== "admin") {
       const others = await query<{ count: string }>(
+        // Counts THIS workspace's other admins. Unscoped, another tenant's admin
+        // would satisfy the check and a workspace could demote its own last one.
         `SELECT COUNT(*)::text AS count FROM users
-          WHERE LOWER(role) = 'admin' AND is_active = true AND deleted_at IS NULL AND id <> $1`,
-        [id]
+          WHERE LOWER(role) = 'admin' AND is_active = true AND deleted_at IS NULL
+            AND organization_id = $2 AND id <> $1`,
+        [id, orgId]
       );
       if (Number(others[0]?.count ?? 0) === 0) {
         return NextResponse.json(
@@ -650,7 +678,11 @@ export async function PATCH(req: NextRequest) {
       );
     }
     if (managerId) {
-      const manager = await query<{ id: number }>(`SELECT id FROM users WHERE id = $1`, [managerId]);
+      // Same organization as the employee being edited.
+      const manager = await query<{ id: number }>(
+        `SELECT id FROM users WHERE id = $1 AND organization_id = $2`,
+        [managerId, orgId],
+      );
       if (manager.length === 0) {
         return NextResponse.json(
           { success: false, message: "Selected reporting manager does not exist." },
@@ -680,9 +712,11 @@ export async function PATCH(req: NextRequest) {
   }
 
   const setClauses = Object.keys(updates).map((col, i) => `${col} = $${i + 1}`);
-  const values = [...Object.values(updates), id];
+  // MT-05: id comes from the request, so the organization is part of the WHERE.
+  const values = [...Object.values(updates), id, orgId];
   await query(
-    `UPDATE users SET ${setClauses.join(", ")}, updated_at = NOW() WHERE id = $${values.length}`,
+    `UPDATE users SET ${setClauses.join(", ")}, updated_at = NOW()
+      WHERE id = $${values.length - 1} AND organization_id = $${values.length}`,
     values
   );
 
@@ -721,6 +755,7 @@ export async function PATCH(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const gate = await requireRoles(["admin"]);
   if (!gate.ok) return gate.response;
+  const orgId = await getOrganizationId();
 
   let body: any;
   try {
@@ -748,8 +783,9 @@ export async function DELETE(req: NextRequest) {
   if ((before.role ?? "").toLowerCase() === "admin") {
     const others = await query<{ count: string }>(
       `SELECT COUNT(*)::text AS count FROM users
-        WHERE LOWER(role) = 'admin' AND is_active = true AND deleted_at IS NULL AND id <> $1`,
-      [id]
+        WHERE LOWER(role) = 'admin' AND is_active = true AND deleted_at IS NULL
+          AND organization_id = $2 AND id <> $1`,
+      [id, orgId]
     );
     if (Number(others[0]?.count ?? 0) === 0) {
       return NextResponse.json(
@@ -769,10 +805,13 @@ export async function DELETE(req: NextRequest) {
   if (disposition === "reassign" || disposition === "unassign") {
     const target = disposition === "reassign" ? gate.session.name : null;
     const moved = await query<{ id: number }>(
+      // Lead ownership is keyed on the employee NAME, which is only unique
+      // platform-wide by convention — so this reassignment is organization-scoped
+      // to stop it rewriting another builder's leads that share a name.
       `UPDATE walkin_enquiries SET assigned_to = $1
-        WHERE assigned_to = $2
+        WHERE assigned_to = $2 AND organization_id = $3
       RETURNING id`,
-      [target, before.name]
+      [target, before.name, orgId]
     );
     reassigned = moved.length;
   }
@@ -784,15 +823,15 @@ export async function DELETE(req: NextRequest) {
     `UPDATE users
         SET is_active = false, deactivated_at = NOW(), deleted_at = NOW(),
             invite_token = NULL, updated_at = NOW()
-      WHERE id = $1`,
-    [id]
+      WHERE id = $1 AND organization_id = $2`,
+    [id, orgId]
   );
 
   await query(
     `UPDATE employee_sessions
         SET is_active = false, session_end = NOW(), session_end_reason = 'removed_by_admin'
-      WHERE user_id = $1 AND is_active = true`,
-    [id]
+      WHERE user_id = $1 AND is_active = true AND organization_id = $2`,
+    [id, orgId]
   );
 
   const { ip, userAgent } = requestContext(req);

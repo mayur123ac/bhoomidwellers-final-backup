@@ -3,6 +3,7 @@ import path from "path";
 import type { PoolClient } from "pg";
 import { bucketName, deleteObjectFromR2, listR2KeysByPrefix } from "@/lib/r2";
 import { recalculateSrNos } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 
 type R2Failure = {
   key: string;
@@ -78,7 +79,10 @@ const LEAD_RELATED_DELETES = [
   { table: "employee_assignments", column: "lead_id" },
   { table: "lead_assignment_logs", column: "lead_id" },
   { table: "employee_activity_logs", column: "lead_id" },
-  { table: "completed_leads", column: "id" },
+  // MT-03: `completed_leads` removed from this list — the table is approved for
+  // DROP. Entries here are existence-guarded, so a stale name is harmless, but
+  // leaving it would imply the archive still exists. A completed lead is now a
+  // `booking_applications` row keyed on lead_id; there is no separate archive.
   { table: "bookings", column: "lead_id" },
   { table: "customers", column: "lead_id" },
 ];
@@ -326,6 +330,12 @@ export async function deleteLeadDatabaseRecords(
   const { recalc = true } = options;
   const deletedRecords: Record<string, number> = {};
 
+  // Both callers already refuse a lead belonging to another organization before
+  // reaching this helper. The predicates below are the second lock on the same
+  // door: this function deletes rows across a dozen tables from a bare numeric id,
+  // and it must not depend on every future caller remembering to check first.
+  const orgId = await getOrganizationId(client);
+
   for (const item of LEAD_RELATED_DELETES) {
     if (!(await tableHasColumn(client, item.table, item.column))) continue;
 
@@ -347,15 +357,16 @@ export async function deleteLeadDatabaseRecords(
         SET active_lead_id = NULL,
             active_lead_name = NULL
         WHERE active_lead_id::text = $1
+          AND organization_id = $2
       `,
-      [String(leadId)]
+      [String(leadId), orgId]
     );
     clearedLiveStateRows = result.rowCount ?? 0;
   }
 
   const leadDeleteResult = await client.query(
-    "DELETE FROM walkin_enquiries WHERE id = $1",
-    [leadId]
+    "DELETE FROM walkin_enquiries WHERE id = $1 AND organization_id = $2",
+    [leadId, orgId]
   );
   deletedRecords.walkin_enquiries = leadDeleteResult.rowCount ?? 0;
 

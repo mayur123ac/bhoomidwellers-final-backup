@@ -5,6 +5,7 @@
 // booking_loan_details if a booking exists, otherwise the lead's draft.
 import { NextRequest, NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 import {
   buildFinancialSnapshot,
@@ -74,8 +75,9 @@ export async function PUT(
     // is the key watched for here.
     if ("amount_sanctioned" in body) {
       const appRows = await query<{ booking_id: number | null; lead_id: number | null }>(
-        `SELECT booking_id, lead_id FROM loan_applications WHERE id = $1`,
-        [Number(id)]
+        // MT-06: ownership gate — a foreign loan application resolves to nothing.
+        `SELECT booking_id, lead_id FROM loan_applications WHERE id = $1 AND organization_id = $2`,
+        [Number(id), await getOrganizationId()]
       );
       if (appRows.length === 0) {
         return NextResponse.json({ success: false, message: "Loan application not found" }, { status: 404 });
@@ -118,7 +120,7 @@ export async function PUT(
     }
 
     const result = await transaction(async (client) => {
-      const existing = await client.query(`SELECT * FROM loan_applications WHERE id = $1`, [Number(id)]);
+      const existing = await client.query(`SELECT * FROM loan_applications WHERE id = $1 AND organization_id = $2`, [Number(id), await getOrganizationId(client)]);
       if (existing.rows.length === 0) return { notFound: true as const };
       const app = existing.rows[0];
 
@@ -179,8 +181,10 @@ export async function PUT(
             await client.query(
               `INSERT INTO booking_loan_details
                  (booking_id, loan_required, bank_name, loan_type, loan_executive, loan_reference_no,
-                  loan_amount, sanction_amount, sanction_date, sanction_status, loan_status, interest_rate, loan_tenure_months)
-               VALUES ($1, true, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+                  loan_amount, sanction_amount, sanction_date, sanction_status, loan_status, interest_rate, loan_tenure_months,
+                  organization_id)
+               VALUES ($1, true, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
+                       (SELECT organization_id FROM booking_applications WHERE id = $1))`,
               [targetBookingId, row.bank_name, row.loan_type, row.loan_executive, row.loan_reference_no,
                row.amount_requested, row.amount_sanctioned, row.sanction_date, sanctionStatus, loanStatus,
                row.interest_rate, row.tenure_months],
@@ -210,8 +214,8 @@ export async function PUT(
           await client.query(
             `UPDATE walkin_enquiries
                SET loan_tracking_info = COALESCE(loan_tracking_info, '{}'::jsonb) || $2::jsonb
-             WHERE id = $1`,
-            [app.lead_id, JSON.stringify(merge)],
+             WHERE id = $1 AND organization_id = $3`,
+            [app.lead_id, JSON.stringify(merge), await getOrganizationId(client)],
           );
         }
       }

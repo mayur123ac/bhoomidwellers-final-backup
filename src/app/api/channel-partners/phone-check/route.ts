@@ -12,6 +12,7 @@
 // entitled to see that partner anyway.
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { getServerSession } from "@/lib/serverAuth";
 import { canCreatePartners, canViewAllPartners, normalizeCpPhone } from "@/lib/cpRbac";
 
@@ -50,12 +51,14 @@ export async function GET(req: NextRequest) {
               cp.assigned_sourcing_manager_id,
               sm.name AS assigned_sourcing_manager_name
          FROM channel_partners cp
-         LEFT JOIN users sm ON sm.id = cp.assigned_sourcing_manager_id
+         LEFT JOIN users sm
+                ON sm.id = cp.assigned_sourcing_manager_id AND sm.organization_id = cp.organization_id
         WHERE right(regexp_replace(COALESCE(cp.phone, ''), '\\D', '', 'g'), 10) = $1
           AND ($2::int IS NULL OR cp.id <> $2::int)
+          AND cp.organization_id = $3
         ORDER BY cp.id ASC
         LIMIT 1`,
-      [phone, excludeId]
+      [phone, excludeId, await getOrganizationId()]
     );
 
     if (rows.length === 0) {

@@ -57,6 +57,11 @@ export const GET = withApiKey("/api/v1/leads", "leads:read", async (ctx) => {
     where.push(`COALESCE(enquiry_date, created_at) >= $${params.length}::timestamptz`);
   }
 
+  // The API key is the tenant for v1 — there is no session here. Pushed onto
+  // `params` so its index follows whatever optional filters were supplied.
+  params.push(ctx.key.organization_id);
+  where.push(`organization_id = $${params.length}`);
+
   const whereSql = `WHERE ${where.join(" AND ")}`;
 
   const rows = await query(

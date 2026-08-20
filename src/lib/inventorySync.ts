@@ -5,6 +5,7 @@
 // succeed while its inventory link silently fails.
 import type { PoolClient } from "pg";
 import { resolveHierarchy } from "./inventoryHierarchy";
+import { getOrganizationId } from "./tenantContext";
 
 const cleanNum = (v: any): number | null => {
   if (v === null || v === undefined || v === "") return null;
@@ -54,6 +55,9 @@ export interface SyncResult {
 // Keyed on (project_name, tower, COALESCE(wing,''), floor, flat_no) — the same key
 // as the partial unique index. Creates the unit if the bulk generator never covered it.
 export async function syncBookingUnit(client: PoolClient, input: BookingUnitInput): Promise<SyncResult> {
+  // MT-05: resolved once per call, on the caller's transaction client, and
+  // reused by every INSERT below. Never per row.
+  const orgId = await getOrganizationId(client);
   const project_name = (input.project_name || "").trim();
   const tower = (input.tower || "").trim();
   const flat_no = (input.flat_number || "").trim();
@@ -139,11 +143,12 @@ export async function syncBookingUnit(client: PoolClient, input: BookingUnitInpu
       `INSERT INTO inventory_units (
          project_name, tower, wing, unit_type, floor, flat_no,
          carpet_area_sqft, status, source, lead_id, booking_id, created_by, updated_by,
-         project_id, tower_id
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,'booked','booking_sync',$8,$9,$10,$10,$11,$12)
+         project_id, tower_id,
+         organization_id
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,'booked','booking_sync',$8,$9,$10,$10,$11,$12,$13)
        RETURNING id`,
       [project_name, tower, wing, unit_type, floor, flat_no, carpet, leadId, bookingId, actor,
-       projectId, towerId],
+       projectId, towerId, orgId],
     );
     unitId = ins.rows[0].id;
     oldStatus = null;
@@ -153,9 +158,9 @@ export async function syncBookingUnit(client: PoolClient, input: BookingUnitInpu
   // History for every status change (skip the no-op re-save of an already-booked unit).
   if (oldStatus !== "booked") {
     await client.query(
-      `INSERT INTO inventory_unit_history (unit_id, old_status, new_status, changed_by, reason)
-       VALUES ($1, $2, 'booked', $3, $4)`,
-      [unitId, oldStatus, actor, `linked to booking #${bookingId}`],
+      `INSERT INTO inventory_unit_history (unit_id, old_status, new_status, changed_by, reason, organization_id)
+       VALUES ($1, $2, 'booked', $3, $4, $5)`,
+      [unitId, oldStatus, actor, `linked to booking #${bookingId}`, orgId],
     );
   }
 
@@ -170,6 +175,9 @@ export async function releaseUnitForBooking(
   reason: string,
   actor: string,
 ): Promise<number[]> {
+  // MT-05: resolved once, OUTSIDE the loop below that writes one history row
+  // per released unit.
+  const orgId = await getOrganizationId(client);
   const linked = await client.query(
     `SELECT id, status FROM inventory_units WHERE booking_id = $1 AND deleted_at IS NULL`,
     [bookingId],
@@ -185,9 +193,9 @@ export async function releaseUnitForBooking(
     );
     if (row.status !== "available") {
       await client.query(
-        `INSERT INTO inventory_unit_history (unit_id, old_status, new_status, changed_by, reason)
-         VALUES ($1, $2, 'available', $3, $4)`,
-        [row.id, row.status, actor || "System", reason],
+        `INSERT INTO inventory_unit_history (unit_id, old_status, new_status, changed_by, reason, organization_id)
+         VALUES ($1, $2, 'available', $3, $4, $5)`,
+        [row.id, row.status, actor || "System", reason, orgId],
       );
     }
     released.push(row.id);

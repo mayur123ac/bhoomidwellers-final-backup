@@ -7,6 +7,7 @@
 // together or not at all.
 import { NextResponse } from "next/server";
 import { transaction } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 type SalesFormFields = {
@@ -82,11 +83,13 @@ export async function POST(req: Request) {
     const authorName = salesManagerName || createdBy || "sales";
 
     const result = await transaction(async (client) => {
+      // MT-05: resolved once per transaction, on this client.
+      const orgId = await getOrganizationId(client);
       // 🔒 Row-lock the lead so no concurrent write can flip it to Closing/Lost
       // mid-transaction.
       const lockCheck = await client.query(
-        `SELECT status, is_lost_lead FROM walkin_enquiries WHERE id = $1 FOR UPDATE`,
-        [leadId]
+        `SELECT status, is_lost_lead FROM walkin_enquiries WHERE id = $1 AND organization_id = $2 FOR UPDATE`,
+        [leadId, orgId]
       );
       const lead = lockCheck.rows[0];
       if (!lead) {
@@ -98,10 +101,10 @@ export async function POST(req: Request) {
 
       // 1️⃣ One follow-up row = the human timeline entry.
       const followUpRes = await client.query(
-        `INSERT INTO follow_ups (lead_id, message, created_by_name, site_visit_date)
-         VALUES ($1, $2, $3, $4)
+        `INSERT INTO follow_ups (lead_id, message, created_by_name, site_visit_date, organization_id)
+         VALUES ($1, $2, $3, $4, $5)
          RETURNING *`,
-        [String(leadId), message, authorName, visitDate]
+        [String(leadId), message, authorName, visitDate, orgId]
       );
 
       // 2️⃣ Normalized columns + status, in the same UPDATE.
@@ -117,7 +120,7 @@ export async function POST(req: Request) {
              loan_planned_confirmed = $6,
              lead_interest_status = $7,
              location = $8
-         WHERE id = $9`,
+         WHERE id = $9 AND organization_id = $10`,
         [
           newStatus,
           formFields.propertyType || null,
@@ -128,6 +131,7 @@ export async function POST(req: Request) {
           formFields.leadStatus || null,
           formFields.location || null,
           leadId,
+          orgId,
         ]
       );
 
@@ -135,9 +139,9 @@ export async function POST(req: Request) {
       // the row above already records it.
       if (visitDate) {
         await client.query(
-          `INSERT INTO site_visits (lead_id, visit_date, created_by, role, status, notes)
-           VALUES ($1, $2, $3, $4, 'scheduled', $5)`,
-          [leadId, visitDate, authorName, "Sales Manager", "Scheduled via Salesform"]
+          `INSERT INTO site_visits (lead_id, visit_date, created_by, role, status, notes, organization_id)
+           VALUES ($1, $2, $3, $4, 'scheduled', $5, $6)`,
+          [leadId, visitDate, authorName, "Sales Manager", "Scheduled via Salesform", orgId]
         );
       }
 

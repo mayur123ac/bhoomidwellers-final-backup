@@ -1,7 +1,8 @@
 // app/api/settings/lead-sorting/route.ts
 import { NextResponse } from "next/server";
 import { query, recalculateSrNos } from "@/lib/db";
-import { requireRole } from "@/lib/serverAuth";
+import { requireRole, requireSession } from "@/lib/serverAuth";
+import { getOrganizationId } from "@/lib/tenantContext";
 
 export const dynamic = "force-dynamic";
 
@@ -9,10 +10,18 @@ export const dynamic = "force-dynamic";
 // Returns the current lead number sorting toggle state
 export async function GET() {
   try {
+    // MT-06: was answered anonymously. With no session getOrganizationId() falls
+    // through to sole-organization resolution, so an unauthenticated caller was
+    // reading SOME tenant's settings. A session is required before any tenant is
+    // resolved at all.
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const res = await query(
       `SELECT lead_number_sorting_enabled 
        FROM organization_settings 
-       WHERE organization_id = 1`
+       WHERE organization_id = $1`,
+      [await getOrganizationId()]
     );
 
     if (res.length === 0) {
@@ -53,11 +62,11 @@ export async function POST(req: Request) {
     // Save the setting
     await query(
       `INSERT INTO organization_settings (organization_id, shift_start, shift_end, flexible, lead_number_sorting_enabled)
-       VALUES (1, '11:00', '20:00', false, $1)
+       VALUES ($2, '11:00', '20:00', false, $1)
        ON CONFLICT (organization_id) DO UPDATE
          SET lead_number_sorting_enabled = EXCLUDED.lead_number_sorting_enabled,
              updated_at = CURRENT_TIMESTAMP`,
-      [enabled]
+      [enabled, await getOrganizationId()]
     );
 
     // Immediately recalculate all sr_nos with the new algorithm

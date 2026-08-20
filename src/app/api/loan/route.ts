@@ -1,6 +1,7 @@
 // app/api/loan/route.ts
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 // C5: loan_updates is an append-only activity log — every POST inserts a NEW row
@@ -49,6 +50,8 @@ export async function GET(req: Request) {
 // ── POST: Save loan update + inject follow-up timeline message ────────────────
 export async function POST(req: Request) {
   try {
+    // MT-05: from the authenticated session, never from the request body.
+    const orgId = await getOrganizationId();
     const gate = await requireSession();
     if (!gate.ok) return gate.response;
 
@@ -63,8 +66,8 @@ export async function POST(req: Request) {
 
     // 🔒 Final-state lock guard
     const leadRows = await query(
-      `SELECT status, is_lost_lead FROM walkin_enquiries WHERE id = $1`,
-      [body.leadId]
+      `SELECT status, is_lost_lead FROM walkin_enquiries WHERE id = $1 AND organization_id = $2`,
+      [body.leadId, orgId]
     );
     const lead = leadRows[0];
     if (!lead) {
@@ -99,14 +102,16 @@ export async function POST(req: Request) {
         cibil, agent, agent_contact,
         emp_type, income, emi,
         doc_pan, doc_aadhaar, doc_salary, doc_bank, doc_property,
-        notes, previous_status, new_status
+        notes, previous_status, new_status,
+        organization_id
       ) VALUES (
         $1,$2,$3,$4,$5,
         $6,$7,$8,
         $9,$10,$11,
         $12,$13,$14,
         $15,$16,$17,$18,$19,
-        $20,$21,$22
+        $20,$21,$22,
+        $23
       ) RETURNING *`,
       [
         String(body.leadId),
@@ -131,6 +136,7 @@ export async function POST(req: Request) {
         body.notes || null,
         previousStatus,
         newStatus,
+        orgId,
       ]
     );
 
@@ -158,12 +164,13 @@ export async function POST(req: Request) {
 
     // 3. Inject into follow_ups table (PostgreSQL) instead of MongoDB FollowupMessage
     await query(
-      `INSERT INTO follow_ups (lead_id, message, created_by_name, created_at)
-       VALUES ($1, $2, $3, NOW())`,
+      `INSERT INTO follow_ups (lead_id, message, created_by_name, created_at, organization_id)
+       VALUES ($1, $2, $3, NOW(), $4)`,
       [
         String(body.leadId),
         summaryMessage,
         body.salesManagerName || body.createdBy || "sales",
+        orgId,
       ]
     );
 

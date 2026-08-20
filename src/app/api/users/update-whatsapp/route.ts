@@ -17,6 +17,7 @@
 // is only honoured for admins, and only as a way of naming someone else. For
 // everyone else the session decides, and the field is ignored.
 
+import { getOrganizationId } from "@/lib/tenantContext";
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getServerSession } from "@/lib/serverAuth";
@@ -38,10 +39,7 @@ interface Target {
  * user_id (preferred) or name (legacy); the name path is ambiguous by nature, so
  * it refuses rather than guessing when it matches more than one person.
  */
-async function resolveTarget(
-  session: any,
-  body: any
-): Promise<{ ok: true; target: Target } | { ok: false; status: number; message: string }> {
+async function resolveTarget(session: any, body: any, orgId: string): Promise<{ ok: true; target: Target } | { ok: false; status: number; message: string }> {
   const selfId = Number(session._id ?? session.id);
   const isAdmin = normalizeRole(session.role) === "admin";
 
@@ -55,7 +53,7 @@ async function resolveTarget(
   // Admin targeting someone else by id.
   const explicitId = Number(body?.user_id);
   if (Number.isInteger(explicitId) && explicitId > 0) {
-    const rows = await query<Target>(`SELECT id, name FROM users WHERE id = $1 LIMIT 1`, [explicitId]);
+    const rows = await query<Target>(`SELECT id, name FROM users WHERE id = $1 AND organization_id = $2 LIMIT 1`, [explicitId, orgId]);
     if (!rows[0]) return { ok: false, status: 404, message: "No such user." };
     return { ok: true, target: rows[0] };
   }
@@ -63,7 +61,7 @@ async function resolveTarget(
   // Admin targeting someone else by name (legacy shape).
   const name = typeof body?.name === "string" ? body.name.trim() : "";
   if (name && name !== session.name) {
-    const rows = await query<Target>(`SELECT id, name FROM users WHERE name = $1`, [name]);
+    const rows = await query<Target>(`SELECT id, name FROM users WHERE name = $1 AND organization_id = $2`, [name, orgId]);
     if (rows.length === 0) return { ok: false, status: 404, message: "No such user." };
     if (rows.length > 1) {
       return {
@@ -82,6 +80,7 @@ async function resolveTarget(
 }
 
 export async function POST(req: Request) {
+  const orgId = await getOrganizationId();
   const session = await getServerSession();
   if (!session?.role) {
     return NextResponse.json({ success: false, message: "Not signed in." }, { status: 401 });
@@ -112,7 +111,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const resolved = await resolveTarget(session, body);
+    const resolved = await resolveTarget(session, body, orgId);
     if (!resolved.ok) {
       return NextResponse.json(
         { success: false, message: resolved.message },
@@ -126,9 +125,13 @@ export async function POST(req: Request) {
     // the same value, so what is saved no longer depends on how it was typed.
     const stored = phone.digits;
 
-    await query(`UPDATE public.users SET whatsapp_number = $1 WHERE id = $2`, [
+    // resolveTarget() already restricts the target to this organization, so this
+    // is defence in depth: the boundary is stated on the mutation itself rather
+    // than only in the lookup that produced the id.
+    await query(`UPDATE public.users SET whatsapp_number = $1 WHERE id = $2 AND organization_id = $3`, [
       stored,
       resolved.target.id,
+      orgId,
     ]);
 
     return NextResponse.json({
@@ -146,6 +149,7 @@ export async function POST(req: Request) {
 }
 
 export async function GET(req: Request) {
+  const orgId = await getOrganizationId();
   const session = await getServerSession();
   if (!session?.role) {
     return NextResponse.json({ success: false, message: "Not signed in." }, { status: 401 });
@@ -162,12 +166,12 @@ export async function GET(req: Request) {
     const rows =
       isAdmin && askedFor && askedFor !== session.name
         ? await query<{ whatsapp_number: string | null }>(
-            `SELECT whatsapp_number FROM public.users WHERE name = $1 LIMIT 1`,
-            [askedFor]
+            `SELECT whatsapp_number FROM public.users WHERE name = $1 AND organization_id = $2 LIMIT 1`,
+            [askedFor, orgId]
           )
         : await query<{ whatsapp_number: string | null }>(
-            `SELECT whatsapp_number FROM public.users WHERE id = $1 LIMIT 1`,
-            [selfId]
+            `SELECT whatsapp_number FROM public.users WHERE id = $1 AND organization_id = $2 LIMIT 1`,
+            [selfId, orgId]
           );
 
     return NextResponse.json({

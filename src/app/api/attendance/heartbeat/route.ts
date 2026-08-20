@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { requireRole } from "@/lib/serverAuth";
 import { broadcastEvent } from "@/lib/eventBus";
+import { getOrganizationId } from "@/lib/tenantContext";
 
 export async function POST(req: Request) {
   try {
@@ -11,6 +12,8 @@ export async function POST(req: Request) {
     }
 
     const userId = auth.session._id;
+    // MT-05: resolved once per request, then reused by every statement below.
+    const orgId = await getOrganizationId();
     const now = new Date();
     let body: any = {};
     try { body = await req.json(); } catch { }
@@ -25,12 +28,15 @@ export async function POST(req: Request) {
     } = body;
 
     // Force Logout Check: verify if the most recent session has been marked inactive by an admin
+    // The tenant predicate sits in the WHERE clause, ahead of ORDER BY and LIMIT:
+    // filtering after LIMIT 1 would let another tenant's newer row win the pick and
+    // then vanish, reporting "no session" instead of this tenant's real one.
     const sessionCheck = await query(`
       SELECT is_active 
       FROM employee_sessions 
-      WHERE user_id = $1 AND DATE(session_start) = CURRENT_DATE
+      WHERE user_id = $1 AND organization_id = $2 AND DATE(session_start) = CURRENT_DATE
       ORDER BY session_start DESC LIMIT 1
-    `, [userId]);
+    `, [userId, orgId]);
 
     if (sessionCheck.length > 0 && !sessionCheck[0].is_active) {
       return NextResponse.json({ forceLogout: true }, { status: 401 });
@@ -40,13 +46,13 @@ export async function POST(req: Request) {
     await query(
       `UPDATE employee_sessions 
        SET last_heartbeat = $1 
-       WHERE user_id = $2 AND is_active = true
+       WHERE user_id = $2 AND organization_id = $3 AND is_active = true
        AND id = (
            SELECT id FROM employee_sessions 
-           WHERE user_id = $2 AND is_active = true 
+           WHERE user_id = $2 AND organization_id = $3 AND is_active = true 
            ORDER BY session_start DESC LIMIT 1
        )`,
-      [now, userId]
+      [now, userId, orgId]
     );
 
     // Score weight dictionary
@@ -64,8 +70,10 @@ export async function POST(req: Request) {
     const liveStateResult = await query(`
       INSERT INTO employee_live_state (
         user_id, current_module, active_lead_id, active_lead_name, current_action, current_route,
-        last_activity, idle_duration_seconds, productivity_score, is_idle, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $7)
+        last_activity, idle_duration_seconds, productivity_score, is_idle, updated_at,
+        organization_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $7,
+                (SELECT organization_id FROM users WHERE id = $1))
       ON CONFLICT (user_id) DO UPDATE SET
         current_module = EXCLUDED.current_module,
         active_lead_id = EXCLUDED.active_lead_id,

@@ -1,11 +1,13 @@
 // app/api/booking-applications/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { uploadBufferToR2 } from "@/lib/r2";
 import { syncBookingUnit } from "@/lib/inventorySync";
 import { computeCPCommission } from "@/lib/cpCommissionEngine";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 import { resolveGstRate, calcGstAmount } from "@/lib/gst";
+import { resolveStampDutyRate, resolveRegistrationFeeRate, calcStampDuty, calcRegistrationFee } from "@/lib/charges";
 // Single definition of the fully-joined booking shape, shared by GET, POST and
 // the PUT in [id]/route.ts — see lib/bookingQuery.ts for why.
 import { BOOKING_SELECT_SQL, fetchBookingById } from "@/lib/bookingQuery";
@@ -175,6 +177,17 @@ async function ensureTable() {
       ADD COLUMN IF NOT EXISTS registration_status TEXT DEFAULT 'Pending';
   `);
 
+  // Stamp duty / registration fee RATES. Mirrors booking_applications.gst_rate:
+  // the rate is stored, the amount is derived from agreement_value × rate. The
+  // 5 / 1 defaults are the Maharashtra figures the old hardcoded auto-calc used,
+  // so backfilled rows keep their existing amounts.
+  // See scripts/migrations/2026-08-18_stamp_duty_registration_rates.sql.
+  await query(`
+    ALTER TABLE booking_registration_details
+      ADD COLUMN IF NOT EXISTS stamp_duty_rate NUMERIC DEFAULT 5,
+      ADD COLUMN IF NOT EXISTS registration_fee_rate NUMERIC DEFAULT 1;
+  `);
+
   await query(`
     CREATE TABLE IF NOT EXISTS booking_custom_charges (
       id SERIAL PRIMARY KEY,
@@ -286,11 +299,15 @@ export async function GET(req: NextRequest) {
 
     // The identical SELECT is used by POST and by the PUT in [id]/route.ts, so a
     // saved booking comes back in the same shape a fetched one does.
+    // The tenant filter is always present, before LIMIT/OFFSET below, so a page
+    // of this list can never contain another organization's bookings.
     let sql = BOOKING_SELECT_SQL;
     const params: any[] = [];
+    params.push(await getOrganizationId());
+    sql += ` WHERE b.organization_id = $${params.length}`;
     if (leadId) {
-      sql += ` WHERE b.lead_id = $1`;
       params.push(Number(leadId));
+      sql += ` AND b.lead_id = $${params.length}`;
     }
     // id DESC as tiebreaker: two bookings written in the same transaction share a
     // created_at, and the booking form picks data[0] as "the" booking — an
@@ -479,7 +496,11 @@ export async function POST(req: NextRequest) {
     // GST — rate is client-overridable, amount is always server-computed from agreement_value
     const gst_rate_input = getStr("gst_rate");
 
-    // Stamp Duty & Registration Fee — client-overridable, else Maharashtra defaults apply
+    // Stamp Duty & Registration Fee — like GST, the rate is client-overridable and
+    // the amount derives from it. Both fall back to the Maharashtra defaults only
+    // when no rate was sent at all.
+    const stamp_duty_rate_input = getStr("stamp_duty_rate");
+    const registration_fee_rate_input = getStr("registration_fee_rate");
     const stamp_duty_amount_input = getStr("stamp_duty_amount");
     const stamp_duty_paid_date = getStr("stamp_duty_paid_date");
     const stamp_duty_status = getStr("stamp_duty_status");
@@ -515,6 +536,11 @@ export async function POST(req: NextRequest) {
 
     // We will do everything inside a transaction
     const result = await transaction(async (client) => {
+      // MT-05: the tenant for every row written in this transaction. Resolved
+      // once, on this client so it shares the open transaction, and appended as
+      // the LAST column of each INSERT so no existing $n placeholder shifts.
+      const orgId = await getOrganizationId(client);
+
       // 1. Insert DB record to get ID
       const insertRes = await client.query(
         `INSERT INTO booking_applications (
@@ -531,13 +557,15 @@ export async function POST(req: NextRequest) {
           booking_date, agreement_value, booking_amount, booking_remarks, internal_notes,
           apartment_name, project_name, tower, wing,
           revenue_include_ocr, revenue_include_sdr, revenue_include_cash, revenue_include_sanction, revenue_include_disbursement,
-          sourced_by_channel_partner_id
+          sourced_by_channel_partner_id,
+          organization_id
         ) VALUES (
           $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,'Pending',
           $37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,
           -- CP attribution is inherited from the source lead, never re-entered.
           -- Resolves to NULL for direct/non-CP leads and for bookings with no lead.
-          (SELECT channel_partner_id FROM walkin_enquiries WHERE id = $1)
+          (SELECT channel_partner_id FROM walkin_enquiries WHERE id = $1),
+          $51
         ) RETURNING id`,
         [
           lead_id, primary_name, primary_email, primary_mobile, primary_pan, primary_aadhaar,
@@ -552,7 +580,8 @@ export async function POST(req: NextRequest) {
           application_date, created_by, created_role,
           booking_date || null, cleanNum(agreement_value), cleanNum(booking_amount), booking_remarks, internal_notes,
           apartment_name, project_name, tower, wing,
-          revenue_include_ocr, revenue_include_sdr, revenue_include_cash, revenue_include_sanction, revenue_include_disbursement
+          revenue_include_ocr, revenue_include_sdr, revenue_include_cash, revenue_include_sanction, revenue_include_disbursement,
+          orgId
         ]
       );
       const newId = insertRes.rows[0].id;
@@ -569,8 +598,17 @@ export async function POST(req: NextRequest) {
       // numeric 0 from a non-form caller cannot regress to 5.
       const gstRate = resolveGstRate(gst_rate_input);
       const gstAmount = calcGstAmount(agreementVal, gstRate);
-      const stampDutyAmount = stamp_duty_amount_input ? cleanNum(stamp_duty_amount_input) : agreementVal * 0.05;
-      const registrationFeeAmount = registration_fee_amount_input ? cleanNum(registration_fee_amount_input) : Math.min(agreementVal * 0.01, 30000);
+      // Same treatment for the two statutory charges: resolve the rate (0 survives,
+      // absent falls back to the Maharashtra default), then derive the amount from
+      // it unless the client sent an explicit figure.
+      const stampDutyRate = resolveStampDutyRate(stamp_duty_rate_input);
+      const registrationFeeRate = resolveRegistrationFeeRate(registration_fee_rate_input);
+      const stampDutyAmount = stamp_duty_amount_input
+        ? cleanNum(stamp_duty_amount_input)
+        : calcStampDuty(agreementVal, stampDutyRate);
+      const registrationFeeAmount = registration_fee_amount_input
+        ? cleanNum(registration_fee_amount_input)
+        : calcRegistrationFee(agreementVal, registrationFeeRate);
 
       await client.query(`
         UPDATE booking_applications SET
@@ -591,54 +629,55 @@ export async function POST(req: NextRequest) {
       // (ocr_amount is intentionally still written: it feeds the financial_ledger 'ocr' line,
       // which has no derived replacement yet — see deferred pipeline notes.)
       await client.query(`
-        INSERT INTO booking_financials (booking_id, token_amount, ocr_amount, ocr_received_date, ocr_payment_mode, ocr_remarks, sdr_amount, sdr_payment_date, sdr_status, sdr_remarks, cash_component, cash_component_date, cash_component_remarks)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-      `, [newId, cleanNum(token_amount), cleanNum(ocr_amount), ocr_received_date || null, ocr_payment_mode, ocr_remarks, null, null, null, sdr_remarks, cleanNum(cash_component), cash_component_date || null, cash_component_remarks]);
+        INSERT INTO booking_financials (booking_id, token_amount, ocr_amount, ocr_received_date, ocr_payment_mode, ocr_remarks, sdr_amount, sdr_payment_date, sdr_status, sdr_remarks, cash_component, cash_component_date, cash_component_remarks, organization_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      `, [newId, cleanNum(token_amount), cleanNum(ocr_amount), ocr_received_date || null, ocr_payment_mode, ocr_remarks, null, null, null, sdr_remarks, cleanNum(cash_component), cash_component_date || null, cash_component_remarks, orgId]);
 
       // 1c. Insert Loan Details (incl. EMI fields)
       await client.query(`
-        INSERT INTO booking_loan_details (booking_id, loan_required, bank_name, loan_executive, loan_type, loan_reference_no, loan_amount, sanction_amount, sanction_date, sanction_status, loan_status, expected_disbursement_date, actual_disbursement_date, expected_disbursement_amount, disbursement_amount, disbursement_status, interest_rate, loan_tenure_months, emi_start_date, payment_type, pre_emi_amount, emi_amount)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
-      `, [newId, loan_required, bank_name, loan_executive, loan_type, loan_reference_no, cleanNum(loan_amount), cleanNum(sanction_amount), sanction_date || null, sanction_status || 'Pending', loan_status || 'Pending', expected_disbursement_date || null, actual_disbursement_date || null, cleanNum(expected_disbursement_amount), cleanNum(disbursement_amount), disbursement_status || 'Pending', cleanNum(interest_rate), cleanNum(loan_tenure_months), emi_start_date || null, payment_type || 'Pre-EMI', cleanNum(pre_emi_amount), cleanNum(emi_amount)]);
+        INSERT INTO booking_loan_details (booking_id, loan_required, bank_name, loan_executive, loan_type, loan_reference_no, loan_amount, sanction_amount, sanction_date, sanction_status, loan_status, expected_disbursement_date, actual_disbursement_date, expected_disbursement_amount, disbursement_amount, disbursement_status, interest_rate, loan_tenure_months, emi_start_date, payment_type, pre_emi_amount, emi_amount, organization_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+      `, [newId, loan_required, bank_name, loan_executive, loan_type, loan_reference_no, cleanNum(loan_amount), cleanNum(sanction_amount), sanction_date || null, sanction_status || 'Pending', loan_status || 'Pending', expected_disbursement_date || null, actual_disbursement_date || null, cleanNum(expected_disbursement_amount), cleanNum(disbursement_amount), disbursement_status || 'Pending', cleanNum(interest_rate), cleanNum(loan_tenure_months), emi_start_date || null, payment_type || 'Pre-EMI', cleanNum(pre_emi_amount), cleanNum(emi_amount), orgId]);
 
       // 1d. Insert Registration Details (with split Stamp Duty / Registration Fee)
       await client.query(`
         INSERT INTO booking_registration_details (
           booking_id, expected_registration_date, actual_registration_date, registration_status, registration_number, registration_remarks,
-          stamp_duty_amount, stamp_duty_paid_date, stamp_duty_status, stamp_duty_payment_mode, stamp_duty_receipt_no,
-          registration_fee_amount, registration_fee_paid_date, registration_fee_status, registration_fee_payment_mode
+          stamp_duty_rate, stamp_duty_amount, stamp_duty_paid_date, stamp_duty_status, stamp_duty_payment_mode, stamp_duty_receipt_no,
+          registration_fee_rate, registration_fee_amount, registration_fee_paid_date, registration_fee_status, registration_fee_payment_mode,
+          organization_id
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
       `, [newId, expected_registration_date || null, actual_registration_date || null, registration_status || 'Pending', registration_number, registration_remarks,
-          stampDutyAmount, stamp_duty_paid_date || null, stamp_duty_status || 'Pending', stamp_duty_payment_mode, stamp_duty_receipt_no,
-          registrationFeeAmount, registration_fee_paid_date || null, registration_fee_status || 'Pending', registration_fee_payment_mode]);
+          stampDutyRate, stampDutyAmount, stamp_duty_paid_date || null, stamp_duty_status || 'Pending', stamp_duty_payment_mode, stamp_duty_receipt_no,
+          registrationFeeRate, registrationFeeAmount, registration_fee_paid_date || null, registration_fee_status || 'Pending', registration_fee_payment_mode, orgId]);
 
       // 1e. Insert Custom Charges
       for (const charge of custom_charges) {
         await client.query(`
-          INSERT INTO booking_custom_charges (booking_id, charge_name, amount, remarks)
-          VALUES ($1, $2, $3, $4)
-        `, [newId, charge.charge_name, charge.amount || 0, charge.remarks]);
+          INSERT INTO booking_custom_charges (booking_id, charge_name, amount, remarks, organization_id)
+          VALUES ($1, $2, $3, $4, $5)
+        `, [newId, charge.charge_name, charge.amount || 0, charge.remarks, orgId]);
       }
 
       // 1f. Insert into Revenue Pipeline
       await client.query(`
-        INSERT INTO booking_pipeline (booking_id, current_stage, status)
-        VALUES ($1, 'Booking', 'Active')
-      `, [newId]);
+        INSERT INTO booking_pipeline (booking_id, current_stage, status, organization_id)
+        VALUES ($1, 'Booking', 'Active', $2)
+      `, [newId, orgId]);
 
       // 1f-2. Initialize Financial Account & Ledger
-      const accInsert = await client.query(`INSERT INTO financial_accounts (booking_id) VALUES ($1) RETURNING id`, [newId]);
+      const accInsert = await client.query(`INSERT INTO financial_accounts (booking_id, organization_id) VALUES ($1, $2) RETURNING id`, [newId, orgId]);
       const account_id = accInsert.rows[0].id;
 
       const upsertLedger = async (type: string, direction: string, amount: number, date: any, affectsRevenue: string, receivedFrom: string, bankName: string | null = null, paymentMode: string | null = null, remarks: string | null = null) => {
         if (amount > 0) {
           await client.query(`
-            INSERT INTO financial_ledger (account_id, transaction_type, transaction_direction, amount, transaction_date, status, affects_revenue, received_from, transaction_source, bank_name, payment_mode, notes, created_by)
-            VALUES ($1, $2, $3, $4, $5, 'Received', $6, $7, 'UI_Update', $8, $9, $10, $11)
+            INSERT INTO financial_ledger (account_id, transaction_type, transaction_direction, amount, transaction_date, status, affects_revenue, received_from, transaction_source, bank_name, payment_mode, notes, created_by, organization_id)
+            VALUES ($1, $2, $3, $4, $5, 'Received', $6, $7, 'UI_Update', $8, $9, $10, $11, $12)
             ON CONFLICT (account_id, transaction_type, transaction_source) DO UPDATE 
             SET amount = EXCLUDED.amount, transaction_date = EXCLUDED.transaction_date, bank_name = EXCLUDED.bank_name, payment_mode = EXCLUDED.payment_mode, notes = EXCLUDED.notes
-          `, [account_id, type, direction, amount, date || new Date(), affectsRevenue, receivedFrom, bankName, paymentMode, remarks, created_by || 'System']);
+          `, [account_id, type, direction, amount, date || new Date(), affectsRevenue, receivedFrom, bankName, paymentMode, remarks, created_by || 'System', orgId]);
         }
       };
 
@@ -671,23 +710,23 @@ export async function POST(req: NextRequest) {
         const demandAmount = agreementVal * ms.percentage / 100;
         const status = ms.paid <= 0 ? 'Upcoming' : ms.paid >= demandAmount ? 'Paid' : 'Partially Paid';
         await client.query(`
-          INSERT INTO booking_payment_milestones (booking_id, milestone_name, milestone_order, percentage, demand_amount, paid_amount, paid_date, status)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        `, [newId, ms.name, ms.order, ms.percentage, demandAmount, ms.paid, ms.paidDate || null, status]);
+          INSERT INTO booking_payment_milestones (booking_id, milestone_name, milestone_order, percentage, demand_amount, paid_amount, paid_date, status, organization_id)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        `, [newId, ms.name, ms.order, ms.percentage, demandAmount, ms.paid, ms.paidDate || null, status, orgId]);
       }
 
       // 1g. Insert initial stage history
       await client.query(`
-        INSERT INTO booking_stage_history (booking_id, stage_name, employee_name, remarks)
-        VALUES ($1, 'Booking Submitted', $2, 'Initial booking form submitted.')
-      `, [newId, created_by || 'System']);
+        INSERT INTO booking_stage_history (booking_id, stage_name, employee_name, remarks, organization_id)
+        VALUES ($1, 'Booking Submitted', $2, 'Initial booking form submitted.', $3)
+      `, [newId, created_by || 'System', orgId]);
 
       // 1h. Phase B5: migrate the lead's multi-bank loan applications to this booking.
       // The lead-level draft (loan_tracking_info.loan_application_ids) references
       // loan_applications rows; on booking creation they become booking-scoped so the
       // shopping history follows the booking. Best-effort — never fails the booking.
       try {
-        const leadDraftRes = await client.query(`SELECT loan_tracking_info FROM walkin_enquiries WHERE id = $1`, [lead_id]);
+        const leadDraftRes = await client.query(`SELECT loan_tracking_info FROM walkin_enquiries WHERE id = $1 AND organization_id = $2`, [lead_id, orgId]);
         const draftRaw = leadDraftRes.rows[0]?.loan_tracking_info;
         const draft = typeof draftRaw === "string" ? JSON.parse(draftRaw) : (draftRaw || {});
         const ids = Array.isArray(draft?.loan_application_ids)
@@ -730,9 +769,9 @@ export async function POST(req: NextRequest) {
         await uploadBufferToR2(key, await fileToBuffer(file), file.type);
 
         await client.query(`
-          INSERT INTO booking_documents (booking_id, lead_id, booking_number, document_type, applicant_type, file_name, object_key, mime_type, file_size, uploaded_by)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-        `, [newId, lead_id, bookingNumber, docType, appType, file.name, key, file.type, file.size, created_by]);
+          INSERT INTO booking_documents (booking_id, lead_id, booking_number, document_type, applicant_type, file_name, object_key, mime_type, file_size, uploaded_by, organization_id)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        `, [newId, lead_id, bookingNumber, docType, appType, file.name, key, file.type, file.size, created_by, orgId]);
 
         return key;
       };
@@ -780,7 +819,7 @@ export async function POST(req: NextRequest) {
         await uploadBufferToR2(key, buffer, "image/png");
         updatesForDb.signature_data = key;
 
-        await client.query(`INSERT INTO booking_documents (booking_id, lead_id, booking_number, document_type, applicant_type, file_name, object_key, mime_type, file_size, uploaded_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`, [newId, lead_id, bookingNumber, "SIGNATURE", "PRIMARY", "signature.png", key, "image/png", buffer.length, created_by]);
+        await client.query(`INSERT INTO booking_documents (booking_id, lead_id, booking_number, document_type, applicant_type, file_name, object_key, mime_type, file_size, uploaded_by, organization_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`, [newId, lead_id, bookingNumber, "SIGNATURE", "PRIMARY", "signature.png", key, "image/png", buffer.length, created_by, orgId]);
       }
 
       // Re-update the booking applications record with the URLs
@@ -856,8 +895,9 @@ export async function POST(req: NextRequest) {
     });
 
     // Mark booking as Confirmed and Lead as Closed now that the full transaction succeeded
-    await query(`UPDATE booking_applications SET booking_status = 'Confirmed' WHERE id = $1`, [result.id]);
-    await query(`UPDATE walkin_enquiries SET status = 'Closed' WHERE id = $1`, [lead_id]);
+    const postCommitOrgId = await getOrganizationId();
+    await query(`UPDATE booking_applications SET booking_status = 'Confirmed' WHERE id = $1 AND organization_id = $2`, [result.id, postCommitOrgId]);
+    await query(`UPDATE walkin_enquiries SET status = 'Closed' WHERE id = $1 AND organization_id = $2`, [lead_id, postCommitOrgId]);
 
     // Return the SAME shape GET returns, not the bare booking_applications row.
     // The caller feeds this straight into the booking view (sales/page.tsx does

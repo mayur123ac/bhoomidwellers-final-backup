@@ -20,6 +20,7 @@
 // route (/api/channel-partners/[id]/commissions) with its own gate.
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { getServerSession } from "@/lib/serverAuth";
 import { canViewPartners, canViewAllPartners } from "@/lib/cpRbac";
 
@@ -65,9 +66,10 @@ export async function GET(
               sm.whatsapp_number AS assigned_sourcing_manager_phone,
               sm.is_active       AS assigned_sourcing_manager_active
          FROM channel_partners cp
-         LEFT JOIN users sm ON sm.id = cp.assigned_sourcing_manager_id
-        WHERE cp.id = $1`,
-      [cpId]
+         LEFT JOIN users sm
+                ON sm.id = cp.assigned_sourcing_manager_id AND sm.organization_id = cp.organization_id
+        WHERE cp.id = $1 AND cp.organization_id = $2`,
+      [cpId, await getOrganizationId()]
     );
 
     if (partnerRows.length === 0) {
@@ -94,6 +96,10 @@ export async function GET(
 
     // Four independent reads against the same partner — run together rather than
     // sequentially, since none of them depends on another's result.
+    // cpId comes from the URL. Every read below is organization-scoped so a
+    // partner id belonging to another builder yields nothing rather than their
+    // client list.
+    const cpOrgId = await getOrganizationId();
     const [enquiries, siteVisits, followUps, bookings] = await Promise.all([
       query(
         `SELECT w.id, w.sr_no, w.created_at, w.enquiry_date, w.status,
@@ -104,33 +110,36 @@ export async function GET(
                 w.sourcing_manager_id,
                 sm.name AS sourcing_manager_name
            FROM walkin_enquiries w
-           LEFT JOIN users sm ON sm.id = w.sourcing_manager_id
-          WHERE w.channel_partner_id = $1
+           LEFT JOIN users sm
+             ON sm.id = w.sourcing_manager_id AND sm.organization_id = w.organization_id
+          WHERE w.channel_partner_id = $1 AND w.organization_id = $2
           ORDER BY w.created_at DESC
           LIMIT ${ACTIVITY_LIMIT}`,
-        [cpId]
+        [cpId, cpOrgId]
       ),
       query(
         `SELECT v.id, v.lead_id, v.visit_date, v.status, v.notes,
                 v.created_by, v.role, v.created_at,
                 w.name AS client_name
            FROM site_visits v
-           JOIN walkin_enquiries w ON w.id = v.lead_id
-          WHERE w.channel_partner_id = $1
+           JOIN walkin_enquiries w
+             ON w.id = v.lead_id AND w.organization_id = v.organization_id
+          WHERE w.channel_partner_id = $1 AND v.organization_id = $2
           ORDER BY v.visit_date DESC NULLS LAST, v.id DESC
           LIMIT ${ACTIVITY_LIMIT}`,
-        [cpId]
+        [cpId, cpOrgId]
       ),
       query(
         `SELECT f.id, f.lead_id, f.message, f.created_by_name, f.created_at,
                 f.followup_date, f.site_visit_date,
                 w.name AS client_name
            FROM follow_ups f
-           JOIN walkin_enquiries w ON w.id = f.lead_id
-          WHERE w.channel_partner_id = $1
+           JOIN walkin_enquiries w
+             ON w.id = f.lead_id AND w.organization_id = f.organization_id
+          WHERE w.channel_partner_id = $1 AND f.organization_id = $2
           ORDER BY f.created_at DESC
           LIMIT ${ACTIVITY_LIMIT}`,
-        [cpId]
+        [cpId, cpOrgId]
       ),
       query(
         `SELECT b.id, b.booking_number, b.lead_id, b.created_at

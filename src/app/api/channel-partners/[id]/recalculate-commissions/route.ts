@@ -11,6 +11,7 @@
 //     rate would destroy that intent without telling anyone.
 import { NextRequest, NextResponse } from "next/server";
 import { transaction } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { recalculateCommission, CPCommissionError } from "@/lib/cpCommissionEngine";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 
@@ -43,9 +44,11 @@ export async function POST(
     const updatedBy = (body.updated_by || body.user_name || "admin").toString();
 
     const result = await transaction(async (client) => {
+      // cpId comes from the URL; resolved once and reused by both statements.
+      const recalcOrgId = await getOrganizationId(client);
       const cpRes = await client.query(
-        `SELECT id, name, default_commission_rate FROM channel_partners WHERE id = $1`,
-        [cpId]
+        `SELECT id, name, default_commission_rate FROM channel_partners WHERE id = $1 AND organization_id = $2`,
+        [cpId, recalcOrgId]
       );
       if (cpRes.rows.length === 0) {
         throw new CPCommissionError(`Channel partner ${cpId} not found.`, "CP_NOT_FOUND", 404);
@@ -64,10 +67,11 @@ export async function POST(
       const targets = await client.query(
         `SELECT id FROM cp_commissions
           WHERE channel_partner_id = $1
+            AND organization_id = $2
             AND status IN ('accrued', 'due')
             ${includeOverrides ? "" : "AND COALESCE(is_override, false) = false"}
           ORDER BY id ASC`,
-        [cpId]
+        [cpId, recalcOrgId]
       );
 
       const updated: number[] = [];

@@ -14,6 +14,11 @@ import { formatCurrencyDisplay, formatCurrencyDecimal, toStorageValue } from "@/
 // for why `|| 5` could not express "default when absent" for a field whose zero
 // is meaningful.
 import { resolveGstRate, calcGstAmount, parseGstRate, GST_RATE_PRESETS } from "@/lib/gst";
+import {
+  resolveStampDutyRate, resolveRegistrationFeeRate, calcStampDuty, calcRegistrationFee,
+  isRegistrationFeeCapped, parseRatePercent,
+  STAMP_DUTY_RATE_PRESETS, REGISTRATION_FEE_RATE_PRESETS,
+} from "@/lib/charges";
 import LoanDealForm from "@/components/LoanDealForm";
 import { buildTheme } from "@/lib/crmTheme";
 import { useFinancialStatus, canOverride } from "@/components/FinancialPositionCard";
@@ -89,10 +94,15 @@ interface BookingFormData {
 
   // Cost breakdown — GST is auto-computed from agreement_value × rate.
   gst_rate: string; gst_amount: string; gst_paid: string; gst_status: string;
-  // Stamp Duty & Registration Fee (split) — amounts auto-computed (Maharashtra
-  // defaults), the rest are captured manually as they are paid.
+  // Stamp Duty & Registration Fee (split) — like GST, the RATE is the stored
+  // thing and the amount is derived from agreement_value × rate. Both rates are
+  // bare percentage strings ("5", "4", "0.5"), same shape as gst_rate; the
+  // Maharashtra defaults are applied only when no rate was ever chosen.
+  // The rest are captured manually as they are paid.
+  stamp_duty_rate: string;
   stamp_duty_amount: string; stamp_duty_paid_date: string; stamp_duty_status: string;
   stamp_duty_payment_mode: string; stamp_duty_receipt_no: string;
+  registration_fee_rate: string;
   registration_fee_amount: string; registration_fee_paid_date: string;
   registration_fee_status: string; registration_fee_payment_mode: string;
   // Other charges (manual)
@@ -277,6 +287,7 @@ function computeFinancials(form: BookingFormData): FinancialSummary {
 // Maharashtra defaults (GST 5%, Stamp Duty 5%, Registration 1% capped ₹30K).
 interface CostBreakdown {
   agreementValue: number; gstRate: number; gstAmount: number;
+  stampDutyRate: number; registrationFeeRate: number;
   stampDuty: number; registrationFee: number;
   legalCharges: number; maintenanceDeposit: number; possessionCharges: number;
   customChargesTotal: number; totalCost: number;
@@ -284,8 +295,6 @@ interface CostBreakdown {
 }
 
 function autoGstAmount(agreementValue: number, rate: number) { return Math.round(agreementValue * rate / 100); }
-function autoStampDuty(agreementValue: number) { return Math.round(agreementValue * 0.05); }
-function autoRegistrationFee(agreementValue: number) { return Math.min(Math.round(agreementValue * 0.01), 30000); }
 
 function computeCostBreakdown(form: BookingFormData): CostBreakdown {
   const agreementValue = toNumber(form.agreement_value);
@@ -298,8 +307,19 @@ function computeCostBreakdown(form: BookingFormData): CostBreakdown {
   const gstAmount = enteredGstAmount === ""
     ? calcGstAmount(agreementValue, gstRate)
     : toNumber(enteredGstAmount);
-  const stampDuty = toNumber(form.stamp_duty_amount) || autoStampDuty(agreementValue);
-  const registrationFee = toNumber(form.registration_fee_amount) || autoRegistrationFee(agreementValue);
+  // Stamp duty and registration fee follow exactly the same rule as GST above:
+  // the rate is what's stored, the amount derives from it, and only an EMPTY
+  // amount means "derive". A deliberately typed ₹0 is a real figure and survives.
+  const stampDutyRate = resolveStampDutyRate(form.stamp_duty_rate);
+  const enteredStampDuty = String(form.stamp_duty_amount ?? "").trim();
+  const stampDuty = enteredStampDuty === ""
+    ? calcStampDuty(agreementValue, stampDutyRate)
+    : toNumber(enteredStampDuty);
+  const registrationFeeRate = resolveRegistrationFeeRate(form.registration_fee_rate);
+  const enteredRegistrationFee = String(form.registration_fee_amount ?? "").trim();
+  const registrationFee = enteredRegistrationFee === ""
+    ? calcRegistrationFee(agreementValue, registrationFeeRate)
+    : toNumber(enteredRegistrationFee);
   const legalCharges = toNumber(form.legal_charges);
   const maintenanceDeposit = toNumber(form.maintenance_deposit);
   const possessionCharges = toNumber(form.possession_charges);
@@ -312,7 +332,8 @@ function computeCostBreakdown(form: BookingFormData): CostBreakdown {
   // this figure mirrors the API's required_own_contribution (Agreement + GST − Loan).
   const ownContributionRequired = Math.max(agreementValue + gstAmount - loanAmount, 0);
   return {
-    agreementValue, gstRate, gstAmount, stampDuty, registrationFee,
+    agreementValue, gstRate, gstAmount,
+    stampDutyRate, registrationFeeRate, stampDuty, registrationFee,
     legalCharges, maintenanceDeposit, possessionCharges, customChargesTotal,
     totalCost, loanAmount, ownContributionRequired,
   };
@@ -401,6 +422,11 @@ function defaultForm(lead: any): BookingFormData {
     // derives it from this rate.
     gst_rate: String(resolveGstRate(draft.gst_rate)),
     gst_amount: "", gst_paid: "", gst_status: "Pending",
+    // Same "prefer the draft, fall back to the statutory default" rule as
+    // gst_rate above. resolve*, not `||`: a draft saved at 0% arrives as 0 or
+    // "0", which is falsy, and must not be reset to 5% / 1%.
+    stamp_duty_rate: String(resolveStampDutyRate(draft.stamp_duty_rate)),
+    registration_fee_rate: String(resolveRegistrationFeeRate(draft.registration_fee_rate)),
     stamp_duty_amount: draft.stamp_duty_amount || "", stamp_duty_paid_date: "", stamp_duty_status: draft.stamp_duty_status || "Pending",
     stamp_duty_payment_mode: "E-Stamp", stamp_duty_receipt_no: "",
     registration_fee_amount: draft.registration_fee_amount || "", registration_fee_paid_date: "",
@@ -552,7 +578,8 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
   // value; the hint under the field reads off it, and `set()` clears the flag on
   // the first edit. `touchedRef` is what makes the booking form's values win: once
   // a key is in it, no later prefill pass may overwrite it.
-  const PREFILL_KEYS = ["agreement_value", "gst_rate", "token_amount"] as const;
+  const PREFILL_KEYS = ["agreement_value", "gst_rate", "token_amount",
+    "stamp_duty_rate", "registration_fee_rate"] as const;
   const [loanPrefilled, setLoanPrefilled] = useState<Record<string, boolean>>({});
   const touchedRef = useRef<Set<string>>(new Set());
   // True when this open restored a sessionStorage draft. That draft is prior work
@@ -560,11 +587,12 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
   // on-open pass must leave it alone. (The loan-editor round trip still refreshes
   // it: that one is the operator asking for the new numbers.)
   const restoredDraftRef = useRef(false);
-  // The (agreement_value, gst_rate) pair as hydrated from a saved booking. While
-  // the live form still matches it, the derived-figures effect must not overwrite
-  // persisted stamp duty / registration fee / GST amount. Null in create mode,
-  // where deriving from the start is correct.
-  const derivedBaselineRef = useRef<{ av: string; rate: string } | null>(null);
+  // The drivers of every derived figure, as hydrated from a saved booking:
+  // agreement value plus each of the three rates. While the live form still
+  // matches all four, the derived-figures effect must not overwrite persisted
+  // stamp duty / registration fee / GST amount. Null in create mode, where
+  // deriving from the start is correct.
+  const derivedBaselineRef = useRef<{ av: string; rate: string; sdRate: string; regRate: string } | null>(null);
   // ── FOE: derived financial state for THIS booking (Phase 4) ────────────────
   // Only meaningful for a saved booking — a new one has no row to derive from,
   // so no request is made and the OCR section stays fully editable.
@@ -733,6 +761,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
         return String(Number(s));
       };
       ["gst_rate", "gst_amount", "gst_paid", "agreement_value", "booking_amount",
+        "stamp_duty_rate", "registration_fee_rate",
         "stamp_duty_amount", "registration_fee_amount", "legal_charges",
         "maintenance_deposit", "possession_charges", "token_amount", "ocr_amount",
         "sdr_amount", "cash_component", "loan_amount", "sanction_amount",
@@ -760,16 +789,25 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
         ...safeBooking,
         custom_charges,
         joint_applicants: typeof safeBooking.joint_applicants === 'string' ? JSON.parse(safeBooking.joint_applicants) : (safeBooking.joint_applicants || initialForm.joint_applicants),
-        payment_details: typeof safeBooking.payment_details === 'string' ? JSON.parse(safeBooking.payment_details) : (safeBooking.payment_details || initialForm.payment_details)
+        payment_details: typeof safeBooking.payment_details === 'string' ? JSON.parse(safeBooking.payment_details) : (safeBooking.payment_details || initialForm.payment_details),
+        // A booking saved before stamp_duty_rate / registration_fee_rate existed
+        // has NULL in those columns, and the spread above would put that NULL
+        // straight into the form — the rate input renders blank and the amount
+        // derives at nothing. resolve* turns absent back into the statutory
+        // default while leaving a genuinely stored 0 alone.
+        stamp_duty_rate: String(resolveStampDutyRate(safeBooking.stamp_duty_rate)),
+        registration_fee_rate: String(resolveRegistrationFeeRate(safeBooking.registration_fee_rate)),
       };
       setForm(hydrated);
 
       // Freeze the derived-figures effect at exactly these drivers. Until the
-      // operator changes agreement value or GST rate, the persisted stamp duty /
-      // registration fee / GST amount must not be recomputed over — see §10.
+      // operator changes agreement value or one of the three rates, the persisted
+      // stamp duty / registration fee / GST amount must not be recomputed over — see §10.
       derivedBaselineRef.current = {
         av: String(hydrated.agreement_value ?? ""),
         rate: String(hydrated.gst_rate ?? ""),
+        sdRate: String(hydrated.stamp_duty_rate ?? ""),
+        regRate: String(hydrated.registration_fee_rate ?? ""),
       };
       restoredDraftRef.current = false;
     } else if (stored) {
@@ -811,8 +849,8 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
     const av = toNumber(form.agreement_value);
     const rate = resolveGstRate(form.gst_rate);
     const gst = String(calcGstAmount(av, rate));
-    const stamp = String(autoStampDuty(av));
-    const reg = String(autoRegistrationFee(av));
+    const stamp = String(calcStampDuty(av, resolveStampDutyRate(form.stamp_duty_rate)));
+    const reg = String(calcRegistrationFee(av, resolveRegistrationFeeRate(form.registration_fee_rate)));
 
     // ── Do not recompute over persisted figures on load (§10, §14) ────────────
     //
@@ -825,23 +863,29 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
     // The baseline is set at hydration. While the drivers still match it, the
     // operator has not changed anything, so persisted values are left alone and
     // only genuinely EMPTY derived fields are filled in. The moment agreement
-    // value or GST rate actually changes, the baseline stops matching and the
+    // value or a rate actually changes, the baseline stops matching and the
     // figures derive normally again.
+    //
+    // Frozen is evaluated PER FIGURE, not once for all three. Each amount has its
+    // own rate driver now, and a shared flag would mean nudging the stamp duty
+    // rate also unfroze — and so silently recomputed — the persisted GST amount.
+    // Agreement value is a driver of all three, so it unfreezes all three.
     const baseline = derivedBaselineRef.current;
-    const frozen = !!baseline
-      && baseline.av === String(form.agreement_value ?? "")
-      && baseline.rate === String(form.gst_rate ?? "");
+    const avFrozen = !!baseline && baseline.av === String(form.agreement_value ?? "");
+    const gstFrozen = avFrozen && baseline!.rate === String(form.gst_rate ?? "");
+    const stampFrozen = avFrozen && baseline!.sdRate === String(form.stamp_duty_rate ?? "");
+    const regFrozen = avFrozen && baseline!.regRate === String(form.registration_fee_rate ?? "");
 
     setForm(f => {
       const blank = (v: any) => String(v ?? "").trim() === "";
-      const nextGst = frozen && !blank(f.gst_amount) ? f.gst_amount : gst;
-      const nextStamp = frozen && !blank(f.stamp_duty_amount) ? f.stamp_duty_amount : stamp;
-      const nextReg = frozen && !blank(f.registration_fee_amount) ? f.registration_fee_amount : reg;
+      const nextGst = gstFrozen && !blank(f.gst_amount) ? f.gst_amount : gst;
+      const nextStamp = stampFrozen && !blank(f.stamp_duty_amount) ? f.stamp_duty_amount : stamp;
+      const nextReg = regFrozen && !blank(f.registration_fee_amount) ? f.registration_fee_amount : reg;
       return f.gst_amount === nextGst && f.stamp_duty_amount === nextStamp && f.registration_fee_amount === nextReg
         ? f
         : { ...f, gst_amount: nextGst, stamp_duty_amount: nextStamp, registration_fee_amount: nextReg };
     });
-  }, [form.agreement_value, form.gst_rate]);
+  }, [form.agreement_value, form.gst_rate, form.stamp_duty_rate, form.registration_fee_rate]);
 
   // Auto-compute Pre-EMI / EMI from loan figures.
   useEffect(() => {
@@ -983,6 +1027,8 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
       if (String(draft.agreement_value_estimate ?? "").trim() !== "") incoming.agreement_value = String(draft.agreement_value_estimate);
       if (String(draft.gst_rate ?? "").trim() !== "") incoming.gst_rate = String(resolveGstRate(draft.gst_rate));
       if (String(draft.token_amount ?? "").trim() !== "") incoming.token_amount = String(draft.token_amount);
+      if (String(draft.stamp_duty_rate ?? "").trim() !== "") incoming.stamp_duty_rate = String(resolveStampDutyRate(draft.stamp_duty_rate));
+      if (String(draft.registration_fee_rate ?? "").trim() !== "") incoming.registration_fee_rate = String(resolveRegistrationFeeRate(draft.registration_fee_rate));
       if (Object.keys(incoming).length === 0) return;
 
       // A Set, not an array: the updater below can be invoked more than once for a
@@ -995,7 +1041,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
           if (incoming[k] === undefined) return;
           if (touchedRef.current.has(k)) return;
           const current = String(f[k] ?? "").trim();
-          if (k === "gst_rate") {
+          if (k === "gst_rate" || k === "stamp_duty_rate" || k === "registration_fee_rate") {
             // Never blank — defaultForm always resolves a rate — so "is it empty"
             // can't gate it. Untouched means the form still holds a default the
             // operator never chose, which the loan form's rate should replace.
@@ -1230,6 +1276,8 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
       formData.append("gst_paid", form.gst_paid);
       formData.append("gst_status", form.gst_status);
       // Stamp Duty & Registration Fee (split)
+      formData.append("stamp_duty_rate", form.stamp_duty_rate);
+      formData.append("registration_fee_rate", form.registration_fee_rate);
       formData.append("stamp_duty_amount", form.stamp_duty_amount);
       formData.append("stamp_duty_paid_date", form.stamp_duty_paid_date);
       formData.append("stamp_duty_status", form.stamp_duty_status);
@@ -2023,6 +2071,75 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                                   <span className={`text-sm ${strong ? "font-extrabold" : "font-semibold"} ${textMain}`}>{formatINR(value)}</span>
                                 </div>
                               );
+                              // Percentage-driven row: preset buttons + free numeric entry + the
+                              // live derived amount. Factored out because Stamp Duty and
+                              // Registration Fee are the same control with different presets —
+                              // GST keeps its inline markup above since it also carries the
+                              // rate-error affordances.
+                              const RateRow = ({
+                                label, presets, presetTitle, rate, onRate, ariaLabel, placeholder,
+                                step = 0.5, value, prefilled, capped, capLabel,
+                              }: {
+                                label: string;
+                                presets: readonly number[];
+                                presetTitle: (p: number) => string;
+                                rate: string;
+                                onRate: (v: string) => void;
+                                ariaLabel: string;
+                                placeholder: string;
+                                step?: number;
+                                value: number;
+                                prefilled?: boolean;
+                                capped?: boolean;
+                                capLabel?: string;
+                              }) => (
+                                <div className={`flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 border-b ${divider}`}>
+                                  <span className={`text-xs ${textMuted} flex items-center gap-2 flex-wrap`}>
+                                    {label}
+                                    <span className="flex gap-1">
+                                      {presets.map(p => {
+                                        const active = parseRatePercent(rate) === p;
+                                        return (
+                                          <button
+                                            key={p}
+                                            type="button"
+                                            onClick={() => onRate(String(p))}
+                                            title={presetTitle(p)}
+                                            className={`px-2 py-1 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer ${active
+                                              ? "bg-[#9E217B] border-[#9E217B] text-white"
+                                              : `${textMuted} ${isDark ? "border-[#2A2A35]" : "border-[#9CA3AF]"} hover:border-[#9E217B]/50`
+                                              }`}
+                                          >
+                                            {p}%
+                                          </button>
+                                        );
+                                      })}
+                                    </span>
+                                    <span className="relative">
+                                      <input
+                                        type="number"
+                                        inputMode="decimal"
+                                        min={0}
+                                        max={100}
+                                        step={step}
+                                        value={rate}
+                                        onChange={e => onRate(e.target.value)}
+                                        placeholder={placeholder}
+                                        aria-label={ariaLabel}
+                                        className={`w-16 rounded-md pl-1.5 pr-4 py-0.5 text-xs outline-none border ${isDark ? "bg-[#14141B] border-[#2A2A35] text-white" : "bg-white border-[#9CA3AF] text-[#1A1A1A]"}`}
+                                      />
+                                      <span className={`absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] pointer-events-none ${textMuted}`}>%</span>
+                                    </span>
+                                    {capped && capLabel && (
+                                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border text-amber-500 border-amber-500/30 bg-amber-500/10">{capLabel}</span>
+                                    )}
+                                    {prefilled && (
+                                      <span className={`text-[10px] ${textMuted}`}>Prefilled from Loan Form — you can edit</span>
+                                    )}
+                                  </span>
+                                  <span className={`text-sm font-semibold ${textMain}`}>{formatINR(value)}</span>
+                                </div>
+                              );
                               return (
                                 <div className={`rounded-xl border overflow-hidden ${isDark ? "bg-[#121218] border-[#2A2A35]" : "bg-white border-[#E5E7EB]"}`}>
                                   {/* Agreement Value drives GST, stamp duty, registration fee, total
@@ -2078,8 +2195,35 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                                     </span>
                                     <span className={`text-sm font-semibold ${textMain}`}>{formatINR(cost.gstAmount)}</span>
                                   </div>
-                                  <Row label="+ Stamp Duty" value={cost.stampDuty} hint="(5% est.)" />
-                                  <Row label="+ Registration Fee" value={cost.registrationFee} hint="(1% est., cap ₹30K)" />
+                                  {/* Stamp Duty and Registration Fee use the same control as GST
+                                      above: preset buttons for the rates actually used, plus free
+                                      numeric entry for anything else. The rate is what's stored;
+                                      the rupee figure is derived and updates as you type. */}
+                                  <RateRow
+                                    label="+ Stamp Duty"
+                                    presets={STAMP_DUTY_RATE_PRESETS}
+                                    presetTitle={p => p === 4 ? "4% — female sole/co-owner concession" : p === 5 ? "5% — standard Maharashtra urban" : "6% — Mumbai / metro (incl. 1% metro cess)"}
+                                    rate={form.stamp_duty_rate}
+                                    onRate={v => set("stamp_duty_rate", v)}
+                                    ariaLabel="Stamp duty rate percentage"
+                                    placeholder="5"
+                                    value={cost.stampDuty}
+                                    prefilled={!!loanPrefilled.stamp_duty_rate}
+                                  />
+                                  <RateRow
+                                    label="+ Registration Fee"
+                                    presets={REGISTRATION_FEE_RATE_PRESETS}
+                                    presetTitle={p => p === 0.5 ? "0.5% (capped at ₹30,000)" : "1% (capped at ₹30,000)"}
+                                    rate={form.registration_fee_rate}
+                                    onRate={v => set("registration_fee_rate", v)}
+                                    ariaLabel="Registration fee rate percentage"
+                                    placeholder="1"
+                                    step={0.1}
+                                    value={cost.registrationFee}
+                                    prefilled={!!loanPrefilled.registration_fee_rate}
+                                    capped={isRegistrationFeeCapped(cost.agreementValue, cost.registrationFeeRate)}
+                                    capLabel="Capped at ₹30,000"
+                                  />
                                   <div className={`flex items-center justify-between px-4 py-2 border-b ${divider}`}>
                                     <span className={`text-xs ${textMuted}`}>+ Legal Charges</span>
                                     <IndianCurrencyInput value={form.legal_charges} onChange={val => set("legal_charges", val)} placeholder="0" className={`${inputCls} text-xs py-1.5 w-40 text-right`} />

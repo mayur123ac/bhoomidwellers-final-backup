@@ -8,6 +8,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { requireRoles } from "@/lib/serverAuth";
 import { requestContext, writeAuditLog } from "@/lib/auditLog";
 import {
@@ -47,9 +48,11 @@ export async function GET() {
                  AND u.bucket_start >= NOW() - INTERVAL '24 hours'
             ), 0)::int AS calls_24h
        FROM api_keys k
-       LEFT JOIN users c ON c.id = k.created_by
-       LEFT JOIN users r ON r.id = k.revoked_by
-      ORDER BY k.revoked_at IS NOT NULL, k.created_at DESC`
+       LEFT JOIN users c ON c.id = k.created_by AND c.organization_id = k.organization_id
+       LEFT JOIN users r ON r.id = k.revoked_by AND r.organization_id = k.organization_id
+      WHERE k.organization_id = $1
+      ORDER BY k.revoked_at IS NOT NULL, k.created_at DESC`,
+    [await getOrganizationId()]
   );
 
   return NextResponse.json({
@@ -130,8 +133,8 @@ export async function POST(req: NextRequest) {
   const inserted = await query<{ id: number; key_prefix: string; created_at: string }>(
     `INSERT INTO api_keys
        (name, key_prefix, key_hash, scopes, rate_limit_per_min, ip_whitelist,
-        created_by, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        created_by, expires_at, organization_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      RETURNING id, key_prefix, created_at`,
     [
       name,
@@ -142,6 +145,7 @@ export async function POST(req: NextRequest) {
       ipWhitelist,
       gate.userId,
       expiresAt,
+      await getOrganizationId(),
     ]
   );
 

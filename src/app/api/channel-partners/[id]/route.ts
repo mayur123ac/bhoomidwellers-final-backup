@@ -1,6 +1,7 @@
 // api/channel-partners/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { getServerSession } from "@/lib/serverAuth";
 import {
   canViewPartners,
@@ -81,7 +82,8 @@ export async function GET(
               sm.email           AS assigned_sourcing_manager_email,
               sm.whatsapp_number AS assigned_sourcing_manager_phone,
               sm.is_active       AS assigned_sourcing_manager_active,
-              (SELECT COUNT(*) FROM walkin_enquiries w WHERE w.channel_partner_id = cp.id) AS lead_count,
+              (SELECT COUNT(*) FROM walkin_enquiries w
+                WHERE w.channel_partner_id = cp.id AND w.organization_id = cp.organization_id) AS lead_count,
               (SELECT COUNT(*) FROM booking_applications b WHERE b.sourced_by_channel_partner_id = cp.id) AS booking_count
          FROM channel_partners cp
          LEFT JOIN users sm ON sm.id = cp.assigned_sourcing_manager_id
@@ -262,9 +264,12 @@ export async function PATCH(
     values.push(updatedBy);
     sets.push(`updated_by = $${values.length}`);
     values.push(Number(id));
+    // id comes from the URL, so the organization is part of the predicate: a
+    // partner in another organization matches 0 rows and 404s below.
+    values.push(await getOrganizationId());
 
     const rows = await query(
-      `UPDATE channel_partners SET ${sets.join(", ")} WHERE id = $${values.length} RETURNING *`,
+      `UPDATE channel_partners SET ${sets.join(", ")} WHERE id = $${values.length - 1} AND organization_id = $${values.length} RETURNING *`,
       values
     );
 
@@ -307,11 +312,13 @@ export async function DELETE(
   try {
     const [refs] = await query(
       `SELECT
-         (SELECT COUNT(*) FROM walkin_enquiries    WHERE channel_partner_id = $1)            AS lead_count,
-         (SELECT COUNT(*) FROM booking_applications WHERE sourced_by_channel_partner_id = $1) AS booking_count,
-         (SELECT COUNT(*) FROM cp_commissions      WHERE channel_partner_id = $1)            AS commission_count,
-         (SELECT name FROM channel_partners        WHERE id = $1)                            AS name`,
-      [cpId]
+         -- Every reference count is organization-scoped: the delete guard must
+         -- not be satisfied (or blocked) by another builder's rows.
+         (SELECT COUNT(*) FROM walkin_enquiries    WHERE channel_partner_id = $1 AND organization_id = $2) AS lead_count,
+         (SELECT COUNT(*) FROM booking_applications WHERE sourced_by_channel_partner_id = $1 AND organization_id = $2) AS booking_count,
+         (SELECT COUNT(*) FROM cp_commissions      WHERE channel_partner_id = $1 AND organization_id = $2) AS commission_count,
+         (SELECT name FROM channel_partners        WHERE id = $1 AND organization_id = $2)                 AS name`,
+      [cpId, await getOrganizationId()]
     );
 
     if (!refs?.name) {
@@ -342,7 +349,7 @@ export async function DELETE(
       );
     }
 
-    await query(`DELETE FROM channel_partners WHERE id = $1`, [cpId]);
+    await query(`DELETE FROM channel_partners WHERE id = $1 AND organization_id = $2`, [cpId, await getOrganizationId()]);
     return NextResponse.json(
       { success: true, message: `"${refs.name}" deleted.` },
       { status: 200 }

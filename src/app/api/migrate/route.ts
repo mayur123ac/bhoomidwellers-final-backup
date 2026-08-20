@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { requireRoles } from "@/lib/serverAuth";
 
 export async function GET() {
@@ -40,20 +41,9 @@ export async function GET() {
       )
     `);
 
-    // 3. Employee Attendance (Daily records)
-    await query(`
-      CREATE TABLE IF NOT EXISTS employee_attendance (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        date DATE NOT NULL,
-        first_login TIMESTAMP WITH TIME ZONE,
-        last_logout TIMESTAMP WITH TIME ZONE,
-        total_active_minutes INTEGER DEFAULT 0,
-        status VARCHAR(50) DEFAULT 'Present',
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE (user_id, date)
-      )
-    `);
+    // 3. (removed, MT-03) `CREATE TABLE IF NOT EXISTS employee_attendance` used to
+    //    live here. Attendance is `attendance_records` now, and leaving this in
+    //    place would silently recreate the dropped table on the next admin call.
 
     // 4. Update walkin_enquiries for new Lead Lifecycle and Tracking fields
     await query(`
@@ -66,16 +56,8 @@ export async function GET() {
       ADD COLUMN IF NOT EXISTS referral_info JSONB DEFAULT '{}'::jsonb;
     `);
 
-    // 5. Update leads for new Lead Lifecycle and Tracking fields
-    await query(`
-      ALTER TABLE leads
-      ADD COLUMN IF NOT EXISTS assigned_at TIMESTAMP WITH TIME ZONE,
-      ADD COLUMN IF NOT EXISTS first_contact_at TIMESTAMP WITH TIME ZONE,
-      ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMP WITH TIME ZONE,
-      ADD COLUMN IF NOT EXISTS site_visit_history JSONB DEFAULT '[]'::jsonb,
-      ADD COLUMN IF NOT EXISTS loan_tracking_info JSONB DEFAULT '{}'::jsonb,
-      ADD COLUMN IF NOT EXISTS referral_info JSONB DEFAULT '{}'::jsonb;
-    `);
+    // 5. (removed, MT-03) the matching `ALTER TABLE leads` block used to live here.
+    //    `leads` is empty, superseded by `walkin_enquiries`, and slated for DROP.
 
     // 6. Create Audit Logs for Lead Assignments
     await query(`
@@ -100,17 +82,18 @@ export async function GET() {
     `);
 
     // 7. Update existing status from Routed to Assigned
+    //
+    // Admin-gated backfill helper, but still organization-scoped: it must not
+    // rewrite another builder's rows. The status test is PARENTHESISED first —
+    // written flat, SQL binds A OR B AND org as A OR (B AND org), so the
+    // 'Routed' branch would have updated every organization.
+    const migrateOrgId = await getOrganizationId();
     await query(`
       UPDATE walkin_enquiries
       SET status = 'Assigned'
-      WHERE status = 'Routed' OR status = 'ROUTED'
-    `);
-
-    await query(`
-      UPDATE leads
-      SET status = 'Assigned'
-      WHERE status = 'Routed' OR status = 'ROUTED'
-    `);
+      WHERE (status = 'Routed' OR status = 'ROUTED')
+        AND organization_id = $1
+    `, [migrateOrgId]);
 
     await query(`
       UPDATE walkin_enquiries
@@ -118,15 +101,11 @@ export async function GET() {
       WHERE assigned_at IS NULL
         AND assigned_to IS NOT NULL
         AND assigned_to <> ''
-    `);
+        AND organization_id = $1
+    `, [migrateOrgId]);
 
-    await query(`
-      UPDATE leads
-      SET assigned_at = COALESCE(assigned_at, created_at, NOW())
-      WHERE assigned_at IS NULL
-        AND assign_manager IS NOT NULL
-        AND assign_manager <> ''
-    `);
+    // (removed, MT-03) the two `UPDATE leads` backfills that used to follow the
+    // walkin_enquiries ones are gone with the table.
 
     return NextResponse.json({ message: "Migration successful!" }, { status: 200 });
   } catch (error: any) {

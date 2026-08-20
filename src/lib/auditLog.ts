@@ -12,6 +12,7 @@
 // screen unions all three for display, which is what fetchActivityFeed does.
 
 import { query } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 
 export interface AuditEntry {
   userId: number | null;
@@ -145,7 +146,28 @@ export async function fetchActivityFeed(
   const to = filters.to || new Date(Date.now() + 24 * 3600 * 1000).toISOString();
   const userId = filters.userId ?? null;
   const action = filters.action || null;
+  const orgId = await getOrganizationId();
 
+  // ── Tenant scoping of a three-way UNION (MT-05) ───────────────────────────
+  //
+  // The three sources do not carry tenancy the same way, so they are not scoped
+  // the same way:
+  //
+  //   employee_activity_logs  has its own organization_id (MT-04 stamped it), so
+  //                           it is filtered on that column directly.
+  //   audit_logs
+  //   admin_audit_logs        are Category D SYSTEM/AUDIT tables and were left
+  //                           global by MT-03, so they have no organization_id to
+  //                           filter on. Tenancy is derived from the ACTOR: the
+  //                           users row is the authoritative server-side answer to
+  //                           which organization a person belongs to.
+  //
+  // The actor joins are therefore INNER, not LEFT. A row whose actor is NULL —
+  // a system-generated audit entry — cannot be attributed to any organization,
+  // and its `new_value` can quote another tenant's data verbatim. Showing it to
+  // every tenant would be a leak, so it is excluded: this fails closed. The
+  // durable fix is to stamp organization_id onto audit_logs, which is schema work
+  // and deliberately not done here.
   const unioned = `
     SELECT 'audit'::text AS source, a.id, a.user_id,
            COALESCE(a.actor_name, u.name) AS actor_name,
@@ -156,7 +178,7 @@ export async function fetchActivityFeed(
            )), '') AS details,
            a.ip_address, a.user_agent, a.created_at
     FROM audit_logs a
-    LEFT JOIN users u ON u.id = a.user_id
+    JOIN users u ON u.id = a.user_id AND u.organization_id = $1
 
     UNION ALL
 
@@ -165,32 +187,38 @@ export async function fetchActivityFeed(
            NULLIF(TRIM(CONCAT_WS(' — ', e.module, e.description, e.lead_name)), '') AS details,
            NULL, NULL, e.created_at
     FROM employee_activity_logs e
-    LEFT JOIN users u ON u.id = e.user_id
+    LEFT JOIN users u ON u.id = e.user_id AND u.organization_id = $1
+    WHERE e.organization_id = $1
 
     UNION ALL
 
     SELECT 'admin'::text, l.id, l.admin_id, u.name,
            'admin.action', l.action, NULL, NULL, l.created_at
     FROM admin_audit_logs l
-    LEFT JOIN users u ON u.id = l.admin_id
+    JOIN users u ON u.id = l.admin_id AND u.organization_id = $1
   `;
 
+  // $1 is the organization and is consumed INSIDE the union, so the tenant filter
+  // is applied per branch before the branches are combined — never afterwards on
+  // the merged result, and never after LIMIT/OFFSET.
   const where = `
-    WHERE created_at >= $1::timestamptz
-      AND created_at <= $2::timestamptz
-      AND ($3::int  IS NULL OR user_id = $3::int)
-      AND ($4::text IS NULL OR action ILIKE '%' || $4::text || '%')
+    WHERE created_at >= $2::timestamptz
+      AND created_at <= $3::timestamptz
+      AND ($4::int  IS NULL OR user_id = $4::int)
+      AND ($5::text IS NULL OR action ILIKE '%' || $5::text || '%')
   `;
 
-  const params = [from, to, userId, action];
+  const params = [orgId, from, to, userId, action];
 
   const rows = await query<ActivityRow>(
     `SELECT * FROM (${unioned}) feed ${where}
      ORDER BY created_at DESC
-     LIMIT $5 OFFSET $6`,
+     LIMIT $6 OFFSET $7`,
     [...params, limit, offset]
   );
 
+  // The count reuses the same union and the same where, so the total can never
+  // disagree with the page about which tenant's rows exist.
   const totalRows = await query<{ count: string }>(
     `SELECT COUNT(*)::text AS count FROM (${unioned}) feed ${where}`,
     params

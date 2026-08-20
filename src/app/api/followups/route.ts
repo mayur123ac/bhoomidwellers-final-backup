@@ -1,6 +1,7 @@
 ﻿// app/api/followups/route.ts
 import { NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { jsonCompressed } from "@/lib/apiResponse";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 
@@ -90,8 +91,8 @@ async function handleInternalMessage(
   }
 
   const leadRows = await query<any>(
-    `SELECT id, name, assigned_to, assigned_receptionist FROM walkin_enquiries WHERE id = $1`,
-    [leadId]
+    `SELECT id, name, assigned_to, assigned_receptionist FROM walkin_enquiries WHERE id = $1 AND organization_id = $2`,
+    [leadId, await getOrganizationId()]
   );
   if (leadRows.length === 0) {
     return NextResponse.json({ success: false, message: "Lead not found" }, { status: 404 });
@@ -130,11 +131,16 @@ async function handleInternalMessage(
     }
 
     const smRows = await query<{ id: number; name: string }>(
+      // Resolving a person by NAME, which is not unique — and across tenants it is
+      // very much not unique. The organization predicate is inside the WHERE, ahead
+      // of ORDER BY/LIMIT 1, so a same-named manager in another tenant cannot win
+      // the pick and receive this lead's internal message.
       `SELECT id, name FROM users
         WHERE LOWER(TRIM(name)) = LOWER(TRIM($1))
+          AND organization_id = $2
           AND is_active = true
         ORDER BY id LIMIT 1`,
-      [lead.assigned_to]
+      [lead.assigned_to, await getOrganizationId()]
     );
     // No usable recipient means no one would ever be notified — better to refuse
     // than to write a message addressed to nobody.
@@ -153,10 +159,11 @@ async function handleInternalMessage(
     const rows = await query<any>(
       `INSERT INTO follow_ups
          (lead_id, message, created_by_name, created_by_role,
-          follow_up_type, sent_to_role, sent_to_user_id, read_at)
-       VALUES ($1, $2, $3, 'receptionist', 'internal_message', 'sales_manager', $4, NULL)
+          follow_up_type, sent_to_role, sent_to_user_id, read_at,
+          organization_id)
+       VALUES ($1, $2, $3, 'receptionist', 'internal_message', 'sales_manager', $4, NULL, $5)
        RETURNING id, created_at`,
-      [leadId, text, actorName, sm.id]
+      [leadId, text, actorName, sm.id, await getOrganizationId()]
     );
 
     return NextResponse.json(
@@ -190,8 +197,9 @@ async function handleInternalMessage(
   const parentRows = await query<any>(
     `SELECT id, sent_to_user_id, created_by_name
        FROM follow_ups
-      WHERE id = $1 AND lead_id = $2 AND follow_up_type = 'internal_message'`,
-    [parentId, leadId]
+      WHERE id = $1 AND lead_id = $2 AND follow_up_type = 'internal_message'
+        AND organization_id = $3`,
+    [parentId, leadId, await getOrganizationId()]
   );
   if (parentRows.length === 0) {
     return NextResponse.json(
@@ -213,18 +221,21 @@ async function handleInternalMessage(
   }
 
   const inserted = await transaction(async (client) => {
+    // MT-05: resolved once per transaction, on this client.
+    const orgId = await getOrganizationId(client);
     const r = await client.query(
       `INSERT INTO follow_ups
          (lead_id, message, created_by_name, created_by_role,
-          follow_up_type, parent_follow_up_id)
-       VALUES ($1, $2, $3, 'sales_manager', 'sm_reply', $4)
+          follow_up_type, parent_follow_up_id,
+          organization_id)
+       VALUES ($1, $2, $3, 'sales_manager', 'sm_reply', $4, $5)
        RETURNING id, created_at`,
-      [leadId, text, actorName, parentId]
+      [leadId, text, actorName, parentId, orgId]
     );
     // Replying is reading — the badge must not keep claiming it is unread.
     await client.query(
-      `UPDATE follow_ups SET read_at = NOW() WHERE id = $1 AND read_at IS NULL`,
-      [parentId]
+      `UPDATE follow_ups SET read_at = NOW() WHERE id = $1 AND read_at IS NULL AND organization_id = $2`,
+      [parentId, orgId]
     );
     return r.rows[0];
   });
@@ -250,12 +261,16 @@ export async function GET(req: Request) {
 
     const leadId = new URL(req.url).searchParams.get("lead_id");
 
+    // Both branches are organization-scoped. The second branch is "every
+    // follow-up note for every lead" — unscoped it returns the entire table
+    // across every organization, which is the single largest leak in this route.
+    const orgId = await getOrganizationId();
     const data = leadId
       ? await query(
-          `${SELECT_COLUMNS} WHERE lead_id = $1 ORDER BY created_at ASC`,
-          [leadId]
+          `${SELECT_COLUMNS} WHERE lead_id = $1 AND organization_id = $2 ORDER BY created_at ASC`,
+          [leadId, orgId]
         )
-      : await query(`${SELECT_COLUMNS} ORDER BY created_at ASC`);
+      : await query(`${SELECT_COLUMNS} WHERE organization_id = $1 ORDER BY created_at ASC`, [orgId]);
 
     // Compressed: this is the single largest response the app produces.
     return jsonCompressed(req, { success: true, data }, { status: 200 });
@@ -304,8 +319,8 @@ export async function POST(req: Request) {
     // /api/site-visits all still refuse, and the Salesform/Loan buttons stay
     // hidden behind isLeadLocked in the UI.
     const leadRows = await query(
-      `SELECT id FROM walkin_enquiries WHERE id = $1`,
-      [leadId]
+      `SELECT id FROM walkin_enquiries WHERE id = $1 AND organization_id = $2`,
+      [leadId, await getOrganizationId()]
     );
     if (leadRows.length === 0) {
       return NextResponse.json(
@@ -315,14 +330,15 @@ export async function POST(req: Request) {
     }
 
     const rows = await query(
-      `INSERT INTO follow_ups (lead_id, message, created_by_name, site_visit_date)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO follow_ups (lead_id, message, created_by_name, site_visit_date, organization_id)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
       [
         String(leadId),
         message,
         salesManagerName || createdBy || "sales",
         siteVisitDate || null,
+        await getOrganizationId(),
       ]
     );
 

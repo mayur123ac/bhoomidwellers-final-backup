@@ -39,8 +39,11 @@ export async function seedPddChecklist(
 
   for (const doc of STANDARD_PDD_DOCS) {
     await query(
-      `INSERT INTO loan_pdd_tracking (booking_id, loan_application_id, document_name, required_by_date)
-       VALUES ($1, $2, $3, $4)`,
+      // Organization inherited from the booking in SQL, so a PDD row can never
+      // belong to a different tenant than the booking it tracks.
+      `INSERT INTO loan_pdd_tracking (booking_id, loan_application_id, document_name, required_by_date, organization_id)
+       VALUES ($1, $2, $3, $4,
+               (SELECT organization_id FROM booking_applications WHERE id = $1))`,
       [bookingId, loanApplicationId, doc, dueStr],
     );
   }

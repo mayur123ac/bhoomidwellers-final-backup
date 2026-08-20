@@ -40,6 +40,19 @@ type RoleType = { _id: string; name: string };
 type EmployeeType = {
   _id: string; name: string; username: string;
   email: string; role: string; isActive: boolean; password?: string;
+  organization_id?: string;
+};
+
+/**
+ * The one-time credential handed back by POST /api/employees.
+ *
+ * Held in component state only, for as long as the confirmation is on screen.
+ * Never written to localStorage, sessionStorage, a cookie or a log — see the
+ * note on the API route for why the plaintext exists at all and when it goes.
+ */
+type CreatedEmployee = {
+  _id: string; name: string; email: string; role: string;
+  organization_id?: string; password?: string;
 };
 
 // ─── Sun / Moon Icons ─────────────────────────────────────────────────────────
@@ -279,6 +292,8 @@ export default function EmployeesPage() {
   const [dbRoles, setDbRoles] = useState<RoleType[]>([]);
   const [employees, setEmployees] = useState<EmployeeType[]>([]);
   const [newRoleInput, setNewRoleInput] = useState("");
+  // In-memory only, and only until the Admin dismisses the confirmation.
+  const [justCreated, setJustCreated] = useState<CreatedEmployee | null>(null);
   const [revealedPasswords, setRevealedPasswords] = useState<Record<string, boolean>>({});
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<EmployeeType>>({});
@@ -583,6 +598,9 @@ export default function EmployeesPage() {
       });
       const d = await r.json();
       if (r.ok) {
+        // Shown once, in memory, so the Admin can pass the credential on. Cleared
+        // by dismissing the notice; nothing persists it.
+        setJustCreated(d?.employee ?? null);
         setEmpName(""); setEmail(""); setPassword(""); setRole("");
         fetchEmployees();
       } else {
@@ -1359,6 +1377,40 @@ export default function EmployeesPage() {
                   <div className={`w-1 h-5 ${t.dividerBar} rounded-full`} />
                   Create & Assign Role to Employee
                 </h2>
+                {justCreated && (
+                  <div
+                    className={`mb-5 rounded-lg p-4 text-sm ${t.text}`}
+                    style={{ border: "1px solid rgba(16,185,129,0.4)", background: isDark ? "rgba(16,185,129,0.08)" : "rgba(16,185,129,0.06)" }}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <p className="font-semibold">Employee created</p>
+                        <p className={t.textMuted}>
+                          {justCreated.name} &middot; {justCreated.email} &middot; {justCreated.role}
+                        </p>
+                        <p className={`font-mono text-xs ${t.textMuted}`}>
+                          Organization: {justCreated.organization_id ?? "—"}
+                        </p>
+                        {justCreated.password && (
+                          <p className="font-mono text-xs">
+                            Password: <span className="font-semibold">{justCreated.password}</span>
+                          </p>
+                        )}
+                        <p className={`text-xs ${t.textMuted}`}>
+                          Shown once. Share it with the employee now — it is not stored in this screen
+                          and cannot be retrieved again from here.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setJustCreated(null)}
+                        className={`text-xs underline shrink-0 ${t.textMuted}`}
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <form onSubmit={handleAddEmployee} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
                   <div>
                     <label className={`block text-xs mb-1.5 font-medium ${t.textMuted}`}>Full Name</label>
@@ -1769,12 +1821,12 @@ export default function EmployeesPage() {
                       <div className="space-y-3 text-sm">
                         <div className="flex justify-between items-start">
                           <div className="w-full">
-                            <InlineContactField label="Contact No." value={selectedLead.contact_no} fieldType="tel" isDark={isDark} theme={{ text: t.textLight, textFaint: t.textFaint, inputInner: t.inp, inputFocus: "focus:border-[#d946a8]" }} canEdit={user?.role === "Admin" || user?.role === "Caller"} mono onSave={async (val) => { const r = await contactFieldSave(selectedLead._id, "phone", val, "leads"); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, contact_no: val })); showToast("Contact details updated successfully."); }} />
+                            <InlineContactField label="Contact No." value={selectedLead.contact_no} fieldType="tel" isDark={isDark} theme={{ text: t.textLight, textFaint: t.textFaint, inputInner: t.inp, inputFocus: "focus:border-[#d946a8]" }} canEdit={user?.role === "Admin" || user?.role === "Caller"} mono onSave={async (val) => { const r = await contactFieldSave(selectedLead._id, "phone", val, "caller_leads"); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, contact_no: val })); showToast("Contact details updated successfully."); }} />
                           </div>
                         </div>
                         <div className="flex justify-between items-start">
                           <div className="w-full">
-                            <InlineContactField label="Email" value={selectedLead.email} fieldType="email" isDark={isDark} theme={{ text: t.textLight, textFaint: t.textFaint, inputInner: t.inp, inputFocus: "focus:border-[#d946a8]" }} canEdit={user?.role === "Admin" || user?.role === "Caller"} onSave={async (val) => { const r = await contactFieldSave(selectedLead._id, "email", val, "leads"); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, email: val || "N/A" })); showToast("Contact details updated successfully."); }} />
+                            <InlineContactField label="Email" value={selectedLead.email} fieldType="email" isDark={isDark} theme={{ text: t.textLight, textFaint: t.textFaint, inputInner: t.inp, inputFocus: "focus:border-[#d946a8]" }} canEdit={user?.role === "Admin" || user?.role === "Caller"} onSave={async (val) => { const r = await contactFieldSave(selectedLead._id, "email", val, "caller_leads"); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, email: val || "N/A" })); showToast("Contact details updated successfully."); }} />
                           </div>
                         </div>
                         {[
@@ -1789,7 +1841,7 @@ export default function EmployeesPage() {
                         ) : null)}
                         <div className="flex justify-between items-start">
                           <div className="w-full">
-                            <InlineContactField label="Location" value={selectedLead.location} fieldType="text" isDark={isDark} theme={{ text: t.textLight, textFaint: t.textFaint, inputInner: t.inp, inputFocus: "focus:border-[#d946a8]" }} canEdit={user?.role === "Admin" || user?.role === "Caller"} onSave={async (val) => { const r = await contactFieldSave(selectedLead._id, "location", val, "leads"); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, location: val || "N/A" })); showToast("Contact details updated successfully."); }} />
+                            <InlineContactField label="Location" value={selectedLead.location} fieldType="text" isDark={isDark} theme={{ text: t.textLight, textFaint: t.textFaint, inputInner: t.inp, inputFocus: "focus:border-[#d946a8]" }} canEdit={user?.role === "Admin" || user?.role === "Caller"} onSave={async (val) => { const r = await contactFieldSave(selectedLead._id, "location", val, "caller_leads"); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, location: val || "N/A" })); showToast("Contact details updated successfully."); }} />
                           </div>
                         </div>
                         {[
@@ -2839,17 +2891,17 @@ function CallerControlMode({ leads, savedLeads, setSavedLeads, adminName, onExit
                     <div className="space-y-3 text-sm">
                       <div className="flex justify-between items-start">
                         <div className="w-full">
-                          <InlineContactField label="Phone" value={sl.contact_no || sl.phone} fieldType="tel" isDark={true} theme={{ text: "text-white", textFaint: "text-gray-500", inputInner: "bg-[#0f0f0f] border border-gray-700", inputFocus: "focus:border-orange-400" }} canEdit={true} mono onSave={async (val) => { const r = await contactFieldSave(sl.id, "phone", val, "leads"); if (!r.success) throw new Error(r.message); setSavedLeads(prev => prev.map(l => l.id === sl.id ? { ...l, contact_no: val, phone: val } : l)); }} />
+                          <InlineContactField label="Phone" value={sl.contact_no || sl.phone} fieldType="tel" isDark={true} theme={{ text: "text-white", textFaint: "text-gray-500", inputInner: "bg-[#0f0f0f] border border-gray-700", inputFocus: "focus:border-orange-400" }} canEdit={true} mono onSave={async (val) => { const r = await contactFieldSave(sl.id, "phone", val, "caller_leads"); if (!r.success) throw new Error(r.message); setSavedLeads(prev => prev.map(l => l.id === sl.id ? { ...l, contact_no: val, phone: val } : l)); }} />
                         </div>
                       </div>
                       <div className="flex justify-between items-start">
                         <div className="w-full">
-                          <InlineContactField label="Alt Phone" value={sl.alt_phone || sl.altPhone} fieldType="tel" isDark={true} theme={{ text: "text-white", textFaint: "text-gray-500", inputInner: "bg-[#0f0f0f] border border-gray-700", inputFocus: "focus:border-orange-400" }} canEdit={true} mono onSave={async (val) => { const r = await contactFieldSave(sl.id, "alt_phone", val, "leads"); if (!r.success) throw new Error(r.message); setSavedLeads(prev => prev.map(l => l.id === sl.id ? { ...l, alt_phone: val, altPhone: val } : l)); }} />
+                          {/* MT-03: Alt Phone editor removed — `alt_phone` exists on neither `caller_leads` nor the dead `leads` table, so it could never be saved on a caller lead. */}
                         </div>
                       </div>
                       <div className="flex justify-between items-start">
                         <div className="w-full">
-                          <InlineContactField label="Email" value={sl.email} fieldType="email" isDark={true} theme={{ text: "text-white", textFaint: "text-gray-500", inputInner: "bg-[#0f0f0f] border border-gray-700", inputFocus: "focus:border-orange-400" }} canEdit={true} onSave={async (val) => { const r = await contactFieldSave(sl.id, "email", val, "leads"); if (!r.success) throw new Error(r.message); setSavedLeads(prev => prev.map(l => l.id === sl.id ? { ...l, email: val || "N/A" } : l)); }} />
+                          <InlineContactField label="Email" value={sl.email} fieldType="email" isDark={true} theme={{ text: "text-white", textFaint: "text-gray-500", inputInner: "bg-[#0f0f0f] border border-gray-700", inputFocus: "focus:border-orange-400" }} canEdit={true} onSave={async (val) => { const r = await contactFieldSave(sl.id, "email", val, "caller_leads"); if (!r.success) throw new Error(r.message); setSavedLeads(prev => prev.map(l => l.id === sl.id ? { ...l, email: val || "N/A" } : l)); }} />
                         </div>
                       </div>
                       {[
@@ -2864,7 +2916,7 @@ function CallerControlMode({ leads, savedLeads, setSavedLeads, adminName, onExit
                       ) : null)}
                       <div className="flex justify-between items-start">
                         <div className="w-full">
-                          <InlineContactField label="Location" value={sl.location} fieldType="text" isDark={true} theme={{ text: "text-white", textFaint: "text-gray-500", inputInner: "bg-[#0f0f0f] border border-gray-700", inputFocus: "focus:border-orange-400" }} canEdit={true} onSave={async (val) => { const r = await contactFieldSave(sl.id, "location", val, "leads"); if (!r.success) throw new Error(r.message); setSavedLeads(prev => prev.map(l => l.id === sl.id ? { ...l, location: val || "N/A" } : l)); }} />
+                          <InlineContactField label="Location" value={sl.location} fieldType="text" isDark={true} theme={{ text: "text-white", textFaint: "text-gray-500", inputInner: "bg-[#0f0f0f] border border-gray-700", inputFocus: "focus:border-orange-400" }} canEdit={true} onSave={async (val) => { const r = await contactFieldSave(sl.id, "location", val, "caller_leads"); if (!r.success) throw new Error(r.message); setSavedLeads(prev => prev.map(l => l.id === sl.id ? { ...l, location: val || "N/A" } : l)); }} />
                         </div>
                       </div>
                       {[

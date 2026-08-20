@@ -174,9 +174,12 @@ export async function issueDeviceConfirmLinks(params: {
     const expires = new Date(Date.now() + DEVICE_CONFIRM_TTL_HOURS * 3600_000).toISOString();
 
     const updated = await query<{ id: number }>(
+      // Minted during login, before any session exists. The organization comes
+      // from the users row in-statement; see checkAndRecordDevice for the rationale.
       `UPDATE known_login_devices
           SET confirm_token_hash = $3, confirm_expires_at = $4
         WHERE user_id = $1 AND device_hash = $2
+          AND organization_id = (SELECT organization_id FROM users WHERE id = $1)
         RETURNING id`,
       [params.userId, params.deviceHash, hashToken(token), expires]
     );
@@ -217,10 +220,16 @@ export async function respondToDevicePrompt(params: {
     device_label: string;
     confirm_token_hash: string | null;
     confirm_expires_at: string | null;
+    organization_id: string | null;
   }>(
-    `SELECT id, device_label, confirm_token_hash, confirm_expires_at
+    // Reached from an emailed link, so there is no session here either — and
+    // params.userId arrives in the URL. It is not trusted for authorization (the
+    // single-use token below is what authorizes), and it is not trusted as a tenant
+    // claim either: the organization is read from the users row server-side.
+    `SELECT id, device_label, confirm_token_hash, confirm_expires_at, organization_id
        FROM known_login_devices
-      WHERE user_id = $1 AND confirm_token_hash IS NOT NULL`,
+      WHERE user_id = $1 AND confirm_token_hash IS NOT NULL
+        AND organization_id = (SELECT organization_id FROM users WHERE id = $1)`,
     [params.userId]
   );
 
@@ -239,8 +248,9 @@ export async function respondToDevicePrompt(params: {
 
   if (match.confirm_expires_at && new Date(match.confirm_expires_at).getTime() <= Date.now()) {
     await query(
-      `UPDATE known_login_devices SET confirm_token_hash = NULL, confirm_expires_at = NULL WHERE id = $1`,
-      [match.id]
+      `UPDATE known_login_devices SET confirm_token_hash = NULL, confirm_expires_at = NULL
+        WHERE id = $1 AND organization_id = $2`,
+      [match.id, match.organization_id]
     );
     return { ok: false, message: "This link has expired." };
   }
@@ -249,8 +259,8 @@ export async function respondToDevicePrompt(params: {
     `UPDATE known_login_devices
         SET trusted = $2, trust_responded_at = NOW(),
             confirm_token_hash = NULL, confirm_expires_at = NULL
-      WHERE id = $1`,
-    [match.id, params.action === "confirm"]
+      WHERE id = $1 AND organization_id = $3`,
+    [match.id, params.action === "confirm", match.organization_id]
   );
 
   let sessionsEnded = 0;
@@ -264,9 +274,9 @@ export async function respondToDevicePrompt(params: {
     const ended = await query<{ id: number }>(
       `UPDATE employee_sessions
           SET is_active = false, session_end = NOW(), session_end_reason = 'device_not_recognised'
-        WHERE user_id = $1 AND is_active = true
+        WHERE user_id = $1 AND is_active = true AND organization_id = $2
         RETURNING id`,
-      [params.userId]
+      [params.userId, match.organization_id]
     );
     sessionsEnded = ended.length;
   }

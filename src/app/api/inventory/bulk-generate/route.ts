@@ -5,6 +5,7 @@
 // batch) are skipped and reported, the rest are inserted. source = 'bulk_generated'.
 import { NextRequest, NextResponse } from "next/server";
 import { transaction } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 import { resolveHierarchy } from "@/lib/inventoryHierarchy";
 
@@ -42,6 +43,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: `Too many units (${units.length}). Max ${MAX_UNITS} per batch.` }, { status: 400 });
 
     const result = await transaction(async (client) => {
+      // MT-05: resolved ONCE, outside the generation loop below — not per unit.
+      const orgId = await getOrganizationId(client);
       let created = 0;
       const skipped: { flat_no: string; reason: string }[] = [];
 
@@ -77,8 +80,9 @@ export async function POST(req: NextRequest) {
              project_name, tower, wing, unit_type, floor, flat_no,
              carpet_area_sqft, built_up_area_sqft, rate_per_sqft, base_price, facing,
              status, source, created_by, updated_by,
-             project_id, tower_id, is_corner, is_park_facing, parking_slots
-           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'bulk_generated',$13,$13,$14,$15,$16,$17,$18)
+             project_id, tower_id, is_corner, is_park_facing, parking_slots,
+             organization_id
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'bulk_generated',$13,$13,$14,$15,$16,$17,$18,$19)
            ON CONFLICT (project_name, tower, COALESCE(wing,''), floor, flat_no) WHERE deleted_at IS NULL
            DO NOTHING
            RETURNING id`,
@@ -90,14 +94,16 @@ export async function POST(req: NextRequest) {
             projectId, towerId,
             u.is_corner === true, u.is_park_facing === true,
             Math.max(0, Math.trunc(cleanNum(u.parking_slots) ?? 0)),
+            orgId,
           ],
         );
 
         if (ins.rows.length) {
           created++;
           await client.query(
-            `INSERT INTO inventory_unit_history (unit_id, old_status, new_status, changed_by, reason)
-             VALUES ($1, NULL, $2, $3, 'bulk generated')`,
+            `INSERT INTO inventory_unit_history (unit_id, old_status, new_status, changed_by, reason, organization_id)
+             VALUES ($1, NULL, $2, $3, 'bulk generated',
+                     (SELECT organization_id FROM inventory_units WHERE id = $1))`,
             [ins.rows[0].id, status, user_name],
           );
         } else {

@@ -4,6 +4,7 @@
 // row here is one lender the case was submitted to.
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { resolveLatestBookingId } from "@/lib/pdd";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 
@@ -25,8 +26,9 @@ export async function GET(
     if (!gate.ok) return gate.response;
 
     const rows = await query(
-      `SELECT * FROM loan_applications WHERE lead_id = $1 ORDER BY created_at ASC`,
-      [Number(id)],
+      // MT-06: caller-supplied lead id — scoped to the caller's organization.
+      `SELECT * FROM loan_applications WHERE lead_id = $1 AND organization_id = $2 ORDER BY created_at ASC`,
+      [Number(id), await getOrganizationId()],
     );
     return NextResponse.json({ success: true, data: rows }, { status: 200 });
   } catch (err: any) {
@@ -71,8 +73,10 @@ export async function POST(
       `INSERT INTO loan_applications (
          lead_id, booking_id, bank_name, loan_type, dsa_agent_name, dsa_agent_contact,
          loan_executive, loan_reference_no, amount_requested, amount_sanctioned,
-         interest_rate, tenure_months, application_date, status, remarks, created_by
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+         interest_rate, tenure_months, application_date, status, remarks, created_by,
+         organization_id
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,
+                 (SELECT organization_id FROM walkin_enquiries WHERE id = $1))
        RETURNING *`,
       [
         Number(id), bookingId, String(body.bank_name).trim(), body.loan_type || null,

@@ -234,11 +234,13 @@ export async function setNotificationPreferences(
   const values: unknown[] = [userId];
   const tuples = applied.map((key) => {
     values.push(key, changes[key]);
-    return `($1, $${values.length - 1}, $${values.length})`;
+    return `($1, $${values.length - 1}, $${values.length}, (SELECT organization_id FROM users WHERE id = $1))`;
   });
 
   await query(
-    `INSERT INTO notification_type_preferences (user_id, notification_key, enabled)
+    // Organization inherited from the owning user in SQL — one lookup per tuple,
+    // but it keeps the preference in the same tenant as the user by construction.
+    `INSERT INTO notification_type_preferences (user_id, notification_key, enabled, organization_id)
      VALUES ${tuples.join(", ")}
      ON CONFLICT (user_id, notification_key)
      DO UPDATE SET enabled = EXCLUDED.enabled, updated_at = NOW()`,

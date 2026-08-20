@@ -1,6 +1,7 @@
 // api/channel-partners/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { getServerSession } from "@/lib/serverAuth";
 import {
   canViewPartners,
@@ -74,6 +75,12 @@ export async function GET(req: NextRequest) {
     const where: string[] = [];
     const params: any[] = [];
 
+    // Tenant filter first, so it applies whatever optional filters follow. The
+    // subquery/JOIN predicates below inherit cp.organization_id; this is what
+    // scopes the OUTER list itself.
+    params.push(await getOrganizationId());
+    where.push(`cp.organization_id = $${params.length}`);
+
     if (status) {
       params.push(status);
       where.push(`cp.status = $${params.length}`);
@@ -115,10 +122,15 @@ export async function GET(req: NextRequest) {
               sm.email           AS assigned_sourcing_manager_email,
               sm.whatsapp_number AS assigned_sourcing_manager_phone,
               sm.is_active       AS assigned_sourcing_manager_active,
-              (SELECT COUNT(*) FROM walkin_enquiries w WHERE w.channel_partner_id = cp.id) AS lead_count,
-              (SELECT COUNT(*) FROM booking_applications b WHERE b.sourced_by_channel_partner_id = cp.id) AS booking_count
+              -- Both counts inherit the partner's organization, so a partner row
+              -- can never be decorated with another builder's totals.
+              (SELECT COUNT(*) FROM walkin_enquiries w
+                WHERE w.channel_partner_id = cp.id AND w.organization_id = cp.organization_id) AS lead_count,
+              (SELECT COUNT(*) FROM booking_applications b
+                WHERE b.sourced_by_channel_partner_id = cp.id AND b.organization_id = cp.organization_id) AS booking_count
          FROM channel_partners cp
-         LEFT JOIN users sm ON sm.id = cp.assigned_sourcing_manager_id
+         LEFT JOIN users sm
+           ON sm.id = cp.assigned_sourcing_manager_id AND sm.organization_id = cp.organization_id
         ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
         ORDER BY cp.name ASC`,
       params
@@ -197,8 +209,9 @@ export async function POST(req: NextRequest) {
       ? await query(
           `SELECT id FROM channel_partners
             WHERE right(regexp_replace(COALESCE(phone, ''), '\\D', '', 'g'), 10) = $1
+              AND organization_id = $2
             LIMIT 1`,
-          [phoneKey]
+          [phoneKey, await getOrganizationId()]
         )
       : [];
     const willUpdateExisting = existingForPhone.length > 0;
@@ -293,9 +306,10 @@ export async function POST(req: NextRequest) {
         const hit = await client.query(
           `SELECT id, name, assigned_sourcing_manager_id FROM channel_partners
             WHERE right(regexp_replace(COALESCE(phone, ''), '\\D', '', 'g'), 10) = $1
+              AND organization_id = $2
             ORDER BY id ASC
             LIMIT 1`,
-          [normalizedPhone]
+          [normalizedPhone, await getOrganizationId(client)]
         );
 
         if (hit.rows.length > 0) {
@@ -341,7 +355,7 @@ export async function POST(req: NextRequest) {
                  CASE WHEN assigned_sourcing_manager_id IS NULL AND $10::int IS NOT NULL
                       THEN $11 ELSE assigned_sourcing_manager_by END,
                updated_by           = $11
-             WHERE id = $12
+             WHERE id = $12 AND organization_id = $13
              RETURNING *`,
             [
               profile.company_name ?? "",
@@ -356,6 +370,7 @@ export async function POST(req: NextRequest) {
               assignedSourcingManagerId,
               actor,
               existing.id,
+              await getOrganizationId(client),
             ]
           );
           return { merged: true, matchedName: existing.name, row: upd.rows[0] };
@@ -368,13 +383,15 @@ export async function POST(req: NextRequest) {
            (name, company_name, rera_registration_no, pan_number, phone, email,
             office_address, owner_contact_person, gst_number, pin_code, city,
             bank_account_details, default_commission_rate, status, created_by, updated_by,
-            assigned_sourcing_manager_id, assigned_sourcing_manager_at, assigned_sourcing_manager_by)
+            assigned_sourcing_manager_id, assigned_sourcing_manager_at, assigned_sourcing_manager_by,
+            organization_id)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, COALESCE($14, 'active'), $15, $15,
                  $16,
                  CASE WHEN $16::int IS NULL THEN NULL ELSE now() END,
                  -- Cast needed: $15 is otherwise inferred from the NULL branch here
                  -- and conflicts with its varchar use as created_by/updated_by.
-                 CASE WHEN $16::int IS NULL THEN NULL ELSE $15::varchar END)
+                 CASE WHEN $16::int IS NULL THEN NULL ELSE $15::varchar END,
+                 $17)
          RETURNING *`,
         [
           name,
@@ -393,6 +410,7 @@ export async function POST(req: NextRequest) {
           canSetCommercials ? body.status || null : null,
           actor,
           assignedSourcingManagerId,
+          await getOrganizationId(),
         ]
       );
       return { merged: false, matchedName: null, row: ins.rows[0] };

@@ -61,9 +61,11 @@ export async function GET(req: NextRequest) {
               -- assignment was made, and routing to a non-Sourcing-Manager would
               -- put the lead somewhere no panel displays.
               (REPLACE(LOWER(TRIM(sm.role)), '_', ' ') = 'sourcing manager') AS assigned_sourcing_manager_is_sm,
-              (SELECT COUNT(*) FROM walkin_enquiries w WHERE w.channel_partner_id = cp.id) AS lead_count
+              (SELECT COUNT(*) FROM walkin_enquiries w
+                WHERE w.channel_partner_id = cp.id AND w.organization_id = cp.organization_id) AS lead_count
          FROM channel_partners cp
-         LEFT JOIN users sm ON sm.id = cp.assigned_sourcing_manager_id
+         LEFT JOIN users sm
+                ON sm.id = cp.assigned_sourcing_manager_id AND sm.organization_id = cp.organization_id
         WHERE right(regexp_replace(COALESCE(cp.phone, ''), '\\D', '', 'g'), 10) = $1
         ORDER BY cp.id ASC
         LIMIT 1`,

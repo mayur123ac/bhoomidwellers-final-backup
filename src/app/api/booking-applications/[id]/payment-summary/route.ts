@@ -1,6 +1,7 @@
 // app/api/booking-applications/[id]/payment-summary/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
@@ -44,8 +45,10 @@ export async function GET(
        LEFT JOIN booking_registration_details r ON r.booking_id = b.id
        LEFT JOIN booking_total_cost_view tcv ON tcv.booking_id = b.id
        LEFT JOIN customer_ledger_view clv ON clv.booking_id = b.id
-       WHERE b.id = $1`,
-      [Number(id)]
+       -- MT-06: caller-supplied booking id. The organization predicate is on the
+       -- driving table, so every LEFT JOIN below inherits the scope.
+       WHERE b.id = $1 AND b.organization_id = $2`,
+      [Number(id), await getOrganizationId()]
     );
     if (!bookingRows.length) {
       return NextResponse.json({ success: false, message: "Booking not found" }, { status: 404 });

@@ -12,6 +12,7 @@
 // is an error and neither blocks the form — the operator just types it themselves.
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { getServerSession } from "@/lib/serverAuth";
 import { canCreatePartners } from "@/lib/cpRbac";
 
@@ -94,6 +95,11 @@ export async function GET(req: NextRequest) {
               sm.name AS sm_name
          FROM (SELECT $1::varchar AS pin) k
          LEFT JOIN pincodes p ON p.pincode = k.pin
+         -- sourcing_manager_pincodes is a JUNCTION table: MT-04 deliberately gave
+         -- it no organization_id because it inherits tenancy through user_id.
+         -- The tenant boundary is therefore enforced on the joined user below
+         -- (sm.organization_id = $2), which is what stops another builder's
+         -- territory row resolving a manager for this caller.
          LEFT JOIN sourcing_manager_pincodes smp ON smp.pincode = k.pin
          -- The territory row is only honoured while it still points at an active
          -- Sourcing Manager. A stale row (role changed, account deactivated) is
@@ -101,8 +107,9 @@ export async function GET(req: NextRequest) {
          LEFT JOIN users sm
                 ON sm.id = smp.user_id
                AND sm.is_active = true
-               AND REPLACE(LOWER(TRIM(sm.role)), '_', ' ') = 'sourcing manager'`,
-      [pincode]
+               AND REPLACE(LOWER(TRIM(sm.role)), '_', ' ') = 'sourcing manager'
+               AND sm.organization_id = $2`,
+      [pincode, await getOrganizationId()]
     );
 
     const r = rows[0] || {};

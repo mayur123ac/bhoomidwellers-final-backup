@@ -110,9 +110,10 @@ export async function POST(req: NextRequest) {
          corner_premium_pct, park_facing_premium_pct,
          club_fee, corpus_fund, legal_charges, maintenance_deposit, parking_charge_per_slot,
          gst_rate, stamp_duty_rate, registration_fee,
-         effective_from, created_by, updated_by
+         effective_from, created_by, updated_by, organization_id
        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,
-                 COALESCE($18::date, CURRENT_DATE), $19, $19)
+                 COALESCE($18::date, CURRENT_DATE), $19, $19,
+                 (SELECT organization_id FROM inventory_projects WHERE id = $1))
        RETURNING *`,
       [
         projectId,

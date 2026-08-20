@@ -25,6 +25,7 @@
 //   functions rather than a change to their call sites.
 
 import { query } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import type { AiScope } from "./rbac";
 
 /** Rows a single tool may return. Beyond this the model gets a truncation note. */
@@ -196,12 +197,15 @@ export async function getSalesManagerPerformance(_args: any, _scope: AiScope) {
             COALESCE(SUM(b.agreement_value),0) AS agreement_value,
             COALESCE(SUM(${OCR}),0)            AS ocr_collected
        FROM booking_applications b
-       LEFT JOIN walkin_enquiries w ON w.id = b.lead_id
+       LEFT JOIN walkin_enquiries w
+              ON w.id = b.lead_id AND w.organization_id = b.organization_id
        ${MONEY_JOIN}
       WHERE ${ACTIVE_BOOKING.replace(/booking_status/g, "b.booking_status")}
+        AND b.organization_id = $1
       GROUP BY 1
       ORDER BY agreement_value DESC
-      LIMIT ${MAX_ROWS}`
+      LIMIT ${MAX_ROWS}`,
+    [await getOrganizationId()]
   );
   return rows.map((r) => ({
     manager: r.manager,
@@ -220,6 +224,10 @@ export async function getLeadsSummary(args: any, _scope: AiScope) {
     dateClause = `AND COALESCE(enquiry_date, created_at)::date >= $1::date
                   AND COALESCE(enquiry_date, created_at)::date <  $2::date`;
   }
+  // Appended AFTER the optional date params so its index is whatever comes next,
+  // whether or not a month filter was supplied.
+  params.push(await getOrganizationId());
+  const orgClause = `AND organization_id = $${params.length}`;
 
   const rows = await query<any>(
     `SELECT COUNT(*)::int AS total,
@@ -227,13 +235,13 @@ export async function getLeadsSummary(args: any, _scope: AiScope) {
             COUNT(*) FILTER (WHERE status = 'Closing')::int                AS closing,
             COUNT(DISTINCT source)::int                                    AS distinct_sources
        FROM walkin_enquiries
-      WHERE 1=1 ${dateClause}`,
+      WHERE 1=1 ${dateClause} ${orgClause}`,
     params
   );
   const bySource = await query<any>(
     `SELECT COALESCE(NULLIF(TRIM(source),''),'Unknown') AS source, COUNT(*)::int AS leads
        FROM walkin_enquiries
-      WHERE 1=1 ${dateClause}
+      WHERE 1=1 ${dateClause} ${orgClause}
       GROUP BY 1 ORDER BY leads DESC LIMIT ${MAX_ROWS}`,
     params
   );
@@ -320,12 +328,17 @@ export async function searchKnowledgeBase(args: any, _scope: AiScope) {
               CASE WHEN f.message ILIKE '%' || $1 || '%' THEN 1.0 ELSE 0 END
             ) AS score
        FROM follow_ups f
-       LEFT JOIN walkin_enquiries w ON w.id = f.lead_id
-      WHERE f.message ILIKE '%' || $1 || '%'
-         OR word_similarity($1, f.message) > 0.5
+       LEFT JOIN walkin_enquiries w
+         ON w.id = f.lead_id AND w.organization_id = f.organization_id
+      -- The two search branches are PARENTHESISED before the tenant filter is
+      -- applied. Written flat, SQL binds A OR B AND org as A OR (B AND org),
+      -- and the ILIKE branch would then return every organization's follow-ups.
+      WHERE (f.message ILIKE '%' || $1 || '%'
+             OR word_similarity($1, f.message) > 0.5)
+        AND f.organization_id = $3
       ORDER BY score DESC, f.created_at DESC
       LIMIT $2`,
-    [q, MAX_ROWS]
+    [q, MAX_ROWS, await getOrganizationId()]
   );
 
   return {

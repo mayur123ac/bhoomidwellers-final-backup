@@ -54,6 +54,20 @@ export interface SessionUser {
   email?: string;
   role: string;
   isActive?: boolean;
+  /**
+   * MT-05: the signing user's organization, as a UUID string.
+   *
+   * Stamped at login from `users.organization_id` and carried inside the
+   * SIGNED payload, so it cannot be edited by the cookie holder — the same
+   * protection `role` relies on. Read it through
+   * `getOrganizationId()` in lib/tenantContext, never directly: routes must not
+   * acquire the habit of pulling a tenant id out of a request object.
+   *
+   * Optional because sessions issued before MT-05 do not carry it. Those fall
+   * back to sole-organization resolution, which stays correct while exactly one
+   * organization exists and fails loudly the moment that stops being true.
+   */
+  org?: string;
   iat?: number;
   exp?: number;
 }

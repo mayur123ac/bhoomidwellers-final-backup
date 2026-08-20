@@ -19,8 +19,11 @@ export async function POST(
     }
 
     const rows = await query(
-      `INSERT INTO caller_follow_ups (lead_id, message, created_by_name)
-       VALUES ($1, $2, $3) RETURNING *`,
+      // Organization inherited from the caller lead in SQL, which also makes a
+      // follow-up under another tenant's lead impossible.
+      `INSERT INTO caller_follow_ups (lead_id, message, created_by_name, organization_id)
+       VALUES ($1, $2, $3,
+               (SELECT organization_id FROM caller_leads WHERE id = $1)) RETURNING *`,
       [parseInt(id, 10), message.trim(), created_by ?? "Caller"]
     );
 

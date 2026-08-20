@@ -38,6 +38,7 @@
 
 import crypto from "node:crypto";
 import { query } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { dispatch } from "@/lib/email/provider";
 import type { EmailError, EmailMessage, SendOutcome } from "@/lib/email/types";
 import { isKnownNotificationKey } from "@/lib/notificationCatalogue";
@@ -435,8 +436,8 @@ async function recordAttempt(params: {
 
     await query(
       `INSERT INTO email_delivery_attempts
-         (user_id, email_type, recipient, destination, delivered, transport, error)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+         (user_id, email_type, recipient, destination, delivered, transport, error, organization_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [
         params.userId,
         params.emailType,
@@ -446,6 +447,7 @@ async function recordAttempt(params: {
         // Column is named `transport` for history; it holds the provider name.
         params.result.provider,
         error,
+        await getOrganizationId(),
       ]
     );
   } catch (err) {
@@ -684,20 +686,32 @@ export async function checkAndRecordDevice(
   const { label } = describeDevice(userAgent);
 
   try {
+    // These run DURING login, before a session cookie exists, so there is no org
+    // claim to read. The organization is derived in-statement from the users row —
+    // the authoritative server-side answer — exactly as the INSERT below already
+    // did. Nothing is manufactured, and a user with no organization stamped yields
+    // NULL, which matches nothing and fails closed.
     const existing = await query<{ id: number }>(
-      `SELECT id FROM known_login_devices WHERE user_id = $1 AND device_hash = $2 LIMIT 1`,
+      `SELECT id FROM known_login_devices
+        WHERE user_id = $1 AND device_hash = $2
+          AND organization_id = (SELECT organization_id FROM users WHERE id = $1)
+        LIMIT 1`,
       [userId, fingerprint]
     );
 
     const knownCount = await query<{ count: string }>(
-      `SELECT COUNT(*)::text AS count FROM known_login_devices WHERE user_id = $1`,
+      `SELECT COUNT(*)::text AS count FROM known_login_devices
+        WHERE user_id = $1
+          AND organization_id = (SELECT organization_id FROM users WHERE id = $1)`,
       [userId]
     );
     const isFirstEverLogin = Number(knownCount[0]?.count ?? 0) === 0;
 
     await query(
-      `INSERT INTO known_login_devices (user_id, device_hash, device_label, last_ip)
-       VALUES ($1, $2, $3, $4)
+      // Organization inherited from the user in SQL: this runs during login,
+      // before a session cookie exists, so there is nothing to read a claim from.
+      `INSERT INTO known_login_devices (user_id, device_hash, device_label, last_ip, organization_id)
+       SELECT $1, $2, $3, $4, u.organization_id FROM users u WHERE u.id = $1
        ON CONFLICT (user_id, device_hash)
        DO UPDATE SET last_seen_at = NOW(), last_ip = EXCLUDED.last_ip`,
       [userId, fingerprint, label.slice(0, 160), (ip || "").split(",")[0].trim().slice(0, 64)]

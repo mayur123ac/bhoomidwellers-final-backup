@@ -25,6 +25,7 @@
 // pages now.
 
 import { query } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import type { Lead } from "./llm";
 import type { DigestFollowUp } from "./llm";
 
@@ -90,17 +91,21 @@ export async function hydrateScope(
   try {
     // Both reads in parallel — they are independent and this is on the path of a
     // user waiting for a chat reply.
+    // `ids` arrive from the chat context, so they are effectively client-
+    // supplied: the organization filter is what stops an id from another
+    // builder's lead being hydrated into the assistant's answer.
+    const hydrateOrgId = await getOrganizationId();
     const [rows, notes] = await Promise.all([
       query<any>(
-        `SELECT ${LEAD_COLUMNS} FROM walkin_enquiries WHERE id = ANY($1::int[]) ORDER BY sr_no DESC NULLS LAST`,
-        [ids]
+        `SELECT ${LEAD_COLUMNS} FROM walkin_enquiries WHERE id = ANY($1::int[]) AND organization_id = $2 ORDER BY sr_no DESC NULLS LAST`,
+        [ids, hydrateOrgId]
       ),
       query<any>(
         `SELECT lead_id, message, created_by_name, site_visit_date, created_at
            FROM follow_ups
-          WHERE lead_id = ANY($1::int[])
+          WHERE lead_id = ANY($1::int[]) AND organization_id = $2
           ORDER BY lead_id, created_at ASC`,
-        [ids]
+        [ids, hydrateOrgId]
       ),
     ]);
 

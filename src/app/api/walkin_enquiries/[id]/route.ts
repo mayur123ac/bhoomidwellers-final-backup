@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { query, transaction, recalculateSrNos } from "@/lib/db";
 import { requireRole, getServerSession } from "@/lib/serverAuth";
 import { normalizeRole } from "@/lib/cpRbac";
+import { getOrganizationId } from "@/lib/tenantContext";
 import {
   deleteLeadAssets,
   deleteLeadDatabaseRecords,
@@ -52,8 +53,8 @@ export async function GET(
     }
 
     const rows = await query(
-      "SELECT id, name, loan_tracking_info FROM walkin_enquiries WHERE id = $1",
-      [leadId]
+      "SELECT id, name, loan_tracking_info FROM walkin_enquiries WHERE id = $1 AND organization_id = $2",
+      [leadId, await getOrganizationId()]
     );
 
     if (rows.length === 0) {
@@ -85,7 +86,13 @@ export async function PUT(
     // against this endpoint at all, so blocking that one role closes the gap with
     // zero regression risk for everyone else.
     const session = await getServerSession();
-    if (session?.role && normalizeRole(session.role) === "sourcing manager") {
+    // MT-08 (CRITICAL, pre-existing): same defect as the list endpoint, but on a
+    // WRITE — an anonymous caller failed the role test and went on to edit any
+    // lead by id. Reject the unauthenticated caller before the role rule.
+    if (!session?.role) {
+      return NextResponse.json({ success: false, message: "You must be signed in." }, { status: 401 });
+    }
+    if (normalizeRole(session.role) === "sourcing manager") {
       return NextResponse.json(
         { success: false, message: "Sourcing Managers cannot edit leads directly." },
         { status: 403 }
@@ -131,8 +138,8 @@ export async function PUT(
 
     const result = await transaction(async (client) => {
       const existingRows = await client.query(
-        "SELECT id, assigned_to, status, is_lost_lead FROM walkin_enquiries WHERE id = $1",
-        [leadId]
+        "SELECT id, assigned_to, status, is_lost_lead FROM walkin_enquiries WHERE id = $1 AND organization_id = $2",
+        [leadId, await getOrganizationId(client)]
       );
 
       if (existingRows.rows.length === 0) {
@@ -196,17 +203,21 @@ export async function PUT(
         return { noFields: true };
       }
 
+      // leadId comes from the URL; organization_id is appended after it so the
+      // dynamic SET clause's numbering is untouched.
       values.push(leadId);
+      values.push(await getOrganizationId(client));
       const updateRows = await client.query(
-        `UPDATE walkin_enquiries SET ${fields.join(", ")} WHERE id = $${values.length} RETURNING *`,
+        `UPDATE walkin_enquiries SET ${fields.join(", ")} WHERE id = $${values.length - 1} AND organization_id = $${values.length} RETURNING *`,
         values
       );
 
       if (assignmentChanged) {
         await client.query(
           `
-            INSERT INTO lead_assignment_logs (lead_id, assigned_to, assigned_by, reason)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO lead_assignment_logs (lead_id, assigned_to, assigned_by, reason, organization_id)
+            VALUES ($1, $2, $3, $4,
+                    (SELECT organization_id FROM walkin_enquiries WHERE id = $1))
           `,
           [
             leadId,
@@ -320,12 +331,9 @@ export async function DELETE(
       const tenantColumn = ["organization_id", "tenant_id", "org_id"].find((column) =>
         leadColumns.has(column)
       );
-      const sessionOrgId =
-        auth.session.organization_id ??
-        auth.session.organizationId ??
-        auth.session.tenant_id ??
-        auth.session.tenantId ??
-        1;
+      // Server-resolved tenant identity. Never read from the session payload,
+      // and no fallback to a literal id.
+      const sessionOrgId = await getOrganizationId(client);
 
       if (tenantColumn && String(lead[tenantColumn]) !== String(sessionOrgId)) {
         return { status: "forbidden" as const };

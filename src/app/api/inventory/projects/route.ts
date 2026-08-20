@@ -6,6 +6,7 @@
 // is refused at the database, not just in this handler.
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
@@ -75,8 +76,8 @@ export async function POST(req: NextRequest) {
 
     const actor = gate.session.name || "system";
     const rows = await query(
-      `INSERT INTO inventory_projects (name, city, address, rera_number, status, possession_date, created_by, updated_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$7)
+      `INSERT INTO inventory_projects (name, city, address, rera_number, status, possession_date, created_by, updated_by, organization_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$7,$8)
        RETURNING *`,
       [
         name,
@@ -86,6 +87,7 @@ export async function POST(req: NextRequest) {
         status,
         body.possession_date || null,
         actor,
+        await getOrganizationId(),
       ],
     );
 

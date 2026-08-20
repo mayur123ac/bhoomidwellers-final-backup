@@ -7,6 +7,7 @@
 // reverse-then-recompute workflow reachable from the UI.
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
@@ -29,13 +30,15 @@ export async function GET(
       `SELECT b.id, b.booking_number, b.agreement_value, b.primary_name AS buyer_name
          FROM booking_applications b
         WHERE b.sourced_by_channel_partner_id = $1
+          AND b.organization_id = $2
           AND NOT EXISTS (
                 SELECT 1 FROM cp_commissions c
                  WHERE c.booking_id = b.id
                    AND c.status <> 'reversed'
+                   AND c.organization_id = b.organization_id
               )
         ORDER BY b.id DESC`,
-      [cpId]
+      [cpId, await getOrganizationId()]
     );
 
     return NextResponse.json({ success: true, data: rows }, { status: 200 });

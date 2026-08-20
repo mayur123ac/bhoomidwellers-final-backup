@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { requireRole, getSessionUserId } from "@/lib/serverAuth";
+import { getOrganizationId } from "@/lib/tenantContext";
 
 export const dynamic = "force-dynamic";
 
@@ -32,12 +33,12 @@ export async function GET() {
             LEFT JOIN LATERAL (
                 SELECT id, login_time, attendance_status
                 FROM attendance_records
-                WHERE employee_id = $1
+                WHERE employee_id = $1 AND organization_id = $2
                   AND DATE(login_time) = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date
                 ORDER BY id DESC
                 LIMIT 1
             ) ar ON true
-        `, [userId]);
+        `, [userId, await getOrganizationId()]);
 
         const row = existing[0];
         const marked = !!row && String(row.attendance_status).toLowerCase() === "present";

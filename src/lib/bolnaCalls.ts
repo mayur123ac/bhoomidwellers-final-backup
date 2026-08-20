@@ -16,7 +16,7 @@ import {
   type BolnaExecution,
 } from "@/types/bolna.types";
 import { redactSecrets } from "@/config/bolna.config";
-import { DEFAULT_ORG_ID } from "@/lib/bolnaSettings";
+import { getOrganizationId } from "./tenantContext";
 
 // ── row → API shape ──────────────────────────────────────────────────────────
 
@@ -54,7 +54,7 @@ function toRecord(r: any): BolnaCallRecord {
 
 /** Records a call at the moment it is initiated, before any outcome is known. */
 export async function createCallRecord(params: {
-  orgId?: number;
+  orgId?: string;
   executionId: string | null;
   leadId?: number | null;
   callerLeadId?: number | null;
@@ -81,7 +81,7 @@ export async function createCallRecord(params: {
        updated_at = NOW()
      RETURNING *`,
     [
-      params.orgId ?? DEFAULT_ORG_ID,
+      params.orgId ?? await getOrganizationId(),
       params.executionId,
       params.leadId ?? null,
       params.callerLeadId ?? null,
@@ -181,7 +181,7 @@ export function extractSummary(execution: BolnaExecution): string | null {
  */
 export async function applyExecutionUpdate(
   execution: BolnaExecution,
-  opts: { orgId?: number } = {}
+  opts: { orgId?: string } = {}
 ): Promise<{ matched: boolean; created: boolean; callId: number | null; leadId: number | null }> {
   const executionId = String(execution.id ?? "").trim();
   if (!executionId) return { matched: false, created: false, callId: null, leadId: null };
@@ -207,8 +207,22 @@ export async function applyExecutionUpdate(
       ).slice(0, 1000)
     : null;
 
-  const existing = await query<{ id: number; lead_id: number | null; status: string }>(
-    `SELECT id, lead_id, status FROM bolna_calls WHERE execution_id = $1`,
+  // ── Tenancy on the webhook path (MT-05) ──────────────────────────────────
+  //
+  // This runs from Bolna's webhook, so there is no session and no org claim to
+  // read; resolving one would mean guessing. The row itself is the trusted
+  // source: execution_id is issued by the provider and carries a UNIQUE
+  // constraint, so this SELECT identifies exactly one call and, with it, exactly
+  // one organization. That organization is then carried into the UPDATE's WHERE
+  // clause rather than left implicit, so the statement cannot be repointed at a
+  // different tenant's row by a later edit.
+  const existing = await query<{
+    id: number;
+    lead_id: number | null;
+    status: string;
+    organization_id: string | null;
+  }>(
+    `SELECT id, lead_id, status, organization_id FROM bolna_calls WHERE execution_id = $1`,
     [executionId]
   );
 
@@ -236,7 +250,7 @@ export async function applyExecutionUpdate(
          last_payload     = $13,
          completed_at     = CASE WHEN $14 THEN COALESCE(completed_at, NOW()) ELSE completed_at END,
          updated_at       = NOW()
-       WHERE id = $1
+       WHERE id = $1 AND organization_id IS NOT DISTINCT FROM $15
        RETURNING id, lead_id`,
       [
         current.id,
@@ -253,6 +267,7 @@ export async function applyExecutionUpdate(
         execution.agent_number ?? null,
         JSON.stringify(execution),
         isTerminal,
+        current.organization_id,
       ]
     );
 
@@ -278,7 +293,7 @@ export async function applyExecutionUpdate(
      ON CONFLICT (execution_id) DO NOTHING
      RETURNING id, lead_id`,
     [
-      opts.orgId ?? DEFAULT_ORG_ID,
+      opts.orgId ?? await getOrganizationId(),
       executionId,
       leadId,
       execution.agent_id ?? null,
@@ -326,11 +341,15 @@ export async function findLeadByPhone(phone: string | null): Promise<number | nu
   const last10 = digits.slice(-10);
 
   const rows = await query<{ id: number }>(
+    // The phone/alt_phone match is PARENTHESISED before the tenant filter.
+    // Written flat, SQL binds A OR B AND org as A OR (B AND org), so the phone
+    // branch would resolve a lead belonging to another organization.
     `SELECT id FROM walkin_enquiries
-      WHERE RIGHT(regexp_replace(COALESCE(phone, ''), '\\D', '', 'g'), 10) = $1
-         OR RIGHT(regexp_replace(COALESCE(alt_phone, ''), '\\D', '', 'g'), 10) = $1
+      WHERE (RIGHT(regexp_replace(COALESCE(phone, ''), '\\D', '', 'g'), 10) = $1
+             OR RIGHT(regexp_replace(COALESCE(alt_phone, ''), '\\D', '', 'g'), 10) = $1)
+        AND organization_id = $2
       LIMIT 2`,
-    [last10]
+    [last10, await getOrganizationId()]
   );
 
   return rows.length === 1 ? rows[0].id : null;
@@ -339,24 +358,33 @@ export async function findLeadByPhone(phone: string | null): Promise<number | nu
 // ── reads ────────────────────────────────────────────────────────────────────
 
 export async function getCallsForLead(leadId: number, limit = 50): Promise<BolnaCallRecord[]> {
+  // Reached from a signed-in request (the call-history widget), so the session's
+  // organization is available and the leadId — which arrives as a query parameter —
+  // is never the only predicate. The filter precedes the LIMIT.
   const rows = await query(
     `SELECT * FROM bolna_calls
-      WHERE lead_id = $1
+      WHERE lead_id = $1 AND organization_id = $3
       ORDER BY created_at DESC
       LIMIT $2`,
-    [leadId, limit]
+    [leadId, limit, await getOrganizationId()]
   );
   return rows.map(toRecord);
 }
 
 export async function getCallByExecutionId(executionId: string): Promise<BolnaCallRecord | null> {
-  const rows = await query(`SELECT * FROM bolna_calls WHERE execution_id = $1`, [executionId]);
+  // Request-path read, so it is scoped to the caller's organization. The webhook
+  // does NOT go through here — it uses applyExecutionUpdate above, which resolves
+  // tenancy from the row because no session exists there.
+  const rows = await query(
+    `SELECT * FROM bolna_calls WHERE execution_id = $1 AND organization_id = $2`,
+    [executionId, await getOrganizationId()]
+  );
   return rows[0] ? toRecord(rows[0]) : null;
 }
 
 /** Marks a call that never reached Bolna, so the failure is visible on the lead. */
 export async function recordCallFailure(params: {
-  orgId?: number;
+  orgId?: string;
   leadId?: number | null;
   agentId: string;
   channel: "phone" | "web";
@@ -372,7 +400,7 @@ export async function recordCallFailure(params: {
         from_number, to_number, initiated_by, initiated_by_name, error_message)
      VALUES ($1, $2, $3, $4, 'outbound', $5, $6, $7, $8, $9, $10)`,
     [
-      params.orgId ?? DEFAULT_ORG_ID,
+      params.orgId ?? await getOrganizationId(),
       params.leadId ?? null,
       params.agentId,
       params.channel,

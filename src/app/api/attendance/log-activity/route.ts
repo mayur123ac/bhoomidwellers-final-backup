@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { requireRole } from "@/lib/serverAuth";
 import { broadcastEvent } from "@/lib/eventBus";
 
@@ -11,6 +12,8 @@ export async function POST(req: Request) {
     }
 
     const userId = auth.session._id;
+    // MT-05: from the authenticated session, never from the request body.
+    const orgId = await getOrganizationId();
     let body: any = {};
     try { body = await req.json(); } catch { }
 
@@ -22,15 +25,16 @@ export async function POST(req: Request) {
     // Insert structured event into permanent audit history
     await query(`
       INSERT INTO employee_activity_logs 
-      (user_id, action_type, description, module, lead_id, lead_name, timestamp)
-      VALUES ($1, $2, $3, $4, $5, $6, NOW())
+      (user_id, action_type, description, module, lead_id, lead_name, timestamp, organization_id)
+      VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7)
     `, [
       userId,
       type,         // e.g. "LEAD_EDIT"
       action,       // e.g. "Editing Sales Form"
       module || "Dashboard",
       leadId || null,
-      leadName || null
+      leadName || null,
+      orgId
     ]);
 
     // Broadcast live historical event to Admins and Site Heads
@@ -51,8 +55,8 @@ export async function POST(req: Request) {
     await query(`
       INSERT INTO employee_live_state (
         user_id, current_module, active_lead_id, active_lead_name, current_action, current_route,
-        last_activity, is_idle, updated_at, lead_started_at, productivity_score
-      ) VALUES ($1, $2, $3, $4, $5, $6, NOW(), false, NOW(), NOW(), 1)
+        last_activity, is_idle, updated_at, lead_started_at, productivity_score, organization_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, NOW(), false, NOW(), NOW(), 1, $7)
       ON CONFLICT (user_id) DO UPDATE SET
         current_module = EXCLUDED.current_module,
         current_action = EXCLUDED.current_action,
@@ -73,7 +77,8 @@ export async function POST(req: Request) {
       leadId || null,
       leadName || null,
       action,
-      "/"
+      "/",
+      orgId
     ]);
 
     // Broadcast the snapshot state immediately for instant UI refresh
@@ -93,8 +98,8 @@ export async function POST(req: Request) {
       const switchResult = await query(`
         SELECT COUNT(DISTINCT lead_id) as lead_count
         FROM employee_activity_logs
-        WHERE user_id = $1 AND timestamp > NOW() - INTERVAL '10 minutes' AND lead_id IS NOT NULL
-      `, [userId]);
+        WHERE user_id = $1 AND organization_id = $2 AND timestamp > NOW() - INTERVAL '10 minutes' AND lead_id IS NOT NULL
+      `, [userId, orgId]);
 
       const leadCount = parseInt(switchResult[0]?.lead_count || "0", 10);
       if (leadCount >= 20) {

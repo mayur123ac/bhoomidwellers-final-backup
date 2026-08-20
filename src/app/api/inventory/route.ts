@@ -4,6 +4,7 @@
 // (see /inventory_schema.sql); this route assumes they already exist.
 import { NextRequest, NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 import { resolveHierarchy } from "@/lib/inventoryHierarchy";
 
@@ -49,8 +50,13 @@ async function revertExpiredHolds() {
   );
   for (const r of expired) {
     await query(
-      `INSERT INTO inventory_unit_history (unit_id, old_status, new_status, changed_by, reason)
-       VALUES ($1, 'on_hold', 'available', 'System', $2)`,
+      // MT-05: the organization is taken from the unit itself, not from a
+       // session — this sweeper runs for expired holds and has no actor. Deriving
+       // it in SQL also makes a history row in a different tenant to its unit
+       // structurally impossible.
+      `INSERT INTO inventory_unit_history (unit_id, old_status, new_status, changed_by, reason, organization_id)
+       VALUES ($1, 'on_hold', 'available', 'System', $2,
+               (SELECT organization_id FROM inventory_units WHERE id = $1))`,
       [r.id, r.held_by ? `hold expired (was ${r.held_by}'s)` : "hold expired"],
     );
   }
@@ -300,6 +306,8 @@ export async function POST(req: NextRequest) {
       );
 
     const created = await transaction(async (client) => {
+      // MT-05: resolved once per transaction, on this client.
+      const orgId = await getOrganizationId(client);
       // Keeps project_id / tower_id populated on every new unit. Without it the
       // unit cannot resolve a price rule and cost sheets refuse it.
       const { projectId, towerId } = await resolveHierarchy(client, project, tower, user_name);
@@ -309,8 +317,9 @@ export async function POST(req: NextRequest) {
            project_name, tower, wing, unit_type, floor, flat_no,
            carpet_area_sqft, built_up_area_sqft, rate_per_sqft, base_price, facing,
            status, source, created_by, updated_by,
-           project_id, tower_id, is_corner, is_park_facing, parking_slots
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'manual',$13,$13,$14,$15,$16,$17,$18)
+           project_id, tower_id, is_corner, is_park_facing, parking_slots,
+           organization_id
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'manual',$13,$13,$14,$15,$16,$17,$18,$19)
          RETURNING *`,
         [
           project, tower, wing,
@@ -321,12 +330,14 @@ export async function POST(req: NextRequest) {
           projectId, towerId,
           body.is_corner === true, body.is_park_facing === true,
           Math.max(0, Math.trunc(cleanNum(body.parking_slots) ?? 0)),
+          orgId,
         ],
       );
       const unit = ins.rows[0];
       await client.query(
-        `INSERT INTO inventory_unit_history (unit_id, old_status, new_status, changed_by, reason)
-         VALUES ($1, NULL, $2, $3, 'unit created (manual)')`,
+        `INSERT INTO inventory_unit_history (unit_id, old_status, new_status, changed_by, reason, organization_id)
+         VALUES ($1, NULL, $2, $3, 'unit created (manual)',
+                 (SELECT organization_id FROM inventory_units WHERE id = $1))`,
         [unit.id, status, user_name],
       );
       return unit;

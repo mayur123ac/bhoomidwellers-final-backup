@@ -2,6 +2,7 @@
 // Inserts a batch of parsed leads inside a single transaction, then recalculates
 // Sr. Nos ONCE at the end. Duplicate external_ref rows are skipped, not aborted.
 import { transaction, recalculateSrNos } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { isChannelPartnerSource, resolveChannelPartnerId } from "@/lib/cpCommissionEngine";
 import type { ParsedLead } from "./parseLeadSheet";
 
@@ -33,6 +34,12 @@ export async function bulkInsertLeads(
   const { rows, assignedTo, overseeingSiteHead, uploadedByName } = params;
 
   return transaction(async (client) => {
+    // MT-05: resolved ONCE for the whole batch, before the loop. A sheet import
+    // can carry hundreds of rows; resolving per row would repeat the lookup for
+    // every one of them to reach the same answer, and would make the batch's
+    // tenant depend on when each row happened to be processed.
+    const orgId = await getOrganizationId(client);
+
     let inserted = 0;
     const skipped: SkippedRow[] = [];
 
@@ -62,7 +69,8 @@ export async function bulkInsertLeads(
           cp_name, cp_company, cp_phone,
           loan_planned, assigned_to, assigned_receptionist, status,
           is_global_shared, overseeing_site_head,
-          enquiry_date, auto_date_enabled, external_ref, channel_partner_id
+          enquiry_date, auto_date_enabled, external_ref, channel_partner_id,
+          organization_id
         )
         VALUES (
           $1,  $2,  $3,  $4,  $5,  $6,
@@ -71,7 +79,8 @@ export async function bulkInsertLeads(
           $14, $15, $16,
           $17, $18, $19, $20,
           $21, $22,
-          $23, $24, $25, $26
+          $23, $24, $25, $26,
+          $27
         )
         ON CONFLICT (external_ref) WHERE external_ref IS NOT NULL DO NOTHING
         RETURNING id`,
@@ -102,6 +111,7 @@ export async function bulkInsertLeads(
           false, // $24 auto_date_enabled
           clamp(row.external_ref || null, 100), // $25 external_ref
           channelPartnerId, // $26
+          orgId, // $27
         ]
       );
 
@@ -123,9 +133,9 @@ export async function bulkInsertLeads(
       const feedback = (row.feedback || "").trim();
       if (feedback) {
         await client.query(
-          `INSERT INTO follow_ups (lead_id, message, created_by_name, created_at, followup_date)
-           VALUES ($1, $2, $3, $4, NULL)`,
-          [leadId, feedback, clamp(uploadedByName, 150), row.enquiry_date]
+          `INSERT INTO follow_ups (lead_id, message, created_by_name, created_at, followup_date, organization_id)
+           VALUES ($1, $2, $3, $4, NULL, $5)`,
+          [leadId, feedback, clamp(uploadedByName, 150), row.enquiry_date, orgId]
         );
       }
     }

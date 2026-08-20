@@ -2,6 +2,7 @@
 // Returns groups of leads that share the same normalized (last-10-digit) phone number.
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { requireRole } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
@@ -32,8 +33,10 @@ export async function GET() {
               count(*)::int AS cnt
        FROM walkin_enquiries
        WHERE phone IS NOT NULL AND phone <> ''
+         AND organization_id = $1
        GROUP BY norm_phone
-       HAVING count(*) > 1`
+       HAVING count(*) > 1`,
+      [await getOrganizationId()]
     );
 
     const duplicateGroups = rows.map((r) => ({

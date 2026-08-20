@@ -22,6 +22,7 @@
 
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { requireRoles } from "@/lib/serverAuth";
 
 /**
@@ -117,13 +118,17 @@ export async function POST(req: Request) {
     // toggle on the admin Employees screen. An Admin flips the new account on
     // there once they have confirmed it.
     await query(
-      `INSERT INTO users (name, email, password, role, is_active)
-       VALUES ($1, $2, $3, $4, false)`,
+      // This route is gated by requireRoles(["admin"]) — there is no public
+      // self-signup — so the new user joins the creating Admin's organization.
+      // That is a trustworthy tenant source, not a fallback.
+      `INSERT INTO users (name, email, password, role, is_active, organization_id)
+       VALUES ($1, $2, $3, $4, false, $5)`,
       [
         name.trim(),
         email.trim().toLowerCase(),
         password,
         canonicalRole, // whitelisted value, not the raw request field
+        await getOrganizationId(),
       ]
     );
 

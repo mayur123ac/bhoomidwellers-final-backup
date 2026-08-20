@@ -3,6 +3,7 @@
 // a loan fully disburses (see the tranches route), or manually by an admin here.
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { seedPddChecklist } from "@/lib/pdd";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 
@@ -24,8 +25,8 @@ export async function GET(
     if (!gate.ok) return gate.response;
 
     const rows = await query(
-      `SELECT * FROM loan_pdd_tracking WHERE booking_id = $1 ORDER BY id ASC`,
-      [Number(id)],
+      `SELECT * FROM loan_pdd_tracking WHERE booking_id = $1 AND organization_id = $2 ORDER BY id ASC`,
+      [Number(id), await getOrganizationId()],
     );
     return NextResponse.json({ success: true, data: rows }, { status: 200 });
   } catch (err: any) {
@@ -55,8 +56,8 @@ export async function POST(
 
     const inserted = await seedPddChecklist(Number(id), body.loan_application_id ?? null, body.disbursement_date ?? null);
     const rows = await query(
-      `SELECT * FROM loan_pdd_tracking WHERE booking_id = $1 ORDER BY id ASC`,
-      [Number(id)],
+      `SELECT * FROM loan_pdd_tracking WHERE booking_id = $1 AND organization_id = $2 ORDER BY id ASC`,
+      [Number(id), await getOrganizationId()],
     );
     return NextResponse.json({ success: true, seeded: inserted, data: rows }, { status: 200 });
   } catch (err: any) {

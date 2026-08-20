@@ -1,6 +1,7 @@
 // app/api/settings/workspace/route.ts — workspace-level settings and stats.
 //
-// Backed by the single `organization_settings` row (organization_id = 1). There
+// Backed by the `organization_settings` row for the current tenant, resolved
+// server-side via getOrganizationId(). There
 // is no `organizations` table and this is not multi-tenant; the spec's workspace
 // model maps onto that one row.
 //
@@ -12,6 +13,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { requireRoles } from "@/lib/serverAuth";
 import { diffFields, requestContext, writeAuditLog } from "@/lib/auditLog";
+import { getOrganizationId } from "@/lib/tenantContext";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +22,7 @@ const CURRENCIES = ["INR", "USD", "AED", "GBP", "EUR"];
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 
 interface WorkspaceRow {
-  organization_id: number;
+  organization_id: string;
   workspace_name: string | null;
   industry: string | null;
   currency: string | null;
@@ -44,7 +46,8 @@ async function loadWorkspace(): Promise<WorkspaceRow | null> {
             lock_dashboard, force_theme, lead_number_sorting_enabled,
             allow_sm_upload, shift_start, shift_end
        FROM organization_settings
-      WHERE organization_id = 1`
+      WHERE organization_id = $1`,
+    [await getOrganizationId()]
   );
   return rows[0] ?? null;
 }
@@ -52,6 +55,7 @@ async function loadWorkspace(): Promise<WorkspaceRow | null> {
 export async function GET() {
   const gate = await requireRoles(["admin"]);
   if (!gate.ok) return gate.response;
+  const orgId = await getOrganizationId();
 
   const row = await loadWorkspace();
   if (!row) {
@@ -64,12 +68,13 @@ export async function GET() {
   // Counted live rather than cached. These are small tables and an admin opening
   // this screen a few times a day does not justify a staleness bug.
   const [leads, bookings, users, cps] = await Promise.all([
-    query<{ count: string }>(`SELECT COUNT(*)::text AS count FROM walkin_enquiries`),
-    query<{ count: string }>(`SELECT COUNT(*)::text AS count FROM booking_applications`),
+    query<{ count: string }>(`SELECT COUNT(*)::text AS count FROM walkin_enquiries WHERE organization_id = $1`, [orgId]),
+    query<{ count: string }>(`SELECT COUNT(*)::text AS count FROM booking_applications WHERE organization_id = $1`, [orgId]),
     query<{ count: string }>(
-      `SELECT COUNT(*)::text AS count FROM users WHERE deleted_at IS NULL AND is_active = true`
+      `SELECT COUNT(*)::text AS count FROM users WHERE deleted_at IS NULL AND is_active = true AND organization_id = $1`,
+      [orgId]
     ),
-    query<{ count: string }>(`SELECT COUNT(*)::text AS count FROM channel_partners`),
+    query<{ count: string }>(`SELECT COUNT(*)::text AS count FROM channel_partners WHERE organization_id = $1`, [orgId]),
   ]);
 
   return NextResponse.json({
@@ -200,8 +205,8 @@ export async function PATCH(req: NextRequest) {
   await query(
     `UPDATE organization_settings
         SET ${setClauses.join(", ")}, updated_by = $${values.length}, updated_at = CURRENT_TIMESTAMP
-      WHERE organization_id = 1`,
-    values
+      WHERE organization_id = $${values.length + 1}`,
+    [...values, await getOrganizationId()]
   );
 
   const { old, next } = diffFields(before as any, updates);

@@ -30,6 +30,7 @@
 // denormalized copy to drift out of sync.
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { getServerSession } from "@/lib/serverAuth";
 import { normalizeRole } from "@/lib/cpRbac";
 import { CP_SOURCE_VALUES } from "@/lib/cpCommissionEngine";
@@ -84,9 +85,14 @@ const SELECT_SQL = `
     sm.email    AS sourcing_manager_email,
     sm.whatsapp_number AS sourcing_manager_phone
   FROM walkin_enquiries w
-  LEFT JOIN channel_partners cp ON cp.id = w.channel_partner_id
+  -- Joined tenant-owned rows carry their own predicate: without it the
+  -- COALESCE below could resolve an effective owner from another organization's
+  -- partner row.
+  LEFT JOIN channel_partners cp
+         ON cp.id = w.channel_partner_id AND cp.organization_id = w.organization_id
   LEFT JOIN users sm
     ON sm.id = COALESCE(w.sourcing_manager_id, cp.assigned_sourcing_manager_id)
+   AND sm.organization_id = w.organization_id
 `;
 
 export async function GET(req: NextRequest) {
@@ -112,6 +118,11 @@ export async function GET(req: NextRequest) {
     // commission attribution never disagree about what counts as a CP lead.
     params.push(CP_SOURCE_VALUES as unknown as string[]);
     const where: string[] = [`TRIM(w.source) = ANY($${params.length})`];
+
+    // Tenant filter joins the same dynamic clause list, so it is applied inside
+    // the query alongside every other filter rather than appended to the string.
+    params.push(await getOrganizationId());
+    where.push(`w.organization_id = $${params.length}`);
 
     // Filtering and scoping both run on the effective owner, not the enquiry
     // column — otherwise the table would show a manager's name in the row while

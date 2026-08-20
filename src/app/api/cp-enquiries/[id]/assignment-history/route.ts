@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { getServerSession } from "@/lib/serverAuth";
 import { normalizeRole } from "@/lib/cpRbac";
 import { CP_SOURCE_VALUES } from "@/lib/cpCommissionEngine";
@@ -35,8 +36,8 @@ export async function GET(
     const leadRows = await query(
       `SELECT id, source, sourcing_manager_id
          FROM walkin_enquiries
-        WHERE id = $1`,
-      [enquiryId]
+        WHERE id = $1 AND organization_id = $2`,
+      [enquiryId, await getOrganizationId()]
     );
 
     if (leadRows.length === 0) {
@@ -76,11 +77,15 @@ export async function GET(
          h.action,
          h.assigned_at
        FROM cp_assignment_history h
-       LEFT JOIN users prev_sm ON prev_sm.id = h.previous_sourcing_manager_id
-       LEFT JOIN users new_sm  ON new_sm.id = h.new_sourcing_manager_id
-       WHERE h.lead_id = $1
+       LEFT JOIN users prev_sm
+              ON prev_sm.id = h.previous_sourcing_manager_id
+             AND prev_sm.organization_id = h.organization_id
+       LEFT JOIN users new_sm
+              ON new_sm.id = h.new_sourcing_manager_id
+             AND new_sm.organization_id = h.organization_id
+       WHERE h.lead_id = $1 AND h.organization_id = $2
        ORDER BY h.assigned_at DESC, h.id DESC`,
-      [enquiryId]
+      [enquiryId, await getOrganizationId()]
     );
 
     return NextResponse.json({ success: true, data: rows }, { status: 200 });

@@ -77,8 +77,11 @@ export async function POST(req: NextRequest) {
 
     const actor = gate.session.name || "system";
     const rows = await query(
-      `INSERT INTO inventory_towers (project_id, name, total_floors, units_per_floor, created_by, updated_by)
-       VALUES ($1,$2,$3,$4,$5,$5) RETURNING *`,
+      // Organization inherited from the project in SQL: a tower cannot end up in
+      // a different tenant than the project it belongs to.
+      `INSERT INTO inventory_towers (project_id, name, total_floors, units_per_floor, created_by, updated_by, organization_id)
+       VALUES ($1,$2,$3,$4,$5,$5,
+               (SELECT organization_id FROM inventory_projects WHERE id = $1)) RETURNING *`,
       [
         projectId, name,
         body.total_floors === "" || body.total_floors == null ? null : Number(body.total_floors),

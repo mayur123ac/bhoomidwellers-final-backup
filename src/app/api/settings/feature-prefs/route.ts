@@ -25,6 +25,7 @@ import {
 } from "@/lib/featurePrefs";
 import { getManualCallingSummary } from "@/lib/manualCallingSettings";
 import { isBolnaConfigured } from "@/lib/bolnaSettings";
+import { getOrganizationId } from "@/lib/tenantContext";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,8 +37,8 @@ interface UserRow {
 
 async function loadPrefs(userId: number): Promise<{ row: UserRow; prefs: FeaturePrefs } | null> {
   const rows = await query<UserRow>(
-    `SELECT name, feature_prefs FROM public.users WHERE id = $1 LIMIT 1`,
-    [userId]
+    `SELECT name, feature_prefs FROM public.users WHERE id = $1 AND organization_id = $2 LIMIT 1`,
+    [userId, await getOrganizationId()]
   );
   if (!rows[0]) return null;
   return { row: rows[0], prefs: mergeFeaturePrefs(rows[0].feature_prefs) };
@@ -58,7 +59,8 @@ async function platformStatus() {
       .catch(() => ({ available: false, provider: null as string | null })),
     isBolnaConfigured().catch(() => false),
     query<{ lead_number_sorting_enabled: boolean }>(
-      `SELECT lead_number_sorting_enabled FROM organization_settings WHERE organization_id = 1`
+      `SELECT lead_number_sorting_enabled FROM organization_settings WHERE organization_id = $1`,
+      [await getOrganizationId()]
     )
       .then((r) => r[0]?.lead_number_sorting_enabled === true)
       .catch(() => false),
@@ -74,6 +76,8 @@ async function platformStatus() {
 export async function GET() {
   const gate = await requireSession();
   if (!gate.ok) return gate.response;
+  // No organization is resolved here: loadPrefs() and platformStatus() each
+  // resolve their own, on the query that needs it.
   if (!gate.userId) {
     return NextResponse.json(
       { success: false, message: "Session carries no user id." },

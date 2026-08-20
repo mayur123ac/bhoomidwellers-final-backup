@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { requireRole } from "@/lib/serverAuth";
 import { buildRevenueAnalytics } from "@/lib/revenueCalculations";
 
@@ -139,7 +140,13 @@ export async function GET(req: NextRequest) {
                  cp.name AS partner_name
             FROM cp_commissions c
             JOIN channel_partners cp ON cp.id = c.channel_partner_id
+                                    AND cp.organization_id = c.organization_id
            WHERE c.booking_id = b.id
+             -- The LATERAL correlates on b.id, and b is already tenant-scoped in
+             -- base's WHERE, so this is defence in depth rather than the primary
+             -- control. Verified behaviour-neutral: no row in cp_commissions or
+             -- channel_partners has a NULL organization_id.
+             AND c.organization_id = b.organization_id
              AND c.status <> 'reversed'
            ORDER BY c.id DESC
            LIMIT 1
@@ -179,6 +186,31 @@ export async function GET(req: NextRequest) {
 
     const params: any[] = [];
     const clauses: string[] = [];
+
+    // ── Tenant filter placement ──────────────────────────────────────────────
+    //
+    // The organization predicate belongs in the `base` CTE, NOT in `clauses`.
+    //
+    // `clauses` is applied by the `filtered` CTE, whose FROM is `base` — so the
+    // only names in scope there are base's OUTPUT columns, which is why every
+    // addTextFilter/addDateFilter/addRevenueFilter predicate is written
+    // unqualified. An alias-qualified `b.organization_id` pushed onto that list
+    // referenced a table that is not in `filtered`'s FROM clause at all, and
+    // Postgres rejected the whole statement with
+    // `missing FROM-clause entry for table "b"`.
+    //
+    // Putting it in `base` is also the stronger position, and the one the
+    // original comment intended: the tenant filter is applied before the join
+    // fan-out is materialised and before anything downstream aggregates or
+    // orders, rather than trimming an already-built cross-tenant set. It also
+    // keeps organization_id out of base's projection, so the internal id is
+    // never carried into the API response.
+    //
+    // The index is captured rather than assumed: `params` is shared by both CTEs,
+    // and a parameter may be referenced anywhere in the statement, so this stays
+    // correct even if a filter is later pushed ahead of it.
+    params.push(await getOrganizationId());
+    const orgParam = `$${params.length}`;
 
     addTextFilter(clauses, params, "project", searchParams.get("project"));
     addTextFilter(clauses, params, "building", searchParams.get("building"));
@@ -254,7 +286,8 @@ export async function GET(req: NextRequest) {
           p.status AS pipeline_status,
           ${cpPayoutColumns}
         FROM booking_applications b
-        LEFT JOIN walkin_enquiries w ON w.id = b.lead_id
+        LEFT JOIN walkin_enquiries w
+               ON w.id = b.lead_id AND w.organization_id = b.organization_id
         LEFT JOIN booking_financials f ON f.booking_id = b.id
         LEFT JOIN booking_loan_details l ON l.booking_id = b.id
         LEFT JOIN booking_registration_details r ON r.booking_id = b.id
@@ -262,6 +295,7 @@ export async function GET(req: NextRequest) {
         LEFT JOIN customer_ledger_view clv ON clv.booking_id = b.id
         ${cpPayoutJoin}
         WHERE LOWER(COALESCE(b.booking_status, '')) IN ('confirmed', 'approved')
+          AND b.organization_id = ${orgParam}
       ),
       filtered AS (
         SELECT *

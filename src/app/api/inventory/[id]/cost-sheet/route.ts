@@ -11,6 +11,7 @@
 // history of what was offered stays intact.
 import { NextRequest, NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 import { buildCostSheet } from "@/lib/inventoryPricing";
 import { RESOLVE_RULE_SQL } from "../../price-rules/route";
@@ -34,10 +35,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     const rows = await query(
       `SELECT cs.*, w.name AS lead_name
          FROM inventory_cost_sheets cs
-         LEFT JOIN walkin_enquiries w ON w.id = cs.lead_id
-        WHERE cs.unit_id = $1
+         LEFT JOIN walkin_enquiries w
+                ON w.id = cs.lead_id AND w.organization_id = cs.organization_id
+        WHERE cs.unit_id = $1 AND cs.organization_id = $2
         ORDER BY cs.version DESC, cs.id DESC`,
-      [Number(id)],
+      [Number(id), await getOrganizationId()],
     );
     return NextResponse.json({ success: true, data: rows }, { status: 200 });
   } catch (err: any) {
@@ -121,9 +123,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
            club_fee, corpus_fund, legal_charges, maintenance_deposit, other_charges_total,
            gst_rate, gst_amount, stamp_duty_rate, stamp_duty_amount, registration_fee,
            discount_amount, discount_pct, total_amount, breakdown,
-           status, valid_until, created_by
+           status, valid_until, created_by, organization_id
          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,
-                   $18,$19,$20,$21,$22,$23,$24,$25,$26,'issued',$27,$28)
+                   $18,$19,$20,$21,$22,$23,$24,$25,$26,'issued',$27,$28,
+                   (SELECT organization_id FROM inventory_units WHERE id = $1))
          RETURNING *`,
         [
           Number(id),

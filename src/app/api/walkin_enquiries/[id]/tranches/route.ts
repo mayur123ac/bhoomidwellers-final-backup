@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { resolveLatestBookingId, seedPddChecklist } from "@/lib/pdd";
 import { getServerSession } from "@/lib/serverAuth";
+import { getOrganizationId } from "@/lib/tenantContext";
 import {
   buildFinancialSnapshot,
   BookingNotFoundError,
@@ -32,9 +33,28 @@ export async function GET(
 ) {
     const { id } = await params;
     try {
+        // MT-06: this had no gate at all. It returns disbursement amounts and bank
+        // reference numbers for ANY lead id, so it was both an authorization gap
+        // and an IDOR — the two together meant anyone on the internet could walk
+        // the id space and read every tenant's loan disbursement history. Gated to
+        // the same roles that may write a tranche, and scoped to the caller's
+        // organization so a foreign lead id returns an empty list rather than data.
+        const session = await getServerSession();
+        if (!session?.role) {
+            return NextResponse.json({ success: false, message: "Not signed in." }, { status: 401 });
+        }
+        if (!TRANCHE_ROLES.includes(normalize(session.role))) {
+            return NextResponse.json(
+                { success: false, message: "Your role cannot view disbursement tranches." },
+                { status: 403 }
+            );
+        }
+
         const result = await query(
-            `SELECT * FROM disbursement_tranches WHERE lead_id = $1 ORDER BY created_at ASC`,
-            [Number(id)]
+            `SELECT * FROM disbursement_tranches
+              WHERE lead_id = $1 AND organization_id = $2
+              ORDER BY created_at ASC`,
+            [Number(id), await getOrganizationId()]
         );
         return NextResponse.json({ success: true, tranches: result }, { status: 200 });
     } catch (err: any) {
@@ -186,8 +206,10 @@ export async function POST(
         // Insert the tranche
         const trancheRes = await query(
             `INSERT INTO disbursement_tranches
-         (lead_id, booking_id, amount, status, receiving_date, bank_reference_no, remarks, added_by_name, added_by_role)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         (lead_id, booking_id, amount, status, receiving_date, bank_reference_no, remarks, added_by_name, added_by_role,
+          organization_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9,
+               (SELECT organization_id FROM walkin_enquiries WHERE id = $1))
        RETURNING *`,
             // added_by_* come from the session first: the audit trail should record
             // who actually performed the write, not what the caller claimed to be.

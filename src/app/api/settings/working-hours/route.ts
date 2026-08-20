@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { requireRole } from "@/lib/serverAuth";
+import { requireRole, requireSession } from "@/lib/serverAuth";
+import { getOrganizationId } from "@/lib/tenantContext";
 
 export const dynamic = "force-dynamic";
 
@@ -8,7 +9,13 @@ export const dynamic = "force-dynamic";
 // Returns the centralized shift timing for the organization
 export async function GET() {
   try {
-    const orgId = 1; // Default organization for now
+    // MT-06: this handler does not only read — it INSERTs a default settings row
+    // on a miss. Unauthenticated, that was an anonymous write against a tenant
+    // resolved by sole-organization fallback.
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
+    const orgId = await getOrganizationId();
 
     const res = await query(
       `SELECT shift_start, shift_end, flexible FROM organization_settings WHERE organization_id = $1`,
@@ -52,7 +59,7 @@ export async function POST(req: Request) {
 
     const body = await req.json();
     const { loginTime, logoutTime, flexible } = body;
-    const orgId = 1; // Default organization
+    const orgId = await getOrganizationId();
 
     // Server-Side Validation
     if (typeof flexible !== "boolean") {

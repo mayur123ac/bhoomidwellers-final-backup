@@ -13,6 +13,7 @@
 // The name strings remain authoritative for the booking↔unit match in
 // inventorySync.ts. This adds the FK alongside; it never rewrites the strings.
 import type { PoolClient } from "pg";
+import { getOrganizationId } from "./tenantContext";
 
 export interface HierarchyIds {
   projectId: number | null;
@@ -61,11 +62,11 @@ export async function resolveHierarchy(
     // project, and the unique index would turn the loser into a 23505 that
     // aborts an otherwise valid bulk generate.
     const ins = await client.query(
-      `INSERT INTO inventory_projects (name, created_by, updated_by)
-       VALUES ($1, $2, $2)
+      `INSERT INTO inventory_projects (name, created_by, updated_by, organization_id)
+       VALUES ($1, $2, $2, $3)
        ON CONFLICT DO NOTHING
        RETURNING id`,
-      [project, actor || "system"],
+      [project, actor || "system", await getOrganizationId(client)],
     );
     if (ins.rows.length) {
       projectId = ins.rows[0].id;
@@ -93,8 +94,11 @@ export async function resolveHierarchy(
     towerId = foundTower.rows[0].id;
   } else if (allowCreate) {
     const ins = await client.query(
-      `INSERT INTO inventory_towers (project_id, name, created_by, updated_by)
-       VALUES ($1, $2, $3, $3)
+      // The tower inherits the project's organization in SQL, so a tower can
+      // never land in a different tenant to its project.
+      `INSERT INTO inventory_towers (project_id, name, created_by, updated_by, organization_id)
+       VALUES ($1, $2, $3, $3,
+               (SELECT organization_id FROM inventory_projects WHERE id = $1))
        ON CONFLICT DO NOTHING
        RETURNING id`,
       [projectId, tower, actor || "system"],

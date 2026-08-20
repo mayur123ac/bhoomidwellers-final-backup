@@ -9,6 +9,7 @@
 // Re-activation is an admin action from Employee Management, not a self-service
 // undo; there would be nobody signed in to perform it.
 
+import { getOrganizationId } from "@/lib/tenantContext";
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { requireSession } from "@/lib/serverAuth";
@@ -21,6 +22,7 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest) {
   const gate = await requireSession();
   if (!gate.ok) return gate.response;
+  const orgId = await getOrganizationId();
   if (!gate.userId) {
     return NextResponse.json({ success: false, message: "Session carries no user id." }, { status: 400 });
   }
@@ -41,8 +43,8 @@ export async function POST(req: NextRequest) {
   }
 
   const rows = await query<{ password: string | null; name: string; email: string | null; role: string }>(
-    `SELECT password, name, email, role FROM users WHERE id = $1 LIMIT 1`,
-    [gate.userId]
+    `SELECT password, name, email, role FROM users WHERE id = $1 AND organization_id = $2 LIMIT 1`,
+    [gate.userId, orgId]
   );
   if (rows.length === 0) {
     return NextResponse.json({ success: false, message: "User not found." }, { status: 404 });
@@ -58,8 +60,8 @@ export async function POST(req: NextRequest) {
   if ((rows[0].role ?? "").toLowerCase() === "admin") {
     const others = await query<{ count: string }>(
       `SELECT COUNT(*)::text AS count FROM users
-        WHERE LOWER(role) = 'admin' AND is_active = true AND deleted_at IS NULL AND id <> $1`,
-      [gate.userId]
+        WHERE LOWER(role) = 'admin' AND is_active = true AND deleted_at IS NULL AND id <> $1 AND organization_id = $2`,
+      [gate.userId, orgId]
     );
     if (Number(others[0]?.count ?? 0) === 0) {
       return NextResponse.json(
@@ -76,15 +78,15 @@ export async function POST(req: NextRequest) {
   await query(
     `UPDATE users
         SET is_active = false, deactivated_at = NOW(), deleted_at = NOW(), updated_at = NOW()
-      WHERE id = $1`,
-    [gate.userId]
+      WHERE id = $1 AND organization_id = $2`,
+    [gate.userId, orgId]
   );
 
   await query(
     `UPDATE employee_sessions
         SET is_active = false, session_end = NOW(), session_end_reason = 'account_deactivated'
-      WHERE user_id = $1 AND is_active = true`,
-    [gate.userId]
+      WHERE user_id = $1 AND is_active = true AND organization_id = $2`,
+    [gate.userId, orgId]
   );
 
   const { ip, userAgent } = requestContext(req);
@@ -105,8 +107,8 @@ export async function POST(req: NextRequest) {
   // because the address is no longer read here; the routing engine decides.
   const admins = await query<{ id: number; name: string }>(
     `SELECT id, name FROM users
-      WHERE LOWER(role) = 'admin' AND is_active = true AND deleted_at IS NULL AND id <> $1`,
-    [gate.userId]
+      WHERE LOWER(role) = 'admin' AND is_active = true AND deleted_at IS NULL AND id <> $1 AND organization_id = $2`,
+    [gate.userId, orgId]
   );
 
   for (const admin of admins) {

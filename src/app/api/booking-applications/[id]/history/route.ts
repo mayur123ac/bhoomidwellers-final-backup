@@ -1,6 +1,7 @@
 // app/api/booking-applications/[id]/history/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
@@ -27,8 +28,11 @@ export async function GET(
     `);
 
     const rows = await query(
-      `SELECT * FROM booking_history WHERE booking_id = $1 ORDER BY created_at DESC`,
-      [Number(id)]
+      // MT-06: the booking id is a caller-supplied route parameter. Without the
+      // organization predicate any signed-in user could read another tenant's
+      // booking history by walking the id space.
+      `SELECT * FROM booking_history WHERE booking_id = $1 AND organization_id = $2 ORDER BY created_at DESC`,
+      [Number(id), await getOrganizationId()]
     );
     return NextResponse.json({ success: true, data: rows }, { status: 200 });
   } catch (err: any) {

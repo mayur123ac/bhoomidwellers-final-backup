@@ -186,8 +186,9 @@ export async function PATCH(req: NextRequest) {
 
   await query(
     `INSERT INTO notification_preferences
-       (user_id, send_current_email, send_alternative_email, fallback_enabled, updated_at, updated_by)
-     VALUES ($1, $2, $3, $4, NOW(), $1)
+       (user_id, send_current_email, send_alternative_email, fallback_enabled, updated_at, updated_by, organization_id)
+     VALUES ($1, $2, $3, $4, NOW(), $1,
+             (SELECT organization_id FROM users WHERE id = $1))
      ON CONFLICT (user_id) DO UPDATE
        SET send_current_email     = EXCLUDED.send_current_email,
            send_alternative_email = EXCLUDED.send_alternative_email,

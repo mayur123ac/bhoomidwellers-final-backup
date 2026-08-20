@@ -12,10 +12,18 @@
 // NEVER returns the value, any prefix of it, or a hash of it. Length and
 // presence only.
 import { NextResponse } from "next/server";
+import { requireRoles } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  // MT-06: this reports the LENGTH of SESSION_SECRET, whether it has stray
+  // whitespace, and which deployment answered. That is a useful diagnostic for an
+  // admin and a useful reconnaissance result for anyone else, so it is no longer
+  // answered anonymously.
+  const gate = await requireRoles(["admin"]);
+  if (!gate.ok) return gate.response;
+
   const secret = process.env.SESSION_SECRET;
 
   return NextResponse.json({

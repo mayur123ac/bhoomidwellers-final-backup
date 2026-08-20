@@ -176,16 +176,34 @@ async function writeLeadTimelineEntry(leadId: number, payload: BolnaExecution): 
 
   const message = summary ? `${headline}\n\n${summary}` : headline;
 
+  // ── MT-05 tenant resolution for an unauthenticated caller ────────────────
+  // This runs from a provider callback, so there is no session and
+  // getOrganizationId() would fall back to "the only organization" — which is a
+  // guess, and stops being correct the moment a second tenant exists.
+  //
+  // It does not need to guess. `leadId` was read out of the bolna_calls row
+  // matched on execution_id, so it is server-side data, not anything the caller
+  // sent. The lead therefore IS the tenant source, and both writes derive the
+  // organization from it in SQL.
+  //
+  // INSERT ... SELECT rather than VALUES, deliberately: if the lead has since
+  // been deleted the SELECT yields no row and nothing is written, instead of
+  // writing a row with a NULL organization. No orphan, no NULL, no fallback.
   await query(
     `INSERT INTO employee_activity_logs
-       (user_id, action_type, module, lead_id, lead_name, description, event_severity)
-     VALUES (NULL, 'voice_call_completed', 'bolna', $1, NULL, $2, $3)`,
-    [String(leadId), message, status === "completed" ? "info" : "warning"]
+       (user_id, action_type, module, lead_id, lead_name, description, event_severity, organization_id)
+     -- lead_id is varchar on employee_activity_logs, so it is taken from the
+     -- joined row (w.id::text) rather than casting the parameter. Casting $1
+     -- would make Postgres infer it as text and break the join predicate.
+     SELECT NULL, 'voice_call_completed', 'bolna', w.id::text, NULL, $2, $3, w.organization_id
+       FROM walkin_enquiries w WHERE w.id = $1`,
+    [leadId, message, status === "completed" ? "info" : "warning"]
   ).catch((e) => console.error("[bolna webhook] activity log failed:", e?.message));
 
   await query(
-    `INSERT INTO follow_ups (lead_id, message, created_by_name, follow_up_type, created_by_role)
-     VALUES ($1, $2, 'Bolna AI Agent', 'voice_call', 'system')`,
+    `INSERT INTO follow_ups (lead_id, message, created_by_name, follow_up_type, created_by_role, organization_id)
+     SELECT $1, $2, 'Bolna AI Agent', 'voice_call', 'system', w.organization_id
+       FROM walkin_enquiries w WHERE w.id = $1`,
     [leadId, message]
   ).catch((e) => console.error("[bolna webhook] follow-up failed:", e?.message));
 }

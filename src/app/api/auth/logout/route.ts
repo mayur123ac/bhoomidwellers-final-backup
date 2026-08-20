@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getServerSession } from "@/lib/serverAuth";
+import { getOrganizationId } from "@/lib/tenantContext";
 
 export async function POST(req: Request) {
   try {
@@ -9,24 +10,21 @@ export async function POST(req: Request) {
     if (session) {
       const userId = session._id;
       const now = new Date();
-      const today = now.toISOString().split('T')[0];
 
       // Close the active session
       await query(
-        `UPDATE employee_sessions 
-         SET session_end = $1, is_active = false 
-         WHERE user_id = $2 AND is_active = true`,
-        [now, userId]
+        `UPDATE employee_sessions
+         SET session_end = $1, is_active = false
+         WHERE user_id = $2 AND is_active = true AND organization_id = $3`,
+        [now, userId, await getOrganizationId()]
       );
 
-      // Update attendance logout time and recalculate working hours
-      await query(
-        `UPDATE employee_attendance 
-         SET last_logout = $1,
-             working_hours = ROUND(CAST(EXTRACT(EPOCH FROM ($1 - first_login))/3600 AS NUMERIC), 2)
-         WHERE user_id = $2 AND date = $3`,
-        [now, userId, today]
-      );
+      // MT-03: the `UPDATE employee_attendance` that used to sit here has been
+      // removed. Attendance moved to `attendance_records` (see api/attendance/*),
+      // and nothing in the application ever INSERTed into employee_attendance —
+      // so this statement matched zero rows on every logout since the migration,
+      // failing silently inside the catch below. The table is slated for DROP.
+      // Logout time is derived from employee_sessions.session_end.
     }
   } catch (err) {
     console.error("Logout DB update error:", err);

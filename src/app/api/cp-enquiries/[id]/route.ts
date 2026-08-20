@@ -10,6 +10,7 @@
 // leaving that guarantee undefined for whatever calls this route next.
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { getServerSession } from "@/lib/serverAuth";
 import { normalizeRole } from "@/lib/cpRbac";
 import { CP_SOURCE_VALUES } from "@/lib/cpCommissionEngine";
@@ -37,9 +38,15 @@ const SELECT_SQL = `
     sm.name AS sourcing_manager_name, sm.username AS sourcing_manager_username,
     sm.email AS sourcing_manager_email, sm.whatsapp_number AS sourcing_manager_phone
   FROM walkin_enquiries w
-  LEFT JOIN channel_partners cp ON cp.id = w.channel_partner_id
-  LEFT JOIN users sm            ON sm.id = w.sourcing_manager_id
-  WHERE w.id = $1
+  -- Joined tenant-owned rows carry their own predicate so a partner or manager
+  -- from another organization cannot be decorated onto this enquiry.
+  LEFT JOIN channel_partners cp
+         ON cp.id = w.channel_partner_id AND cp.organization_id = w.organization_id
+  LEFT JOIN users sm
+         ON sm.id = w.sourcing_manager_id AND sm.organization_id = w.organization_id
+  -- $2 is the tenant: an id belonging to another organization matches no row,
+  -- so the handler answers 404 exactly as it does for a nonexistent id.
+  WHERE w.id = $1 AND w.organization_id = $2
 `;
 
 export async function GET(
@@ -66,7 +73,7 @@ export async function GET(
   }
 
   try {
-    const rows = await query(SELECT_SQL, [enquiryId]);
+    const rows = await query(SELECT_SQL, [enquiryId, await getOrganizationId()]);
     if (rows.length === 0) {
       return NextResponse.json({ success: false, message: "Enquiry not found." }, { status: 404 });
     }

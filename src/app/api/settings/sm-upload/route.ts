@@ -3,16 +3,23 @@
 // POST: admin-only, set the toggle.
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { requireRole } from "@/lib/serverAuth";
+import { requireRole, requireSession } from "@/lib/serverAuth";
+import { getOrganizationId } from "@/lib/tenantContext";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
+    // MT-06: see the note in settings/lead-sorting. Anonymous callers must not
+    // reach a tenant-resolved read.
+    const gate = await requireSession();
+    if (!gate.ok) return gate.response;
+
     const res = await query(
       `SELECT allow_sm_upload
        FROM organization_settings
-       WHERE organization_id = 1`
+       WHERE organization_id = $1`,
+      [await getOrganizationId()]
     );
 
     if (res.length === 0) {
@@ -48,11 +55,11 @@ export async function POST(req: Request) {
 
     await query(
       `INSERT INTO organization_settings (organization_id, shift_start, shift_end, flexible, allow_sm_upload)
-       VALUES (1, '11:00', '20:00', false, $1)
+       VALUES ($2, '11:00', '20:00', false, $1)
        ON CONFLICT (organization_id) DO UPDATE
          SET allow_sm_upload = EXCLUDED.allow_sm_upload,
              updated_at = CURRENT_TIMESTAMP`,
-      [enabled]
+      [enabled, await getOrganizationId()]
     );
 
     return NextResponse.json({

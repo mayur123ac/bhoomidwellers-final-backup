@@ -6,6 +6,7 @@
 // happen. /cp-commissions/[id] is always the commission id.
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
@@ -31,11 +32,13 @@ export async function GET(
       `SELECT c.*, cp.name AS channel_partner_name, cp.status AS channel_partner_status,
               b.booking_number
          FROM cp_commissions c
-         JOIN channel_partners cp ON cp.id = c.channel_partner_id
-         LEFT JOIN booking_applications b ON b.id = c.booking_id
-        WHERE c.booking_id = $1
+         JOIN channel_partners cp
+           ON cp.id = c.channel_partner_id AND cp.organization_id = c.organization_id
+         LEFT JOIN booking_applications b
+           ON b.id = c.booking_id AND b.organization_id = c.organization_id
+        WHERE c.booking_id = $1 AND c.organization_id = $2
         ORDER BY (c.status <> 'reversed') DESC, c.id DESC`,
-      [Number(bookingId)]
+      [Number(bookingId), await getOrganizationId()]
     );
 
     if (rows.length === 0) {

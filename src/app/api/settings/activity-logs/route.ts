@@ -5,6 +5,7 @@
 // for admins only; for everyone else it is ignored and forced to the session's
 // own id, so it is not a way to read a colleague's activity by editing the URL.
 
+import { getOrganizationId } from "@/lib/tenantContext";
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/serverAuth";
 import { fetchActivityFeed } from "@/lib/auditLog";
@@ -25,6 +26,7 @@ function csvCell(value: unknown): string {
 export async function GET(req: NextRequest) {
   const gate = await requireSession();
   if (!gate.ok) return gate.response;
+  const orgId = await getOrganizationId();
 
   const params = req.nextUrl.searchParams;
   const admin = isAdmin(gate.session.role);
@@ -90,7 +92,8 @@ export async function GET(req: NextRequest) {
   // everyone else would leak the directory to roles that cannot see it.
   const users = admin
     ? await query<{ id: number; name: string }>(
-        `SELECT id, name FROM users WHERE deleted_at IS NULL ORDER BY name`
+        `SELECT id, name FROM users WHERE deleted_at IS NULL AND organization_id = $1 ORDER BY name`,
+        [orgId]
       )
     : [];
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { requireRole } from "@/lib/serverAuth";
+import { getOrganizationId } from "@/lib/tenantContext";
 
 export const dynamic = 'force-dynamic';
 
@@ -19,29 +20,34 @@ export async function GET(req: Request) {
     }
 
     const today = new Date().toISOString().split('T')[0];
+    // userId is a query parameter. Every statement below therefore carries the
+    // organization predicate, and it sits in the WHERE clause — ahead of LIMIT and
+    // ahead of the COUNT/GROUP BY aggregations, so no other tenant's rows can be
+    // counted into this tenant's totals.
+    const orgId = await getOrganizationId();
 
     // 1. Fetch Audit History (Timeline)
     const logs = await query(`
       SELECT action_type, description as action, module, lead_id, lead_name, timestamp as created_at
       FROM employee_activity_logs
-      WHERE user_id = $1 AND DATE(timestamp) = $2
+      WHERE user_id = $1 AND organization_id = $3 AND DATE(timestamp) = $2
       ORDER BY timestamp DESC
       LIMIT 100
-    `, [userId, today]);
+    `, [userId, today, orgId]);
 
     // 2. Compute Analytics Metrics
     const leadsOpenedRes = await query(`
       SELECT COUNT(DISTINCT lead_id) as count
       FROM employee_activity_logs
-      WHERE user_id = $1 AND DATE(timestamp) = $2 AND lead_id IS NOT NULL
-    `, [userId, today]);
+      WHERE user_id = $1 AND organization_id = $3 AND DATE(timestamp) = $2 AND lead_id IS NOT NULL
+    `, [userId, today, orgId]);
 
     const interactionsRes = await query(`
       SELECT action_type, COUNT(*) as count
       FROM employee_activity_logs
-      WHERE user_id = $1 AND DATE(timestamp) = $2 
+      WHERE user_id = $1 AND organization_id = $3 AND DATE(timestamp) = $2 
       GROUP BY action_type
-    `, [userId, today]);
+    `, [userId, today, orgId]);
 
     let callsInitiated = 0;
     let followupsAdded = 0;

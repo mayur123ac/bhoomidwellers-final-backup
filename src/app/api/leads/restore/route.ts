@@ -1,6 +1,7 @@
 //api/leads/restore/route.ts
 import { NextResponse } from "next/server";
 import { query, recalculateSrNos } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { broadcastLeadUpdate } from "@/lib/lostLeadEvents";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 
@@ -33,8 +34,8 @@ export async function PATCH(req: Request) {
     }
 
     const existing = await query(
-      "SELECT id, name, is_lost_lead FROM walkin_enquiries WHERE id = $1",
-      [leadId]
+      "SELECT id, name, is_lost_lead FROM walkin_enquiries WHERE id = $1 AND organization_id = $2",
+      [leadId, await getOrganizationId()]
     );
 
     if (existing.length === 0) {
@@ -50,9 +51,9 @@ export async function PATCH(req: Request) {
            lost_lead_reason = NULL,
            lost_lead_marked_at = NULL,
            lost_lead_marked_by = NULL
-       WHERE id = $1
+       WHERE id = $1 AND organization_id = $2
        RETURNING *`,
-      [leadId]
+      [leadId, await getOrganizationId()]
     );
 
     const updatedLead = updatedRows[0];
@@ -66,13 +67,14 @@ export async function PATCH(req: Request) {
 
     try {
       await query(
-        `INSERT INTO follow_ups (lead_id, message, created_by_name, site_visit_date)
-         VALUES ($1, $2, $3, $4)`,
+        `INSERT INTO follow_ups (lead_id, message, created_by_name, site_visit_date, organization_id)
+         VALUES ($1, $2, $3, $4, $5)`,
         [
           String(leadId),
           `Lead restored from Lost Leads\nRestored By: ${restoredBy}`,
           restoredBy,
           null,
+          await getOrganizationId(),
         ]
       );
     } catch (fuErr: unknown) {

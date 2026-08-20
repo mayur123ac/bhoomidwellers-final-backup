@@ -19,6 +19,7 @@ import {
 import { buildWebhookUrl, readBolnaConfig } from "@/config/bolna.config";
 import { getAgent, listPhoneNumbers, toBolnaError } from "@/lib/bolna-client";
 import { toE164 } from "@/lib/phone";
+import { getOrganizationId } from "./tenantContext";
 import {
   BolnaError,
   type BolnaCredentials,
@@ -29,13 +30,12 @@ import {
 const PROVIDER = "bolna";
 
 /**
- * This CRM is single-tenant. organization_settings hard-codes `const orgId = 1`
+ * The organization is resolved server-side by getOrganizationId(); callers may
  * in every route, and integration_settings follows the same convention rather
  * than inventing a tenancy model the rest of the app does not have. The column
  * and the unique index are there so that adding real multi-tenancy later is a
  * change to this constant and its callers, not a migration.
  */
-export const DEFAULT_ORG_ID = 1;
 
 interface IntegrationRow {
   settings: Record<string, any> | null;
@@ -46,12 +46,12 @@ interface IntegrationRow {
   updated_at: Date | null;
 }
 
-async function readRow(orgId = DEFAULT_ORG_ID): Promise<IntegrationRow | null> {
+async function readRow(orgId?: string): Promise<IntegrationRow | null> {
   const rows = await query<IntegrationRow>(
     `SELECT settings, secrets, enabled, last_verified_at, last_verify_error, updated_at
        FROM integration_settings
       WHERE organization_id = $1 AND provider = $2`,
-    [orgId, PROVIDER]
+    [orgId ?? await getOrganizationId(), PROVIDER]
   );
   return rows[0] ?? null;
 }
@@ -72,7 +72,7 @@ async function readRow(orgId = DEFAULT_ORG_ID): Promise<IntegrationRow | null> {
  * BOLNA_API_KEY left in .env.local from testing must not silently win.
  */
 export async function getBolnaCredentials(
-  orgId = DEFAULT_ORG_ID
+  orgId?: string
 ): Promise<BolnaCredentials | null> {
   const cfg = readBolnaConfig();
   const row = await readRow(orgId);
@@ -99,7 +99,7 @@ export async function getBolnaCredentials(
 }
 
 /** Whether a call can actually be placed right now. Never throws. */
-export async function isBolnaConfigured(orgId = DEFAULT_ORG_ID): Promise<boolean> {
+export async function isBolnaConfigured(orgId?: string): Promise<boolean> {
   if (!readBolnaConfig().enabled) return false;
   try {
     return (await getBolnaCredentials(orgId)) !== null;
@@ -121,7 +121,7 @@ export async function isBolnaConfigured(orgId = DEFAULT_ORG_ID): Promise<boolean
  * someone rotated SECRETS_ENCRYPTION_KEY.
  */
 export async function getBolnaSettingsSummary(
-  orgId = DEFAULT_ORG_ID,
+  orgId?: string,
   reqOrigin?: string | null
 ): Promise<BolnaSettingsSummary> {
   const cfg = readBolnaConfig();
@@ -325,7 +325,7 @@ export async function validateBolnaCredentials(
  * gets silently dropped by a code path that only knew about the first.
  */
 export async function saveBolnaSettings(params: {
-  orgId?: number;
+  orgId?: string;
   agentId: string;
   phoneNumber: string;
   /** Omit or pass null to retain the currently stored key. */
@@ -335,7 +335,7 @@ export async function saveBolnaSettings(params: {
   verified: boolean;
   verifyError?: string | null;
 }): Promise<void> {
-  const orgId = params.orgId ?? DEFAULT_ORG_ID;
+  const orgId = params.orgId ?? await getOrganizationId();
 
   if (!isSecretsCryptoConfigured()) {
     throw new BolnaError(
@@ -388,7 +388,7 @@ export async function saveBolnaSettings(params: {
 }
 
 /** Clears the stored credentials. The row is kept so `enabled` and audit survive. */
-export async function clearBolnaSettings(orgId = DEFAULT_ORG_ID, updatedBy?: number | null) {
+export async function clearBolnaSettings(orgId?: string, updatedBy?: number | null) {
   await query(
     `UPDATE integration_settings
         SET secrets = '{}'::jsonb,
@@ -398,6 +398,6 @@ export async function clearBolnaSettings(orgId = DEFAULT_ORG_ID, updatedBy?: num
             updated_by = $2,
             updated_at = NOW()
       WHERE organization_id = $1 AND provider = $3`,
-    [orgId, updatedBy ?? null, PROVIDER]
+    [orgId ?? await getOrganizationId(), updatedBy ?? null, PROVIDER]
   );
 }

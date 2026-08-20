@@ -30,6 +30,7 @@ import {
 } from "@/lib/emailRouting";
 import { EmailService } from "@/lib/email/EmailService";
 import { resolveApproximateLocation } from "@/lib/email/location";
+import { getOrganizationId } from "./tenantContext";
 import {
   describeLockStatus,
   issueDeviceConfirmLinks,
@@ -71,7 +72,8 @@ function deviceTypeOf(userAgent: string): string {
 async function organizationName(): Promise<string> {
   try {
     const rows = await query<{ workspace_name: string | null }>(
-      `SELECT workspace_name FROM organization_settings WHERE organization_id = 1 LIMIT 1`
+      `SELECT workspace_name FROM organization_settings WHERE organization_id = $1 LIMIT 1`,
+      [await getOrganizationId()]
     );
     return rows[0]?.workspace_name?.trim() || "Bhoomi Dwellers";
   } catch {
@@ -231,8 +233,12 @@ async function deviceFirstSeen(userId: number, fingerprint: string): Promise<str
   if (!fingerprint) return null;
   try {
     const rows = await query<{ first_seen_at: string }>(
+      // Pre-session path (sign-in alert). Organization derived in-statement from
+      // the users row, the same way checkAndRecordDevice does it.
       `SELECT first_seen_at FROM known_login_devices
-        WHERE user_id = $1 AND device_hash = $2 LIMIT 1`,
+        WHERE user_id = $1 AND device_hash = $2
+          AND organization_id = (SELECT organization_id FROM users WHERE id = $1)
+        LIMIT 1`,
       [userId, fingerprint]
     );
     if (!rows[0]) return null;

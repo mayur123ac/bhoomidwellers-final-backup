@@ -32,6 +32,8 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 export async function POST(req: NextRequest) {
   const gate = await requireSession();
   if (!gate.ok) return gate.response;
+  // (no organization-scoped query remains in this handler: name and email are
+  //  platform-wide login identifiers — decision 2026-08-19)
   if (!gate.userId) {
     return NextResponse.json({ success: false, message: "Session carries no user id." }, { status: 400 });
   }
@@ -77,6 +79,9 @@ export async function POST(req: NextRequest) {
   }
 
   const taken = await query<{ id: number }>(
+    // Email identity is PLATFORM-WIDE (decision 2026-08-19): one address is one
+    // account across every organization, which is what lets login identify a user
+    // by email alone. So this check is deliberately NOT organization-scoped.
     `SELECT id FROM users WHERE LOWER(email) = $1 AND id <> $2 LIMIT 1`,
     [newEmail, gate.userId]
   );
@@ -126,8 +131,9 @@ export async function POST(req: NextRequest) {
     // `purpose` is explicit rather than relying on the column default, so that
     // this row can never be mistaken for an alternative-address verification by
     // /api/settings/notification-recipients/verify.
-    `INSERT INTO email_change_otps (user_id, new_email, sent_to, otp_hash, expires_at, purpose)
-     VALUES ($1, $2, $3, $4, $5, 'primary_change')`,
+    `INSERT INTO email_change_otps (user_id, new_email, sent_to, otp_hash, expires_at, purpose, organization_id)
+     VALUES ($1, $2, $3, $4, $5, 'primary_change',
+             (SELECT organization_id FROM users WHERE id = $1))`,
     [gate.userId, newEmail, user.email, hashOtp(otp), expiresAt]
   );
 

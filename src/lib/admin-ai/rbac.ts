@@ -15,6 +15,7 @@
 
 import { getServerSession, getSessionUserId } from "@/lib/serverAuth";
 import { normalizeRole } from "@/lib/cpRbac";
+import { getOrganizationId } from "../tenantContext";
 
 /**
  * Roles allowed to use the Admin AI.
@@ -34,17 +35,16 @@ export function canUseAdminAi(role: unknown): boolean {
 /**
  * The authorization envelope for one AI request.
  *
- * `organizationId` is fixed at 1 because this deployment is single-tenant —
- * organization_id exists only on organization_settings and attendance_records,
- * with a single row. It is threaded through anyway so the tool layer and audit
- * log already speak in tenant terms; making that change later would mean
- * touching every tool.
+ * `organizationId` is the canonical tenant UUID, resolved server-side by
+ * getOrganizationId(). It is never supplied by the caller. The tool layer and
+ * audit log already speak in tenant terms, so scoping their queries is a
+ * matter of using this value rather than threading a new one through.
  */
 export interface AiScope {
   userId: number;
   userName: string;
   role: string;
-  organizationId: number;
+  organizationId: string;
   /** True when the scope may read across every user's records. */
   canReadAllRecords: boolean;
 }
@@ -98,7 +98,7 @@ export async function authorizeAiRequest(): Promise<AiAuthResult> {
       userId,
       userName: String(session.name ?? "Unknown"),
       role: normalizeRole(session.role),
-      organizationId: 1,
+      organizationId: await getOrganizationId(),
       canReadAllRecords: normalizeRole(session.role) === "admin",
     },
   };

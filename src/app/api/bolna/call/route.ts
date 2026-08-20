@@ -20,6 +20,7 @@ import { makeCall, toBolnaError } from "@/lib/bolna-client";
 import { createCallRecord, getCallsForLead, recordCallFailure } from "@/lib/bolnaCalls";
 import { readBolnaConfig, redactSecrets } from "@/config/bolna.config";
 import { query } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { toE164 } from "@/lib/phone";
 import { describeBolnaError } from "@/types/bolna.types";
 
@@ -57,8 +58,8 @@ export async function POST(req: NextRequest) {
 
   if (leadId !== null) {
     const rows = await query<{ phone: string | null; name: string | null }>(
-      `SELECT phone, name FROM walkin_enquiries WHERE id = $1`,
-      [leadId]
+      `SELECT phone, name FROM walkin_enquiries WHERE id = $1 AND organization_id = $2`,
+      [leadId, await getOrganizationId()]
     );
     if (rows.length === 0) {
       return NextResponse.json({ success: false, message: "Lead not found." }, { status: 404 });
@@ -67,8 +68,8 @@ export async function POST(req: NextRequest) {
     leadName = rows[0].name;
   } else if (callerLeadId !== null) {
     const rows = await query<{ contact_no: string | null; name: string | null }>(
-      `SELECT contact_no, name FROM caller_leads WHERE id = $1`,
-      [callerLeadId]
+      `SELECT contact_no, name FROM caller_leads WHERE id = $1 AND organization_id = $2`,
+      [callerLeadId, await getOrganizationId()]
     );
     if (rows.length === 0) {
       return NextResponse.json({ success: false, message: "Lead not found." }, { status: 404 });
@@ -154,13 +155,14 @@ export async function POST(req: NextRequest) {
     if (leadId !== null) {
       await query(
         `INSERT INTO employee_activity_logs
-           (user_id, action_type, module, lead_id, lead_name, description, event_severity)
-         VALUES ($1, 'voice_call', 'bolna', $2, $3, $4, 'info')`,
+           (user_id, action_type, module, lead_id, lead_name, description, event_severity, organization_id)
+         VALUES ($1, 'voice_call', 'bolna', $2, $3, $4, 'info', $5)`,
         [
           gate.userId,
           String(leadId),
           leadName,
           `AI voice call placed to ${e164.e164} via Bolna agent`,
+          await getOrganizationId(),
         ]
       ).catch(() => {});
     }

@@ -1,6 +1,7 @@
 // app/api/settings/account/route.ts — the Account & Security summary block,
 // plus the notification-email preference which lives on that screen.
 
+import { getOrganizationId } from "@/lib/tenantContext";
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { requireSession } from "@/lib/serverAuth";
@@ -15,6 +16,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 export async function GET() {
   const gate = await requireSession();
   if (!gate.ok) return gate.response;
+  const orgId = await getOrganizationId();
   if (!gate.userId) {
     return NextResponse.json({ success: false, message: "Session carries no user id." }, { status: 400 });
   }
@@ -26,13 +28,13 @@ export async function GET() {
 
   const active = await query<{ count: string }>(
     `SELECT COUNT(*)::text AS count FROM employee_sessions
-      WHERE user_id = $1 AND is_active = true`,
-    [gate.userId]
+      WHERE user_id = $1 AND is_active = true AND organization_id = $2`,
+    [gate.userId, orgId]
   );
 
   const stored = await query<{ password: string | null }>(
-    `SELECT password FROM users WHERE id = $1`,
-    [gate.userId]
+    `SELECT password FROM users WHERE id = $1 AND organization_id = $2`,
+    [gate.userId, orgId]
   );
 
   return NextResponse.json({

@@ -15,6 +15,7 @@
 import { buildServerDigest } from "@/lib/revenueDigest";
 import { REVENUE_CHAT_SYSTEM_PROMPT } from "@/lib/prompts";
 import { NextRequest, NextResponse } from "next/server";
+import { requireSession } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -171,6 +172,13 @@ function v0(entry: [string, { count: number }]) {
 // ─── POST — answer a question about the visible rows ──────────────────────────
 export async function POST(req: NextRequest) {
     try {
+        // MT-06: this had no gate. It does not touch the database — the rows come
+        // from the request — but it spends the workspace's OpenAI key on behalf of
+        // whoever calls it, and it echoes the submitted rows back through a third
+        // party. Both are things only a signed-in user should be able to do.
+        const gate = await requireSession();
+        if (!gate.ok) return gate.response;
+
         const apiKey = process.env.OPENAI_API_KEY;
         if (!apiKey) {
             return NextResponse.json(

@@ -8,6 +8,7 @@
 //      step — without it the band is just a label on a self-service discount.
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { requireRoles } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
@@ -31,7 +32,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       );
     }
 
-    const rows = await query<any>(`SELECT * FROM inventory_offers WHERE id = $1`, [Number(id)]);
+    // MT-06: approving/rejecting an offer is a mutation keyed on a caller-supplied
+    // id — scoped so another tenant's offer is not decidable from here.
+    const rows = await query<any>(`SELECT * FROM inventory_offers WHERE id = $1 AND organization_id = $2`, [Number(id), await getOrganizationId()]);
     if (!rows.length) {
       return NextResponse.json({ success: false, message: "Offer not found." }, { status: 404 });
     }

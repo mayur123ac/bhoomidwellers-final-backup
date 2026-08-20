@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
+import { getOrganizationId } from "@/lib/tenantContext";
 
 export async function GET() {
   try {
@@ -33,18 +34,27 @@ export async function GET() {
       }
     };
 
+    // Every aggregate below is organization-scoped. An unscoped COUNT here would
+    // silently total both builders' leads into one number on the dashboard.
+    const orgId = await getOrganizationId();
+
+    // The roster is the row set every aggregate is reported against, so it is
+    // scoped first — an unscoped roster would put other tenants' staff names on
+    // this dashboard even with every count correct.
     const users = await query(`
       SELECT id, name, role FROM public.users
       WHERE role IN ('Sales Manager', 'Site Head', 'Receptionist') AND is_active = true
+        AND organization_id = $1
       ORDER BY role, name
-    `);
+    `, [orgId]);
 
     const leadCounts = await safeQuery(`
       SELECT assigned_to AS name, COUNT(*) AS total
       FROM public.walkin_enquiries
       WHERE assigned_to IS NOT NULL AND assigned_to != ''
+        AND organization_id = $1
       GROUP BY assigned_to
-    `);
+    `, [orgId]);
 
     const followUpsToday = await safeQuery(`
       SELECT created_by_name AS name, COUNT(*) AS count
@@ -52,24 +62,28 @@ export async function GET() {
       WHERE created_at >= $1 AND created_at < $2
         AND message NOT LIKE '%Lead Transferred%'
         AND message NOT LIKE '%Lead Marked as Closing%'
+        AND organization_id = $3
       GROUP BY created_by_name
-    `, [startOfDay, endOfDay]);
+    `, [startOfDay, endOfDay, orgId]);
 
     const waToday = await safeQuery(`
       SELECT sender_name AS name, COUNT(*) AS count
       FROM public.whatsapp_logs
       WHERE sent_at >= $1 AND sent_at < $2
+        AND organization_id = $3
       GROUP BY sender_name
-    `, [startOfDay, endOfDay]);
+    `, [startOfDay, endOfDay, orgId]);
 
     // ── Today's site visits ──────────────────────────────────────────────────
     const siteVisitRows = await safeQuery(
       `SELECT sv.*, we.name, we.assigned_to, we.status as lead_status
        FROM public.site_visits sv
-       JOIN public.walkin_enquiries we ON we.id = sv.lead_id
+       JOIN public.walkin_enquiries we
+         ON we.id = sv.lead_id AND we.organization_id = sv.organization_id
        WHERE sv.visit_date >= $1 AND sv.visit_date <= $2
+         AND sv.organization_id = $3
        ORDER BY sv.visit_date ASC`,
-      [startOfDay, endOfDay]
+      [startOfDay, endOfDay, orgId]
     );
 
     const siteVisitsToday       = siteVisitRows;
@@ -80,10 +94,12 @@ export async function GET() {
     const siteVisitsTomorrow = await safeQuery(
       `SELECT sv.*, we.name, we.assigned_to, we.status as lead_status
        FROM public.site_visits sv
-       JOIN public.walkin_enquiries we ON we.id = sv.lead_id
+       JOIN public.walkin_enquiries we
+         ON we.id = sv.lead_id AND we.organization_id = sv.organization_id
        WHERE sv.visit_date >= $1 AND sv.visit_date <= $2
+         AND sv.organization_id = $3
        ORDER BY sv.visit_date ASC`,
-      [startOfTomorrow, endOfTomorrow]
+      [startOfTomorrow, endOfTomorrow, orgId]
     );
 
     const siteVisitActionsToday = await safeQuery(
@@ -96,8 +112,10 @@ export async function GET() {
          we.name AS lead_name,
          we.assigned_to
        FROM public.follow_ups f
-       LEFT JOIN public.walkin_enquiries we ON we.id = f.lead_id
+       LEFT JOIN public.walkin_enquiries we
+         ON we.id = f.lead_id AND we.organization_id = f.organization_id
        WHERE f.created_at >= $1 AND f.created_at <= $2
+         AND f.organization_id = $3
          AND (
            f.message ILIKE '%Site Visit Scheduled%'
            OR f.message ILIKE '%Re-Site Visit Scheduled%'
@@ -105,7 +123,7 @@ export async function GET() {
            OR f.message ILIKE '%Site Visit marked as%'
          )
        ORDER BY f.created_at DESC`,
-      [startOfDay, endOfDay]
+      [startOfDay, endOfDay, orgId]
     );
 
     const leadsNoFollowUp = await safeQuery(`
@@ -113,11 +131,13 @@ export async function GET() {
       FROM public.walkin_enquiries we
       WHERE we.status NOT IN ('Closing', 'Closed', 'Completed')
         AND we.assigned_to IS NOT NULL AND we.assigned_to != ''
+        AND we.organization_id = $3
         AND NOT EXISTS (
           SELECT 1 FROM public.follow_ups f
           WHERE f.lead_id = we.id AND f.created_at >= $1 AND f.created_at < $2
+            AND f.organization_id = we.organization_id
         )
-    `, [startOfDay, endOfDay]);
+    `, [startOfDay, endOfDay, orgId]);
 
     const leadMap: Record<string, number> = {};
     leadCounts.forEach((r: any) => { leadMap[r.name] = parseInt(r.total); });

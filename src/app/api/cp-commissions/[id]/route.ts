@@ -1,6 +1,7 @@
 // api/cp-commissions/[id]/route.ts — [id] is always the cp_commissions id.
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
@@ -44,10 +45,12 @@ export async function GET(
     const rows = await query(
       `SELECT c.*, cp.name AS channel_partner_name, b.booking_number
          FROM cp_commissions c
-         JOIN channel_partners cp ON cp.id = c.channel_partner_id
-         LEFT JOIN booking_applications b ON b.id = c.booking_id
-        WHERE c.id = $1`,
-      [Number(id)]
+         JOIN channel_partners cp
+           ON cp.id = c.channel_partner_id AND cp.organization_id = c.organization_id
+         LEFT JOIN booking_applications b
+           ON b.id = c.booking_id AND b.organization_id = c.organization_id
+        WHERE c.id = $1 AND c.organization_id = $2`,
+      [Number(id), await getOrganizationId()]
     );
     if (rows.length === 0) {
       return NextResponse.json(
@@ -133,19 +136,23 @@ export async function PATCH(
     values.push(updatedBy);
     sets.push(`updated_by = $${values.length}`);
     values.push(Number(id));
+    // id comes from the URL: the organization is part of the predicate so a
+    // commission in another organization matches 0 rows and 404s below.
+    values.push(await getOrganizationId());
 
     // A reversed commission is a closed record — reopening it by flipping status
     // to paid/due would erase the reversal without any audit trace.
     const rows = await query(
       `UPDATE cp_commissions
           SET ${sets.join(", ")}
-        WHERE id = $${values.length} AND status <> 'reversed'
+        WHERE id = $${values.length - 1} AND status <> 'reversed'
+          AND organization_id = $${values.length}
         RETURNING *`,
       values
     );
 
     if (rows.length === 0) {
-      const exists = await query(`SELECT status FROM cp_commissions WHERE id = $1`, [Number(id)]);
+      const exists = await query(`SELECT status FROM cp_commissions WHERE id = $1 AND organization_id = $2`, [Number(id), await getOrganizationId()]);
       if (exists.length === 0) {
         return NextResponse.json(
           { success: false, message: `Commission ${id} not found.` },

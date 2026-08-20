@@ -32,6 +32,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { requireSession } from "@/lib/serverAuth";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { askOpenAI, LlmError, MAX_QUESTION_CHARS, type ChatTurn } from "../ai-assistant/llm";
 
 export const dynamic = "force-dynamic";
@@ -74,14 +75,19 @@ interface SmDigest { text: string; counts: Record<string, number>; }
  * Every statement here is filtered by `smName`.
  */
 async function buildSmDigest(smName: string, currentLeadId: number | null): Promise<SmDigest> {
+  // assigned_to is matched on NAME, so the organization filter below is what
+  // actually separates two builders' managers who happen to share a name.
+  // It is added per query rather than folded into `scope`, because the
+  // placeholder index differs between these statements.
   const scope = `LOWER(TRIM(w.assigned_to)) = LOWER(TRIM($1))`;
+  const chatOrgId = await getOrganizationId();
 
   const [totals] = await query<any>(
     `SELECT COUNT(*)::int total,
             COUNT(*) FILTER (WHERE COALESCE(w.is_lost_lead,false) = false)::int active,
             COUNT(*) FILTER (WHERE w.is_lost_lead)::int lost,
             COUNT(*) FILTER (WHERE LOWER(COALESCE(w.status,'')) IN ('closing','closed'))::int closing
-       FROM walkin_enquiries w WHERE ${scope}`, [smName]);
+       FROM walkin_enquiries w WHERE ${scope} AND w.organization_id = $2`, [smName, chatOrgId]);
 
   // Staleness from the last actual follow-up, not last_activity_at — that column
   // is touched by any edit, so it would report "contacted" for a typo fix.
@@ -89,32 +95,38 @@ async function buildSmDigest(smName: string, currentLeadId: number | null): Prom
     `SELECT w.id, w.sr_no, w.name, w.phone, w.status,
             EXTRACT(DAY FROM NOW() - lastf.last_at)::int AS days_since
        FROM walkin_enquiries w
-       LEFT JOIN (SELECT lead_id, MAX(created_at) last_at FROM follow_ups GROUP BY lead_id) lastf
+       LEFT JOIN (SELECT lead_id, MAX(created_at) last_at FROM follow_ups
+                   WHERE organization_id = $2 GROUP BY lead_id) lastf
               ON lastf.lead_id = w.id
       WHERE ${scope} AND COALESCE(w.is_lost_lead,false) = false
+        AND w.organization_id = $2
         AND (lastf.last_at IS NULL OR lastf.last_at < NOW() - INTERVAL '7 days')
-      ORDER BY lastf.last_at ASC NULLS FIRST LIMIT 25`, [smName]);
+      ORDER BY lastf.last_at ASC NULLS FIRST LIMIT 25`, [smName, chatOrgId]);
 
   // "Due today" = site visits actually scheduled for today. See the header note.
   const dueToday = await query<any>(
     `SELECT w.id, w.sr_no, w.name, w.phone, w.status, sv.visit_date, sv.status AS visit_status
-       FROM site_visits sv JOIN walkin_enquiries w ON w.id = sv.lead_id
+       FROM site_visits sv JOIN walkin_enquiries w
+         ON w.id = sv.lead_id AND w.organization_id = sv.organization_id
       WHERE ${scope} AND sv.visit_date::date = (NOW() AT TIME ZONE 'Asia/Kolkata')::date
-      ORDER BY sv.visit_date ASC LIMIT 25`, [smName]);
+        AND sv.organization_id = $2
+      ORDER BY sv.visit_date ASC LIMIT 25`, [smName, chatOrgId]);
 
   const [sv] = await query<any>(
     `SELECT COUNT(*) FILTER (WHERE LOWER(COALESCE(sv.status,'')) = 'completed')::int done,
             COUNT(*) FILTER (WHERE LOWER(COALESCE(sv.status,'')) <> 'completed')::int pending
-       FROM site_visits sv JOIN walkin_enquiries w ON w.id = sv.lead_id
+       FROM site_visits sv JOIN walkin_enquiries w
+         ON w.id = sv.lead_id AND w.organization_id = sv.organization_id
       WHERE ${scope}
-        AND DATE_TRUNC('month', sv.visit_date) = DATE_TRUNC('month', NOW())`, [smName]);
+        AND sv.organization_id = $2
+        AND DATE_TRUNC('month', sv.visit_date) = DATE_TRUNC('month', NOW())`, [smName, chatOrgId]);
 
   let current: any = null;
   if (currentLeadId) {
     // Scoped too — asking about someone else's lead by id must not leak it.
     const rows = await query<any>(
-      `SELECT w.* FROM walkin_enquiries w WHERE ${scope} AND w.id = $2 LIMIT 1`,
-      [smName, currentLeadId]);
+      `SELECT w.* FROM walkin_enquiries w WHERE ${scope} AND w.id = $2 AND w.organization_id = $3 LIMIT 1`,
+      [smName, currentLeadId, chatOrgId]);
     current = rows[0] ?? null;
   }
 
@@ -198,6 +210,7 @@ export async function POST(req: Request) {
   const started = Date.now();
   const gate = await requireSession();
   if (!gate.ok) return gate.response;
+  const orgId = await getOrganizationId();
 
   const role = normRole(gate.session.role);
   // Identity from the session, then re-read from the database. The body never
@@ -251,11 +264,11 @@ export async function POST(req: Request) {
     try {
       await query(
         `INSERT INTO ai_audit_logs
-           (user_id, user_name, user_role, question, tools_called, modules_accessed,
+           (user_id, user_name, user_role, organization_id, question, tools_called, modules_accessed,
             model, status, latency_ms, prompt_tokens, completion_tokens, total_tokens, error)
-         VALUES ($1,$2,$3,$4,'[]'::jsonb,$5,$6,$7,$8,$9,$10,$11,$12)`,
+         VALUES ($1,$2,$3,$4,$5,'[]'::jsonb,$6,$7,$8,$9,$10,$11,$12,$13)`,
         [
-          gate.userId, smName, gate.session.role, question.slice(0, 2000),
+          gate.userId, smName, gate.session.role, orgId, question.slice(0, 2000),
           ["sm_ai_chat"], "gpt", status, Date.now() - started,
           usage?.prompt_tokens ?? null, usage?.completion_tokens ?? null,
           usage?.total_tokens ?? null, error ? String(error).slice(0, 1000) : null,

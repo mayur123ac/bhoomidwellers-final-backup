@@ -1,6 +1,7 @@
 //walkin_enquiries/route.ts
 import { NextResponse } from "next/server";
 import { query, transaction, recalculateSrNos } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { isChannelPartnerSource, resolveChannelPartnerId } from "@/lib/cpCommissionEngine";
 import { claimPartnerForSourcingManager, resolvePartnerOwner } from "@/lib/sourcingAssignment";
 import { getServerSession } from "@/lib/serverAuth";
@@ -19,7 +20,15 @@ export async function GET(req: Request) {
     // elsewhere that still expects the full unfiltered set), a Sourcing Manager is
     // refused outright and pointed at the endpoint that is actually scoped for them.
     const session = await getServerSession();
-    if (session?.role && normalizeRole(session.role) === "sourcing manager") {
+    // MT-08 (CRITICAL, pre-existing): the session was fetched but a NULL one was
+    // never rejected. Every check below is `session?.role === ...`, which an
+    // anonymous caller fails — so they fell straight through and received the
+    // entire lead table: names, phones, emails, addresses. Reject first, then
+    // apply the role rule; the Sourcing Manager behaviour below is unchanged.
+    if (!session?.role) {
+      return NextResponse.json({ success: false, message: "You must be signed in." }, { status: 401 });
+    }
+    if (normalizeRole(session.role) === "sourcing manager") {
       return NextResponse.json(
         {
           success: false,
@@ -36,12 +45,16 @@ export async function GET(req: Request) {
     const offset = Math.max(parseInt(searchParams.get("offset") ?? "0", 10), 0);
 
     // Because this uses SELECT *, the new Site Head columns will be fetched automatically
+    const listOrgId = await getOrganizationId();
     const [rows, countRows] = await Promise.all([
+      // The tenant filter goes INSIDE the query, before LIMIT/OFFSET. Paginating
+      // an unscoped set and filtering afterwards would make page 1 another
+      // organization's rows, and the total would count both builders' leads.
       query(
-        "SELECT * FROM walkin_enquiries ORDER BY sr_no DESC NULLS LAST LIMIT $1 OFFSET $2",
-        [limit, offset]
+        "SELECT * FROM walkin_enquiries WHERE organization_id = $3 ORDER BY sr_no DESC NULLS LAST LIMIT $1 OFFSET $2",
+        [limit, offset, listOrgId]
       ),
-      query("SELECT COUNT(*)::int AS total FROM walkin_enquiries"),
+      query("SELECT COUNT(*)::int AS total FROM walkin_enquiries WHERE organization_id = $1", [listOrgId]),
     ]);
 
     const total: number = countRows[0]?.total ?? 0;
@@ -85,8 +98,8 @@ export async function POST(req: Request) {
     // Server-side duplicate prevention (idempotency check)
     // Reject if the same phone number was submitted within the last 15 seconds
     const duplicateCheck = await query(
-      `SELECT id FROM walkin_enquiries WHERE phone = $1 AND created_at >= NOW() - INTERVAL '15 seconds'`,
-      [phone]
+      `SELECT id FROM walkin_enquiries WHERE phone = $1 AND created_at >= NOW() - INTERVAL '15 seconds' AND organization_id = $2`,
+      [phone, await getOrganizationId()]
     );
 
     if (duplicateCheck.length > 0) {
@@ -153,12 +166,15 @@ export async function POST(req: Request) {
       // substituting a different manager than the operator saw on screen.
       if (requestedSourcingManagerId !== null) {
         const managerRows = await query(
+          // The id comes from the form, so the organization predicate is what
+          // stops a manager in another tenant being accepted as the assignee.
           `SELECT id FROM users
             WHERE id = $1
+              AND organization_id = $2
               AND is_active = true
               AND REPLACE(LOWER(TRIM(role)), '_', ' ') = 'sourcing manager'
             LIMIT 1`,
-          [requestedSourcingManagerId]
+          [requestedSourcingManagerId, await getOrganizationId()]
         );
 
         if (managerRows.length === 0) {
@@ -175,6 +191,8 @@ export async function POST(req: Request) {
     }
 
     const result = await transaction(async (client) => {
+      // MT-05: resolved once per transaction, on this client.
+      const orgId = await getOrganizationId(client);
       // Resolve the channel partner (find-or-create) in the same transaction as the
       // enquiry insert, so a failure here rolls back both. Non-CP sources are
       // skipped entirely — their cp_name is sub-source noise, not partner data.
@@ -212,7 +230,8 @@ export async function POST(req: Request) {
           is_global_shared, overseeing_site_head,
           enquiry_date, auto_date_enabled, channel_partner_id,
           pin_code, city, preferred_location,
-          sourcing_manager_id, sourcing_manager_assigned_at, sourcing_manager_assigned_by
+          sourcing_manager_id, sourcing_manager_assigned_at, sourcing_manager_assigned_by,
+          organization_id
         )
         VALUES (
           $1,  $2,  $3,  $4,  $5,  $6,
@@ -225,7 +244,8 @@ export async function POST(req: Request) {
           $26, $27, $28,
           $29,
           CASE WHEN $29::int IS NULL THEN NULL ELSE now() END,
-          CASE WHEN $29::int IS NULL THEN NULL ELSE $30 END
+          CASE WHEN $29::int IS NULL THEN NULL ELSE $30 END,
+          $31
         )
         RETURNING id`,
         [
@@ -266,6 +286,7 @@ export async function POST(req: Request) {
           // there is one, otherwise whoever the form selected.
           effectiveSourcingManagerId,          // $29
           actorName,                           // $30
+          orgId,                               // $31
         ]
       );
       
@@ -293,7 +314,8 @@ export async function POST(req: Request) {
              assigned_by_name,
              assigned_by_role,
              action,
-             assigned_at
+             assigned_at,
+             organization_id
            )
            SELECT
              id,
@@ -303,7 +325,8 @@ export async function POST(req: Request) {
              $3,
              $4,
              'assigned',
-             COALESCE(sourcing_manager_assigned_at, now())
+             COALESCE(sourcing_manager_assigned_at, now()),
+             organization_id
            FROM walkin_enquiries
            WHERE id = $1`,
           [newId, actorUserId, actorName, session?.role || null]

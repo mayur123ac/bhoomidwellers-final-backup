@@ -1,4 +1,5 @@
 //api/users/site-head/route.ts
+import { getOrganizationId } from "@/lib/tenantContext";
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db"; 
 import { requireSession, requireRoles } from "@/lib/serverAuth";
@@ -7,13 +8,19 @@ export async function GET(req: Request) {
   try {
     const gate = await requireSession();
     if (!gate.ok) return gate.response;
+  const orgId = await getOrganizationId();
 
     // CHANGED: Using the "users" table and SELECT * to avoid column name mismatches
+    // MT-05: the role test is PARENTHESISED before the organization filter is
+    // added. `A OR B AND org` binds as `A OR (B AND org)` in SQL, which would
+    // have returned every organization's site heads through the first branch.
     const rows = await query(
-      `SELECT * FROM users 
-       WHERE LOWER(role) LIKE '%site%head%' 
-          OR LOWER(role) = 'site_head' 
-       ORDER BY name ASC`
+      `SELECT * FROM users
+       WHERE (LOWER(role) LIKE '%site%head%'
+              OR LOWER(role) = 'site_head')
+         AND organization_id = $1
+       ORDER BY name ASC`,
+      [orgId]
     );
 
     return NextResponse.json({ 

@@ -30,6 +30,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { requireRoles } from "@/lib/serverAuth";
+import { getOrganizationId } from "@/lib/tenantContext";
 
 export const dynamic = "force-dynamic";
 
@@ -142,8 +143,14 @@ export async function GET(req: NextRequest) {
     }
 
     // ── Shift configuration (the same row the Live Activity header reads) ────
+    // Resolved once and reused by every statement in this report, so the roster,
+    // the session aggregate and the attendance marks are all read for the same
+    // organization and cannot be assembled from a mix of tenants.
+    const orgId = await getOrganizationId();
+
     const settings = await query<any>(
-      `SELECT shift_start, shift_end, flexible FROM organization_settings WHERE organization_id = 1`
+      `SELECT shift_start, shift_end, flexible FROM organization_settings WHERE organization_id = $1`,
+      [orgId]
     );
     const shiftStart = settings[0]?.shift_start || "11:00";
     const shiftEnd = settings[0]?.shift_end || "20:00";
@@ -153,8 +160,9 @@ export async function GET(req: NextRequest) {
     const employees = await query<any>(
       `SELECT id, name, COALESCE(NULLIF(TRIM(role),''),'—') AS role, email
          FROM users
-        WHERE is_active = true
-        ORDER BY name ASC`
+        WHERE is_active = true AND organization_id = $1
+        ORDER BY name ASC`,
+      [orgId]
     );
 
     // ── Query 2: sessions folded to one row per employee per day ────────────
@@ -175,9 +183,10 @@ export async function GET(req: NextRequest) {
               COALESCE(SUM(EXTRACT(EPOCH FROM (COALESCE(s.session_end, NOW()) - s.session_start))), 0)::bigint
                                                           AS worked_seconds
          FROM employee_sessions s
-        WHERE DATE(s.session_start AT TIME ZONE 'Asia/Kolkata') BETWEEN $1::date AND $2::date
+        WHERE s.organization_id = $3
+          AND DATE(s.session_start AT TIME ZONE 'Asia/Kolkata') BETWEEN $1::date AND $2::date
         GROUP BY s.user_id, DATE(s.session_start AT TIME ZONE 'Asia/Kolkata')`,
-      [from, effectiveTo]
+      [from, effectiveTo, orgId]
     );
 
     // ── Query 3: the marked attendance status per employee per day ──────────
@@ -191,9 +200,10 @@ export async function GET(req: NextRequest) {
               login_time,
               logout_time
          FROM attendance_records
-        WHERE DATE(login_time) BETWEEN $1::date AND $2::date
+        WHERE organization_id = $3
+          AND DATE(login_time) BETWEEN $1::date AND $2::date
         ORDER BY employee_id, DATE(login_time), login_time DESC`,
-      [from, effectiveTo]
+      [from, effectiveTo, orgId]
     );
 
     // ── Assemble ────────────────────────────────────────────────────────────

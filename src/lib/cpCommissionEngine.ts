@@ -15,6 +15,7 @@
 // before this phase keep channel_partner_id = NULL.
 
 import type { PoolClient } from "pg";
+import { getOrganizationId } from "./tenantContext";
 
 /** Source values that carry real partner identity in cp_name/cp_company/cp_phone.
  *  Exported so /api/cp-enquiries selects exactly the rows commission attribution
@@ -329,6 +330,8 @@ export async function computeCPCommission(
   createdBy: string,
   opts: ComputeOptions = {}
 ): Promise<CpCommissionRow> {
+  // MT-05: resolved once per call on the caller's transaction client.
+  const orgId = await getOrganizationId(client);
   const { source = "auto", overrideGross, overrideReason } = opts;
 
   if (overrideGross !== undefined && !(overrideReason || "").trim()) {
@@ -350,12 +353,13 @@ export async function computeCPCommission(
         agreement_value, commission_rate_percent, gross_commission_amount,
         tds_percent, tds_amount, net_payable_amount,
         status, due_date, created_by, updated_by,
-        commission_source, is_override, override_reason
+        commission_source, is_override, override_reason,
+        organization_id
      ) VALUES (
         $1, $2, $3::numeric, $4::numeric, $5::numeric,
         $6::numeric, $7::numeric, $8::numeric,
         'accrued', NULL, $9, $9,
-        $10, $11, $12
+        $10, $11, $12, $13
      ) RETURNING *`,
     [
       bookingId, p.channelPartnerId,
@@ -370,6 +374,7 @@ export async function computeCPCommission(
       p.gross,
       p.tdsPercent, p.tdsAmount, p.netPayable,
       createdBy, source, overrideGross !== undefined, overrideReason?.trim() || null,
+      orgId,
     ]
   );
 
@@ -431,6 +436,9 @@ export async function findOrCreateChannelPartner(
   // be able to turn "Hoarding (KAKA)" into a channel partner.
   if (!isChannelPartnerSource(input.source)) return null;
 
+  // MT-05: resolved once per call; both create branches below reuse it.
+  const orgId = await getOrganizationId(client);
+
   const name = (input.cp_name ?? "").trim();
   const company = (input.cp_company ?? "").trim();
   const phoneRaw = (input.cp_phone ?? "").trim();
@@ -465,10 +473,10 @@ export async function findOrCreateChannelPartner(
 
     const created = await client.query(
       `INSERT INTO channel_partners
-         (name, company_name, phone, default_commission_rate, created_by, updated_by)
-       VALUES ($1, $2, $3, NULL, $4, $4)
+         (name, company_name, phone, default_commission_rate, created_by, updated_by, organization_id)
+       VALUES ($1, $2, $3, NULL, $4, $4, $5)
        RETURNING id`,
-      [displayName, company || null, phoneRaw || null, createdBy]
+      [displayName, company || null, phoneRaw || null, createdBy, orgId]
     );
     const id = created.rows[0].id as number;
     console.info(`[CP] created id=${id} keyed_by=phone phone=${normalizedPhone} name="${name}"`);
@@ -502,10 +510,10 @@ export async function findOrCreateChannelPartner(
 
   const created = await client.query(
     `INSERT INTO channel_partners
-       (name, company_name, phone, default_commission_rate, created_by, updated_by)
-     VALUES ($1, $2, NULL, NULL, $3, $3)
+       (name, company_name, phone, default_commission_rate, created_by, updated_by, organization_id)
+     VALUES ($1, $2, NULL, NULL, $3, $3, $4)
      RETURNING id`,
-    [name, company || null, createdBy]
+    [name, company || null, createdBy, orgId]
   );
   const id = created.rows[0].id as number;
   console.info(`[CP] created id=${id} keyed_by=name key="${normalizedName}" name="${name}"`);

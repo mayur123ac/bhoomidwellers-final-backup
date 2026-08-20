@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
+import { getOrganizationId } from "@/lib/tenantContext";
 
 export async function GET() {
   try {
@@ -14,7 +15,9 @@ export async function GET() {
        FROM users
        WHERE LOWER(role) = 'sales manager'
          AND is_active = true
-       ORDER BY name ASC`
+         AND organization_id = $1
+       ORDER BY name ASC`,
+      [await getOrganizationId()]
     );
 
     // Return { success, data } — same shape the receptionist page already expects

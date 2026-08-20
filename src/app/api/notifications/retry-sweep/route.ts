@@ -17,6 +17,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "@/lib/serverAuth";
 import { normalizeRole } from "@/lib/cpRbac";
 import { processDue } from "@/services/whatsapp.service";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { configSummary, getVerifyToken } from "@/config/whatsapp.config";
 import { safeEqual } from "@/lib/whatsapp-client";
 
@@ -54,8 +55,16 @@ async function handle(req: NextRequest) {
 
   const limit = Number(req.nextUrl.searchParams.get("limit")) || 25;
 
+  // MT-05: the tenant scope follows HOW this call was authorized, never anything
+  // in the request. The cron token is the platform worker and must drain every
+  // organization's queue — scoping it would quietly stop delivering for every
+  // tenant whose cron did not happen to fire. An admin session is one tenant's
+  // administrator, so their sweep is confined to their own organization and the
+  // counts they get back describe only their own queue.
+  const sweepOrgId = auth.via === "session" ? await getOrganizationId() : null;
+
   try {
-    const report = await processDue(limit);
+    const report = await processDue(limit, sweepOrgId);
     return NextResponse.json(
       { success: true, ...report, via: auth.via, configuration: configSummary() },
       { status: 200 }

@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
+import { getOrganizationId } from "@/lib/tenantContext";
 
 export async function GET() {
   try {
@@ -13,7 +14,9 @@ export async function GET() {
        FROM users
        WHERE LOWER(role) = 'receptionist'
          AND is_active = true
-       ORDER BY name ASC`
+         AND organization_id = $1
+       ORDER BY name ASC`,
+      [await getOrganizationId()]
     );
 
     // Map id → _id so any frontend code using _id keeps working

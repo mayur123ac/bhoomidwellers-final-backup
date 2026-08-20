@@ -1,6 +1,7 @@
 // app/api/employees/route.ts
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { requireRole } from "@/lib/serverAuth";
 
 // ── GET: Fetch all employees ──────────────────────────────────────────────────
@@ -11,10 +12,27 @@ export async function GET() {
       return NextResponse.json({ message: auth.error }, { status: auth.status });
     }
 
+    // MT-06 (CRITICAL): `password` is NOT selected.
+    //
+    // This endpoint returned the stored password for EVERY user in the
+    // organization — and because passwords in this database are still stored in
+    // plaintext, that was the entire staff's credentials in one admin API
+    // response. The employees screen rendered them behind a reveal toggle; it
+    // falls back to "N/A" when the field is absent, and its edit form skips the
+    // password update when the field is empty, so both degrade rather than break.
+    //
+    // The column list is an allow-list for exactly this reason: SELECT * here
+    // would silently re-expose the column the moment anyone added one.
+    // organization_id is included so the admin employee view can show which
+    // organization each employee belongs to. `password` remains excluded — the
+    // plaintext exception is limited to the creation response in POST below.
     const users = await query(
-      `SELECT id, name, username, email, password, role, is_active as "isActive", created_at
+      `SELECT id, name, username, email, role, is_active as "isActive", created_at,
+              organization_id
        FROM users
-       ORDER BY created_at DESC`
+       WHERE organization_id = $1
+       ORDER BY created_at DESC`,
+      [await getOrganizationId()]
     );
 
     // Map id → _id so the frontend (employees page) keeps working without any changes
@@ -55,16 +73,65 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "Username already taken." }, { status: 400 });
     }
 
-    await query(
-      `INSERT INTO users (name, username, email, password, role, is_active)
-       VALUES ($1, $2, $3, $4, $5, true)`,
-      [name, username?.trim(), email?.trim().toLowerCase(), password, role]
+    // The organization is taken from the creating Admin's session and NOTHING
+    // else. It is not destructured from the request body, so a browser cannot
+    // supply one: an Admin of organization A physically cannot create a user in
+    // organization B through this endpoint, whatever it sends.
+    const orgId = await getOrganizationId();
+
+    const created = await query<{
+      id: number;
+      name: string;
+      email: string;
+      role: string;
+      organization_id: string;
+    }>(
+      `INSERT INTO users (name, username, email, password, role, is_active, organization_id)
+       VALUES ($1, $2, $3, $4, $5, true, $6)
+       RETURNING id, name, email, role, organization_id`,
+      [name, username?.trim(), email?.trim().toLowerCase(), password, role, orgId]
     );
 
-    return NextResponse.json({ message: "Employee added successfully." }, { status: 201 });
+    const row = created[0];
+
+    // ── TEMPORARY, DELIBERATE EXCEPTION (MT-06 follow-up) ────────────────────
+    //
+    // This is the ONLY response in the application that returns a plaintext
+    // password, and it is a stopgap until password hashing lands. It is narrow
+    // on purpose:
+    //
+    //   * only on CREATION — never on read, list, detail, profile or login;
+    //   * only to the Admin who just supplied that very password, so it tells
+    //     the caller nothing they did not already type;
+    //   * echoed straight back from the request, never re-read from the database,
+    //     so this endpoint cannot become a way to recover an existing password.
+    //
+    // It is never logged. The catch below deliberately does not log the request
+    // body, and this route writes no audit entry, so the value reaches the
+    // response and nowhere else.
+    //
+    // When hashing lands, delete the `password` line and nothing else changes.
+    return NextResponse.json(
+      {
+        message: "Employee added successfully.",
+        employee: {
+          id: row.id,
+          _id: String(row.id),
+          name: row.name,
+          email: row.email,
+          role: row.role,
+          organization_id: row.organization_id,
+          password,
+        },
+      },
+      { status: 201 }
+    );
 
   } catch (error: any) {
-    console.error("POST /api/employees error:", error);
+    // Logs the error only — never the request body, which holds the password.
+    // `password` carries no unique constraint, so a Postgres constraint-violation
+    // detail string cannot echo it either.
+    console.error("POST /api/employees error:", error?.message ?? error);
     return NextResponse.json({ message: "Error adding employee." }, { status: 500 });
   }
 }
@@ -124,9 +191,14 @@ export async function PUT(req: Request) {
         return NextResponse.json({ message: "No fields to update." }, { status: 400 });
       }
 
+      // MT-05: userId comes from the request body, so the organization boundary is
+      // part of the WHERE clause. Another organization's id matches 0 rows and the
+      // handler below answers 404 — the same answer a nonexistent id gets, so this
+      // cannot be used to probe which ids exist.
       values.push(userId);
+      values.push(await getOrganizationId());
       const updated = await query(
-        `UPDATE users SET ${setClauses.join(", ")} WHERE id = $${p} RETURNING *`,
+        `UPDATE users SET ${setClauses.join(", ")} WHERE id = $${p} AND organization_id = $${p + 1} RETURNING *`,
         values
       );
 
@@ -135,8 +207,25 @@ export async function PUT(req: Request) {
       }
 
       const u = updated[0];
+      // RETURNING * includes the password column, so the row is NOT spread into
+      // the response. The plaintext exception is limited to the creation response
+      // in POST; an edit must not hand back the stored password of an account the
+      // Admin may not have set. Explicit allow-list rather than a delete, so a
+      // column added later cannot leak by default.
       return NextResponse.json(
-        { message: "Employee updated successfully.", user: { ...u, _id: String(u.id) } },
+        {
+          message: "Employee updated successfully.",
+          user: {
+            id: u.id,
+            _id: String(u.id),
+            name: u.name,
+            username: u.username,
+            email: u.email,
+            role: u.role,
+            isActive: u.is_active,
+            organization_id: u.organization_id,
+          },
+        },
         { status: 200 }
       );
     }
@@ -144,8 +233,8 @@ export async function PUT(req: Request) {
     // ── STATUS TOGGLE ──
     if (typeof body.isActive === "boolean") {
       const updated = await query(
-        `UPDATE users SET is_active = $1 WHERE id = $2 RETURNING id`,
-        [body.isActive, userId]
+        `UPDATE users SET is_active = $1 WHERE id = $2 AND organization_id = $3 RETURNING id`,
+        [body.isActive, userId, await getOrganizationId()]
       );
       if (updated.length === 0) {
         return NextResponse.json({ message: "User not found." }, { status: 404 });
@@ -176,8 +265,9 @@ export async function DELETE(req: Request) {
     }
 
     const deleted = await query(
-      `DELETE FROM users WHERE id = $1 RETURNING id`,
-      [userId]
+      // MT-05: deleting another organization's user must affect 0 rows.
+      `DELETE FROM users WHERE id = $1 AND organization_id = $2 RETURNING id`,
+      [userId, await getOrganizationId()]
     );
 
     if (deleted.length === 0) {

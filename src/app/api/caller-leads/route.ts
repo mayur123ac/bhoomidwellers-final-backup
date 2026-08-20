@@ -1,6 +1,7 @@
 // src/app/api/caller-leads/route.ts
 import { NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 import { broadcastUpdate } from "./events/route";
 
@@ -18,10 +19,12 @@ export async function POST(req: Request) {
     }
 
     const result = await transaction(async (client) => {
+      // MT-05: resolved ONCE for the batch, before the per-lead loop below.
+      const orgId = await getOrganizationId(client);
       const { rows: batchRows } = await client.query(
-        `INSERT INTO caller_upload_batches (file_name, row_count, uploaded_by)
-         VALUES ($1, $2, $3) RETURNING id`,
-        [fileName ?? "upload", leads.length, uploadedBy ?? "unknown"]
+        `INSERT INTO caller_upload_batches (file_name, row_count, uploaded_by, organization_id)
+         VALUES ($1, $2, $3, $4) RETURNING id`,
+        [fileName ?? "upload", leads.length, uploadedBy ?? "unknown", orgId]
       );
       const batchId = batchRows[0].id;
 
@@ -31,8 +34,9 @@ export async function POST(req: Request) {
           `INSERT INTO caller_leads
               (upload_batch, batch_name, sr_no, form_no, lead_date, name,
                contact_no, email, source, channel_partner, assign_manager,
-               feedback, uploaded_by, assigned_to, saved_by)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+               feedback, uploaded_by, assigned_to, saved_by,
+               organization_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
            RETURNING id`,
           [
             batchId, fileName ?? null,
@@ -43,6 +47,7 @@ export async function POST(req: Request) {
             uploadedBy ?? "unknown",
             (assignedTo || uploadedBy) ?? "unknown",
             null,
+            orgId,
           ]
         );
         ids.push(rows[0].id);
@@ -81,11 +86,13 @@ export async function GET(req: Request) {
     if (batchesOnly === "1") {
       const rows = await query(
         `SELECT id, file_name, row_count, uploaded_by, created_at
-         FROM caller_upload_batches ORDER BY created_at DESC`
+         FROM caller_upload_batches WHERE organization_id = $1 ORDER BY created_at DESC`,
+        [await getOrganizationId()]
       );
       return NextResponse.json({ batches: rows });
     }
 
+    const callerListOrgId = await getOrganizationId();
     const rows = await query(
       `SELECT cl.*,
          COALESCE(
@@ -97,11 +104,14 @@ export async function GET(req: Request) {
            ) FILTER (WHERE cf.id IS NOT NULL), '[]'
          ) AS follow_ups
        FROM caller_leads cl
-       LEFT JOIN caller_follow_ups cf ON cf.lead_id = cl.id
-       ${batch ? "WHERE cl.upload_batch::text = $1" : ""}
+       LEFT JOIN caller_follow_ups cf
+              ON cf.lead_id = cl.id AND cf.organization_id = cl.organization_id
+       -- Tenant filter is present in BOTH branches and applied before GROUP BY,
+       -- so the aggregated follow-up array is built per organization.
+       ${batch ? "WHERE cl.organization_id = $1 AND cl.upload_batch::text = $2" : "WHERE cl.organization_id = $1"}
        GROUP BY cl.id
        ORDER BY cl.created_at DESC`,
-      batch ? [batch] : []
+      batch ? [callerListOrgId, batch] : [callerListOrgId]
     );
 
     return NextResponse.json({ leads: rows });
@@ -124,13 +134,18 @@ export async function DELETE(req: Request) {
     if (!batchId) return NextResponse.json({ error: "batchId required" }, { status: 400 });
 
     await transaction(async (client) => {
+      // Every statement carries its own organization predicate, including the
+      // inner SELECT: caller_leads has an explicit organization_id, so tenancy is
+      // never derived from the nullable upload_batch link.
+      const batchOrgId = await getOrganizationId(client);
       await client.query(
         `DELETE FROM caller_follow_ups
-         WHERE lead_id IN (SELECT id FROM caller_leads WHERE upload_batch::text = $1)`,
-        [batchId]
+         WHERE organization_id = $2
+           AND lead_id IN (SELECT id FROM caller_leads WHERE upload_batch::text = $1 AND organization_id = $2)`,
+        [batchId, batchOrgId]
       );
-      await client.query(`DELETE FROM caller_leads WHERE upload_batch::text = $1`, [batchId]);
-      await client.query(`DELETE FROM caller_upload_batches WHERE id::text = $1`, [batchId]);
+      await client.query(`DELETE FROM caller_leads WHERE upload_batch::text = $1 AND organization_id = $2`, [batchId, batchOrgId]);
+      await client.query(`DELETE FROM caller_upload_batches WHERE id::text = $1 AND organization_id = $2`, [batchId, batchOrgId]);
     });
 
     broadcastUpdate({ type: "batch_deleted", batchId, ts: Date.now() });

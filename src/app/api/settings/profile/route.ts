@@ -27,6 +27,8 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const gate = await requireSession();
   if (!gate.ok) return gate.response;
+  // (no organization-scoped query remains in this handler: name and email are
+  //  platform-wide login identifiers — decision 2026-08-19)
   if (!gate.userId) {
     return NextResponse.json(
       { success: false, message: "Session carries no user id." },
@@ -110,6 +112,10 @@ export async function PATCH(req: NextRequest) {
     // LOWER(name) as well as LOWER(email)), so a collision would make two
     // accounts indistinguishable at sign-in.
     const clash = await query<{ id: number }>(
+      // Name is also a LOGIN IDENTIFIER (login matches LOWER(u.name)), so its
+      // uniqueness must be platform-wide for the same reason email is: a
+      // per-organization check would let two organizations hold the same name and
+      // make the login lookup ambiguous.
       `SELECT id FROM users WHERE LOWER(name) = LOWER($1) AND id <> $2 LIMIT 1`,
       [nextName, gate.userId]
     );

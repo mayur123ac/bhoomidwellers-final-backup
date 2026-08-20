@@ -60,8 +60,9 @@ export async function softDeleteUnit(client: PoolClient, unit: any, actor: strin
     [unit.id, actor],
   );
   await client.query(
-    `INSERT INTO inventory_unit_history (unit_id, old_status, new_status, changed_by, reason)
-     VALUES ($1, $2, 'deleted', $3, $4)`,
+    `INSERT INTO inventory_unit_history (unit_id, old_status, new_status, changed_by, reason, organization_id)
+     VALUES ($1, $2, 'deleted', $3, $4,
+             (SELECT organization_id FROM inventory_units WHERE id = $1))`,
     [unit.id, unit.status, actor, reason],
   );
 }

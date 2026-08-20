@@ -6,6 +6,7 @@
 // cookie rather than on anything the client sends.
 import { NextRequest, NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { getServerSession } from "@/lib/serverAuth";
 import { normalizeRole } from "@/lib/cpRbac";
 import { CP_SOURCE_VALUES } from "@/lib/cpCommissionEngine";
@@ -49,11 +50,15 @@ export async function PATCH(
     // Admin could park a CP enquiry on a Receptionist or a deactivated account,
     // and it would then be invisible on every Sourcing Manager dashboard.
     const check = await query(
+      // smId arrives in the request body. Without the organization predicate an
+      // admin could assign the enquiry to a Sourcing Manager in another tenant,
+      // who would then see this partner's details on their dashboard.
       `SELECT id FROM users
         WHERE id = $1
+          AND organization_id = $2
           AND is_active = true
           AND REPLACE(LOWER(TRIM(role)), '_', ' ') = 'sourcing manager'`,
-      [smId]
+      [smId, await getOrganizationId()]
     );
     if (check.length === 0) {
       return NextResponse.json(
@@ -71,13 +76,16 @@ export async function PATCH(
     const actorUserId = Number.isInteger(actorUserIdRaw) ? actorUserIdRaw : null;
 
     const result = await transaction(async (client) => {
+      // leadId comes from the URL; resolved once on this client and reused by
+      // every statement in the transaction.
+      const assignOrgId = await getOrganizationId(client);
       const existing = await client.query(
         `SELECT id, source, sourcing_manager_id,
                 sourcing_manager_assigned_at, sourcing_manager_assigned_by
            FROM walkin_enquiries
-          WHERE id = $1
+          WHERE id = $1 AND organization_id = $2
           FOR UPDATE`,
-        [leadId]
+        [leadId, assignOrgId]
       );
 
       if (existing.rows.length === 0) {
@@ -107,9 +115,9 @@ export async function PATCH(
             SET sourcing_manager_id          = $1,
                 sourcing_manager_assigned_at = now(),
                 sourcing_manager_assigned_by = $2
-          WHERE id = $3
+          WHERE id = $3 AND organization_id = $4
           RETURNING id, sourcing_manager_id, sourcing_manager_assigned_at, sourcing_manager_assigned_by`,
-        [smId, actorName, leadId]
+        [smId, actorName, leadId, assignOrgId]
       );
 
       await client.query(
@@ -121,8 +129,10 @@ export async function PATCH(
            assigned_by_name,
            assigned_by_role,
            action,
-           assigned_at
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, now())`,
+           assigned_at,
+           organization_id
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, now(),
+                   (SELECT organization_id FROM walkin_enquiries WHERE id = $1))`,
         [
           leadId,
           previousId,

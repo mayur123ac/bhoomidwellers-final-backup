@@ -26,6 +26,7 @@
 // AI call button, which genuinely cannot do anything without Bolna credentials.
 
 import { query } from "@/lib/db";
+import { getOrganizationId } from "./tenantContext";
 import {
   decryptSecret,
   encryptSecret,
@@ -37,7 +38,6 @@ import {
 const PROVIDER_ROW = "manual_calling";
 
 /** Matches lib/bolnaSettings.ts — this CRM is single-tenant. */
-export const DEFAULT_ORG_ID = 1;
 
 /**
  * Providers whose click-to-call the server can actually perform.
@@ -87,12 +87,12 @@ interface IntegrationRow {
   updated_at: Date | null;
 }
 
-async function readRow(orgId = DEFAULT_ORG_ID): Promise<IntegrationRow | null> {
+async function readRow(orgId?: string): Promise<IntegrationRow | null> {
   const rows = await query<IntegrationRow>(
     `SELECT settings, secrets, enabled, last_verified_at, last_verify_error, updated_at
        FROM integration_settings
       WHERE organization_id = $1 AND provider = $2`,
-    [orgId, PROVIDER_ROW]
+    [orgId ?? await getOrganizationId(), PROVIDER_ROW]
   );
   return rows[0] ?? null;
 }
@@ -116,7 +116,7 @@ function normalizeProvider(value: unknown): ManualProvider {
  * that were fine.
  */
 export async function getManualCallingCredentials(
-  orgId = DEFAULT_ORG_ID
+  orgId?: string
 ): Promise<ManualCallingCredentials | null> {
   const row = await readRow(orgId);
   if (!row || row.enabled === false) return null;
@@ -142,7 +142,7 @@ export async function getManualCallingCredentials(
 }
 
 /** Whether provider click-to-call can be used right now. Never throws. */
-export async function isManualCallingConfigured(orgId = DEFAULT_ORG_ID): Promise<boolean> {
+export async function isManualCallingConfigured(orgId?: string): Promise<boolean> {
   try {
     return (await getManualCallingCredentials(orgId)) !== null;
   } catch {
@@ -154,7 +154,7 @@ export async function isManualCallingConfigured(orgId = DEFAULT_ORG_ID): Promise
 
 /** Everything the settings panel needs, with the token reduced to a mask. */
 export async function getManualCallingSummary(
-  orgId = DEFAULT_ORG_ID
+  orgId?: string
 ): Promise<ManualCallingSummary> {
   const row = await readRow(orgId);
   const encryptionReady = isSecretsCryptoConfigured();
@@ -208,7 +208,7 @@ export class ManualCallingConfigError extends Error {}
  * it only when the field was edited.
  */
 export async function saveManualCallingSettings(params: {
-  orgId?: number;
+  orgId?: string;
   provider: string;
   apiKey: string;
   accountSid: string;
@@ -219,7 +219,7 @@ export async function saveManualCallingSettings(params: {
   enabled?: boolean;
   updatedBy?: number | null;
 }): Promise<void> {
-  const orgId = params.orgId ?? DEFAULT_ORG_ID;
+  const orgId = params.orgId ?? await getOrganizationId();
 
   if (!isSecretsCryptoConfigured()) {
     throw new ManualCallingConfigError(
@@ -270,7 +270,7 @@ export async function saveManualCallingSettings(params: {
 
 /** Clears the stored credentials, returning the CRM to `tel:` mode. */
 export async function clearManualCallingSettings(
-  orgId = DEFAULT_ORG_ID,
+  orgId?: string,
   updatedBy?: number | null
 ) {
   await query(
@@ -282,6 +282,6 @@ export async function clearManualCallingSettings(
             updated_by = $2,
             updated_at = NOW()
       WHERE organization_id = $1 AND provider = $3`,
-    [orgId, updatedBy ?? null, PROVIDER_ROW]
+    [orgId ?? await getOrganizationId(), updatedBy ?? null, PROVIDER_ROW]
   );
 }

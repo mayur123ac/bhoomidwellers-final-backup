@@ -6,6 +6,7 @@
 
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 // ── POST — Mark lead as lost ──────────────────
@@ -38,8 +39,8 @@ export async function POST(req: Request) {
 
     // Check lead exists
     const existing = await query(
-      `SELECT id, name, sr_no, is_lost_lead FROM walkin_enquiries WHERE id = $1`,
-      [lead_id]
+      `SELECT id, name, sr_no, is_lost_lead FROM walkin_enquiries WHERE id = $1 AND organization_id = $2`,
+      [lead_id, await getOrganizationId()]
     );
 
     if (existing.length === 0) {
@@ -63,9 +64,9 @@ export async function POST(req: Request) {
            lost_lead_reason = $1,
            lost_lead_marked_at = NOW(),
            lost_lead_marked_by = $2
-       WHERE id = $3
+       WHERE id = $3 AND organization_id = $4
        RETURNING *`,
-      [reason.trim(), marked_by, lead_id]
+      [reason.trim(), marked_by, lead_id, await getOrganizationId()]
     );
 
     // Create activity log entry via follow_ups
@@ -74,9 +75,9 @@ export async function POST(req: Request) {
 
     try {
       await query(
-        `INSERT INTO follow_ups (lead_id, message, created_by_name, site_visit_date)
-         VALUES ($1, $2, $3, $4)`,
-        [String(lead_id), logMessage, marked_by, null]
+        `INSERT INTO follow_ups (lead_id, message, created_by_name, site_visit_date, organization_id)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [String(lead_id), logMessage, marked_by, null, await getOrganizationId()]
       );
     } catch (fuErr: any) {
       console.warn("[lost-lead] follow_ups insert failed:", fuErr.message);
@@ -120,8 +121,8 @@ export async function PUT(req: Request) {
 
     // Check lead exists and is actually lost
     const existing = await query(
-      `SELECT id, name, sr_no, is_lost_lead FROM walkin_enquiries WHERE id = $1`,
-      [lead_id]
+      `SELECT id, name, sr_no, is_lost_lead FROM walkin_enquiries WHERE id = $1 AND organization_id = $2`,
+      [lead_id, await getOrganizationId()]
     );
 
     if (existing.length === 0) {
@@ -145,9 +146,9 @@ export async function PUT(req: Request) {
            lost_lead_reason = NULL,
            lost_lead_marked_at = NULL,
            lost_lead_marked_by = NULL
-       WHERE id = $1
+       WHERE id = $1 AND organization_id = $2
        RETURNING *`,
-      [lead_id]
+      [lead_id, await getOrganizationId()]
     );
 
     // Create activity log entry
@@ -156,9 +157,9 @@ export async function PUT(req: Request) {
 
     try {
       await query(
-        `INSERT INTO follow_ups (lead_id, message, created_by_name, site_visit_date)
-         VALUES ($1, $2, $3, $4)`,
-        [String(lead_id), logMessage, restored_by, null]
+        `INSERT INTO follow_ups (lead_id, message, created_by_name, site_visit_date, organization_id)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [String(lead_id), logMessage, restored_by, null, await getOrganizationId()]
       );
     } catch (fuErr: any) {
       console.warn("[lost-lead] follow_ups insert failed:", fuErr.message);

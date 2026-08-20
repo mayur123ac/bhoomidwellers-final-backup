@@ -261,8 +261,8 @@ export async function stagePendingEmail(params: {
     (row?.pending_alternative_email ?? "").trim().toLowerCase() !== candidate;
 
   await query(
-    `INSERT INTO notification_preferences (user_id, pending_alternative_email, updated_at, updated_by)
-     VALUES ($1, $2, NOW(), $1)
+    `INSERT INTO notification_preferences (user_id, pending_alternative_email, updated_at, updated_by, organization_id)
+     VALUES ($1, $2, NOW(), $1, (SELECT organization_id FROM users WHERE id = $1))
      ON CONFLICT (user_id) DO UPDATE
        SET pending_alternative_email = EXCLUDED.pending_alternative_email,
            -- Changing the candidate invalidates any code in flight. A code

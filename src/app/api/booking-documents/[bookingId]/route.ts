@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { generatePresignedUrl } from "@/lib/r2";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 
@@ -9,7 +10,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ booking
     if (!gate.ok) return gate.response;
 
     const { bookingId } = await context.params;
-    const res = await query(`SELECT * FROM booking_documents WHERE booking_id = $1`, [bookingId]);
+    const res = await query(`SELECT * FROM booking_documents WHERE booking_id = $1 AND organization_id = $2`, [bookingId, await getOrganizationId()]);
     
     const documents = await Promise.all(res.map(async (doc: any) => {
       try {
@@ -46,7 +47,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ bookin
     }
     
     // get booking number and lead id
-    const bookingRes = await query(`SELECT booking_number, lead_id FROM booking_applications WHERE id = $1`, [bookingId]);
+    const bookingRes = await query(`SELECT booking_number, lead_id FROM booking_applications WHERE id = $1 AND organization_id = $2`, [bookingId, await getOrganizationId()]);
     if (bookingRes.length === 0) {
       return NextResponse.json({ success: false, message: "Booking not found" }, { status: 404 });
     }
@@ -64,8 +65,9 @@ export async function POST(req: NextRequest, context: { params: Promise<{ bookin
     await uploadBufferToR2(key, fileBuffer, file.type);
     
     const insertRes = await query(`
-      INSERT INTO booking_documents (booking_id, lead_id, booking_number, document_type, applicant_type, file_name, object_key, mime_type, file_size, uploaded_by)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      INSERT INTO booking_documents (booking_id, lead_id, booking_number, document_type, applicant_type, file_name, object_key, mime_type, file_size, uploaded_by, organization_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+              (SELECT organization_id FROM booking_applications WHERE id = $1))
       RETURNING *
     `, [bookingId, lead_id, booking_number, documentType, 'GENERAL', file.name, key, file.type, file.size, uploadedBy || 'System']);
 

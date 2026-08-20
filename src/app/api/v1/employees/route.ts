@@ -36,6 +36,13 @@ export const GET = withApiKey("/api/v1/employees", "employees:read", async (ctx)
     );
   }
 
+  // The API key is the tenant for v1 — there is no session here. Pushed onto
+  // `params` so its index follows whatever optional filters were supplied, the
+  // same way /api/v1/leads does it. Without this an integration key issued to one
+  // organization would return the whole platform's staff directory.
+  params.push(ctx.key.organization_id);
+  where.push(`organization_id = $${params.length}`);
+
   const whereSql = `WHERE ${where.join(" AND ")}`;
 
   const rows = await query(

@@ -13,6 +13,7 @@
 // owns commercial terms rather than territory.
 import { NextRequest, NextResponse } from "next/server";
 import { transaction } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { getServerSession } from "@/lib/serverAuth";
 import { canAssignPartners } from "@/lib/cpRbac";
 import { parseAssignee, isActiveSourcingManager } from "@/lib/sourcingAssignment";
@@ -89,9 +90,9 @@ export async function POST(req: NextRequest) {
                   WHEN assigned_sourcing_manager_id IS DISTINCT FROM $1::int THEN $2
                   ELSE assigned_sourcing_manager_by END,
                 updated_by = $2
-          WHERE id = ANY($3::int[])
+          WHERE id = ANY($3::int[]) AND organization_id = $4
           RETURNING id, name, assigned_sourcing_manager_id`,
-        [target, actor, ids]
+        [target, actor, ids, await getOrganizationId(client)]
       );
       return res.rows;
     });

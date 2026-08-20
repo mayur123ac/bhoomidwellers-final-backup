@@ -23,6 +23,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { requireRoles } from "@/lib/serverAuth";
 import { requestContext } from "@/lib/auditLog";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { EmailService } from "@/lib/email/EmailService";
 import { activeProvider, readSenderConfig, readSmtpConfig, validateMailConfig } from "@/lib/email/config";
 import { isValidRecipient } from "@/lib/email/types";
@@ -54,19 +55,28 @@ export async function GET() {
   let stats = { total: 0, delivered: 0, failed: 0 };
 
   try {
+    // The failure list quotes employee email addresses verbatim, and the totals
+    // are shown as this workspace's delivery health, so both are scoped: the
+    // predicate goes in the WHERE clause, ahead of the LIMIT and ahead of the
+    // COUNT aggregation, so no other tenant's attempts are listed or counted.
+    const emailOrgId = await getOrganizationId();
+
     recentFailures = await query<FailureRow>(
       `SELECT created_at, email_type, recipient, destination, transport, error
          FROM email_delivery_attempts
-        WHERE delivered = false
+        WHERE delivered = false AND organization_id = $1
         ORDER BY created_at DESC
-        LIMIT 10`
+        LIMIT 10`,
+      [emailOrgId]
     );
 
     const totals = await query<{ total: string; delivered: string }>(
       `SELECT COUNT(*)::text AS total,
               COUNT(*) FILTER (WHERE delivered)::text AS delivered
          FROM email_delivery_attempts
-        WHERE created_at > NOW() - INTERVAL '30 days'`
+        WHERE organization_id = $1
+          AND created_at > NOW() - INTERVAL '30 days'`,
+      [emailOrgId]
     );
 
     const total = Number(totals[0]?.total ?? 0);

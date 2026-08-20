@@ -211,6 +211,15 @@ export function ipMatchesWhitelist(clientIp: string, whitelist: string[]): boole
 
 export interface ApiKeyRow {
   id: number;
+  /**
+   * MT-05: the tenant this key belongs to.
+   *
+   * v1 traffic carries no session cookie, so getOrganizationId() would fall
+   * back to sole-organization resolution — a guess that stops being correct the
+   * moment a second tenant exists. The KEY is the tenant for this API, and it
+   * is server-side data: the caller presents a secret, not an organization.
+   */
+  organization_id: string;
   name: string;
   key_prefix: string;
   key_hash: string;
@@ -318,7 +327,7 @@ export async function authenticateApiKey(
   const prefix = `${KEY_MARKER}${keyId}`;
 
   const rows = await query<ApiKeyRow>(
-    `SELECT id, name, key_prefix, key_hash, scopes, rate_limit_per_min,
+    `SELECT id, organization_id, name, key_prefix, key_hash, scopes, rate_limit_per_min,
             ip_whitelist, expires_at, revoked_at, last_used_at
        FROM api_keys
       WHERE key_prefix = $1
@@ -437,9 +446,12 @@ export async function recordApiUsage(params: {
   const statusClass = Math.trunc(params.status / 100);
   try {
     await query(
+      // Organization inherited from the key itself: this runs on API-key traffic,
+      // which carries no session cookie to read a claim from.
       `INSERT INTO api_key_usage
-         (api_key_id, bucket_start, endpoint, status_class, request_count, total_duration_ms)
-       VALUES ($1, date_trunc('minute', NOW()), $2, $3, 1, $4)
+         (api_key_id, bucket_start, endpoint, status_class, request_count, total_duration_ms, organization_id)
+       VALUES ($1, date_trunc('minute', NOW()), $2, $3, 1, $4,
+               (SELECT organization_id FROM api_keys WHERE id = $1))
        ON CONFLICT (api_key_id, bucket_start, endpoint, status_class)
        DO UPDATE SET request_count     = api_key_usage.request_count + 1,
                      total_duration_ms = api_key_usage.total_duration_ms + EXCLUDED.total_duration_ms`,

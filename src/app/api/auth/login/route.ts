@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { signSession } from "@/lib/sessionCookie";
-import { isHashed, verifyPassword } from "@/lib/passwords";
+import { verifyPassword } from "@/lib/passwords";
 import { writeAuditLog } from "@/lib/auditLog";
 import { handleFailedLogin, notifyLogin } from "@/lib/loginNotification";
 import { clearFailedLogins } from "@/lib/loginSecurity";
@@ -122,6 +122,16 @@ export async function POST(req: Request) {
       email: user.email,
       role: user.role,
       isActive: user.is_active,
+      // MT-05: the tenant claim. Taken from the row we just authenticated
+      // against, never from anything the client sent, and carried inside the
+      // signed payload so it cannot be edited by the cookie holder.
+      //
+      // `?? undefined` rather than a fallback organization: a user with no
+      // organization must produce a session with no claim, so tenant
+      // resolution falls back to the sole-organization path and fails loudly
+      // once a second organization exists. Inventing an organization here
+      // would be exactly the hardcoded tenant MT-02 removed.
+      org: (user.organization_id as string | null) ?? undefined,
     };
 
     // `ip` and `userAgent` are read once near the top of the handler, because
@@ -146,8 +156,10 @@ export async function POST(req: Request) {
 
     const now = new Date();
     const sessionRes = await query(
-      `INSERT INTO employee_sessions (user_id, session_start, last_heartbeat, ip_address, device_info, is_active)
-       VALUES ($1, $2, $3, $4, $5, true) RETURNING id`,
+      // Organization inherited from the user in SQL: this runs DURING login, so
+      // the session cookie carrying the org claim does not exist yet.
+      `INSERT INTO employee_sessions (user_id, session_start, last_heartbeat, ip_address, device_info, is_active, organization_id)
+       SELECT $1, $2, $3, $4, $5, true, u.organization_id FROM users u WHERE u.id = $1 RETURNING id`,
       [user.id, now, now, ip, device_info]
     );
     const loginSessionId = sessionRes[0].id;
@@ -218,13 +230,21 @@ export async function POST(req: Request) {
     const response = NextResponse.json(
       {
         message: "Login successful.",
-        // Several dashboards render the signed-in user's own password behind a
-        // show/hide toggle, reading it out of localStorage — which is why this
-        // field is here at all. Once a password has been hashed there is nothing
-        // meaningful to send, and shipping the scrypt digest would put a hash on
-        // screen where a password used to be. Those widgets already fall back to
-        // "N/A"/dots when the field is absent.
-        user: { ...userData, password: isHashed(user.password) ? null : user.password },
+        // MT-06 (CRITICAL): the password is NOT returned, in any form.
+        //
+        // This previously shipped the account's plaintext password whenever the
+        // stored value had not yet been hashed, so that several dashboards could
+        // render it behind a show/hide toggle. The client persists this whole
+        // object to localStorage (app/page.tsx), which meant every signed-in
+        // browser held a readable copy of the user's password — recoverable by
+        // any XSS, any malicious extension, and anyone with access to the
+        // machine's profile directory. A credential must never travel back to
+        // the client that just supplied it.
+        //
+        // The show/hide widgets already fall back to "N/A"/dots when the field
+        // is absent, so they degrade rather than break. `isHashed` is no longer
+        // needed here: hashed or not, nothing is sent.
+        user: userData,
         // The durable half of the theme preference, so the choice survives a
         // sign-out — and follows the user to a machine whose localStorage has
         // never heard of them. Returned as its own field rather than folded

@@ -6,6 +6,7 @@
 import { NextResponse } from "next/server";
 import { transaction, recalculateSrNos } from "@/lib/db";
 import { requireRole } from "@/lib/serverAuth";
+import { getOrganizationId } from "@/lib/tenantContext";
 import {
   getExistingColumns,
   deleteLeadAssets,
@@ -61,12 +62,10 @@ export async function POST(req: Request) {
 
     const adminId = String(auth.session._id || auth.session.id || "");
     const adminName = auth.session.name || "Admin";
-    const sessionOrgId =
-      auth.session.organization_id ??
-      auth.session.organizationId ??
-      auth.session.tenant_id ??
-      auth.session.tenantId ??
-      1;
+    // Tenant identity comes from the server, never from the session payload the
+    // client round-trips. The old fallback to the literal 1 is gone: if the org
+    // cannot be resolved this throws rather than deleting against a guess.
+    const sessionOrgId = await getOrganizationId();
 
     const result = await transaction(async (client) => {
       let deleted = 0;

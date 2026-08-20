@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { requireRole } from "@/lib/serverAuth";
+import { getOrganizationId } from "@/lib/tenantContext";
 
 export const dynamic = "force-dynamic";
 
@@ -30,13 +31,17 @@ export async function GET(req: Request) {
         session_end_reason,
         EXTRACT(EPOCH FROM (COALESCE(session_end, NOW()) - session_start)) as session_duration_seconds
       FROM employee_sessions
-      WHERE user_id = $1
+      WHERE user_id = $1 AND organization_id = $2
     `;
-    const params: any[] = [userId];
+    // userId arrives as a query parameter, so the organization predicate is what
+    // stops one tenant's manager reading another tenant's session history by id.
+    // It is part of the base clause rather than an optional one, so no branch of
+    // this builder can produce an unscoped statement.
+    const params: any[] = [userId, await getOrganizationId()];
 
     if (dateStr) {
       // Cast to DATE to ignore the time component, assuming session_start is timestamp
-      queryStr += ` AND DATE(session_start AT TIME ZONE 'Asia/Kolkata') = $2`;
+      queryStr += ` AND DATE(session_start AT TIME ZONE 'Asia/Kolkata') = $3`;
       params.push(dateStr);
     }
 

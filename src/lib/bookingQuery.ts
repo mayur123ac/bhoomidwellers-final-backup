@@ -54,6 +54,7 @@ export const BOOKING_SELECT_SQL = `
          TO_CHAR(r.expected_registration_date, 'YYYY-MM-DD') AS expected_registration_date,
          TO_CHAR(r.actual_registration_date, 'YYYY-MM-DD') AS actual_registration_date,
          r.registration_status, r.registration_number, r.registration_remarks,
+         r.stamp_duty_rate, r.registration_fee_rate,
          r.stamp_duty_amount, r.stamp_duty_status, TO_CHAR(r.stamp_duty_paid_date, 'YYYY-MM-DD') AS stamp_duty_paid_date,
          r.registration_fee_amount, r.registration_fee_status,
          TO_CHAR(r.registration_fee_paid_date, 'YYYY-MM-DD') AS registration_fee_paid_date,
@@ -78,7 +79,8 @@ export const BOOKING_SELECT_SQL = `
            'gst_amount', tcv.gst_amount
          ) AS financial_summary
     FROM booking_applications b
-    LEFT JOIN walkin_enquiries w ON w.id = b.lead_id
+    LEFT JOIN walkin_enquiries w
+           ON w.id = b.lead_id AND w.organization_id = b.organization_id
     LEFT JOIN booking_financials f ON f.booking_id = b.id
     LEFT JOIN booking_loan_details l ON l.booking_id = b.id
     LEFT JOIN booking_registration_details r ON r.booking_id = b.id
@@ -96,6 +98,13 @@ export const BOOKING_SELECT_SQL = `
  * simply the same read any subsequent GET would perform.
  */
 export async function fetchBookingById(id: number | string): Promise<any | null> {
-  const rows = await query(`${BOOKING_SELECT_SQL} WHERE b.id = $1 LIMIT 1`, [Number(id)]);
+  // The tenant predicate is part of the WHERE, so a booking id from another
+  // organization simply matches no row and callers 404 as they would for a
+  // nonexistent id.
+  const { getOrganizationId } = await import("./tenantContext");
+  const rows = await query(
+    `${BOOKING_SELECT_SQL} WHERE b.id = $1 AND b.organization_id = $2 LIMIT 1`,
+    [Number(id), await getOrganizationId()],
+  );
   return rows[0] ?? null;
 }

@@ -12,6 +12,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { requireSession } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
@@ -35,9 +36,10 @@ export async function GET(_req: NextRequest) {
         WHERE f.follow_up_type = 'internal_message'
           AND f.sent_to_user_id = $1
           AND f.read_at IS NULL
+          AND f.organization_id = $2
         ORDER BY f.created_at DESC
         LIMIT 50`,
-      [gate.userId]
+      [gate.userId, await getOrganizationId()]
     );
 
     return NextResponse.json(

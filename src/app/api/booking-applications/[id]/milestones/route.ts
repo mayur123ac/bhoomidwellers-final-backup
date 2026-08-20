@@ -1,6 +1,8 @@
 // app/api/booking-applications/[id]/milestones/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
+import { assertParentOrganization } from "@/lib/tenantGuard";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
@@ -43,6 +45,10 @@ export async function POST(
     const agreementVal = Number(bookingRes[0].agreement_value) || 0;
 
     const saved = await transaction(async (client) => {
+      // MT-05: the booking id comes from the URL, so verify it belongs to the
+      // caller's organization before attaching milestones to it.
+      const orgId = await getOrganizationId(client);
+      await assertParentOrganization(client, "booking_applications", Number(id), orgId);
       const existingRes = await client.query(
         `SELECT id, milestone_order FROM booking_payment_milestones WHERE booking_id = $1`,
         [Number(id)]
@@ -83,11 +89,11 @@ export async function POST(
         } else {
           const ins = await client.query(
             `INSERT INTO booking_payment_milestones
-               (booking_id, milestone_name, milestone_order, percentage, demand_amount, demand_date, demand_letter_url, due_date, status, remarks)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+               (booking_id, milestone_name, milestone_order, percentage, demand_amount, demand_date, demand_letter_url, due_date, status, remarks, organization_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
              RETURNING *`,
             [Number(id), ms.milestone_name, milestoneOrder, percentage, demandAmount, ms.demand_date || null,
-              ms.demand_letter_url || null, ms.due_date || null, ms.status || "Upcoming", ms.remarks || null]
+              ms.demand_letter_url || null, ms.due_date || null, ms.status || "Upcoming", ms.remarks || null, orgId]
           );
           row = ins.rows[0];
           changeLog.push({ milestone_order: milestoneOrder, action: "created", demand_amount: demandAmount });
@@ -96,9 +102,9 @@ export async function POST(
       }
 
       await client.query(
-        `INSERT INTO booking_history (booking_id, updated_by, user_role, changed_fields)
-         VALUES ($1, $2, $3, $4)`,
-        [Number(id), user_name, user_role, JSON.stringify({ payment_milestones: changeLog })]
+        `INSERT INTO booking_history (booking_id, updated_by, user_role, changed_fields, organization_id)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [Number(id), user_name, user_role, JSON.stringify({ payment_milestones: changeLog }), orgId]
       );
 
       return savedRows;

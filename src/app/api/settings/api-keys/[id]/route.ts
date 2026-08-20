@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { requireRoles } from "@/lib/serverAuth";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { diffFields, requestContext, writeAuditLog } from "@/lib/auditLog";
 import { clampRateLimit, sanitizeScopes, validateCidr } from "@/lib/apiKeys";
 
@@ -25,12 +26,19 @@ interface KeyRow {
   revoked_at: string | null;
 }
 
-async function loadKey(id: number): Promise<KeyRow | null> {
+// MT-06: the key id is a caller-supplied route parameter and this file EDITS and
+// REVOKES. Unscoped, an admin of one workspace could revoke another workspace's
+// integration key — a cross-tenant denial of service, and an untraceable one
+// because the audit entry would be written against the wrong organization.
+// Scoping the load makes a foreign key indistinguishable from a missing one, and
+// the mutations below repeat the predicate so neither can act on a row this
+// function did not authorise.
+async function loadKey(id: number, orgId: string): Promise<KeyRow | null> {
   const rows = await query<KeyRow>(
     `SELECT id, name, key_prefix, scopes, rate_limit_per_min, ip_whitelist,
             expires_at, revoked_at
-       FROM api_keys WHERE id = $1 LIMIT 1`,
-    [id]
+       FROM api_keys WHERE id = $1 AND organization_id = $2 LIMIT 1`,
+    [id, orgId]
   );
   return rows[0] ?? null;
 }
@@ -54,7 +62,8 @@ export async function PATCH(
     return NextResponse.json({ success: false, message: "Invalid JSON body." }, { status: 400 });
   }
 
-  const existing = await loadKey(id);
+  const orgId = await getOrganizationId();
+  const existing = await loadKey(id, orgId);
   if (!existing) {
     return NextResponse.json({ success: false, message: "Key not found." }, { status: 404 });
   }
@@ -133,8 +142,8 @@ export async function PATCH(
   const setSql = columns.map((c, i) => `${c} = $${i + 2}`).join(", ");
 
   await query(
-    `UPDATE api_keys SET ${setSql}, updated_at = NOW() WHERE id = $1`,
-    [id, ...columns.map((c) => updates[c])]
+    `UPDATE api_keys SET ${setSql}, updated_at = NOW() WHERE id = $1 AND organization_id = $${columns.length + 2}`,
+    [id, ...columns.map((c) => updates[c]), orgId]
   );
 
   const { ip, userAgent } = requestContext(req);
@@ -182,7 +191,8 @@ export async function DELETE(
 
   const reason = String(new URL(req.url).searchParams.get("reason") ?? "").slice(0, 255) || null;
 
-  const existing = await loadKey(id);
+  const orgId = await getOrganizationId();
+  const existing = await loadKey(id, orgId);
   if (!existing) {
     return NextResponse.json({ success: false, message: "Key not found." }, { status: 404 });
   }
@@ -197,8 +207,8 @@ export async function DELETE(
   await query(
     `UPDATE api_keys
         SET revoked_at = NOW(), revoked_by = $2, revoked_reason = $3, updated_at = NOW()
-      WHERE id = $1`,
-    [id, gate.userId, reason]
+      WHERE id = $1 AND organization_id = $4`,
+    [id, gate.userId, reason, orgId]
   );
 
   const { ip, userAgent } = requestContext(req);

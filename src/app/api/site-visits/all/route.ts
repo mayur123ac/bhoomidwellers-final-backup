@@ -1,6 +1,7 @@
 //api/site-visits/all
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 // GET all site visits (admin-wide overview) with lead info joined
@@ -32,11 +33,17 @@ export async function GET(req: Request) {
         we.assigned_to,
         we.assigned_receptionist
       FROM public.site_visits sv
-      JOIN public.walkin_enquiries we ON we.id = sv.lead_id
+      JOIN public.walkin_enquiries we
+        ON we.id = sv.lead_id AND we.organization_id = sv.organization_id
     `;
 
     const params: any[] = [];
     const conditions: string[] = [];
+
+    // Pushed first so it holds $1 regardless of which optional date filters the
+    // caller supplied; the conditions below number from there.
+    params.push(await getOrganizationId());
+    conditions.push(`sv.organization_id = $${params.length}`);
 
     if (from) {
       conditions.push(`sv.visit_date >= $${params.length + 1}`);
@@ -75,7 +82,7 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ success: false, message: "Missing id" }, { status: 400 });
     }
 
-    await query(`DELETE FROM public.site_visits WHERE id = $1`, [id]);
+    await query(`DELETE FROM public.site_visits WHERE id = $1 AND organization_id = $2`, [id, await getOrganizationId()]);
     return NextResponse.json({ success: true });
   } catch (err: any) {
     return NextResponse.json({ success: false, message: err.message }, { status: 500 });

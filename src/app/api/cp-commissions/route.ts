@@ -1,6 +1,7 @@
 // api/cp-commissions/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { computeCPCommission, CPCommissionError } from "@/lib/cpCommissionEngine";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 
@@ -21,6 +22,11 @@ export async function GET(req: NextRequest) {
 
     const where: string[] = [];
     const params: any[] = [];
+
+    // Tenant filter joins the dynamic clause list so it is inside the query,
+    // ahead of ORDER BY and any limiting.
+    params.push(await getOrganizationId());
+    where.push(`c.organization_id = $${params.length}`);
 
     if (channelPartnerId) {
       params.push(Number(channelPartnerId));
@@ -44,8 +50,10 @@ export async function GET(req: NextRequest) {
     const rows = await query(
       `SELECT c.*, cp.name AS channel_partner_name, b.booking_number
          FROM cp_commissions c
-         JOIN channel_partners cp ON cp.id = c.channel_partner_id
-         LEFT JOIN booking_applications b ON b.id = c.booking_id
+         JOIN channel_partners cp
+           ON cp.id = c.channel_partner_id AND cp.organization_id = c.organization_id
+         LEFT JOIN booking_applications b
+           ON b.id = c.booking_id AND b.organization_id = c.organization_id
         ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
         ORDER BY c.created_at DESC, c.id DESC`,
       params

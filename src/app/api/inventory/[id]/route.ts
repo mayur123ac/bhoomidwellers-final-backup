@@ -7,6 +7,7 @@
 //   • on_hold requires a hold_expires_at; leaving on_hold clears it.
 import { NextRequest, NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { isAdmin, isLinkedActive, isBookingProtected, bookingProtectedReason, linkDescriptor, softDeleteUnit } from "@/lib/inventoryDelete";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 
@@ -51,9 +52,13 @@ const UNIT_DETAIL_SQL = `
          w.assigned_to AS lead_assigned_to,
          b.booking_number, b.booking_status, b.primary_name AS booking_primary_name
     FROM inventory_units iu
-    LEFT JOIN walkin_enquiries w ON w.id = iu.lead_id
-    LEFT JOIN booking_applications b ON b.id = iu.booking_id
-   WHERE iu.id = $1`;
+    -- Joined tenant-owned rows carry their own predicate: a lead or booking from
+    -- another organization must not be decorated onto this unit.
+    LEFT JOIN walkin_enquiries w
+           ON w.id = iu.lead_id AND w.organization_id = iu.organization_id
+    LEFT JOIN booking_applications b
+           ON b.id = iu.booking_id AND b.organization_id = iu.organization_id
+   WHERE iu.id = $1 AND iu.organization_id = $2`;
 
 // ─── GET — single unit + its history ──────────────────────────────────────────
 export async function GET(
@@ -65,7 +70,8 @@ export async function GET(
     const gate = await requireSession();
     if (!gate.ok) return gate.response;
 
-    let rows = await query(UNIT_DETAIL_SQL, [Number(id)]);
+    const unitOrgId = await getOrganizationId();
+    let rows = await query(UNIT_DETAIL_SQL, [Number(id), unitOrgId]);
     if (!rows.length)
       return NextResponse.json({ success: false, message: "Unit not found" }, { status: 404 });
 
@@ -77,11 +83,12 @@ export async function GET(
         [Number(id)],
       );
       await query(
-        `INSERT INTO inventory_unit_history (unit_id, old_status, new_status, changed_by, reason)
-         VALUES ($1, 'on_hold', 'available', 'System', 'hold expired')`,
+        `INSERT INTO inventory_unit_history (unit_id, old_status, new_status, changed_by, reason, organization_id)
+         VALUES ($1, 'on_hold', 'available', 'System', 'hold expired',
+                 (SELECT organization_id FROM inventory_units WHERE id = $1))`,
         [Number(id)],
       );
-      rows = await query(UNIT_DETAIL_SQL, [Number(id)]);
+      rows = await query(UNIT_DETAIL_SQL, [Number(id), unitOrgId]);
     }
 
     const history = await query(
@@ -113,7 +120,10 @@ export async function PATCH(
       return NextResponse.json({ success: false, message: "Only Admin and Sales Managers can edit units." }, { status: 403 });
 
     const result = await transaction(async (client) => {
-      const existing = await client.query(`SELECT * FROM inventory_units WHERE id = $1`, [Number(id)]);
+      // MT-06: the unit id is a caller-supplied route parameter and this handler
+      // deletes. Scoping the lookup means a foreign unit returns notFound instead
+      // of being deleted out of another tenant.
+      const existing = await client.query(`SELECT * FROM inventory_units WHERE id = $1 AND organization_id = $2`, [Number(id), await getOrganizationId(client)]);
       if (!existing.rows.length) return { notFound: true as const };
       const unit = existing.rows[0];
       if (unit.deleted_at) return { error: "This unit has been deleted." };
@@ -172,8 +182,9 @@ export async function PATCH(
         const released = ["available", "cancelled"].includes(statusChange.to) && SYNC_ONLY_STATUSES.includes(statusChange.from);
         const reason = body.reason || (released ? "released (manual)" : "status changed (manual)");
         await client.query(
-          `INSERT INTO inventory_unit_history (unit_id, old_status, new_status, changed_by, reason)
-           VALUES ($1,$2,$3,$4,$5)`,
+          `INSERT INTO inventory_unit_history (unit_id, old_status, new_status, changed_by, reason, organization_id)
+           VALUES ($1,$2,$3,$4,$5,
+                   (SELECT organization_id FROM inventory_units WHERE id = $1))`,
           [Number(id), statusChange.from, statusChange.to, user_name, reason],
         );
       }
@@ -218,7 +229,10 @@ export async function DELETE(
       return NextResponse.json({ success: false, message: "Only Admin can delete units." }, { status: 403 });
 
     const result = await transaction(async (client) => {
-      const existing = await client.query(`SELECT * FROM inventory_units WHERE id = $1`, [Number(id)]);
+      // MT-06: the unit id is a caller-supplied route parameter and this handler
+      // deletes. Scoping the lookup means a foreign unit returns notFound instead
+      // of being deleted out of another tenant.
+      const existing = await client.query(`SELECT * FROM inventory_units WHERE id = $1 AND organization_id = $2`, [Number(id), await getOrganizationId(client)]);
       if (!existing.rows.length) return { notFound: true as const };
       const unit = existing.rows[0];
       if (unit.deleted_at) return { unit };  // already deleted — idempotent

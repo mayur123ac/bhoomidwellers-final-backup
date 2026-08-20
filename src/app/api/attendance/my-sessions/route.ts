@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { requireRole, getSessionUserId } from "@/lib/serverAuth";
+import { getOrganizationId } from "@/lib/tenantContext";
 
 export const dynamic = "force-dynamic";
 
@@ -42,12 +43,16 @@ export async function GET(req: Request) {
       );
     }
 
-    // Expire stale sessions (no heartbeat in >5 min) — same as live API
+    const orgId = await getOrganizationId();
+
+    // Expire stale sessions (no heartbeat in >5 min) — same as live API, and
+    // scoped the same way: the sweep may only touch the caller's own tenant.
     await query(`
       UPDATE employee_sessions
       SET is_active = false, session_end = last_heartbeat
-      WHERE is_active = true AND EXTRACT(EPOCH FROM (NOW() - last_heartbeat)) > 300
-    `);
+      WHERE is_active = true AND organization_id = $1
+        AND EXTRACT(EPOCH FROM (NOW() - last_heartbeat)) > 300
+    `, [orgId]);
 
     // Fetch ALL sessions for this user on this date, oldest first
     let rows: any[];
@@ -81,13 +86,15 @@ export async function GET(req: Request) {
         LEFT JOIN (
           SELECT DISTINCT ON (employee_id) employee_id, attendance_status
           FROM attendance_records
-          WHERE DATE(login_time) = $2::date
+          WHERE DATE(login_time) = $2::date AND organization_id = $3
         ) ar ON u.id = ar.employee_id
         WHERE es.user_id = $1
+          AND es.organization_id = $3
+          AND u.organization_id = $3
           AND DATE(es.session_start AT TIME ZONE 'Asia/Kolkata') = $2
         ORDER BY es.session_start ASC
         `,
-        [userId, dateStr]
+        [userId, dateStr, orgId]
       );
     } else {
       // Fallback: look up by name if id not available
@@ -120,13 +127,18 @@ export async function GET(req: Request) {
         LEFT JOIN (
           SELECT DISTINCT ON (employee_id) employee_id, attendance_status
           FROM attendance_records
-          WHERE DATE(login_time) = $2::date
+          WHERE DATE(login_time) = $2::date AND organization_id = $3
         ) ar ON u.id = ar.employee_id
+        -- Name matching is ambiguous ACROSS tenants as well as within one, so the
+        -- organization predicate is what keeps a same-named user in another tenant
+        -- out of this employee's own session list.
         WHERE LOWER(u.name) = LOWER($1)
+          AND es.organization_id = $3
+          AND u.organization_id = $3
           AND DATE(es.session_start AT TIME ZONE 'Asia/Kolkata') = $2
         ORDER BY es.session_start ASC
         `,
-        [userName, dateStr]
+        [userName, dateStr, orgId]
       );
     }
 

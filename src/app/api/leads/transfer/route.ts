@@ -1,6 +1,7 @@
 // app/api/leads/transfer/route.ts
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export async function POST(req: Request) {
@@ -16,6 +17,10 @@ export async function POST(req: Request) {
     // queue, and lead routing is not theirs to change.
     const gate = await requireRoles(["admin", "sales manager", "receptionist"]);
     if (!gate.ok) return gate.response;
+
+    // MT-05: resolved once for the whole handler, from the authenticated
+    // session — never from `body`, which the browser controls.
+    const orgId = await getOrganizationId();
 
     const body = await req.json();
     const { lead_id, transfer_to, transfer_note, transferred_by } = body as {
@@ -36,8 +41,8 @@ export async function POST(req: Request) {
    
 
     const existing = await query(
-      `SELECT id, sr_no, assigned_to, assigned_receptionist FROM walkin_enquiries WHERE id = $1`,
-      [lead_id]
+      `SELECT id, sr_no, assigned_to, assigned_receptionist FROM walkin_enquiries WHERE id = $1 AND organization_id = $2`,
+      [lead_id, orgId]
     );
 
     if (existing.length === 0) {
@@ -70,27 +75,22 @@ export async function POST(req: Request) {
     let followUpRow: any = null;
     try {
       const followUpRows = await query(
-        `INSERT INTO follow_ups (lead_id, message, created_by_name, site_visit_date)
-         VALUES ($1, $2, $3, $4)
+        `INSERT INTO follow_ups (lead_id, message, created_by_name, site_visit_date, organization_id)
+         VALUES ($1, $2, $3, $4, $5)
          RETURNING *`,
-        [String(lead_id), transferMessage, transferred_by, null]
+        [String(lead_id), transferMessage, transferred_by, null, orgId]
       );
       followUpRow = followUpRows[0];
     } catch (fuErr: any) {
-      // If follow_ups schema is different, try the salesManagerName column
-      console.warn("[transfer] follow_ups insert failed, trying alternate schema:", fuErr.message);
-      try {
-        const followUpRows = await query(
-          `INSERT INTO follow_ups (lead_id, message, sales_manager_name, created_by, site_visit_date)
-           VALUES ($1, $2, $3, $4, $5)
-           RETURNING *`,
-          [String(lead_id), transferMessage, transferred_by, "receptionist", null]
-        );
-        followUpRow = followUpRows[0];
-      } catch (fuErr2: any) {
-        console.error("[transfer] follow_ups insert failed completely:", fuErr2.message);
-        // Don't fail the whole transfer just because follow-up logging failed
-      }
+      // The "alternate schema" retry that used to live here has been removed.
+      // It inserted into follow_ups(sales_manager_name, created_by) — NEITHER
+      // column exists on follow_ups, so that retry could only ever throw and be
+      // swallowed by its own catch. The MT-05 PREPARE harness surfaced it; it is
+      // a pre-existing dead branch, not something this phase introduced.
+      // Behaviour is unchanged: the transfer still succeeds, followUpRow stays
+      // null, and the failure is logged once instead of twice.
+      console.error("[transfer] follow_ups insert failed:", fuErr.message);
+      // Don't fail the whole transfer just because follow-up logging failed.
     }
 
     // ── 5. Update assigned_to ─────────────────────────────────────────
@@ -99,9 +99,9 @@ export async function POST(req: Request) {
        SET assigned_to = $1,
            assigned_at = NOW(),
            last_activity_at = NOW()
-       WHERE id = $2
+       WHERE id = $2 AND organization_id = $3
        RETURNING *`,
-      [transfer_to, lead_id]
+      [transfer_to, lead_id, orgId]
     );
 
     if (updatedRows.length === 0) {
@@ -113,13 +113,14 @@ export async function POST(req: Request) {
 
     // ── 6. Map follow-up to frontend shape ────────────────────────────
     await query(
-      `INSERT INTO lead_assignment_logs (lead_id, assigned_to, assigned_by, reason)
-       VALUES ($1, $2, $3, $4)`,
+      `INSERT INTO lead_assignment_logs (lead_id, assigned_to, assigned_by, reason, organization_id)
+       VALUES ($1, $2, $3, $4, $5)`,
       [
         Number(lead_id),
         transfer_to,
         transferred_by,
         transfer_note?.trim() || `Transferred from ${currentManager || "Unassigned"}`,
+        orgId,
       ]
     );
 

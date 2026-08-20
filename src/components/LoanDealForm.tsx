@@ -34,6 +34,7 @@ import { FaUniversity, FaTimes, FaFileAlt, FaFileInvoiceDollar, FaPlus, FaTrash,
 import IndianCurrencyInput from "@/components/IndianCurrencyInput";
 import LenderApplicationsTracker, { type LoanApplication } from "@/components/LenderApplicationsTracker";
 import { parseGstRate, resolveGstRate, GST_RATE_PRESETS, DEFAULT_GST_RATE } from "@/lib/gst";
+import { resolveStampDutyRate, resolveRegistrationFeeRate } from "@/lib/charges";
 import PddChecklist from "@/components/PddChecklist";
 
 interface LoanDealFormProps {
@@ -292,8 +293,14 @@ function defaultDealForm() {
     custom_charges: [] as { charge_name: string; amount: string; remarks: string }[],
     token_amount: "",
     // Phase-1-3 aligned booking financials
-    gst_rate: "5", stamp_duty_amount: "", stamp_duty_percentage: "", stamp_duty_status: "Pending", stamp_duty_mode: "auto" as "auto" | "manual",
-    registration_fee_amount: "", registration_fee_percentage: "", registration_fee_status: "Pending", registration_fee_mode: "auto" as "auto" | "manual",
+    // stamp_duty_rate / registration_fee_rate are the SAME fields BookingFormModal
+    // stores — the percent the operator picks here is written into the draft and
+    // into the booking, so a 4% choice made before a booking exists survives into
+    // the booking form instead of being re-derived at 5%. (They replace the old
+    // stamp_duty_percentage / registration_fee_percentage, which were never read
+    // by anything: the percent lived in component-local state and was lost on save.)
+    gst_rate: "5", stamp_duty_amount: "", stamp_duty_rate: "5", stamp_duty_status: "Pending", stamp_duty_mode: "auto" as "auto" | "manual",
+    registration_fee_amount: "", registration_fee_rate: "1", registration_fee_status: "Pending", registration_fee_mode: "auto" as "auto" | "manual",
     legal_charges: "", maintenance_deposit: "",
     // Estimate-only agreement value for stamp-duty/registration auto-calc before a
     // booking exists. NEVER written to booking_applications.agreement_value.
@@ -339,12 +346,13 @@ export default function LoanDealForm({ lead, booking, loanUpdate, user, isDark =
   const [showAdditionalPayment, setShowAdditionalPayment] = useState(false);
   const [ownContributionPaid, setOwnContributionPaid] = useState<number | null>(null);
 
-  // Stamp Duty / Registration Fee auto-calc toggles (UI-only; no new DB column).
-  // Percent stays adjustable — e.g. 4% for a female co-owner in Maharashtra.
-
-  const [stampDutyPercent, setStampDutyPercent] = useState("5");
-
-  const [registrationFeePercent, setRegistrationFeePercent] = useState("1");
+  // Stamp Duty / Registration Fee percents. These used to be component-local
+  // state, so the rate the operator picked here (e.g. 4% for a female co-owner)
+  // was thrown away on save and the booking form re-derived at 5%. They now live
+  // on dealForm as stamp_duty_rate / registration_fee_rate — the same field names
+  // the booking persists — so the choice round-trips.
+  const stampDutyPercent = dealForm.stamp_duty_rate;
+  const registrationFeePercent = dealForm.registration_fee_rate;
 
   // Selecting a lender copies its terms into the local deal form so the sanction
   // amount (and therefore the disbursement progress) reflects the chosen bank.
@@ -452,11 +460,12 @@ export default function LoanDealForm({ lead, booking, loanUpdate, user, isDark =
       // which is falsy, so reopening a zero-GST deal silently reset it to 5%.
       gst_rate: String(resolveGstRate(src?.gst_rate)),
       stamp_duty_amount: src?.stamp_duty_amount ? String(src.stamp_duty_amount) : "",
-      stamp_duty_percentage: src?.stamp_duty_percentage ? String(src.stamp_duty_percentage) : "",
+      // resolve*, not `||` — a stored 0 is falsy and must not snap back to 5 / 1.
+      stamp_duty_rate: String(resolveStampDutyRate(src?.stamp_duty_rate)),
       stamp_duty_status: src?.stamp_duty_status || "Pending",
       stamp_duty_mode: (src?.stamp_duty_mode as "auto" | "manual") || "auto",
       registration_fee_amount: src?.registration_fee_amount ? String(src.registration_fee_amount) : "",
-      registration_fee_percentage: src?.registration_fee_percentage ? String(src.registration_fee_percentage) : "",
+      registration_fee_rate: String(resolveRegistrationFeeRate(src?.registration_fee_rate)),
       registration_fee_status: src?.registration_fee_status || "Pending",
       registration_fee_mode: (src?.registration_fee_mode as "auto" | "manual") || "auto",
       legal_charges: src?.legal_charges ? String(src.legal_charges) : "",
@@ -737,6 +746,10 @@ export default function LoanDealForm({ lead, booking, loanUpdate, user, isDark =
         // untouched field re-sends its current value rather than blanking it.
         fd.set("gst_rate", dealForm.gst_rate);
         // Mode-resolved final values so auto/manual both persist the right number.
+        // The rates go with them so the booking form reopens showing the percent
+        // that produced the figure, rather than a hardcoded 5% / 1%.
+        fd.set("stamp_duty_rate", dealForm.stamp_duty_rate);
+        fd.set("registration_fee_rate", dealForm.registration_fee_rate);
         fd.set("stamp_duty_amount", finalStampDuty);
         fd.set("stamp_duty_status", dealForm.stamp_duty_status);
         fd.set("registration_fee_amount", finalRegistrationFee);
@@ -792,6 +805,10 @@ export default function LoanDealForm({ lead, booking, loanUpdate, user, isDark =
           disbursement_status: autoDisbursementStatus,
           token_amount: dealForm.token_amount,
           gst_rate: dealForm.gst_rate,
+          // Rates travel with the amounts — BookingFormModal.defaultForm() reads
+          // these straight out of the draft, same as gst_rate.
+          stamp_duty_rate: dealForm.stamp_duty_rate,
+          registration_fee_rate: dealForm.registration_fee_rate,
           stamp_duty_amount: finalStampDuty,
           stamp_duty_status: dealForm.stamp_duty_status,
           stamp_duty_mode: dealForm.stamp_duty_mode,
@@ -1280,7 +1297,7 @@ export default function LoanDealForm({ lead, booking, loanUpdate, user, isDark =
                 mode={dealForm.stamp_duty_mode}
                 onMode={m => updateDealForm({ stamp_duty_mode: m })}
                 percent={stampDutyPercent}
-                onPercent={v => { setIsDirty(true); setStampDutyPercent(v); }}
+                onPercent={v => updateDealForm({ stamp_duty_rate: v })}
                 agreementValue={agreementValueForCalc}
                 computed={computedStampDuty}
                 manualValue={dealForm.stamp_duty_amount}
@@ -1296,7 +1313,7 @@ export default function LoanDealForm({ lead, booking, loanUpdate, user, isDark =
                 mode={dealForm.registration_fee_mode}
                 onMode={m => updateDealForm({ registration_fee_mode: m })}
                 percent={registrationFeePercent}
-                onPercent={v => { setIsDirty(true); setRegistrationFeePercent(v); }}
+                onPercent={v => updateDealForm({ registration_fee_rate: v })}
                 agreementValue={agreementValueForCalc}
                 computed={computedRegistrationFee}
                 capped={registrationFeeCapped}

@@ -1,6 +1,7 @@
 // app/api/leads/[id]/assignment-history/route.ts
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export async function GET(
@@ -25,10 +26,10 @@ export async function GET(
       `
         SELECT id, lead_id, assigned_to, assigned_by, assigned_at, reason
         FROM lead_assignment_logs
-        WHERE lead_id = $1
+        WHERE lead_id = $1 AND organization_id = $2
         ORDER BY assigned_at DESC, id DESC
       `,
-      [leadId]
+      [leadId, await getOrganizationId()]
     );
 
     return NextResponse.json({ success: true, data: rows }, { status: 200 });

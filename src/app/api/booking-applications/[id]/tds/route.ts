@@ -1,6 +1,7 @@
 // app/api/booking-applications/[id]/tds/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
@@ -39,8 +40,8 @@ export async function GET(
     if (!gate.ok) return gate.response;
 
     const rows = await query(
-      `SELECT * FROM booking_tds_records WHERE booking_id = $1 ORDER BY created_at ASC`,
-      [Number(id)]
+      `SELECT * FROM booking_tds_records WHERE booking_id = $1 AND organization_id = $2 ORDER BY created_at ASC`,
+      [Number(id), await getOrganizationId()]
     );
     return NextResponse.json({ success: true, data: rows }, { status: 200 });
   } catch (err: any) {
@@ -77,7 +78,9 @@ export async function POST(
       return NextResponse.json({ success: false, message: "tds_amount is required and must be greater than zero." }, { status: 400 });
     }
 
-    const bookingRes = await query(`SELECT id FROM booking_applications WHERE id = $1`, [Number(id)]);
+    // MT-06: this is the ownership gate for the whole handler — scoping it here
+    // makes a foreign booking indistinguishable from a non-existent one.
+    const bookingRes = await query(`SELECT id FROM booking_applications WHERE id = $1 AND organization_id = $2`, [Number(id), await getOrganizationId()]);
     if (!bookingRes.length) {
       return NextResponse.json({ success: false, message: "Booking not found" }, { status: 404 });
     }
@@ -86,8 +89,9 @@ export async function POST(
 
     const rows = await query(
       `INSERT INTO booking_tds_records
-         (booking_id, payment_id, tds_amount, tds_rate, form_26qb_filed, form_26qb_date, acknowledgement_no, financial_year, quarter, buyer_pan, seller_pan)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         (booking_id, payment_id, tds_amount, tds_rate, form_26qb_filed, form_26qb_date, acknowledgement_no, financial_year, quarter, buyer_pan, seller_pan, organization_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+               (SELECT organization_id FROM booking_applications WHERE id = $1))
        RETURNING *`,
       [
         Number(id), payment_id || null, cleanAmount, tds_rate != null ? Number(tds_rate) : 1,

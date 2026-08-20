@@ -1,6 +1,7 @@
 // app/api/followups/route.ts
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 // GET: Fetch all follow-up messages
@@ -9,8 +10,15 @@ export async function GET() {
     const gate = await requireSession();
     if (!gate.ok) return gate.response;
 
+    // Tenant leak fixed: this returned EVERY follow-up in the database.
+    //
+    // NOTE (recorded, not changed): despite sitting at /api/leads/[id]/follow-ups
+    // this GET takes no params and ignores the [id] entirely. Narrowing it to the
+    // lead would change the route's contract for its callers, which is outside
+    // Batch 2's remit — so it is scoped to the organization only and flagged.
     const messages = await query(
-      `SELECT * FROM follow_ups ORDER BY created_at ASC`
+      `SELECT * FROM follow_ups WHERE organization_id = $1 ORDER BY created_at ASC`,
+      [await getOrganizationId()]
     );
 
     // Map to same shape the frontend expects from the old MongoDB response
@@ -52,14 +60,15 @@ export async function POST(req: Request) {
     }
 
     const rows = await query(
-      `INSERT INTO follow_ups (lead_id, message, created_by_name, site_visit_date)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO follow_ups (lead_id, message, created_by_name, site_visit_date, organization_id)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
       [
         String(leadId),
         message,
         salesManagerName || createdBy || "sales",
         siteVisitDate    || null,
+        await getOrganizationId(),
       ]
     );
 

@@ -21,6 +21,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/serverAuth";
 import { getManualCallingCredentials } from "@/lib/manualCallingSettings";
 import { query } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { toE164 } from "@/lib/phone";
 
 export const runtime = "nodejs";
@@ -104,8 +105,8 @@ export async function POST(req: NextRequest) {
 
   if (leadId !== null) {
     const rows = await query<{ phone: string | null }>(
-      `SELECT phone FROM walkin_enquiries WHERE id = $1`,
-      [leadId]
+      `SELECT phone FROM walkin_enquiries WHERE id = $1 AND organization_id = $2`,
+      [leadId, await getOrganizationId()]
     );
     if (rows.length === 0) {
       return NextResponse.json({ success: false, message: "Lead not found." }, { status: 404 });
@@ -113,8 +114,8 @@ export async function POST(req: NextRequest) {
     toRaw = rows[0].phone;
   } else if (callerLeadId !== null) {
     const rows = await query<{ contact_no: string | null }>(
-      `SELECT contact_no FROM caller_leads WHERE id = $1`,
-      [callerLeadId]
+      `SELECT contact_no FROM caller_leads WHERE id = $1 AND organization_id = $2`,
+      [callerLeadId, await getOrganizationId()]
     );
     if (rows.length === 0) {
       return NextResponse.json({ success: false, message: "Lead not found." }, { status: 404 });

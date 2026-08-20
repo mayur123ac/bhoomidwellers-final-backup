@@ -1,6 +1,7 @@
 //api/leads/lost/route.ts
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { broadcastLeadUpdate } from "@/lib/lostLeadEvents";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 
@@ -46,8 +47,8 @@ export async function PATCH(req: Request) {
     }
 
     const existing = await query(
-      "SELECT id, name, is_lost_lead FROM walkin_enquiries WHERE id = $1",
-      [leadId]
+      "SELECT id, name, is_lost_lead FROM walkin_enquiries WHERE id = $1 AND organization_id = $2",
+      [leadId, await getOrganizationId()]
     );
 
     if (existing.length === 0) {
@@ -64,9 +65,9 @@ export async function PATCH(req: Request) {
                lost_lead_reason = $1,
                lost_lead_marked_at = NOW(),
                lost_lead_marked_by = $2
-           WHERE id = $3
+           WHERE id = $3 AND organization_id = $4
            RETURNING *`,
-          [reason, actor, leadId]
+          [reason, actor, leadId, await getOrganizationId()]
         )
       : await query(
           `UPDATE walkin_enquiries
@@ -74,9 +75,9 @@ export async function PATCH(req: Request) {
                lost_lead_reason = NULL,
                lost_lead_marked_at = NULL,
                lost_lead_marked_by = NULL
-           WHERE id = $1
+           WHERE id = $1 AND organization_id = $2
            RETURNING *`,
-          [leadId]
+          [leadId, await getOrganizationId()]
         );
 
     const updatedLead = updatedRows[0];
@@ -92,9 +93,9 @@ export async function PATCH(req: Request) {
 
     try {
       await query(
-        `INSERT INTO follow_ups (lead_id, message, created_by_name, site_visit_date)
-         VALUES ($1, $2, $3, $4)`,
-        [String(leadId), logMessage, actor, null]
+        `INSERT INTO follow_ups (lead_id, message, created_by_name, site_visit_date, organization_id)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [String(leadId), logMessage, actor, null, await getOrganizationId()]
       );
     } catch (fuErr: unknown) {
       console.warn("[PATCH /api/leads/lost] follow_ups insert failed:", getErrorMessage(fuErr, "Unknown error"));

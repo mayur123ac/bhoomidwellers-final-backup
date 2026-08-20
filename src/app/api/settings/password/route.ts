@@ -5,6 +5,7 @@
 // who changes their password here can still sign in, and everyone who hasn't is
 // unaffected. See lib/passwords.ts for the full reasoning.
 
+import { getOrganizationId } from "@/lib/tenantContext";
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { requireSession } from "@/lib/serverAuth";
@@ -17,6 +18,7 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest) {
   const gate = await requireSession();
   if (!gate.ok) return gate.response;
+  const orgId = await getOrganizationId();
   if (!gate.userId) {
     return NextResponse.json({ success: false, message: "Session carries no user id." }, { status: 400 });
   }
@@ -47,8 +49,8 @@ export async function POST(req: NextRequest) {
   }
 
   const stored = await query<{ password: string | null; name: string; email: string | null }>(
-    `SELECT password, name, email FROM users WHERE id = $1 LIMIT 1`,
-    [gate.userId]
+    `SELECT password, name, email FROM users WHERE id = $1 AND organization_id = $2 LIMIT 1`,
+    [gate.userId, orgId]
   );
   if (stored.length === 0) {
     return NextResponse.json({ success: false, message: "User not found." }, { status: 404 });
@@ -111,8 +113,8 @@ export async function POST(req: NextRequest) {
   await query(
     `UPDATE employee_sessions
         SET is_active = false, session_end = NOW(), session_end_reason = 'password_changed'
-      WHERE user_id = $1 AND is_active = true`,
-    [gate.userId]
+      WHERE user_id = $1 AND is_active = true AND organization_id = $2`,
+    [gate.userId, orgId]
   );
 
   await writeAuditLog({

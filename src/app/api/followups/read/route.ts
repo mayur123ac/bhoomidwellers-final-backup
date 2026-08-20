@@ -12,6 +12,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { requireSession } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
@@ -39,8 +40,9 @@ export async function PATCH(req: NextRequest) {
           AND follow_up_type = 'internal_message'
           AND sent_to_user_id = $2
           AND read_at IS NULL
+          AND organization_id = $3
         RETURNING id`,
-      [leadId, gate.userId]
+      [leadId, gate.userId, await getOrganizationId()]
     );
 
     return NextResponse.json({ success: true, marked: rows.length, ids: rows.map(r => r.id) }, { status: 200 });

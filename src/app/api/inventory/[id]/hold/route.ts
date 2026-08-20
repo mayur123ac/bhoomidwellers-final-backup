@@ -79,8 +79,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       );
 
       await client.query(
-        `INSERT INTO inventory_unit_history (unit_id, old_status, new_status, changed_by, reason)
-         VALUES ($1, $2, 'on_hold', $3, $4)`,
+        `INSERT INTO inventory_unit_history (unit_id, old_status, new_status, changed_by, reason, organization_id)
+         VALUES ($1, $2, 'on_hold', $3, $4,
+                 (SELECT organization_id FROM inventory_units WHERE id = $1))`,
         [
           Number(id), unit.status, actor,
           `held for ${hours}h${leadId ? ` for lead #${leadId}` : ""}${body.reason ? ` — ${String(body.reason).trim()}` : ""}`,
@@ -139,8 +140,9 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       );
 
       await client.query(
-        `INSERT INTO inventory_unit_history (unit_id, old_status, new_status, changed_by, reason)
-         VALUES ($1, 'on_hold', 'available', $2, $3)`,
+        `INSERT INTO inventory_unit_history (unit_id, old_status, new_status, changed_by, reason, organization_id)
+         VALUES ($1, 'on_hold', 'available', $2, $3,
+                 (SELECT organization_id FROM inventory_units WHERE id = $1))`,
         [Number(id), actor, `hold released${unit.held_by && unit.held_by !== actor ? ` (was ${unit.held_by}'s)` : ""}`],
       );
 

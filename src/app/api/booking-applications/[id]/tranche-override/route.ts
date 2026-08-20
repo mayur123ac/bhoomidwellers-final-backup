@@ -19,6 +19,8 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
+import { assertParentOrganization } from "@/lib/tenantGuard";
 import { requireRoles } from "@/lib/serverAuth";
 import {
   buildFinancialSnapshot,
@@ -144,6 +146,10 @@ export async function POST(
     const performedBy = gate.session.email || gate.session.name || String(gate.session._id ?? "unknown");
 
     const result = await transaction(async (client) => {
+      // MT-05: bookingId comes from the URL, so the parent's ownership is
+      // verified rather than assumed before anything is written under it.
+      const orgId = await getOrganizationId(client);
+      await assertParentOrganization(client, "booking_applications", bookingId, orgId);
       // Log FIRST. If the tranche were committed before its justification, a
       // failure in between would leave a disbursement nobody authorised on
       // record — the transaction makes both atomic, and this ordering makes the
@@ -153,14 +159,16 @@ export async function POST(
            booking_id, lead_id, adjustment_type,
            performed_by, performed_by_role, performed_at,
            gate_code, obligation_snapshot,
-           reason, approved_amount, notes
-         ) VALUES ($1,$2,$3,$4,$5,NOW(),$6,$7,$8,$9,$10)
+           reason, approved_amount, notes,
+           organization_id
+         ) VALUES ($1,$2,$3,$4,$5,NOW(),$6,$7,$8,$9,$10,$11)
          RETURNING id`,
         [
           bookingId, leadId, "TRANCHE_OVERRIDE",
           performedBy, gate.session.role,
           gateCode, JSON.stringify(obligation),
           reason.trim(), amount, notes,
+          orgId,
         ]
       );
       const adjustmentId = adj.rows[0].id as number;
@@ -170,13 +178,14 @@ export async function POST(
       // receiving_date, and the actor is recorded in added_by_name/added_by_role.
       const tranche = await client.query(
         `INSERT INTO disbursement_tranches
-           (lead_id, booking_id, amount, status, receiving_date, remarks, added_by_name, added_by_role)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+           (lead_id, booking_id, amount, status, receiving_date, remarks, added_by_name, added_by_role, organization_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
          RETURNING id`,
         [
           leadId, bookingId, amount, "Scheduled", expectedDate,
           `Admin override #${adjustmentId}: ${reason.trim()}`,
           gate.session.name || performedBy, gate.session.role,
+          orgId,
         ]
       );
       const trancheId = tranche.rows[0].id as number;

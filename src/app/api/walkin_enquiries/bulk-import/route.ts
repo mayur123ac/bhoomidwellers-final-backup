@@ -6,6 +6,7 @@ import { query } from "@/lib/db";
 import { requireRole } from "@/lib/serverAuth";
 import { parseLeadSheet, RowCapError } from "@/lib/ingestion/parseLeadSheet";
 import { bulkInsertLeads } from "@/lib/ingestion/bulkInsertLeads";
+import { getOrganizationId } from "@/lib/tenantContext";
 
 export const dynamic = "force-dynamic";
 
@@ -42,7 +43,8 @@ export async function POST(req: Request) {
     // Sales managers can only upload when the org toggle is enabled.
     if (kind === "sales_manager") {
       const settingRows = await query(
-        `SELECT allow_sm_upload FROM organization_settings WHERE organization_id = 1`
+        `SELECT allow_sm_upload FROM organization_settings WHERE organization_id = $1`,
+        [await getOrganizationId()]
       );
       const allowed = settingRows[0]?.allow_sm_upload === true;
       if (!allowed) {

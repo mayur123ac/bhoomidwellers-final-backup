@@ -1,6 +1,7 @@
 // app/api/transfer-leads/route.ts
 import { NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { requireRole } from "@/lib/serverAuth";
 
 export async function POST(req: Request) {
@@ -33,11 +34,15 @@ export async function POST(req: Request) {
 
     // ── Execute transfer inside a transaction ──
     const transferred = await transaction(async (client) => {
+      // Bulk reassignment keyed on employee NAME. Without the organization
+      // filter a same-named manager in another builder would have their entire
+      // lead book reassigned by this call.
+      const orgId = await getOrganizationId(client);
       const result = await client.query(
         `UPDATE public.walkin_enquiries
          SET assigned_to = $2
-         WHERE assigned_to = $1`,
-        [from.trim(), to.trim()]
+         WHERE assigned_to = $1 AND organization_id = $3`,
+        [from.trim(), to.trim(), orgId]
       );
       return result.rowCount ?? 0;
     });

@@ -21,6 +21,7 @@
 // payment-summary route; the cp_commissions ones are the likely names and may
 // differ in your schema.
 import { query } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
 
 const MONTHS_BACK = 18;
 const CACHE_MS = 60_000;
@@ -108,10 +109,13 @@ export async function buildServerDigest(): Promise<string> {
             COALESCE(SUM(CASE WHEN LOWER(c.status) = 'paid' THEN c.gross_commission_amount ELSE 0 END), 0)  AS paid,
             COALESCE(SUM(CASE WHEN LOWER(c.status) <> 'paid' THEN c.gross_commission_amount ELSE 0 END), 0) AS committed
      FROM cp_commissions c
-     LEFT JOIN channel_partners cp ON cp.id = c.channel_partner_id
+     LEFT JOIN channel_partners cp
+            ON cp.id = c.channel_partner_id AND cp.organization_id = c.organization_id
      WHERE LOWER(COALESCE(c.status, '')) <> 'reversed'
+       AND c.organization_id = $1
      GROUP BY 1
-     ORDER BY gross DESC`
+     ORDER BY gross DESC`,
+      [await getOrganizationId()]
     );
 
     /* ── merge the two monthly streams ── */

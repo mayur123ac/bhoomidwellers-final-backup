@@ -35,16 +35,18 @@ export const GET = withApiKey("/api/v1/followups", "followups:read", async (ctx)
       WHERE lead_id = $1
         AND sent_to_user_id IS NULL
         AND sent_to_role IS NULL
+        AND organization_id = $4
       ORDER BY created_at ASC, id ASC
       LIMIT $2 OFFSET $3`,
-    [leadId, ctx.limit, ctx.offset]
+    [leadId, ctx.limit, ctx.offset, ctx.key.organization_id]
   );
 
   const totalRows = await query<{ count: string }>(
     `SELECT COUNT(*)::text AS count
        FROM follow_ups
-      WHERE lead_id = $1 AND sent_to_user_id IS NULL AND sent_to_role IS NULL`,
-    [leadId]
+      WHERE lead_id = $1 AND sent_to_user_id IS NULL AND sent_to_role IS NULL
+        AND organization_id = $2`,
+    [leadId, ctx.key.organization_id]
   );
 
   return { data: rows, meta: { leadId, total: Number(totalRows[0]?.count ?? 0) } };

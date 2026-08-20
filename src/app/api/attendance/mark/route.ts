@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { requireRole, getSessionUserId } from "@/lib/serverAuth";
+import { getOrganizationId } from "@/lib/tenantContext";
 
 export async function POST(req: NextRequest) {
     try {
@@ -20,6 +21,7 @@ export async function POST(req: NextRequest) {
         // here must match the one /api/attendance/status reads back, otherwise the
         // header badge can never see the record.
         const targetUserId = sessionUserId;
+        const orgId = await getOrganizationId();
 
         // Find the active session for the user
         let sessionIdToUse = session_id;
@@ -29,9 +31,9 @@ export async function POST(req: NextRequest) {
             const activeSession = await query(`
                 SELECT id, session_start
                 FROM employee_sessions
-                WHERE user_id = $1 AND is_active = true
+                WHERE user_id = $1 AND organization_id = $2 AND is_active = true
                 ORDER BY session_start DESC LIMIT 1
-            `, [targetUserId]);
+            `, [targetUserId, orgId]);
 
             if (activeSession.length === 0) {
                 return NextResponse.json({ success: false, message: "No active session found to mark attendance" }, { status: 404 });
@@ -44,11 +46,11 @@ export async function POST(req: NextRequest) {
         // not depend on the app server's clock/timezone.
         const existing = await query(`
             SELECT id, attendance_status, login_time FROM attendance_records
-            WHERE employee_id = $1
+            WHERE employee_id = $1 AND organization_id = $2
               AND DATE(login_time) = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date
             ORDER BY id DESC
             LIMIT 1
-        `, [targetUserId]);
+        `, [targetUserId, orgId]);
 
         if (existing.length > 0) {
             return NextResponse.json({
@@ -67,7 +69,7 @@ export async function POST(req: NextRequest) {
             INSERT INTO attendance_records (organization_id, employee_id, login_session_id, attendance_status, login_time)
             VALUES ($1, $2, $3, $4, COALESCE($5::timestamptz, CURRENT_TIMESTAMP) AT TIME ZONE 'Asia/Kolkata')
             RETURNING id, attendance_status, login_time
-        `, [1, targetUserId, sessionIdToUse, 'Present', loginTime]);
+        `, [orgId, targetUserId, sessionIdToUse, 'Present', loginTime]);
 
         if (result.length === 0) {
             // Already marked — return success anyway so frontend updates gracefully
