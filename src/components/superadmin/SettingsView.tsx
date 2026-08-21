@@ -5,6 +5,7 @@
 
 import type { SuperAdminTheme } from "./theme";
 import { Panel, SectionHead, PlaceholderAction } from "./ui";
+import AccountSecurity from "./AccountSecurity";
 
 /** A setting row with an inert control. */
 function SettingRow({
@@ -40,9 +41,18 @@ function InertSwitch({ t, on = false }: { t: SuperAdminTheme; on?: boolean }) {
   );
 }
 
-export default function SettingsView({ t }: { t: SuperAdminTheme }) {
+export default function SettingsView({
+  t, onSignedOut,
+}: {
+  t: SuperAdminTheme;
+  /** Passed down so a password change can end the session it was made from. */
+  onSignedOut: () => void;
+}) {
   return (
     <div className="max-w-3xl space-y-8">
+      {/* First, because it is the only section here that actually does
+          something — the rest is Phase 1 structure. */}
+      <AccountSecurity t={t} onSignedOut={onSignedOut} />
       <section>
         <SectionHead t={t} title="Platform" sub="Applies to every organization on the platform" />
         <Panel t={t}>

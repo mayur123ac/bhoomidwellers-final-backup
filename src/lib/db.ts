@@ -1,5 +1,6 @@
 // lib/db.ts
 import { Pool, PoolClient } from "pg";
+import { createResolvingSocket } from "./dnsFallback";
 
 let pool: Pool | undefined;
 
@@ -58,7 +59,26 @@ export function getPool(): Pool {
       // ssl: { rejectUnauthorized: false }, // ← Always ON for Neon
       max: 10,
       idleTimeoutMillis: 30_000,
-      connectionTimeoutMillis: 5_000,
+      // 15s, not 5s. Neon suspends an idle compute, and the first connection
+      // after that has to wake it, negotiate TLS and authenticate. At 5s that
+      // race was lost often enough that the first request against a freshly
+      // started server returned `Connection terminated due to connection
+      // timeout` — surfacing on the login screen as "Login failed. Something
+      // went wrong.", while a retry seconds later succeeded.
+      //
+      // This is a ceiling, not a delay: a warm pool still connects in
+      // milliseconds and nothing waits longer than it needs to.
+      connectionTimeoutMillis: 15_000,
+      // Socket factory whose only difference from a plain net.Socket is the DNS
+      // path: the system resolver is tried first, and public resolvers are used
+      // only if it fails. Some networks refuse *.aws.neon.tech outright, which
+      // surfaces as `getaddrinfo ENOTFOUND ep-…-pooler…` on every query and
+      // looks like the database being down.
+      //
+      // The connection still uses the HOSTNAME, so SNI, certificate
+      // verification and sslmode are untouched — see lib/dnsFallback.ts for why
+      // connecting by IP instead would have meant disabling TLS verification.
+      stream: () => createResolvingSocket(),
     });
     pool.on("error", (err) => console.error("[DB] Pool error", err));
   }

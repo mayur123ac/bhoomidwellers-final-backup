@@ -37,7 +37,8 @@ import {
 } from "react-icons/io5";
 
 import { useCrmTheme } from "@/lib/hooks/useCrmTheme";
-import { getStoredCrmUser } from "@/lib/authSession";
+import { useRouter } from "next/navigation";
+import { getStoredCrmUser, clearCrmSession } from "@/lib/authSession";
 import AppHeader, { HeaderControl } from "@/components/AppHeader";
 import HeaderClock from "@/components/HeaderClock";
 import UserAvatar from "@/components/UserAvatar";
@@ -50,6 +51,7 @@ import OrgDetailSheet from "@/components/superadmin/OrgDetailSheet";
 import UsersView from "@/components/superadmin/UsersView";
 import ActivityView from "@/components/superadmin/ActivityView";
 import SettingsView from "@/components/superadmin/SettingsView";
+import AddOrganizationModal, { type CreatedOrg } from "@/components/superadmin/AddOrganizationModal";
 
 type TabId = "dashboard" | "organizations" | "users" | "activity" | "settings";
 
@@ -73,6 +75,7 @@ const SUBTITLES: Record<TabId, string> = {
 };
 
 export default function SuperAdminPanel() {
+  const router = useRouter();
   const { isDark, toggleTheme } = useCrmTheme();
   const t = superAdminTheme(isDark);
 
@@ -80,6 +83,9 @@ export default function SuperAdminPanel() {
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [openOrgId, setOpenOrgId] = useState<string | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  /** Transient success banner after a tenant is created. */
+  const [created, setCreated] = useState<CreatedOrg | null>(null);
   const topbarRef = useRef<HTMLDivElement>(null);
 
   // Phase 2: real data, behind the platform gate. The panel is reached only
@@ -103,6 +109,20 @@ export default function SuperAdminPanel() {
     document.addEventListener("mousedown", onClickOutside);
     return () => document.removeEventListener("mousedown", onClickOutside);
   }, []);
+
+  /**
+   * Sign out through the CRM's own mechanism — no separate auth path.
+   *
+   * clearCrmSession() drops the stored user, theme and avatar and POSTs
+   * /api/auth/logout, which clears the httpOnly cookie server-side. Once that
+   * cookie is gone, middleware and app/super-admin/layout.tsx both refuse
+   * /super-admin on the very next request, so a back-button return cannot
+   * reopen the panel.
+   */
+  const handleLogout = () => {
+    clearCrmSession();
+    router.replace("/");
+  };
 
   const openOrg = data.orgs.find(o => o.id === openOrgId) ?? null;
   const activeTitle = tab === "settings" ? "Settings" : NAV.find(n => n.id === tab)?.title ?? "Dashboard";
@@ -273,6 +293,23 @@ export default function SuperAdminPanel() {
                     Platform-level access. Not a tenant Admin — this account is not scoped
                     to any organization.
                   </p>
+
+                  <button
+                    onClick={() => { setProfileOpen(false); setTab("settings"); }}
+                    className="w-full mt-3 py-2 rounded-xl font-medium text-[12px] transition-colors"
+                    style={{ color: t.text, background: t.raised }}
+                  >
+                    Account Security
+                  </button>
+
+                  {/* Destructive, so it is the only red control in the menu. */}
+                  <button
+                    onClick={handleLogout}
+                    className="w-full mt-2 py-2 rounded-xl font-medium text-[12px] transition-colors"
+                    style={{ color: t.danger, background: tint(t.danger, 0.1) }}
+                  >
+                    Log Out
+                  </button>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -287,6 +324,46 @@ export default function SuperAdminPanel() {
               </h1>
               <p className="text-[13px] mt-1" style={{ color: t.textMuted }}>{SUBTITLES[tab]}</p>
             </header>
+
+            {/* Success confirmation. Dismissed by hand rather than on a timer —
+                it names the admin account that was just created, which is the
+                one thing the operator needs to write down or pass on. */}
+            <AnimatePresence>
+              {created && (
+                <motion.div
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  className="mb-5 rounded-2xl px-4 py-3.5 flex items-start gap-3"
+                  style={{ background: tint(t.positive, 0.1), border: `1px solid ${tint(t.positive, 0.28)}` }}
+                >
+                  <span className="mt-[3px] flex-shrink-0" style={{ color: t.positive }}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M20 6 9 17l-5-5" />
+                    </svg>
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[13px] font-semibold" style={{ color: t.text }}>
+                      {created.name} created
+                    </p>
+                    <p className="text-[12px] mt-0.5 break-words" style={{ color: t.textMuted }}>
+                      Admin <strong style={{ color: t.text }}>{created.adminEmail}</strong> can now sign in.
+                      Organization ID <span className="font-mono text-[11px]">{created.id}</span>
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setCreated(null)}
+                    aria-label="Dismiss"
+                    className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
+                    style={{ color: t.textMuted }}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+                      <path d="M18 6 6 18M6 6l12 12" />
+                    </svg>
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {error ? (
               /* Surfaced rather than rendered as empty tables — an empty
@@ -319,11 +396,11 @@ export default function SuperAdminPanel() {
               <DashboardView t={t} data={data} metrics={metrics} onOpenOrg={setOpenOrgId} />
             )}
             {tab === "organizations" && (
-              <OrganizationsView t={t} orgs={data.orgs} onOpenOrg={setOpenOrgId} />
+              <OrganizationsView t={t} orgs={data.orgs} onOpenOrg={setOpenOrgId} onAddOrganization={() => setAddOpen(true)} />
             )}
             {tab === "users" && <UsersView t={t} users={data.users} />}
             {tab === "activity" && <ActivityView t={t} activity={data.activity} />}
-            {tab === "settings" && <SettingsView t={t} />}
+            {tab === "settings" && <SettingsView t={t} onSignedOut={handleLogout} />}
               </>
             )}
           </div>
@@ -331,6 +408,19 @@ export default function SuperAdminPanel() {
       </div>
 
       <OrgDetailSheet org={openOrg} t={t} onClose={() => setOpenOrgId(null)} />
+
+      <AddOrganizationModal
+        open={addOpen}
+        t={t}
+        onClose={() => setAddOpen(false)}
+        onCreated={org => {
+          setCreated(org);
+          // Refetch rather than splicing the new row in: the list carries
+          // server-computed counts, and a locally-built row would be a guess.
+          reload();
+          setTab("organizations");
+        }}
+      />
     </div>
   );
 }

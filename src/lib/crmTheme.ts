@@ -111,6 +111,41 @@ export function buildTheme(isDark: boolean) {
     cardNGD: "bg-[rgba(249,115,22,0.06)] border border-[rgba(249,115,22,0.35)] hover:border-[#F97316] shadow-[0_4px_12px_rgba(249,115,22,0.12)] transition-all duration-300 flex flex-col h-full",
     rowNGD: "bg-[rgba(249,115,22,0.03)]",
   };
+  const apple = {
+    // Backgrounds
+    modalBg: isDark ? '#1C1C1E' : '#FFFFFF',
+    modalOverlay: 'rgba(0, 0, 0, 0.4)',
+    cardBg: isDark ? '#2C2C2E' : '#F5F5F7',
+    cardBgHover: isDark ? '#3A3A3C' : '#ECECEE',
+    inputBg: isDark ? '#1C1C1E' : '#FFFFFF',
+    inputBorder: isDark ? '#3A3A3C' : '#D2D2D7',
+    inputBorderFocus: '#0071E3',
+    inputBorderError: '#FF3B30',
+
+    // Text
+    textPrimary: isDark ? '#F5F5F7' : '#1D1D1F',
+    textSecondary: isDark ? '#A1A1A6' : '#6E6E73',
+    textTertiary: isDark ? '#636366' : '#86868B',
+    textOnAccent: '#FFFFFF',
+
+    // Accent
+    accent: '#0071E3',          // Apple Blue
+    accentHover: '#0077ED',
+    accentLight: isDark ? 'rgba(0,113,227,0.15)' : 'rgba(0,113,227,0.08)',
+
+    // Status
+    success: '#34C759',
+    successBg: isDark ? 'rgba(52,199,89,0.12)' : 'rgba(52,199,89,0.08)',
+    warning: '#FF9F0A',
+    warningBg: isDark ? 'rgba(255,159,10,0.12)' : 'rgba(255,159,10,0.08)',
+    error: '#FF3B30',
+    errorBg: isDark ? 'rgba(255,59,48,0.12)' : 'rgba(255,59,48,0.08)',
+    info: '#5856D6',
+
+    // Dividers
+    separator: isDark ? '#38383A' : '#D2D2D7',
+    separatorLight: isDark ? '#2C2C2E' : '#E8E8ED',
+  };
 }
 
 export type CrmTheme = ReturnType<typeof buildTheme>;

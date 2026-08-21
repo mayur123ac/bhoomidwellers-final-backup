@@ -20,6 +20,7 @@ const appleFontStack = `-apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pr
  */
 export function AppLogo({
   src = "/assets/bhoomidwellersLogo_trans.png",
+  style = { width: "20px" },
   className = "",
 }: {
   src?: string;
@@ -30,7 +31,8 @@ export function AppLogo({
     <img
       src={src}
       alt="Bhoomi Dwellers"
-      className={`h-6 sm:h-7 w-auto max-w-[120px] sm:max-w-[120px] object-contain flex-shrink-0 transition-opacity duration-200 hover:opacity-80 ${className}`}
+      className={` object-contain flex-shrink-0 transition-opacity duration-200 hover:opacity-80 ${className}`}
+      style={{ width: "150px" }}
     />
   );
 }
@@ -137,7 +139,7 @@ export default function AppHeader({
               className="font-semibold truncate"
               style={{
                 // Apple standard: 17px for mobile inline titles, tight tracking
-                fontSize: "clamp(17px, 2vw, 19px)",
+                fontSize: "clamp(12px, 2vw, 16px)",
                 letterSpacing: "-0.41px",
                 color: isDark ? "#FFFFFF" : "#000000"
               }}

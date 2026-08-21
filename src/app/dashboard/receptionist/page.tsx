@@ -3683,215 +3683,301 @@ export default function ReceptionistDashboard() {
           ENQUIRY MODAL (with Self-Assign toggle)
       ════════════════════════════════════════════════════ */}
       {isEnquiryModalOpen && (
-        <div className="fixed inset-0 bg-black/70 z-[100] flex justify-center items-center p-4 sm:p-6 animate-fadeIn" style={{ backdropFilter: "blur(6px)" }}>
-          <div className={`rounded-4xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl border ${t.modalCard}`} style={t.modalGlass}>
-            <div className={`p-4 md:p-6 border-b flex justify-between items-center ${t.modalHeader} ${t.tableBorder}`}>
+        <div
+          className="fixed inset-0 bg-black/40 z-[100] flex justify-center items-center p-4 sm:p-6 animate-fadeIn"
+          style={{ backdropFilter: "blur(20px) saturate(180%)" }}
+        >
+          <div
+            className={`rounded-[28px] w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col ${t.modalCard}`}
+            style={{
+              ...t.modalGlass,
+              boxShadow: isDark
+                ? "0 24px 70px -12px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.06)"
+                : "0 24px 70px -12px rgba(0,0,0,0.22), 0 0 0 1px rgba(0,0,0,0.04)",
+            }}
+          >
+            {/* Header — Apple sheet header: title left, plain circular close, hairline divider */}
+            <div className={`px-6 py-5 flex justify-between items-start border-b ${t.tableBorder}`}>
               <div>
-                <h2 className={`rp-title flex items-center gap-2 ${t.text}`}><FaUserCircle className={t.accentText} /> Client Enquiry Form</h2>
-                <p className={`text-xs mt-1 ${t.textMuted}`}>Fill all details accurately to route to the Sales Manager.</p>
+                <h2 className={`text-[19px] font-semibold tracking-[-0.01em] ${t.text}`}>
+                  Client Enquiry
+                </h2>
+                <p className={`text-[13px] mt-0.5 ${t.textMuted}`}>
+                  Fill all details accurately to route to the Sales Manager.
+                </p>
               </div>
-              <button onClick={() => setIsEnquiryModalOpen(false)} className={`hover:text-red-500 transition-colors cursor-pointer p-2 ${t.textMuted}`}><FaTimes className="text-xl" /></button>
+              <button
+                onClick={() => setIsEnquiryModalOpen(false)}
+                aria-label="Close"
+                className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors cursor-pointer ${isDark ? "bg-white/10 hover:bg-white/15 text-gray-300" : "bg-black/[0.06] hover:bg-black/[0.09] text-gray-500"
+                  }`}
+              >
+                <FaTimes className="text-[13px]" />
+              </button>
             </div>
-            <div className={`p-4 md:p-6 overflow-y-auto custom-scrollbar flex-1 ${t.modalInner}`}>
-              {/* space-y-8 (32) between the bordered sections, gap-5 (20) between
-                  fields inside one, and label→input at 8 from the .recep-panel
-                  form rules. Three distinct steps, so grouping is legible from
-                  spacing alone — the previous 24/32 → 16/24 pairs put the gap
-                  between two sections within 8px of the gap between two fields. */}
-              <form id="enquiryForm" onSubmit={handleEnquirySubmit} className="space-y-8">
-                <div className={`p-6 rounded-xl border ${t.modalBlock}`} style={t.modalBlockGl}>
-                  <h3 className={`rp-eyebrow mb-5 border-b pb-3 ${t.sectionTitle} ${t.sectionBorder}`}>Personal Information</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                    <div className="sm:col-span-2">
-                      <label className={`block text-xs mb-1.5 font-medium pl-2 ${t.textMuted}`}>Full Name *</label>
-                      <input type="text" required value={enquiryForm.fullName} onChange={e => setEnquiryForm({ ...enquiryForm, fullName: e.target.value })}
-                        className={`w-full rounded-lg p-3 text-sm outline-none transition-colors border ${t.modalInput} ${t.text}`} placeholder="e.g. Mayur Acharya" />
-                    </div>
-                    <div className="sm:col-span-2">
-                      <label className={`block text-xs mb-1.5 font-medium pl-2 ${t.textMuted}`}>Address</label>
-                      <input type="text" value={enquiryForm.address} onChange={e => setEnquiryForm({ ...enquiryForm, address: e.target.value })}
-                        className={`w-full rounded-lg p-3 text-sm outline-none transition-colors border ${t.modalInput} ${t.text}`} placeholder="Full residential address" />
 
-                      {/* Pin Code + City — optional, same as Address. Captured now so
-                          Channel Partners can later be matched to enquiry demand by
-                          area; no filtering UI is wired to these yet. */}
-                      <div className="grid grid-cols-2 gap-4 mt-4">
-                        <div>
-                          <label className={`block text-xs mb-1.5 font-medium pl-2 ${t.textMuted}`}>Pin Code</label>
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            maxLength={6}
-                            value={enquiryForm.pinCode}
-                            // Digits only: the column is VARCHAR, but a stray letter
-                            // would break an equality match against a CP's pincode.
-                            onChange={e => setEnquiryForm({ ...enquiryForm, pinCode: e.target.value.replace(/\D/g, "").slice(0, 6) })}
-                            className={`w-full rounded-lg p-3 text-sm outline-none transition-colors border ${t.modalInput} ${t.text}`}
-                            placeholder="e.g. 411045"
-                          />
-                        </div>
-                        <div>
-                          <label className={`block text-xs mb-1.5 font-medium pl-2 ${t.textMuted}`}>City</label>
-                          <input
-                            type="text"
-                            value={enquiryForm.city}
-                            onChange={e => setEnquiryForm({ ...enquiryForm, city: e.target.value })}
-                            className={`w-full rounded-lg p-3 text-sm outline-none transition-colors border ${t.modalInput} ${t.text}`}
-                            placeholder="e.g. Pune"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                    <div>
-                      <label className={`block text-xs mb-1.5 font-medium pl-2 ${t.textMuted}`}>Mobile No *</label>
-                      <div className={`flex items-center rounded-lg border overflow-hidden ${t.modalInput}`}>
-                        <span className={`pl-3 pr-1 text-sm font-semibold select-none ${t.textMuted}`}>+91</span>
+            <div className={`px-6 py-6 overflow-y-auto custom-scrollbar flex-1 ${t.modalInner}`}>
+              {/* space-y-9: Apple grouped-list sections read as separate "cards" of
+            content, so the gap between sections needs to clearly exceed the
+            gap between fields inside one (gap-4) — otherwise the eye can't
+            tell where one group ends and the next begins. */}
+              <form id="enquiryForm" onSubmit={handleEnquirySubmit} className="space-y-9">
+                <div>
+                  <h3 className={`text-[12px] font-semibold uppercase tracking-wider mb-3 px-1 ${t.textMuted}`}>
+                    Personal Information
+                  </h3>
+                  <div
+                    className={`rounded-2xl border overflow-hidden ${isDark ? "border-white/10 bg-white/[0.03]" : "border-black/[0.06] bg-black/[0.015]"}`}
+                  >
+                    <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="sm:col-span-2">
+                        <label className={`block text-[12px] mb-1.5 font-medium px-0.5 ${t.textMuted}`}>Full Name *</label>
                         <input
-                          type="tel"
+                          type="text"
                           required
-                          inputMode="numeric"
-                          maxLength={10}
-                          value={enquiryForm.mobile}
-                          onChange={e => setEnquiryForm({ ...enquiryForm, mobile: cleanMobileDigits(e.target.value) })}
-                          className={`flex-1 p-3 pl-1 text-sm outline-none bg-transparent ${t.text}`}
-                          placeholder="8369787919"
+                          value={enquiryForm.fullName}
+                          onChange={e => setEnquiryForm({ ...enquiryForm, fullName: e.target.value })}
+                          className={`w-full rounded-xl px-3.5 py-2.5 text-[14px] outline-none transition-all border ${isDark ? "bg-white/5 border-white/10 focus:border-blue-400/60" : "bg-white border-black/10 focus:border-blue-500"
+                            } focus:ring-4 ${isDark ? "focus:ring-blue-500/10" : "focus:ring-blue-500/10"} ${t.text}`}
+                          placeholder="e.g. Mayur Acharya"
                         />
                       </div>
-                    </div>
-                    <div>
-                      <label className={`block text-xs mb-1.5 font-medium pl-2 ${t.textMuted}`}>Alt Mobile No</label>
-                      <div className={`flex items-center rounded-lg border overflow-hidden ${t.modalInput}`}>
-                        <span className={`pl-3 pr-1 text-sm font-semibold select-none ${t.textMuted}`}>+91</span>
+                      <div className="sm:col-span-2">
+                        <label className={`block text-[12px] mb-1.5 font-medium px-0.5 ${t.textMuted}`}>Address</label>
                         <input
-                          type="tel"
-                          inputMode="numeric"
-                          maxLength={10}
-                          value={enquiryForm.altMobile}
-                          onChange={e => setEnquiryForm({ ...enquiryForm, altMobile: cleanMobileDigits(e.target.value) })}
-                          className={`flex-1 p-3 pl-1 text-sm outline-none bg-transparent ${t.text}`}
-                          placeholder="9876543210"
+                          type="text"
+                          value={enquiryForm.address}
+                          onChange={e => setEnquiryForm({ ...enquiryForm, address: e.target.value })}
+                          className={`w-full rounded-xl px-3.5 py-2.5 text-[14px] outline-none transition-all border-gray-400 ${isDark ? "bg-white/5 border-white/10" : "bg-white border-black/10"
+                            } ${t.text}`}
+                          placeholder="Full residential address"
                         />
-                      </div>
-                    </div>
-                    <div>
-                      <label className={`block text-xs mb-1.5 font-medium pl-2 ${t.textMuted}`}>Email ID</label>
-                      <input type="email" value={enquiryForm.email} onChange={e => setEnquiryForm({ ...enquiryForm, email: e.target.value })}
-                        className={`w-full rounded-lg p-3 text-sm outline-none transition-colors border ${t.modalInput} ${t.text}`} placeholder="email@example.com" />
-                    </div>
-                    <div>
-                      <label className={`block text-xs mb-1.5 font-medium pl-2 ${t.textMuted}`}>Occupation</label>
-                      <select value={enquiryForm.occupation} onChange={e => setEnquiryForm({ ...enquiryForm, occupation: e.target.value })}
-                        className={`w-full rounded-lg p-3 text-sm outline-none transition-colors border cursor-pointer ${t.modalInput} ${t.text}`}>
-                        <option value="" disabled>Select Occupation</option>
-                        {["Salaried", "Self Employed", "Business owner", "House maker"].map(o => <option key={o} value={o}>{o}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className={`block text-xs mb-1.5 font-medium pl-2 ${t.textMuted}`}>Loan Planned</label>
-                      <select value={enquiryForm.loanPlanned} onChange={e => setEnquiryForm({ ...enquiryForm, loanPlanned: e.target.value })}
-                        className={`w-full rounded-lg p-3 text-sm outline-none transition-colors border cursor-pointer ${t.modalInput} ${t.text}`}>
-                        <option value="" disabled>Select Option</option>
-                        <option value="Yes">Yes</option><option value="No">No</option>
-                      </select>
-                    </div>
 
-                    {/* ── Auto Date Toggle + Enquiry Date Picker ── */}
-                    <div className="sm:col-span-2">
-                      <div className={`rounded-xl p-4 border ${isDark ? "bg-[#14141B]/60 border-[#2A2A35]" : "bg-[#F8FAFC] border-[#D1D5DB]"}`}>
-                        {/* Toggle Row */}
-                        <div className="flex items-center justify-between mb-3">
+                        {/* Pin Code + City — optional, same as Address. Captured now so
+                      Channel Partners can later be matched to enquiry demand by
+                      area; no filtering UI is wired to these yet. */}
+                        <div className="grid grid-cols-2 gap-3 mt-3">
                           <div>
-                            <label className={`block text-xs font-bold ${isDark ? "text-[#d4006e]" : "text-[#9E217B]"}`}>
-                              <FaCalendarAlt className="inline mr-1.5 text-[10px]" />
-                              Auto Date
-                            </label>
-                            <p className={`text-[10px] mt-0.5 ${t.textFaint}`}>
-                              {autoDate ? "Using today's date automatically." : "Select the original enquiry date."}
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            /* role="switch" matches the shared ToggleSwitch and,
-                               beyond the a11y win, exempts this control from the
-                               panel's 36px min-height rule — a switch has fixed
-                               geometry (h-6 w-11 with a knob positioned against
-                               that height) and would otherwise inflate. */
-                            role="switch"
-                            aria-checked={autoDate}
-                            onClick={() => setAutoDate(!autoDate)}
-                            className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-300 focus:outline-none cursor-pointer flex-shrink-0"
-                            style={{
-                              backgroundColor: autoDate
-                                ? (isDark ? "#9E217B" : "#00AEEF")
-                                : (isDark ? "#2A2A35" : "#D1D5DB"),
-                              boxShadow: autoDate
-                                ? (isDark ? "0 0 8px rgba(158,33,123,0.5)" : "0 0 8px rgba(0,174,239,0.4)")
-                                : "none",
-                            }}
-                            aria-label="Toggle Auto Date"
-                          >
-                            <span
-                              className="inline-block h-4 w-4 transform rounded-full bg-white shadow-md transition-transform duration-300"
-                              style={{
-                                transform: autoDate ? "translateX(22px)" : "translateX(4px)",
-                              }}
+                            <label className={`block text-[12px] mb-1.5 font-medium px-0.5 ${t.textMuted}`}>Pin Code</label>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              maxLength={6}
+                              value={enquiryForm.pinCode}
+                              // Digits only: the column is VARCHAR, but a stray letter
+                              // would break an equality match against a CP's pincode.
+                              onChange={e => setEnquiryForm({ ...enquiryForm, pinCode: e.target.value.replace(/\D/g, "").slice(0, 6) })}
+                              className={`w-full rounded-xl px-3.5 py-2.5 text-[14px] outline-none transition-all border ${isDark ? "bg-white/5 border-white/10 focus:border-blue-400/60" : "bg-white border-black/10 focus:border-blue-500"
+                                } focus:ring-4 ${isDark ? "focus:ring-blue-500/10" : "focus:ring-blue-500/10"} ${t.text}`}
+                              placeholder="e.g. 411045"
                             />
-                          </button>
+                          </div>
+                          <div>
+                            <label className={`block text-[12px] mb-1.5 font-medium px-0.5 ${t.textMuted}`}>City</label>
+                            <input
+                              type="text"
+                              value={enquiryForm.city}
+                              onChange={e => setEnquiryForm({ ...enquiryForm, city: e.target.value })}
+                              className={`w-full appearance-none rounded-xl px-3.5 py-2.5 text-[14px] outline-none transition-all border ${isDark ? "bg-white/5 border-white/10 focus:border-blue-400/60" : "bg-white border-black/10 focus:border-blue-500"
+                                } focus:ring-4 ${isDark ? "focus:ring-blue-500/10" : "focus:ring-blue-500/10"} ${t.text}`}
+                              placeholder="e.g. Pune"
+                            />
+                          </div>
                         </div>
-
-                        {/* Date Picker */}
-                        <div>
-                          <label className={`block text-xs mb-1.5 font-medium pl-1 ${t.textMuted}`}>
-                            Enquiry Date {!autoDate && <span className={isDark ? "text-red-400" : "text-red-500"}>*</span>}
-                          </label>
+                      </div>
+                      <div>
+                        <label className={`block text-[12px] mb-1.5 font-medium px-0.5 ${t.textMuted}`}>Mobile No *</label>
+                        <div
+                          className={`flex items-center rounded-xl border overflow-hidden transition-all focus-within:ring-4 ${isDark
+                            ? "bg-white/5 border-white/10 focus-within:border-blue-400/60 focus-within:ring-blue-500/10"
+                            : "bg-white border-black/10 focus-within:border-blue-500 focus-within:ring-blue-500/10"
+                            }`}
+                        >
+                          <span className={`pl-3.5 pr-1 text-[14px] font-medium select-none ${t.textMuted}`}>+91</span>
                           <input
-                            type="date"
-                            required={!autoDate}
-                            disabled={autoDate}
-                            value={enquiryForm.enquiryDate}
-                            max={getTodayString()}
-                            onChange={e => setEnquiryForm({ ...enquiryForm, enquiryDate: e.target.value })}
-                            className={`w-full rounded-lg p-3 text-sm outline-none transition-colors border ${t.modalInput} ${t.text} ${autoDate ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
-                            style={autoDate ? { pointerEvents: "none" } : {}}
+                            type="tel"
+                            required
+                            inputMode="numeric"
+                            maxLength={10}
+                            value={enquiryForm.mobile}
+                            onChange={e => setEnquiryForm({ ...enquiryForm, mobile: cleanMobileDigits(e.target.value) })}
+                            className={`flex-1 py-2.5 pr-3.5 pl-1 text-[14px] outline-none bg-transparent ${t.text}`}
+                            placeholder="8369787919"
                           />
                         </div>
                       </div>
-                    </div>
+                      <div>
+                        <label className={`block text-[12px] mb-1.5 font-medium px-0.5 ${t.textMuted}`}>Alt Mobile No</label>
+                        <div
+                          className={`flex items-center rounded-xl border overflow-hidden transition-all focus-within:ring-4 ${isDark
+                            ? "bg-white/5 border-white/10 focus-within:border-blue-400/60 focus-within:ring-blue-500/10"
+                            : "bg-white border-black/10 focus-within:border-blue-500 focus-within:ring-blue-500/10"
+                            }`}
+                        >
+                          <span className={`pl-3.5 pr-1 text-[14px] font-medium select-none ${t.textMuted}`}>+91</span>
+                          <input
+                            type="tel"
+                            inputMode="numeric"
+                            maxLength={10}
+                            value={enquiryForm.altMobile}
+                            onChange={e => setEnquiryForm({ ...enquiryForm, altMobile: cleanMobileDigits(e.target.value) })}
+                            className={`flex-1 py-2.5 pr-3.5 pl-1 text-[14px] outline-none bg-transparent ${t.text}`}
+                            placeholder="9876543210"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className={`block text-[12px] mb-1.5 font-medium px-0.5 ${t.textMuted}`}>Email ID</label>
+                        <input
+                          type="email"
+                          value={enquiryForm.email}
+                          onChange={e => setEnquiryForm({ ...enquiryForm, email: e.target.value })}
+                          className={`w-full rounded-xl px-3.5 py-2.5 text-[14px] outline-none transition-all border ${isDark ? "bg-white/5 border-white/10 focus:border-blue-400/60" : "bg-white border-black/10 focus:border-blue-500"
+                            } focus:ring-4 ${isDark ? "focus:ring-blue-500/10" : "focus:ring-blue-500/10"} ${t.text}`}
+                          placeholder="email@example.com"
+                        />
+                      </div>
+                      <div>
+                        <label className={`block text-[12px] mb-1.5 font-medium px-0.5 ${t.textMuted}`}>Occupation</label>
+                        <select
+                          value={enquiryForm.occupation}
+                          onChange={e => setEnquiryForm({ ...enquiryForm, occupation: e.target.value })}
+                          className={`w-full rounded-xl px-3.5 py-2.5 text-[14px] outline-none transition-all border cursor-pointer appearance-none ${isDark ? "bg-white/5 border-white/10 focus:border-blue-400/60" : "bg-white border-black/10 focus:border-blue-500"
+                            } focus:ring-4 ${isDark ? "focus:ring-blue-500/10" : "focus:ring-blue-500/10"} ${t.text}`}
+                        >
+                          <option value="" disabled>Select Occupation</option>
+                          {["Salaried", "Self Employed", "Business owner", "House maker"].map(o => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={`block text-[12px] mb-1.5 font-medium px-0.5 ${t.textMuted}`}>Loan Planned</label>
+                        <select
+                          value={enquiryForm.loanPlanned}
+                          onChange={e => setEnquiryForm({ ...enquiryForm, loanPlanned: e.target.value })}
+                          className={`w-full rounded-xl px-3.5 py-2.5 text-[14px] outline-none transition-all border cursor-pointer appearance-none ${isDark ? "bg-white/5 border-white/10 focus:border-blue-400/60" : "bg-white border-black/10 focus:border-blue-500"
+                            } focus:ring-4 ${isDark ? "focus:ring-blue-500/10" : "focus:ring-blue-500/10"} ${t.text}`}
+                        >
+                          <option value="" disabled>Select Option</option>
+                          <option value="Yes">Yes</option><option value="No">No</option>
+                        </select>
+                      </div>
 
+                      {/* ── Auto Date Toggle + Enquiry Date Picker ── */}
+                      <div className="sm:col-span-2">
+                        <div className={`rounded-xl p-4 border ${isDark ? "bg-white/[0.04] border-white/10" : "bg-black/[0.02] border-black/[0.06]"}`}>
+                          {/* Toggle Row */}
+                          <div className="flex items-center justify-between mb-3">
+                            <div>
+                              <label className={`block text-[13px] font-medium ${t.text}`}>
+                                <FaCalendarAlt className={`inline mr-1.5 text-[11px] ${t.textMuted}`} />
+                                Auto Date
+                              </label>
+                              <p className={`text-[11px] mt-0.5 ${t.textFaint}`}>
+                                {autoDate ? "Using today's date automatically." : "Select the original enquiry date."}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              /* role="switch" matches the shared ToggleSwitch and,
+                                 beyond the a11y win, exempts this control from the
+                                 panel's 36px min-height rule — a switch has fixed
+                                 geometry (h-6 w-11 with a knob positioned against
+                                 that height) and would otherwise inflate. */
+                              role="switch"
+                              aria-checked={autoDate}
+                              onClick={() => setAutoDate(!autoDate)}
+                              className="relative inline-flex h-[26px] w-[46px] items-center rounded-full transition-colors duration-200 focus:outline-none cursor-pointer flex-shrink-0"
+                              style={{
+                                backgroundColor: autoDate ? "#34C759" : (isDark ? "rgba(255,255,255,0.16)" : "#E9E9EB"),
+                              }}
+                              aria-label="Toggle Auto Date"
+                            >
+                              <span
+                                className="inline-block h-[22px] w-[22px] transform rounded-full bg-white transition-transform duration-200"
+                                style={{
+                                  transform: autoDate ? "translateX(22px)" : "translateX(2px)",
+                                  boxShadow: "0 1px 3px rgba(0,0,0,0.25)",
+                                }}
+                              />
+                            </button>
+                          </div>
+
+                          {/* Date Picker */}
+                          <div>
+                            <label className={`block text-[12px] mb-1.5 font-medium px-0.5 ${t.textMuted}`}>
+                              Enquiry Date {!autoDate && <span className="text-red-500">*</span>}
+                            </label>
+                            <input
+                              type="date"
+                              required={!autoDate}
+                              disabled={autoDate}
+                              value={enquiryForm.enquiryDate}
+                              max={getTodayString()}
+                              onChange={e => setEnquiryForm({ ...enquiryForm, enquiryDate: e.target.value })}
+                              className={`w-full rounded-xl px-3.5 py-2.5 text-[14px] outline-none transition-all border ${isDark ? "bg-white/5 border-white/10 focus:border-blue-400/60" : "bg-white border-black/10 focus:border-blue-500"
+                                } focus:ring-4 ${isDark ? "focus:ring-blue-500/10" : "focus:ring-blue-500/10"} ${t.text} ${autoDate ? "opacity-40 cursor-not-allowed" : "cursor-pointer"
+                                }`}
+                              style={autoDate ? { pointerEvents: "none" } : {}}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                <div className={`p-6 rounded-xl border ${t.modalBlock}`} style={t.modalBlockGl}>
-                  <h3 className={`rp-eyebrow mb-5 border-b pb-3 ${t.sectionTitle} ${t.sectionBorder}`}>Requirement & Budget</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+                <div>
+                  <h3 className={`text-[12px] font-semibold uppercase tracking-wider mb-3 px-1 ${t.textMuted}`}>
+                    Requirement &amp; Budget
+                  </h3>
+                  <div
+                    className={`rounded-2xl border p-5 grid grid-cols-1 sm:grid-cols-3 gap-4 ${isDark ? "border-white/10 bg-white/[0.03]" : "border-black/[0.06] bg-black/[0.015]"
+                      }`}
+                  >
                     <div>
-                      <label className={`block text-xs mb-1.5 font-medium pl-2 ${t.textMuted}`}>Budget *</label>
-                      <input type="text" required value={enquiryForm.budget} onChange={e => setEnquiryForm({ ...enquiryForm, budget: e.target.value })}
-                        className={`w-full rounded-lg p-3 text-sm outline-none transition-colors border ${t.modalInput} ${t.text}`} placeholder="e.g. 80 Lakhs, 1.5 Cr" />
+                      <label className={`block text-[12px] mb-1.5 font-medium px-0.5 ${t.textMuted}`}>Budget *</label>
+                      <input
+                        type="text"
+                        required
+                        value={enquiryForm.budget}
+                        onChange={e => setEnquiryForm({ ...enquiryForm, budget: e.target.value })}
+                        className={`w-full rounded-xl px-3.5 py-2.5 text-[14px] outline-none transition-all border ${isDark ? "bg-white/5 border-white/10 focus:border-blue-400/60" : "bg-white border-black/10 focus:border-blue-500"
+                          } focus:ring-4 ${isDark ? "focus:ring-blue-500/10" : "focus:ring-blue-500/10"} ${t.text}`}
+                        placeholder="e.g. 80 Lakhs, 1.5 Cr"
+                      />
                     </div>
                     <div>
                       {/* Where the client wants to buy — distinct from the residential
-                          address captured in Personal Information. */}
-                      <label className={`block text-xs mb-1.5 font-medium pl-2 ${t.textMuted}`}>Preferred Location</label>
-                      <input type="text" value={enquiryForm.preferredLocation}
+                    address captured in Personal Information. */}
+                      <label className={`block text-[12px] mb-1.5 font-medium px-0.5 ${t.textMuted}`}>Preferred Location</label>
+                      <input
+                        type="text"
+                        value={enquiryForm.preferredLocation}
                         onChange={e => setEnquiryForm({ ...enquiryForm, preferredLocation: e.target.value })}
-                        className={`w-full rounded-lg p-3 text-sm outline-none transition-colors border ${t.modalInput} ${t.text}`}
-                        placeholder="e.g. Baner, Wakad, Hinjewadi" />
+                        className={`w-full rounded-xl px-3.5 py-2.5 text-[14px] outline-none transition-all border ${isDark ? "bg-white/5 border-white/10 focus:border-blue-400/60" : "bg-white border-black/10 focus:border-blue-500"
+                          } focus:ring-4 ${isDark ? "focus:ring-blue-500/10" : "focus:ring-blue-500/10"} ${t.text}`}
+                        placeholder="e.g. Baner, Wakad, Hinjewadi"
+                      />
                     </div>
                     <div>
-                      <label className={`block text-xs mb-1.5 font-medium pl-2 ${t.textMuted}`}>Configuration (BHK)</label>
+                      <label className={`block text-[12px] mb-1.5 font-medium px-0.5 ${t.textMuted}`}>Configuration (BHK)</label>
                       <input
                         type="text"
                         value={enquiryForm.configuration}
                         onChange={e => setEnquiryForm({ ...enquiryForm, configuration: e.target.value })}
-                        className={`w-full rounded-lg p-3 text-sm outline-none transition-colors border ${t.modalInput} ${t.text}`}
+                        className={`w-full rounded-xl px-3.5 py-2.5 text-[14px] outline-none transition-all border ${isDark ? "bg-white/5 border-white/10 focus:border-blue-400/60" : "bg-white border-black/10 focus:border-blue-500"
+                          } focus:ring-4 ${isDark ? "focus:ring-blue-500/10" : "focus:ring-blue-500/10"} ${t.text}`}
                         placeholder="e.g. 2 BHK, 3 BHK, Studio"
                       />
                     </div>
                     <div>
-                      <label className={`block text-xs mb-1.5 font-medium pl-2 ${t.textMuted}`}>Purpose</label>
-                      <select value={enquiryForm.purpose} onChange={e => setEnquiryForm({ ...enquiryForm, purpose: e.target.value })}
-                        className={`w-full rounded-lg p-3 text-sm outline-none transition-colors border cursor-pointer ${t.modalInput} ${t.text}`}>
+                      <label className={`block text-[12px] mb-1.5 font-medium px-0.5 ${t.textMuted}`}>Purpose</label>
+                      <select
+                        value={enquiryForm.purpose}
+                        onChange={e => setEnquiryForm({ ...enquiryForm, purpose: e.target.value })}
+                        className={`w-full rounded-xl px-3.5 py-2.5 text-[14px] outline-none transition-all border cursor-pointer appearance-none ${isDark ? "bg-white/5 border-white/10 focus:border-blue-400/60" : "bg-white border-black/10 focus:border-blue-500"
+                          } focus:ring-4 ${isDark ? "focus:ring-blue-500/10" : "focus:ring-blue-500/10"} ${t.text}`}
+                      >
                         <option value="" disabled>Select…</option>
                         {["Personal use", "Investment", "Second home"].map(o => <option key={o} value={o}>{o}</option>)}
                       </select>
@@ -3899,91 +3985,102 @@ export default function ReceptionistDashboard() {
                   </div>
                 </div>
 
-                <div className={`p-6 rounded-xl border ${isDark ? "border-[#9E217B]/20" : "border-[#00AEEF]/20"} ${t.modalBlock}`} style={t.modalBlockGl}>
-                  <h3 className={`rp-eyebrow mb-5 border-b pb-3 ${isDark ? "text-[#d4006e] border-[#9E217B]/20" : "text-[#00AEEF] border-[#00AEEF]/20"}`}>Routing & Source</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <div>
+                  <h3 className={`text-[12px] font-semibold uppercase tracking-wider mb-3 px-1 ${t.textMuted}`}>
+                    Routing &amp; Source
+                  </h3>
+                  <div
+                    className={`rounded-2xl border p-5 grid grid-cols-1 sm:grid-cols-2 gap-4 ${isDark ? "border-white/10 bg-white/[0.03]" : "border-black/[0.06] bg-black/[0.015]"
+                      }`}
+                  >
                     <div>
-                      <label className={`block text-xs mb-1.5 font-medium pl-2 ${t.textMuted}`}>Source *</label>
-                      <select required value={enquiryForm.source} onChange={e => {
-                        const newSource = e.target.value;
-                        setEnquiryForm(prev => {
-                          let updated = { ...prev, source: newSource };
-                          if (newSource === "Channel Partner") {
-                            updated.cpDetails = { name: "", company: "", phone: "" };
-                          } else {
-                            updated.cpDetails = { name: "", company: "", phone: "" };
-                          }
-                          return updated;
-                        });
-                        // Switching away from Channel Partner must not leave a stale
-                        // CP-phone error attached to a source that has no CP fields.
-                        setCpPhoneError("");
-                      }}
-                        className={`w-full rounded-lg p-3 text-sm outline-none transition-colors border cursor-pointer ${t.modalInput} ${t.text}`}>
+                      <label className={`block text-[12px] mb-1.5 font-medium px-0.5 ${t.textMuted}`}>Source *</label>
+                      <select
+                        required
+                        value={enquiryForm.source}
+                        onChange={e => {
+                          const newSource = e.target.value;
+                          setEnquiryForm(prev => {
+                            let updated = { ...prev, source: newSource };
+                            if (newSource === "Channel Partner") {
+                              updated.cpDetails = { name: "", company: "", phone: "" };
+                            } else {
+                              updated.cpDetails = { name: "", company: "", phone: "" };
+                            }
+                            return updated;
+                          });
+                          // Switching away from Channel Partner must not leave a stale
+                          // CP-phone error attached to a source that has no CP fields.
+                          setCpPhoneError("");
+                        }}
+                        className={`w-full rounded-xl px-3.5 py-2.5 text-[14px] outline-none transition-all border cursor-pointer appearance-none ${isDark ? "bg-white/5 border-white/10 focus:border-blue-400/60" : "bg-white border-black/10 focus:border-blue-500"
+                          } focus:ring-4 ${isDark ? "focus:ring-blue-500/10" : "focus:ring-blue-500/10"} ${t.text}`}
+                      >
                         <option value="" disabled>Select Source</option>
-                        {["Advertisement", "Referral", "Exhibition", "Channel Partner", "Website", "Call Center", "Others"].map(s => <option key={s} value={s}>{s}</option>)}
+                        {["Advertisement", "Referral", "Exhibition", "Channel Partner", "Website", "Call Center", "Others"].map(s => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
                       </select>
                     </div>
 
-                    {/* SELF-ASSIGN TOGGLE */}
-                    <div className={`rounded-xl p-4 border flex flex-col gap-3 ${isDark ? "bg-[#9E217B]/5 border-[#9E217B]/20" : "bg-[#9E217B]/5 border-[#9E217B]/20"}`}>
-                      <label className={`block text-xs font-bold ${isDark ? "text-[#d4006e]" : "text-[#9E217B]"}`}>Assignment Option</label>
-                      <div className="flex items-center gap-3">
-                        <button type="button"
+                    {/* SELF-ASSIGN — true iOS segmented control: single pill track,
+                  sliding white/dark "thumb" behind the active label. Only one
+                  of the two states is ever visually "raised", matching how
+                  UISegmentedControl reads at a glance. */}
+                    <div className={`rounded-xl p-4 border flex flex-col gap-3 ${isDark ? "bg-white/[0.04] border-white/10" : "bg-black/[0.02] border-black/[0.06]"}`}>
+                      <label className={`block text-[12px] font-medium px-0.5 ${t.textMuted}`}>Assignment Option</label>
+                      <div className={`relative flex p-1 rounded-lg ${isDark ? "bg-black/30" : "bg-black/[0.06]"}`}>
+                        <div
+                          className={`absolute top-1 bottom-1 w-[calc(50%-4px)] rounded-md transition-transform duration-200 ease-out ${isDark ? "bg-[#2C2C2E]" : "bg-white"
+                            }`}
+                          style={{
+                            transform: enquiryForm.selfAssign ? "translateX(calc(100% + 8px))" : "translateX(0)",
+                            boxShadow: "0 1px 2px rgba(0,0,0,0.12)",
+                          }}
+                        />
+                        <button
+                          type="button"
                           onClick={() => { setEnquiryForm({ ...enquiryForm, selfAssign: false }); setShowManagerDropdown(true); }}
-                          className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-colors border ${!enquiryForm.selfAssign ? (isDark ? "bg-[#9E217B] border-[#9E217B] text-white" : "bg-[#00AEEF] border-[#00AEEF] text-white") : `${t.textMuted} ${t.tableBorder}`}`}>
+                          className={`relative z-10 flex-1 py-1.5 rounded-md text-[12.5px] font-medium transition-colors cursor-pointer ${!enquiryForm.selfAssign ? "text-blue-500" : t.textMuted
+                            }`}
+                        >
                           Assign to Manager
                         </button>
-                        <button type="button"
+                        <button
+                          type="button"
                           onClick={() => { setEnquiryForm({ ...enquiryForm, selfAssign: true, assignedTo: "" }); setAssignedToError(""); }}
-                          className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-colors border ${enquiryForm.selfAssign ? (isDark ? "bg-[#9E217B] border-[#9E217B] text-white" : "bg-[#9E217B] border-[#9E217B] text-white") : `${t.textMuted} ${t.tableBorder}`}`}>
+                          className={`relative z-10 flex-1 py-1.5 rounded-md text-[12.5px] font-medium transition-colors cursor-pointer ${enquiryForm.selfAssign ? "text-blue-500" : t.textMuted
+                            }`}
+                        >
                           Self-Assign (Me)
                         </button>
                       </div>
                       {enquiryForm.selfAssign ? (
-                        <p className={`text-xs ${isDark ? "text-[#d4006e]" : "text-[#9E217B]"}`}>✓ Lead will be assigned to <strong>{user.name}</strong> (you)</p>
+                        <p className="text-[12px] text-blue-500">✓ Lead will be assigned to <strong>{user.name}</strong> (you)</p>
                       ) : (
-                        <div className={`w-full rounded-xl border-2 overflow-hidden ${assignedToError
-                          ? "border-red-500"
-                          : isDark ? "border-purple-500/40" : "border-purple-300"
-                          }`}>
+                        <div className={`w-full rounded-xl border overflow-hidden ${assignedToError ? "border-red-500" : isDark ? "border-white/10" : "border-black/10"}`}>
                           {isFetchingManagers ? (
-                            <div className={`p-3 text-sm ${t.textMuted}`}>Loading managers…</div>
+                            <div className={`p-3 text-[13px] ${t.textMuted}`}>Loading managers…</div>
                           ) : combinedAssignees.length === 0 ? (
-                            <div className={`p-3 text-sm ${t.textMuted}`}>No assignees available</div>
+                            <div className={`p-3 text-[13px] ${t.textMuted}`}>No assignees available</div>
                           ) : (
                             <>
                               {/* Selected display or placeholder — always visible */}
                               <div
                                 onClick={() => setShowManagerDropdown(prev => !prev)}
-                                className={`px-4 py-3 text-sm cursor-pointer flex items-center justify-between ${enquiryForm.assignedTo
-                                  ? isDark ? "text-white bg-purple-900/30" : "text-purple-800 bg-purple-100 font-semibold"
-                                  : isDark ? "text-gray-400" : "text-gray-400"
+                                className={`px-3.5 py-2.5 text-[13.5px] cursor-pointer flex items-center justify-between ${enquiryForm.assignedTo
+                                  ? isDark ? "text-blue-300 bg-blue-500/10" : "text-blue-700 bg-blue-500/[0.06] font-medium"
+                                  : t.textFaint
                                   }`}
                               >
-                                <span>
-                                  {enquiryForm.assignedTo
-                                    ? `${enquiryForm.assignedTo} ✓`
-                                    : "-- Select Sales Manager --"}
-                                </span>
-                                <span className={`text-xs ${t.textFaint}`}>{showManagerDropdown ? "▲" : "▼"}</span>
+                                <span>{enquiryForm.assignedTo ? `${enquiryForm.assignedTo} ✓` : "-- Select Sales Manager --"}</span>
+                                <span className={`text-[11px] ${t.textFaint}`}>{showManagerDropdown ? "▲" : "▼"}</span>
                               </div>
 
                               {/* Dropdown list — only shown when open */}
                               {showManagerDropdown && (
-                                <div className={`max-h-[200px] overflow-y-auto custom-scrollbar border-t ${isDark ? "border-[#2a2a35]" : "border-gray-100"}`}>
-                                  {/* <div
-                                    onClick={() => {
-                                      setEnquiryForm({ ...enquiryForm, assignedTo: "" });
-                                      setShowManagerDropdown(false);
-                                    }}
-                                    className={`px-4 py-3 text-sm cursor-pointer border-b transition-colors ${
-                                      isDark ? "text-gray-500 hover:bg-[#1a1a28] border-[#2a2a35]" : "text-gray-400 hover:bg-gray-50 border-gray-100"
-                                    }`}
-                                  >
-                                    -- Clear Selection --
-                                  </div> */}
-                                  {combinedAssignees.map((m: any, i: number) => (
+                                <div className={`max-h-[200px] overflow-y-auto custom-scrollbar border-t ${isDark ? "border-white/10" : "border-black/[0.06]"}`}>
+                                  {combinedAssignees.map((m, i) => (
                                     <div
                                       key={i}
                                       onClick={() => {
@@ -3991,13 +4088,13 @@ export default function ReceptionistDashboard() {
                                         setAssignedToError("");
                                         setShowManagerDropdown(false);
                                       }}
-                                      className={`px-4 py-3 text-sm cursor-pointer border-b transition-colors ${enquiryForm.assignedTo === m.name
-                                        ? isDark ? "bg-purple-900/40 text-purple-200 font-bold" : "bg-purple-100 text-purple-800 font-bold"
-                                        : isDark ? "text-white hover:bg-[#1a1a28] border-[#2a2a35]" : "text-[#1A1A1A] hover:bg-purple-50 border-gray-100"
+                                      className={`px-3.5 py-2.5 text-[13.5px] cursor-pointer border-b transition-colors ${enquiryForm.assignedTo === m.name
+                                        ? isDark ? "bg-blue-500/15 text-blue-300 font-medium" : "bg-blue-500/[0.08] text-blue-700 font-medium"
+                                        : `${t.text} ${isDark ? "hover:bg-white/[0.04] border-white/10" : "hover:bg-black/[0.02] border-black/[0.05]"}`
                                         }`}
                                     >
-                                      <span className="font-semibold">{m.name}</span>
-                                      <span className={`ml-2 text-xs ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                                      <span>{m.name}</span>
+                                      <span className={`ml-2 text-[11px] ${t.textFaint}`}>
                                         ({String(m.role || "Sales Manager").replace("_", " ")})
                                       </span>
                                     </div>
@@ -4010,10 +4107,10 @@ export default function ReceptionistDashboard() {
                       )}
 
                       {/* The submit guard sets assignedToError but nothing displayed it,
-                          so an unassigned submit failed silently — the button appeared
-                          to do nothing. Rendered here, under the field it refers to. */}
+                    so an unassigned submit failed silently — the button appeared
+                    to do nothing. Rendered here, under the field it refers to. */}
                       {assignedToError && (
-                        <p className="text-xs font-semibold text-red-500 flex items-center gap-1.5 mt-1.5">
+                        <p className="text-[12px] font-medium text-red-500 flex items-center gap-1.5">
                           <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
                           {assignedToError}
                         </p>
@@ -4021,40 +4118,49 @@ export default function ReceptionistDashboard() {
                     </div>
 
                     {enquiryForm.source === "Others" && (
-                      <div className="sm:col-span-2 mt-2">
-                        <label className={`block text-xs mb-1.5 font-medium pl-2 ${t.textMuted}`}>Specify Source *</label>
-                        <input required type="text" value={enquiryForm.sourceOther} onChange={e => setEnquiryForm({ ...enquiryForm, sourceOther: e.target.value })}
-                          className={`w-full rounded-lg p-3 text-sm outline-none transition-colors border ${t.modalInput} ${t.text}`} placeholder="Please specify the lead source" />
+                      <div className="sm:col-span-2">
+                        <label className={`block text-[12px] mb-1.5 font-medium px-0.5 ${t.textMuted}`}>Specify Source *</label>
+                        <input
+                          required
+                          type="text"
+                          value={enquiryForm.sourceOther}
+                          onChange={e => setEnquiryForm({ ...enquiryForm, sourceOther: e.target.value })}
+                          className={`w-full rounded-xl px-3.5 py-2.5 text-[14px] outline-none transition-all border ${isDark ? "bg-white/5 border-white/10 focus:border-blue-400/60" : "bg-white border-black/10 focus:border-blue-500"
+                            } focus:ring-4 ${isDark ? "focus:ring-blue-500/10" : "focus:ring-blue-500/10"} ${t.text}`}
+                          placeholder="Please specify the lead source"
+                        />
                       </div>
                     )}
                     {enquiryForm.source === "Referral" && (
-                      <div className="sm:col-span-2 mt-2">
-                        <label className={`block text-xs mb-1.5 font-medium pl-2 ${t.textMuted}`}>
-                          Referred by *
-                        </label>
+                      <div className="sm:col-span-2">
+                        <label className={`block text-[12px] mb-1.5 font-medium px-0.5 ${t.textMuted}`}>Referred by *</label>
                         <input
                           required
                           type="text"
                           value={enquiryForm.referralName}
                           onChange={e => setEnquiryForm({ ...enquiryForm, referralName: e.target.value })}
-                          className={`w-full rounded-lg p-3 text-sm outline-none transition-colors border ${t.modalInput} ${t.text}`}
+                          className={`w-full rounded-xl px-3.5 py-2.5 text-[14px] outline-none transition-all border ${isDark ? "bg-white/5 border-white/10 focus:border-blue-400/60" : "bg-white border-black/10 focus:border-blue-500"
+                            } focus:ring-4 ${isDark ? "focus:ring-blue-500/10" : "focus:ring-blue-500/10"} ${t.text}`}
                           placeholder="e.g. Rajesh Sharma (existing client)"
                         />
                       </div>
                     )}
                     {enquiryForm.source === "Channel Partner" && (
-                      <div className={`sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2 p-4 rounded-xl border ${t.settingsBg} ${t.tableBorder}`}>
-                        <h4 className={`sm:col-span-2 text-xs font-bold mb-1 ${t.accentText}`}>Channel Partner Details</h4>
+                      <div
+                        className={`sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3.5 p-4 rounded-xl border ${isDark ? "bg-white/[0.04] border-white/10" : "bg-black/[0.02] border-black/[0.06]"
+                          }`}
+                      >
+                        <h4 className={`sm:col-span-2 text-[12px] font-semibold uppercase tracking-wider mb-0.5 ${t.textMuted}`}>
+                          Channel Partner Details
+                        </h4>
 
                         {/* Phone is first, emphasized, and now REQUIRED. It is the only
-                            field that identifies a partner uniquely: name-only matching
-                            creates duplicates, and where two partners share a name it
-                            merges them and pays commission to the wrong person. Enforced
-                            client-side here and again in POST /api/walkin_enquiries. */}
+                      field that identifies a partner uniquely: name-only matching
+                      creates duplicates, and where two partners share a name it
+                      merges them and pays commission to the wrong person. Enforced
+                      client-side here and again in POST /api/walkin_enquiries. */}
                         <div className="sm:col-span-2">
-                          <label className={`block text-xs mb-1.5 font-semibold pl-2 ${t.accentText}`}>
-                            CP Phone Number *
-                          </label>
+                          <label className={`block text-[12px] mb-1.5 font-semibold px-0.5 text-blue-500`}>CP Phone Number *</label>
                           <input
                             required
                             type="text"
@@ -4063,82 +4169,82 @@ export default function ReceptionistDashboard() {
                               setEnquiryForm({ ...enquiryForm, cpDetails: { ...enquiryForm.cpDetails, phone: e.target.value } });
                               if (cpPhoneError) setCpPhoneError("");
                             }}
-                            className={`w-full rounded-lg p-3 text-sm outline-none transition-colors border-2 ${cpPhoneError ? "border-red-500" : t.modalInput} ${t.text}`}
+                            className={`w-full rounded-xl px-3.5 py-2.5 text-[14px] outline-none transition-all border ${cpPhoneError
+                              ? "border-red-500 focus:ring-4 focus:ring-red-500/10"
+                              : isDark
+                                ? "bg-white/5 border-white/10 focus:border-blue-400/60 focus:ring-4 focus:ring-blue-500/10"
+                                : "bg-white border-black/10 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+                              } ${t.text}`}
                             placeholder="Phone Number"
                           />
                           {cpPhoneError ? (
-                            <p className="text-[11px] mt-1.5 pl-2 font-medium text-red-500">{cpPhoneError}</p>
+                            <p className="text-[11px] mt-1.5 px-0.5 font-medium text-red-500">{cpPhoneError}</p>
                           ) : cpLookupLoading ? (
-                            <p className={`text-[11px] mt-1.5 pl-2 ${t.textFaint}`}>Checking the partner registry…</p>
+                            <p className={`text-[11px] mt-1.5 px-0.5 ${t.textFaint}`}>Checking the partner registry…</p>
                           ) : (
-                            <p className={`text-[11px] mt-1.5 pl-2 ${t.textMuted}`}>
+                            <p className={`text-[11px] mt-1.5 px-0.5 ${t.textMuted}`}>
                               Required — identifies this partner and prevents duplicate records.
                             </p>
                           )}
 
                           {/* ── Registry cross-check result ──
-                              Three outcomes, each worth saying differently:
-                              a registered partner with an owner (routing is decided),
-                              a registered partner with none (this form picks the owner),
-                              and an unknown number (a new partner will be created). */}
+                        Three outcomes, each worth saying differently:
+                        a registered partner with an owner (routing is decided),
+                        a registered partner with none (this form picks the owner),
+                        and an unknown number (a new partner will be created). */}
                           {!cpLookupLoading && cpLookup?.found && cpLookup.routable && (
-                            <div className={`mt-2 rounded-lg px-3 py-2 flex items-start gap-2 text-[11px] ${isDark
-                              ? "bg-emerald-500/10 border border-emerald-500/25 text-emerald-300"
-                              : "bg-emerald-50 border border-emerald-200 text-emerald-800"}`}>
-                              <FaUserTie className="mt-0.5 flex-shrink-0" />
+                            <div className={`mt-2 rounded-xl px-3 py-2.5 flex items-start gap-2 text-[12px] ${isDark ? "bg-green-500/[0.08] text-green-300" : "bg-green-500/[0.06] text-green-700"
+                              }`}>
+                              <FaUserTie className="mt-0.5 flex-shrink-0 text-[11px]" />
                               <span>
                                 <b>{cpLookup.partner.name}</b>
-                                {cpLookup.partner.company_name ? ` (${cpLookup.partner.company_name})` : ""}
-                                {" "}is a registered Channel Partner with{" "}
-                                <b>{Number(cpLookup.partner.lead_count || 0)}</b> lead
-                                {Number(cpLookup.partner.lead_count || 0) === 1 ? "" : "s"} so far.
-                                This lead goes to their Sourcing Manager,{" "}
-                                <b>{cpLookup.partner.assigned_sourcing_manager_name}</b>.
+                                {cpLookup.partner.company_name ? ` (${cpLookup.partner.company_name})` : ""}{" "}
+                                is a registered Channel Partner with <b>{Number(cpLookup.partner.lead_count || 0)}</b> lead
+                                {Number(cpLookup.partner.lead_count || 0) === 1 ? "" : "s"} so far. This lead goes to their
+                                Sourcing Manager, <b>{cpLookup.partner.assigned_sourcing_manager_name}</b>.
                               </span>
                             </div>
                           )}
 
                           {!cpLookupLoading && cpLookup?.found && !cpLookup.routable && (
-                            <div className={`mt-2 rounded-lg px-3 py-2 flex items-start gap-2 text-[11px] ${isDark
-                              ? "bg-amber-500/10 border border-amber-500/25 text-amber-300"
-                              : "bg-amber-50 border border-amber-200 text-amber-800"}`}>
-                              <FaInfoCircle className="mt-0.5 flex-shrink-0" />
+                            <div className={`mt-2 rounded-xl px-3 py-2.5 flex items-start gap-2 text-[12px] ${isDark ? "bg-amber-500/[0.08] text-amber-300" : "bg-amber-500/[0.08] text-amber-700"
+                              }`}>
+                              <FaInfoCircle className="mt-0.5 flex-shrink-0 text-[11px]" />
                               <span>
-                                <b>{cpLookup.partner.name}</b> is already registered but has no active
-                                Sourcing Manager. Choose one below — they will own this partner from now on.
+                                <b>{cpLookup.partner.name}</b> is already registered but has no active Sourcing Manager.
+                                Choose one below — they will own this partner from now on.
                               </span>
                             </div>
                           )}
 
                           {!cpLookupLoading && cpLookup && !cpLookup.found && (
-                            <div className={`mt-2 rounded-lg px-3 py-2 flex items-start gap-2 text-[11px] ${isDark
-                              ? "bg-blue-500/10 border border-blue-500/25 text-blue-300"
-                              : "bg-blue-50 border border-blue-200 text-blue-700"}`}>
-                              <FaInfoCircle className="mt-0.5 flex-shrink-0" />
-                              <span>
-                                New number — a Channel Partner record will be created and assigned to the
-                                Sourcing Manager you pick below.
-                              </span>
+                            <div className={`mt-2 rounded-xl px-3 py-2.5 flex items-start gap-2 text-[12px] ${isDark ? "bg-blue-500/[0.08] text-blue-300" : "bg-blue-500/[0.06] text-blue-700"
+                              }`}>
+                              <FaInfoCircle className="mt-0.5 flex-shrink-0 text-[11px]" />
+                              <span>New number — a Channel Partner record will be created and assigned to the Sourcing Manager you pick below.</span>
                             </div>
                           )}
                         </div>
 
                         <div>
-                          <label className={`block text-xs mb-1.5 font-medium pl-2 ${t.textMuted}`}>CP Name *</label>
+                          <label className={`block text-[12px] mb-1.5 font-medium px-0.5 ${t.textMuted}`}>CP Name *</label>
                           <input
                             required
                             type="text"
                             value={enquiryForm.cpDetails.name}
                             onChange={e => setEnquiryForm({ ...enquiryForm, cpDetails: { ...enquiryForm.cpDetails, name: e.target.value } })}
-                            className={`w-full rounded-lg p-3 text-sm outline-none transition-colors border ${t.modalInput} ${t.text}`}
+                            className={`w-full rounded-xl px-3.5 py-2.5 text-[14px] outline-none transition-all border ${isDark ? "bg-white/5 border-white/10 focus:border-blue-400/60" : "bg-white border-black/10 focus:border-blue-500"
+                              } focus:ring-4 ${isDark ? "focus:ring-blue-500/10" : "focus:ring-blue-500/10"} ${t.text}`}
                             placeholder="Contact Person Name"
                           />
                         </div>
 
                         {/* Smart Auto-suggest Input for Company */}
                         <div className="relative">
-                          <label className={`block text-xs mb-1.5 font-medium pl-2 ${t.textMuted}`}>CP Company *</label>
-                          <input required type="text"
+                          <label className={`block text-[12px] mb-1.5 font-medium px-0.5 ${t.textMuted}`}>CP Company *</label>
+                          <input
+                            required
+                            type="text"
                             value={enquiryForm.cpDetails.company}
                             onChange={e => {
                               setEnquiryForm({ ...enquiryForm, cpDetails: { ...enquiryForm.cpDetails, company: e.target.value } });
@@ -4146,48 +4252,52 @@ export default function ReceptionistDashboard() {
                             }}
                             onFocus={() => setShowCpDropdown(true)}
                             onBlur={() => setTimeout(() => setShowCpDropdown(false), 200)} // Delay so click registers
-                            className={`w-full rounded-lg p-3 text-sm outline-none transition-colors border ${t.modalInput} ${t.text}`}
+                            className={`w-full rounded-xl px-3.5 py-2.5 text-[14px] outline-none transition-all border ${isDark ? "bg-white/5 border-white/10 focus:border-blue-400/60" : "bg-white border-black/10 focus:border-blue-500"
+                              } focus:ring-4 ${isDark ? "focus:ring-blue-500/10" : "focus:ring-blue-500/10"} ${t.text}`}
                             placeholder="Company Name"
                           />
 
                           {/* Dropdown Menu */}
                           {showCpDropdown && enquiryForm.cpDetails.company && (
-                            <div className={`absolute z-50 w-full mt-1 max-h-40 overflow-y-auto rounded-lg shadow-xl border ${t.dropdown}`} style={t.dropdownGlass}>
+                            <div
+                              className={`absolute z-50 w-full mt-1.5 max-h-40 overflow-y-auto rounded-xl border ${t.dropdown}`}
+                              style={{ ...t.dropdownGlass, boxShadow: "0 12px 32px -8px rgba(0,0,0,0.25)" }}
+                            >
                               {existingCPs.filter(cp => cp.company.toLowerCase().includes(enquiryForm.cpDetails.company.toLowerCase())).length > 0 ? (
                                 existingCPs
                                   .filter(cp => cp.company.toLowerCase().includes(enquiryForm.cpDetails.company.toLowerCase()))
                                   .map((cp, idx) => (
-                                    <div key={idx}
+                                    <div
+                                      key={idx}
                                       onClick={() => {
                                         // Auto-fill company AND phone number
                                         setEnquiryForm({
                                           ...enquiryForm,
-                                          cpDetails: { name: "", company: cp.company, phone: cp.phone }
+                                          cpDetails: { name: "", company: cp.company, phone: cp.phone },
                                         });
                                         setShowCpDropdown(false);
                                       }}
-                                      className={`px-4 py-2 text-sm cursor-pointer transition-colors ${t.tableRow} ${t.text}`}
+                                      className={`px-3.5 py-2 text-[13px] cursor-pointer transition-colors ${t.tableRow} ${t.text}`}
                                     >
-                                      <p className="font-bold">{cp.company}</p>
-                                      {cp.phone && <p className={`text-[10px] ${t.textFaint}`}>{cp.phone}</p>}
+                                      <p className="font-medium">{cp.company}</p>
+                                      {cp.phone && <p className={`text-[10.5px] ${t.textFaint}`}>{cp.phone}</p>}
                                     </div>
                                   ))
                               ) : (
-                                <div className={`px-4 py-2 text-xs italic ${t.textFaint}`}>Add as new Channel Partner</div>
+                                <div className={`px-3.5 py-2 text-[12px] italic ${t.textFaint}`}>Add as new Channel Partner</div>
                               )}
                             </div>
                           )}
                         </div>
 
-
                         {/* CP phone now lives at the top of this block (see above) so it
-                            reads as the primary identifier rather than an afterthought. */}
+                      reads as the primary identifier rather than an afterthought. */}
 
                         {/* ── Assign Sourcing Manager ──
-                            Only the employee id is stored. Names are never hardcoded —
-                            the list is fetched from /api/users/sourcing-manager. */}
+                      Only the employee id is stored. Names are never hardcoded —
+                      the list is fetched from /api/users/sourcing-manager. */}
                         <div className="md:col-span-2">
-                          <label className={`block text-xs mb-1.5 font-medium pl-2 ${t.textMuted}`}>
+                          <label className={`block text-[12px] mb-1.5 font-medium px-0.5 ${t.textMuted}`}>
                             Assign Sourcing Manager{" "}
                             {cpRoutedByPartner
                               ? <span className={t.textFaint}>(set by the partner&apos;s registration)</span>
@@ -4208,59 +4318,66 @@ export default function ReceptionistDashboard() {
                             ariaLabel="Assign Sourcing Manager"
                           />
                           {cpRoutedByPartner && (
-                            <p className={`text-[11px] mt-1.5 pl-2 ${isDark ? "text-emerald-400" : "text-emerald-700"}`}>
-                              This partner is already registered under{" "}
-                              <b>{cpLookup.partner.assigned_sourcing_manager_name}</b>, so their leads
-                              stay with them. An Admin can reassign the partner from Channel Partner Management.
+                            <p className={`text-[11px] mt-1.5 px-0.5 ${isDark ? "text-green-400" : "text-green-700"}`}>
+                              This partner is already registered under <b>{cpLookup.partner.assigned_sourcing_manager_name}</b>,
+                              so their leads stay with them. An Admin can reassign the partner from Channel Partner Management.
                             </p>
                           )}
                           {/* Three distinct states, deliberately not collapsed into one:
-                              a genuinely empty registry, a failed fetch, and "loading" all
-                              left the list at [] before this fix — which meant a network
-                              error looked identical to "zero Sourcing Manager accounts
-                              exist" with no way to tell them apart from this screen. */}
+                        a genuinely empty registry, a failed fetch, and "loading" all
+                        left the list at [] before this fix — which meant a network
+                        error looked identical to "zero Sourcing Manager accounts
+                        exist" with no way to tell them apart from this screen. */}
                           {cpRoutedByPartner ? (
                             // The routing is already explained above; repeating the
                             // "required" / "no managers" copy here would contradict it.
                             null
                           ) : isFetchingSourcingManagers ? (
-                            <p className={`text-[11px] mt-1.5 pl-2 ${t.textFaint}`}>Loading Sourcing Managers…</p>
+                            <p className={`text-[11px] mt-1.5 px-0.5 ${t.textFaint}`}>Loading Sourcing Managers…</p>
                           ) : sourcingManagersError ? (
-                            <p className="text-[11px] mt-1.5 pl-2 font-medium text-red-500">
+                            <p className="text-[11px] mt-1.5 px-0.5 font-medium text-red-500">
                               Couldn&apos;t load Sourcing Managers ({sourcingManagersError}).{" "}
-                              <button type="button" onClick={fetchSourcingManagers} className="underline cursor-pointer">
-                                Retry
-                              </button>
+                              <button type="button" onClick={fetchSourcingManagers} className="underline cursor-pointer">Retry</button>
                             </p>
                           ) : sourcingManagers.length === 0 ? (
                             // A walk-in partner must never be turned away because no
                             // Sourcing Manager account exists yet — reception can submit
                             // unassigned and an Admin assigns from Channel Partner
                             // Management afterwards.
-                            <p className={`text-[11px] mt-1.5 pl-2 ${isDark ? "text-amber-400" : "text-amber-600"}`}>
-                              No Sourcing Managers yet — create one in Add Employee. You can still
-                              submit; an Admin can assign this enquiry later.
+                            <p className={`text-[11px] mt-1.5 px-0.5 ${isDark ? "text-amber-400" : "text-amber-600"}`}>
+                              No Sourcing Managers yet — create one in Add Employee. You can still submit; an Admin can assign this enquiry later.
                             </p>
                           ) : !enquiryForm.sourcingManagerId ? (
-                            <p className={`text-[11px] mt-1.5 pl-2 ${t.textFaint}`}>
-                              Optional — you can submit without one and an Admin can assign
-                              this enquiry later.
+                            <p className={`text-[11px] mt-1.5 px-0.5 ${t.textFaint}`}>
+                              Optional — you can submit without one and an Admin can assign this enquiry later.
                             </p>
                           ) : null}
                         </div>
-
                       </div>
                     )}
                   </div>
                 </div>
               </form>
             </div>
-            <div className={`p-4 md:p-6 border-t flex flex-col md:flex-row justify-end gap-3 md:gap-4 ${t.modalHeader} ${t.tableBorder}`}>
-              <button onClick={() => { setIsEnquiryModalOpen(false); setShowManagerDropdown(false); }} type="button"
-                className={`px-6 py-2.5 rounded-lg font-bold cursor-pointer transition-colors ${t.textMuted} ${isDark ? "hover:bg-red-500/10 hover:text-red-500" : "hover:bg-[#9E217B]/10 hover:text-[#9E217B]"}`}>Cancel</button>
-              <button form="enquiryForm" type="submit" disabled={isSubmitting}
-                className={`px-8 py-2.5 rounded-lg font-bold transition-colors ${isSubmitting ? "opacity-50 cursor-not-allowed" : "cursor-pointer"} ${t.btnPrimary}`}>
-                {isSubmitting ? "⏳ Submitting..." : "Submit"}
+
+            {/* Footer — plain-text Cancel, single blue pill primary action (Apple sheet convention) */}
+            <div className={`px-6 py-4 border-t flex flex-col-reverse sm:flex-row justify-end gap-2.5 ${t.tableBorder}`}>
+              <button
+                onClick={() => { setIsEnquiryModalOpen(false); setShowManagerDropdown(false); }}
+                type="button"
+                className={`px-5 py-2.5 rounded-full text-[14px] font-medium cursor-pointer transition-colors ${isDark ? "text-gray-300 hover:bg-white/[0.06]" : "text-gray-600 hover:bg-black/[0.04]"
+                  }`}
+              >
+                Cancel
+              </button>
+              <button
+                form="enquiryForm"
+                type="submit"
+                disabled={isSubmitting}
+                className={`px-6 py-2.5 rounded-full text-[14px] font-semibold text-white bg-blue-500 transition-all ${isSubmitting ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-blue-600 active:scale-[0.98]"
+                  }`}
+              >
+                {isSubmitting ? "Submitting…" : "Submit"}
               </button>
             </div>
           </div>

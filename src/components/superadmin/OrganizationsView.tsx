@@ -19,8 +19,13 @@ import {
 const FILTERS = ["all", "active", "inactive", "suspended"];
 
 export default function OrganizationsView({
-  t, orgs, onOpenOrg,
-}: { t: SuperAdminTheme; orgs: OrgRow[]; onOpenOrg: (id: string) => void }) {
+  t, orgs, onOpenOrg, onAddOrganization,
+}: {
+  t: SuperAdminTheme;
+  orgs: OrgRow[];
+  onOpenOrg: (id: string) => void;
+  onAddOrganization: () => void;
+}) {
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState("all");
 
@@ -40,9 +45,22 @@ export default function OrganizationsView({
         <SearchField t={t} value={q} onChange={setQ} placeholder="Search name or organization ID" />
         <div className="flex items-center gap-3">
           <Segmented t={t} options={FILTERS} value={filter} onChange={setFilter} />
-          <span className="hidden sm:block text-[12px] whitespace-nowrap tabular-nums" style={{ color: t.textMuted }}>
+          <span className="hidden lg:block text-[12px] whitespace-nowrap tabular-nums" style={{ color: t.textMuted }}>
             {rows.length} of {orgs.length}
           </span>
+          {/* The one primary action on this screen, so it is the only filled
+              button — everything else here is a filter or a row action. */}
+          <button
+            onClick={onAddOrganization}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[13px] font-semibold whitespace-nowrap flex-shrink-0 transition-opacity hover:opacity-90"
+            style={{ background: t.accent, color: "#fff" }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            <span className="hidden sm:inline">Add Organization</span>
+            <span className="sm:hidden">Add</span>
+          </button>
         </div>
       </div>
 

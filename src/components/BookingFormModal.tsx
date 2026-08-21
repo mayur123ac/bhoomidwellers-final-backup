@@ -200,13 +200,13 @@ function parseIndianAmount(val: string): string {
 // transaction types can be added by pushing another entry into `items`.
 //
 // Rules (matches real-estate accounting):
-//   • Revenue counts an item only if it is BOTH actually received/completed AND
-//     explicitly marked "Include in Revenue". Nothing is auto-counted.
-//   • "Received" is auto-derived from the item's own date/status fields.
-//   • Loan Sanction is informational (bank approval, not cash) — it never sits
-//     in Scheduled Receivables and only reaches Revenue if management opts in.
-//   • Scheduled Receivables = money entered but not yet received (future income).
-//     It is shown separately and never reduces Balance Receivable.
+//   • Revenue counts an item only if it is BOTH actually received/completed AND
+//     explicitly marked "Include in Revenue". Nothing is auto-counted.
+//   • "Received" is auto-derived from the item's own date/status fields.
+//   • Loan Sanction is informational (bank approval, not cash) — it never sits
+//     in Scheduled Receivables and only reaches Revenue if management opts in.
+//   • Scheduled Receivables = money entered but not yet received (future income).
+//     It is shown separately and never reduces Balance Receivable.
 type RevenueItemKey = "ocr" | "sdr" | "cash" | "sanction" | "disbursement";
 type RevenueFlagKey =
   | "revenue_include_ocr" | "revenue_include_sdr" | "revenue_include_cash"
@@ -216,12 +216,12 @@ interface RevenueItem {
   key: RevenueItemKey;
   label: string;
   amount: number;
-  received: boolean;          // has the money actually arrived / milestone completed
-  receivedLabel: string;      // wording for the status chip ("Received" / "Approved" …)
-  informational: boolean;     // true = not a cash receipt (Loan Sanction)
+  received: boolean;          // has the money actually arrived / milestone completed
+  receivedLabel: string;      // wording for the status chip ("Received" / "Approved" …)
+  informational: boolean;     // true = not a cash receipt (Loan Sanction)
   includeKey: RevenueFlagKey;
   included: boolean;
-  countsAsRevenue: boolean;   // received && included
+  countsAsRevenue: boolean;   // received && included
 }
 
 interface FinancialSummary {
@@ -1476,7 +1476,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                     <p className={`text-xs mt-0.5 ${textMuted}`}>
                       Lead #{lead?.sr_no || lead?.id} — {lead?.name}
                       {/* Says out loud which record is being changed, so a reopened
-                          lead can never look like it is starting a fresh booking. */}
+                          lead can never look like it is starting a fresh booking. */}
                       {effEdit && effBooking?.booking_number && (
                         <span className="ml-1">· editing {effBooking.booking_number}</span>
                       )}
@@ -1490,10 +1490,10 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
             </div>
 
             {/* ── Booking lookup gate ──
-                The form must not render defaults while we are still finding out
-                whether this lead already has a booking. Showing an empty form for
-                a moment invites the operator to start typing into fields that are
-                about to be replaced by hydrated values. */}
+                The form must not render defaults while we are still finding out
+                whether this lead already has a booking. Showing an empty form for
+                a moment invites the operator to start typing into fields that are
+                about to be replaced by hydrated values. */}
             {(resolvingBooking || resolveError) && !confirmedBooking ? (
               <div className={`flex-1 flex items-center justify-center p-10 ${bg}`}>
                 {resolveError ? (
@@ -1793,10 +1793,10 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                             <p className={sectionTitle}><FaBuilding className="inline mr-2" />Details of Unit Applied For</p>
 
                             {/* ── Unit selection (Phase 1) ──
-                                Picking a real inventory row instead of typing the flat is what
-                                keeps booking_applications and inventory_units in step: the server
-                                re-matches these fields by exact string key, so typed text could
-                                silently fork a duplicate unit. */}
+                                Picking a real inventory row instead of typing the flat is what
+                                keeps booking_applications and inventory_units in step: the server
+                                re-matches these fields by exact string key, so typed text could
+                                silently fork a duplicate unit. */}
                             {!manualUnitEntry && (
                               <div className={`mb-4 rounded-xl border p-4 ${selectedUnit
                                 ? (isDark ? "border-emerald-500/40 bg-emerald-500/5" : "border-emerald-500/40 bg-emerald-50")
@@ -1858,8 +1858,8 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                             )}
 
                             {/* The fields themselves are unchanged in shape and still what gets
-                                submitted — they are just locked while a real unit is linked, so
-                                the text cannot drift away from the row it has to match. */}
+                                submitted — they are just locked while a real unit is linked, so
+                                the text cannot drift away from the row it has to match. */}
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                               {[
                                 // Temporarily hidden — to be re-enabled later
@@ -1985,9 +1985,9 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                       {step === 3 && (
                         <div className="space-y-6">
                           {/* ── FOE: critical issues on this booking ──
-                              Compact by design: the full explanation lives on the
-                              Loan Overview, and repeating four banners here would
-                              bury the form. */}
+                              Compact by design: the full explanation lives on the
+                              Loan Overview, and repeating four banners here would
+                              bury the form. */}
                           {foeCriticals.length > 0 && (
                             <button
                               type="button"
@@ -2008,8 +2008,8 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                             <div className="flex items-center justify-between gap-3 flex-wrap">
                               <p className={sectionTitle}><FaMoneyBillWave className="inline mr-2" />Booking &amp; Agreement</p>
                               {/* Agreement Value, GST and Token all originate in the Loan & Deal
-                                  form. Editing them at source without losing this form is the
-                                  point — the overlay keeps the booking form mounted. */}
+                                  form. Editing them at source without losing this form is the
+                                  point — the overlay keeps the booking form mounted. */}
                               <button
                                 type="button"
                                 onClick={openLoanEditor}
@@ -2144,8 +2144,8 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                               return (
                                 <div className={`rounded-xl border overflow-hidden ${isDark ? "bg-[#121218] border-[#2A2A35]" : "bg-white border-[#E5E7EB]"}`}>
                                   {/* Agreement Value drives GST, stamp duty, registration fee, total
-                                      cost and own contribution — every figure below recomputes from
-                                      form.agreement_value on each render, so editing here is live. */}
+                                      cost and own contribution — every figure below recomputes from
+                                      form.agreement_value on each render, so editing here is live. */}
                                   <div className={`flex items-center justify-between px-4 py-2 border-b ${divider}`}>
                                     <span className={`text-xs ${textMuted}`}>Agreement Value <span className="opacity-60">(editable)</span></span>
                                     <IndianCurrencyInput value={form.agreement_value} onChange={val => set("agreement_value", val)} placeholder="50,00,000" className={`${inputCls} text-xs py-1.5 w-40 text-right`} />
@@ -2154,8 +2154,8 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                                     <span className={`text-xs ${textMuted} flex items-center gap-2 flex-wrap`}>
                                       + GST
                                       {/* Same control as the Loan form's Section 8: preset buttons for
-                                          the statutory rates plus free numeric entry, so 1% / 18% and
-                                          decimals are expressible. Stored as a bare number ("5"). */}
+                                          the statutory rates plus free numeric entry, so 1% / 18% and
+                                          decimals are expressible. Stored as a bare number ("5"). */}
                                       <span className="flex gap-1">
                                         {GST_RATE_PRESETS.map(p => {
                                           const active = parseGstRate(form.gst_rate) === p;
@@ -2197,9 +2197,9 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                                     <span className={`text-sm font-semibold ${textMain}`}>{formatINR(cost.gstAmount)}</span>
                                   </div>
                                   {/* Stamp Duty and Registration Fee use the same control as GST
-                                      above: preset buttons for the rates actually used, plus free
-                                      numeric entry for anything else. The rate is what's stored;
-                                      the rupee figure is derived and updates as you type. */}
+                                      above: preset buttons for the rates actually used, plus free
+                                      numeric entry for anything else. The rate is what's stored;
+                                      the rupee figure is derived and updates as you type. */}
                                   <RateRow
                                     label="+ Stamp Duty"
                                     presets={STAMP_DUTY_RATE_PRESETS}
@@ -2212,11 +2212,11 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                                     prefilled={!!loanPrefilled.stamp_duty_rate}
                                   />
                                   {/* Registration Fee is typed in directly, exactly like
-                                      Legal Charges and Custom Charges below — no preset
-                                      percentages, no derivation from agreement value and
-                                      no ₹30,000 cap. Whatever is entered here is what
-                                      lands in Total Cost and what gets saved; an empty
-                                      box is ₹0. */}
+                                      Legal Charges and Custom Charges below — no preset
+                                      percentages, no derivation from agreement value and
+                                      no ₹30,000 cap. Whatever is entered here is what
+                                      lands in Total Cost and what gets saved; an empty
+                                      box is ₹0. */}
                                   <div className={`flex items-center justify-between px-4 py-2 border-b ${divider}`}>
                                     <span className={`text-xs ${textMuted}`}>+ Registration Fee</span>
                                     <IndianCurrencyInput value={form.registration_fee_amount} onChange={val => set("registration_fee_amount", val)} placeholder="0" className={`${inputCls} text-xs py-1.5 w-40 text-right`} />
@@ -2230,17 +2230,17 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                                     <IndianCurrencyInput value={form.maintenance_deposit} onChange={val => set("maintenance_deposit", val)} placeholder="0" className={`${inputCls} text-xs py-1.5 w-40 text-right`} />
                                   </div>
                                   {/* Custom charges are stored as a LIST of named items
-                                      ({charge_name, amount, remarks}); the itemised editor further
-                                      down this same step maintains it, and the API persists it to
-                                      booking_custom_charges. This row therefore edits THAT array
-                                      rather than introducing a second field: with no items, typing
-                                      here creates one; with exactly one, it edits that one in place.
-                                      Nothing new is stored and the itemised editor keeps working.
+                                      ({charge_name, amount, remarks}); the itemised editor further
+                                      down this same step maintains it, and the API persists it to
+                                      booking_custom_charges. This row therefore edits THAT array
+                                      rather than introducing a second field: with no items, typing
+                                      here creates one; with exactly one, it edits that one in place.
+                                      Nothing new is stored and the itemised editor keeps working.
 
-                                      Two or more named items cannot be represented by a single box —
-                                      there is no answer to which one it would write to — so the row
-                                      falls back to the read-only total and points at the editor,
-                                      which is the only place that can express them. */}
+                                      Two or more named items cannot be represented by a single box —
+                                      there is no answer to which one it would write to — so the row
+                                      falls back to the read-only total and points at the editor,
+                                      which is the only place that can express them. */}
                                   {form.custom_charges.length <= 1 ? (
                                     <div className={`flex items-center justify-between px-4 py-2 border-b ${divider}`}>
                                       <span className={`text-xs ${textMuted}`}>+ Custom Charges</span>
@@ -2320,10 +2320,10 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                               );
                             })()}
                             {/* ── FOE gate on OCR entry ──
-                                Locked means the agreement is already fully funded,
-                                so more customer money cannot be allocated to it.
-                                The amounts stay VISIBLE and merely read-only: the
-                                operator still needs to see what was collected. */}
+                                Locked means the agreement is already fully funded,
+                                so more customer money cannot be allocated to it.
+                                The amounts stay VISIBLE and merely read-only: the
+                                operator still needs to see what was collected. */}
                             {foe.loading ? (
                               <div className="rounded-xl border border-gray-500/20 p-4 mb-4 animate-pulse">
                                 <div className={`h-3 w-48 rounded mb-2 ${isDark ? "bg-gray-700/50" : "bg-gray-200"}`} />
@@ -2339,8 +2339,8 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                                 <div className="flex items-center justify-between gap-2 mt-2">
                                   <span className={`text-[11px] ${textMuted}`}>To adjust, contact admin.</span>
                                   {/* Admins get the live override; everyone else keeps the
-                                      inert button pointing at their admin. The role check is
-                                      repeated server-side — this only decides the label. */}
+                                      inert button pointing at their admin. The role check is
+                                      repeated server-side — this only decides the label. */}
                                   {canOverride(user?.role) ? (
                                     <button
                                       type="button"
@@ -2460,36 +2460,36 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
 
                           {/* ── Section 5: Additional Direct Payment (collapsible, optional) ── */}
                           {/* <div className={`border-t pt-6 ${divider}`}>
-                            <button
-                              type="button"
-                              onClick={() => setShowAdditionalPayment(v => !v)}
-                              className={`flex items-center gap-2 text-sm font-bold uppercase tracking-wider ${isDark ? "text-[#d4006e]" : "text-[#9E217B]"}`}
-                            >
-                              <FaChevronRight className={`text-[10px] transition-transform ${showAdditionalPayment ? "rotate-90" : ""}`} />
-                              Additional Direct Payment (Optional)
-                            </button>
-                            {showAdditionalPayment && (
-                              <div className="mt-4">
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                  <div>
-                                    <label className={labelCls}>Amount</label>
-                                    <IndianCurrencyInput value={form.cash_component} onChange={val => set("cash_component", val)} placeholder="If applicable" className={inputCls} disabled={ocrLocked} />
-                                  </div>
-                                  <div>
-                                    <label className={labelCls}>Date</label>
-                                    <input type="date" value={form.cash_component_date} onChange={e => set("cash_component_date", e.target.value)} className={inputCls} />
-                                  </div>
-                                  <div>
-                                    <label className={labelCls}>Remarks</label>
-                                    <input value={form.cash_component_remarks} onChange={e => set("cash_component_remarks", e.target.value)} placeholder="Remarks" className={inputCls} />
-                                  </div>
-                                </div>
-                                <p className={`mt-2 text-[11px] flex items-center gap-1.5 ${isDark ? "text-amber-400" : "text-amber-600"}`}>
-                                  ⚠ This payment is outside the agreement value.
-                                </p>
-                              </div>
-                            )}
-                          </div> */}
+                            <button
+                              type="button"
+                              onClick={() => setShowAdditionalPayment(v => !v)}
+                              className={`flex items-center gap-2 text-sm font-bold uppercase tracking-wider ${isDark ? "text-[#d4006e]" : "text-[#9E217B]"}`}
+                            >
+                              <FaChevronRight className={`text-[10px] transition-transform ${showAdditionalPayment ? "rotate-90" : ""}`} />
+                              Additional Direct Payment (Optional)
+                            </button>
+                            {showAdditionalPayment && (
+                              <div className="mt-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                  <div>
+                                    <label className={labelCls}>Amount</label>
+                                    <IndianCurrencyInput value={form.cash_component} onChange={val => set("cash_component", val)} placeholder="If applicable" className={inputCls} disabled={ocrLocked} />
+                                  </div>
+                                  <div>
+                                    <label className={labelCls}>Date</label>
+                                    <input type="date" value={form.cash_component_date} onChange={e => set("cash_component_date", e.target.value)} className={inputCls} />
+                                  </div>
+                                  <div>
+                                    <label className={labelCls}>Remarks</label>
+                                    <input value={form.cash_component_remarks} onChange={e => set("cash_component_remarks", e.target.value)} placeholder="Remarks" className={inputCls} />
+                                  </div>
+                                </div>
+                                <p className={`mt-2 text-[11px] flex items-center gap-1.5 ${isDark ? "text-amber-400" : "text-amber-600"}`}>
+                                  ⚠ This payment is outside the agreement value.
+                                </p>
+                              </div>
+                            )}
+                          </div> */}
 
                           {/* Bank Loan Details */}
                           <div className={`border-t pt-6 ${divider}`}>
@@ -2565,78 +2565,78 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
 
                                 {/* Disbursement */}
                                 {/* <div className={`border-t pt-4 mt-2 ${divider}`}>
-                                  <p className={`text-xs font-bold uppercase tracking-wider mb-3 ${accent}`}>Disbursement</p>
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    <div>
-                                      <label className={labelCls}>Expected Disbursement Date</label>
-                                      <input type="date" value={form.expected_disbursement_date} onChange={e => set("expected_disbursement_date", e.target.value)} className={inputCls} />
-                                    </div>
-                                    <div>
-                                      <label className={labelCls}>Expected Disbursement Amount</label>
-                                      <IndianCurrencyInput value={form.expected_disbursement_amount} onChange={val => set("expected_disbursement_amount", val)} placeholder="Amount" className={inputCls} />
-                                    </div>
-                                  </div>
-                                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                    <div>
-                                      <label className={labelCls}>Actual Disbursement Date</label>
-                                      <input type="date" value={form.actual_disbursement_date} onChange={e => set("actual_disbursement_date", e.target.value)} className={inputCls} />
-                                    </div>
-                                    <div>
-                                      <label className={labelCls}>Amount Disbursed</label>
-                                      <IndianCurrencyInput value={form.disbursement_amount} onChange={val => set("disbursement_amount", val)} placeholder="Amount received" className={inputCls} />
-                                    </div>
-                                    <div>
-                                      <label className={labelCls}>Disbursement Status</label>
-                                      <select value={form.disbursement_status} onChange={e => set("disbursement_status", e.target.value)} className={inputCls}>
-                                        <option value="Pending">Pending</option>
-                                        <option value="Partial">Partial</option>
-                                        <option value="Completed">Completed</option>
-                                      </select>
-                                    </div>
-                                  </div>
-                                  <p className={`mt-3 text-[11px] flex items-start gap-1.5 ${textMuted}`}>
-                                    <span>ℹ</span>
-                                    <span>Disbursement tranches are tracked in the Loan &amp; Deal section after the booking is confirmed. This captures the initial/first disbursement only.</span>
-                                  </p>
-                                </div> */}
+                                  <p className={`text-xs font-bold uppercase tracking-wider mb-3 ${accent}`}>Disbursement</p>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div>
+                                      <label className={labelCls}>Expected Disbursement Date</label>
+                                      <input type="date" value={form.expected_disbursement_date} onChange={e => set("expected_disbursement_date", e.target.value)} className={inputCls} />
+                                    </div>
+                                    <div>
+                                      <label className={labelCls}>Expected Disbursement Amount</label>
+                                      <IndianCurrencyInput value={form.expected_disbursement_amount} onChange={val => set("expected_disbursement_amount", val)} placeholder="Amount" className={inputCls} />
+                                    </div>
+                                  </div>
+                                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                    <div>
+                                      <label className={labelCls}>Actual Disbursement Date</label>
+                                      <input type="date" value={form.actual_disbursement_date} onChange={e => set("actual_disbursement_date", e.target.value)} className={inputCls} />
+                                    </div>
+                                    <div>
+                                      <label className={labelCls}>Amount Disbursed</label>
+                                      <IndianCurrencyInput value={form.disbursement_amount} onChange={val => set("disbursement_amount", val)} placeholder="Amount received" className={inputCls} />
+                                    </div>
+                                    <div>
+                                      <label className={labelCls}>Disbursement Status</label>
+                                      <select value={form.disbursement_status} onChange={e => set("disbursement_status", e.target.value)} className={inputCls}>
+                                        <option value="Pending">Pending</option>
+                                        <option value="Partial">Partial</option>
+                                        <option value="Completed">Completed</option>
+                                      </select>
+                                    </div>
+                                  </div>
+                                  <p className={`mt-3 text-[11px] flex items-start gap-1.5 ${textMuted}`}>
+                                    <span>ℹ</span>
+                                    <span>Disbursement tranches are tracked in the Loan &amp; Deal section after the booking is confirmed. This captures the initial/first disbursement only.</span>
+                                  </p>
+                                </div> */}
 
                                 {/* EMI Details */}
                                 {/* <div className={`border-t pt-4 mt-2 ${divider}`}>
-                                  <p className={`text-xs font-bold uppercase tracking-wider mb-3 ${accent}`}>EMI Details</p>
-                                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                    <div>
-                                      <label className={labelCls}>Interest Rate (%)</label>
-                                      <input type="number" step="0.01" value={form.interest_rate} onChange={e => set("interest_rate", e.target.value)} placeholder="8.5" className={inputCls} />
-                                    </div>
-                                    Temporarily hidden — to be re-enabled later
-                                    <div>
-                                      <label className={labelCls}>Tenure (months)</label>
-                                      <input type="number" value={form.loan_tenure_months} onChange={e => set("loan_tenure_months", e.target.value)} placeholder="240" className={inputCls} />
-                                    </div>
-                                   
-                                    <div>
-                                      <label className={labelCls}>EMI Start Date</label>
-                                      <input type="date" value={form.emi_start_date} onChange={e => set("emi_start_date", e.target.value)} className={inputCls} />
-                                    </div>
-                                  </div>
-                                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                    <div>
-                                      <label className={labelCls}>Pre-EMI Amount <span className="font-normal opacity-70">(auto)</span></label>
-                                      <input readOnly value={formatINR(toNumber(form.pre_emi_amount))} className={`${inputCls} opacity-80 cursor-default`} />
-                                    </div>
-                                    <div>
-                                      <label className={labelCls}>Full EMI Amount <span className="font-normal opacity-70">(auto)</span></label>
-                                      <input readOnly value={formatINR(toNumber(form.emi_amount))} className={`${inputCls} opacity-80 cursor-default`} />
-                                    </div>
-                                    <div>
-                                      <label className={labelCls}>Payment Type</label>
-                                      <select value={form.payment_type} onChange={e => set("payment_type", e.target.value)} className={inputCls}>
-                                        <option value="Pre-EMI">Pre-EMI</option>
-                                        <option value="Full EMI">Full EMI</option>
-                                      </select>
-                                    </div>
-                                  </div>
-                                </div> */}
+                                  <p className={`text-xs font-bold uppercase tracking-wider mb-3 ${accent}`}>EMI Details</p>
+                                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                    <div>
+                                      <label className={labelCls}>Interest Rate (%)</label>
+                                      <input type="number" step="0.01" value={form.interest_rate} onChange={e => set("interest_rate", e.target.value)} placeholder="8.5" className={inputCls} />
+                                    </div>
+                                    Temporarily hidden — to be re-enabled later
+                                    <div>
+                                      <label className={labelCls}>Tenure (months)</label>
+                                      <input type="number" value={form.loan_tenure_months} onChange={e => set("loan_tenure_months", e.target.value)} placeholder="240" className={inputCls} />
+                                    </div>
+                                   
+                                    <div>
+                                      <label className={labelCls}>EMI Start Date</label>
+                                      <input type="date" value={form.emi_start_date} onChange={e => set("emi_start_date", e.target.value)} className={inputCls} />
+                                    </div>
+                                  </div>
+                                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                    <div>
+                                      <label className={labelCls}>Pre-EMI Amount <span className="font-normal opacity-70">(auto)</span></label>
+                                      <input readOnly value={formatINR(toNumber(form.pre_emi_amount))} className={`${inputCls} opacity-80 cursor-default`} />
+                                    </div>
+                                    <div>
+                                      <label className={labelCls}>Full EMI Amount <span className="font-normal opacity-70">(auto)</span></label>
+                                      <input readOnly value={formatINR(toNumber(form.emi_amount))} className={`${inputCls} opacity-80 cursor-default`} />
+                                    </div>
+                                    <div>
+                                      <label className={labelCls}>Payment Type</label>
+                                      <select value={form.payment_type} onChange={e => set("payment_type", e.target.value)} className={inputCls}>
+                                        <option value="Pre-EMI">Pre-EMI</option>
+                                        <option value="Full EMI">Full EMI</option>
+                                      </select>
+                                    </div>
+                                  </div>
+                                </div> */}
                               </div>
                             )}
                           </div>
@@ -2745,7 +2745,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                             })()}
 
                             {/* Revenue recognition overrides — preserved so management can still
-                                mark which items count toward realized developer revenue downstream. */}
+                                mark which items count toward realized developer revenue downstream. */}
                             <details className={`mt-4 rounded-xl border ${isDark ? "border-[#2A2A35] bg-[#121218]" : "border-[#E5E7EB] bg-white"}`}>
                               <summary className={`cursor-pointer px-4 py-2.5 text-xs font-bold uppercase tracking-wider ${textMuted}`}>
                                 Revenue Recognition (advanced)
@@ -2847,164 +2847,164 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                               </div>
 
                               {/* ── CP commission ──────────────────────────────
-                                  Recorded against the partner when this booking
-                                  saves, and visible immediately under Channel
-                                  Partners in the admin panel. */}
+                                  Recorded against the partner when this booking
+                                  saves, and visible immediately under Channel
+                                  Partners in the admin panel. */}
                               {/* <div className={`rounded-xl p-4 border ${isDark ? "bg-[#9E217B]/5 border-[#9E217B]/25" : "bg-[#9E217B]/5 border-[#9E217B]/20"}`}>
-                                <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-                                  <div>
-                                    <p className={`text-xs font-bold ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>Channel Partner Commission</p>
-                                    {cpMaster && (
-                                      <p className={`text-[10px] mt-0.5 ${textMuted}`}>
-                                        From this lead: <strong className={textMain}>{cpMaster.name}</strong>
-                                        {cpMaster.phone ? ` · ${cpMaster.phone}` : ""}
-                                        {cpMaster.default_commission_rate !== null
-                                          ? ` · ${cpMaster.default_commission_rate}%`
-                                          : " · no rate set"}
-                                      </p>
-                                    )}
-                                  </div>
-                                  <div className="flex items-center gap-4">
-                                
-                                    <label className={`flex items-center gap-2 cursor-pointer text-[11px] ${textMuted}`}>
-                                      <input
-                                        type="checkbox"
-                                        checked={form.cp_commission_mode !== "none"}
-                                        onChange={e => set("cp_commission_mode", e.target.checked ? "auto" : "none")}
-                                        className="cursor-pointer"
-                                      />
-                                      Record commission
-                                    </label>
-                                    {form.cp_commission_mode !== "none" && (
-                                      <label className={`flex items-center gap-2 cursor-pointer text-[11px] ${textMuted}`}>
-                                        <input
-                                          type="checkbox"
-                                          checked={form.cp_commission_mode === "manual"}
-                                          onChange={e => set("cp_commission_mode", e.target.checked ? "manual" : "auto")}
-                                          className="cursor-pointer"
-                                        />
-                                        Enter manually
-                                      </label>
-                                    )}
-                                  </div>
-                                </div>
+                                <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                                  <div>
+                                    <p className={`text-xs font-bold ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>Channel Partner Commission</p>
+                                    {cpMaster && (
+                                      <p className={`text-[10px] mt-0.5 ${textMuted}`}>
+                                        From this lead: <strong className={textMain}>{cpMaster.name}</strong>
+                                        {cpMaster.phone ? ` · ${cpMaster.phone}` : ""}
+                                        {cpMaster.default_commission_rate !== null
+                                          ? ` · ${cpMaster.default_commission_rate}%`
+                                          : " · no rate set"}
+                                      </p>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-4">
+                                
+                                    <label className={`flex items-center gap-2 cursor-pointer text-[11px] ${textMuted}`}>
+                                      <input
+                                        type="checkbox"
+                                        checked={form.cp_commission_mode !== "none"}
+                                        onChange={e => set("cp_commission_mode", e.target.checked ? "auto" : "none")}
+                                        className="cursor-pointer"
+                                      />
+                                      Record commission
+                                    </label>
+                                    {form.cp_commission_mode !== "none" && (
+                                      <label className={`flex items-center gap-2 cursor-pointer text-[11px] ${textMuted}`}>
+                                        <input
+                                          type="checkbox"
+                                          checked={form.cp_commission_mode === "manual"}
+                                          onChange={e => set("cp_commission_mode", e.target.checked ? "manual" : "auto")}
+                                          className="cursor-pointer"
+                                        />
+                                        Enter manually
+                                      </label>
+                                    )}
+                                  </div>
+                                </div>
 
-                                {!cpId && (
-                                  <p className={`text-[11px] ${textMuted}`}>
-                                    This lead has no channel partner on record, so no commission can be recorded.
-                                    Set the CP on the lead first.
-                                  </p>
-                                )}
+                                {!cpId && (
+                                  <p className={`text-[11px] ${textMuted}`}>
+                                    This lead has no channel partner on record, so no commission can be recorded.
+                                    Set the CP on the lead first.
+                                  </p>
+                                )}
 
-                                {cpId && form.cp_commission_mode !== "manual" && (
-                                  <div>
-                                    <label className={labelCls}>Commission (auto-calculated)</label>
-                                    <input
-                                      readOnly
-                                      value={cpPreview ? formatCurrencyDecimal(cpPreview.gross) : ""}
-                                      placeholder={cpPreviewError ? "—" : "Enter agreement value above"}
-                                      className={`${inputCls} cursor-not-allowed opacity-90`}
-                                    />
-                                    <p className={`text-[10px] mt-1 ${textMuted}`}>
-                                      {cpPreview
-                                        ? `${formatCurrencyDecimal(cpPreview.agreementValue)} × ${cpPreview.commissionRatePercent}% (this partner's configured rate)`
-                                        : "Calculated from the agreement value and the partner's configured rate."}
-                                    </p>
-                                  </div>
-                                )}
+                                {cpId && form.cp_commission_mode !== "manual" && (
+                                  <div>
+                                    <label className={labelCls}>Commission (auto-calculated)</label>
+                                    <input
+                                      readOnly
+                                      value={cpPreview ? formatCurrencyDecimal(cpPreview.gross) : ""}
+                                      placeholder={cpPreviewError ? "—" : "Enter agreement value above"}
+                                      className={`${inputCls} cursor-not-allowed opacity-90`}
+                                    />
+                                    <p className={`text-[10px] mt-1 ${textMuted}`}>
+                                      {cpPreview
+                                        ? `${formatCurrencyDecimal(cpPreview.agreementValue)} × ${cpPreview.commissionRatePercent}% (this partner's configured rate)`
+                                        : "Calculated from the agreement value and the partner's configured rate."}
+                                    </p>
+                                  </div>
+                                )}
 
-                                {cpId && form.cp_commission_mode === "manual" && (
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    <div>
-                                      <label className={labelCls}>Commission Amount</label>
-                                      <input
-                                        value={form.cp_commission_amount}
-                                        onChange={e => set("cp_commission_amount", e.target.value)}
-                                        placeholder="e.g. 150000"
-                                        className={inputCls}
-                                      />
-                                    </div>
-                                    <div>
-                                      <label className={labelCls}>Reason</label>
-                                      <input
-                                        value={form.cp_commission_reason}
-                                        onChange={e => set("cp_commission_reason", e.target.value)}
-                                        placeholder="Why it differs from the standard rate"
-                                        className={inputCls}
-                                      />
-                                    </div>
-                                  </div>
-                                )}
+                                {cpId && form.cp_commission_mode === "manual" && (
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div>
+                                      <label className={labelCls}>Commission Amount</label>
+                                      <input
+                                        value={form.cp_commission_amount}
+                                        onChange={e => set("cp_commission_amount", e.target.value)}
+                                        placeholder="e.g. 150000"
+                                        className={inputCls}
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className={labelCls}>Reason</label>
+                                      <input
+                                        value={form.cp_commission_reason}
+                                        onChange={e => set("cp_commission_reason", e.target.value)}
+                                        placeholder="Why it differs from the standard rate"
+                                        className={inputCls}
+                                      />
+                                    </div>
+                                  </div>
+                                )}
 
-                                {cpPreviewError && (
-                                  <p className="text-[11px] mt-2 text-amber-500">{cpPreviewError}</p>
-                                )}
+                                {cpPreviewError && (
+                                  <p className="text-[11px] mt-2 text-amber-500">{cpPreviewError}</p>
+                                )}
 
 
-                                {cpId && cpPreviewCode === "CP_RATE_NOT_SET" && (
-                                  canSetRate ? (
-                                    <div className={`mt-3 pt-3 border-t ${divider}`}>
-                                      <label className={labelCls}>Set commission rate for {cpMaster?.name || "this partner"} (%)</label>
-                                      <div className="flex items-center gap-2">
-                                        <input
-                                          value={rateInput}
-                                          onChange={e => { setRateInput(e.target.value); setRateError(null); }}
-                                          placeholder="e.g. 2 or 1.75"
-                                          className={`${inputCls} flex-1`}
-                                        />
-                                        <button
-                                          type="button"
-                                          disabled={rateSaving || !rateInput.trim()}
-                                          onClick={saveCpRate}
-                                          className={`px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer whitespace-nowrap ${isDark ? "bg-[#9E217B] hover:bg-[#7a1960] text-white" : "bg-[#9E217B] hover:bg-[#7a1960] text-white"} ${rateSaving || !rateInput.trim() ? "opacity-50 cursor-not-allowed" : ""}`}
-                                        >
-                                          {rateSaving ? "Saving..." : "Save rate"}
-                                        </button>
-                                      </div>
-                                      {rateError
-                                        ? <p className="text-[10px] mt-1 text-red-500">{rateError}</p>
-                                        : <p className={`text-[10px] mt-1 ${textMuted}`}>
-                                            Saved against the partner, so it applies to their future bookings too.
-                                            Or tick &ldquo;Enter manually&rdquo; to just type an amount for this booking.
-                                          </p>}
-                                    </div>
-                                  ) : (
-                                    <p className={`text-[11px] mt-2 ${textMuted}`}>
-                                      Tick &ldquo;Enter manually&rdquo; to record an amount for this booking, or ask an
-                                      admin to set this partner&apos;s rate under Channel Partners.
-                                    </p>
-                                  )
-                                )}
+                                {cpId && cpPreviewCode === "CP_RATE_NOT_SET" && (
+                                  canSetRate ? (
+                                    <div className={`mt-3 pt-3 border-t ${divider}`}>
+                                      <label className={labelCls}>Set commission rate for {cpMaster?.name || "this partner"} (%)</label>
+                                      <div className="flex items-center gap-2">
+                                        <input
+                                          value={rateInput}
+                                          onChange={e => { setRateInput(e.target.value); setRateError(null); }}
+                                          placeholder="e.g. 2 or 1.75"
+                                          className={`${inputCls} flex-1`}
+                                        />
+                                        <button
+                                          type="button"
+                                          disabled={rateSaving || !rateInput.trim()}
+                                          onClick={saveCpRate}
+                                          className={`px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer whitespace-nowrap ${isDark ? "bg-[#9E217B] hover:bg-[#7a1960] text-white" : "bg-[#9E217B] hover:bg-[#7a1960] text-white"} ${rateSaving || !rateInput.trim() ? "opacity-50 cursor-not-allowed" : ""}`}
+                                        >
+                                          {rateSaving ? "Saving..." : "Save rate"}
+                                        </button>
+                                      </div>
+                                      {rateError
+                                        ? <p className="text-[10px] mt-1 text-red-500">{rateError}</p>
+                                        : <p className={`text-[10px] mt-1 ${textMuted}`}>
+                                            Saved against the partner, so it applies to their future bookings too.
+                                            Or tick &ldquo;Enter manually&rdquo; to just type an amount for this booking.
+                                          </p>}
+                                    </div>
+                                  ) : (
+                                    <p className={`text-[11px] mt-2 ${textMuted}`}>
+                                      Tick &ldquo;Enter manually&rdquo; to record an amount for this booking, or ask an
+                                      admin to set this partner&apos;s rate under Channel Partners.
+                                    </p>
+                                  )
+                                )}
 
-                                {cpId && form.cp_commission_mode === "none" && (
-                                  <p className={`text-[11px] mt-2 ${textMuted}`}>
-                                    Shown for reference only — this commission will <strong>not</strong> be recorded
-                                    against the partner. You can add it later from Channel Partners.
-                                  </p>
-                                )}
+                                {cpId && form.cp_commission_mode === "none" && (
+                                  <p className={`text-[11px] mt-2 ${textMuted}`}>
+                                    Shown for reference only — this commission will <strong>not</strong> be recorded
+                                    against the partner. You can add it later from Channel Partners.
+                                  </p>
+                                )}
 
-                                {cpPreview && (
-                                  <div className={`mt-3 pt-3 border-t text-[11px] space-y-1 ${divider}`}>
-                                    <div className="flex justify-between">
-                                      <span className={textMuted}>Gross commission</span>
-                                      <span className={`font-bold ${textMain}`}>{formatCurrencyDecimal(cpPreview.gross)}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                      <span className={textMuted}>TDS ({cpPreview.tdsPercent}%)</span>
-                                      <span className={textMain}>{formatCurrencyDecimal(cpPreview.tdsAmount)}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                      <span className={textMuted}>Net payable</span>
-                                      <span className={`font-bold ${textMain}`}>{formatCurrencyDecimal(cpPreview.netPayable)}</span>
-                                    </div>
-                                    {cpPreview.crossed && (
-                                      <p className="text-[10px] pt-1 text-amber-500">
-                                        This partner is over the ₹20,000 FY threshold, so {cpPreview.tdsPercent}% TDS applies.
-                                      </p>
-                                    )}
-                                  </div>
-                                )}
-                              </div> */}
+                                {cpPreview && (
+                                  <div className={`mt-3 pt-3 border-t text-[11px] space-y-1 ${divider}`}>
+                                    <div className="flex justify-between">
+                                      <span className={textMuted}>Gross commission</span>
+                                      <span className={`font-bold ${textMain}`}>{formatCurrencyDecimal(cpPreview.gross)}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span className={textMuted}>TDS ({cpPreview.tdsPercent}%)</span>
+                                      <span className={textMain}>{formatCurrencyDecimal(cpPreview.tdsAmount)}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span className={textMuted}>Net payable</span>
+                                      <span className={`font-bold ${textMain}`}>{formatCurrencyDecimal(cpPreview.netPayable)}</span>
+                                    </div>
+                                    {cpPreview.crossed && (
+                                      <p className="text-[10px] pt-1 text-amber-500">
+                                        This partner is over the ₹20,000 FY threshold, so {cpPreview.tdsPercent}% TDS applies.
+                                      </p>
+                                    )}
+                                  </div>
+                                )}
+                              </div> */}
                             </motion.div>
                           )}
 
@@ -3348,9 +3348,9 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
       )}
 
       {/* ── Loan & Deal editor, layered over the booking form ──────────────────
-          Rendered above this modal (z-210 vs 200) rather than replacing it, so
-          the booking form keeps its state — the whole point of editing loan
-          details from here instead of cancelling out to the lead screen. */}
+          Rendered above this modal (z-210 vs 200) rather than replacing it, so
+          the booking form keeps its state — the whole point of editing loan
+          details from here instead of cancelling out to the lead screen. */}
       {showLoanEditor && (
         <div
           key="loan-editor"

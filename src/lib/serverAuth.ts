@@ -103,7 +103,44 @@ export async function requireSession(): Promise<SessionGate> {
     return deny("This account is deactivated.", "ACCOUNT_DISABLED", 403);
   }
 
-  return { ok: true, session, userId: getSessionUserId(session) };
+  const userId = getSessionUserId(session);
+
+  // ── Sessions issued before the last password change are refused ──────────
+  //
+  // A password reset has to mean "everyone holding the old credentials is out",
+  // and the cookie is stateless — signed, self-expiring, with no server-side row
+  // to delete — so there is nothing to revoke by deletion. Instead the cookie's
+  // `iat` is compared against `users.password_changed_at`; see
+  // lib/passwordReset.ts for the comparison and why it is second-granular.
+  //
+  // This lives here rather than in getServerSession() or verifySession() for two
+  // reasons: this is already THE gate every API route goes through, and
+  // verifySession() also runs in middleware at the edge, where there is no
+  // database to ask. It costs one primary-key lookup per gated request.
+  //
+  // Known limit, stated rather than papered over: middleware still lets a page
+  // shell render for a revoked session, because it cannot reach the database.
+  // Every route that page calls returns 401, so the session is dead in practice
+  // — but the redirect happens on the first data fetch, not at the edge.
+  if (userId != null) {
+    try {
+      const { query } = await import("./db");
+      const rows = await query<{ password_changed_at: Date | null }>(
+        "SELECT password_changed_at FROM users WHERE id = $1 LIMIT 1",
+        [userId]
+      );
+      const { sessionPredatesPasswordChange } = await import("./passwordReset");
+      if (rows.length > 0 && sessionPredatesPasswordChange(session, rows[0].password_changed_at)) {
+        return deny("Your password was changed. Please sign in again.", "SESSION_REVOKED", 401);
+      }
+    } catch {
+      // A database hiccup must not lock everyone out of a working session; the
+      // signed cookie is still proof of a genuine login. Fail open here and let
+      // the route's own query surface the outage.
+    }
+  }
+
+  return { ok: true, session, userId };
 }
 
 /**

@@ -474,3 +474,12 @@ body {
     transform: none;
   }
 }
+
+/* Chrome autofill focus style fix */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+select:-webkit-autofill {
+  border-radius: inherit;
+  outline: none;
+}

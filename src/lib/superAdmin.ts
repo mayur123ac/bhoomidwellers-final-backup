@@ -69,8 +69,8 @@ export async function getSuperAdmin(): Promise<SuperAdminIdentity | null> {
   // The authoritative check. `organization_id IS NULL` is in the WHERE clause
   // rather than asserted afterwards so the row simply does not come back for a
   // tenant-scoped account.
-  const rows = await query<SuperAdminIdentity & { role: string }>(
-    `SELECT id, name, email, role
+  const rows = await query<SuperAdminIdentity & { password_changed_at: Date | null }>(
+    `SELECT id, name, email, role, password_changed_at
        FROM users
       WHERE id = $1
         AND organization_id IS NULL
@@ -81,7 +81,31 @@ export async function getSuperAdmin(): Promise<SuperAdminIdentity | null> {
     [userId]
   );
 
-  return rows[0] ?? null;
+  const row = rows[0];
+  if (!row) return null;
+
+  // ── Session revocation on password change ─────────────────────────────
+  // The session cookie is stateless — signed, self-expiring, with no server-side
+  // record to delete — so "log everyone out" cannot be done by dropping rows.
+  //
+  // It does not need to be. signSession() already stamps `iat`, and users
+  // already has `password_changed_at`. A session minted before the password was
+  // last changed is, by definition, one that was issued to whoever knew the old
+  // password, so it is refused here. Changing the password logs out every
+  // existing session, including the one that made the change.
+  //
+  // Compared at whole-second granularity because `iat` is whole seconds: a
+  // sub-second `password_changed_at` would otherwise be "newer" than the token
+  // issued moments later by the re-login, locking the account out of itself.
+  if (row.password_changed_at) {
+    const changedAtSeconds = Math.floor(new Date(row.password_changed_at).getTime() / 1000);
+    const issuedAt = Number((session as any).iat);
+    // A session with no `iat` predates the claim and cannot be shown to be
+    // current, so it is treated as stale rather than trusted.
+    if (!Number.isFinite(issuedAt) || issuedAt < changedAtSeconds) return null;
+  }
+
+  return { id: row.id, name: row.name, email: row.email, role: row.role };
 }
 
 export type SuperAdminGate =
