@@ -197,8 +197,8 @@ export async function GET(req: NextRequest) {
               employee_id,
               TO_CHAR(DATE(login_time), 'YYYY-MM-DD') AS day,
               attendance_status,
-              login_time,
-              logout_time
+              login_time AT TIME ZONE 'Asia/Kolkata' AS login_time,
+              logout_time AT TIME ZONE 'Asia/Kolkata' AS logout_time
          FROM attendance_records
         WHERE organization_id = $3
           AND DATE(login_time) BETWEEN $1::date AND $2::date

@@ -25,7 +25,7 @@ export default function AttendanceView({
   const [selectedDate, setSelectedDate] = useState<string>(
     () => new Date().toISOString().split("T")[0]
   );
-  
+
   const {
     markAttendanceOptimistic,
     refreshAttendance,
@@ -389,7 +389,7 @@ export default function AttendanceView({
           {
             label: "First Login",
             value: firstLogin
-              ? new Date(firstLogin).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
+              ? new Date(firstLogin).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" })
               : "—",
             color: t.text,
             glow: t.statGlow1,
@@ -547,6 +547,7 @@ export default function AttendanceView({
                           day: "2-digit",
                           month: "long",
                           year: "numeric",
+                          timeZone: "Asia/Kolkata",
                         })}
                       </td>
 
@@ -556,6 +557,7 @@ export default function AttendanceView({
                           hour: "2-digit",
                           minute: "2-digit",
                           second: "2-digit",
+                          timeZone: "Asia/Kolkata",
                         })}
                       </td>
 
@@ -575,6 +577,7 @@ export default function AttendanceView({
                               hour: "2-digit",
                               minute: "2-digit",
                               second: "2-digit",
+                              timeZone: "Asia/Kolkata",
                             })
                             : "N/A"}
                       </td>
@@ -602,7 +605,7 @@ export default function AttendanceView({
                       <td className={`px-4 py-3 border-b ${t.tableBorder}`}>
                         {isAlreadyMarked ? (
                           <span className="flex items-center gap-1.5 text-green-500 font-black text-xs">
-                            <FaCheckCircle className="text-base" /> Present
+                            <FaCheckCircle className="text-base" /> Logged In
                           </span>
                         ) : (
                           <AttendanceCheckbox
@@ -661,7 +664,7 @@ function AttendanceCheckbox({
         >
           {checked && <FaCheck className="text-white text-[8px]" />}
         </div>
-        <span className={`text-[11px] font-semibold ${t.textMuted}`}>Present</span>
+        <span className={`text-[11px] font-semibold ${t.textMuted}`}>Logged In</span>
       </label>
 
       {checked && (

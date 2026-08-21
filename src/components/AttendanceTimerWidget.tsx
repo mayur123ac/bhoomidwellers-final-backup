@@ -138,6 +138,7 @@ export default function AttendanceTimerWidget() {
           {displayLoginTime.toLocaleTimeString([], {
             hour: "2-digit",
             minute: "2-digit",
+            timeZone: "Asia/Kolkata",
           })}
         </span>
       </div>

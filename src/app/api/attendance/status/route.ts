@@ -31,7 +31,7 @@ export async function GET() {
                 ar.attendance_status
             FROM (SELECT 1) AS _
             LEFT JOIN LATERAL (
-                SELECT id, login_time, attendance_status
+                SELECT id, login_time AT TIME ZONE 'Asia/Kolkata' AS login_time, attendance_status
                 FROM attendance_records
                 WHERE employee_id = $1 AND organization_id = $2
                   AND DATE(login_time) = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date

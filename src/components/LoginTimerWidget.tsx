@@ -20,7 +20,7 @@ function fmt(sec: number) {
 function fmtTime(iso: string) {
   try {
     return new Date(iso).toLocaleTimeString("en-IN", {
-      hour: "2-digit", minute: "2-digit", hour12: true
+      hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "Asia/Kolkata"
     });
   } catch { return "--:--"; }
 }

@@ -26,7 +26,7 @@ export default function AttendanceBadge({ onNavigate }: { onNavigate?: () => voi
   if (isLoading) return null;
 
   const markedAt = timeIn
-    ? new Date(timeIn).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })
+    ? new Date(timeIn).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" })
     : "";
 
   if (!isMarkedPresent) {
@@ -61,7 +61,7 @@ export default function AttendanceBadge({ onNavigate }: { onNavigate?: () => voi
       >
         <span className="w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0" />
         <span className="hidden sm:inline text-xs font-semibold whitespace-nowrap">
-          Mark Attendance
+          Mark Login
         </span>
       </button>
     );
@@ -74,7 +74,7 @@ export default function AttendanceBadge({ onNavigate }: { onNavigate?: () => voi
     >
       <FaCheckCircle className="text-emerald-500 w-3.5 h-3.5 flex-shrink-0" />
       <span className="hidden sm:inline text-xs font-semibold whitespace-nowrap">
-        Present{markedAt ? ` · ${markedAt}` : ""}
+        Logged In{markedAt ? ` · ${markedAt}` : ""}
       </span>
     </div>
   );

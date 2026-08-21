@@ -4,10 +4,10 @@ import { resolveLatestBookingId, seedPddChecklist } from "@/lib/pdd";
 import { getServerSession } from "@/lib/serverAuth";
 import { getOrganizationId } from "@/lib/tenantContext";
 import {
-  buildFinancialSnapshot,
-  BookingNotFoundError,
-  NoActiveBookingForLeadError,
-  fmtINR,
+    buildFinancialSnapshot,
+    BookingNotFoundError,
+    NoActiveBookingForLeadError,
+    fmtINR,
 } from "@/lib/buildFinancialSnapshot";
 import { computeFinancialObligation } from "@/lib/financialObligationEngine";
 
@@ -24,7 +24,7 @@ const TRANCHE_ROLES = ["sales manager", "admin", "site head"];
 
 /** Matches middleware.ts: lowercase, trimmed, underscores normalised to spaces. */
 const normalize = (r: unknown) =>
-  String(r ?? "").trim().toLowerCase().replace(/_/g, " ");
+    String(r ?? "").trim().toLowerCase().replace(/_/g, " ");
 
 // ─── GET — list tranches for a lead ───────────────────────────────────────
 export async function GET(
@@ -136,65 +136,65 @@ export async function POST(
             );
             obligation = computeFinancialObligation(snapshot);
         } catch (e: any) {
-            if (e instanceof NoActiveBookingForLeadError) {
+            // A booking is optional during the loan/disbursement lifecycle.
+            // Do not block disbursement simply because the booking has not
+            // been created yet.
+            if (
+                e instanceof NoActiveBookingForLeadError ||
+                e instanceof BookingNotFoundError
+            ) {
+                obligation = null;
+            } else {
+                throw e;
+            }
+        }
+
+        if (obligation) {
+            // Gate 1 — the sanction itself breaches its ceiling. Correct that before
+            // any more bank money moves.
+            if (obligation.loanOverLimit) {
                 return NextResponse.json(
-                    { success: false, error: "NO_ACTIVE_BOOKING", message: e.message },
-                    { status: 404 }
+                    {
+                        success: false,
+                        error: "LOAN_EXCEEDS_CEILING",
+                        message: `Loan sanction of ₹${fmtINR(obligation.sanctionedAmount)} exceeds ceiling of ₹${fmtINR(obligation.maxAllowedLoan)}. Reduce sanction or increase customer contribution before adding disbursements.`,
+                        maxAllowedLoan: obligation.maxAllowedLoan,
+                        sanctionedAmount: obligation.sanctionedAmount,
+                        obligation,
+                    },
+                    { status: 422 }
                 );
             }
-            if (e instanceof BookingNotFoundError) {
+
+            // Gate 2 — no room left at all.
+            if (!obligation.canAddDisbursementTranche) {
                 return NextResponse.json(
-                    { success: false, error: "BOOKING_NOT_FOUND", message: e.message },
-                    { status: 404 }
+                    {
+                        success: false,
+                        error: "TRANCHE_EXCEEDS_LIMIT",
+                        message: `Total disbursed ₹${fmtINR(obligation.disbursedAmount)} already at or above limit. Max allowed: ₹${fmtINR(obligation.maxAllowedLoan)}`,
+                        maxAllowedLoan: obligation.maxAllowedLoan,
+                        disbursedAmount: obligation.disbursedAmount,
+                        obligation,
+                    },
+                    { status: 422 }
                 );
             }
-            throw e;
-        }
 
-        // Gate 1 — the sanction itself breaches its ceiling. Correct that before
-        // any more bank money moves.
-        if (obligation.loanOverLimit) {
-            return NextResponse.json(
-                {
-                    success: false,
-                    error: "LOAN_EXCEEDS_CEILING",
-                    message: `Loan sanction of ₹${fmtINR(obligation.sanctionedAmount)} exceeds ceiling of ₹${fmtINR(obligation.maxAllowedLoan)}. Reduce sanction or increase customer contribution before adding disbursements.`,
-                    maxAllowedLoan: obligation.maxAllowedLoan,
-                    sanctionedAmount: obligation.sanctionedAmount,
-                    obligation,
-                },
-                { status: 422 }
-            );
-        }
-
-        // Gate 2 — no room left at all.
-        if (!obligation.canAddDisbursementTranche) {
-            return NextResponse.json(
-                {
-                    success: false,
-                    error: "TRANCHE_EXCEEDS_LIMIT",
-                    message: `Total disbursed ₹${fmtINR(obligation.disbursedAmount)} already at or above limit. Max allowed: ₹${fmtINR(obligation.maxAllowedLoan)}`,
-                    maxAllowedLoan: obligation.maxAllowedLoan,
-                    disbursedAmount: obligation.disbursedAmount,
-                    obligation,
-                },
-                { status: 422 }
-            );
-        }
-
-        // Gate 3 — this particular tranche would push the total past the ceiling.
-        const newTotal = obligation.disbursedAmount + cleanAmount;
-        if (newTotal > obligation.maxAllowedLoan) {
-            return NextResponse.json(
-                {
-                    success: false,
-                    error: "TRANCHE_WOULD_EXCEED",
-                    message: `This tranche of ₹${fmtINR(cleanAmount)} would bring total disbursed to ₹${fmtINR(newTotal)}, exceeding ceiling of ₹${fmtINR(obligation.maxAllowedLoan)}.`,
-                    maxTrancheAllowed: obligation.maxAllowedLoan - obligation.disbursedAmount,
-                    obligation,
-                },
-                { status: 422 }
-            );
+            // Gate 3 — this particular tranche would push the total past the ceiling.
+            const newTotal = obligation.disbursedAmount + cleanAmount;
+            if (newTotal > obligation.maxAllowedLoan) {
+                return NextResponse.json(
+                    {
+                        success: false,
+                        error: "TRANCHE_WOULD_EXCEED",
+                        message: `This tranche of ₹${fmtINR(cleanAmount)} would bring total disbursed to ₹${fmtINR(newTotal)}, exceeding ceiling of ₹${fmtINR(obligation.maxAllowedLoan)}.`,
+                        maxTrancheAllowed: obligation.maxAllowedLoan - obligation.disbursedAmount,
+                        obligation,
+                    },
+                    { status: 422 }
+                );
+            }
         }
 
         // C3: resolve the booking this disbursement belongs to and record it

@@ -618,12 +618,12 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
                             )}
                             {visibleColumns.loginDate && (
                               <td className={`px-3 py-2.5 border-b ${theme.textMuted} ${theme.tableBorder}`}>
-                                {s.session_start ? new Date(s.session_start).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }) : '-'}
+                                {s.session_start ? new Date(s.session_start).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata' }) : '-'}
                               </td>
                             )}
                             {visibleColumns.loginTime && (
                               <td className={`px-3 py-2.5 border-b ${theme.textMuted} ${theme.tableBorder}`}>
-                                {s.session_start ? new Date(s.session_start).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '-'}
+                                {s.session_start ? new Date(s.session_start).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Kolkata' }) : '-'}
                               </td>
                             )}
                             {visibleColumns.punctuality && (
@@ -633,7 +633,7 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
                             )}
                             {visibleColumns.logoutTime && (
                               <td className={`px-3 py-2.5 border-b font-bold ${s.session_is_active ? 'text-green-500' : theme.textMuted} ${theme.tableBorder}`}>
-                                {s.session_start ? (s.session_is_active ? "User Active" : (s.session_end ? new Date(s.session_end).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : "N/A")) : "-"}
+                                {s.session_start ? (s.session_is_active ? "User Active" : (s.session_end ? new Date(s.session_end).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Kolkata' }) : "N/A")) : "-"}
                               </td>
                             )}
                             {visibleColumns.liveTimer && (
@@ -676,8 +676,8 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
                                       <div key={hIdx} className="text-[11px]">
                                         <p className={`font-bold ${theme.text}`}>• {new Date(h.session_start).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
                                         <div className="grid grid-cols-4 gap-4 mt-1 ml-3">
-                                          <div><span className={theme.textMuted}>Login:</span> <span className={theme.text}>{new Date(h.session_start).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span></div>
-                                          <div><span className={theme.textMuted}>Logout:</span> <span className={`font-bold ${h.is_active ? 'text-green-500' : theme.text}`}>{h.is_active ? "User Active" : (h.session_end ? new Date(h.session_end).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : "N/A")}</span></div>
+                                          <div><span className={theme.textMuted}>Login:</span> <span className={theme.text}>{new Date(h.session_start).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })}</span></div>
+                                          <div><span className={theme.textMuted}>Logout:</span> <span className={`font-bold ${h.is_active ? 'text-green-500' : theme.text}`}>{h.is_active ? "User Active" : (h.session_end ? new Date(h.session_end).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' }) : "N/A")}</span></div>
                                           <div><span className={theme.textMuted}>Duration:</span> <span className={`font-mono ${theme.text}`}>{getWorkingHours(h.session_start, h.session_end, h.is_active)}</span></div>
                                           <div><span className={theme.textMuted}>Device:</span> <span className={theme.text}>{h.device_info || '-'}</span></div>
                                           <div className="col-span-4"><span className={theme.textMuted}>IP:</span> <span className={theme.text}>{h.ip_address || '-'}</span></div>

@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
         // Check if attendance already exists today (IST), computed DB-side so it does
         // not depend on the app server's clock/timezone.
         const existing = await query(`
-            SELECT id, attendance_status, login_time FROM attendance_records
+            SELECT id, attendance_status, login_time AT TIME ZONE 'Asia/Kolkata' AS login_time FROM attendance_records
             WHERE employee_id = $1 AND organization_id = $2
               AND DATE(login_time) = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date
             ORDER BY id DESC
@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
         const result = await query(`
             INSERT INTO attendance_records (organization_id, employee_id, login_session_id, attendance_status, login_time)
             VALUES ($1, $2, $3, $4, COALESCE($5::timestamptz, CURRENT_TIMESTAMP) AT TIME ZONE 'Asia/Kolkata')
-            RETURNING id, attendance_status, login_time
+            RETURNING id, attendance_status, login_time AT TIME ZONE 'Asia/Kolkata' AS login_time
         `, [orgId, targetUserId, sessionIdToUse, 'Present', loginTime]);
 
         if (result.length === 0) {
