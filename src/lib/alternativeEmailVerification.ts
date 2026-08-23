@@ -352,7 +352,6 @@ export type SendOutcome =
       address: string;
       sessionId: string;
       delivered: boolean;
-      devOtp?: string;
       state: VerificationState;
     }
   | { ok: false; code: string; message: string; state: VerificationState };
@@ -458,9 +457,6 @@ export async function sendVerificationCode(params: {
     address,
     sessionId,
     delivered: mail.delivered,
-    // With no transport the flow stays testable end to end rather than being a
-    // dead end. Disappears the moment SMTP is configured.
-    devOtp: isMailConfigured() ? undefined : otp,
     state: await getVerificationState(userId),
   };
 }

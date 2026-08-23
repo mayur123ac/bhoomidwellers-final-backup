@@ -93,7 +93,6 @@ interface SendCodeResponse {
   address: string;
   sessionId: string;
   delivered: boolean;
-  devOtp?: string;
   state: VerificationState;
 }
 
@@ -724,7 +723,6 @@ function VerificationModal({
   const [sessionId, setSessionId] = useState<string | null>(initialState.sessionId);
   const [otp, setOtp] = useState("");
   const [busy, setBusy] = useState(false);
-  const [devOtp, setDevOtp] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [succeeded, setSucceeded] = useState(false);
 
@@ -740,7 +738,6 @@ function VerificationModal({
       });
       setState(res.state);
       setSessionId(res.sessionId);
-      setDevOtp(res.devOtp ?? null);
       setOtp("");
       setStep("code");
       toast(res.delivered ? "success" : "info", res.message);
@@ -900,13 +897,6 @@ function VerificationModal({
           {state.attemptsRemaining} attempt{state.attemptsRemaining === 1 ? "" : "s"} remaining on
           this code.
         </p>
-      )}
-
-      {devOtp && (
-        <InfoBanner tone="warning">
-          Mail delivery is not configured, so the code could not be sent. For testing, it is{" "}
-          <strong>{devOtp}</strong>. This disappears once SMTP is set up.
-        </InfoBanner>
       )}
 
       <div className="flex flex-wrap items-center gap-3">

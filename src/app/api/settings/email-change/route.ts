@@ -169,19 +169,19 @@ export async function POST(req: NextRequest) {
     userAgent,
   });
 
+  if (!mail.delivered) {
+    return NextResponse.json({
+      success: false,
+      message: "Failed to send OTP. Please check the email server configuration.",
+    }, { status: 500 });
+  }
+
   return NextResponse.json({
     success: true,
     sentTo: user.email,
     expiresInMinutes: OTP_TTL_MINUTES,
     resendAfterSeconds: RESEND_COOLDOWN_SECONDS,
-    mailDelivered: mail.delivered,
-    // No mail transport is configured (see lib/email/config.ts), so the code would be
-    // unreachable and the flow untestable. It is returned only in that case, and
-    // the UI labels it plainly as a stand-in for the email. Once SMTP is
-    // configured isMailConfigured() flips and this field disappears.
-    devOtp: isMailConfigured() ? undefined : otp,
-    message: mail.delivered
-      ? "Check your email for OTP"
-      : "Email delivery is not configured on this server — use the code shown below.",
+    mailDelivered: true,
+    message: "OTP sent successfully.",
   });
 }

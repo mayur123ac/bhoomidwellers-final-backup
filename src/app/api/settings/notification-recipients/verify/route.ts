@@ -69,15 +69,23 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  if (!result.delivered) {
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Failed to send OTP. Please check the email server configuration.",
+        state: result.state,
+      },
+      { status: 500 }
+    );
+  }
+
   return NextResponse.json({
     success: true,
-    message: result.delivered
-      ? `A 6-digit code has been sent to ${result.address}.`
-      : "Mail delivery is not configured, so the code could not be sent. It is shown below for testing.",
+    message: `A 6-digit code has been sent to ${result.address}.`,
     address: result.address,
     sessionId: result.sessionId,
-    delivered: result.delivered,
-    devOtp: result.devOtp,
+    delivered: true,
     state: result.state,
   });
 }

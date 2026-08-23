@@ -295,7 +295,6 @@ function EmailChangeModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cooldown, setCooldown] = useState(0);
-  const [devOtp, setDevOtp] = useState<string | null>(null);
 
   // Reset every time the modal opens, so a previous half-finished attempt does
   // not leak into the next one.
@@ -306,7 +305,6 @@ function EmailChangeModal({
       setOtp("");
       setError(null);
       setCooldown(0);
-      setDevOtp(null);
     }
   }, [open]);
 
@@ -326,7 +324,6 @@ function EmailChangeModal({
       });
       setStep("otp");
       setCooldown(result.resendAfterSeconds ?? 60);
-      setDevOtp(result.devOtp ?? null);
       toast(result.mailDelivered ? "info" : "warning", result.message);
     } catch (err: any) {
       setError(err.message);
@@ -417,19 +414,6 @@ function EmailChangeModal({
           <Field label="6-digit code" error={error}>
             <OTPInput value={otp} onChange={setOtp} disabled={busy} />
           </Field>
-
-          {devOtp && (
-            <InfoBanner tone="warning">
-              This server has no email transport configured, so nothing was sent.
-              Your code is <strong>{devOtp}</strong>. Set
-              <code className="mx-1 rounded bg-black/5 px-1">SMTP_HOST</code>,
-              <code className="mx-1 rounded bg-black/5 px-1">SMTP_USER</code>,
-              <code className="mx-1 rounded bg-black/5 px-1">SMTP_PASSWORD</code> and
-              <code className="mx-1 rounded bg-black/5 px-1">MAIL_FROM_EMAIL</code> in
-              <code className="mx-1 rounded bg-black/5 px-1">.env.local</code> to deliver these by
-              email.
-            </InfoBanner>
-          )}
         </>
       )}
     </Modal>
