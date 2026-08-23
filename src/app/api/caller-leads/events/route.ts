@@ -1,57 +1,22 @@
 // app/api/caller-leads/events/route.ts
-import { NextRequest } from "next/server";
 import { requireSession } from "@/lib/serverAuth";
+import { getOrganizationId } from "@/lib/tenantContext";
+import { createCallerUpdateStream } from "@/lib/callerLeadEvents";
 
-const clients = new Set<ReadableStreamDefaultController>();
+export const dynamic = "force-dynamic";
 
-export function broadcastUpdate(data: object) {
-  const msg = `data: ${JSON.stringify(data)}\n\n`;
-  const dead: ReadableStreamDefaultController[] = [];
-  clients.forEach(ctrl => {
-    try { ctrl.enqueue(msg); }
-    catch { dead.push(ctrl); }
-  });
-  dead.forEach(c => clients.delete(c));
-}
-
-export async function GET(req: NextRequest) {
+/**
+ * The subscriber registry and broadcaster now live in lib/callerLeadEvents.ts.
+ * They used to be declared here and imported BY other route files, which meant
+ * one global, un-partitioned Set of controllers: every caller-lead change was
+ * pushed to every organization's open panel. See that module for the details.
+ */
+export async function GET() {
   // Gated before the stream opens. An SSE endpoint holds a connection and pushes
   // every caller-lead change to whoever is listening, so leaving it open meant a
   // live feed of lead activity to an anonymous subscriber.
   const gate = await requireSession();
   if (!gate.ok) return gate.response;
 
-  let controller: ReadableStreamDefaultController;
-  let heartbeatTimer: ReturnType<typeof setInterval>;
-
-  const stream = new ReadableStream({
-    start(ctrl) {
-      controller = ctrl;
-      clients.add(ctrl);
-      ctrl.enqueue(`data: ${JSON.stringify({ type: "connected", ts: Date.now() })}\n\n`);
-
-      // ✅ Heartbeat every 25s — prevents proxy/nginx from killing idle connections
-      heartbeatTimer = setInterval(() => {
-        try {
-          ctrl.enqueue(`: heartbeat\n\n`); // SSE comment, ignored by client
-        } catch {
-          clearInterval(heartbeatTimer);
-          clients.delete(ctrl);
-        }
-      }, 25_000);
-    },
-    cancel() {
-      clearInterval(heartbeatTimer); // ✅ Clean up timer when client disconnects
-      clients.delete(controller);
-    },
-  });
-
-  return new Response(stream, {
-    headers: {
-      "Content-Type":      "text/event-stream",
-      "Cache-Control":     "no-cache, no-transform",
-      "Connection":        "keep-alive",
-      "X-Accel-Buffering": "no",
-    },
-  });
+  return createCallerUpdateStream(await getOrganizationId());
 }

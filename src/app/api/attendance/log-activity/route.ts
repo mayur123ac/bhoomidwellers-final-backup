@@ -38,7 +38,7 @@ export async function POST(req: Request) {
     ]);
 
     // Broadcast live historical event to Admins and Site Heads
-    broadcastEvent({
+    broadcastEvent(orgId, {
       type: "ACTIVITY",
       userId,
       userName: auth.session.name,
@@ -82,7 +82,7 @@ export async function POST(req: Request) {
     ]);
 
     // Broadcast the snapshot state immediately for instant UI refresh
-    broadcastEvent({
+    broadcastEvent(orgId, {
       type: "SESSION_UPDATE",
       userId,
       current_module: module || "Dashboard",
@@ -103,7 +103,7 @@ export async function POST(req: Request) {
 
       const leadCount = parseInt(switchResult[0]?.lead_count || "0", 10);
       if (leadCount >= 20) {
-        broadcastEvent({
+        broadcastEvent(orgId, {
           type: "SMART_ALERT",
           alertType: "EXCESSIVE_LEAD_SWITCHING",
           userId,

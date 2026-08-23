@@ -24,7 +24,18 @@ export async function GET(
     const gate = await requireSession();
     if (!gate.ok) return gate.response;
 
-    const bookingRows = await query<any>(
+    // ── Two round trips, not five ────────────────────────────────────────────
+    // The first four reads only need the booking id, which is already in hand, so
+    // they go together; only the tranche lookup depends on a result (lead_id) and
+    // has to wait. Sequentially this was five round trips to Neon back to back —
+    // ~410 ms of waiting for ~2 ms of SQL.
+    //
+    // MT: the last four were keyed on booking_id alone. The 404 gate below made
+    // that safe in practice, but each now carries its own organization predicate
+    // rather than depending on a check somewhere else in the function.
+    const orgId = await getOrganizationId();
+    const [bookingRows, milestoneRows, tdsRows, breakdownRows] = await Promise.all([
+      query<any>(
       `SELECT
          b.id, b.lead_id, b.agreement_value::numeric AS agreement_value,
          COALESCE(b.gst_rate, 5) AS gst_rate, COALESCE(b.gst_amount, 0) AS gst_amount, COALESCE(b.gst_paid, 0) AS gst_paid, COALESCE(b.gst_status, 'Pending') AS gst_status,
@@ -48,46 +59,50 @@ export async function GET(
        -- MT-06: caller-supplied booking id. The organization predicate is on the
        -- driving table, so every LEFT JOIN below inherits the scope.
        WHERE b.id = $1 AND b.organization_id = $2`,
-      [Number(id), await getOrganizationId()]
-    );
+        [Number(id), orgId]
+      ),
+      query<any>(
+        `SELECT milestone_name, demand_amount, paid_amount, status
+         FROM booking_payment_milestones
+        WHERE booking_id = $1 AND organization_id = $2 ORDER BY milestone_order ASC`,
+        [Number(id), orgId]
+      ),
+      query<{ total: string }>(
+        `SELECT COALESCE(SUM(tds_amount), 0) AS total FROM booking_tds_records
+          WHERE booking_id = $1 AND organization_id = $2`,
+        [Number(id), orgId]
+      ),
+      query<any>(
+        `SELECT fl.transaction_type, fl.amount, fl.transaction_date
+         FROM financial_ledger fl
+         JOIN financial_accounts fa ON fa.id = fl.account_id AND fa.organization_id = fl.organization_id
+         WHERE fa.booking_id = $1
+           AND fl.organization_id = $2
+           AND fl.transaction_direction = 'CREDIT'
+           AND fl.status = 'Received'
+           AND fl.received_from = 'Customer'
+           AND fl.amount > 0
+         ORDER BY fl.transaction_date ASC NULLS LAST`,
+        [Number(id), orgId]
+      ),
+    ]);
+
     if (!bookingRows.length) {
       return NextResponse.json({ success: false, message: "Booking not found" }, { status: 404 });
     }
     const b = bookingRows[0];
 
-    const milestoneRows = await query<any>(
-      `SELECT milestone_name, demand_amount, paid_amount, status
-       FROM booking_payment_milestones WHERE booking_id = $1 ORDER BY milestone_order ASC`,
-      [Number(id)]
-    );
-
-    const tdsRows = await query<{ total: string }>(
-      `SELECT COALESCE(SUM(tds_amount), 0) AS total FROM booking_tds_records WHERE booking_id = $1`,
-      [Number(id)]
-    );
-
-    const breakdownRows = await query<any>(
-      `SELECT fl.transaction_type, fl.amount, fl.transaction_date
-       FROM financial_ledger fl
-       JOIN financial_accounts fa ON fa.id = fl.account_id
-       WHERE fa.booking_id = $1
-         AND fl.transaction_direction = 'CREDIT'
-         AND fl.status = 'Received'
-         AND fl.received_from = 'Customer'
-         AND fl.amount > 0
-       ORDER BY fl.transaction_date ASC NULLS LAST`,
-      [Number(id)]
-    );
-
     let tranches: any[] = [];
     if (b.lead_id) {
+      // Depends on b.lead_id, so it could not join the batch above.
       const trancheRows = await query<any>(
         `SELECT t.amount, t.receiving_date, t.status, pm.milestone_name
          FROM disbursement_tranches t
-         LEFT JOIN booking_payment_milestones pm ON pm.id = t.milestone_id
-         WHERE t.lead_id = $1
+         LEFT JOIN booking_payment_milestones pm
+                ON pm.id = t.milestone_id AND pm.organization_id = t.organization_id
+         WHERE t.lead_id = $1 AND t.organization_id = $2
          ORDER BY t.created_at ASC`,
-        [Number(b.lead_id)]
+        [Number(b.lead_id), orgId]
       );
       tranches = trancheRows.map((t, i) => ({
         tranche: i + 1,

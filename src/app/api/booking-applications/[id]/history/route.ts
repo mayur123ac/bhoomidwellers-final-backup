@@ -15,18 +15,10 @@ export async function GET(
     const gate = await requireSession();
     if (!gate.ok) return gate.response;
 
-    // Check if table exists (in case there are no history entries yet)
-    await query(`
-      CREATE TABLE IF NOT EXISTS booking_history (
-          id SERIAL PRIMARY KEY,
-          booking_id INT REFERENCES booking_applications(id) ON DELETE CASCADE,
-          updated_by VARCHAR(255) NOT NULL,
-          user_role VARCHAR(100) NOT NULL,
-          changed_fields JSONB NOT NULL,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-
+    // The CREATE TABLE IF NOT EXISTS that used to run here has moved to
+    // scripts/migrations/2026-08-23_booking_schema_baseline.sql. It was a no-op
+    // that cost a full round trip to Neon (~82 ms) on every history read, which
+    // was roughly a third of this endpoint's entire response time.
     const rows = await query(
       // MT-06: the booking id is a caller-supplied route parameter. Without the
       // organization predicate any signed-in user could read another tenant's

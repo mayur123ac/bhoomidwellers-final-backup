@@ -519,7 +519,11 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
     setResolveError(null);
     (async () => {
       try {
-        const res = await fetch(`/api/booking-applications?lead_id=${lead.id}`, { credentials: "include" });
+        // view=summary: this only needs to know whether a live booking EXISTS and
+        // what its id and status are. The default (full) response carries the
+        // whole booking aggregate — every joined financial, loan and registration
+        // field plus two aggregate views — to answer a yes/no question.
+        const res = await fetch(`/api/booking-applications?lead_id=${lead.id}&view=summary`, { credentials: "include" });
         const json = await res.json();
         if (cancelled) return;
         // Cancelled bookings are not "the" booking — a lead whose booking was

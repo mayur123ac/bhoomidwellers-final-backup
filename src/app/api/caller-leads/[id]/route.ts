@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
 import { getOrganizationId } from "@/lib/tenantContext";
-import { broadcastUpdate } from "../events/route";
+import { broadcastCallerUpdate } from "@/lib/callerLeadEvents";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 // ── PATCH: Update lead fields ─────────────────────────────────────────────────
@@ -52,8 +52,9 @@ export async function PATCH(
       return NextResponse.json({ error: "Lead not found" }, { status: 404 });
     }
 
-    // 🔴 Broadcast lead update
-    broadcastUpdate({
+    // Broadcast to this tenant only: `changes` is the PATCH body, so it can
+    // carry name, contact_no, email, budget and location.
+    broadcastCallerUpdate(await getOrganizationId(), {
       type: "lead_updated",
       leadId: parseInt(id, 10),
       changes: body,
@@ -103,8 +104,7 @@ export async function DELETE(
       }
     });
 
-    // 🔴 Broadcast deletion
-    broadcastUpdate({ type: "lead_deleted", leadId, ts: Date.now() });
+    broadcastCallerUpdate(await getOrganizationId(), { type: "lead_deleted", leadId, ts: Date.now() });
 
     return NextResponse.json({ success: true, deletedId: leadId });
   } catch (err: any) {

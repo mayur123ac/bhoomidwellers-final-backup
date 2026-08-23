@@ -56,6 +56,15 @@ import { CRMContextManager } from "@/lib/admin-ai/contextManager";
 import UserAvatar from "@/components/UserAvatar";
 import HeaderClock from "@/components/HeaderClock";
 import { APP_HEADER_HEIGHT, APP_HEADER_PADDING, AppLogo } from "@/components/AppHeader";
+// The notification queue. Built and organization-scoped on the server — see
+// lib/notifications/feed.ts for why it is no longer derived in this file.
+import {
+  useNotificationFeed,
+  openNotificationLead,
+  type CrmNotification,
+} from "@/lib/hooks/useNotificationFeed";
+import NotificationPopover from "@/components/notifications/NotificationPopover";
+import NotificationCenterView from "@/components/notifications/NotificationCenterView";
 
 const RevenueIntelligenceView = dynamic(() => import("./RevenueIntelligenceView"), { ssr: false });
 const GeoAnalyticsView = dynamic(() => import("./GeoAnalyticsView"), { ssr: false });
@@ -539,8 +548,15 @@ function AdminAtlasDashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [activeView, setActiveView] = useState("dashboard");
-  // Deep-link target from the Inventory drawer → opens this lead's booking in the Sales view.
-  const [invOpenLeadId, setInvOpenLeadId] = useState<number | null>(null);
+  // Deep-link target for the Sales view. Two callers want different things once
+  // the lead is open: the Inventory drawer wants its booking, a notification
+  // wants the Lead Detail panel. `openBooking` is what tells them apart — this
+  // used to be a bare lead id and every jump forced the booking view.
+  const [invOpenLeadId, setInvOpenLeadId] =
+    useState<{ id: number; openBooking?: boolean } | null>(null);
+  /** Which tab the Notification Center opens on, set by the footer that sent us there. */
+  const [notificationFilter, setNotificationFilter] =
+    useState<"all" | "follow_up" | "site_visit" | "new_lead">("all");
   const [invLinkError, setInvLinkError] = useState<string | null>(null);
 
   // Inventory booking chips carry only a booking id, but every open-lead path in
@@ -552,7 +568,7 @@ function AdminAtlasDashboardContent() {
       const json = await res.json();
       const leadId = json?.success ? json?.data?.lead_id : null;
       if (!leadId) throw new Error(json?.message || "No lead linked to this booking");
-      setInvOpenLeadId(Number(leadId));
+      setInvOpenLeadId({ id: Number(leadId), openBooking: true });
       setActiveView("sales");
     } catch (err: any) {
       console.error("[inventory→booking deep-link]", err);
@@ -569,7 +585,9 @@ function AdminAtlasDashboardContent() {
   }, [searchParams]);
 
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
-  const [dismissedNotifIds, setDismissedNotifIds] = useState<Set<string>>(new Set());
+  // Dismissals moved into useNotificationFeed, keyed by notification id so a
+  // lead that raises both a New Lead and a Site Visit reminder can have one
+  // dismissed without silencing the other.
   const [currentTime, setCurrentTime] = useState(new Date());
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -595,7 +613,10 @@ function AdminAtlasDashboardContent() {
   // change anywhere repaints everywhere without a reload.
   const { isDark, toggleTheme } = useCrmTheme();
 
-  type CrmNotif = { id: string; line1: string; line2: string; type: "lead" | "visit" };
+  // `leadId` is what makes a toast clickable: it is the lead the notification is
+  // about, carried through from the server feed so the toast can open the same
+  // Lead Detail panel the dropdown row does.
+  type CrmNotif = { id: string; line1: string; line2: string; type: "lead" | "visit"; leadId?: number };
 
   const [notifQueue, setNotifQueue] = useState<CrmNotif[]>([]);
   const [activeNotif, setActiveNotif] = useState<CrmNotif | null>(null);
@@ -615,66 +636,59 @@ function AdminAtlasDashboardContent() {
     return { name: "System", role: "Admin" };
   };
 
-  // ── Permanent History List for the Dropdown ──
-  // ── Permanent History List for the Dropdown ──
-  const notificationHistory = useMemo(() => {
-    const history: (CrmNotif & { rawDate: number })[] = [];
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+  // ── The notification queue ─────────────────────────────────────────────────
+  // Built by the server, scoped to this session's organization in SQL. This
+  // replaces a useMemo that re-derived the New Lead and Site Visit rules in the
+  // browser from a full download of every lead — the same three rules three
+  // other files also implemented, each with its own copy of the tenant
+  // assumption. See lib/notifications/feed.ts.
+  //
+  // `notificationHistory` keeps its name so the popover below reads the same,
+  // but it is now the server's list: New Leads and Site Visits, newest first.
+  const notifications = useNotificationFeed();
+  const notificationHistory = useMemo(
+    () =>
+      [...notifications.newLeads, ...notifications.siteVisits].sort(
+        (a, b) => new Date(b.at ?? 0).getTime() - new Date(a.at ?? 0).getTime()
+      ),
+    [notifications.newLeads, notifications.siteVisits]
+  );
 
-    allLeads.forEach((lead: any) => {
-      // 1. Add Leads (1 Day Expiration)
-      const createdDate = new Date(lead.created_at || 0);
-      createdDate.setHours(0, 0, 0, 0);
-      const createdDiffDays = (today.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24);
+  // The shared notification components take their classes as props: this page
+  // and /dashboard/sales each build their own theme object, and neither should
+  // have to know about the other's token names.
+  const notifPopoverTheme = useMemo(
+    () => ({
+      text: theme.text,
+      textMuted: theme.textMuted,
+      textFaint: theme.textMuted,
+      border: theme.tableBorder,
+      itemHover: isDark ? "hover:bg-white/5" : "hover:bg-black/5",
+      footer: isDark
+        ? "text-[#d946a8] hover:bg-[#9E217B]/10"
+        : "text-[#9E217B] hover:bg-[#9E217B]/10",
+    }),
+    [theme, isDark]
+  );
 
-      if (createdDiffDays <= 1) {
-        const formattedId = String(lead.id).padStart(3, '0');
-        const creatorInfo = getCreatorInfo(lead);
-
-        history.push({
-          id: `hist_lead_${lead.id}`,
-          line1: `New Lead · ${formattedId} - ${lead.name}`,
-          line2: `${creatorInfo.name} (${creatorInfo.role})`,
-          type: "lead",
-          rawDate: new Date(lead.created_at || 0).getTime(),
-        });
-      }
-
-      // 2. Add Site Visits (Visible up to 3 days before, expires 2 days after)
-      if (lead.mongoVisitDate) {
-        const visitDateObj = new Date(lead.mongoVisitDate);
-        visitDateObj.setHours(0, 0, 0, 0);
-        const diffDays = (visitDateObj.getTime() - today.getTime()) / (1000 * 60 * 60 * 24);
-
-        if (diffDays >= -3 && diffDays <= 2) {
-          const visitDate = new Date(lead.mongoVisitDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
-
-          // 👇 FIXED: Determine Accurate Role for Assignee
-          const assigneeName = lead.assigned_to || lead.assigned_receptionist || "Unassigned";
-          let role = "Sales Manager";
-          if (siteHeads.some((sh: any) => sh.name === assigneeName)) {
-            role = "Site Head";
-          } else if (receptionists.some((r: any) => r.name === assigneeName)) {
-            role = "Receptionist";
-          }
-
-          history.push({
-            id: `hist_visit_${lead.id}_${lead.mongoVisitDate}`,
-            line1: `Site Visit · ${visitDate}`,
-            line2: `${assigneeName} (${role}) - ${lead.name}`,
-            type: "visit",
-            rawDate: new Date(lead.mongoVisitDate).getTime(),
-          });
-        }
-
-      }
-    });
-    return history
-      .sort((a, b) => b.rawDate - a.rawDate)
-      .slice(0, 20)
-      .filter(n => !dismissedNotifIds.has(n.id)); // add this line
-  }, [allLeads, siteHeads, receptionists, dismissedNotifIds]); // Added receptionists here
+  const notifCenterTheme = useMemo(
+    () => ({
+      text: theme.text,
+      textMuted: theme.textMuted,
+      textFaint: theme.textMuted,
+      border: theme.tableBorder,
+      card: theme.dropdown,
+      cardGlass: theme.dropdownGlass,
+      itemHover: isDark ? "hover:bg-white/5" : "hover:bg-black/5",
+      chipActive: isDark
+        ? "bg-[#9E217B]/20 border-[#9E217B]/50 text-[#d946a8]"
+        : "bg-[#9E217B]/10 border-[#9E217B]/40 text-[#9E217B]",
+      chipIdle: isDark
+        ? "border-[#333] text-gray-400 hover:border-[#9E217B]/40"
+        : "border-[#E5E7EB] text-[#475569] hover:border-[#9E217B]/40",
+    }),
+    [theme, isDark]
+  );
   // ── Load User & Fetch Live Password ──
   useEffect(() => {
     const cleanupBackGuard = installLoggedOutBackGuard(() => router.replace("/"));
@@ -716,82 +730,50 @@ function AdminAtlasDashboardContent() {
   }, [router]);
 
   // ── Toast Notification Queue Populator ──
-  // ── Toast Notification Queue Populator ──
+  //
+  // Fed from the same server-built queue as the dropdown, so a toast and the
+  // list behind it can no longer disagree about what arrived.
+  //
+  // The "already shown" set is namespaced by organization. It used to be one
+  // flat `crm_shown_notif_ids` key: sign out of Bhoomi, sign in as Viraj on the
+  // same machine, and Viraj's genuinely-new leads were silently suppressed
+  // because Bhoomi's session had already used those lead ids. Ids are global
+  // integers, so the collision was routine, not a corner case.
   useEffect(() => {
-    if (!allLeads || allLeads.length === 0) return;
+    if (!notifications.organizationId) return;
+    if (notificationHistory.length === 0) return;
 
+    const storageKey = `crm_shown_notif_ids:${notifications.organizationId}`;
     let storedIds: string[] = [];
     try {
-      const item = localStorage.getItem("crm_shown_notif_ids");
+      const item = localStorage.getItem(storageKey);
       storedIds = item ? JSON.parse(item) : [];
       if (!Array.isArray(storedIds)) storedIds = [];
-    } catch (e) { storedIds = []; }
+    } catch { storedIds = []; }
 
     const seenSet = new Set(storedIds);
     const fresh: CrmNotif[] = [];
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
 
-    allLeads.forEach((lead: any) => {
-      // Notification 1: New Lead (1 Day Expiration)
-      const leadNotifId = `lead_${lead.id}`;
-      if (!seenSet.has(leadNotifId)) {
-        const createdDate = new Date(lead.created_at || 0);
-        createdDate.setHours(0, 0, 0, 0);
-        const createdDiffDays = (today.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24);
-
-        if (createdDiffDays <= 1) {
-          const formattedId = String(lead.id).padStart(3, '0');
-          const creatorInfo = getCreatorInfo(lead);
-
-          fresh.push({
-            id: leadNotifId,
-            line1: `New Lead · ${formattedId} - ${lead.name}`,
-            line2: `${creatorInfo.name} (${creatorInfo.role})`,
-            type: "lead"
-          });
-          seenSet.add(leadNotifId);
-        }
-      }
-
-      // Notification 2: Site Visit
-      const visitNotifId = `visit_${lead.id}_${lead.mongoVisitDate}`;
-      if (!seenSet.has(visitNotifId) && lead.mongoVisitDate) {
-        const visitDateObj = new Date(lead.mongoVisitDate);
-        visitDateObj.setHours(0, 0, 0, 0);
-        const diffDays = (visitDateObj.getTime() - today.getTime()) / (1000 * 60 * 60 * 24);
-
-        if (diffDays >= -3 && diffDays <= 2) {
-          const visitDate = new Date(lead.mongoVisitDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
-
-          // 👇 FIXED: Determine Accurate Role
-          const assigneeName = lead.assigned_to || lead.assigned_receptionist || "Unassigned";
-          let role = "Sales Manager";
-          if (siteHeads.some((sh: any) => sh.name === assigneeName)) {
-            role = "Site Head";
-          } else if (receptionists.some((r: any) => r.name === assigneeName)) {
-            role = "Receptionist";
-          }
-
-          fresh.push({
-            id: visitNotifId,
-            line1: `Site Visit · ${visitDate}`,
-            line2: `${assigneeName} (${role}) - ${lead.name}`,
-            type: "visit"
-          });
-          seenSet.add(visitNotifId);
-        }
-      }
-    });
+    for (const n of notificationHistory) {
+      if (seenSet.has(n.id)) continue;
+      fresh.push({
+        id: n.id,
+        line1: n.title,
+        line2: n.subtitle,
+        type: n.kind === "site_visit" ? "visit" : "lead",
+        leadId: n.leadId,
+      });
+      seenSet.add(n.id);
+    }
 
     if (fresh.length > 0) {
       setNotifQueue(prev => [...prev, ...fresh]);
       setNotifCount(c => c + fresh.length);
       try {
-        localStorage.setItem("crm_shown_notif_ids", JSON.stringify(Array.from(seenSet)));
-      } catch (e) { }
+        localStorage.setItem(storageKey, JSON.stringify(Array.from(seenSet)));
+      } catch { /* quota or private mode; the toast simply repeats */ }
     }
-  }, [allLeads, siteHeads, receptionists]); // Added receptionists here// Added receptionists here
+  }, [notificationHistory, notifications.organizationId]);
 
   // ── Trigger Popup Display (2 Seconds) ──
   useEffect(() => {
@@ -809,6 +791,34 @@ function AdminAtlasDashboardContent() {
   }, [activeNotif, notifQueue]);
 
   const handleLogout = () => { clearCrmSession(); router.replace("/"); };
+
+  /**
+   * Open a notification's lead in the Lead Detail panel.
+   *
+   * The server is asked first, every time. It re-reads the organization from
+   * the session and re-applies it, so a lead id that came from a stale tab, a
+   * hand-made request or another tenant resolves to nothing and the panel does
+   * not open. Only after that does the id go to AdminSalesView, which selects
+   * the lead from its own organization-scoped list.
+   *
+   * Note what this is NOT: it does not route to the generic dashboard, and it
+   * does not open a blank new-lead form. Both were the old behaviour — the
+   * dropdown row had no click handler at all, and the sales-page equivalent
+   * switched view without ever selecting a lead.
+   */
+  const openLeadFromNotification = useCallback(async (leadId?: number) => {
+    setActivePopup(null);
+    setActiveNotif(null);
+    if (!leadId) return;
+    const lead = await openNotificationLead(leadId);
+    if (!lead) {
+      console.warn("[notifications] lead is not available for this organization:", leadId);
+      return;
+    }
+    // openBooking:false — a notification wants the lead, not the booking form.
+    setInvOpenLeadId({ id: lead.id, openBooking: false });
+    setActiveView("sales");
+  }, []);
 
   const userRole = (user?.role || "").toLowerCase();
   const isAdmin = userRole === "admin";
@@ -1011,41 +1021,26 @@ function AdminAtlasDashboardContent() {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: -6, scale: 0.98 }}
                     transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-                    className={`absolute top-12 right-0 w-[320px] border rounded-xl shadow-2xl flex flex-col z-50 ${theme.dropdown}`} style={theme.dropdownGlass}
+                    className={`absolute top-12 right-0 w-[320px] border rounded-xl shadow-2xl flex flex-col z-50 overflow-hidden ${theme.dropdown}`} style={theme.dropdownGlass}
                   >
-                    <div className={`p-5 border-b flex justify-between items-center ${theme.tableBorder}`}>
-                      <h3 className={`font-bold text-sm flex items-center gap-2 ${theme.text}`}>
-                        <FaBell className="text-[#9E217B]" /> Recent Notifications
-                      </h3>
-                      <button onClick={() => setActivePopup(null)} className={`${theme.textMuted} hover:text-red-500`}><FaTimes className="text-xs" /></button>
-                    </div>
-                    <div className={`max-h-[360px] overflow-y-auto ${theme.scroll}`}>
-                      {notificationHistory.length === 0 ? (
-                        <p className={`p-6 text-center text-xs ${theme.textMuted}`}>No notifications yet.</p>
-                      ) : (
-                        notificationHistory.map((n) => (
-                          <div key={n.id} className={`p-5 border-b last:border-b-0 transition-colors flex items-start gap-3 ${isDark ? "hover:bg-white/5 border-[#333]" : "hover:bg-black/5 border-[#E5E7EB]"}`}>
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-white ${n.type === "visit" ? "bg-orange-500" : "bg-[#25D366]"}`}>
-                              {n.type === "visit" ? <FaCalendarAlt className="text-[12px]" /> : <FaBriefcase className="text-[12px]" />}
-                            </div>
-                            <div>
-                              <p className={`text-xs font-bold ${theme.text}`}>{n.line1}</p>
-                              <p className={`text-[10px] mt-1 ${theme.textMuted}`}>{n.line2}</p>
-                            </div>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setDismissedNotifIds(prev => new Set([...prev, n.id]));
-                              }}
-                              className={`absolute right-3 top-3 p-1.5 rounded-md opacity-0 group-hover:opacity-100 transition-all ${theme.textMuted} hover:bg-red-500/10 hover:text-red-500 cursor-pointer`}
-                              title="Delete Notification"
-                            >
-                              <FaTimes className="text-[10px]" />
-                            </button>
-                          </div>
-                        ))
-                      )}
-                    </div>
+                    {/* Three at most, newest first, and no internal scrollbar.
+                        Clicking a row opens that lead's detail panel; the footer
+                        opens the Notification Center with the whole queue. */}
+                    <NotificationPopover
+                      title="Recent Notifications"
+                      caption="New leads and upcoming site visits"
+                      items={notificationHistory}
+                      footerNoun="notifications"
+                      accent="green"
+                      theme={notifPopoverTheme}
+                      onOpenLead={(n) => openLeadFromNotification(n.leadId)}
+                      onDismiss={(n) => notifications.dismiss(n.id)}
+                      onSeeAll={() => {
+                        setActivePopup(null);
+                        setNotificationFilter("all");
+                        setActiveView("notification_center");
+                      }}
+                    />
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -1094,7 +1089,17 @@ function AdminAtlasDashboardContent() {
             {/* 👇 NEW: UPDATED POPUP TOAST WITH DYNAMIC ICONS 👇 */}
             {activeNotif && (
               <div className="absolute top-[68px] right-4 z-[999] animate-fadeIn">
-                <div className={`flex items-start gap-3 px-4 py-3 sm:py-4 rounded-xl shadow-2xl border min-w-[280px] max-w-[360px]
+                <div
+                  role={activeNotif.leadId ? "button" : undefined}
+                  tabIndex={activeNotif.leadId ? 0 : undefined}
+                  // The toast opens the same Lead Detail panel as its dropdown
+                  // row. It carries the lead id from the server feed, so this is
+                  // the same authorized open — not a guess from the text.
+                  onClick={activeNotif.leadId ? () => openLeadFromNotification(activeNotif.leadId) : undefined}
+                  onKeyDown={activeNotif.leadId ? (e) => {
+                    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openLeadFromNotification(activeNotif.leadId); }
+                  } : undefined}
+                  className={`flex items-start gap-3 px-4 py-3 sm:py-4 rounded-xl shadow-2xl border min-w-[280px] max-w-[360px] ${activeNotif.leadId ? "cursor-pointer" : ""}
                   ${isDark ? "bg-[#1a1a1a] border-[#333]" : "bg-white border-[#E5E7EB]"}`}
                   style={{ boxShadow: "0 8px 32px rgba(0,0,0,0.18)" }}>
 
@@ -1111,7 +1116,7 @@ function AdminAtlasDashboardContent() {
                     <p className={`text-xs font-bold truncate ${isDark ? "text-white" : "text-[#1A1A1A]"}`}>{activeNotif.line1}</p>
                     <p className={`text-[11px] mt-0.5 truncate ${isDark ? "text-gray-400" : "text-[#6B7280]"}`}>{activeNotif.line2}</p>
                   </div>
-                  <button onClick={() => setActiveNotif(null)} className={`flex-shrink-0 mt-0.5 p-0.5 rounded cursor-pointer transition-colors ${isDark ? "text-gray-500 hover:text-gray-300" : "text-gray-400 hover:text-gray-600"}`}>
+                  <button onClick={(e) => { e.stopPropagation(); setActiveNotif(null); }} className={`flex-shrink-0 mt-0.5 p-0.5 rounded cursor-pointer transition-colors ${isDark ? "text-gray-500 hover:text-gray-300" : "text-gray-400 hover:text-gray-600"}`}>
                     <FaTimes className="text-[10px]" />
                   </button>
                 </div>
@@ -1142,7 +1147,7 @@ function AdminAtlasDashboardContent() {
           {activeView === "inventory" && (
             <div className="flex flex-col h-full overflow-hidden p-1">
               <InventoryManagementView user={user} isDark={isDark} t={theme}
-                onOpenLead={(leadId: number) => { setInvOpenLeadId(leadId); setActiveView("sales"); }}
+                onOpenLead={(leadId: number) => { setInvOpenLeadId({ id: leadId, openBooking: true }); setActiveView("sales"); }}
                 onOpenBooking={openBookingFromInventory} />
             </div>
           )}
@@ -1208,6 +1213,29 @@ function AdminAtlasDashboardContent() {
             <div className="flex flex-col h-full overflow-hidden">
               <div className="p-5 md:p-8 overflow-y-auto">
                 <AttendanceView adminUser={user} isDark={isDark} t={theme} now={currentTime.getTime()} />
+              </div>
+            </div>
+          )}
+          {/* The Notification Center: the COMPLETE queue the bell caps at three.
+              The view id is "notification_center", not "notifications" — on this
+              page "notifications" is already the rail's WhatsApp Alerts button,
+              which navigates to /dashboard/employees?tab=notifications. Reusing
+              it here would make the footer navigate away instead of opening the
+              queue. (/dashboard/sales has no such clash and uses
+              activeView = "notifications" as specified.) */}
+          {activeView === "notification_center" && (
+            <div className="flex flex-col h-full overflow-hidden">
+              <div className="p-5 md:p-8 overflow-y-auto">
+                <NotificationCenterView
+                  newLeads={notifications.newLeads}
+                  siteVisits={notifications.siteVisits}
+                  followUps={notifications.followUps}
+                  isLoading={notifications.isLoading}
+                  theme={notifCenterTheme}
+                  initialFilter={notificationFilter}
+                  onOpenLead={(n) => openLeadFromNotification(n.leadId)}
+                  onDismiss={(n) => notifications.dismiss(n.id)}
+                />
               </div>
             </div>
           )}
@@ -3032,11 +3060,13 @@ function WhatsAppSendModal({
 // ============================================================================
 // Opens a lead's booking view when the Inventory drawer requests it (by lead id),
 // then clears the request. `open` receives the resolved lead object.
+// `openLeadId` is { id, openBooking }. Notifications pass openBooking:false —
+// they want the Lead Detail panel, not the booking view this was written for.
 function useInventoryDeepLink({ openLeadId, allLeads, onOpenLeadHandled, open }: any) {
   useEffect(() => {
     if (openLeadId == null || !Array.isArray(allLeads) || allLeads.length === 0) return;
-    const l = allLeads.find((x: any) => String(x.id) === String(openLeadId));
-    if (l) open(l);
+    const l = allLeads.find((x: any) => String(x.id) === String(openLeadId.id));
+    if (l) open(l, openLeadId.openBooking !== false);
     if (onOpenLeadHandled) onOpenLeadHandled();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openLeadId, allLeads]);
@@ -3048,7 +3078,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
   // Deep-link handler — await the fetch, only flip showBookingView once data is confirmed
   useInventoryDeepLink({
     openLeadId, allLeads, onOpenLeadHandled,
-    open: async (l: any) => {   // ← now async
+    open: async (l: any, openBooking: boolean) => {   // ← now async
       const mgr = managers.find((m: any) => m.name === l.assigned_to);
       if (mgr) setSelectedManager(mgr);
 
@@ -3056,6 +3086,9 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
       setSubView("detail");
       try { prefillSalesForm(l); } catch { }
 
+      // Only the Inventory path continues into the booking view. A notification
+      // has done what it came to do once the Lead Detail panel is open.
+      if (!openBooking) return;
       const hasBooking = await fetchBookingForLead(l.id);   // ← awaited now
       if (hasBooking) setShowBookingView(true);              // ← only set once data exists
     }

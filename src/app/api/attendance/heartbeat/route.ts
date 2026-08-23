@@ -96,7 +96,7 @@ export async function POST(req: Request) {
 
     const currentIdleSeconds = liveStateResult[0]?.idle_duration_seconds || 0;
     if (currentIdleSeconds > 2700) { // 45 minutes
-      broadcastEvent({
+      broadcastEvent(orgId, {
         type: "SMART_ALERT",
         alertType: "EXCESSIVE_IDLE",
         userId,
@@ -107,7 +107,7 @@ export async function POST(req: Request) {
     }
 
     // Broadcast to Admins so they see the live status instantly
-    broadcastEvent({
+    broadcastEvent(orgId, {
       type: "SESSION_UPDATE",
       userId,
       current_module,

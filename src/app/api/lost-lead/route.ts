@@ -12,7 +12,10 @@ import { requireSession, requireRoles } from "@/lib/serverAuth";
 // ── POST — Mark lead as lost ──────────────────
 export async function POST(req: Request) {
   try {
-    const gate = await requireRoles(["admin", "sales manager", "receptionist"]);
+    // Site Head included — same rule as /api/leads/lost, which this route is the
+    // older sibling of. Both are live; keeping the two gates in step is what
+    // stops "Mark as Lost" working from one screen and 403-ing from another.
+    const gate = await requireRoles(["admin", "sales manager", "site head", "receptionist"]);
     if (!gate.ok) return gate.response;
 
     const body = await req.json();
@@ -103,7 +106,10 @@ export async function POST(req: Request) {
 // ── PUT — Restore a lost lead ─────────────────
 export async function PUT(req: Request) {
   try {
-    const gate = await requireRoles(["admin", "sales manager", "receptionist"]);
+    // Site Head included — same rule as /api/leads/lost, which this route is the
+    // older sibling of. Both are live; keeping the two gates in step is what
+    // stops "Mark as Lost" working from one screen and 403-ing from another.
+    const gate = await requireRoles(["admin", "sales manager", "site head", "receptionist"]);
     if (!gate.ok) return gate.response;
 
     const body = await req.json();

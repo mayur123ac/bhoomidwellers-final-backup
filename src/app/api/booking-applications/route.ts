@@ -10,298 +10,214 @@ import { resolveGstRate, calcGstAmount } from "@/lib/gst";
 import { resolveStampDutyRate, resolveRegistrationFeeRate, calcStampDuty } from "@/lib/charges";
 // Single definition of the fully-joined booking shape, shared by GET, POST and
 // the PUT in [id]/route.ts — see lib/bookingQuery.ts for why.
-import { BOOKING_SELECT_SQL, fetchBookingById } from "@/lib/bookingQuery";
+import { BOOKING_SELECT_SQL, BOOKING_LIST_SQL, fetchBookingById } from "@/lib/bookingQuery";
 
 export const dynamic = "force-dynamic";
 
-// ─── Auto-create table ────────────────────────────────────────────────────────
-async function ensureTable() {
-  await query(`
-    CREATE TABLE IF NOT EXISTS booking_applications (
-      id                        SERIAL PRIMARY KEY,
-      booking_number            VARCHAR(30) UNIQUE,
-      lead_id                   INTEGER NOT NULL,
+// ─── Schema ──────────────────────────────────────────────────────────────────
+// ensureTable() used to live here and ran at the top of GET and POST: 9 CREATE
+// TABLE IF NOT EXISTS, 5 ALTER TABLE ... ADD COLUMN IF NOT EXISTS and 1 CREATE
+// OR REPLACE VIEW, sequentially, on every single booking request.
+//
+// All 15 were no-ops after the first deploy, and all 15 cost a full round trip
+// to Neon ap-southeast-1. Measured: 82 ms per round trip, 1,320 ms for the
+// sequence, against 0.4 ms of actual SQL execution for the booking query itself.
+// That was the 3-4 second booking load — not the joins, not the views.
+//
+// The ALTER TABLEs also took an ACCESS EXCLUSIVE lock on booking_applications
+// and the CREATE OR REPLACE VIEW one on customer_ledger_view, so concurrent
+// booking reads serialised behind schema changes that changed nothing.
+//
+// The DDL now lives in scripts/migrations/2026-08-23_booking_schema_baseline.sql.
+// Every object it creates was verified present in production before this was
+// deleted, so removal cannot break a running deployment; the migration is
+// idempotent and exists so the schema has a home outside the request path.
 
-      -- Primary Applicant
-      primary_name              TEXT,
-      primary_email             TEXT,
-      primary_mobile            TEXT,
-      primary_pan               TEXT,
-      primary_aadhaar           TEXT,
-      primary_aadhaar_front_url TEXT,
-      primary_aadhaar_back_url  TEXT,
-      primary_pan_url           TEXT,
-      primary_occupation        TEXT,
-      primary_nationality       TEXT DEFAULT 'Indian',
+/* ── Document staging ────────────────────────────────────────────────────────
+   A document's bytes and metadata, read out of the multipart body BEFORE any
+   transaction opens and uploaded to R2 only AFTER it commits.
 
-      -- Joint Applicant (Legacy fields kept for backward compatibility)
-      joint_name                TEXT,
-      joint_email               TEXT,
-      joint_mobile              TEXT,
-      joint_pan                 TEXT,
-      joint_occupation          TEXT,
-      joint_nationality         TEXT,
-
-      -- Dynamic Joint Applicants array
-      joint_applicants          JSONB DEFAULT '[]',
-
-      -- Residence
-      address                   TEXT,
-      pin                       TEXT,
-      state                     TEXT,
-      country                   TEXT DEFAULT 'India',
-
-      -- Unit
-      property_type             TEXT,
-      floor_number              TEXT,
-      flat_number               TEXT,
-      carpet_area               TEXT,
-      consideration_value       TEXT,
-      consideration_value_words TEXT,
-      parking_details           TEXT,
-
-      -- Payments (JSON array)
-      payment_details           JSONB DEFAULT '[]',
-
-      -- Witness
-      witness_name              TEXT,
-      witness_aadhaar           TEXT,
-
-      -- Booking Source
-      booking_source            TEXT DEFAULT 'Direct',
-      direct_source             TEXT,
-      channel_partner_name      TEXT,
-      channel_partner_contact   TEXT,
-
-      -- Unit Summary
-      unit_cost                 TEXT,
-      sdr                       TEXT,
-      gst                       TEXT,
-
-      -- Declaration
-      declaration_accepted      BOOLEAN DEFAULT false,
-      terms_accepted            BOOLEAN DEFAULT false,
-      consent_accepted          BOOLEAN DEFAULT false,
-
-      -- Signature (base64 or URL)
-      signature_data            TEXT,
-
-      -- Meta
-      application_date          DATE DEFAULT CURRENT_DATE,
-      booking_status            TEXT DEFAULT 'Pending',
-      created_by                TEXT,
-      created_role              TEXT,
-      created_at                TIMESTAMPTZ DEFAULT NOW(),
-      updated_at                TIMESTAMPTZ DEFAULT NOW()
-    );
-  `);
-
-  // Alter booking_applications for new fields
-  await query(`
-    ALTER TABLE booking_applications 
-    ADD COLUMN IF NOT EXISTS booking_date DATE,
-    ADD COLUMN IF NOT EXISTS agreement_value NUMERIC,
-    ADD COLUMN IF NOT EXISTS booking_amount NUMERIC,
-    ADD COLUMN IF NOT EXISTS booking_remarks TEXT,
-    ADD COLUMN IF NOT EXISTS internal_notes TEXT;
-  `);
-
-  await query(`
-    CREATE TABLE IF NOT EXISTS booking_financials (
-      id SERIAL PRIMARY KEY,
-      booking_id INTEGER REFERENCES booking_applications(id) ON DELETE CASCADE,
-      token_amount NUMERIC,
-      ocr_amount NUMERIC,
-      ocr_received_date DATE,
-      sdr_amount NUMERIC,
-      sdr_payment_date DATE,
-      cash_component NUMERIC,
-      cash_component_remarks TEXT,
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      updated_at TIMESTAMPTZ DEFAULT NOW()
-    );
-  `);
-
-  await query(`
-    ALTER TABLE booking_financials
-      ADD COLUMN IF NOT EXISTS ocr_payment_mode TEXT,
-      ADD COLUMN IF NOT EXISTS ocr_remarks TEXT,
-      ADD COLUMN IF NOT EXISTS sdr_status TEXT DEFAULT 'Pending',
-      ADD COLUMN IF NOT EXISTS sdr_remarks TEXT,
-      ADD COLUMN IF NOT EXISTS cash_component_date DATE;
-  `);
-
-  await query(`
-    CREATE TABLE IF NOT EXISTS booking_loan_details (
-      id SERIAL PRIMARY KEY,
-      booking_id INTEGER REFERENCES booking_applications(id) ON DELETE CASCADE,
-      loan_required BOOLEAN DEFAULT false,
-      bank_name TEXT,
-      loan_executive TEXT,
-      loan_amount NUMERIC,
-      sanction_amount NUMERIC,
-      sanction_date DATE,
-      loan_status TEXT DEFAULT 'Pending',
-      expected_disbursement_date DATE,
-      actual_disbursement_date DATE,
-      expected_disbursement_amount NUMERIC,
-      disbursement_amount NUMERIC,
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      updated_at TIMESTAMPTZ DEFAULT NOW()
-    );
-  `);
-
-  await query(`
-    ALTER TABLE booking_loan_details
-      ADD COLUMN IF NOT EXISTS loan_type TEXT,
-      ADD COLUMN IF NOT EXISTS loan_reference_no TEXT,
-      ADD COLUMN IF NOT EXISTS sanction_status TEXT DEFAULT 'Pending',
-      ADD COLUMN IF NOT EXISTS disbursement_status TEXT DEFAULT 'Pending';
-  `);
-
-  await query(`
-    CREATE TABLE IF NOT EXISTS booking_registration_details (
-      id SERIAL PRIMARY KEY,
-      booking_id INTEGER REFERENCES booking_applications(id) ON DELETE CASCADE,
-      expected_registration_date DATE,
-      actual_registration_date DATE,
-      registration_number TEXT,
-      registration_remarks TEXT,
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      updated_at TIMESTAMPTZ DEFAULT NOW()
-    );
-  `);
-
-  await query(`
-    ALTER TABLE booking_registration_details
-      ADD COLUMN IF NOT EXISTS registration_status TEXT DEFAULT 'Pending';
-  `);
-
-  // Stamp duty / registration fee RATES. Mirrors booking_applications.gst_rate:
-  // the rate is stored, the amount is derived from agreement_value × rate. The
-  // 5 / 1 defaults are the Maharashtra figures the old hardcoded auto-calc used,
-  // so backfilled rows keep their existing amounts.
-  // See scripts/migrations/2026-08-18_stamp_duty_registration_rates.sql.
-  await query(`
-    ALTER TABLE booking_registration_details
-      ADD COLUMN IF NOT EXISTS stamp_duty_rate NUMERIC DEFAULT 5,
-      ADD COLUMN IF NOT EXISTS registration_fee_rate NUMERIC DEFAULT 1;
-  `);
-
-  await query(`
-    CREATE TABLE IF NOT EXISTS booking_custom_charges (
-      id SERIAL PRIMARY KEY,
-      booking_id INTEGER REFERENCES booking_applications(id) ON DELETE CASCADE,
-      charge_name TEXT,
-      amount NUMERIC,
-      remarks TEXT,
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    );
-  `);
-
-  await query(`
-    CREATE TABLE IF NOT EXISTS booking_pipeline (
-      id SERIAL PRIMARY KEY,
-      booking_id INTEGER UNIQUE REFERENCES booking_applications(id) ON DELETE CASCADE,
-      current_stage TEXT DEFAULT 'Booking',
-      status TEXT DEFAULT 'Active',
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      updated_at TIMESTAMPTZ DEFAULT NOW()
-    );
-  `);
-
-  await query(`
-    CREATE TABLE IF NOT EXISTS booking_stage_history (
-      id SERIAL PRIMARY KEY,
-      booking_id INTEGER REFERENCES booking_applications(id) ON DELETE CASCADE,
-      stage_name TEXT,
-      employee_name TEXT,
-      remarks TEXT,
-      logged_at TIMESTAMPTZ DEFAULT NOW()
-    );
-  `);
-
-  await query(`
-    CREATE TABLE IF NOT EXISTS financial_accounts (
-      id SERIAL PRIMARY KEY,
-      booking_id INT UNIQUE REFERENCES booking_applications(id) ON DELETE CASCADE,
-      account_type VARCHAR(50) DEFAULT 'customer_receivable',
-      status VARCHAR(50) DEFAULT 'active',
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
-
-  await query(`
-    CREATE TABLE IF NOT EXISTS financial_ledger (
-      id SERIAL PRIMARY KEY,
-      account_id INT REFERENCES financial_accounts(id) ON DELETE CASCADE,
-      transaction_type VARCHAR(100),
-      transaction_direction VARCHAR(20),
-      amount NUMERIC,
-      transaction_date TIMESTAMP,
-      bank_name VARCHAR(255),
-      payment_mode VARCHAR(100),
-      reference_number VARCHAR(255),
-      status VARCHAR(50),
-      affects_revenue VARCHAR(10),
-      received_from VARCHAR(100),
-      transaction_source VARCHAR(100),
-      notes TEXT,
-      created_by VARCHAR(255),
-      updated_by VARCHAR(255),
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE (account_id, transaction_type, transaction_source)
-    );
-  `);
-
-  await query(`
-    CREATE OR REPLACE VIEW customer_ledger_view AS
-    SELECT 
-      fa.booking_id,
-      fa.id as account_id,
-      ba.agreement_value::numeric AS agreement_value,
-      COALESCE(SUM(fl.amount) FILTER (WHERE fl.transaction_direction = 'CREDIT' AND fl.status = 'Received'), 0) AS gross_collection,
-      COALESCE(SUM(fl.amount) FILTER (WHERE fl.transaction_direction = 'CREDIT' AND fl.status = 'Received' AND fl.affects_revenue = 'YES'), 0) AS developer_revenue,
-      COALESCE(SUM(fl.amount) FILTER (WHERE fl.transaction_direction = 'CREDIT' AND fl.status = 'Received' AND fl.affects_revenue = 'NO'), 0) AS government_charges,
-      COALESCE(SUM(fl.amount) FILTER (WHERE fl.transaction_direction = 'DEBIT' AND fl.transaction_type = 'refund' AND fl.status = 'Refunded'), 0) AS refunds,
-      (
-        COALESCE(SUM(fl.amount) FILTER (WHERE fl.transaction_direction = 'CREDIT' AND fl.status = 'Received'), 0) 
-        - 
-        COALESCE(SUM(fl.amount) FILTER (WHERE fl.transaction_direction = 'DEBIT' AND fl.transaction_type = 'refund' AND fl.status = 'Refunded'), 0)
-      ) AS net_collection,
-      (
-        ba.agreement_value::numeric 
-        - 
-        COALESCE(SUM(fl.amount) FILTER (WHERE fl.transaction_direction = 'CREDIT' AND fl.status = 'Received' AND fl.affects_revenue = 'YES'), 0)
-      ) AS outstanding_balance
-    FROM financial_accounts fa
-    JOIN booking_applications ba ON ba.id = fa.booking_id
-    LEFT JOIN financial_ledger fl ON fl.account_id = fa.id
-    GROUP BY fa.booking_id, fa.id, ba.agreement_value;
-  `);
+   `column` names the booking_applications column that should hold the object
+   key once the upload succeeds; `jointIndex` does the same for an entry in the
+   joint_applicants JSON array. Both are null for documents that only ever live
+   in booking_documents. */
+interface StagedDoc {
+  docType: string;
+  applicantType: string;
+  pathSegment: string;
+  fileName: string;
+  mimeType: string;
+  bytes: Buffer;
+  column?: "primary_pan_url" | "primary_aadhaar_front_url" | "primary_aadhaar_back_url" | "signature_data";
+  jointIndex?: number;
+  jointField?: "pan_url" | "aadhaar_front_url" | "aadhaar_back_url";
 }
 
+async function stageBookingDocuments(
+  getStr: (k: string) => string | null,
+  getFile: (k: string) => File | null,
+  jointApplicants: any[],
+): Promise<StagedDoc[]> {
+  const staged: StagedDoc[] = [];
+
+  const add = async (
+    file: File | null,
+    docType: string,
+    applicantType: string,
+    pathSegment: string,
+    extra: Partial<StagedDoc>,
+  ) => {
+    if (!file || typeof file === "string" || !file.name || !file.arrayBuffer) return;
+    const bytes = Buffer.from(await file.arrayBuffer());
+    if (bytes.length === 0) return;
+    let ext = ".jpg";
+    if (file.name.lastIndexOf(".") !== -1) ext = file.name.substring(file.name.lastIndexOf("."));
+    else if (file.type === "application/pdf") ext = ".pdf";
+    staged.push({
+      docType, applicantType, pathSegment: `${pathSegment}/${docType}${ext}`,
+      fileName: file.name, mimeType: file.type, bytes, ...extra,
+    });
+  };
+
+  await add(getFile("primary_pan_file"), "PAN_CARD", "PRIMARY", "primary", { column: "primary_pan_url" });
+  await add(getFile("primary_aadhaar_front_file"), "AADHAAR_FRONT", "PRIMARY", "primary", { column: "primary_aadhaar_front_url" });
+  await add(getFile("primary_aadhaar_back_file"), "AADHAAR_BACK", "PRIMARY", "primary", { column: "primary_aadhaar_back_url" });
+
+  for (let i = 0; i < jointApplicants.length; i++) {
+    await add(getFile(`joint_${i}_pan_file`), "PAN_CARD", `JOINT_${i + 1}`, `joint_${i + 1}`, { jointIndex: i, jointField: "pan_url" });
+    await add(getFile(`joint_${i}_aadhaar_front_file`), "AADHAAR_FRONT", `JOINT_${i + 1}`, `joint_${i + 1}`, { jointIndex: i, jointField: "aadhaar_front_url" });
+    await add(getFile(`joint_${i}_aadhaar_back_file`), "AADHAAR_BACK", `JOINT_${i + 1}`, `joint_${i + 1}`, { jointIndex: i, jointField: "aadhaar_back_url" });
+  }
+
+  // The signature arrives as a data: URL in a text field, not as a File.
+  const sigData = getStr("signature_data");
+  if (sigData && sigData.startsWith("data:image")) {
+    const bytes = Buffer.from(sigData.replace(/^data:image\/\w+;base64,/, ""), "base64");
+    if (bytes.length > 0) {
+      staged.push({
+        docType: "SIGNATURE", applicantType: "PRIMARY", pathSegment: "primary/signature.png",
+        fileName: "signature.png", mimeType: "image/png", bytes, column: "signature_data",
+      });
+    }
+  }
+
+  return staged;
+}
+
+/**
+ * Upload staged documents and record them — strictly after the booking commits.
+ *
+ * ── Ordering, and why this one ──────────────────────────────────────────────
+ * For each document: upload to R2 first, and only insert the booking_documents
+ * row if that upload returned successfully. So the database can never claim a
+ * document exists when its bytes are not in storage, which is the failure the
+ * old in-transaction version was protecting against by rolling everything back.
+ *
+ * The cost of moving out of the transaction is the mirror case: an upload that
+ * succeeds while the process dies before the INSERT leaves an object in R2 with
+ * no row pointing at it. That is a few orphaned kilobytes, invisible to the app
+ * and reclaimable by a bucket sweep — against holding a database transaction
+ * open across an arbitrary number of cross-datacentre uploads.
+ *
+ * A failed upload does NOT fail the booking. The booking is already committed
+ * and is the valuable record; the failures are returned so the caller can tell
+ * the user which documents need re-attaching from the edit screen.
+ */
+async function commitBookingDocuments(opts: {
+  staged: StagedDoc[];
+  bookingId: number;
+  bookingNumber: string;
+  leadId: string | number;
+  uploadedBy: string | null;
+  organizationId: string;
+  jointApplicants: any[];
+}): Promise<{ failed: { docType: string; applicantType: string; reason: string }[] }> {
+  const { staged, bookingId, bookingNumber, leadId, uploadedBy, organizationId, jointApplicants } = opts;
+  const failed: { docType: string; applicantType: string; reason: string }[] = [];
+  const columnUpdates: Record<string, string> = {};
+  let jointTouched = false;
+
+  for (const doc of staged) {
+    const key = `bookings/${bookingNumber}/${doc.pathSegment}`;
+    try {
+      await uploadBufferToR2(key, doc.bytes, doc.mimeType);
+    } catch (e: any) {
+      failed.push({ docType: doc.docType, applicantType: doc.applicantType, reason: e?.message || "upload failed" });
+      continue; // No row is written for a document that is not in storage.
+    }
+
+    try {
+      await query(
+        `INSERT INTO booking_documents (booking_id, lead_id, booking_number, document_type, applicant_type, file_name, object_key, mime_type, file_size, uploaded_by, organization_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+        [bookingId, leadId, bookingNumber, doc.docType, doc.applicantType, doc.fileName, key, doc.mimeType, doc.bytes.length, uploadedBy, organizationId],
+      );
+    } catch (e: any) {
+      failed.push({ docType: doc.docType, applicantType: doc.applicantType, reason: e?.message || "record failed" });
+      continue;
+    }
+
+    if (doc.column) columnUpdates[doc.column] = key;
+    if (doc.jointIndex !== undefined && doc.jointField && jointApplicants[doc.jointIndex]) {
+      jointApplicants[doc.jointIndex][doc.jointField] = key;
+      jointTouched = true;
+    }
+  }
+
+  // One UPDATE for all the URL columns, rather than one per document.
+  const sets: string[] = [];
+  const params: any[] = [];
+  for (const [col, key] of Object.entries(columnUpdates)) {
+    params.push(key);
+    sets.push(`${col} = $${params.length}`);
+  }
+  if (jointTouched) {
+    params.push(JSON.stringify(jointApplicants));
+    sets.push(`joint_applicants = $${params.length}`);
+  }
+  if (sets.length > 0) {
+    params.push(bookingId, organizationId);
+    await query(
+      `UPDATE booking_applications SET ${sets.join(", ")}
+        WHERE id = $${params.length - 1} AND organization_id = $${params.length}`,
+      params,
+    );
+  }
+
+  return { failed };
+}
 
 // ─── GET — fetch bookings ─────────────────────────────────────────────────────
+//
+// Two read models, chosen by `?view=`:
+//
+//   view=summary  BOOKING_LIST_SQL   — explicit columns, one join, no views, no
+//                                      JSON aggregation. For "does this lead have
+//                                      a booking" and any future booking table.
+//   view=full     BOOKING_SELECT_SQL — the complete aggregate (default).
+//
+// `full` stays the DEFAULT deliberately. Every existing caller of this endpoint
+// uses `?lead_id=` and feeds the result straight into a booking detail view; the
+// two that only need existence and status now ask for `summary` explicitly.
+// Flipping the default would have silently emptied every joined field in those
+// views — the exact failure lib/bookingQuery.ts was written to prevent.
 export async function GET(req: NextRequest) {
   try {
-    // SELECT b.* returns primary_pan, primary_aadhaar and document URLs.
+    // The full view returns primary_pan, primary_aadhaar and document URLs.
     const gate = await requireSession();
     if (!gate.ok) return gate.response;
 
-    await ensureTable();
     const { searchParams } = new URL(req.url);
     const leadId = searchParams.get("lead_id");
+    const summaryOnly = searchParams.get("view") === "summary";
     const limit = Math.min(Number(searchParams.get("limit") ?? 50), 200);
     const offset = Number(searchParams.get("offset") ?? 0);
 
-    // The identical SELECT is used by POST and by the PUT in [id]/route.ts, so a
+    // The full SELECT is also used by POST and by the PUT in [id]/route.ts, so a
     // saved booking comes back in the same shape a fetched one does.
     // The tenant filter is always present, before LIMIT/OFFSET below, so a page
     // of this list can never contain another organization's bookings.
-    let sql = BOOKING_SELECT_SQL;
+    let sql = summaryOnly ? BOOKING_LIST_SQL : BOOKING_SELECT_SQL;
     const params: any[] = [];
     params.push(await getOrganizationId());
     sql += ` WHERE b.organization_id = $${params.length}`;
@@ -312,6 +228,7 @@ export async function GET(req: NextRequest) {
     // id DESC as tiebreaker: two bookings written in the same transaction share a
     // created_at, and the booking form picks data[0] as "the" booking — an
     // unstable order there would open a different record on each refresh.
+    // Server-side pagination is retained in both modes.
     sql += ` ORDER BY b.created_at DESC, b.id DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
     params.push(limit, offset);
 
@@ -330,7 +247,6 @@ export async function POST(req: NextRequest) {
     const gate = await requireSession();
     if (!gate.ok) return gate.response;
 
-    await ensureTable();
     const formData = await req.formData();
     const getStr = (key: string) => (formData.get(key) as string) || null;
     const getFile = (key: string) => (formData.get(key) as File) || null;
@@ -338,37 +254,80 @@ export async function POST(req: NextRequest) {
     const lead_id = getStr("lead_id");
     if (!lead_id) return NextResponse.json({ success: false, message: "lead_id is required" }, { status: 400 });
 
-    // ── One live booking per lead ────────────────────────────────────────────
-    // A lead can only be sold one flat at a time, so a second booking is always a
-    // mistake — and it was a mistake this endpoint used to accept silently. The
-    // booking form is opened from six places; one of them ("Mark Closing") passes
-    // create-mode flags unconditionally, so a REOPENED closed lead came back
-    // through here and inserted a duplicate. Production already carries the
-    // damage: lead 134 has bookings 15 and 17, both Confirmed.
+    // Resolved once for the whole handler. Every tenant predicate below binds
+    // this value, and at 82 ms per round trip to Neon a re-resolve is not free.
+    const orgId = await getOrganizationId();
+
+    // ── Two guards, one round trip ───────────────────────────────────────────
     //
-    // The form now resolves edit mode itself, but that is a UI convenience. This
-    // is the actual guarantee, because it holds for any caller.
+    // (a) THE LEAD MUST BELONG TO THE CALLER'S ORGANIZATION.
+    //     lead_id arrives in the request body and lead ids are global integers,
+    //     so without this a signed-in user of one builder could create a booking
+    //     against another builder's lead by sending its id. The booking row lands
+    //     in the creator's organization but points at a lead they cannot see — a
+    //     dangling cross-tenant reference that every join in BOOKING_SELECT_SQL
+    //     then silently drops (they all carry
+    //     `w.organization_id = b.organization_id`), so it renders as a booking
+    //     with no customer and is invisible from both sides.
     //
-    // Cancelled bookings are excluded: a lead whose booking was cancelled may
-    // legitimately book again.
-    const liveBooking = await query<{ id: number; booking_number: string; booking_status: string }>(
-      `SELECT id, booking_number, booking_status
-         FROM booking_applications
-        WHERE lead_id = $1
-          AND LOWER(COALESCE(booking_status, '')) <> 'cancelled'
-        -- Same order as GET, so the 409 names the booking the form will actually
-        -- open. Naming a different one would send the operator hunting.
-        ORDER BY created_at DESC, id DESC LIMIT 1`,
-      [Number(lead_id)],
+    //     Found by the post-refactor write smoke test, which sent one tenant's
+    //     lead id as another tenant's admin and got a booking created.
+    //     Pre-existing: the only thing that ever stood in the way was (b), and
+    //     that only fires when the foreign lead already has a booking.
+    //
+    // (b) ONE LIVE BOOKING PER LEAD.
+    //     A lead can only be sold one flat at a time, so a second booking is
+    //     always a mistake — and it was a mistake this endpoint used to accept
+    //     silently. The booking form is opened from six places; one of them
+    //     ("Mark Closing") passes create-mode flags unconditionally, so a
+    //     REOPENED closed lead came back through here and inserted a duplicate.
+    //     Production already carries the damage: lead 134 has bookings 15 and 17,
+    //     both Confirmed. The form now resolves edit mode itself, but that is a UI
+    //     convenience; this is the actual guarantee, because it holds for any
+    //     caller. Cancelled bookings are excluded — a lead whose booking was
+    //     cancelled may legitimately book again.
+    //
+    //     This check also had NO organization predicate, so a lead id that existed
+    //     in another organization matched THAT organization's booking and returned
+    //     its booking_number and status in the 409 message.
+    //
+    // Both answers come from one query. The lead lookup drives it, so a lead
+    // outside this organization returns no row at all and the LATERAL never runs.
+    const guard = await query<{ booking_id: number | null; booking_number: string | null; booking_status: string | null }>(
+      `SELECT live.id AS booking_id, live.booking_number, live.booking_status
+         FROM walkin_enquiries w
+         LEFT JOIN LATERAL (
+           SELECT b.id, b.booking_number, b.booking_status
+             FROM booking_applications b
+            WHERE b.lead_id = w.id
+              AND b.organization_id = w.organization_id
+              AND LOWER(COALESCE(b.booking_status, '')) <> 'cancelled'
+            -- Same order as GET, so the 409 names the booking the form will
+            -- actually open. Naming a different one would send the operator hunting.
+            ORDER BY b.created_at DESC, b.id DESC
+            LIMIT 1
+         ) live ON TRUE
+        WHERE w.id = $1 AND w.organization_id = $2
+        LIMIT 1`,
+      [Number(lead_id), orgId],
     );
-    if (liveBooking.length) {
-      const b = liveBooking[0];
+
+    if (guard.length === 0) {
+      // 404, not 403: confirming the lead exists elsewhere would let a caller map
+      // the platform's lead table by walking ids.
+      return NextResponse.json(
+        { success: false, code: "LEAD_NOT_FOUND", message: "Lead not found." },
+        { status: 404 },
+      );
+    }
+    if (guard[0].booking_id != null) {
+      const b = guard[0];
       return NextResponse.json(
         {
           success: false,
           code: "BOOKING_EXISTS",
-          bookingId: b.id,
-          message: `This lead already has booking ${b.booking_number || `#${b.id}`} (${b.booking_status}). Edit that booking instead of creating a new one.`,
+          bookingId: b.booking_id,
+          message: `This lead already has booking ${b.booking_number || `#${b.booking_id}`} (${b.booking_status}). Edit that booking instead of creating a new one.`,
         },
         { status: 409 },
       );
@@ -534,12 +493,18 @@ export async function POST(req: NextRequest) {
     // tell the user a booking saved but its commission did not.
     let commissionResult: { accrued: boolean; reason?: string; code?: string } | null = null;
 
+    // ── Document bytes are read BEFORE the transaction opens ─────────────────
+    // Reading a File into a Buffer is local work; doing it inside the
+    // transaction meant the database connection sat idle during it. The R2
+    // uploads themselves happen AFTER commit — see the post-commit block below
+    // for the ordering and why it is the safe one.
+    const stagedDocs = await stageBookingDocuments(getStr, getFile, joint_applicants);
+
     // We will do everything inside a transaction
     const result = await transaction(async (client) => {
-      // MT-05: the tenant for every row written in this transaction. Resolved
-      // once, on this client so it shares the open transaction, and appended as
-      // the LAST column of each INSERT so no existing $n placeholder shifts.
-      const orgId = await getOrganizationId(client);
+      // MT-05: the tenant for every row written in this transaction — the same
+      // value resolved at the top of the handler, appended as the LAST column of
+      // each INSERT so no existing $n placeholder shifts.
 
       // 1. Insert DB record to get ID
       const insertRes = await client.query(
@@ -564,7 +529,11 @@ export async function POST(req: NextRequest) {
           $37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,
           -- CP attribution is inherited from the source lead, never re-entered.
           -- Resolves to NULL for direct/non-CP leads and for bookings with no lead.
-          (SELECT channel_partner_id FROM walkin_enquiries WHERE id = $1),
+          -- TENANT: scoped to $51. lead_id comes from the request body, so without
+          -- the organization predicate a lead id belonging to another builder
+          -- would have attributed THEIR channel partner to this booking — and
+          -- commission is accrued against whatever this resolves to.
+          (SELECT channel_partner_id FROM walkin_enquiries WHERE id = $1 AND organization_id = $51),
           $51
         ) RETURNING id`,
         [
@@ -736,102 +705,35 @@ export async function POST(req: NextRequest) {
           ? draft.loan_application_ids.map((n: any) => Number(n)).filter((n: number) => Number.isInteger(n) && n > 0)
           : [];
         if (ids.length > 0) {
+          // The ids come out of a lead row this organization owns, but they are
+          // still values from a JSON blob: the organization predicate makes the
+          // UPDATE itself tenant-safe rather than relying on where they came from.
           await client.query(
-            `UPDATE loan_applications SET booking_id = $1, updated_at = NOW() WHERE id = ANY($2::int[])`,
-            [newId, ids]
+            `UPDATE loan_applications SET booking_id = $1, updated_at = NOW()
+              WHERE id = ANY($2::int[]) AND organization_id = $3`,
+            [newId, ids, orgId]
           );
         }
       } catch (e) {
         console.warn("[POST booking-applications] loan_application_ids migration skipped:", (e as any)?.message);
       }
 
-      // 2. Upload Files to R2
-
-      const fileToBuffer = async (file: any) => {
-        if (!file || typeof file === 'string' || !file.arrayBuffer) return Buffer.from([]);
-        return Buffer.from(await file.arrayBuffer());
-      };
-      const toBase64 = async (file: any) => {
-        if (!file || typeof file === 'string' || !file.type) return null;
-        const buf = await fileToBuffer(file);
-        if (buf.length === 0) return null;
-        return "data:" + file.type + ";base64," + buf.toString("base64");
-      };
-
-      const imagesForPdf: Record<string, string | null> = {};
-      const updatesForDb: Record<string, string | null> = {};
-
-      const uploadDoc = async (file: any, docType: string, appType: string, pathSegment: string) => {
-        if (!file || typeof file === 'string' || !file.name) return null;
-        let ext = ".jpg";
-        if (file.name.lastIndexOf(".") !== -1) {
-          ext = file.name.substring(file.name.lastIndexOf("."));
-        } else if (file.type === "application/pdf") ext = ".pdf";
-
-        const key = `bookings/${bookingNumber}/${pathSegment}/${docType}${ext}`;
-        await uploadBufferToR2(key, await fileToBuffer(file), file.type);
-
-        await client.query(`
-          INSERT INTO booking_documents (booking_id, lead_id, booking_number, document_type, applicant_type, file_name, object_key, mime_type, file_size, uploaded_by, organization_id)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-        `, [newId, lead_id, bookingNumber, docType, appType, file.name, key, file.type, file.size, created_by, orgId]);
-
-        return key;
-      };
-
-      // Primary
-      const pPanFile = getFile("primary_pan_file");
-      if (pPanFile) {
-        updatesForDb.primary_pan_url = await uploadDoc(pPanFile, "PAN_CARD", "PRIMARY", "primary");
-        imagesForPdf.primary_pan = await toBase64(pPanFile);
-      }
-      const pAadhaarFront = getFile("primary_aadhaar_front_file");
-      if (pAadhaarFront) {
-        updatesForDb.primary_aadhaar_front_url = await uploadDoc(pAadhaarFront, "AADHAAR_FRONT", "PRIMARY", "primary");
-        imagesForPdf.primary_aadhaar_front = await toBase64(pAadhaarFront);
-      }
-      const pAadhaarBack = getFile("primary_aadhaar_back_file");
-      if (pAadhaarBack) {
-        updatesForDb.primary_aadhaar_back_url = await uploadDoc(pAadhaarBack, "AADHAAR_BACK", "PRIMARY", "primary");
-      }
-
-      // Joint
-      for (let i = 0; i < joint_applicants.length; i++) {
-        const jPan = getFile(`joint_${i}_pan_file`);
-        if (jPan) {
-          joint_applicants[i].pan_url = await uploadDoc(jPan, "PAN_CARD", `JOINT_${i + 1}`, `joint_${i + 1}`);
-          imagesForPdf[`joint_${i}_pan`] = await toBase64(jPan);
-        }
-        const jAFront = getFile(`joint_${i}_aadhaar_front_file`);
-        if (jAFront) {
-          joint_applicants[i].aadhaar_front_url = await uploadDoc(jAFront, "AADHAAR_FRONT", `JOINT_${i + 1}`, `joint_${i + 1}`);
-          imagesForPdf[`joint_${i}_aadhaar_front`] = await toBase64(jAFront);
-        }
-        const jABack = getFile(`joint_${i}_aadhaar_back_file`);
-        if (jABack) {
-          joint_applicants[i].aadhaar_back_url = await uploadDoc(jABack, "AADHAAR_BACK", `JOINT_${i + 1}`, `joint_${i + 1}`);
-        }
-      }
-
-      // Signature
-      const sigData = getStr("signature_data");
-      if (sigData && sigData.startsWith("data:image")) {
-        const base64Data = sigData.replace(/^data:image\/\w+;base64,/, "");
-        const buffer = Buffer.from(base64Data, "base64");
-        const key = `bookings/${bookingNumber}/primary/signature.png`;
-        await uploadBufferToR2(key, buffer, "image/png");
-        updatesForDb.signature_data = key;
-
-        await client.query(`INSERT INTO booking_documents (booking_id, lead_id, booking_number, document_type, applicant_type, file_name, object_key, mime_type, file_size, uploaded_by, organization_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`, [newId, lead_id, bookingNumber, "SIGNATURE", "PRIMARY", "signature.png", key, "image/png", buffer.length, created_by, orgId]);
-      }
-
-      // Re-update the booking applications record with the URLs
-      await client.query(`
-        UPDATE booking_applications SET
-          primary_pan_url = $1, primary_aadhaar_front_url = $2, primary_aadhaar_back_url = $3,
-          joint_applicants = $4, signature_data = $5
-        WHERE id = $6
-      `, [updatesForDb.primary_pan_url || null, updatesForDb.primary_aadhaar_front_url || null, updatesForDb.primary_aadhaar_back_url || null, JSON.stringify(joint_applicants), updatesForDb.signature_data || null, newId]);
+      // 2. Documents — NOT here any more.
+      //
+      // Every uploadBufferToR2() call used to run at this point, inside the open
+      // transaction: a network round trip to Cloudflare, per document, while this
+      // Postgres connection and the row locks taken above stayed held. A booking
+      // with four attachments on a slow line held the transaction open for the
+      // duration of four uploads' worth of network, doing no database work.
+      //
+      // The bytes are already in memory (staged before the transaction opened);
+      // the uploads and their booking_documents rows now happen after COMMIT.
+      // See the post-commit block for the ordering and its failure behaviour.
+      //
+      // Also removed: an `imagesForPdf` object that base64-encoded every uploaded
+      // document — a second full read of each file plus ~33% memory inflation —
+      // and was then never read by anything. PDF generation is on-demand and
+      // fetches its own images.
 
       // ── Inventory sync: mark the booked unit (create it if the bulk generator
       // never did). Runs inside this transaction, so a sync failure rolls the whole
@@ -854,8 +756,8 @@ export async function POST(req: NextRequest) {
       // silently — the commission can then be added later from the CP Master.
       if (cp_commission_mode !== "none") {
         const bookingRow = await client.query(
-          `SELECT sourced_by_channel_partner_id FROM booking_applications WHERE id = $1`,
-          [newId]
+          `SELECT sourced_by_channel_partner_id FROM booking_applications WHERE id = $1 AND organization_id = $2`,
+          [newId, orgId]
         );
         const attributedCp = bookingRow.rows[0]?.sourced_by_channel_partner_id ?? null;
 
@@ -892,30 +794,59 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // Return the saved booking row — PDF generation is intentionally decoupled and done on-demand
-      const fetchBooking = await client.query(`SELECT * FROM booking_applications WHERE id = $1`, [newId]);
-      return fetchBooking.rows[0];
+      // The booking id and number are all the post-commit steps need. This used
+      // to be `SELECT * FROM booking_applications WHERE id = $1` — a 121-column
+      // read of a row that was then discarded, because the response is built
+      // from fetchBookingById() below anyway. One wasted round trip per booking.
+      return { id: newId as number, booking_number: bookingNumber };
     });
 
-    // Mark booking as Confirmed and Lead as Closed now that the full transaction succeeded
-    const postCommitOrgId = await getOrganizationId();
-    await query(`UPDATE booking_applications SET booking_status = 'Confirmed' WHERE id = $1 AND organization_id = $2`, [result.id, postCommitOrgId]);
-    await query(`UPDATE walkin_enquiries SET status = 'Closed' WHERE id = $1 AND organization_id = $2`, [lead_id, postCommitOrgId]);
+    // ── Post-commit ──────────────────────────────────────────────────────────
+    // Status flip and lead closure folded into ONE statement. They were two
+    // sequential UPDATEs, each its own round trip; a CTE makes it one. Both
+    // predicates are unchanged, including the organization scope on each table.
+    await query(
+      `WITH confirmed AS (
+         UPDATE booking_applications SET booking_status = 'Confirmed'
+          WHERE id = $1 AND organization_id = $3
+       )
+       UPDATE walkin_enquiries SET status = 'Closed'
+        WHERE id = $2 AND organization_id = $3`,
+      [result.id, lead_id, orgId],
+    );
+
+    // Documents: uploaded to R2 and recorded now, outside any transaction. A
+    // document that fails to upload is reported, not silently dropped, and never
+    // gets a booking_documents row. See commitBookingDocuments().
+    const { failed: failedDocuments } = await commitBookingDocuments({
+      staged: stagedDocs,
+      bookingId: result.id,
+      bookingNumber: result.booking_number,
+      leadId: lead_id,
+      uploadedBy: created_by,
+      organizationId: orgId,
+      jointApplicants: joint_applicants,
+    });
 
     // Return the SAME shape GET returns, not the bare booking_applications row.
     // The caller feeds this straight into the booking view (sales/page.tsx does
     // `setBookingData(booking)`), and the bare row has no lead_name, lead_phone,
     // token_amount or ocr_amount on it at all — so every joined field rendered
     // as "—" on a booking whose details had just been typed in.
-    const enriched = await fetchBookingById(result.id);
+    //
+    // This is the ONE read the response needs, and it now reuses the already
+    // resolved organization instead of asking for it again.
+    const enriched = await fetchBookingById(result.id, orgId);
 
     return NextResponse.json(
       {
         success: true,
-        // Falls back to the bare row if the enrichment read somehow returns
+        // Falls back to a minimal row if the enrichment read somehow returns
         // nothing: a booking that saved must never be reported as failed.
-        data: enriched ?? { ...result, booking_status: "Confirmed" },
+        data: enriched ?? { id: result.id, booking_number: result.booking_number, booking_status: "Confirmed" },
         commission: commissionResult,
+        // Present only when something failed, so existing callers see no change.
+        ...(failedDocuments.length > 0 ? { failedDocuments } : {}),
       },
       { status: 201 }
     );

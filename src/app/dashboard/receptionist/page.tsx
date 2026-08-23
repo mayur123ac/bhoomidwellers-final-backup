@@ -32,6 +32,11 @@ import LoginTimerWidget from "@/components/LoginTimerWidget";
 import AttendanceBadge from "@/components/AttendanceBadge";
 import CrmUpdatesNotification from "@/components/CrmUpdatesNotification";
 import LostLeadModal from "@/components/LostLeadModal";
+import { updateLeadLostState, useLostLeadEvents } from "@/lib/lostLeadSync";
+// The notification queue. Built and organization-scoped on the server — see
+// lib/notifications/feed.ts for why it is no longer derived in this file.
+import { useNotificationFeed, openNotificationLead, type CrmNotification } from "@/lib/hooks/useNotificationFeed";
+import NotificationPopover from "@/components/notifications/NotificationPopover";
 // buildTheme used to be defined in this file; it moved out unchanged so the
 // Sourcing Manager panel shares it instead of forking.
 // WhatsAppSettingsCard went with the in-page Settings tab — the WhatsApp number
@@ -556,7 +561,24 @@ export default function ReceptionistDashboard() {
   const [notifQueue, setNotifQueue] = useState<CrmNotif[]>([]);
   const [activeNotif, setActiveNotif] = useState<CrmNotif | null>(null);
   const [notifCount, setNotifCount] = useState(0);
-  const [notificationHistory, setNotificationHistory] = useState<(CrmNotif & { rawDate: number })[]>([]);
+  // notificationHistory is no longer local state — it is derived from the
+  // server-built, organization-scoped feed further down.
+
+  // The shared notification popover takes its classes as props, so each
+  // dashboard keeps its own theme token names.
+  const notifPopoverTheme = useMemo(
+    () => ({
+      text: t.text,
+      textMuted: t.textMuted,
+      textFaint: t.textFaint,
+      border: t.tableBorder,
+      itemHover: isDark ? "hover:bg-white/5" : "hover:bg-black/5",
+      footer: isDark
+        ? "text-[#d946a8] hover:bg-[#9E217B]/10"
+        : "text-[#9E217B] hover:bg-[#9E217B]/10",
+    }),
+    [t, isDark]
+  );
 
   // ── Enquiry (new-entry) modal ──
   const [isEnquiryModalOpen, setIsEnquiryModalOpen] = useState(false);
@@ -1122,78 +1144,114 @@ export default function ReceptionistDashboard() {
   const refetchAll = async () => {
     await Promise.all([initialLoad(), fetchFollowUps(), fetchMyAssignedLeads(user.name)]);
   };
-  // ── Notification Queue & History Handler ──
+
+  // ── Lost / restored leads, live ─────────────────────────────────────────────
+  // This panel loads its leads once at mount and never polls, so a lead marked
+  // Lost anywhere else — by a Site Head, a Sales Manager or an Admin — stayed
+  // Active on the front desk until someone reloaded the page. The Admin and
+  // Sales dashboards have subscribed to this channel all along; this one had
+  // simply been left out.
+  //
+  // Both lead lists are updated, because they come from different endpoints:
+  // `enquiries` is the paginated table, `directAssignedLeads` is this
+  // receptionist's own leads. Updating one and not the other would leave the
+  // same lead showing two different statuses on two tabs of the same screen.
+  //
+  // The stream is tenant-scoped server-side (lib/lostLeadEvents.ts), so nothing
+  // here has to check which organization an event belongs to.
+  const applyLostLeadUpdate = useCallback((updatedLead: any) => {
+    setEnquiries(prev => updateLeadLostState(prev, updatedLead));
+    setDirectAssignedLeads(prev => updateLeadLostState(prev, updatedLead));
+    setSelectedLead((prev: any) =>
+      prev && String(prev.id) === String(updatedLead?.id) ? { ...prev, ...updatedLead } : prev
+    );
+  }, []);
+  // Both callbacks must keep the SAME identity across renders: useLostLeadEvents
+  // has them in its effect deps, so a fresh closure per render would tear down
+  // and reopen the EventSource on every render. refetchAll is rebuilt each
+  // render (it closes over user.name), so it is reached through a ref.
+  const refetchAllRef = useRef(refetchAll);
+  refetchAllRef.current = refetchAll;
+  const resyncAfterLostLeadDrop = useCallback(() => { refetchAllRef.current(); }, []);
+  useLostLeadEvents(applyLostLeadUpdate, resyncAfterLostLeadDrop);
+
+  // ── The notification queue ─────────────────────────────────────────────────
+  //
+  // Built by the server, scoped to this session's organization in SQL. This
+  // replaces a useEffect that re-derived the New Lead and Site Visit rules here
+  // in the browser — the same two rules the Admin and Sales dashboards each kept
+  // their own copy of. See lib/notifications/feed.ts.
+  const notifications = useNotificationFeed();
+  const notificationHistory = useMemo(
+    () =>
+      [...notifications.newLeads, ...notifications.siteVisits].sort(
+        (a, b) => new Date(b.at ?? 0).getTime() - new Date(a.at ?? 0).getTime()
+      ),
+    [notifications.newLeads, notifications.siteVisits]
+  );
+
+  /**
+   * Open a notification's lead in this panel's Lead Detail view.
+   *
+   * The server is asked first: it re-reads the organization from the session and
+   * re-applies it, so a lead id from a stale tab or another tenant resolves to
+   * nothing and nothing opens. Only then is the lead selected from this page's
+   * own organization-scoped list.
+   */
+  const openLeadFromNotification = useCallback(async (n: CrmNotification) => {
+    setActivePopup(null);
+    setActiveNotif(null);
+    const ok = await openNotificationLead(n.leadId);
+    if (!ok) {
+      console.warn("[notifications] lead is not available for this organization:", n.leadId);
+      return;
+    }
+    const lead =
+      directAssignedLeads.find((l: any) => Number(l.id) === Number(n.leadId)) ??
+      enquiries.find((l: any) => Number(l.id) === Number(n.leadId));
+    if (!lead) return;
+    setSelectedLead(lead);
+    setAssignedSubView("detail");
+    setDetailTab("personal");
+    setShowSalesForm(false);
+    setShowLoanForm(false);
+    setActiveTab("assigned");
+  }, [directAssignedLeads, enquiries]);
+
+  // Toast queue. The "already shown" set is namespaced by organization: it used
+  // to be one flat crm_shown_notif_ids key, so signing out of one builder and
+  // into another on the same machine silently suppressed the second tenant's
+  // genuinely-new leads, because lead ids are global and had already been used.
   useEffect(() => {
-    if (isFetchingEnquiries || enquiries.length === 0) return;
+    if (!notifications.organizationId || notificationHistory.length === 0) return;
+    const storageKey = "crm_shown_notif_ids:" + notifications.organizationId;
+    let storedIds: string[] = [];
+    try {
+      const item = localStorage.getItem(storageKey);
+      storedIds = item ? JSON.parse(item) : [];
+      if (!Array.isArray(storedIds)) storedIds = [];
+    } catch { storedIds = []; }
 
-    const checkNotifs = () => {
-      let storedIds: string[] = [];
-      try {
-        const item = localStorage.getItem("crm_shown_notif_ids");
-        storedIds = item ? JSON.parse(item) : [];
-      } catch (e) { storedIds = []; }
-
-      const seenSet = new Set(storedIds);
-      const fresh: CrmNotif[] = [];
-      const history: (CrmNotif & { rawDate: number })[] = [];
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-
-      mergedLeads.forEach((lead: any) => {
-        const formattedId = String(lead.id).padStart(3, '0');
-
-        // 1. New Lead Notification (1-Day Expiry)
-        const createdDate = new Date(lead.created_at || 0);
-        createdDate.setHours(0, 0, 0, 0);
-        const createdDiffDays = (today.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24);
-
-        if (createdDiffDays <= 1) {
-          const leadNotif = {
-            id: `lead_${lead.id}`,
-            line1: `New Lead · ${formattedId} - ${lead.name}`,
-            line2: lead.assigned_receptionist ? `Entered by ${lead.assigned_receptionist} (Receptionist)` : `Entered by ${lead.assignedTo} (Manager)`,
-            type: "lead" as const
-          };
-          history.push({ ...leadNotif, id: `hist_lead_${lead.id}`, rawDate: new Date(lead.created_at || 0).getTime() });
-          if (!seenSet.has(leadNotif.id)) {
-            fresh.push(leadNotif);
-            seenSet.add(leadNotif.id);
-          }
-        }
-
-        // 2. Site Visit Notification (2 days before, 3 days duration)
-        const vDate = lead.mongoVisitDate || lead.siteVisitDate;
-        if (vDate && (lead.assignedReceptionist === user.name || lead.assigned_to === user.name)) {
-          const visitDateObj = new Date(vDate);
-          visitDateObj.setHours(0, 0, 0, 0);
-          const diffDays = (visitDateObj.getTime() - today.getTime()) / (1000 * 60 * 60 * 24);
-
-          if (diffDays >= -3 && diffDays <= 2) {
-            const visitDate = new Date(vDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
-            const visitNotif = {
-              id: `visit_${lead.id}_${vDate}`,
-              line1: `Site Visit · ${visitDate}`,
-              line2: `${lead.assignedTo} - ${lead.name}`,
-              type: "visit" as const
-            };
-            history.push({ ...visitNotif, id: `hist_visit_${lead.id}`, rawDate: new Date(vDate).getTime() });
-            if (!seenSet.has(visitNotif.id)) {
-              fresh.push(visitNotif);
-              seenSet.add(visitNotif.id);
-            }
-          }
-        }
+    const seenSet = new Set(storedIds);
+    const fresh: CrmNotif[] = [];
+    for (const n of notificationHistory) {
+      if (seenSet.has(n.id)) continue;
+      fresh.push({
+        id: n.id,
+        line1: n.title,
+        line2: n.subtitle,
+        type: n.kind === "site_visit" ? "visit" : "lead",
       });
+      seenSet.add(n.id);
+    }
 
-      setNotificationHistory(history.sort((a, b) => b.rawDate - a.rawDate).slice(0, 20));
-      if (fresh.length > 0) {
-        setNotifQueue(prev => [...prev, ...fresh]);
-        setNotifCount(c => c + fresh.length);
-        localStorage.setItem("crm_shown_notif_ids", JSON.stringify(Array.from(seenSet)));
-      }
-    };
-    checkNotifs();
-  }, [enquiries, user.name, siteHeads]);
+    if (fresh.length > 0) {
+      setNotifQueue(prev => [...prev, ...fresh]);
+      setNotifCount(c => c + fresh.length);
+      try { localStorage.setItem(storageKey, JSON.stringify(Array.from(seenSet))); } catch { }
+    }
+  }, [notificationHistory, notifications.organizationId]);
+
 
   // Trigger Popup Logic (2 Seconds)
   useEffect(() => {
@@ -1854,31 +1912,26 @@ export default function ReceptionistDashboard() {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: -6, scale: 0.98 }}
                     transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-                    className={`absolute top-12 right-0 w-[320px] border rounded-xl shadow-2xl flex flex-col z-50 ${t.dropdown}`} style={t.dropdownGlass}
+                    className={`absolute top-12 right-0 w-[320px] border rounded-xl shadow-2xl flex flex-col z-50 overflow-hidden ${t.dropdown}`} style={t.dropdownGlass}
                   >
-                    <div className={`p-4 border-b flex justify-between items-center ${t.tableBorder}`}>
-                      <h3 className={`font-bold text-sm flex items-center gap-2 ${t.text}`}>
-                        <FaBell className="text-[#9E217B]" /> Recent Notifications
-                      </h3>
-                      <button onClick={() => setActivePopup(null)} className={`${t.textMuted} hover:text-red-500`}><FaTimes className="text-xs" /></button>
-                    </div>
-                    <div className={`max-h-[360px] overflow-y-auto ${t.scroll}`}>
-                      {notificationHistory.length === 0 ? (
-                        <p className={`p-6 text-center text-xs ${t.textMuted}`}>No notifications yet.</p>
-                      ) : (
-                        notificationHistory.map((n) => (
-                          <div key={n.id} className={`p-4 border-b last:border-b-0 transition-colors flex items-start gap-3 ${isDark ? "hover:bg-white/5 border-[#333]" : "hover:bg-black/5 border-[#E5E7EB]"}`}>
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-white ${n.type === "visit" ? "bg-orange-500" : "bg-[#25D366]"}`}>
-                              {n.type === "visit" ? <FaCalendarAlt className="text-[12px]" /> : <FaBriefcase className="text-[12px]" />}
-                            </div>
-                            <div>
-                              <p className={`text-xs font-bold ${t.text}`}>{n.line1}</p>
-                              <p className={`text-[10px] mt-1 ${t.textMuted}`}>{n.line2}</p>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
+                    {/* Three at most, newest first, no internal scrollbar, and a
+                        centred "You're all caught up" instead of a blank box.
+                        Clicking a row opens that lead's detail panel. */}
+                    <NotificationPopover
+                      title="Recent Notifications"
+                      caption="New leads and upcoming site visits"
+                      items={notificationHistory}
+                      footerNoun="notifications"
+                      accent="green"
+                      theme={notifPopoverTheme}
+                      onOpenLead={openLeadFromNotification}
+                      onDismiss={(n) => notifications.dismiss(n.id)}
+                      // No separate Notification Center on this panel: the front
+                      // desk's own Enquiries table already IS the full list, and
+                      // it is one click away in the rail. The footer takes them
+                      // there rather than to a second copy of the same rows.
+                      onSeeAll={() => { setActivePopup(null); setActiveTab("overview"); }}
+                    />
                   </motion.div>
                 )}
               </AnimatePresence>

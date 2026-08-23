@@ -19,7 +19,10 @@ function getErrorMessage(error: unknown, fallback: string) {
 
 export async function PATCH(req: Request) {
   try {
-    const gate = await requireRoles(["admin", "sales manager", "receptionist"]);
+    // Site Head included for the same reason as the Lost gate it mirrors: a role
+    // that can mark a lead lost has to be able to undo it, or it can put a lead
+    // into a state only someone else can get it out of.
+    const gate = await requireRoles(["admin", "sales manager", "site head", "receptionist"]);
     if (!gate.ok) return gate.response;
 
     const body = (await req.json()) as RestorePayload;
@@ -33,9 +36,13 @@ export async function PATCH(req: Request) {
       );
     }
 
+    // Resolved once; the broadcast at the end must publish to the same tenant
+    // the row was read from.
+    const organizationId = await getOrganizationId();
+
     const existing = await query(
       "SELECT id, name, is_lost_lead FROM walkin_enquiries WHERE id = $1 AND organization_id = $2",
-      [leadId, await getOrganizationId()]
+      [leadId, organizationId]
     );
 
     if (existing.length === 0) {
@@ -53,7 +60,7 @@ export async function PATCH(req: Request) {
            lost_lead_marked_by = NULL
        WHERE id = $1 AND organization_id = $2
        RETURNING *`,
-      [leadId, await getOrganizationId()]
+      [leadId, organizationId]
     );
 
     const updatedLead = updatedRows[0];
@@ -74,14 +81,15 @@ export async function PATCH(req: Request) {
           `Lead restored from Lost Leads\nRestored By: ${restoredBy}`,
           restoredBy,
           null,
-          await getOrganizationId(),
+          organizationId,
         ]
       );
     } catch (fuErr: unknown) {
       console.warn("[PATCH /api/leads/restore] follow_ups insert failed:", getErrorMessage(fuErr, "Unknown error"));
     }
 
-    broadcastLeadUpdate({
+    // This tenant's subscribers only — see lib/lostLeadEvents.ts.
+    broadcastLeadUpdate(organizationId, {
       type: "lead:lost-updated",
       leadId: String(leadId),
       lead: responseLead,

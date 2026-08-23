@@ -1,5 +1,6 @@
 import { requireRole } from "@/lib/serverAuth";
 import { addSSEClient, removeSSEClient } from "@/lib/eventBus";
+import { getOrganizationId } from "@/lib/tenantContext";
 
 // ✅ Pass withCredentials so cookies are sent
 
@@ -28,6 +29,10 @@ export async function GET(req: Request) {
       id: clientId,
       userId: auth.session._id,
       role: auth.session.role,
+      // From the signed session, never the request. Without it the bus filtered
+      // only on role, and "admin" exists in every tenant — so one organization's
+      // activity feed was delivered to all of them.
+      organizationId: await getOrganizationId(),
       controller
     });
 

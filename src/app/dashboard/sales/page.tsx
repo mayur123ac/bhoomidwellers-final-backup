@@ -58,6 +58,16 @@ import { handleMarkLostLead as markLostLeadApi, restoreLostLead, updateLeadLostS
 import AttendanceTimerWidget from "@/components/AttendanceTimerWidget";
 import UserAvatar from "@/components/UserAvatar";
 import AppHeader from "@/components/AppHeader";
+// The notification queue. Built and organization-scoped on the server — see
+// lib/notifications/feed.ts for why it is no longer derived in this file.
+import {
+  useNotificationFeed,
+  openNotificationLead,
+  withinNextDay,
+  type CrmNotification,
+} from "@/lib/hooks/useNotificationFeed";
+import NotificationPopover from "@/components/notifications/NotificationPopover";
+import NotificationCenterView from "@/components/notifications/NotificationCenterView";
 
 const SiteVisitOverview = dynamic(() => import("../../dashboard/SiteVisitOverview"), { ssr: false });
 const CARDS_PER_PAGE = 20;
@@ -76,6 +86,9 @@ const SALES_CONTEXT: Record<string, string> = {
   ...Object.fromEntries(SALES_NAV.map((i) => [i.id, i.label])),
   detail: "Assigned Leads",
   sales: "Dashboard",
+  // No rail item of its own: you arrive here from a popover's "See all N …"
+  // footer, not from the sidebar.
+  notifications: "Notification Center",
 };
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -364,9 +377,18 @@ export default function SalesDashboard() {
   const [user, setUser] = useState({ name: "Loading...", role: "Sales Manager", email: "", password: "" });
   const [activeView, setActiveView] = useState("overview");
   const [showPassword, setShowPassword] = useState(false);
-  const [dismissedFollowUps, setDismissedFollowUps] = useState<Set<string>>(new Set());
-  const [dismissedVisits, setDismissedVisits] = useState<Set<string>>(new Set());
-  const [pendingLeadOpen, setPendingLeadOpen] = useState<number | null>(null);
+  // Dismissals now live in the notification feed hook, keyed by notification id
+  // rather than lead id — a lead can raise both a follow-up and a site-visit
+  // reminder, and dismissing one used to silence the other.
+  //
+  // `openBooking` distinguishes the two ways a lead gets opened from outside the
+  // Assigned Leads list: Inventory wants the booking form, a notification wants
+  // the Lead Detail panel. Previously every jump forced the booking view open.
+  const [pendingLeadOpen, setPendingLeadOpen] =
+    useState<{ id: number; openBooking?: boolean } | null>(null);
+  /** Which tab the Notification Center opens on, set by the footer that sent us there. */
+  const [notificationFilter, setNotificationFilter] =
+    useState<"all" | "follow_up" | "site_visit" | "new_lead">("all");
   const [activePopup, setActivePopup] = useState<"notifications" | "profile" | "visit" | null>(null);
   const topbarRef = useRef<HTMLDivElement>(null);
   // ── Attendance: live clock tick ──
@@ -400,55 +422,105 @@ export default function SalesDashboard() {
     return isUnrestricted ? allLeads : allLeads.filter((l: any) => l.assigned_to === user.name);
   }, [allLeads, user]);
 
-  const followUpLeads = useMemo(() => {
-    // Settings → Additional Features → "Follow-up reminders". Off empties the
-    // list, which silences the badge and leaves the panel saying everything is
-    // up to date. The leads themselves are untouched — this is a notification
-    // preference, not a filter.
-    if (featurePrefs.toggles.followUpReminders === false) return [];
-    const now = new Date();
-    const myLeads = user.role === "admin" ? allLeads : allLeads.filter((l: any) => l.assigned_to === user.name);
-    return myLeads.filter((lead: any) => {
-      if (lead.is_lost_lead) return false;
-      if (lead.status === "Completed" || lead.status === "Closing") return false;
-      if (lead.leadInterestStatus === "Not Interested") return false;
-      const leadFups = followUps.filter((f: any) => String(f.leadId) === String(lead.id));
-      const lastActivityMs = leadFups.length > 0
-        ? Math.max(...leadFups.map((f: any) => new Date(f.createdAt).getTime()))
-        : new Date(lead.created_at).getTime();
-      return (now.getTime() - lastActivityMs) / (1000 * 60 * 60 * 24) >= 2;
-    }).map((lead: any) => {
-      const leadFups = followUps.filter((f: any) => String(f.leadId) === String(lead.id));
-      const lastActivityMs = leadFups.length > 0
-        ? Math.max(...leadFups.map((f: any) => new Date(f.createdAt).getTime()))
-        : new Date(lead.created_at).getTime();
-      return { ...lead, daysSince: Math.floor((now.getTime() - lastActivityMs) / (1000 * 60 * 60 * 24)) };
-    }).sort((a: any, b: any) => b.daysSince - a.daysSince);
-  }, [allLeads, followUps, user, featurePrefs.toggles.followUpReminders]);
+  // ── The notification queue ─────────────────────────────────────────────────
+  // Built by the server, scoped to this session's organization in SQL. The two
+  // useMemo blocks this replaces re-derived the same three rules in the browser
+  // from a full download of every lead and every follow-up. That was never a
+  // leak on its own — /api/walkin_enquiries is organization-scoped — but it left
+  // the tenant boundary implicit in four separate files, any of which could add
+  // a fetch that forgot it. It is now one SQL predicate, in one module.
+  //
+  // Settings → Additional Features is passed through, so a disabled reminder
+  // empties the queue at the source rather than being hidden client-side.
+  const notifications = useNotificationFeed({
+    followUpReminders: featurePrefs.toggles.followUpReminders !== false,
+    siteVisitAlerts: featurePrefs.toggles.siteVisitAlerts !== false,
+  });
+  const followUpLeads = notifications.followUps;
+  // This bell means "today & tomorrow", which is narrower than the window the
+  // feed returns for the Admin bell and the Notification Center. See
+  // withinNextDay: a display window, not a tenant filter.
+  const visitNotificationLeads = useMemo(
+    () => withinNextDay(notifications.siteVisits),
+    [notifications.siteVisits]
+  );
 
-  const visitNotificationLeads = useMemo(() => {
-    // Settings → Additional Features → "Site visit alerts".
-    if (featurePrefs.toggles.siteVisitAlerts === false) return [];
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const myLeads = user.role === "admin" ? allLeads : allLeads.filter((l: any) => l.assigned_to === user.name);
-    return myLeads
-      .filter((lead: any) => {
-        if (lead.is_lost_lead) return false;
-        if (!lead.mongoVisitDate) return false;
-        if (dismissedVisits.has(String(lead.id))) return false;
-        const visitDay = new Date(lead.mongoVisitDate);
-        const visit = new Date(visitDay.getFullYear(), visitDay.getMonth(), visitDay.getDate());
-        return Math.round((visit.getTime() - today.getTime()) / 86400000) >= 0 &&
-          Math.round((visit.getTime() - today.getTime()) / 86400000) <= 1;
-      })
-      .map((lead: any) => {
-        const visitDay = new Date(lead.mongoVisitDate);
-        const visit = new Date(visitDay.getFullYear(), visitDay.getMonth(), visitDay.getDate());
-        return { ...lead, visitDiff: Math.round((visit.getTime() - today.getTime()) / 86400000) };
-      })
-      .sort((a: any, b: any) => a.visitDiff - b.visitDiff);
-  }, [allLeads, dismissedVisits, user, featurePrefs.toggles.siteVisitAlerts]);
+  /**
+   * Open a notification's lead in the Lead Detail panel.
+   *
+   * Two steps, in this order, and both matter:
+   *   1. Ask the server whether this session may open that lead. It re-reads the
+   *      organization from the session and re-applies it, so a notification id
+   *      or lead id that came from anywhere else — a stale tab, a hand-made
+   *      request, another tenant — resolves to nothing.
+   *   2. Only then hand the id to SalesManagerView, which selects the lead from
+   *      its own organization-scoped list and switches to the detail view.
+   *
+   * The popover closes either way; leaving it open over a panel that did not
+   * change would read as the click having done nothing.
+   */
+  const openLeadFromNotification = useCallback(async (n: CrmNotification) => {
+    setActivePopup(null);
+    const lead = await openNotificationLead(n.leadId);
+    if (!lead) {
+      console.warn("[notifications] lead is not available for this organization:", n.leadId);
+      return;
+    }
+    setPendingLeadOpen({ id: lead.id });
+    setActiveView("forms");
+  }, []);
+
+  /** Footer of a capped popover: close it and show the whole queue. */
+  const seeAllNotifications = useCallback(
+    (filter: "all" | "follow_up" | "site_visit" | "new_lead") => {
+      setActivePopup(null);
+      setNotificationFilter(filter);
+      setActiveView("notifications");
+    },
+    []
+  );
+
+  /** Display extras the feed does not carry: property, budget, interest badge. */
+  const leadById = useCallback(
+    (leadId: number) => allLeads.find((l: any) => Number(l.id) === Number(leadId)),
+    [allLeads]
+  );
+
+  // The shared notification components take their classes as props: /dashboard
+  // and this page each build their own theme object, and neither should have to
+  // know about the other's token names.
+  const notifPopoverTheme = useMemo(
+    () => ({
+      text: t.text,
+      textMuted: t.textMuted,
+      textFaint: t.textFaint,
+      border: t.tableBorder,
+      itemHover: t.dropdownItem,
+      footer: isDark
+        ? "text-[#d946a8] hover:bg-[#9E217B]/10"
+        : "text-[#9E217B] hover:bg-[#9E217B]/10",
+    }),
+    [t, isDark]
+  );
+
+  const notifCenterTheme = useMemo(
+    () => ({
+      text: t.text,
+      textMuted: t.textMuted,
+      textFaint: t.textFaint,
+      border: t.tableBorder,
+      card: t.dropdown,
+      cardGlass: t.dropdownGlass,
+      itemHover: t.dropdownItem,
+      chipActive: isDark
+        ? "bg-[#9E217B]/20 border-[#9E217B]/50 text-[#d946a8]"
+        : "bg-[#9E217B]/10 border-[#9E217B]/40 text-[#9E217B]",
+      chipIdle: isDark
+        ? "border-[#2a2a2a] text-gray-400 hover:border-[#9E217B]/40"
+        : "border-[#D1D5DB] text-[#475569] hover:border-[#9E217B]/40",
+    }),
+    [t, isDark]
+  );
 
   // Restore the view a rail click asked for before it navigated here — the same
   // `return_tab` convention the Admin dashboard has always used. Without it,
@@ -571,35 +643,36 @@ export default function SalesDashboard() {
                     transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
                     className={`absolute top-12 right-[-40] sm:right-0 w-72 sm:w-80 rounded-xl shadow-2xl z-50 overflow-hidden border ${t.dropdown}`} style={t.dropdownGlass}
                   >
-                    <div className={`p-3 border-b flex items-center justify-between ${t.tableBorder}`}>
-                      <div>
-                        <h3 className={`font-bold text-sm ${t.text}`}>Site Visit Reminders</h3>
-                        <p className={`text-[10px] mt-0.5 ${t.textFaint}`}>Scheduled for today & tomorrow</p>
-                      </div>
-                      {visitNotificationLeads.length > 0 && <span className="text-[10px] font-bold bg-orange-500/10 border border-orange-500/30 text-orange-400 px-2 py-0.5 rounded-full">{visitNotificationLeads.length} upcoming</span>}
-                    </div>
-                    <div className="max-h-80 overflow-y-auto custom-scrollbar">
-                      {visitNotificationLeads.length === 0
-                        ? <div className={`p-6 text-center text-sm ${t.textFaint}`}><FaCalendarAlt className="text-2xl mb-2 mx-auto opacity-20" />No visits in the next 24 hours!</div>
-                        : visitNotificationLeads.map((lead: any) => {
-                          const isToday = lead.visitDiff === 0;
-                          return (
-                            <div key={lead.id} className={`p-3 border-b transition-colors group relative ${t.dropdownItem}`}>
-                              <button onClick={e => { e.stopPropagation(); setDismissedVisits(prev => new Set([...prev, String(lead.id)])); }} className={`absolute top-3 right-3 cursor-pointer opacity-0 group-hover:opacity-100 ${t.textFaint} hover:text-red-500`}><FaTimes className="text-xs" /></button>
-                              <div className="flex items-start justify-between gap-3 pr-4">
-                                <div className="flex-1 min-w-0">
-                                  <p className={`font-bold text-xs group-hover:text-orange-400 truncate ${t.text}`}>#{lead.sr_no || lead.id} — {lead.name}</p>
-                                  <p className={`text-[10px] mt-0.5 truncate ${t.textFaint}`}>{(lead.propType && lead.propType !== "Pending") ? lead.propType : lead.configuration ? lead.configuration : "Property TBD"} · {lead.salesBudget}</p>
-                                  <p className={`text-[10px] mt-1 ${t.textMuted}`}>📅 {new Date(lead.mongoVisitDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</p>
-                                </div>
-                                <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full border flex-shrink-0 ${isToday ? "text-red-400 bg-red-500/10 border-red-500/30" : "text-yellow-400 bg-yellow-500/10 border-yellow-500/30"}`}>{isToday ? "TODAY" : "TOMORROW"}</span>
-                              </div>
-                            </div>
-                          );
-                        })
-                      }
-                    </div>
-                    {visitNotificationLeads.length > 0 && <div className={`p-3 border-t ${t.tableBorder}`}><p className={`text-[10px] text-center ${t.textFaint}`}>🗓️ Showing visits within the next 24 hours</p></div>}
+                    {/* Three at most, sorted by the closest visit first, and no
+                        internal scrollbar. The footer carries the real count. */}
+                    <NotificationPopover
+                      title="Site Visit Reminders"
+                      caption="Scheduled for today & tomorrow"
+                      items={visitNotificationLeads}
+                      footerNoun="upcoming site visits"
+                      accent="orange"
+                      theme={notifPopoverTheme}
+                      onOpenLead={openLeadFromNotification}
+                      onDismiss={(n) => notifications.dismiss(n.id)}
+                      onSeeAll={() => seeAllNotifications("site_visit")}
+                      renderDetail={(n) => {
+                        // Property and budget are display extras the feed does
+                        // not carry; they come from this page's own
+                        // organization-scoped lead list, matched by id.
+                        const lead: any = leadById(n.leadId);
+                        if (!lead) return null;
+                        return (
+                          <p className={`text-[10px] mt-0.5 truncate ${t.textFaint}`}>
+                            {(lead.propType && lead.propType !== "Pending") ? lead.propType : lead.configuration ? lead.configuration : "Property TBD"} · {lead.salesBudget}
+                          </p>
+                        );
+                      }}
+                      renderMetric={(n) => (
+                        <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full border ${n.visitDiff === 0 ? "text-red-400 bg-red-500/10 border-red-500/30" : "text-yellow-400 bg-yellow-500/10 border-yellow-500/30"}`}>
+                          {n.visitDiff === 0 ? "TODAY" : n.visitDiff === 1 ? "TOMORROW" : `IN ${n.visitDiff}D`}
+                        </span>
+                      )}
+                    />
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -612,9 +685,9 @@ export default function SalesDashboard() {
                 className={`relative h-9 w-9 flex-shrink-0 rounded-lg border flex items-center justify-center transition-colors duration-150 cursor-pointer ${t.toggleWrap} hover:border-purple-500/50 ${t.textMuted}`}
               >
                 <FaBell className="text-sm sm:text-base" />
-                {followUpLeads.filter((l: any) => !dismissedFollowUps.has(String(l.id))).length > 0 && (
+                {followUpLeads.length > 0 && (
                   <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 bg-red-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center">
-                    {followUpLeads.filter((l: any) => !dismissedFollowUps.has(String(l.id))).length > 9 ? "9+" : followUpLeads.filter((l: any) => !dismissedFollowUps.has(String(l.id))).length}
+                    {followUpLeads.length > 9 ? "9+" : followUpLeads.length}
                   </span>
                 )}
               </button>
@@ -627,43 +700,51 @@ export default function SalesDashboard() {
                     transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
                     className={`absolute top-12 right-0 sm:right-0 w-72 sm:w-80 rounded-xl shadow-2xl z-50 overflow-hidden border ${t.dropdown}`} style={t.dropdownGlass}
                   >
-                    <div className={`p-3 border-b flex items-center justify-between ${t.tableBorder}`}>
-                      <div>
-                        <h3 className={`font-bold text-sm ${t.text}`}>Follow-up Reminders</h3>
-                        <p className={`text-[10px] mt-0.5 ${t.textFaint}`}>Leads with no activity in 2+ days</p>
-                      </div>
-                      {followUpLeads.filter((l: any) => !dismissedFollowUps.has(String(l.id))).length > 0 &&
-                        <span className="text-[10px] font-bold bg-red-500/10 border border-red-500/30 text-red-400 px-2 py-0.5 rounded-full">
-                          {followUpLeads.filter((l: any) => !dismissedFollowUps.has(String(l.id))).length} pending
-                        </span>
-                      }
-                    </div>
-                    <div className="max-h-80 overflow-y-auto custom-scrollbar">
-                      {followUpLeads.filter((l: any) => !dismissedFollowUps.has(String(l.id))).length === 0
-                        ? <div className={`p-6 text-center text-sm ${t.textFaint}`}><FaBell className="text-2xl mb-2 mx-auto opacity-20" />All leads are up to date!</div>
-                        : followUpLeads.filter((l: any) => !dismissedFollowUps.has(String(l.id))).map((lead: any) => (
-                          <div key={lead.id} onClick={() => { setActivePopup(null); setActiveView("detail"); }} className={`p-3 border-b transition-colors cursor-pointer group relative ${t.dropdownItem}`}>
-                            <button onClick={e => { e.stopPropagation(); setDismissedFollowUps(prev => new Set([...prev, String(lead.id)])); }} className={`absolute top-3 right-3 cursor-pointer opacity-0 group-hover:opacity-100 ${t.textFaint} hover:text-red-500`}><FaTimes className="text-xs" /></button>
-                            <div className="flex items-start justify-between gap-3 pr-4">
-                              <div className="flex-1 min-w-0">
-                                <p className={`font-bold text-xs group-hover:text-purple-400 truncate ${t.text}`}>#{lead.sr_no || lead.id} — {lead.name}</p>
-                                <p className={`text-[10px] mt-0.5 truncate ${t.textFaint}`}>{(lead.propType && lead.propType !== "Pending") ? lead.propType : lead.configuration ? lead.configuration : "No property set"} · {lead.salesBudget}</p>
-                                {lead.leadInterestStatus && lead.leadInterestStatus !== "Pending" && (
-                                  <span className={`inline-block mt-1 text-[9px] font-bold uppercase px-2 py-0.5 rounded-full border ${lead.leadInterestStatus === "Interested" ? "text-green-400 border-green-500/30 bg-green-500/10" : "text-yellow-400 border-yellow-500/30 bg-yellow-500/10"}`}>{lead.leadInterestStatus}</span>
-                                )}
-                              </div>
-                              <div className="flex-shrink-0 text-right">
-                                <div className={`text-xs font-black ${lead.daysSince >= 7 ? "text-red-400" : lead.daysSince >= 4 ? "text-orange-400" : "text-yellow-400"}`}>{lead.daysSince}d</div>
-                                <p className={`text-[9px] ${t.textFaint}`}>no contact</p>
-                              </div>
-                            </div>
+                    {/* Three at most, sorted by the highest daysSince first. The
+                        list itself no longer scrolls — the footer opens the
+                        Notification Center, which does. */}
+                    <NotificationPopover
+                      title="Follow-up Reminders"
+                      caption="Leads with no activity in 2+ days"
+                      items={followUpLeads}
+                      footerNoun="pending follow-ups"
+                      accent="purple"
+                      theme={notifPopoverTheme}
+                      onOpenLead={openLeadFromNotification}
+                      onDismiss={(n) => notifications.dismiss(n.id)}
+                      onSeeAll={() => seeAllNotifications("follow_up")}
+                      renderDetail={(n) => {
+                        // Property and budget are display extras the feed does
+                        // not carry; they come from this page's own
+                        // organization-scoped lead list, matched by id. The
+                        // interest badge DOES come from the feed, so the badge
+                        // and the exclusion rule that hides "Not Interested"
+                        // leads read the same value.
+                        const lead: any = leadById(n.leadId);
+                        return (
+                          <>
+                            {lead && (
+                              <p className={`text-[10px] mt-0.5 truncate ${t.textFaint}`}>
+                                {(lead.propType && lead.propType !== "Pending") ? lead.propType : lead.configuration ? lead.configuration : "No property set"} · {lead.salesBudget}
+                              </p>
+                            )}
+                            {n.interestStatus && n.interestStatus !== "Pending" && (
+                              <span className={`inline-block mt-1 text-[9px] font-bold uppercase px-2 py-0.5 rounded-full border ${n.interestStatus === "Interested" ? "text-green-400 border-green-500/30 bg-green-500/10" : "text-yellow-400 border-yellow-500/30 bg-yellow-500/10"}`}>
+                                {n.interestStatus}
+                              </span>
+                            )}
+                          </>
+                        );
+                      }}
+                      renderMetric={(n) => (
+                        <>
+                          <div className={`text-xs font-black ${(n.daysSince ?? 0) >= 7 ? "text-red-400" : (n.daysSince ?? 0) >= 4 ? "text-orange-400" : "text-yellow-400"}`}>
+                            {n.daysSince}d
                           </div>
-                        ))
-                      }
-                    </div>
-                    {followUpLeads.filter((l: any) => !dismissedFollowUps.has(String(l.id))).length > 0 &&
-                      <div className={`p-3 border-t ${t.tableBorder}`}><p className={`text-[10px] text-center ${t.textFaint}`}>⚠️ Not Interested & Closing leads excluded</p></div>
-                    }
+                          <p className={`text-[9px] ${t.textFaint}`}>no contact</p>
+                        </>
+                      )}
+                    />
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -747,7 +828,8 @@ export default function SalesDashboard() {
               isDark={isDark}
               t={t}
               onOpenLead={(leadId: number) => {
-                setPendingLeadOpen(leadId);
+                // Inventory wants the booking form, not just the lead panel.
+                setPendingLeadOpen({ id: leadId, openBooking: true });
                 setActiveView("forms");   // mounts SalesManagerView so it can pick up pendingLeadOpen
               }}
             />
@@ -757,6 +839,20 @@ export default function SalesDashboard() {
               isDark={isDark}
               t={t}
               now={now}
+            />
+          ) : activeView === "notifications" ? (
+            /* The Notification Center: the COMPLETE queue the popovers cap at
+               three. Reached from a "See all N …" footer, which preselects the
+               matching tab. */
+            <NotificationCenterView
+              newLeads={notifications.newLeads}
+              siteVisits={notifications.siteVisits}
+              followUps={notifications.followUps}
+              isLoading={notifications.isLoading}
+              theme={notifCenterTheme}
+              initialFilter={notificationFilter}
+              onOpenLead={openLeadFromNotification}
+              onDismiss={(n) => notifications.dismiss(n.id)}
             />
           ) : (
             <div className={`text-center mt-20 ${t.textMuted}`}>...</div>
@@ -1082,15 +1178,18 @@ function SalesManagerView({
     else { setBookingData(null); setShowBookingView(false); }
   }, [selectedLead?.id]);
 
-  // Jump here from the Inventory tab: open the lead and, once its booking loads, the booking form itself.
+  // Jump here from elsewhere in the page: Inventory (which also wants the
+  // booking form once it loads) or a header notification (which wants the Lead
+  // Detail panel and nothing else). `openBooking` is what tells them apart —
+  // notifications used to land on the booking view because this always set it.
   useEffect(() => {
     if (pendingLeadOpen == null) return;
-    const lead = allLeads.find((l: any) => Number(l.id) === Number(pendingLeadOpen));
+    const lead = allLeads.find((l: any) => Number(l.id) === Number(pendingLeadOpen.id));
     if (lead) {
       setSelectedLead(lead);
       setMainView("detail");
       setSubView("detail");
-      setAutoOpenBooking(true);
+      if (pendingLeadOpen.openBooking) setAutoOpenBooking(true);
     }
     onPendingLeadOpenHandled?.();
   }, [pendingLeadOpen, allLeads]);

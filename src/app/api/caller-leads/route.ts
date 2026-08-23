@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
 import { getOrganizationId } from "@/lib/tenantContext";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
-import { broadcastUpdate } from "./events/route";
+import { broadcastCallerUpdate } from "@/lib/callerLeadEvents";
 
 // ── POST: Bulk insert leads from Excel upload ─────────────────────────────────
 export async function POST(req: Request) {
@@ -55,7 +55,8 @@ export async function POST(req: Request) {
       return { batchId, ids };
     });
 
-    broadcastUpdate({
+    // Published to the uploading tenant only.
+    broadcastCallerUpdate(await getOrganizationId(), {
       type: "leads_uploaded",
       batchId: result.batchId,
       count: leads.length,
@@ -148,7 +149,7 @@ export async function DELETE(req: Request) {
       await client.query(`DELETE FROM caller_upload_batches WHERE id::text = $1 AND organization_id = $2`, [batchId, batchOrgId]);
     });
 
-    broadcastUpdate({ type: "batch_deleted", batchId, ts: Date.now() });
+    broadcastCallerUpdate(await getOrganizationId(), { type: "batch_deleted", batchId, ts: Date.now() });
 
     return NextResponse.json({ success: true });
   } catch (err: any) {

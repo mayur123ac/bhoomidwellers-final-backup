@@ -14,19 +14,11 @@ import { computeFinancialObligation } from "@/lib/financialObligationEngine";
 
 export const dynamic = "force-dynamic";
 
-// Ensure history table exists
-async function ensureHistoryTable() {
-  await query(`
-    CREATE TABLE IF NOT EXISTS booking_history (
-        id SERIAL PRIMARY KEY,
-        booking_id INT REFERENCES booking_applications(id) ON DELETE CASCADE,
-        updated_by VARCHAR(255) NOT NULL,
-        user_role VARCHAR(100) NOT NULL,
-        changed_fields JSONB NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
-}
+// ensureHistoryTable() lived here and ran at the top of every PUT. The
+// CREATE TABLE IF NOT EXISTS is now in
+// scripts/migrations/2026-08-23_booking_schema_baseline.sql — it was a no-op that
+// cost a full round trip to Neon (~82 ms) on every booking save, and it took an
+// ACCESS EXCLUSIVE lock on booking_history to do nothing.
 
 // ─── GET — fetch single booking ───────────────────────────────────────────────
 export async function GET(
@@ -91,6 +83,19 @@ export async function GET(
                  FROM booking_tds_records t WHERE t.booking_id = b.id),
                 '[]'
               ) AS tds_records,
+              -- Two aliases the LIST response has always carried and this one did
+              -- not. BookingApplicationView renders booking.total_received and
+              -- booking.balance_receivable, and RevenueIntelligenceView reads
+              -- record.balance_receivable — all three came out blank whenever the
+              -- booking was loaded through this endpoint rather than the list.
+              --
+              -- Pre-existing drift, found by the post-refactor shape check: this
+              -- route hand-writes its own copy of the booking SELECT instead of
+              -- using BOOKING_SELECT_SQL, so the two could diverge silently. The
+              -- values were already being read from clv for financial_summary
+              -- below; they are simply exposed under the names the UI uses.
+              clv.gross_collection AS total_received,
+              clv.outstanding_balance AS balance_receivable,
               json_build_object(
                'agreement_value', clv.agreement_value,
                'gross_collection', clv.gross_collection,
@@ -138,7 +143,6 @@ export async function PUT(
     const gate = await requireSession();
     if (!gate.ok) return gate.response;
 
-    await ensureHistoryTable();
     const formData = await req.formData();
 
     const getStr = (key: string) => (formData.get(key) as string) || "";
@@ -268,32 +272,54 @@ export async function PUT(
       }
     }
 
-    // Helper to upload file if exists
+    // ── Document uploads ─────────────────────────────────────────────────────
+    // These already run BEFORE the transaction opens (it starts further down), so
+    // unlike the create path there was never an R2 round trip inside an open
+    // transaction here. That ordering is deliberate and is left alone.
+    //
+    // What changed is that they no longer run one after another. Each upload is a
+    // round trip to Cloudflare, and an edit touching the primary PAN, both Aadhaar
+    // sides and two joint applicants issued nine of them back to back. They are
+    // independent objects — distinct keys, no shared state — so they go together
+    // and the cost becomes the slowest upload instead of the sum.
     async function handleUpload(key: string, existingUrl: string) {
       const file = formData.get(key) as File | null;
       if (file && file.size > 0 && typeof file !== "string") {
         const ext = file.name.split('.').pop();
         const buffer = Buffer.from(await file.arrayBuffer());
+        // The form-field name is part of the key, so two uploads landing in the
+        // same millisecond still cannot collide.
         return await uploadBufferToR2(`bookings/${id}/${key}_${Date.now()}.${ext}`, buffer, file.type);
       }
       return existingUrl;
     }
-
-    const primary_aadhaar_front_url = await handleUpload("primary_aadhaar_front_file", currentData.primary_aadhaar_front_url);
-    const primary_aadhaar_back_url = await handleUpload("primary_aadhaar_back_file", currentData.primary_aadhaar_back_url);
-    const primary_pan_url = await handleUpload("primary_pan_file", currentData.primary_pan_url);
 
     let joint_applicants: any[] = [];
     try { joint_applicants = JSON.parse(getStr("joint_applicants") || "[]"); } catch { }
     let current_joint: any[] = [];
     try { current_joint = typeof currentData.joint_applicants === 'string' ? JSON.parse(currentData.joint_applicants) : currentData.joint_applicants || []; } catch { }
 
-    for (let i = 0; i < joint_applicants.length; i++) {
-      const existingJoint = current_joint[i] || {};
-      joint_applicants[i].pan_url = await handleUpload(`joint_${i}_pan_file`, existingJoint.pan_url);
-      joint_applicants[i].aadhaar_front_url = await handleUpload(`joint_${i}_aadhaar_front_file`, existingJoint.aadhaar_front_url);
-      joint_applicants[i].aadhaar_back_url = await handleUpload(`joint_${i}_aadhaar_back_file`, existingJoint.aadhaar_back_url);
-    }
+    const [primary_aadhaar_front_url, primary_aadhaar_back_url, primary_pan_url, jointUrls] =
+      await Promise.all([
+        handleUpload("primary_aadhaar_front_file", currentData.primary_aadhaar_front_url),
+        handleUpload("primary_aadhaar_back_file", currentData.primary_aadhaar_back_url),
+        handleUpload("primary_pan_file", currentData.primary_pan_url),
+        Promise.all(
+          joint_applicants.map(async (_: any, i: number) => {
+            const existingJoint = current_joint[i] || {};
+            const [pan_url, aadhaar_front_url, aadhaar_back_url] = await Promise.all([
+              handleUpload(`joint_${i}_pan_file`, existingJoint.pan_url),
+              handleUpload(`joint_${i}_aadhaar_front_file`, existingJoint.aadhaar_front_url),
+              handleUpload(`joint_${i}_aadhaar_back_file`, existingJoint.aadhaar_back_url),
+            ]);
+            return { pan_url, aadhaar_front_url, aadhaar_back_url };
+          }),
+        ),
+      ]);
+
+    // Applied after the fact rather than mutated inside the map, so the objects
+    // are written in index order exactly as the sequential version did.
+    jointUrls.forEach((urls, i) => { Object.assign(joint_applicants[i], urls); });
 
     let payment_details: any[] = [];
     try { payment_details = JSON.parse(getStr("payment_details") || "[]"); } catch { }
@@ -523,9 +549,13 @@ export async function PUT(
         const reason = getStr("cancellation_reason") || null;
         const remarks = getStr("cancellation_remarks") || null;
         await client.query(
+          // The organization predicate is redundant — the handler already 404'd
+          // unless this id belongs to this tenant — but redundant is the right
+          // level of paranoia for a write, and it costs nothing.
           `UPDATE booking_applications SET booking_status='Cancelled', cancellation_reason=$2,
-             cancellation_remarks=$3, cancelled_by=$4, cancelled_at=NOW(), updated_at=NOW() WHERE id=$1`,
-          [Number(id), reason, remarks, user_name],
+             cancellation_remarks=$3, cancelled_by=$4, cancelled_at=NOW(), updated_at=NOW()
+             WHERE id=$1 AND organization_id=$5`,
+          [Number(id), reason, remarks, user_name, orgId],
         );
         await releaseUnitForBooking(client, Number(id), `booking #${id} cancelled`, user_name);
         await client.query(
@@ -533,7 +563,11 @@ export async function PUT(
            VALUES ($1, $2, $3, $4, $5)`,
           [Number(id), user_name, user_role, JSON.stringify({ booking_status: { from: cur, to: "Cancelled" }, cancellation_reason: reason }), orgId],
         );
-        return (await client.query(`SELECT * FROM booking_applications WHERE id = $1`, [Number(id)])).rows[0];
+        // No re-read here. This row was fetched, shipped across the wire and then
+        // discarded — the response is built by fetchBookingById() after commit,
+        // and `updatedRow` is only ever a fallback for a booking that vanished
+        // between commit and read. One wasted 121-column round trip per save.
+        return { id: Number(id) };
       }
 
       // ── (B) Reactivate: Cancelled → Confirmed. Re-book the flat (block if another
@@ -564,15 +598,20 @@ export async function PUT(
         });
         await client.query(
           `UPDATE booking_applications SET booking_status='Confirmed', cancellation_reason=NULL,
-             cancellation_remarks=NULL, cancelled_by=NULL, cancelled_at=NULL, updated_at=NOW() WHERE id=$1`,
-          [Number(id)],
+             cancellation_remarks=NULL, cancelled_by=NULL, cancelled_at=NULL, updated_at=NOW()
+             WHERE id=$1 AND organization_id=$2`,
+          [Number(id), orgId],
         );
         await client.query(
           `INSERT INTO booking_history (booking_id, updated_by, user_role, changed_fields, organization_id)
            VALUES ($1, $2, $3, $4, $5)`,
           [Number(id), user_name, user_role, JSON.stringify({ booking_status: { from: "Cancelled", to: "Confirmed" }, action: "reactivated" }), orgId],
         );
-        return (await client.query(`SELECT * FROM booking_applications WHERE id = $1`, [Number(id)])).rows[0];
+        // No re-read here. This row was fetched, shipped across the wire and then
+        // discarded — the response is built by fetchBookingById() after commit,
+        // and `updatedRow` is only ever a fallback for a booking that vanished
+        // between commit and read. One wasted 121-column round trip per save.
+        return { id: Number(id) };
       }
 
       // ── (C) Edit cancellation metadata (stays Cancelled) ──
@@ -580,10 +619,15 @@ export async function PUT(
         const reason = getStr("cancellation_reason") || null;
         const remarks = getStr("cancellation_remarks") || null;
         await client.query(
-          `UPDATE booking_applications SET cancellation_reason=$2, cancellation_remarks=$3, updated_at=NOW() WHERE id=$1`,
-          [Number(id), reason, remarks],
+          `UPDATE booking_applications SET cancellation_reason=$2, cancellation_remarks=$3, updated_at=NOW()
+             WHERE id=$1 AND organization_id=$4`,
+          [Number(id), reason, remarks, orgId],
         );
-        return (await client.query(`SELECT * FROM booking_applications WHERE id = $1`, [Number(id)])).rows[0];
+        // No re-read here. This row was fetched, shipped across the wire and then
+        // discarded — the response is built by fetchBookingById() after commit,
+        // and `updatedRow` is only ever a fallback for a booking that vanished
+        // between commit and read. One wasted 121-column round trip per save.
+        return { id: Number(id) };
       }
 
       // 1. Update Booking Applications
@@ -731,15 +775,18 @@ export async function PUT(
         );
       }
 
-      const rows = await client.query(`SELECT * FROM booking_applications WHERE id = $1`, [Number(id)]);
-      return rows.rows[0];
+      // Same as the branches above: nothing read here survived the function.
+      return { id: Number(id) };
     });
 
-    // Re-read with the joins, post-commit. The bare row above carries no
-    // lead_name / lead_phone / token_amount / ocr_amount, and the UI assigns this
-    // response straight into the booking view — which is how an edited booking
-    // came back showing its own customer details as "—".
-    const enriched = await fetchBookingById(Number(id));
+    // Re-read with the joins, post-commit — the ONE read this response needs.
+    // The bare row this replaced carried no lead_name / lead_phone /
+    // token_amount / ocr_amount, and the UI assigns this response straight into
+    // the booking view, which is how an edited booking came back showing its own
+    // customer details as "—".
+    //
+    // The organization is passed in rather than resolved a second time.
+    const enriched = await fetchBookingById(Number(id), await getOrganizationId());
 
     return NextResponse.json({ success: true, data: enriched ?? updatedRow }, { status: 200 });
   } catch (err: any) {

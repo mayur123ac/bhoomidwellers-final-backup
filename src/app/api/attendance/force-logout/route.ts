@@ -22,18 +22,24 @@ export async function POST(req: Request) {
     // the organization predicate an admin of one tenant could sign out a user of
     // another simply by guessing their id. The organization comes from the signed
     // session, never from the body.
+    const organizationId = await getOrganizationId();
+
     await query(`
-      UPDATE employee_sessions 
+      UPDATE employee_sessions
       SET is_active = false, session_end = NOW(), session_end_reason = 'forced_logout'
       WHERE user_id = $1 AND organization_id = $2
-    `, [user_id, await getOrganizationId()]);
+    `, [user_id, organizationId]);
 
-    // Instantly notify the target user's SSE client to terminate session
-    broadcastEvent({ type: "FORCE_LOGOUT" }, undefined, user_id);
+    // Instantly notify the target user's SSE client to terminate session.
+    // Tenant-scoped as well as user-scoped: user ids are global, so an id that
+    // collides across tenants would otherwise sign out the wrong person.
+    broadcastEvent(organizationId, { type: "FORCE_LOGOUT" }, undefined, user_id);
 
-    // Also notify admins that the user was forcefully logged out
-    broadcastEvent({ 
-      type: "SESSION_UPDATE", 
+    // Also notify THIS organization's admins that the user was forcefully logged
+    // out. "admin" exists in every tenant, so the role filter alone sent this to
+    // all of them.
+    broadcastEvent(organizationId, {
+      type: "SESSION_UPDATE",
       userId: user_id,
       status: "OFFLINE",
       message: "Forcefully Terminated"

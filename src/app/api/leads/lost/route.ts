@@ -23,7 +23,14 @@ function getErrorMessage(error: unknown, fallback: string) {
 export async function PATCH(req: Request) {
   try {
     // Marks a lead lost - removes it from every active pipeline view.
-    const gate = await requireRoles(["admin", "sales manager", "receptionist"]);
+    //
+    // Site Head is on this list because a Site Head owns leads: middleware routes
+    // them to /dashboard, where the lead detail panel renders the same "Mark as
+    // Lost Lead" button every other role gets. The button was never hidden from
+    // them — only this gate refused the mutation, so the action looked available
+    // and then failed with "Your role cannot perform this action." The fix is the
+    // authorization list, not the button: the role legitimately performs this.
+    const gate = await requireRoles(["admin", "sales manager", "site head", "receptionist"]);
     if (!gate.ok) return gate.response;
 
     const body = (await req.json()) as LostLeadPayload;
@@ -46,9 +53,14 @@ export async function PATCH(req: Request) {
       );
     }
 
+    // Resolved once and reused, including by the broadcast at the end. The
+    // event carries the lead row, so the tenant it is published to has to be the
+    // tenant the row was read from — not a second, independently resolved id.
+    const organizationId = await getOrganizationId();
+
     const existing = await query(
       "SELECT id, name, is_lost_lead FROM walkin_enquiries WHERE id = $1 AND organization_id = $2",
-      [leadId, await getOrganizationId()]
+      [leadId, organizationId]
     );
 
     if (existing.length === 0) {
@@ -67,7 +79,7 @@ export async function PATCH(req: Request) {
                lost_lead_marked_by = $2
            WHERE id = $3 AND organization_id = $4
            RETURNING *`,
-          [reason, actor, leadId, await getOrganizationId()]
+          [reason, actor, leadId, organizationId]
         )
       : await query(
           `UPDATE walkin_enquiries
@@ -77,7 +89,7 @@ export async function PATCH(req: Request) {
                lost_lead_marked_by = NULL
            WHERE id = $1 AND organization_id = $2
            RETURNING *`,
-          [leadId, await getOrganizationId()]
+          [leadId, organizationId]
         );
 
     const updatedLead = updatedRows[0];
@@ -95,7 +107,7 @@ export async function PATCH(req: Request) {
       await query(
         `INSERT INTO follow_ups (lead_id, message, created_by_name, site_visit_date, organization_id)
          VALUES ($1, $2, $3, $4, $5)`,
-        [String(leadId), logMessage, actor, null, await getOrganizationId()]
+        [String(leadId), logMessage, actor, null, organizationId]
       );
     } catch (fuErr: unknown) {
       console.warn("[PATCH /api/leads/lost] follow_ups insert failed:", getErrorMessage(fuErr, "Unknown error"));
@@ -107,7 +119,10 @@ export async function PATCH(req: Request) {
       lead: responseLead,
       ts: Date.now(),
     };
-    broadcastLeadUpdate(event);
+    // Published to this tenant's subscribers only. `event.lead` is the entire
+    // enquiry row; before it was tenant-scoped this went to every organization's
+    // open dashboards.
+    broadcastLeadUpdate(organizationId, event);
 
     return NextResponse.json(
       {
