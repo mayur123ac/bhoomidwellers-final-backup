@@ -958,9 +958,19 @@ export default function ReceptionistDashboard() {
   // ─────────────────────────────────────────────────────────────────────────
   // DATA FETCHING
   // ─────────────────────────────────────────────────────────────────────────
-  const fetchPage = async (currentOffset: number, append: boolean) => {
+  /* `search` is sent to the server rather than applied to the loaded rows.
+     This queue is paginated 20 at a time, so the client-side filter below could
+     only ever match leads that had already been scrolled into memory: searching
+     for a lead by name or phone returned "nothing found" unless the receptionist
+     had happened to load far enough down the list first. searchColumn=basic
+     matches exactly the three fields this queue has always searched — name,
+     phone and lead number — so the results are the same set, just drawn from the
+     whole organization instead of the current page. */
+  const fetchPage = async (currentOffset: number, append: boolean, search = "") => {
     try {
-      const res = await fetch(`/api/walkin_enquiries?limit=${PAGE_SIZE}&offset=${currentOffset}`);
+      const qs = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(currentOffset) });
+      if (search.trim()) { qs.set("q", search.trim()); qs.set("searchColumn", "basic"); }
+      const res = await fetch(`/api/walkin_enquiries?${qs.toString()}`);
       if (!res.ok) return;
       const json = await res.json();
       const dataArray: any[] = Array.isArray(json) ? json : (json.data ?? []);
@@ -1001,7 +1011,7 @@ export default function ReceptionistDashboard() {
   const initialLoad = async () => {
     setIsFetchingEnquiries(true);
     setOffset(0); setHasMore(true); setEnquiries([]);
-    await fetchPage(0, false);
+    await fetchPage(0, false, searchRecep);
     setIsFetchingEnquiries(false);
   };
 
@@ -1010,9 +1020,29 @@ export default function ReceptionistDashboard() {
     setIsLoadingMore(true);
     const next = offset + PAGE_SIZE;
     setOffset(next);
-    await fetchPage(next, true);
+    // The search term goes with every page, so "load more" keeps paging through
+    // the FILTERED set rather than reverting to the unfiltered list.
+    await fetchPage(next, true, searchRecep);
     setIsLoadingMore(false);
-  }, [isLoadingMore, hasMore, offset]);
+  }, [isLoadingMore, hasMore, offset, searchRecep]);
+
+  /* Re-query from the top when the search term settles. Debounced, because this
+     runs on a keystroke and each pass is a round trip; 300 ms is below the point
+     where typing feels laggy and well above a fast typist's inter-key gap, so a
+     word costs one request rather than one per letter.
+
+     The leading `didMountSearch` guard keeps this from firing a duplicate first
+     page on mount, which initialLoad has already fetched. */
+  const didMountSearch = useRef(false);
+  useEffect(() => {
+    if (!didMountSearch.current) { didMountSearch.current = true; return; }
+    const id = setTimeout(() => {
+      setOffset(0); setHasMore(true);
+      fetchPage(0, false, searchRecep);
+    }, 300);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchRecep]);
 
   const fetchSourcingManagers = async () => {
     setIsFetchingSourcingManagers(true);

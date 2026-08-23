@@ -11,6 +11,59 @@ import { jsonCompressed } from "@/lib/apiResponse";
 
 export const dynamic = "force-dynamic";
 
+/* ── Server-side search and sort ───────────────────────────────────────────────
+ * All of this is OPT-IN. With none of these query params present the handler
+ * behaves exactly as it always has, so every existing caller is unaffected.
+ *
+ * ── Why only these fields ────────────────────────────────────────────────────
+ * The enquiry table also filters on Property Type, Budget and Lead Status. Those
+ * look like columns but are NOT: for most leads the UI derives them at render
+ * time by regex-parsing the latest "Detailed Salesform Submitted" follow-up.
+ * Measured on production: 122 leads display such a value, but only 21 have the
+ * normalized column set, and NOT ONE has the column without the note — the
+ * columns are a newer write path that was never backfilled.
+ *
+ * Filtering those three in SQL would therefore silently miss 101 of 122 leads.
+ * They are deliberately absent from the map below, and the dashboard keeps
+ * filtering them client-side. Do not add them here without backfilling first.
+ */
+const SORTABLE_COLUMNS: Record<string, string> = {
+  lead_no: "sr_no",
+  name: "name",
+  phone: "phone",
+  email: "email",
+  status: "status",
+  source: "source",
+  budget: "budget",
+  configuration: "configuration",
+  assigned_to: "assigned_to",
+  assigned_receptionist: "assigned_receptionist",
+  cp_name: "cp_name",
+  cp_company: "cp_company",
+  created_at: "created_at",
+  enquiry_date: "enquiry_date",
+};
+
+/* Which real columns a given searchColumn looks at. `basic` exists for the
+ * receptionist queue, whose search has always matched exactly name, lead number
+ * and phone — keeping it as its own entry preserves that behaviour rather than
+ * silently widening it to everything `all` covers. */
+const SEARCH_FIELDS: Record<string, string[]> = {
+  all: [
+    "name", "phone", "alt_phone", "email", "source", "budget", "configuration",
+    "cp_name", "cp_company", "cp_phone", "status", "assigned_to",
+    "assigned_receptionist", "address", "city",
+  ],
+  basic: ["name", "phone"],
+  name: ["name"],
+  phone: ["phone", "alt_phone"],
+  email: ["email"],
+  source: ["source"],
+  status: ["status"],
+  assigned_to: ["assigned_to", "assigned_receptionist"],
+  cp: ["cp_name", "cp_company", "cp_phone"],
+};
+
 export async function GET(req: Request) {
   try {
     // This route has no role scoping — it is a plain SELECT * across every lead,
@@ -46,15 +99,61 @@ export async function GET(req: Request) {
 
     // Because this uses SELECT *, the new Site Head columns will be fetched automatically
     const listOrgId = await getOrganizationId();
+
+    /* The tenant filter is ALWAYS $1 and always the first predicate. Everything
+       below appends to it; nothing can replace it, and no branch can omit it.
+       It stays inside the query, before LIMIT/OFFSET — paginating an unscoped
+       set and filtering afterwards would make page 1 another organization's
+       rows, and the total would count both builders' leads. */
+    const params: any[] = [listOrgId];
+    let where = "organization_id = $1";
+
+    /* Free-text search. The term is a bound parameter, never interpolated; only
+       the COLUMN NAMES come from the code, and only via the SEARCH_FIELDS
+       whitelist, so an unrecognised searchColumn falls back to `all` rather
+       than reaching the query. */
+    const q = (searchParams.get("q") ?? "").trim();
+    if (q) {
+      const requested = searchParams.get("searchColumn") ?? "all";
+      const fields = SEARCH_FIELDS[requested] ?? SEARCH_FIELDS.all;
+      params.push(`%${q}%`);
+      const pattern = `$${params.length}`;
+      const clauses = fields.map((f) => `${f} ILIKE ${pattern}`);
+      // The lead number is numeric, so it is matched as text rather than with
+      // ILIKE against an integer column.
+      clauses.push(`CAST(sr_no AS TEXT) LIKE ${pattern}`);
+      clauses.push(`CAST(id AS TEXT) LIKE ${pattern}`);
+      where += ` AND (${clauses.join(" OR ")})`;
+    }
+
+    // Exact status match, when asked for.
+    const statusFilter = (searchParams.get("status") ?? "").trim();
+    if (statusFilter) {
+      params.push(statusFilter);
+      where += ` AND status = $${params.length}`;
+    }
+
+    /* Sorting. The column comes from SORTABLE_COLUMNS, never from raw input, and
+       the direction is reduced to one of two literals — so neither can carry
+       anything into the SQL text. Default is unchanged. */
+    const requestedSort = searchParams.get("sortKey");
+    const sortColumn = requestedSort ? SORTABLE_COLUMNS[requestedSort] : undefined;
+    const sortDir = searchParams.get("sortDir") === "asc" ? "ASC" : "DESC";
+    const orderBy = sortColumn
+      ? `${sortColumn} ${sortDir} NULLS LAST, id ${sortDir}`
+      : "sr_no DESC NULLS LAST";
+
+    const limitParam = `$${params.length + 1}`;
+    const offsetParam = `$${params.length + 2}`;
+
     const [rows, countRows] = await Promise.all([
-      // The tenant filter goes INSIDE the query, before LIMIT/OFFSET. Paginating
-      // an unscoped set and filtering afterwards would make page 1 another
-      // organization's rows, and the total would count both builders' leads.
       query(
-        "SELECT * FROM walkin_enquiries WHERE organization_id = $3 ORDER BY sr_no DESC NULLS LAST LIMIT $1 OFFSET $2",
-        [limit, offset, listOrgId]
+        `SELECT * FROM walkin_enquiries WHERE ${where} ORDER BY ${orderBy} LIMIT ${limitParam} OFFSET ${offsetParam}`,
+        [...params, limit, offset]
       ),
-      query("SELECT COUNT(*)::int AS total FROM walkin_enquiries WHERE organization_id = $1", [listOrgId]),
+      // Counted with the SAME predicate, so `total` describes the filtered set
+      // and the pager cannot promise pages that do not exist.
+      query(`SELECT COUNT(*)::int AS total FROM walkin_enquiries WHERE ${where}`, params),
     ]);
 
     const total: number = countRows[0]?.total ?? 0;
