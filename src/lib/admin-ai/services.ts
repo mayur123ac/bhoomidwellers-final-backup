@@ -25,11 +25,86 @@
 //   functions rather than a change to their call sites.
 
 import { query } from "@/lib/db";
-import { getOrganizationId } from "@/lib/tenantContext";
 import type { AiScope } from "./rbac";
 
 /** Rows a single tool may return. Beyond this the model gets a truncation note. */
 const MAX_ROWS = 25;
+
+/* ════════════════════════════════════════════════════════════════════════════
+   SCOPING — the two predicates every handler below must carry
+   ════════════════════════════════════════════════════════════════════════════
+
+   ── 1. Tenant ──────────────────────────────────────────────────────────────
+   Five of these handlers had NO organization filter at all: getRevenueSummary,
+   getLoanSummary, getPendingDisbursements, getInventorySummary and
+   getRegistrationSummary read booking_applications / inventory_units across
+   every organization on the platform. On a single-tenant database that is
+   invisible; on this one an Admin asking "what is our total revenue" was being
+   answered with the sum of every builder's revenue, and "which customers are
+   awaiting disbursement" listed other builders' customers by name.
+
+   `getOrganizationId()` is no longer called per-handler. It is resolved ONCE in
+   rbac.ts and travels on the scope, because at 82 ms per round trip to Neon a
+   redundant resolve inside each of eight tools is not free — and a single
+   answer can call several.
+
+   ── 2. Ownership ───────────────────────────────────────────────────────────
+   Admin reads the whole tenant. A Site Head or Receptionist reads only leads
+   that are theirs, which is what made it safe to give them the assistant at
+   all. The predicate is built from `scope.ownershipColumns` — column names
+   fixed in rbac.ts and chosen by the session's role — with the name itself
+   BOUND, never interpolated. The model cannot reach it: no tool schema has a
+   parameter for an employee identity, so there is no argument for it to write.
+
+   Money and registration data hang off a booking, and a booking's owner is the
+   owner of its originating lead, so those handlers reach ownership through
+   `booking_applications.lead_id -> walkin_enquiries`.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * `{ sql, params }` for an ownership predicate on a walkin_enquiries alias.
+ *
+ * Returns `"TRUE"` for a scope that reads everything, so callers can always
+ * concatenate the fragment without branching. `startIndex` is the next free
+ * bind position — these are appended after each handler's own parameters.
+ */
+function ownershipClause(
+  scope: AiScope,
+  alias: string,
+  startIndex: number
+): { sql: string; params: any[] } {
+  if (scope.canReadAllRecords || scope.ownershipColumns.length === 0) {
+    return { sql: "TRUE", params: [] };
+  }
+  // One bind for the name, reused by every column — TRIM/LOWER on both sides
+  // because these columns are free-typed employee names and "  Megha" has been
+  // seen in the data.
+  const idx = startIndex;
+  const ors = scope.ownershipColumns
+    .map((col) => `LOWER(TRIM(COALESCE(${alias}.${col}, ''))) = LOWER(TRIM($${idx}))`)
+    .join(" OR ");
+  return { sql: `(${ors})`, params: [scope.userName] };
+}
+
+/**
+ * Refusal returned to the model for a tool that has no per-user meaning.
+ *
+ * Shaped as data rather than thrown: the route already catches throws and
+ * reports them as tool failures, which would read to the user as "something
+ * broke" instead of "you are not allowed to see that". The model is told the
+ * reason so it can say so plainly.
+ */
+function refuse(what: string) {
+  return {
+    error: "NOT_PERMITTED",
+    message:
+      `${what} covers the whole company, and your access is limited to your own leads. ` +
+      `Tell the user you cannot report company-wide figures for their role, and do not estimate them.`,
+  };
+}
+
+/** True when this scope may only see its own records. */
+const restricted = (scope: AiScope) => !scope.canReadAllRecords;
 
 /** Bookings that never became revenue must not inflate any total. */
 const ACTIVE_BOOKING = `COALESCE(booking_status,'') NOT IN ('Cancelled','Dropped','Rejected')`;
@@ -78,7 +153,7 @@ function monthBounds(month?: unknown): { from: string; to: string } | null {
 
 /* ─────────────────────────── revenue ─────────────────────────── */
 
-export async function getRevenueSummary(args: any, _scope: AiScope) {
+export async function getRevenueSummary(args: any, scope: AiScope) {
   const bounds = monthBounds(args?.month);
   const params: any[] = [];
   let dateClause = "";
@@ -87,6 +162,19 @@ export async function getRevenueSummary(args: any, _scope: AiScope) {
     dateClause = `AND COALESCE(b.booking_date, b.application_date, b.created_at::date) >= $1::date
                   AND COALESCE(b.booking_date, b.application_date, b.created_at::date) <  $2::date`;
   }
+  params.push(scope.organizationId);
+  const orgClause = `AND b.organization_id = $${params.length}`;
+
+  // A restricted scope sums only the bookings that came from its own leads —
+  // "how much have I brought in", not the company's book. The join is INNER for
+  // them and LEFT for Admin: a booking whose lead row is missing belongs to
+  // nobody, so it must not fall into a personal total, but it should still
+  // count in the company's.
+  const own = ownershipClause(scope, "w", params.length + 1);
+  params.push(...own.params);
+  const leadJoin = restricted(scope)
+    ? `JOIN walkin_enquiries w ON w.id = b.lead_id AND w.organization_id = b.organization_id AND ${own.sql}`
+    : "";
 
   const rows = await query<any>(
     `SELECT COUNT(*)::int                      AS bookings,
@@ -96,8 +184,8 @@ export async function getRevenueSummary(args: any, _scope: AiScope) {
             COALESCE(SUM(${CASH}),0)           AS cash_collected,
             COALESCE(SUM(${DISBURSED}),0)      AS loan_disbursed,
             COALESCE(SUM(${SANCTIONED}),0)     AS loan_sanctioned
-       FROM booking_applications b ${MONEY_JOIN}
-      WHERE ${ACTIVE_BOOKING.replace(/booking_status/g, "b.booking_status")} ${dateClause}`,
+       FROM booking_applications b ${leadJoin} ${MONEY_JOIN}
+      WHERE ${ACTIVE_BOOKING.replace(/booking_status/g, "b.booking_status")} ${dateClause} ${orgClause}`,
     params
   );
 
@@ -107,6 +195,8 @@ export async function getRevenueSummary(args: any, _scope: AiScope) {
 
   return {
     period: bounds ? args.month : "all time",
+    // Named so the model cannot present a personal total as the company's.
+    coverage: restricted(scope) ? "your own leads only" : "company-wide",
     bookings: r.bookings ?? 0,
     agreementValue,
     ocrCollected: num(r.ocr_collected),
@@ -123,7 +213,14 @@ export async function getRevenueSummary(args: any, _scope: AiScope) {
 
 /* ─────────────────────────── loans ─────────────────────────── */
 
-export async function getLoanSummary(_args: any, _scope: AiScope) {
+export async function getLoanSummary(_args: any, scope: AiScope) {
+  const params: any[] = [scope.organizationId];
+  const own = ownershipClause(scope, "w", 2);
+  params.push(...own.params);
+  const leadJoin = restricted(scope)
+    ? `JOIN walkin_enquiries w ON w.id = b.lead_id AND w.organization_id = b.organization_id AND ${own.sql}`
+    : "";
+
   // loan_required is BOOLEAN, not the 'Yes'/'No' text the previous version
   // compared against — and the copy on booking_applications reads false for
   // every row while booking_loan_details reads true, so the detail table wins.
@@ -133,11 +230,13 @@ export async function getLoanSummary(_args: any, _scope: AiScope) {
             COALESCE(SUM(COALESCE(bl.loan_amount, b.loan_amount, 0)),0) AS requested,
             COALESCE(SUM(${SANCTIONED}),0)                   AS sanctioned,
             COALESCE(SUM(${DISBURSED}),0)                    AS disbursed
-       FROM booking_applications b ${MONEY_JOIN}
+       FROM booking_applications b ${leadJoin} ${MONEY_JOIN}
       WHERE ${ACTIVE_BOOKING.replace(/booking_status/g, "b.booking_status")}
         AND COALESCE(bl.loan_required, b.loan_required) IS TRUE
+        AND b.organization_id = $1
       GROUP BY 1
-      ORDER BY sanctioned DESC`
+      ORDER BY sanctioned DESC`,
+    params
   );
 
   const byStatus = rows.map((r) => ({
@@ -158,21 +257,37 @@ export async function getLoanSummary(_args: any, _scope: AiScope) {
     { cases: 0, requested: 0, sanctioned: 0, disbursed: 0 }
   );
 
-  return { byStatus, totals, pendingDisbursement: totals.sanctioned - totals.disbursed };
+  return {
+    coverage: restricted(scope) ? "your own leads only" : "company-wide",
+    byStatus,
+    totals,
+    pendingDisbursement: totals.sanctioned - totals.disbursed,
+  };
 }
 
-export async function getPendingDisbursements(_args: any, _scope: AiScope) {
+export async function getPendingDisbursements(_args: any, scope: AiScope) {
+  const params: any[] = [scope.organizationId];
+  const own = ownershipClause(scope, "w", 2);
+  params.push(...own.params);
+  // This one names customers, so the ownership filter is the difference between
+  // "my customers awaiting disbursement" and a list of the company's.
+  const leadJoin = restricted(scope)
+    ? `JOIN walkin_enquiries w ON w.id = b.lead_id AND w.organization_id = b.organization_id AND ${own.sql}`
+    : "";
+
   const rows = await query<any>(
     `SELECT b.primary_name, b.flat_number,
             COALESCE(bl.bank_name, b.bank_name) AS bank_name,
             ${SANCTIONED} AS sanctioned,
             ${DISBURSED}  AS disbursed,
             COALESCE(bl.expected_disbursement_date, b.expected_disbursement_date) AS expected_disbursement_date
-       FROM booking_applications b ${MONEY_JOIN}
+       FROM booking_applications b ${leadJoin} ${MONEY_JOIN}
       WHERE ${ACTIVE_BOOKING.replace(/booking_status/g, "b.booking_status")}
         AND ${SANCTIONED} > ${DISBURSED}
+        AND b.organization_id = $1
       ORDER BY (${SANCTIONED} - ${DISBURSED}) DESC
-      LIMIT ${MAX_ROWS}`
+      LIMIT ${MAX_ROWS}`,
+    params
   );
   return rows.map((r) => ({
     customer: r.primary_name,
@@ -187,7 +302,14 @@ export async function getPendingDisbursements(_args: any, _scope: AiScope) {
 
 /* ─────────────────────── people & performance ─────────────────────── */
 
-export async function getSalesManagerPerformance(_args: any, _scope: AiScope) {
+export async function getSalesManagerPerformance(_args: any, scope: AiScope) {
+  // The only tool with no per-user version. It exists to rank employees against
+  // each other, so "scoped to your own leads" would return a single row that
+  // still discloses nothing useful and invites the model to describe it as a
+  // ranking. A Receptionist or Site Head asking who is performing best is told
+  // no, which is the honest answer.
+  if (restricted(scope)) return refuse("Sales manager performance");
+
   // The sales manager lives on the originating lead, not the booking — there is
   // no sales_manager column on booking_applications, which is what the previous
   // implementation assumed.
@@ -205,7 +327,7 @@ export async function getSalesManagerPerformance(_args: any, _scope: AiScope) {
       GROUP BY 1
       ORDER BY agreement_value DESC
       LIMIT ${MAX_ROWS}`,
-    [await getOrganizationId()]
+    [scope.organizationId]
   );
   return rows.map((r) => ({
     manager: r.manager,
@@ -215,64 +337,90 @@ export async function getSalesManagerPerformance(_args: any, _scope: AiScope) {
   }));
 }
 
-export async function getLeadsSummary(args: any, _scope: AiScope) {
+export async function getLeadsSummary(args: any, scope: AiScope) {
   const bounds = monthBounds(args?.month);
   const params: any[] = [];
   let dateClause = "";
   if (bounds) {
     params.push(bounds.from, bounds.to);
-    dateClause = `AND COALESCE(enquiry_date, created_at)::date >= $1::date
-                  AND COALESCE(enquiry_date, created_at)::date <  $2::date`;
+    dateClause = `AND COALESCE(w.enquiry_date, w.created_at)::date >= $1::date
+                  AND COALESCE(w.enquiry_date, w.created_at)::date <  $2::date`;
   }
   // Appended AFTER the optional date params so its index is whatever comes next,
   // whether or not a month filter was supplied.
-  params.push(await getOrganizationId());
-  const orgClause = `AND organization_id = $${params.length}`;
+  params.push(scope.organizationId);
+  const orgClause = `AND w.organization_id = $${params.length}`;
+
+  // The plainest case of the ownership rule: a Receptionist asking "how many
+  // leads do I have" counts rows where she is the assigned receptionist or the
+  // assignee, and never the company's intake.
+  const own = ownershipClause(scope, "w", params.length + 1);
+  params.push(...own.params);
 
   const rows = await query<any>(
     `SELECT COUNT(*)::int AS total,
-            COUNT(*) FILTER (WHERE COALESCE(is_lost_lead,false))::int      AS lost,
-            COUNT(*) FILTER (WHERE status = 'Closing')::int                AS closing,
-            COUNT(DISTINCT source)::int                                    AS distinct_sources
-       FROM walkin_enquiries
-      WHERE 1=1 ${dateClause} ${orgClause}`,
+            COUNT(*) FILTER (WHERE COALESCE(w.is_lost_lead,false))::int    AS lost,
+            COUNT(*) FILTER (WHERE w.status = 'Closing')::int              AS closing,
+            COUNT(DISTINCT w.source)::int                                  AS distinct_sources
+       FROM walkin_enquiries w
+      WHERE ${own.sql} ${dateClause} ${orgClause}`,
     params
   );
   const bySource = await query<any>(
-    `SELECT COALESCE(NULLIF(TRIM(source),''),'Unknown') AS source, COUNT(*)::int AS leads
-       FROM walkin_enquiries
-      WHERE 1=1 ${dateClause} ${orgClause}
+    `SELECT COALESCE(NULLIF(TRIM(w.source),''),'Unknown') AS source, COUNT(*)::int AS leads
+       FROM walkin_enquiries w
+      WHERE ${own.sql} ${dateClause} ${orgClause}
       GROUP BY 1 ORDER BY leads DESC LIMIT ${MAX_ROWS}`,
     params
   );
-  return { period: bounds ? args.month : "all time", ...rows[0], bySource };
+  return {
+    period: bounds ? args.month : "all time",
+    coverage: restricted(scope) ? "your own leads only" : "company-wide",
+    ...rows[0],
+    bySource,
+  };
 }
 
 /* ─────────────────────────── inventory ─────────────────────────── */
 
-export async function getInventorySummary(_args: any, _scope: AiScope) {
-  // inventory_units is the real inventory master; the previous version counted
-  // booking rows by a non-existent `prop_type` column and called that inventory.
+export async function getInventorySummary(_args: any, scope: AiScope) {
+  // Deliberately NOT restricted by ownership. Unit availability is stock, not
+  // anyone's personal record: it carries no customer name, no money and no
+  // employee attribution, and "is a 2BHK still available in Colossal" is a
+  // question a Receptionist at the front desk is asked all day. The tenant
+  // filter is the one that matters here, and it was missing.
   const rows = await query<any>(
     `SELECT COALESCE(NULLIF(TRIM(project_name),''),'Unknown') AS project,
             COALESCE(NULLIF(TRIM(unit_type),''),'Unknown')    AS unit_type,
             COALESCE(NULLIF(TRIM(status),''),'unknown')       AS status,
             COUNT(*)::int                                     AS units
        FROM inventory_units
-      WHERE deleted_at IS NULL
+      WHERE deleted_at IS NULL AND organization_id = $1
       GROUP BY 1,2,3
-      ORDER BY project, unit_type, status`
+      ORDER BY project, unit_type, status`,
+    [scope.organizationId]
   );
   const totals = await query<any>(
     `SELECT COALESCE(NULLIF(TRIM(status),''),'unknown') AS status, COUNT(*)::int AS units
-       FROM inventory_units WHERE deleted_at IS NULL GROUP BY 1 ORDER BY units DESC`
+       FROM inventory_units
+      WHERE deleted_at IS NULL AND organization_id = $1
+      GROUP BY 1 ORDER BY units DESC`,
+    [scope.organizationId]
   );
   return { byProject: rows.slice(0, MAX_ROWS), totalsByStatus: totals };
 }
 
 /* ─────────────────────────── registration ─────────────────────────── */
 
-export async function getRegistrationSummary(_args: any, _scope: AiScope) {
+export async function getRegistrationSummary(_args: any, scope: AiScope) {
+  const params: any[] = [scope.organizationId];
+  const own = ownershipClause(scope, "w", 2);
+  params.push(...own.params);
+  // Names customers, so it is scoped like the disbursement list.
+  const leadJoin = restricted(scope)
+    ? `JOIN walkin_enquiries w ON w.id = b.lead_id AND w.organization_id = b.organization_id AND ${own.sql}`
+    : "";
+
   // Same denormalization trap as the money columns: booking_registration_details
   // is the populated table, booking_applications only mirrors it.
   const rows = await query<any>(
@@ -282,14 +430,18 @@ export async function getRegistrationSummary(_args: any, _scope: AiScope) {
             COALESCE(r.expected_registration_date, b.expected_registration_date) AS expected_registration_date,
             COALESCE(r.actual_registration_date,   b.actual_registration_date)   AS actual_registration_date
        FROM booking_applications b
+       ${leadJoin}
        LEFT JOIN booking_registration_details r ON r.booking_id = b.id
       WHERE ${ACTIVE_BOOKING.replace(/booking_status/g, "b.booking_status")}
+        AND b.organization_id = $1
       ORDER BY expected_registration_date NULLS LAST
-      LIMIT 200`
+      LIMIT 200`,
+    params
   );
   const done = rows.filter((r) => /complete|registered|done/i.test(r.registration_status));
   const pending = rows.filter((r) => !/complete|registered|done/i.test(r.registration_status));
   return {
+    coverage: restricted(scope) ? "your own leads only" : "company-wide",
     completed: done.length,
     pending: pending.length,
     pendingList: pending.slice(0, MAX_ROWS).map((r) => ({
@@ -304,7 +456,7 @@ export async function getRegistrationSummary(_args: any, _scope: AiScope) {
 
 /* ─────────────────── unstructured retrieval (RAG) ─────────────────── */
 
-export async function searchKnowledgeBase(args: any, _scope: AiScope) {
+export async function searchKnowledgeBase(args: any, scope: AiScope) {
   const q = String(args?.q ?? "").trim().slice(0, 200);
   if (q.length < 3) return { matches: [], note: "Search term too short." };
 
@@ -320,6 +472,14 @@ export async function searchKnowledgeBase(args: any, _scope: AiScope) {
   // below the 0.3 default threshold — searching "loan" over real follow-ups
   // returned nothing at all. Substring matching catches those, while
   // word_similarity still ranks fuzzy and misspelled hits.
+  // Free text staff wrote about a customer, so a restricted scope must only
+  // reach notes on its OWN leads. The join carries the predicate and becomes
+  // INNER for them: a follow-up whose lead row is missing has no identifiable
+  // owner and must not be readable by someone who can only read their own.
+  const own = ownershipClause(scope, "w", 4);
+  const params: any[] = [q, MAX_ROWS, scope.organizationId, ...own.params];
+  const leadJoin = restricted(scope) ? "JOIN" : "LEFT JOIN";
+
   const rows = await query<any>(
     `SELECT f.id, f.lead_id, f.message, f.created_by_name, f.created_at,
             w.name AS lead_name,
@@ -328,7 +488,7 @@ export async function searchKnowledgeBase(args: any, _scope: AiScope) {
               CASE WHEN f.message ILIKE '%' || $1 || '%' THEN 1.0 ELSE 0 END
             ) AS score
        FROM follow_ups f
-       LEFT JOIN walkin_enquiries w
+       ${leadJoin} walkin_enquiries w
          ON w.id = f.lead_id AND w.organization_id = f.organization_id
       -- The two search branches are PARENTHESISED before the tenant filter is
       -- applied. Written flat, SQL binds A OR B AND org as A OR (B AND org),
@@ -336,12 +496,14 @@ export async function searchKnowledgeBase(args: any, _scope: AiScope) {
       WHERE (f.message ILIKE '%' || $1 || '%'
              OR word_similarity($1, f.message) > 0.5)
         AND f.organization_id = $3
+        AND ${own.sql}
       ORDER BY score DESC, f.created_at DESC
       LIMIT $2`,
-    [q, MAX_ROWS, await getOrganizationId()]
+    params
   );
 
   return {
+    coverage: restricted(scope) ? "your own leads only" : "company-wide",
     query: q,
     matches: rows.map((r) => ({
       leadId: r.lead_id,

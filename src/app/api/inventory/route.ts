@@ -252,8 +252,14 @@ export async function GET(req: NextRequest) {
     //
     // Read-only enrichment: a unit with no booking simply gets NULLs, which the
     // UI reads as "no registration state", not as "pending".
+    //
+    // booking_status joins in for the same reason: the delete guardrail in
+    // lib/inventoryDelete.ts distinguishes a live booking from a cancelled one,
+    // and the client mirrors that decision to choose between a lock icon and a
+    // delete button. Without it the UI would lock every once-booked flat.
     const rows = await query(
       `SELECT u.*,
+              ba.booking_status,
               rd.registration_status,
               rd.actual_registration_date,
               ld.disbursement_status,
@@ -261,6 +267,8 @@ export async function GET(req: NextRequest) {
          FROM (
            SELECT * FROM inventory_units ${whereSql} ${orderSql} LIMIT ${limP} OFFSET ${offP}
          ) u
+         LEFT JOIN booking_applications        ba
+                ON ba.id = u.booking_id AND ba.organization_id = u.organization_id
          LEFT JOIN booking_registration_details rd
                 ON rd.booking_id = u.booking_id AND rd.organization_id = u.organization_id
          LEFT JOIN booking_loan_details        ld

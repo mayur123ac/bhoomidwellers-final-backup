@@ -79,8 +79,12 @@ describe("RECEPTIONIST_NAV", () => {
       "Receptionist Leads",
       "Channel Partner Enquiries",
       "Closed Leads",
+      "Site Visit Overview",
       "My Attendance",
-      "CRM AI Assistant",
+      // Renamed from "CRM AI Assistant" when the tab stopped being a mock and
+      // became the same BhoomiAiPanel the Admin and Sales rails mount. The
+      // label is shared deliberately — one assistant, one name.
+      "Bhoomi AI",
       "Settings",
     ]);
   });
@@ -103,6 +107,7 @@ describe("RECEPTIONIST_NAV", () => {
       "recep-leads",
       "cp-enquiries",
       "closed-leads",
+      "site_visits",
       "attendance",
       "assistant",
       "settings",

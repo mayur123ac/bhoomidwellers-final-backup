@@ -26,7 +26,12 @@ if (typeof globalThis.requestAnimationFrame !== "function") {
 // jsdom implements select() but not the selection state that follows it; the
 // component only ever calls it, never reads back, so a no-op-safe stub keeps
 // the calls from throwing on detached nodes.
-if (!HTMLInputElement.prototype.select) {
+//
+// Guarded on the global existing at all: setupFiles runs for every suite,
+// including the ones that opt into `@vitest-environment node` (the API
+// integration tests), where there is no DOM and this would be a ReferenceError
+// that fails the file before a single test is collected.
+if (typeof HTMLInputElement !== "undefined" && !HTMLInputElement.prototype.select) {
   HTMLInputElement.prototype.select = function select() {
     this.setSelectionRange?.(0, this.value.length);
   };

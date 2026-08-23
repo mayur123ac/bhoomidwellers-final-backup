@@ -32,5 +32,20 @@ export default defineConfig({
     setupFiles: ["./src/test/setup.ts"],
     include: ["src/**/*.test.{ts,tsx}"],
     css: false,
+
+    // ── Why parallelism is switched off for the database suites ──────────────
+    // Three suites (inventory delete, AI tool scoping, site-visit scoping) run
+    // against a REAL Postgres database, and each one wipes the tables it uses
+    // in `beforeEach` so it can seed a known fixture. Run in parallel they wipe
+    // each other mid-test: the symptom is a scatter of FK violations and
+    // occasional "deadlock detected", all of them in seeding rather than in any
+    // assertion, and all of them absent when a suite is run on its own.
+    //
+    // They share one database on purpose — standing up three is more moving
+    // parts than the isolation is worth — so the ordering has to come from
+    // here. Only when a database is actually configured: without it those
+    // suites skip themselves entirely, and there is no reason to make the
+    // ordinary component run serial.
+    fileParallelism: !process.env.INVENTORY_TEST_DATABASE_URL,
   },
 });

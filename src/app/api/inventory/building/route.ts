@@ -6,7 +6,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
 import { requireRoles } from "@/lib/serverAuth";
 import { getOrganizationId } from "@/lib/tenantContext";
-import { isLinkedActive, isBookingProtected, bookingProtectedReason, linkDescriptor, softDeleteUnit } from "@/lib/inventoryDelete";
+import { isLinkedActive, isBookingProtected, bookingProtectedReason, linkDescriptor, softDeleteUnit,
+         UNITS_WITH_BOOKING_STATUS, UNIT_GUARD_COLUMNS, GUARDED_UNIT_SQL } from "@/lib/inventoryDelete";
 
 export const dynamic = "force-dynamic";
 
@@ -21,21 +22,17 @@ export const dynamic = "force-dynamic";
 // organization predicate this DELETE soft-deleted another tenant's entire tower
 // whenever the names happened to coincide, and the GET preview counted their
 // units. The organization is always $1 so it can never be the omitted branch.
+//
+// Predicates are qualified with `iu` because both the preview and the delete now
+// read units through UNITS_WITH_BOOKING_STATUS, and booking_applications has
+// organization_id and project_name columns of its own — unqualified names would
+// be ambiguous.
 function buildScope(orgId: string, project_name?: string, tower?: string, wing?: string) {
-  const where = ["deleted_at IS NULL", "organization_id = $1", "project_name = $2", "tower = $3"];
+  const where = ["iu.deleted_at IS NULL", "iu.organization_id = $1", "iu.project_name = $2", "iu.tower = $3"];
   const vals: any[] = [orgId, String(project_name).trim(), String(tower).trim()];
-  if (wing && String(wing).trim()) { vals.push(String(wing).trim()); where.push(`COALESCE(wing,'') = COALESCE($${vals.length},'')`); }
+  if (wing && String(wing).trim()) { vals.push(String(wing).trim()); where.push(`COALESCE(iu.wing,'') = COALESCE($${vals.length},'')`); }
   return { whereSql: where.join(" AND "), vals };
 }
-
-// Mirrors isLinkedActive + isBookingProtected so the preview COUNT exactly matches
-// the server-side delete decision.
-const LINKED_SQL = `(
-  status IN ('booked','registered','on_hold')
-  OR lead_id IS NOT NULL
-  OR booking_id IS NOT NULL
-  OR LOWER(source) IN ('booking sync','booking_sync')
-)`;
 
 // ─── GET — accurate preview counts (COUNT(*), never capped) ───────────────────
 export async function GET(req: NextRequest) {
@@ -56,8 +53,8 @@ export async function GET(req: NextRequest) {
     const { whereSql, vals } = buildScope(await getOrganizationId(), project_name, tower, wing);
     const rows = await query<{ matched: number; linked: number }>(
       `SELECT COUNT(*)::int AS matched,
-              COUNT(*) FILTER (WHERE ${LINKED_SQL})::int AS linked
-         FROM inventory_units WHERE ${whereSql}`,
+              COUNT(*) FILTER (WHERE ${GUARDED_UNIT_SQL})::int AS linked
+         ${UNITS_WITH_BOOKING_STATUS} WHERE ${whereSql}`,
       vals,
     );
     const matched = rows[0]?.matched ?? 0;
@@ -88,7 +85,8 @@ export async function DELETE(req: NextRequest) {
     const scopeLabel = `Tower ${String(tower).trim()}${wing && String(wing).trim() ? ` / Wing ${String(wing).trim()}` : ""}`;
 
     const result = await transaction(async (client) => {
-      const rows = (await client.query(`SELECT * FROM inventory_units WHERE ${whereSql}`, vals)).rows;
+      const rows = (await client.query(
+        `SELECT ${UNIT_GUARD_COLUMNS} ${UNITS_WITH_BOOKING_STATUS} WHERE ${whereSql}`, vals)).rows;
       const skipped: { id: number; flat_no: string; reason: string }[] = [];
       const deletable: any[] = [];
       for (const u of rows) {

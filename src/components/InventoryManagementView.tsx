@@ -220,19 +220,22 @@ function UnitTypeChip({ unitType, isDark }: { unitType: string; isDark: boolean 
 
 
 // ── Booking protection (mirrors lib/inventoryDelete.isBookingProtected) ──
-// A unit is HARD-PROTECTED when it has a booking_id, status booked/registered,
-// or source = booking sync. These units show a lock instead of a delete button,
-// and the backend refuses deletion even if force=true is passed.
+// A unit is HARD-PROTECTED while a booking still has a live claim on it: status
+// booked/registered, or a booking_id whose booking is not cancelled. These units
+// show a lock instead of a delete button, and the backend refuses deletion even
+// if force=true is passed.
+//
+// `source` is deliberately NOT part of this. It records where the row came from
+// ('booking_sync' when the booking flow had to create the flat) and is never
+// cleared — so including it locked every flat that had EVER been booked, for
+// ever, including ones released by a cancellation.
+const CLOSED_BOOKING_STATUSES = ["cancelled", "canceled"];
+const isBookingClosed = (s: unknown) => CLOSED_BOOKING_STATUSES.includes(String(s ?? "").trim().toLowerCase());
 const isBookingProtected = (u: InventoryUnit) => {
   const status = (u.status || "").toLowerCase().trim();
-  const source = (u.source || "").toLowerCase().trim();
-  return (
-    status === "booked" ||
-    status === "registered" ||
-    u.booking_id != null ||
-    source === "booking sync" ||
-    source === "booking_sync"
-  );
+  if (status === "booked" || status === "registered") return true;
+  if (u.booking_id == null) return false;
+  return !isBookingClosed(u.booking_status);
 };
 
 // Delete guardrail (mirrors the server in lib/inventoryDelete.ts). A unit is
@@ -241,7 +244,7 @@ const ACTIVE_STATUSES = ["booked", "registered", "on_hold"];
 const isLinkedActive = (u: InventoryUnit) => ACTIVE_STATUSES.includes(u.status) || u.lead_id != null || u.booking_id != null;
 const linkLabel = (u: InventoryUnit) => {
   const p: string[] = [];
-  if (u.booking_id) p.push(`booking #${u.booking_id}`);
+  if (u.booking_id) p.push(isBookingClosed(u.booking_status) ? `cancelled booking #${u.booking_id}` : `booking #${u.booking_id}`);
   if (u.lead_id) p.push(`lead #${u.lead_id}`);
   if (p.length) return p.join(" / ");
   // Naming the holder is the point of hold ownership — "on hold" alone was the
@@ -476,6 +479,14 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
   const [bLoading, setBLoading] = useState(true);
   const [bFilters, setBFilters] = useState({ search: "", project: "", tower: "", status: "" });
   const [showAddBuilding, setShowAddBuilding] = useState(false);
+  // Which building the header's Delete control is aimed at. Deliberately its own
+  // state, and NOT the "All projects" filter above the cards: the filter narrows
+  // what you are LOOKING at, and wiring a delete to it would mean the button's
+  // target changed every time someone filtered the list. The two are independent
+  // on purpose. Held as the building key so it survives a refetch that renumbers
+  // nothing but reorders the array.
+  const [deleteBuildingKey, setDeleteBuildingKey] = useState("");
+  const [purgeOpen, setPurgeOpen] = useState(false);
 
   // ── Level 2: the opened building (null = landing) ──
   // Held as the grouping key, not the object, so the header statistics re-read
@@ -597,6 +608,12 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
   }, []);
 
   useEffect(() => { fetchBuildings(); }, [fetchBuildings]);
+
+  // Read by applyBuildingDelete, which must not take `buildings` as a dependency:
+  // it is passed to a modal, and a new identity on every list refetch would
+  // remount that modal mid-delete.
+  const buildingsRef = useRef<BuildingSummary[]>([]);
+  useEffect(() => { buildingsRef.current = buildings; }, [buildings]);
 
   const building = useMemo(() => buildings.find(b => b.key === openKey) || null, [buildings, openKey]);
 
@@ -864,6 +881,12 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
     setActiveTower("");
     setUnits([]);
     setTotal(0);
+    // The header's delete target has to let go of a building that no longer
+    // exists, or the control stays enabled and armed at a dead id.
+    setDeleteBuildingKey(prev => {
+      const gone = buildingsRef.current.find(b => b.key === prev);
+      return gone && gone.project_id === projectId ? "" : prev;
+    });
   }, []);
   const selectedUnits = useMemo(() => sorted.filter(u => selected.has(u.id)), [sorted, selected]);
 
@@ -926,6 +949,10 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
       return true;
     });
     const anyBFilter = Object.values(bFilters).some(Boolean);
+    // Resolved from the FULL list, not `visible` — the selection must survive
+    // someone filtering the cards after picking it, and must never silently
+    // re-point at whatever the filter happens to leave on screen.
+    const deleteTargetBuilding = buildings.find(b => b.key === deleteBuildingKey && b.project_id != null) || null;
 
     return (
       <div className="flex flex-col h-full overflow-hidden">
@@ -944,13 +971,56 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
               <FaChartBar className="text-[10px] text-[#00AEEF]" /> Analytics
             </button>
             {canManage && (
-              <button onClick={() => setShowAddBuilding(true)}
-                className="flex items-center gap-1.5 text-xs font-bold px-3.5 py-1.5 rounded-lg bg-[#00AEEF] text-white hover:bg-[#0095cc]">
-                <FaPlus className="text-[10px]" /> Add Building
-              </button>
+              <>
+                {/* The delete target is picked explicitly, never inferred from the
+                    filtered card list. Only buildings with a project_id can be
+                    deleted — a name-only group has no inventory_projects row for
+                    the endpoint to address. */}
+                <select
+                  aria-label="Select building to delete"
+                  value={deleteBuildingKey}
+                  onChange={e => setDeleteBuildingKey(e.target.value)}
+                  className={`${selectCls} w-44`}
+                >
+                  <option value="">Select Building…</option>
+                  {buildings.filter(b => b.project_id != null).map(b => (
+                    <option key={b.key} value={b.key}>{b.project_name}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => setPurgeOpen(true)}
+                  disabled={!deleteTargetBuilding}
+                  title={deleteTargetBuilding
+                    ? `Delete ${deleteTargetBuilding.project_name}`
+                    : "Pick a building first"}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border ${t.tableBorder} ${
+                    deleteTargetBuilding
+                      ? "text-red-500 border-red-500/40 hover:bg-red-500/10"
+                      : `${t.textFaint} opacity-50 cursor-not-allowed`
+                  }`}
+                >
+                  <FaTrash className="text-[10px]" /> Delete Building
+                </button>
+                <button onClick={() => setShowAddBuilding(true)}
+                  className="flex items-center gap-1.5 text-xs font-bold px-3.5 py-1.5 rounded-lg bg-[#00AEEF] text-white hover:bg-[#0095cc]">
+                  <FaPlus className="text-[10px]" /> Add Building
+                </button>
+              </>
             )}
           </div>
         </div>
+
+        {/* Naming the armed target in full, outside the dropdown, so a mis-click
+            in the list is visible before the modal rather than inside it. */}
+        {canManage && deleteTargetBuilding && (
+          <div className={`flex items-center gap-2 mb-3 text-[11px] ${t.textMuted}`}>
+            <FaBuilding className="text-[10px] text-red-500" />
+            <span>Selected for deletion: <b className={t.text}>{deleteTargetBuilding.project_name}</b>
+              {" · "}{deleteTargetBuilding.total} unit{deleteTargetBuilding.total === 1 ? "" : "s"}</span>
+            <button onClick={() => setDeleteBuildingKey("")}
+              className={`font-semibold ${t.textFaint} hover:text-[#00AEEF]`}>Clear</button>
+          </div>
+        )}
 
         {/* ── Building filters ── */}
         <div className={`flex items-center gap-2 flex-wrap mb-3 p-2.5 rounded-xl border ${t.innerBlock}`}>
@@ -997,6 +1067,24 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
         {canManage && showAddBuilding && (
           <AddBuildingModal isDark={isDark} t={t} onClose={() => setShowAddBuilding(false)}
             onCreated={() => { setShowAddBuilding(false); fetchBuildings(); }} />
+        )}
+        {canManage && purgeOpen && deleteTargetBuilding && (
+          <BuildingPurgeModal
+            building={deleteTargetBuilding} isDark={isDark} t={t}
+            onClose={() => setPurgeOpen(false)}
+            onDeleted={(projectId: number) => {
+              // Local state patch, not a page reload: drop the card, clear the
+              // selection, close the modal. The header's building count reads
+              // from `buildings`, so it corrects itself from the same edit.
+              setPurgeOpen(false);
+              applyBuildingDelete(projectId);
+              setDeleteBuildingKey("");
+              // Reconciled against the server afterwards — the counts on the
+              // remaining cards do not change, but a concurrent edit elsewhere
+              // would show up here.
+              fetchBuildings();
+            }}
+          />
         )}
       </div>
     );
@@ -1984,6 +2072,171 @@ function RenameModal({ kind, isDark, t, target, onClose, onRenamed }: any) {
             </button>
           )}
         </div>
+      </div>
+    </ModalShell>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Whole-building delete, launched from the landing header
+// ═══════════════════════════════════════════════════════════════════════════
+// Distinct from BuildingDeleteModal below, which is the tower/wing-scoped
+// soft-delete you reach from INSIDE a building and which asks you to describe the
+// scope. This one has exactly one target — the building already chosen in the
+// header — so it asks nothing except "are you sure", and spends its space on what
+// the deletion would take with it.
+//
+// The dependency counts come from GET /api/inventory/projects/[id], which runs
+// the same guard as the DELETE. A preview computed client-side from the loaded
+// card would disagree with the server the moment anything changed underneath it.
+function BuildingPurgeModal({ building, isDark, t, onClose, onDeleted }: any) {
+  const [deps, setDeps] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [refusal, setRefusal] = useState<{ message: string; blocking: any[] } | null>(null);
+  const [typed, setTyped] = useState("");
+  const inputCls = `w-full rounded-lg px-3 py-2 text-sm border ${t.inputInner} ${t.text} ${t.inputFocus}`;
+
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      try {
+        const res = await fetch(`/api/inventory/projects/${building.project_id}`, { credentials: "include" });
+        const json = await res.json();
+        if (live && json.success) setDeps(json.data);
+        else if (live) setErr(json.message || "Could not read this building's contents.");
+      } catch {
+        if (live) setErr("Could not read this building's contents.");
+      } finally {
+        if (live) setLoading(false);
+      }
+    })();
+    return () => { live = false; };
+  }, [building.project_id]);
+
+  const blocked = !!deps && deps.active_bookings > 0;
+  // Typing the name is the confirmation. It is the one thing that cannot be done
+  // by muscle memory, which is the point for an action this size.
+  const confirmOk = typed.trim().toLowerCase() === String(building.project_name).trim().toLowerCase();
+
+  const commit = async () => {
+    if (!confirmOk || blocked) return;
+    setBusy(true); setErr(null);
+    try {
+      const res = await fetch(`/api/inventory/projects/${building.project_id}`, {
+        method: "DELETE", credentials: "include",
+      });
+      const json = await res.json().catch(() => ({ success: false, message: "Unexpected response" }));
+      if (!json.success) {
+        // 409 with the blocking flats listed — shown rather than reduced to
+        // "failed", because the operator's next action is to go and look at them.
+        if (json.blocking?.length) setRefusal({ message: json.message, blocking: json.blocking });
+        else setErr(json.message || "Delete failed.");
+        return;
+      }
+      onDeleted(building.project_id);
+    } catch (e: any) {
+      setErr(e.message || "Delete failed.");
+    } finally { setBusy(false); }
+  };
+
+  const Row = ({ label, value, tone }: { label: string; value: number; tone?: string }) => (
+    <div className="flex items-center justify-between py-1">
+      <span className={`text-[11px] ${t.textMuted}`}>{label}</span>
+      <span className={`text-xs font-bold ${tone || t.text}`}>{value}</span>
+    </div>
+  );
+
+  return (
+    <ModalShell isDark={isDark} onClose={onClose} maxW="max-w-md">
+      <div className="p-6">
+        <div className="flex items-center gap-2 mb-1">
+          <FaExclamationTriangle className="text-red-500" />
+          <h2 className={`text-base font-bold ${t.text}`}>Delete Building?</h2>
+        </div>
+        <p className={`text-xs mb-3 ${t.textMuted}`}>
+          Are you sure you want to delete <b className={t.text}>{building.project_name}</b>?
+        </p>
+
+        {loading ? (
+          <p className={`text-xs italic ${t.textFaint}`}>Checking what this building contains…</p>
+        ) : refusal ? (
+          <>
+            <div className="rounded-lg border border-red-500/40 bg-red-500/5 p-3 mb-3">
+              <p className="text-xs text-red-500 font-semibold">{refusal.message}</p>
+            </div>
+            <div className={`rounded-lg border p-2.5 max-h-40 overflow-y-auto ${t.innerBlock}`}>
+              {refusal.blocking.map((b: any, i: number) => (
+                <p key={i} className={`text-[11px] ${t.textFaint}`}><b className={t.text}>{b.flat_no}</b> — {b.reason}</p>
+              ))}
+            </div>
+            <div className="flex justify-end mt-4">
+              <button onClick={onClose} className="text-xs font-bold px-5 py-2 rounded-lg bg-[#00AEEF] text-white hover:bg-[#0095cc]">Close</button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className={`rounded-lg border p-3 mb-3 ${t.innerBlock}`}>
+              <p className={`text-[10px] font-bold uppercase tracking-wide mb-1 ${t.textFaint}`}>This building contains</p>
+              <Row label="Towers" value={deps?.towers ?? 0} />
+              <Row label="Wings" value={deps?.wings ?? 0} />
+              <Row label="Floors" value={deps?.floors ?? 0} />
+              <Row label="Units" value={deps?.units ?? 0} />
+              <Row label="Active bookings" value={deps?.active_bookings ?? 0}
+                tone={deps?.active_bookings ? "text-red-500" : undefined} />
+              {!!deps?.history_preserved_units && (
+                <Row label="Flats with past bookings" value={deps.history_preserved_units} tone="text-amber-500" />
+              )}
+              {!!deps?.archived_units && <Row label="Already-deleted flats" value={deps.archived_units} />}
+            </div>
+
+            {blocked ? (
+              <div className="rounded-lg border border-red-500/40 bg-red-500/5 p-3 mb-3">
+                <p className="text-[11px] text-red-500 leading-relaxed">
+                  <b>{deps.active_bookings}</b> flat{deps.active_bookings === 1 ? " is" : "s are"} still held by a
+                  live booking. Cancel or move {deps.active_bookings === 1 ? "that booking" : "those bookings"} first —
+                  the building cannot be deleted while a sale points at it.
+                </p>
+                <div className="mt-2 max-h-28 overflow-y-auto">
+                  {(deps.blocking || []).map((b: any, i: number) => (
+                    <p key={i} className={`text-[11px] ${t.textFaint}`}><b className={t.text}>{b.flat_no}</b> — {b.reason}</p>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <>
+                <p className={`text-[11px] leading-relaxed mb-3 ${t.textMuted}`}>
+                  The building, its towers, its price rules and its unsold stock are removed permanently.
+                  {!!deps?.history_preserved_units && (
+                    <> Flats that a cancelled booking once occupied are <b className={t.text}>archived instead of erased</b>,
+                    so their booking history stays readable.</>
+                  )}{" "}
+                  Bookings, payments and customer records are never touched.
+                </p>
+                <label className={`text-[11px] block mb-1 ${t.textMuted}`}>
+                  Type <b className={t.text}>{building.project_name}</b> to confirm
+                </label>
+                <input value={typed} onChange={e => setTyped(e.target.value)} className={inputCls}
+                  placeholder={building.project_name} autoFocus />
+              </>
+            )}
+
+            {err && <p className="text-red-500 text-[11px] mt-2">{err}</p>}
+            <div className="flex justify-end gap-2 mt-4">
+              <button onClick={onClose} className={`text-xs font-semibold px-4 py-2 rounded-lg border ${t.tableBorder} ${t.textMuted}`}>Cancel</button>
+              {/* Not "Delete Building" — that is the header control that opened
+                  this modal, and two buttons with one name on screen at once is
+                  ambiguous to a screen reader and to anyone reading quickly.
+                  This one also says what is different about it: it does not come
+                  back. */}
+              <button onClick={commit} disabled={busy || blocked || !confirmOk}
+                className="flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-lg bg-red-500 text-white hover:bg-red-600 disabled:opacity-40 disabled:cursor-not-allowed">
+                <FaTrash className="text-[10px]" /> {busy ? "Deleting…" : "Delete Permanently"}
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </ModalShell>
   );

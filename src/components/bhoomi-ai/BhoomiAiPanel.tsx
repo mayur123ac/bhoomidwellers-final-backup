@@ -1,38 +1,32 @@
 "use client";
 
-// components/bhoomi-ai/BhoomiAiPanel.tsx — the Bhoomi AI tab.
-//
-// Layout: a fixed page header, one scrolling conversation column, and a sticky
-// composer. Only the middle scrolls, so the header stays put and the composer
-// never moves while the thread grows.
-//
-// The API contract is untouched — POST { query, history, frontendContext } to
-// /api/admin/ai/chat, GET for capability. Everything below the fetch calls is
-// presentation. The route owns identity, RBAC, rate limiting, tool calling and
-// the audit trail, and this file makes no decision that belongs to it.
-
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FaPlus } from "react-icons/fa6";
-import { FaExclamationTriangle, FaTimes } from "react-icons/fa";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  Bot, Send, Plus, AlertCircle, RefreshCw, Sparkles,
+  ChevronRight, AlignLeft, BarChart3, Users, Building
+} from "lucide-react";
 import { CRMContextManager } from "@/lib/admin-ai/contextManager";
-import BhoomiAiIcon, { AI_ICON_CSS } from "./BhoomiAiIcon";
-import ChatComposer, { type ComposerHandle } from "./ChatComposer";
-import ChatWelcome from "./ChatWelcome";
-import { AssistantMessage, ThinkingIndicator, UserMessage, type Turn } from "./ChatMessage";
-import { aiTheme, CANVAS } from "./theme";
 
 const CHAT_ENDPOINT = "/api/admin/ai/chat";
 
+export interface Turn {
+  role: "user" | "assistant";
+  content: string;
+  sources?: any[];
+  typing?: boolean;
+}
+
 interface Props {
   isDark: boolean;
-  /** The employees-page theme object; used only for its scrollbar class. */
   t: any;
   user: any;
 }
 
-export default function BhoomiAiPanel({ isDark, t: pageTheme, user }: Props) {
-  const t = aiTheme(isDark);
-
+// ============================================================================
+// MAIN PANEL COMPONENT
+// ============================================================================
+export default function BhoomiAiPanel({ isDark, t, user }: Props) {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -40,12 +34,11 @@ export default function BhoomiAiPanel({ isDark, t: pageTheme, user }: Props) {
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
-  const composerRef = useRef<ComposerHandle>(null);
   const abortRef = useRef<AbortController | null>(null);
   const mounted = useRef(true);
-  // The question that produced the newest answer, so Retry can re-ask it.
   const lastQuery = useRef<string | null>(null);
 
+  // ── Backend Config Check ──
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -60,19 +53,19 @@ export default function BhoomiAiPanel({ isDark, t: pageTheme, user }: Props) {
       .then(({ ok, j }) => {
         if (!mounted.current) return;
         setConfigured(ok ? Boolean(j?.configured) : false);
-        // A 403 here is the RBAC answer, and for a Site Head it is the entire
-        // explanation — show it rather than a generic "unavailable".
         if (!ok && j?.message) setError(j.message);
       })
       .catch(() => mounted.current && setConfigured(false));
   }, []);
 
-  // Follow the newest turn. `block: "end"` on a sentinel keeps the composer in
-  // place instead of scrolling it out of view.
+  // ── Auto Scroll ──
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: turns.length > 1 ? "smooth" : "auto", block: "end" });
+    if (endRef.current) {
+      endRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
+    }
   }, [turns, busy]);
 
+  // ── Core AI Interaction Logic ──
   const ask = useCallback(
     async (question: string, opts?: { replaceLast?: boolean }) => {
       if (busy) return;
@@ -80,9 +73,6 @@ export default function BhoomiAiPanel({ isDark, t: pageTheme, user }: Props) {
       setBusy(true);
       lastQuery.current = question;
 
-      // History is the turns BEFORE this question — the route takes the question
-      // separately as `query`, so including it here makes the model see it twice.
-      // On a regenerate, the previous answer and its question are dropped first.
       let base: Turn[] = [];
       setTurns((prev) => {
         const trimmed = opts?.replaceLast ? prev.slice(0, -2) : prev;
@@ -104,11 +94,10 @@ export default function BhoomiAiPanel({ isDark, t: pageTheme, user }: Props) {
           }),
           signal: controller.signal,
         });
+
         const data = await res.json().catch(() => null);
 
         if (!res.ok) {
-          // Every failure path of this route answers with a readable `response`:
-          // rate limits name the wait, a missing key names the env var.
           throw new Error(data?.response || `The assistant could not answer (${res.status}).`);
         }
         if (!mounted.current) return;
@@ -127,7 +116,6 @@ export default function BhoomiAiPanel({ isDark, t: pageTheme, user }: Props) {
       } finally {
         if (mounted.current) setBusy(false);
         abortRef.current = null;
-        composerRef.current?.focus();
       }
     },
     [busy]
@@ -136,7 +124,6 @@ export default function BhoomiAiPanel({ isDark, t: pageTheme, user }: Props) {
   const retry = useCallback(() => {
     const q = lastQuery.current;
     if (!q || busy) return;
-    // The failed attempt left a user turn with no answer; drop it and re-ask.
     setTurns((prev) => (prev[prev.length - 1]?.role === "user" ? prev.slice(0, -1) : prev));
     setError("");
     setTimeout(() => ask(q), 0);
@@ -153,185 +140,290 @@ export default function BhoomiAiPanel({ isDark, t: pageTheme, user }: Props) {
     setError("");
     setBusy(false);
     lastQuery.current = null;
-    composerRef.current?.focus();
   }, []);
 
   const blocked = configured === false;
   const empty = turns.length === 0 && !busy;
-  const lastIndex = turns.length - 1;
 
+  // ── UI / UX Rendering ──
   return (
-    /* ── The AI workspace boundary ──────────────────────────────────────────
-       The dark canvas starts HERE and nowhere above it. Everything outside
-       this element — the Admin header, the rail, the logo, Mark Attendance,
-       the notification badges — keeps the Bhoomi magenta/blue/white identity
-       and is not touched by this file or by theme.ts.
+    <main className={`flex h-full flex-col overflow-hidden relative font-sans antialiased ${isDark ? "bg-[#000000]" : "bg-[#F5F5F7]"}`}>
 
-       `.bhoomi-ai-workspace` is the scope for the few CSS rules the surface
-       needs (the mark's keyframes, the composer's placeholder colour). There
-       is no global rule anywhere: a `body { background: #131314 }` would take
-       the whole CRM down with it. */
-    <main
-      className="bhoomi-ai-workspace flex h-full flex-1 flex-col overflow-hidden"
-      style={{ background: CANVAS, color: t.text }}
-    >
-      {/* ── Page header ── the New Chat home, so it no longer competes with the
-          composer for attention. Not a navbar: the Admin header is right above. */}
-      <div
-        className="flex flex-shrink-0 items-center justify-between gap-4 border-b px-6 py-3.5"
-        style={{ borderColor: t.borderSoft }}
-      >
-        <div className="flex min-w-0 items-center gap-2.5 leading-tight">
-          {/* The same mark as the rail item and the greeting — one Bhoomi AI
-              symbol, used everywhere it identifies the assistant. */}
-          <BhoomiAiIcon size={26} />
-          <div className="min-w-0">
-            <h1 className="text-[15px] font-bold tracking-tight" style={{ color: t.text }}>
-              Bhoomi AI
-            </h1>
-            <p className="text-[11.5px]" style={{ color: t.textFaint }}>
-              AI Business Analyst for your CRM
-            </p>
+      {/* ── Background Glow (Subtle, Premium) ── */}
+      {empty && (
+        <div className="absolute inset-0 pointer-events-none flex items-center justify-center opacity-40 z-0">
+          <div className="w-[600px] h-[600px] rounded-full blur-[120px]" style={{
+            background: isDark
+              ? "radial-gradient(circle, rgba(10,132,255,0.15) 0%, rgba(191,90,242,0.05) 50%, transparent 70%)"
+              : "radial-gradient(circle, rgba(0,122,255,0.1) 0%, rgba(175,82,222,0.05) 50%, transparent 70%)"
+          }} />
+        </div>
+      )}
+
+      {/* ── Header ── */}
+      <header className={`flex-shrink-0 flex items-center justify-between px-6 py-4 z-20 border-b backdrop-blur-2xl ${isDark ? "bg-[#1C1C1E]/80 border-white/10" : "bg-white/80 border-black/5"}`}>
+        <div className="flex items-center gap-3">
+          <div className={`w-8 h-8 rounded-[10px] flex items-center justify-center shadow-sm ${isDark ? "bg-white/10 text-white" : "bg-black/5 text-[#1D1D1F]"}`}>
+            <Sparkles className="w-4 h-4" />
+          </div>
+          <div>
+            <h1 className={`text-[15px] font-semibold tracking-tight leading-tight ${isDark ? "text-white" : "text-[#1D1D1F]"}`}>Bhoomi AI</h1>
+            <p className={`text-[11px] font-medium tracking-wide ${isDark ? "text-[#98989D]" : "text-[#86868B]"}`}>Intelligent CRM Analyst</p>
           </div>
         </div>
 
         <button
           onClick={newChat}
           disabled={empty && !error}
-          className="flex flex-shrink-0 items-center gap-2 rounded-lg border px-3 py-1.5 text-[12px] font-semibold transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-40"
-          style={{ borderColor: t.border, color: t.accent, background: t.surfaceRaised }}
-          aria-label="Start a new chat"
+          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold tracking-wide transition-all active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed ${isDark
+              ? "bg-[#2C2C2E] hover:bg-[#3A3A3C] text-white border border-white/5"
+              : "bg-white hover:bg-black/5 text-[#1D1D1F] border border-black/10 shadow-sm"
+            }`}
         >
-          <FaPlus className="text-[9px]" /> New Chat
+          <Plus className="w-3.5 h-3.5" />
+          New Chat
         </button>
-      </div>
+      </header>
 
-      {/* ── Conversation ── the only scroller on the page. */}
-      <div ref={scrollRef} className={`min-h-0 flex-1 overflow-y-auto ${pageTheme?.scroll ?? ""}`}>
-        <div className="mx-auto w-full max-w-[960px] px-5 pb-6 pt-6 sm:px-8">
+      {/* ── Scrollable Conversation Area ── */}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto custom-scrollbar relative z-10 scroll-smooth">
+        <div className="mx-auto w-full max-w-3xl px-4 sm:px-6 pt-8 pb-40">
+
           {empty ? (
-            <ChatWelcome
-              t={t}
-              isDark={isDark}
-              disabled={blocked}
-              onPick={(p) => ask(p)}
-            />
+            <AIEmptyState isDark={isDark} userName={user?.name} onSuggest={ask} disabled={blocked} />
           ) : (
-            <div className="flex flex-col">
-              {turns.map((turn, i) => (
-                <div
-                  key={i}
-                  // 26px inside a turn, 44px between turns — the exchange reads
-                  // as a pair rather than four evenly spaced blocks.
-                  style={{ marginTop: i === 0 ? 0 : turn.role === "user" ? 44 : 26 }}
-                >
-                  {turn.role === "user" ? (
-                    <UserMessage content={turn.content} />
-                  ) : (
-                    <AssistantMessage
-                      turn={turn}
-                      t={t}
-                      isDark={isDark}
-                      onRegenerate={regenerate}
-                      canRegenerate={i === lastIndex && !busy}
-                    />
-                  )}
-                </div>
-              ))}
+            <div className="flex flex-col space-y-8">
+              <AnimatePresence initial={false}>
+                {turns.map((turn, i) => (
+                  <motion.div
+                    key={i}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+                    className={`flex ${turn.role === "user" ? "justify-end" : "justify-start"}`}
+                  >
+                    {turn.role === "user" ? (
+                      <UserBubble content={turn.content} isDark={isDark} />
+                    ) : (
+                      <AIBubble
+                        content={turn.content}
+                        isDark={isDark}
+                        isLatest={i === turns.length - 1}
+                        onRegenerate={regenerate}
+                        canRegenerate={i === turns.length - 1 && !busy}
+                      />
+                    )}
+                  </motion.div>
+                ))}
+              </AnimatePresence>
 
               {busy && (
-                <div style={{ marginTop: 26 }}>
-                  <ThinkingIndicator t={t} />
-                </div>
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex justify-start">
+                  <AIProcessingState isDark={isDark} />
+                </motion.div>
               )}
+
+              {error && (
+                <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className={`flex items-start gap-3 p-4 rounded-2xl border ${isDark ? "bg-[#FF3B30]/10 border-[#FF3B30]/20 text-[#FF453A]" : "bg-red-50 border-red-200 text-red-600"}`}>
+                  <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium leading-relaxed">{error}</p>
+                    {lastQuery.current && !blocked && (
+                      <button onClick={retry} disabled={busy} className={`mt-3 px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50 ${isDark ? "bg-[#FF3B30]/20 hover:bg-[#FF3B30]/30 text-white" : "bg-red-100 hover:bg-red-200 text-red-700"}`}>
+                        Try Again
+                      </button>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+
+              <div ref={endRef} className="h-4" />
             </div>
           )}
-
-          {error && (
-            <div
-              className="mt-6 flex items-start gap-3 rounded-xl border px-4 py-3"
-              style={{
-                borderColor: isDark ? "rgba(248,113,113,0.32)" : "rgba(239,68,68,0.30)",
-                background: isDark ? "rgba(248,113,113,0.07)" : "rgba(239,68,68,0.05)",
-              }}
-              role="alert"
-            >
-              <FaExclamationTriangle className="mt-0.5 flex-shrink-0 text-[13px]" style={{ color: "#ef4444" }} />
-              <div className="min-w-0 flex-1">
-                <p className="text-[13px] leading-relaxed" style={{ color: t.text }}>
-                  {error}
-                </p>
-                {/* Retry only when there is a question to re-send. A blocked or
-                    unconfigured assistant has nothing to retry. */}
-                {lastQuery.current && !blocked && (
-                  <button
-                    onClick={retry}
-                    disabled={busy}
-                    className="mt-2 rounded-md border px-2.5 py-1 text-[11.5px] font-semibold transition-colors disabled:opacity-50"
-                    style={{ borderColor: t.border, color: t.accent }}
-                  >
-                    Try again
-                  </button>
-                )}
-              </div>
-              <button
-                onClick={() => setError("")}
-                aria-label="Dismiss error"
-                className="flex-shrink-0 opacity-60 transition-opacity hover:opacity-100"
-                style={{ color: t.textMuted }}
-              >
-                <FaTimes className="text-[12px]" />
-              </button>
-            </div>
-          )}
-
-          <div ref={endRef} />
         </div>
       </div>
 
-      {/* ── Composer ── sticky, with a fade so text scrolls out under it. */}
-      <div className="relative flex-shrink-0">
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -top-8 left-0 right-0 h-8"
-          style={{ background: t.fade }}
-        />
-        <div
-          className="mx-auto w-full max-w-[960px] px-5 pb-4 pt-1 sm:px-8"
-          style={{ background: CANVAS }}
-        >
-          <ChatComposer
-            ref={composerRef}
-            t={t}
-            isDark={isDark}
-            busy={busy}
-            disabled={blocked}
-            placeholder={
-              blocked
-                ? "Bhoomi AI is unavailable on this server"
-                : "Ask Bhoomi AI about your leads, revenue, bookings or team…"
-            }
-            onSend={(text) => ask(text)}
-          />
+      {/* ── Floating Composer ── */}
+      <div className="absolute bottom-0 left-0 right-0 z-30 pointer-events-none">
+        {/* Subtle gradient fade to hide text going under the composer */}
+        <div className={`h-12 w-full bg-gradient-to-t to-transparent ${isDark ? "from-[#000000]" : "from-[#F5F5F7]"}`} />
+        <div className={`p-4 sm:p-6 pb-6 sm:pb-8 pointer-events-auto backdrop-blur-xl ${isDark ? "bg-[#000000]/80" : "bg-[#F5F5F7]/80"}`}>
+          <div className="mx-auto w-full max-w-3xl">
+            <AIComposer
+              isDark={isDark}
+              busy={busy}
+              disabled={blocked}
+              onSend={ask}
+            />
+          </div>
         </div>
       </div>
 
-      {/* Workspace-scoped CSS. Every selector below is either a `bdai-` class
-          or nested under `.bhoomi-ai-workspace`, so nothing here can reach the
-          CRM shell around it. */}
-      <style>{`
-        @keyframes bdai-dot{0%,80%,100%{transform:translateY(0);opacity:.35}40%{transform:translateY(-3px);opacity:1}}
-        ${AI_ICON_CSS}
-        .bhoomi-ai-workspace .bdai-input::placeholder{color:${t.textMuted};opacity:1}
-        .bhoomi-ai-workspace .bdai-send-busy{animation:bdai-sweep 2.2s ease-in-out infinite}
-        .bhoomi-ai-workspace .bdai-send:hover:not(:disabled){filter:brightness(1.12)}
-        .bhoomi-ai-workspace .bdai-send:focus-visible{box-shadow:0 0 0 3px rgba(255,255,255,0.16)}
-        /* The canvas fades in when the workspace mounts — the AI surface
-           activating inside a CRM shell that does not move. */
-        .bhoomi-ai-workspace{animation:bdai-canvas-in 260ms ease-out both}
-        @keyframes bdai-canvas-in{from{opacity:0}to{opacity:1}}
-        @media (prefers-reduced-motion:reduce){.bhoomi-ai-workspace{animation:none}}
-      `}</style>
     </main>
+  );
+}
+
+// ============================================================================
+// SUB-COMPONENTS (Inline for drop-in replacement)
+// ============================================================================
+
+function AIEmptyState({ isDark, userName, onSuggest, disabled }: { isDark: boolean, userName: string, onSuggest: (q: string) => void, disabled: boolean }) {
+  const firstName = userName?.split(" ")[0] || "there";
+
+  const suggestions = [
+    { icon: <BarChart3 className="w-4 h-4" />, title: "Pipeline Overview", prompt: "Give me a summary of our entire lead pipeline right now." },
+    { icon: <Users className="w-4 h-4" />, title: "Follow-up Queue", prompt: "Which leads have had no contact in the last 3 days?" },
+    { icon: <Building className="w-4 h-4" />, title: "Inventory Insights", prompt: "Which projects have the highest demand this month?" },
+    { icon: <AlignLeft className="w-4 h-4" />, title: "Draft a Message", prompt: "Draft a polite WhatsApp message to a lead who hasn't replied." },
+  ];
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: "easeOut" }} className="flex flex-col items-center justify-center pt-8 sm:pt-16 text-center">
+      <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-6 shadow-sm ${isDark ? "bg-[#1C1C1E] text-white border border-white/10" : "bg-white text-[#1D1D1F] border border-black/5"}`}>
+        <Bot className="w-8 h-8" strokeWidth={1.5} />
+      </div>
+      <h2 className={`text-2xl sm:text-3xl font-semibold tracking-tight mb-2 ${isDark ? "text-white" : "text-[#1D1D1F]"}`}>
+        Good morning, {firstName}
+      </h2>
+      <p className={`text-sm sm:text-base font-medium mb-12 max-w-md ${isDark ? "text-[#98989D]" : "text-[#86868B]"}`}>
+        I'm your AI business analyst. Ask me anything about your CRM data, leads, or performance.
+      </p>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 w-full max-w-2xl">
+        {suggestions.map((s, i) => (
+          <motion.button
+            key={i}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 + i * 0.05 }}
+            onClick={() => onSuggest(s.prompt)}
+            disabled={disabled}
+            className={`flex items-center gap-3 p-4 rounded-[1.25rem] text-left transition-all active:scale-95 border disabled:opacity-50 disabled:cursor-not-allowed ${isDark
+                ? "bg-[#1C1C1E] border-white/5 hover:bg-[#2C2C2E] text-white"
+                : "bg-white border-black/5 hover:shadow-md text-[#1D1D1F]"
+              }`}
+          >
+            <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${isDark ? "bg-white/10" : "bg-black/5"}`}>
+              {s.icon}
+            </div>
+            <span className="text-sm font-medium tracking-tight">{s.title}</span>
+            <ChevronRight className={`w-4 h-4 ml-auto opacity-50 ${isDark ? "text-white" : "text-black"}`} />
+          </motion.button>
+        ))}
+      </div>
+    </motion.div>
+  );
+}
+
+function UserBubble({ content, isDark }: { content: string, isDark: boolean }) {
+  return (
+    <div className={`max-w-[85%] sm:max-w-[75%] px-5 py-3.5 rounded-[1.5rem] rounded-tr-[4px] shadow-sm text-[15px] leading-relaxed font-medium ${isDark
+        ? "bg-[#0A84FF] text-white"
+        : "bg-[#007AFF] text-white"
+      }`}>
+      {content}
+    </div>
+  );
+}
+
+function AIBubble({ content, isDark, isLatest, onRegenerate, canRegenerate }: { content: string, isDark: boolean, isLatest: boolean, onRegenerate: () => void, canRegenerate: boolean }) {
+  return (
+    <div className="flex items-start gap-4 max-w-[95%] sm:max-w-[85%]">
+      <div className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center mt-1 border shadow-sm ${isDark ? "bg-[#1C1C1E] border-white/10 text-white" : "bg-white border-black/5 text-[#1D1D1F]"
+        }`}>
+        <Sparkles className="w-4 h-4" />
+      </div>
+      <div className="flex flex-col gap-2 min-w-0">
+        <div className={`text-[15px] leading-relaxed font-medium whitespace-pre-wrap break-words ${isDark ? "text-gray-200" : "text-[#1D1D1F]"}`}>
+          {/* Note: In a full app, you'd run 'content' through a React Markdown parser here. 
+              Using whitespace-pre-wrap maintains formatting without complex dependencies. */}
+          {content}
+        </div>
+
+        {isLatest && canRegenerate && (
+          <button
+            onClick={onRegenerate}
+            className={`mt-2 flex items-center gap-1.5 w-fit px-3 py-1.5 rounded-full text-[11px] font-semibold transition-colors ${isDark
+                ? "bg-[#1C1C1E] hover:bg-[#2C2C2E] text-[#98989D] hover:text-white border border-white/5"
+                : "bg-white hover:bg-black/5 text-[#86868B] hover:text-black border border-black/10 shadow-sm"
+              }`}
+          >
+            <RefreshCw className="w-3 h-3" />
+            Regenerate response
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AIProcessingState({ isDark }: { isDark: boolean }) {
+  return (
+    <div className="flex items-center gap-4">
+      <div className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center border shadow-sm ${isDark ? "bg-[#1C1C1E] border-white/10 text-[#0A84FF]" : "bg-white border-black/5 text-[#007AFF]"
+        }`}>
+        <Sparkles className="w-4 h-4 animate-pulse" />
+      </div>
+      <div className={`text-[13px] font-medium tracking-wide animate-pulse ${isDark ? "text-[#98989D]" : "text-[#86868B]"}`}>
+        Analyzing data...
+      </div>
+    </div>
+  );
+}
+
+function AIComposer({ isDark, busy, disabled, onSend }: { isDark: boolean, busy: boolean, disabled: boolean, onSend: (text: string) => void }) {
+  const [input, setInput] = useState("");
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const adjustHeight = () => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+  };
+
+  useEffect(() => {
+    adjustHeight();
+  }, [input]);
+
+  const handleSubmit = () => {
+    if (!input.trim() || busy || disabled) return;
+    onSend(input);
+    setInput("");
+    if (textareaRef.current) textareaRef.current.style.height = "auto";
+  };
+
+  return (
+    <div className={`relative flex items-end p-2 rounded-[2rem] border transition-all duration-300 shadow-sm focus-within:shadow-md ${isDark
+        ? "bg-[#1C1C1E] border-white/10 focus-within:border-white/20"
+        : "bg-white border-black/10 focus-within:border-black/20"
+      }`}>
+      <textarea
+        ref={textareaRef}
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            handleSubmit();
+          }
+        }}
+        disabled={disabled || busy}
+        placeholder={disabled ? "AI is currently unavailable" : "Ask Bhoomi AI..."}
+        className={`flex-1 max-h-[200px] min-h-[44px] py-3.5 px-4 bg-transparent outline-none resize-none text-[15px] leading-relaxed font-medium custom-scrollbar disabled:opacity-50 ${isDark ? "text-white placeholder:text-[#636366]" : "text-[#1D1D1F] placeholder:text-[#A1A1A6]"
+          }`}
+        rows={1}
+      />
+      <button
+        onClick={handleSubmit}
+        disabled={!input.trim() || busy || disabled}
+        className={`flex-shrink-0 w-11 h-11 rounded-full flex items-center justify-center transition-all cursor-pointer m-0.5 disabled:cursor-not-allowed ${input.trim() && !busy && !disabled
+            ? (isDark ? "bg-[#0A84FF] text-white shadow-md active:scale-95" : "bg-[#007AFF] text-white shadow-md active:scale-95")
+            : (isDark ? "bg-white/5 text-[#636366]" : "bg-black/5 text-[#A1A1A6]")
+          }`}
+      >
+        <Send className="w-4 h-4 ml-[-2px]" />
+      </button>
+    </div>
   );
 }

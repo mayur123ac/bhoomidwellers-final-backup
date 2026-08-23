@@ -62,6 +62,13 @@ import { useActivityTracker } from "@/hooks/useActivityTracker";
 import UserAvatar from "@/components/UserAvatar";
 import AppHeader, { HeaderControl } from "@/components/AppHeader";
 import ReceptionistSidebar, { RECEPTIONIST_NAV } from "@/components/receptionist/ReceptionistSidebar";
+import BhoomiAiPanel from "@/components/bhoomi-ai/BhoomiAiPanel";
+import dynamic from "next/dynamic";
+
+// Loaded on demand, matching /dashboard and /dashboard/sales. It pulls in
+// framer-motion and a month/week/day calendar that most front-desk sessions
+// never open, so it has no business in the initial bundle.
+const SiteVisitOverview = dynamic(() => import("../SiteVisitOverview"), { ssr: false });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -769,12 +776,9 @@ export default function ReceptionistDashboard() {
   const [closedLeadView, setClosedLeadView] = useState<"table" | "detail">("table");
   const [searchClosedLeads, setSearchClosedLeads] = useState("");
 
-  // ── Chat ──
-  const [chatInput, setChatInput] = useState("");
-  const [chatMessages, setChatMessages] = useState([
-    { sender: "ai", text: "Hello! I am your CRM Assistant. Ask me about your total leads, or type a client's name to pull up their details!" }
-  ]);
-  const chatEndRef = useRef<HTMLDivElement>(null);
+  // The assistant's chat state used to live here — input, a canned greeting and
+  // a scroll sentinel. BhoomiAiPanel owns its own conversation, so none of it
+  // belongs to this page any more.
 
   const tableSentinelRef = useRef<HTMLDivElement>(null);
 
@@ -868,10 +872,6 @@ export default function ReceptionistDashboard() {
      tab: its only readers were that tab's clock card, so it was re-rendering
      this whole component every second to update nothing. The header's live
      clock is HeaderClock, which owns its own tick. */
-
-  useEffect(() => {
-    if (activeTab === "assistant") chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chatMessages, activeTab]);
 
   useEffect(() => {
     const cleanupBackGuard = installLoggedOutBackGuard(() => router.replace("/"));
@@ -1629,28 +1629,8 @@ export default function ReceptionistDashboard() {
     }
   };
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // CHAT
-  // ─────────────────────────────────────────────────────────────────────────
-  const handleChatSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!chatInput.trim()) return;
-    const userMsg = chatInput.toLowerCase();
-    setChatMessages(prev => [...prev, { sender: "user", text: chatInput }]);
-    setChatInput("");
-    setTimeout(() => {
-      let aiResponse = "I can help you analyze your CRM data. Ask me about total leads or interested clients.";
-      const matchedClient = mergedLeads.find((l: any) => userMsg.includes((l.name || "").toLowerCase().split(" ")[0]));
-      if (matchedClient) {
-        aiResponse = `Here is the data for ${matchedClient.name}:\n\n• Phone: ${maskPhone(matchedClient.phone)}\n• Email: ${matchedClient.email !== "N/A" ? matchedClient.email : "Not Provided"}\n• Budget: ${matchedClient.salesBudget}\n• Config: ${matchedClient.propType}\n• Status: ${matchedClient.status}\n• Created On: ${matchedClient.date}\n• Assigned To: ${matchedClient.assignedTo}`;
-      } else if (userMsg.includes("total") || userMsg.includes("how many")) {
-        aiResponse = `You currently have ${totalCount} total leads in the system. You personally handle ${myAssignedLeads.length} leads.`;
-      } else if (userMsg.includes("my leads") || userMsg.includes("assigned")) {
-        aiResponse = `You have ${myAssignedLeads.length} leads assigned to you. ${myAssignedLeads.filter((l: any) => l.status === "Visit Scheduled").length} have a site visit scheduled.`;
-      }
-      setChatMessages(prev => [...prev, { sender: "ai", text: aiResponse }]);
-    }, 600);
-  };
+  // handleChatSubmit lived here: a setTimeout, three `userMsg.includes(...)`
+  // branches and a default apology. It is gone with the mock it drove.
 
   const handleLogout = () => { clearCrmSession(); router.replace("/"); };
 
@@ -2040,315 +2020,26 @@ export default function ReceptionistDashboard() {
               AI ASSISTANT
           ──────────────────────────────────────────────────────────── */}
           {activeTab === "assistant" && (
-            <div className="animate-fadeIn h-[calc(100vh-130px)] flex flex-col pb-2">
-              {/* Same header component as every other tab. The avatar keeps its
-                  gradient — that mark is part of the assistant's identity, not a
-                  theme colour — but the title no longer opts out of the panel's
-                  type ramp into DM Sans at its own size. */}
-              <RpPageHeader
-                title="CRM AI Assistant"
-                subtitle="Ask about leads, stats, or client details"
-                titleClass={t.text}
-                subtitleClass={t.textMuted}
-                leading={
-                  <div style={{
-                    width: 44, height: 44, borderRadius: 14, flexShrink: 0,
-                    background: "linear-gradient(135deg, #4285f4 0%, #34a853 40%, #fbbc04 70%, #ea4335 100%)",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: 20, boxShadow: "0 4px 16px rgba(66,133,244,0.35)",
-                  }}>✦</div>
-                }
-              >
-                {/* Live indicator */}
-                <div className="flex items-center gap-2">
-                  <span className={`w-2 h-2 rounded-full animate-pulse ${isDark ? "bg-green-400" : "bg-green-500"}`} />
-                  <span className={`text-[10px] font-semibold uppercase tracking-widest ${t.textMuted}`}>Live</span>
-                </div>
-              </RpPageHeader>
+            /* The real assistant, replacing ~310 lines of inline mock.
 
-              {/* ── Chat container ── */}
-              <div className="flex-1 flex flex-col overflow-hidden rounded-2xl border min-h-0"
-                style={{
-                  background: isDark ? "#0f0f11" : "#f8fafc",
-                  border: isDark ? "1px solid #1e1e26" : "1px solid #cbd5e1",
-                  boxShadow: isDark
-                    ? "0 0 0 1px rgba(66,133,244,0.06), 0 8px 32px rgba(0,0,0,0.5)"
-                    : "0 2px 8px rgba(0,0,0,0.06), 0 16px 40px rgba(0,0,0,0.08)",
-                }}>
+               What was here: a hand-rolled chat panel whose "AI" was a chain of
+               `userMsg.includes("total")` string tests returning pre-written
+               strings, a typing indicator permanently disabled behind
+               `{false && ...}`, a duplicated bold-text renderer, and a Google
+               four-colour "✦" avatar that matched nothing else in the CRM. It
+               could not answer anything it had not been hardcoded to answer.
 
-                {/* ── Messages area ── */}
-                <div className="flex-1 overflow-y-auto custom-scrollbar px-4 py-6 flex flex-col gap-5"
-                  style={{ background: isDark ? "#0f0f11" : "#f8fafc" }}>
+               BhoomiAiPanel is the same component the Admin and Sales rails
+               mount: real retrieval through /api/admin/ai/chat, streaming
+               thinking state, retry, regenerate, New Chat, markdown answers and
+               cited sources. It owns its own dark canvas, so it is given the
+               height and left alone — no page header above it, because it
+               renders its own.
 
-                  {chatMessages.map((msg, idx) => {
-                    const isUser = msg.sender === "user";
-                    return (
-                      <div key={idx} className={`flex gap-3 ${isUser ? "justify-end" : "justify-start"}`}
-                        style={{ animation: "fadeUp 0.25s ease both" }}>
-
-                        {/* AI avatar */}
-                        {!isUser && (
-                          <div style={{
-                            width: 32, height: 32, borderRadius: "50%", flexShrink: 0,
-                            background: "linear-gradient(135deg,#4285f4,#34a853)",
-                            display: "flex", alignItems: "center", justifyContent: "center",
-                            fontSize: 13, marginTop: 2,
-                            boxShadow: "0 2px 8px rgba(66,133,244,0.3)",
-                          }}>✦</div>
-                        )}
-
-                        {/* Bubble */}
-                        <div style={{
-                          maxWidth: "78%",
-                          padding: isUser ? "10px 16px" : "14px 18px",
-                          borderRadius: isUser
-                            ? "18px 18px 4px 18px"
-                            : "4px 18px 18px 18px",
-                          background: isUser
-                            ? (isDark
-                              ? "linear-gradient(135deg,#1a73e8,#1558b0)"
-                              : "linear-gradient(135deg,#9E217B,#7a1a5e)")
-                            : (isDark ? "#1a1a22" : "#ffffff"),
-                          border: isUser
-                            ? "none"
-                            : (isDark ? "1px solid #2a2a35" : "1px solid #e2e8f0"),
-                          color: isUser
-                            ? "#ffffff"
-                            : (isDark ? "#e8eaed" : "#1e293b"),
-                          fontSize: 13.5,
-                          lineHeight: 1.75,
-                          whiteSpace: "pre-wrap",
-                          fontFamily: "'DM Sans', sans-serif",
-                          fontWeight: isUser ? 500 : 400,
-                          boxShadow: isUser
-                            ? (isDark ? "0 4px 16px rgba(26,115,232,0.35)" : "0 4px 16px rgba(158,33,123,0.3)")
-                            : (isDark ? "0 2px 8px rgba(0,0,0,0.3)" : "0 1px 4px rgba(0,0,0,0.06)"),
-                        }}>
-                          {/* Bold **text** renderer */}
-                          {msg.text.split("\n").map((line, li) => {
-                            const parts = line.split(/(\*\*[^*]+\*\*)/g);
-                            return (
-                              <div key={li} style={{ minHeight: line === "" ? "0.6em" : undefined }}>
-                                {parts.map((part, pi) =>
-                                  part.startsWith("**") && part.endsWith("**")
-                                    ? <span key={pi} style={{
-                                      fontWeight: 700,
-                                      color: isUser ? "#fff" : (isDark ? "#8ab4f8" : "#9E217B"),
-                                    }}>{part.slice(2, -2)}</span>
-                                    : <span key={pi}>{part}</span>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-
-                        {/* User avatar */}
-                        {isUser && (
-                          <div style={{
-                            width: 32, height: 32, borderRadius: "50%", flexShrink: 0,
-                            background: isDark
-                              ? "linear-gradient(135deg,#7c3aed,#4f46e5)"
-                              : "linear-gradient(135deg,#9E217B,#d4006e)",
-                            display: "flex", alignItems: "center", justifyContent: "center",
-                            fontSize: 13, marginTop: 2, color: "#fff", fontWeight: 700,
-                          }}>
-                            {String(user?.name || "U").charAt(0).toUpperCase()}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-
-                  {/* Typing indicator */}
-                  {false /* replace with your typing state if needed */ && (
-                    <div className="flex gap-3 justify-start">
-                      <div style={{
-                        width: 32, height: 32, borderRadius: "50%",
-                        background: "linear-gradient(135deg,#4285f4,#34a853)",
-                        display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13,
-                      }}>✦</div>
-                      <div style={{
-                        padding: "12px 16px", borderRadius: "4px 18px 18px 18px",
-                        background: isDark ? "#1a1a22" : "#ffffff",
-                        border: isDark ? "1px solid #2a2a35" : "1px solid #e2e8f0",
-                        display: "flex", gap: 5, alignItems: "center",
-                      }}>
-                        {[0, 1, 2].map(i => (
-                          <span key={i} style={{
-                            width: 7, height: 7, borderRadius: "50%",
-                            background: isDark ? "#8ab4f8" : "#9E217B",
-                            animation: `bounce 1.2s ease-in-out ${i * 0.2}s infinite`,
-                            display: "block",
-                          }} />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Suggestion chips — only shown when conversation is fresh */}
-                  {chatMessages.length <= 2 && (
-                    <div className="mt-2">
-                      <p className={`text-[10px] font-bold uppercase tracking-widest mb-3 ${t.textFaint}`}>
-                        Try asking
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        {[
-                          "My assigned leads",
-                          "Total leads this week",
-                          "How many today?",
-                          `Show ${myAssignedLeads[0]?.name?.split(" ")[0] || "a client"}`,
-                          "Leads with site visits",
-                          "Total all time",
-                        ].map(chip => (
-                          <button key={chip}
-                            onClick={() => {
-                              setChatInput(chip);
-                              // Directly trigger submit
-                              const syntheticEvent = { preventDefault: () => { } } as React.FormEvent;
-                              const saved = chatInput;
-                              setChatInput(chip);
-                              setTimeout(() => {
-                                const q = chip;
-                                setChatMessages(prev => [...prev, { sender: "user", text: q }]);
-                                setChatInput("");
-                                setTimeout(() => {
-                                  let aiResponse = "I can help you analyze your CRM data. Try asking about total leads or a specific client's name.";
-                                  const userMsg = q.toLowerCase();
-                                  const matchedClient = mergedLeads.find((l: any) =>
-                                    userMsg.includes((l.name || "").toLowerCase().split(" ")[0])
-                                  );
-                                  if (matchedClient) {
-                                    aiResponse = `**Lead Found — ${matchedClient.name}**\n━━━━━━━━━━━━━━━━━\n📅 Entered: ${matchedClient.date}\n📞 Phone: ${maskPhone(matchedClient.phone)}\n💰 Budget: ${matchedClient.salesBudget || matchedClient.budget}\n🏗️ Config: ${matchedClient.propType || matchedClient.configuration || "N/A"}\n📊 Status: ${matchedClient.status}\n👤 Assigned: ${matchedClient.assignedTo}`;
-                                  } else if (userMsg.includes("total") || userMsg.includes("how many") || userMsg.includes("all time")) {
-                                    aiResponse = `**📊 Lead Count Overview**\n━━━━━━━━━━━━━━━━━\nTotal in system: **${totalCount}**\nAssigned to you: **${myAssignedLeads.length}**\nWith site visits: **${myAssignedLeads.filter((l: any) => l.status === "Visit Scheduled").length}**\nClosing stage: **${closedLeads.length}**`;
-                                  } else if (userMsg.includes("my") || userMsg.includes("assigned")) {
-                                    aiResponse = `**📋 Your Assigned Leads (${myAssignedLeads.length})**\n━━━━━━━━━━━━━━━━━\n${myAssignedLeads.slice(0, 5).map((l: any, i: number) => `${i + 1}. **${l.name}** — ${l.status} | ${l.salesBudget || l.budget}`).join("\n")}${myAssignedLeads.length > 5 ? `\n…and ${myAssignedLeads.length - 5} more.` : ""}`;
-                                  } else if (userMsg.includes("site visit")) {
-                                    const sv = myAssignedLeads.filter((l: any) => l.status === "Visit Scheduled");
-                                    aiResponse = sv.length > 0
-                                      ? `**🏠 Site Visit Leads (${sv.length})**\n━━━━━━━━━━━━━━━━━\n${sv.map((l: any) => `• **${l.name}** — ${formatDate(l.mongoVisitDate)}`).join("\n")}`
-                                      : "No site visits currently scheduled.";
-                                  } else if (userMsg.includes("week")) {
-                                    const weekStart = new Date(); weekStart.setDate(weekStart.getDate() - 7);
-                                    const thisWeek = mergedLeads.filter((l: any) => l.created_at && new Date(l.created_at) >= weekStart);
-                                    aiResponse = `**📅 This Week's Activity**\n━━━━━━━━━━━━━━━━━\nLeads entered: **${thisWeek.length}**\nYour leads this week: **${thisWeek.filter((l: any) => l.assignedReceptionist === user.name || l.assigned_to === user.name).length}**`;
-                                  }
-                                  setChatMessages(prev => [...prev, { sender: "ai", text: aiResponse }]);
-                                }, 650);
-                              }, 0);
-                            }}
-                            style={{
-                              padding: "7px 14px",
-                              borderRadius: 20,
-                              fontSize: 12,
-                              fontWeight: 500,
-                              cursor: "pointer",
-                              transition: "all 0.15s",
-                              fontFamily: "'DM Sans', sans-serif",
-                              background: isDark ? "rgba(138,180,248,0.08)" : "rgba(0,0,0,0.04)",
-                              color: isDark ? "#8ab4f8" : "#475569",
-                              border: isDark ? "1px solid rgba(138,180,248,0.15)" : "1px solid #cbd5e1",
-                            }}
-                            onMouseEnter={e => {
-                              (e.currentTarget as HTMLElement).style.background = isDark ? "rgba(138,180,248,0.18)" : "#fff";
-                              (e.currentTarget as HTMLElement).style.borderColor = isDark ? "rgba(138,180,248,0.4)" : "#9E217B";
-                              (e.currentTarget as HTMLElement).style.color = isDark ? "#fff" : "#9E217B";
-                            }}
-                            onMouseLeave={e => {
-                              (e.currentTarget as HTMLElement).style.background = isDark ? "rgba(138,180,248,0.08)" : "rgba(0,0,0,0.04)";
-                              (e.currentTarget as HTMLElement).style.borderColor = isDark ? "rgba(138,180,248,0.15)" : "#cbd5e1";
-                              (e.currentTarget as HTMLElement).style.color = isDark ? "#8ab4f8" : "#475569";
-                            }}
-                          >{chip}</button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <div ref={chatEndRef} />
-                </div>
-
-                {/* ── Input bar ── */}
-                <div style={{
-                  padding: "12px 16px 16px",
-                  borderTop: isDark ? "1px solid #1e1e26" : "1px solid #e2e8f0",
-                  background: isDark ? "rgba(15,15,17,0.98)" : "rgba(248,250,252,0.98)",
-                  backdropFilter: "blur(12px)",
-                  flexShrink: 0,
-                }}>
-                  <form onSubmit={handleChatSubmit} style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                    <div style={{
-                      flex: 1, display: "flex", alignItems: "center",
-                      background: isDark ? "#1a1a22" : "#ffffff",
-                      border: isDark ? "1.5px solid #2a2a35" : "1.5px solid #cbd5e1",
-                      borderRadius: 26, padding: "3px 6px 3px 18px",
-                      transition: "border-color 0.2s",
-                    }}
-                      onFocus={e => (e.currentTarget as HTMLElement).style.borderColor = isDark ? "#8ab4f8" : "#9E217B"}
-                      onBlur={e => (e.currentTarget as HTMLElement).style.borderColor = isDark ? "#2a2a35" : "#cbd5e1"}
-                    >
-                      <input
-                        type="text"
-                        value={chatInput}
-                        onChange={e => setChatInput(e.target.value)}
-                        placeholder="Ask about leads, stats, or client details…"
-                        style={{
-                          flex: 1, background: "transparent", border: "none", outline: "none",
-                          color: isDark ? "#e8eaed" : "#1e293b",
-                          fontSize: 13.5, fontFamily: "'DM Sans', sans-serif",
-                          padding: "10px 0",
-                        }}
-                      />
-                      {chatInput && (
-                        <button type="button" onClick={() => setChatInput("")}
-                          style={{
-                            background: "transparent", border: "none", cursor: "pointer",
-                            color: isDark ? "#5f6368" : "#94a3b8", fontSize: 15, padding: "0 4px",
-                          }}>✕</button>
-                      )}
-                    </div>
-
-                    {/* Send button */}
-                    <button type="submit" disabled={!chatInput.trim()}
-                      style={{
-                        width: 44, height: 44, borderRadius: "50%", border: "none",
-                        cursor: chatInput.trim() ? "pointer" : "not-allowed",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: 16, transition: "all 0.2s",
-                        background: chatInput.trim()
-                          ? (isDark
-                            ? "linear-gradient(135deg,#1a73e8,#1558b0)"
-                            : "linear-gradient(135deg,#9E217B,#d4006e)")
-                          : (isDark ? "#1a1a22" : "#f1f5f9"),
-                        color: chatInput.trim() ? "#ffffff" : (isDark ? "#3c3c40" : "#94a3b8"),
-                        boxShadow: chatInput.trim()
-                          ? (isDark ? "0 4px 16px rgba(26,115,232,0.4)" : "0 4px 16px rgba(158,33,123,0.35)")
-                          : "none",
-                        transform: chatInput.trim() ? "scale(1)" : "scale(0.95)",
-                      }}>
-                      <FaPaperPlane style={{ marginLeft: -1 }} />
-                    </button>
-                  </form>
-
-                  <p style={{
-                    textAlign: "center", marginTop: 10, fontSize: 10,
-                    color: isDark ? "#3c3c40" : "#94a3b8",
-                    fontFamily: "'DM Sans', sans-serif",
-                  }}>
-                    Phone numbers are masked · Transferred leads show role only
-                  </p>
-                </div>
-              </div>
-
-              {/* Keyframe for fadeUp */}
-              <style dangerouslySetInnerHTML={{
-                __html: `
-                @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
-                @keyframes fadeUp {
-                  from { opacity: 0; transform: translateY(8px); }
-                  to   { opacity: 1; transform: translateY(0); }
-                }
-              `}} />
+               A Receptionist's answers are scoped to her own leads in SQL
+               (lib/admin-ai/services.ts), not by anything this file passes. */
+            <div className="animate-fadeIn h-[calc(100vh-130px)] flex flex-col">
+              <BhoomiAiPanel isDark={isDark} t={t} user={user} />
             </div>
           )}
 
@@ -3704,6 +3395,37 @@ export default function ReceptionistDashboard() {
               t={t}
               now={now}
             />
+          )}
+
+          {/* ════════════════════════════════════════════════════
+              SITE VISIT OVERVIEW — this receptionist's leads only.
+              Same component the Admin and Sales Manager calendars use. It
+              scopes itself to the lead ids handed to it in `allLeads`, which is
+              why the Sales page passes `myOwnLeads` and this one passes
+              `directAssignedLeads` — every lead where she is the assignee or
+              the assigned receptionist, fetched from the two dedicated
+              endpoints rather than the paginated table, so a lead transferred
+              to her is included even when it falls outside the loaded page.
+              `myAssignedLeads` is deliberately NOT used: it drops Closing and
+              closed leads, and a completed visit on a lead that went on to
+              close is exactly the history this calendar should still show.
+
+              The prop is not the security boundary. /api/site-visits/all now
+              applies the same ownership predicate in SQL, so the browser is
+              never sent another employee's visits to filter out.
+          ════════════════════════════════════════════════════ */}
+          {activeTab === "site_visits" && (
+            <div className="animate-fadeIn h-[calc(100vh-130px)]">
+              <SiteVisitOverview
+                allLeads={directAssignedLeads}
+                receptionists={[]}
+                managers={[]}
+                siteHeads={[]}
+                adminUser={user}
+                theme={t}
+                isDark={isDark}
+              />
+            </div>
           )}
         </main>
       </div>

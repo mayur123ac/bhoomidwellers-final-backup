@@ -10,7 +10,7 @@ import { NextResponse } from "next/server";
 import { askAdminAI, AdminLlmError, isAdminLlmConfigured, ADMIN_AI_MODEL } from "@/lib/admin-ai/llm";
 import { authorizeAiRequest } from "@/lib/admin-ai/rbac";
 import { recordAiRequest, checkAiRateLimit, AI_RATE_LIMIT } from "@/lib/admin-ai/audit";
-import { ADMIN_AI_SYSTEM_PROMPT, fenceUntrusted } from "@/lib/admin-ai/prompt";
+import { ADMIN_AI_SYSTEM_PROMPT, fenceUntrusted, scopeInstruction } from "@/lib/admin-ai/prompt";
 
 export const dynamic = "force-dynamic";
 
@@ -87,7 +87,14 @@ export async function POST(req: Request) {
     // The system message contains ONLY our own rules. Client-supplied context
     // goes in as a fenced user-role block, so it can never carry system
     // authority the way it did when it was concatenated onto the prompt.
-    const messages: any[] = [{ role: "system", content: ADMIN_AI_SYSTEM_PROMPT }];
+    //
+    // The scope line is built from `scope`, which came from the signed session
+    // — not from the body — so it is our own rule too and belongs here. It
+    // tells the model how to DESCRIBE the restriction; services.ts is what
+    // enforces it.
+    const messages: any[] = [
+      { role: "system", content: ADMIN_AI_SYSTEM_PROMPT + scopeInstruction(scope) },
+    ];
 
     if (body?.frontendContext) {
       const serialized = JSON.stringify(body.frontendContext).slice(0, MAX_CONTEXT_CHARS);

@@ -25,15 +25,16 @@
 
 import type { IconType } from "react-icons";
 import {
+  FaCalendarAlt,
   FaChartPie,
   FaCheckCircle,
   FaClock,
   FaCog,
   FaHandshake,
-  FaRobot,
   FaThLarge,
   FaUsers,
 } from "react-icons/fa";
+import { BhoomiAiGlyph } from "@/components/bhoomi-ai/BhoomiAiIcon";
 
 export interface ReceptionistNavItem {
   id: string;
@@ -59,8 +60,14 @@ export const RECEPTIONIST_NAV: ReceptionistNavItem[] = [
   { id: "recep-leads", icon: FaUsers, label: "Receptionist Leads" },
   { id: "cp-enquiries", icon: FaHandshake, label: "Channel Partner Enquiries" },
   { id: "closed-leads", icon: FaCheckCircle, label: "Closed Leads" },
+  // Sits with the lead tabs because that is what it is a view of: the visits
+  // booked against this receptionist's own leads, not the site's diary.
+  { id: "site_visits", icon: FaCalendarAlt, label: "Site Visit Overview" },
   { id: "attendance", icon: FaClock, label: "My Attendance" },
-  { id: "assistant", icon: FaRobot, label: "CRM AI Assistant" },
+  // Was FaRobot / "CRM AI Assistant" — a generic robot for what was a mock chat
+  // panel. It is the real assistant now, so it carries the same mark and the
+  // same name it has in the Admin and Sales rails. One assistant, one identity.
+  { id: "assistant", icon: BhoomiAiGlyph, label: "Bhoomi AI" },
   { id: "settings", icon: FaCog, label: "Settings", pinned: true },
 ];
 

@@ -8,7 +8,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
 import { getOrganizationId } from "@/lib/tenantContext";
-import { isAdmin, isLinkedActive, isBookingProtected, bookingProtectedReason, linkDescriptor, softDeleteUnit } from "@/lib/inventoryDelete";
+import { isAdmin, isLinkedActive, isBookingProtected, bookingProtectedReason, linkDescriptor, softDeleteUnit,
+         UNITS_WITH_BOOKING_STATUS, UNIT_GUARD_COLUMNS } from "@/lib/inventoryDelete";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
@@ -232,7 +233,15 @@ export async function DELETE(
       // MT-06: the unit id is a caller-supplied route parameter and this handler
       // deletes. Scoping the lookup means a foreign unit returns notFound instead
       // of being deleted out of another tenant.
-      const existing = await client.query(`SELECT * FROM inventory_units WHERE id = $1 AND organization_id = $2`, [Number(id), await getOrganizationId(client)]);
+      //
+      // Read through the booking join so isBookingProtected() can see whether the
+      // linked booking is still live or was cancelled — without it the guard
+      // fails closed and every once-booked flat stays undeletable.
+      const existing = await client.query(
+        `SELECT ${UNIT_GUARD_COLUMNS} ${UNITS_WITH_BOOKING_STATUS}
+          WHERE iu.id = $1 AND iu.organization_id = $2`,
+        [Number(id), await getOrganizationId(client)],
+      );
       if (!existing.rows.length) return { notFound: true as const };
       const unit = existing.rows[0];
       if (unit.deleted_at) return { unit };  // already deleted — idempotent

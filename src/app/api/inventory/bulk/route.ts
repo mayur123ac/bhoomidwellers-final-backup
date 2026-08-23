@@ -6,7 +6,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { transaction } from "@/lib/db";
 import { requireRoles } from "@/lib/serverAuth";
 import { getOrganizationId } from "@/lib/tenantContext";
-import { isLinkedActive, isBookingProtected, bookingProtectedReason, linkDescriptor, softDeleteUnit } from "@/lib/inventoryDelete";
+import { isLinkedActive, isBookingProtected, bookingProtectedReason, linkDescriptor, softDeleteUnit,
+         UNITS_WITH_BOOKING_STATUS, UNIT_GUARD_COLUMNS } from "@/lib/inventoryDelete";
 
 export const dynamic = "force-dynamic";
 
@@ -39,8 +40,8 @@ export async function DELETE(req: NextRequest) {
       // in `skipped` — the response cannot be used to probe which ids exist
       // elsewhere.
       const rows = (await client.query(
-        `SELECT * FROM inventory_units
-          WHERE id = ANY($1) AND organization_id = $2 AND deleted_at IS NULL`,
+        `SELECT ${UNIT_GUARD_COLUMNS} ${UNITS_WITH_BOOKING_STATUS}
+          WHERE iu.id = ANY($1) AND iu.organization_id = $2 AND iu.deleted_at IS NULL`,
         [numIds, await getOrganizationId(client)],
       )).rows;
 

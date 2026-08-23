@@ -13,6 +13,7 @@ import {
   FaFileInvoice, FaFileInvoiceDollar, FaPaperPlane, FaMicrophone, FaWhatsapp, FaTable, FaChartPie, FaEyeSlash, FaUniversity, FaHandshake, FaExchangeAlt, FaBriefcase, FaDownload, FaCog, FaMapMarkerAlt, FaSignal, FaUserClock, FaTrashAlt, FaBoxes, FaUserTie
 } from "react-icons/fa";
 import { BhoomiAiGlyph } from "@/components/bhoomi-ai/BhoomiAiIcon";
+import BhoomiAiPanel from "@/components/bhoomi-ai/BhoomiAiPanel";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, Cell,
   CartesianGrid, PieChart, Pie,
@@ -912,6 +913,18 @@ function AdminAtlasDashboardContent() {
     caller: "Admin", employees: "Admin", notifications: "Admin",
   };
 
+  // Bhoomi AI is a VIEW of this page, not a route.
+  //
+  // It used to be `router.push("/dashboard/employees?tab=ai")`, which worked for
+  // an Admin and was a dead click for a Site Head: middleware.ts lists
+  // /dashboard/employees among Site Head's forbidden paths and redirects them
+  // straight back to /dashboard. The button appeared to do nothing at all,
+  // because navigating away and being sent back is indistinguishable from not
+  // navigating. Nothing was broken about the panel — it was never reached.
+  //
+  // Rendering it in place removes the round trip for everyone and removes the
+  // dependency on a route Site Head is not allowed to load. The employees page
+  // keeps its own `?tab=ai` section; this is simply no longer the way in.
   const handleMenuClick = (itemId: string) => {
     if (itemId === "employees") {
       router.push("/dashboard/employees");
@@ -921,8 +934,6 @@ function AdminAtlasDashboardContent() {
       // Without this branch the id would fall through to setActiveView() and
       // this page would render nothing — there is no "notifications" view here.
       router.push("/dashboard/employees?tab=notifications");
-    } else if (itemId === "ai") {
-      router.push("/dashboard/employees?tab=ai");
     } else if (itemId === "settings") {
       router.push("/dashboard/settings");
     } else {
@@ -1131,6 +1142,12 @@ function AdminAtlasDashboardContent() {
         </header>
 
         <main className={`flex-1 overflow-hidden transition-colors duration-300 ${theme.mainBg}`}>
+          {/* Bhoomi AI owns its own dark canvas and expects to fill the height it
+              is given — `main` is already flex-1/overflow-hidden, so it needs no
+              wrapper. The panel handles its own RBAC state: /api/admin/ai/chat
+              answers a role it does not serve with a readable message, which the
+              panel shows in place of the composer. */}
+          {activeView === "ai" && <BhoomiAiPanel isDark={isDark} t={theme} user={user} />}
           {activeView === "dashboard" && <DashboardOverview refetch={refetch} managers={managers} siteHeads={siteHeads} allLeads={allLeads} isLoading={isLoading} user={user} theme={theme} isDark={isDark} receptionists={receptionists} followUps={followUps} onNavigateToSales={(lead: any) => {
             const isSiteHead = siteHeads.some((sh: any) => sh.name === lead.assigned_to);
             const isReceptionist = receptionists.some((r: any) => r.name === lead.assigned_receptionist);
