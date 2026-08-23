@@ -1,7 +1,7 @@
 //dashboard/page.tsx
 "use client";
 
-import { useState, useEffect, useRef, useMemo, useCallback, Suspense } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { clearCrmSession, getStoredCrmUser, installLoggedOutBackGuard } from "@/lib/authSession";
 import { useCrmTheme } from "@/lib/hooks/useCrmTheme";
@@ -1874,15 +1874,48 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
     setRecepLeadSearch("");
   }, [perfMode]);
 
+  /* ── Lead indexes, built once per allLeads change ─────────────────────────
+     Everything below this point used to be a bare `allLeads.filter(...)` in the
+     render body. There were roughly fifteen of them, plus two loops of the shape
+     `people.map(p => allLeads.filter(...))` which are O(people × leads), plus
+     seven more inside the stat-card map. None were memoised, so all of them
+     re-ran on every render — and this component re-renders on every keystroke in
+     the search box, because `overviewSearch` is its own state.
+
+     Grouping by assignee once turns both O(people × leads) loops into O(leads),
+     and memoising means a keystroke no longer re-runs any of it. The values are
+     unchanged. */
+  const leadsByAssignedTo = useMemo(() => {
+    const map = new Map<string, any[]>();
+    for (const l of allLeads) {
+      const key = String(l.assigned_to ?? "");
+      let bucket = map.get(key);
+      if (!bucket) { bucket = []; map.set(key, bucket); }
+      bucket.push(l);
+    }
+    return map;
+  }, [allLeads]);
+
+  const leadsByReceptionist = useMemo(() => {
+    const map = new Map<string, any[]>();
+    for (const l of allLeads) {
+      const key = String(l.assigned_receptionist ?? "");
+      let bucket = map.get(key);
+      if (!bucket) { bucket = []; map.set(key, bucket); }
+      bucket.push(l);
+    }
+    return map;
+  }, [allLeads]);
+
   // ── Manager stats ──────────────────────────────────────────────────────────
-  const managerStats = managers.map((m: any) => {
-    const mLeads = allLeads.filter((l: any) => l.assigned_to === m.name);
+  const managerStats = useMemo(() => managers.map((m: any) => {
+    const mLeads = leadsByAssignedTo.get(String(m.name)) ?? EMPTY_FUPS;
     return {
       name: m.name,
       activeLeads: mLeads.length,
       siteVisits: mLeads.filter((l: any) => l.status === "Visit Scheduled" || !!l.mongoVisitDate).length,
     };
-  }).sort((a: any, b: any) => b.activeLeads - a.activeLeads);
+  }).sort((a: any, b: any) => b.activeLeads - a.activeLeads), [managers, leadsByAssignedTo]);
 
   useEffect(() => {
     if (!hasAutoSelectedRecep && receptionists?.length > 0 && !isLoading) {
@@ -1891,29 +1924,76 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
     }
   }, [receptionists, isLoading, hasAutoSelectedRecep]);
 
-  const activeManagerLeads = allLeads.filter((l: any) => l.assigned_to === selectedManagerName);
-  const visitCount = activeManagerLeads.filter((l: any) => l.status === "Visit Scheduled" || !!l.mongoVisitDate).length;
+  const activeManagerLeads = useMemo(
+    () => leadsByAssignedTo.get(String(selectedManagerName)) ?? EMPTY_FUPS,
+    [leadsByAssignedTo, selectedManagerName]
+  );
+  const visitCount = useMemo(
+    () => activeManagerLeads.filter((l: any) => l.status === "Visit Scheduled" || !!l.mongoVisitDate).length,
+    [activeManagerLeads]
+  );
 
   // ── Receptionist data ──────────────────────────────────────────────────────
-  const recepAssignedLeads = allLeads.filter((l: any) => l.assigned_to === selectedReceptionistName);
-  const recepSelfLeads = allLeads.filter((l: any) => l.assigned_receptionist === selectedReceptionistName);
-  const recepAllLeads = [...new Map([...recepAssignedLeads, ...recepSelfLeads].map(l => [l.id, l])).values()];
-  const recepClosed = recepAllLeads.filter((l: any) => l.status === "Closing" || l.status === "Closed").length;
+  const recepAssignedLeads = useMemo(
+    () => leadsByAssignedTo.get(String(selectedReceptionistName)) ?? EMPTY_FUPS,
+    [leadsByAssignedTo, selectedReceptionistName]
+  );
+  const recepSelfLeads = useMemo(
+    () => leadsByReceptionist.get(String(selectedReceptionistName)) ?? EMPTY_FUPS,
+    [leadsByReceptionist, selectedReceptionistName]
+  );
+  const recepAllLeads = useMemo(
+    () => [...new Map([...recepAssignedLeads, ...recepSelfLeads].map((l: any) => [l.id, l])).values()],
+    [recepAssignedLeads, recepSelfLeads]
+  );
+  const recepClosed = useMemo(
+    () => recepAllLeads.filter((l: any) => l.status === "Closing" || l.status === "Closed").length,
+    [recepAllLeads]
+  );
 
-  const recepStats = (receptionists || []).map((r: any) => {
-    const rLeads = allLeads.filter((l: any) => l.assigned_to === r.name || l.assigned_receptionist === r.name);
+  const recepStats = useMemo(() => (receptionists || []).map((r: any) => {
+    // Union of "assigned to them" and "they took it themselves", deduped by id —
+    // the same set the old `l.assigned_to === r.name || l.assigned_receptionist
+    // === r.name` predicate produced, but read from the two indexes instead of
+    // scanning every lead once per receptionist.
+    const rLeads = [
+      ...(leadsByAssignedTo.get(String(r.name)) ?? EMPTY_FUPS),
+      ...(leadsByReceptionist.get(String(r.name)) ?? EMPTY_FUPS),
+    ];
     const unique = [...new Map(rLeads.map((l: any) => [l.id, l])).values()];
     return { name: r.name, activeLeads: unique.length, siteVisits: unique.filter((l: any) => !!l.mongoVisitDate).length };
-  }).sort((a: any, b: any) => b.activeLeads - a.activeLeads);
+  }).sort((a: any, b: any) => b.activeLeads - a.activeLeads), [receptionists, leadsByAssignedTo, leadsByReceptionist]);
 
   // ── Site Head data ─────────────────────────────────────────────────────────
-  const activeSiteHeadLeads = allLeads.filter((l: any) => l.assigned_to === selectedSiteHeadName);
-  const siteHeadVisitCount = activeSiteHeadLeads.filter((l: any) => l.status === "Visit Scheduled" || !!l.mongoVisitDate).length;
-  const lifecycleAssignedCount = allLeads.filter((l: any) => (l.status || "Assigned") === "Assigned").length;
-  const lifecycleContactedCount = allLeads.filter((l: any) => l.status === "Contacted").length;
-  const lifecycleInterestedCount = allLeads.filter((l: any) => l.status === "Interested" || l.leadInterestStatus === "Interested").length;
+  const activeSiteHeadLeads = useMemo(
+    () => leadsByAssignedTo.get(String(selectedSiteHeadName)) ?? EMPTY_FUPS,
+    [leadsByAssignedTo, selectedSiteHeadName]
+  );
+  const siteHeadVisitCount = useMemo(
+    () => activeSiteHeadLeads.filter((l: any) => l.status === "Visit Scheduled" || !!l.mongoVisitDate).length,
+    [activeSiteHeadLeads]
+  );
 
-  const pieData = managerStats.filter((m: any) => m.siteVisits > 0);
+  /* The seven stat-card counts, computed in ONE pass instead of seven.
+     The cards used to call `allLeads.filter(STAT_MATCHERS[id]).length` inside a
+     map over the card list, so every render walked the whole lead array seven
+     times. */
+  const statCounts = useMemo(() => {
+    const counts = {} as Record<StatCardFilter, number>;
+    for (const key of Object.keys(STAT_MATCHERS) as StatCardFilter[]) counts[key] = 0;
+    for (const l of allLeads) {
+      for (const key of Object.keys(STAT_MATCHERS) as StatCardFilter[]) {
+        if (STAT_MATCHERS[key](l)) counts[key]++;
+      }
+    }
+    return counts;
+  }, [allLeads]);
+
+  const lifecycleAssignedCount = statCounts.assigned;
+  const lifecycleContactedCount = statCounts.contacted;
+  const lifecycleInterestedCount = statCounts.interested;
+
+  const pieData = useMemo(() => managerStats.filter((m: any) => m.siteVisits > 0), [managerStats]);
   const VISIT_COLORS = theme.visitPieColors;
 
   // ── Filter helper ──────────────────────────────────────────────────────────
@@ -1949,9 +2029,19 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
     return leads.filter((l: any) => fieldValue(l, col).toLowerCase().includes(lq));
   };
 
+  /* The search box is uncontrolled-feeling but still controlled: the input keeps
+     updating on every keystroke, while the expensive filter below reads the
+     DEFERRED value. React renders the typed character immediately and re-runs the
+     filter at a lower priority, interrupting it if another key arrives first.
+
+     Before this, every keystroke synchronously rebuilt a 17-field concatenated
+     string for each lead — the "all" column case — and re-ran the whole filter
+     chain before the character appeared on screen. */
+  const deferredOverviewSearch = useDeferredValue(overviewSearch);
+
   const filteredOverviewLeads = useMemo(() => {
     const activeAllLeads = allLeads.filter((l: any) => !deletedLeadIds.has(l.id));
-    let leads = filterLeads(activeAllLeads, overviewSearch, overviewSearchColumn);
+    let leads = filterLeads(activeAllLeads, deferredOverviewSearch, overviewSearchColumn);
     // Applied first, using the same predicate the card counted with — so the
     // number on the card and the row count below it always agree.
     if (statCardFilter !== "all") {
@@ -1976,7 +2066,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
     // Sort numerically by sr_no descending so Lead No. order is always correct (#119, #118 ... #2, #1)
     leads = [...leads].sort((a: any, b: any) => (Number(b.sr_no) || 0) - (Number(a.sr_no) || 0));
     return leads;
-  }, [allLeads, overviewSearch, overviewSearchColumn, lostLeadFilter, showLostLeads, showNGDLeads, deletedLeadIds, showDuplicatesOnly, duplicateIds, statCardFilter]);
+  }, [allLeads, deferredOverviewSearch, overviewSearchColumn, lostLeadFilter, showLostLeads, showNGDLeads, deletedLeadIds, showDuplicatesOnly, duplicateIds, statCardFilter]);
 
   useEffect(() => {
     CRMContextManager.update({
@@ -2055,7 +2145,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                 {isActive && <FaTimes className="w-2.5 h-2.5 opacity-70" />}
               </p>
               <p className={`text-2xl font-black mt-1 ${valueCls}`}>
-                {allLeads.filter(STAT_MATCHERS[id]).length}
+                {statCounts[id as StatCardFilter]}
               </p>
             </button>
           );
