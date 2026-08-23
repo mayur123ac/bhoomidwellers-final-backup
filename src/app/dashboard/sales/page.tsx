@@ -42,6 +42,7 @@ import {
 } from "recharts";
 import LoginTimerWidget from "@/components/LoginTimerWidget";
 import AttendanceBadge from "@/components/AttendanceBadge";
+import { useAttendance } from "@/components/AttendanceContext";
 import BookingFormModal from "@/components/BookingFormModal";
 import SMAssistantDock from "@/components/SMAssistantDock";
 import BookingApplicationView from "@/components/BookingApplicationView";
@@ -355,6 +356,7 @@ function useAdminData() {
 // ============================================================================
 export default function SalesDashboard() {
   const router = useRouter();
+  const { isMarkedPresent, timeIn } = useAttendance();
   useActivityTracker();
   // The shared theme, from lib/theme.ts. This used to be a local useState that
   // reset to light on every navigation and was never stored anywhere; it now
@@ -609,7 +611,10 @@ export default function SalesDashboard() {
                 badge navigates to /dashboard?tab=attendance, which middleware
                 bounces to /dashboard/sales — dropping the tab and landing the
                 user back on Dashboard, so the button appeared to do nothing. */}
-            <AttendanceBadge onNavigate={() => setActiveView("attendance")} />
+            <AttendanceBadge 
+              timeIn={timeIn}
+              isMarkedPresent={isMarkedPresent}
+              onNavigate={() => setActiveView("attendance")} />
 
             {/* ── Theme Toggle ── */}
             <button

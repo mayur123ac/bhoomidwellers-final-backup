@@ -84,8 +84,22 @@ export async function GET(req: NextRequest) {
     // routing/pricing, but the NAME stays the grouping key because it is the
     // column that is populated on every row (project_id is NULL on pre-backfill
     // stock) and the one booking sync matches on.
+    // ── TENANT ──────────────────────────────────────────────────────────────
+    // Resolved from the signed session, never from the request. Both branches
+    // below bind it as $1, so it is the FIRST predicate of every query in this
+    // handler and cannot be dropped by a later edit without the numbering
+    // breaking loudly.
+    //
+    // Neither branch had it. `view=buildings` grouped every organization's stock
+    // into one list of building cards — which is precisely what the Inventory
+    // landing page renders, so every tenant's admin saw every other tenant's
+    // buildings, unit counts and status breakdown. The row list below returned
+    // every tenant's units with their flat numbers, areas, prices and hold owner.
+    const orgId = await getOrganizationId();
+
     if (searchParams.get("view") === "buildings") {
-      const live = `FROM inventory_units WHERE deleted_at IS NULL`;
+      // $1 is organization_id for all four aggregates.
+      const live = `FROM inventory_units WHERE deleted_at IS NULL AND organization_id = $1`;
       const statusCols = `
         COUNT(*)::int                                                  AS total,
         COUNT(*) FILTER (WHERE status = 'available')::int              AS available,
@@ -104,6 +118,7 @@ export async function GET(req: NextRequest) {
              ${live}
             GROUP BY LOWER(TRIM(project_name))
             ORDER BY MIN(project_name) ASC`,
+          [orgId],
         ),
         query(
           `SELECT LOWER(TRIM(project_name)) AS key,
@@ -114,6 +129,7 @@ export async function GET(req: NextRequest) {
              ${live}
             GROUP BY LOWER(TRIM(project_name)), tower
             ORDER BY tower ASC`,
+          [orgId],
         ),
         query(
           `SELECT LOWER(TRIM(project_name)) AS key, tower, unit_type,
@@ -121,6 +137,7 @@ export async function GET(req: NextRequest) {
              ${live}
             GROUP BY LOWER(TRIM(project_name)), tower, unit_type
             ORDER BY units DESC`,
+          [orgId],
         ),
         // Wings, per tower. There is no inventory_wings table — the 2026-08-04
         // parity migration deliberately left wing as free text on the unit, because
@@ -139,6 +156,7 @@ export async function GET(req: NextRequest) {
              ${live}
             GROUP BY LOWER(TRIM(project_name)), tower, COALESCE(NULLIF(TRIM(wing), ''), '')
             ORDER BY wing ASC`,
+          [orgId],
         ),
       ]);
 
@@ -152,9 +170,13 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: true, data, total: data.length }, { status: 200 });
     }
 
-    const where: string[] = ["deleted_at IS NULL"];
     const vals: any[] = [];
     const push = (v: any) => { vals.push(v); return `$${vals.length}`; };
+    // Tenant first, before any caller-supplied filter, so it is $1 and applies to
+    // the COUNT and the paginated row read alike. Without it this endpoint served
+    // every organization's flat numbers, carpet areas, prices and hold owners to
+    // any signed-in user, and `total` counted the whole platform's stock.
+    const where: string[] = ["deleted_at IS NULL", `organization_id = ${push(orgId)}`];
 
     // project_name is matched case/space-insensitively, the same way the building
     // aggregate (view=buildings) and inventory_projects' unique index group it.
@@ -239,8 +261,10 @@ export async function GET(req: NextRequest) {
          FROM (
            SELECT * FROM inventory_units ${whereSql} ${orderSql} LIMIT ${limP} OFFSET ${offP}
          ) u
-         LEFT JOIN booking_registration_details rd ON rd.booking_id = u.booking_id
-         LEFT JOIN booking_loan_details        ld ON ld.booking_id = u.booking_id
+         LEFT JOIN booking_registration_details rd
+                ON rd.booking_id = u.booking_id AND rd.organization_id = u.organization_id
+         LEFT JOIN booking_loan_details        ld
+                ON ld.booking_id = u.booking_id AND ld.organization_id = u.organization_id
         ${orderBy("u.")}`,
       vals,
     );

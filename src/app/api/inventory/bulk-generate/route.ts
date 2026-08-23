@@ -83,7 +83,18 @@ export async function POST(req: NextRequest) {
              project_id, tower_id, is_corner, is_park_facing, parking_slots,
              organization_id
            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'bulk_generated',$13,$13,$14,$15,$16,$17,$18,$19)
-           ON CONFLICT (project_name, tower, COALESCE(wing,''), floor, flat_no) WHERE deleted_at IS NULL
+           -- Must match unique_inventory_unit's column list EXACTLY, including
+           -- the leading organization_id added by
+           -- 2026-08-23_inventory_tenant_isolation.sql. Postgres infers the index
+           -- from these columns; a mismatch is not a silent no-op, it is
+           -- "no unique or exclusion constraint matching the ON CONFLICT
+           -- specification" and the whole batch fails.
+           --
+           -- The tenant column also makes the idempotency correct rather than
+           -- merely working: before, one builder generating "Tower A / 101" would
+           -- have been silently skipped because ANOTHER builder already had a flat
+           -- by that name in a same-named project.
+           ON CONFLICT (organization_id, project_name, tower, COALESCE(wing,''), floor, flat_no) WHERE deleted_at IS NULL
            DO NOTHING
            RETURNING id`,
           [

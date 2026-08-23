@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { transaction } from "@/lib/db";
 import { requireRoles } from "@/lib/serverAuth";
+import { getOrganizationId } from "@/lib/tenantContext";
 import { isLinkedActive, isBookingProtected, bookingProtectedReason, linkDescriptor, softDeleteUnit } from "@/lib/inventoryDelete";
 
 export const dynamic = "force-dynamic";
@@ -28,9 +29,19 @@ export async function DELETE(req: NextRequest) {
     const numIds = ids.map((x: any) => Number(x)).filter((n: number) => Number.isFinite(n));
 
     const result = await transaction(async (client) => {
+      // TENANT: the id list comes straight from the request body. Without the
+      // organization predicate this loaded ANOTHER builder's units and — for any
+      // of them not linked to a lead or booking — soft-deleted them. The
+      // linked-active guard below is a business rule, not an access control; it
+      // happened to spare booked stock but would have erased available stock.
+      //
+      // A foreign id now simply matches no row, so it neither deletes nor appears
+      // in `skipped` — the response cannot be used to probe which ids exist
+      // elsewhere.
       const rows = (await client.query(
-        `SELECT * FROM inventory_units WHERE id = ANY($1) AND deleted_at IS NULL`,
-        [numIds],
+        `SELECT * FROM inventory_units
+          WHERE id = ANY($1) AND organization_id = $2 AND deleted_at IS NULL`,
+        [numIds, await getOrganizationId(client)],
       )).rows;
 
       const skipped: { id: number; flat_no: string; reason: string }[] = [];

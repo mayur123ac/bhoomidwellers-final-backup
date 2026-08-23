@@ -20,6 +20,7 @@ import {
 import AdminSidebar from "@/components/admin/AdminSidebar";
 import LoginTimerWidget from "@/components/LoginTimerWidget";
 import AttendanceBadge from "@/components/AttendanceBadge";
+import { useAttendance } from "@/components/AttendanceContext";
 import BookingFormModal from "@/components/BookingFormModal";
 import BookingApplicationView from "@/components/BookingApplicationView";
 import ClosedLeadBookingView from "@/components/ClosedLeadBookingView";
@@ -547,6 +548,7 @@ const maskPhone = (phone: any, userRole: string = "admin", isOwner: boolean = tr
 function AdminAtlasDashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { isMarkedPresent, timeIn } = useAttendance();
   const [activeView, setActiveView] = useState("dashboard");
   // Deep-link target for the Sales view. Two callers want different things once
   // the lead is open: the Inventory drawer wants its booking, a notification
@@ -989,7 +991,10 @@ function AdminAtlasDashboardContent() {
                 threw away every loaded view for a switch this page can do in
                 state. Same destination, no round trip. */}
 
-            <AttendanceBadge onNavigate={() => setActiveView("attendance")} />
+            <AttendanceBadge
+              timeIn={timeIn}
+              isMarkedPresent={isMarkedPresent}
+              onNavigate={() => setActiveView("attendance")} />
             <button onClick={toggleTheme}
               aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
               aria-pressed={isDark}

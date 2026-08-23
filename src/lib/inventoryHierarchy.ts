@@ -46,13 +46,27 @@ export async function resolveHierarchy(
 
   if (!project) return { projectId: null, towerId: null };
 
+  // ── TENANT ────────────────────────────────────────────────────────────────
+  // Resolved once, on this client so it shares the caller's open transaction.
+  // Every lookup below is scoped to it.
+  //
+  // The project lookup matched on NAME ALONE. Building names are not unique
+  // across tenants — two builders can both have a "Colossal" — so a unit created
+  // by one organization resolved to ANOTHER organization's project row and was
+  // inserted with that project_id. Not a disclosure bug: cross-tenant corruption,
+  // silently linking one builder's stock to another builder's project, and from
+  // there to their price rules via the cost-sheet route.
+  const orgId = await getOrganizationId(client);
+
   let projectId: number | null = null;
 
   const foundProject = await client.query(
     `SELECT id FROM inventory_projects
-      WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) AND deleted_at IS NULL
+      WHERE LOWER(TRIM(name)) = LOWER(TRIM($1))
+        AND organization_id = $2
+        AND deleted_at IS NULL
       LIMIT 1`,
-    [project],
+    [project, orgId],
   );
   if (foundProject.rows.length) {
     projectId = foundProject.rows[0].id;
@@ -66,15 +80,20 @@ export async function resolveHierarchy(
        VALUES ($1, $2, $2, $3)
        ON CONFLICT DO NOTHING
        RETURNING id`,
-      [project, actor || "system", await getOrganizationId(client)],
+      [project, actor || "system", orgId],
     );
     if (ins.rows.length) {
       projectId = ins.rows[0].id;
     } else {
+      // Lost the race (or hit the unique index). Re-select within THIS tenant —
+      // an unscoped re-select would hand back the other organization's row and
+      // reintroduce exactly the bug the scoped lookup above closes.
       const again = await client.query(
         `SELECT id FROM inventory_projects
-          WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) AND deleted_at IS NULL LIMIT 1`,
-        [project],
+          WHERE LOWER(TRIM(name)) = LOWER(TRIM($1))
+            AND organization_id = $2
+            AND deleted_at IS NULL LIMIT 1`,
+        [project, orgId],
       );
       projectId = again.rows[0]?.id ?? null;
     }

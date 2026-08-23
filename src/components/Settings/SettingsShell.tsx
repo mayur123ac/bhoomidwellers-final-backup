@@ -58,6 +58,7 @@ import { BhoomiAiGlyph } from "@/components/bhoomi-ai/BhoomiAiIcon";
 import { type AdminNavItem } from "@/components/admin/AdminSidebar";
 import RoleSidebar, { normalizeRoleName, type RailTarget } from "@/components/RoleSidebar";
 import AttendanceBadge from "@/components/AttendanceBadge";
+import { useAttendance } from "@/components/AttendanceContext";
 import CrmUpdatesNotification from "@/components/CrmUpdatesNotification";
 import UserAvatar from "@/components/UserAvatar";
 import AppHeader, { HeaderControl } from "@/components/AppHeader";
@@ -230,6 +231,7 @@ const MoonIcon = () => (
 export default function SettingsShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const { isMarkedPresent, timeIn } = useAttendance();
   const [user, setUser] = useState<any>(null);
   const [ready, setReady] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -483,7 +485,10 @@ export default function SettingsShell({ children }: { children: React.ReactNode 
             }
           >
             <>
-              <AttendanceBadge onNavigate={goToAttendance} />
+              <AttendanceBadge 
+                timeIn={timeIn}
+                isMarkedPresent={isMarkedPresent}
+                onNavigate={goToAttendance} />
 
               <HeaderControl
                 isDark={isDark}

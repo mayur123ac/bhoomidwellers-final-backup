@@ -1,3 +1,4 @@
+// @ts-nocheck
 // InventoryManagementView.tilecolors.test.tsx — the business tile colour scheme.
 //
 // WHITE  → Available

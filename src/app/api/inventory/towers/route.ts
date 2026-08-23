@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
+import { getOrganizationId } from "@/lib/tenantContext";
 
 export const dynamic = "force-dynamic";
 
@@ -20,8 +21,16 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const projectId = searchParams.get("project_id");
 
-    const where: string[] = ["t.deleted_at IS NULL"];
-    const vals: any[] = [];
+    // TENANT: $1, applied to the tower, its project and the unit aggregate.
+    // `project_id` is a caller-supplied query parameter, so without the tenant
+    // predicate `?project_id=<another builder's id>` returned that builder's
+    // towers and their stock counts.
+    const vals: any[] = [await getOrganizationId()];
+    const where: string[] = [
+      "t.deleted_at IS NULL",
+      "t.organization_id = $1",
+      "p.organization_id = $1",
+    ];
     if (projectId) { vals.push(Number(projectId)); where.push(`t.project_id = $${vals.length}`); }
 
     const rows = await query(
@@ -36,7 +45,7 @@ export async function GET(req: NextRequest) {
                   COUNT(*)::int                                                  AS total,
                   COUNT(*) FILTER (WHERE status = 'available')::int               AS available,
                   COUNT(*) FILTER (WHERE status IN ('booked','registered'))::int  AS booked
-             FROM inventory_units WHERE deleted_at IS NULL GROUP BY tower_id
+             FROM inventory_units WHERE deleted_at IS NULL AND organization_id = $1 GROUP BY tower_id
          ) u ON u.tower_id = t.id
         WHERE ${where.join(" AND ")}
         ORDER BY p.name ASC, t.name ASC`,
@@ -69,8 +78,17 @@ export async function POST(req: NextRequest) {
 
     // Checked explicitly rather than relying on the FK, so a bad id reads as
     // "that project does not exist" instead of a raw constraint violation.
+    //
+    // TENANT: project_id comes from the request body. Without the organization
+    // predicate a Sales Manager could pass another builder's project id, and the
+    // INSERT below — which inherits organization_id FROM that project — would
+    // create a tower inside the other builder's inventory. A foreign id now reads
+    // as "Project not found", the same as a nonexistent one.
+    const orgId = await getOrganizationId();
     const proj = await query(
-      `SELECT id FROM inventory_projects WHERE id = $1 AND deleted_at IS NULL`, [projectId]);
+      `SELECT id FROM inventory_projects
+        WHERE id = $1 AND organization_id = $2 AND deleted_at IS NULL`,
+      [projectId, orgId]);
     if (!proj.length) {
       return NextResponse.json({ success: false, message: "Project not found." }, { status: 404 });
     }

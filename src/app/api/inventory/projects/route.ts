@@ -23,6 +23,13 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const includeArchived = searchParams.get("include_archived") === "true";
 
+    // TENANT: from the signed session, never the request. This endpoint listed
+    // every organization's buildings, with their unit and tower counts. The two
+    // aggregate subqueries are scoped too — leaving them open would have kept one
+    // tenant's counts attached to another tenant's project row through the
+    // project_id join.
+    const orgId = await getOrganizationId();
+
     const rows = await query(
       `SELECT p.*,
               COALESCE(u.total, 0)     AS unit_count,
@@ -35,15 +42,17 @@ export async function GET(req: NextRequest) {
                   COUNT(*)::int                                            AS total,
                   COUNT(*) FILTER (WHERE status = 'available')::int         AS available,
                   COUNT(*) FILTER (WHERE status IN ('booked','registered'))::int AS booked
-             FROM inventory_units WHERE deleted_at IS NULL GROUP BY project_id
+             FROM inventory_units WHERE deleted_at IS NULL AND organization_id = $1 GROUP BY project_id
          ) u ON u.project_id = p.id
          LEFT JOIN (
            SELECT project_id, COUNT(*)::int AS towers
-             FROM inventory_towers WHERE deleted_at IS NULL GROUP BY project_id
+             FROM inventory_towers WHERE deleted_at IS NULL AND organization_id = $1 GROUP BY project_id
          ) t ON t.project_id = p.id
         WHERE p.deleted_at IS NULL
+          AND p.organization_id = $1
           ${includeArchived ? "" : "AND p.status <> 'archived'"}
         ORDER BY p.name ASC`,
+      [orgId],
     );
 
     return NextResponse.json({ success: true, data: rows }, { status: 200 });

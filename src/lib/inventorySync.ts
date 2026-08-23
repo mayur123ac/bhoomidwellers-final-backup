@@ -77,12 +77,19 @@ export async function syncBookingUnit(client: PoolClient, input: BookingUnitInpu
   const bookingId = input.bookingId;
   const leadId = toIntOrNull(input.leadId);
 
+  // TENANT: the match key is a set of free-text names, and names repeat across
+  // builders — "Tower A", flat "101", floor 1 is about as generic as a key gets.
+  // Without the organization predicate a booking in one organization matched, and
+  // then TOOK OVER, another organization's unit: the UPDATE below sets
+  // booking_id/lead_id/status on whatever this returns. The tenant column is now
+  // part of the key, exactly as it is in unique_inventory_unit.
   const existing = await client.query(
     `SELECT id, status, booking_id FROM inventory_units
-      WHERE project_name = $1 AND tower = $2 AND COALESCE(wing,'') = COALESCE($3,'')
+      WHERE organization_id = $6
+        AND project_name = $1 AND tower = $2 AND COALESCE(wing,'') = COALESCE($3,'')
         AND floor = $4 AND flat_no = $5 AND deleted_at IS NULL
       LIMIT 1`,
-    [project_name, tower, wing, floor, flat_no],
+    [project_name, tower, wing, floor, flat_no, orgId],
   );
 
   let unitId: number;

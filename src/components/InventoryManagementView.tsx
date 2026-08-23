@@ -508,6 +508,10 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
   const [deleteTarget, setDeleteTarget] = useState<InventoryUnit | null>(null); // single delete
   const [bulkDelOpen, setBulkDelOpen] = useState(false);
   const [bldDelOpen, setBldDelOpen] = useState(false);
+  // Which rename dialog is open, if any. The target itself is derived from the
+  // open building / active tower / active wing at render time, so it cannot go
+  // stale between opening the menu and confirming.
+  const [renameTarget, setRenameTarget] = useState<{ kind: "building" | "tower" | "wing" } | null>(null);
 
   const inputCls = `rounded-lg px-2.5 py-1.5 text-xs outline-none border ${t.inputInner} ${t.text} ${t.inputFocus}`;
   const selectCls = `${inputCls} cursor-pointer`;
@@ -804,6 +808,63 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
   // the rows would leave "126 units" on screen after 126 became 130.
   const afterCreate = () => { setSelected(new Set()); fetchUnits(); fetchBuildings(); };
   const afterDelete = () => { setSelected(new Set()); setDeleteTarget(null); setBulkDelOpen(false); setBldDelOpen(false); fetchUnits(); fetchBuildings(); };
+
+  // ── Local application of a rename, instead of refetching everything ────────
+  // A rename changes exactly one string. Re-running fetchBuildings() would reissue
+  // the four-query building aggregate AND the projects list to learn something the
+  // server already told us in its response, and it would blank the screen for the
+  // round trip. These patch the loaded state in place; the next natural refresh
+  // reconciles anyway.
+  //
+  // `key` is LOWER(TRIM(project_name)) — the grouping key the API returns — so a
+  // building rename moves the key too, and openKey has to follow or the detail
+  // view would decide its building had vanished.
+  const applyBuildingRename = useCallback((projectId: number, nextName: string) => {
+    const nextKey = nextName.trim().toLowerCase();
+    setBuildings(prev => prev
+      .map(b => (b.project_id === projectId
+        ? { ...b, key: nextKey, project_name: nextName }
+        : b))
+      .sort((a, b) => a.project_name.localeCompare(b.project_name)));
+    setOpenKey(prev => {
+      const wasOpen = buildings.find(b => b.key === prev);
+      return wasOpen && wasOpen.project_id === projectId ? nextKey : prev;
+    });
+    setUnits(prev => prev.map(u => ({ ...u, project_name: nextName })));
+  }, [buildings]);
+
+  const applyTowerRename = useCallback((buildingKey: string, prevTower: string, nextName: string) => {
+    setBuildings(prev => prev.map(b => (b.key !== buildingKey ? b : {
+      ...b,
+      towers: b.towers.map(tw => (tw.tower === prevTower ? { ...tw, tower: nextName } : tw)),
+      wings: b.wings.map(w => (w.tower === prevTower ? { ...w, tower: nextName } : w)),
+      unit_types: b.unit_types.map(x => (x.tower === prevTower ? { ...x, tower: nextName } : x)),
+    })));
+    setActiveTower(prev => (prev === prevTower ? nextName : prev));
+    setUnits(prev => prev.map(u => (u.tower === prevTower ? { ...u, tower: nextName } : u)));
+  }, []);
+
+  const applyWingRename = useCallback((buildingKey: string, tower: string, prevWing: string, nextWing: string) => {
+    setBuildings(prev => prev.map(b => (b.key !== buildingKey ? b : {
+      ...b,
+      wings: b.wings.map(w => (w.tower === tower && w.wing === prevWing ? { ...w, wing: nextWing } : w)),
+    })));
+    setActiveWing(prev => (prev === prevWing ? (nextWing || NO_WING) : prev));
+    setUnits(prev => prev.map(u => (
+      u.tower === tower && (u.wing ?? "") === prevWing ? { ...u, wing: nextWing || null } : u
+    )));
+  }, []);
+
+  // A permanently deleted building is simply dropped from the loaded list — no
+  // refetch, and the detail view falls back to the list via the existing
+  // openKey/building effect.
+  const applyBuildingDelete = useCallback((projectId: number) => {
+    setBuildings(prev => prev.filter(b => b.project_id !== projectId));
+    setOpenKey(null);
+    setActiveTower("");
+    setUnits([]);
+    setTotal(0);
+  }, []);
   const selectedUnits = useMemo(() => sorted.filter(u => selected.has(u.id)), [sorted, selected]);
 
   // ── Heatmap grouping (floors desc, flats sorted within a floor) ──
@@ -1049,6 +1110,17 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
                     <button onClick={() => { setBldMenu(false); setShowOffers(true); }} className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs font-semibold text-left hover:bg-[#00AEEF]/10 border-t ${t.tableBorder} ${t.text}`}><FaHandshake className="text-[10px] text-[#00AEEF]" /> Offers</button>
                   )}
                   <button onClick={() => { setBldMenu(false); setShowAnalytics(true); }} className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs font-semibold text-left hover:bg-[#00AEEF]/10 border-t ${t.tableBorder} ${t.text}`}><FaChartBar className="text-[10px] text-[#00AEEF]" /> Analytics</button>
+                  {/* Renames sit with the other manage actions — same gate as
+                      creating inventory. Delete stays admin-only below. */}
+                  {canManage && (
+                    <button onClick={() => { setBldMenu(false); setRenameTarget({ kind: "building" }); }} className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs font-semibold text-left hover:bg-[#00AEEF]/10 border-t ${t.tableBorder} ${t.text}`}><FaPen className="text-[10px] text-[#00AEEF]" /> Rename building</button>
+                  )}
+                  {canManage && activeTower && (
+                    <button onClick={() => { setBldMenu(false); setRenameTarget({ kind: "tower" }); }} className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs font-semibold text-left hover:bg-[#00AEEF]/10 border-t ${t.tableBorder} ${t.text}`}><FaPen className="text-[10px] text-[#00AEEF]" /> Rename tower “{activeTower}”</button>
+                  )}
+                  {canManage && activeTower && activeWing && (
+                    <button onClick={() => { setBldMenu(false); setRenameTarget({ kind: "wing" }); }} className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs font-semibold text-left hover:bg-[#00AEEF]/10 border-t ${t.tableBorder} ${t.text}`}><FaPen className="text-[10px] text-[#00AEEF]" /> Rename wing {activeWing === NO_WING ? "(no wing)" : `“${activeWing}”`}</button>
+                  )}
                   {isAdminUser && (
                     <button onClick={() => { setBldMenu(false); setBldDelOpen(true); }} className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs font-bold text-left text-red-500 hover:bg-red-500/10 border-t ${t.tableBorder}`}><FaTrash className="text-[10px]" /> Delete building</button>
                   )}
@@ -1255,7 +1327,33 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
       {isAdminUser && bldDelOpen && (
         <BuildingDeleteModal user={user} isDark={isDark} t={t} onClose={() => setBldDelOpen(false)} onDeleted={afterDelete}
           defaults={{ project_name: building.project_name, tower: towerCtx, wing: wingCtx }}
-          building={building} />
+          building={building}
+          onBuildingPurged={applyBuildingDelete} />
+      )}
+
+      {/* ── Rename (managers) ── */}
+      {canManage && renameTarget && building && (
+        <RenameModal
+          kind={renameTarget.kind}
+          isDark={isDark}
+          t={t}
+          target={{
+            project_id: building.project_id,
+            project_name: building.project_name,
+            tower: activeTower,
+            // The tower row's id, looked up from the aggregate the API returned.
+            tower_id: building.towers.find(tw => tw.tower === activeTower)?.tower_id ?? null,
+            // NO_WING is this component's sentinel for "these units carry no
+            // wing"; the API models the same thing as an empty string.
+            wing: activeWing === NO_WING ? "" : activeWing,
+          }}
+          onClose={() => setRenameTarget(null)}
+          onRenamed={(nextName: string) => {
+            if (renameTarget.kind === "building") applyBuildingRename(building.project_id!, nextName);
+            else if (renameTarget.kind === "tower") applyTowerRename(building.key, activeTower, nextName);
+            else applyWingRename(building.key, activeTower, activeWing === NO_WING ? "" : activeWing, nextName);
+          }}
+        />
       )}
 
       {/* ── Detail drawer ── */}
@@ -1777,7 +1875,121 @@ function AddBuildingModal({ isDark, t, onClose, onCreated }: any) {
 }
 
 // Whole-building delete: scope inputs, live preview count (+ linked-blocked), type-to-confirm.
-function BuildingDeleteModal({ user, isDark, t, onClose, onDeleted, defaults, building }: any) {
+/**
+ * Rename a building, a tower, or a wing.
+ *
+ * One modal for all three because the interaction is identical — show the current
+ * name, take a new one — and only the endpoint differs. What it does NOT do is
+ * pretend the three are the same object: a building and a tower are rows with
+ * ids, a wing is a free-text value on the units, so each `kind` sends the shape
+ * its endpoint actually needs.
+ *
+ * The rename is applied to the loaded state by the caller's `onRenamed`, from the
+ * server's response — no refetch of the whole inventory for a one-string change.
+ */
+function RenameModal({ kind, isDark, t, target, onClose, onRenamed }: any) {
+  const label = kind === "building" ? "building" : kind === "tower" ? "tower" : "wing";
+  const current = kind === "building" ? target.project_name : kind === "tower" ? target.tower : target.wing;
+  const [name, setName] = useState(kind === "wing" ? (current || "") : current);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const trimmed = String(name ?? "").trim();
+  // A wing may legitimately be renamed to nothing ("this tower has no wings"),
+  // which is a real state the unique index models with COALESCE(wing,'').
+  const canSave = kind === "wing" ? trimmed !== String(current ?? "").trim() : !!trimmed && trimmed !== String(current ?? "").trim();
+
+  const commit = async () => {
+    if (!canSave || busy) return;
+    setBusy(true); setErr(null);
+    try {
+      let res: Response;
+      if (kind === "building") {
+        res = await fetch(`/api/inventory/projects/${target.project_id}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" },
+          credentials: "include", body: JSON.stringify({ name: trimmed }),
+        });
+      } else if (kind === "tower") {
+        res = await fetch(`/api/inventory/towers/${target.tower_id}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" },
+          credentials: "include", body: JSON.stringify({ name: trimmed }),
+        });
+      } else {
+        res = await fetch(`/api/inventory/wings`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            project_name: target.project_name, tower: target.tower,
+            wing: target.wing, new_wing: trimmed,
+          }),
+        });
+      }
+      const json = await res.json().catch(() => ({ success: false, message: "Unexpected response" }));
+      if (!json.success) throw new Error(json.message || `Could not rename this ${label}`);
+      onRenamed(trimmed, json.data);
+      onClose();
+    } catch (e: any) { setErr(e.message); } finally { setBusy(false); }
+  };
+
+  // A building rename with no project row behind it has nothing to PATCH. That
+  // happens for stock whose units predate the project backfill; say so instead of
+  // sending a request to /projects/null.
+  const missingId =
+    (kind === "building" && target.project_id == null) ||
+    (kind === "tower" && target.tower_id == null);
+
+  return (
+    <ModalShell isDark={isDark} onClose={onClose} maxW="max-w-md">
+      <div className="p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <FaPen className="text-[#00AEEF]" />
+          <h2 className={`text-base font-bold capitalize ${t.text}`}>Rename {label}</h2>
+        </div>
+
+        {missingId ? (
+          <p className={`text-xs leading-relaxed ${t.textFaint}`}>
+            This {label} has no record to rename yet — its units were created before the
+            {label === "building" ? " building" : " tower"} registry existed. Generate inventory for it once and it
+            becomes renameable.
+          </p>
+        ) : (
+          <>
+            <label className={`block text-[11px] font-semibold mb-1 ${t.textFaint}`}>
+              Current name
+            </label>
+            <p className={`text-sm font-bold mb-4 ${t.text}`}>{current || "(no wing)"}</p>
+
+            <label className={`block text-[11px] font-semibold mb-1 ${t.textFaint}`}>New name</label>
+            <input
+              autoFocus value={name} onChange={e => setName(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") commit(); }}
+              placeholder={kind === "wing" ? "Leave blank for no wing" : `New ${label} name`}
+              className={`w-full rounded-lg border px-3 py-2 text-sm outline-none focus:border-[#00AEEF] ${t.tableBorder} ${t.text} ${isDark ? "bg-transparent" : "bg-white"}`}
+            />
+            <p className={`text-[11px] mt-2 leading-relaxed ${t.textFaint}`}>
+              Every unit in this {label} is updated, along with any booking that references it,
+              so the booking-to-flat link stays intact.
+            </p>
+          </>
+        )}
+
+        {err && <p className="text-[11px] text-red-500 mt-3">{err}</p>}
+
+        <div className="flex justify-end gap-2 mt-5">
+          <button onClick={onClose} className={`text-xs font-semibold px-4 py-2 rounded-lg border ${t.tableBorder} ${t.text}`}>Cancel</button>
+          {!missingId && (
+            <button onClick={commit} disabled={!canSave || busy}
+              className="text-xs font-bold px-5 py-2 rounded-lg bg-[#00AEEF] text-white hover:bg-[#0095cc] disabled:opacity-50">
+              {busy ? "Saving…" : "Save"}
+            </button>
+          )}
+        </div>
+      </div>
+    </ModalShell>
+  );
+}
+
+function BuildingDeleteModal({ user, isDark, t, onClose, onDeleted, defaults, building, onBuildingPurged }: any) {
   const [scope, setScope] = useState({ project_name: defaults?.project_name || "", tower: defaults?.tower || "", wing: defaults?.wing || "" });
   const [preview, setPreview] = useState<{ matched: number; linked: number } | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
@@ -1809,10 +2021,43 @@ function BuildingDeleteModal({ user, isDark, t, onClose, onDeleted, defaults, bu
   const confirmOk = ready && (typed.trim().toLowerCase() === scope.tower.trim().toLowerCase() || typed.trim() === "DELETE");
   const deletable = preview ? preview.matched - preview.linked : 0;
 
+  // Whole-building delete removes the building RECORD as well as its stock:
+  // DELETE /api/inventory/projects/[id] drops the project, its towers, its price
+  // rules and every unit under it in one transaction. That is what stops a
+  // deleted building lingering on the landing page as an empty 0-unit card, which
+  // is exactly what the tower-scoped delete below leaves behind.
+  //
+  // The tower/wing-scoped path is unchanged and still soft-deletes units only:
+  // "delete Tower B" must not take the building with it.
+  const purgesWholeBuilding = !!building?.project_id && !scope.wing.trim()
+    && (!scope.tower.trim() || building.tower_count <= 1);
+
   const commit = async () => {
     if (!confirmOk) return;
     setBusy(true); setErr(null);
     try {
+      if (purgesWholeBuilding) {
+        const res = await fetch(`/api/inventory/projects/${building.project_id}`, {
+          method: "DELETE", credentials: "include",
+        });
+        const json = await res.json().catch(() => ({ success: false, message: "Unexpected response" }));
+        if (!json.success) {
+          // A building holding sold flats is refused outright rather than
+          // partially deleted; surface which flats are blocking it.
+          const blocking = (json.blocking || []).map((b: any) => ({ flat_no: b.flat_no, reason: b.reason }));
+          setResult({ deleted: 0, skipped: blocking.length, skipped_details: blocking, refused: json.message });
+          return;
+        }
+        setResult({
+          deleted: json.data.deleted_units,
+          skipped: 0,
+          skipped_details: [],
+          purged: json.data,
+        });
+        onBuildingPurged?.(building.project_id);
+        return;
+      }
+
       const res = await fetch(`/api/inventory/building`, {
         method: "DELETE", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...scope, user_name: user.name, user_role: user.role }),

@@ -112,7 +112,7 @@ export async function POST(req: NextRequest) {
         purpose: "Password reset",
         expiryMinutes: RESET_OTP_TTL_MINUTES,
       },
-      { userId: target.id, ipAddress: ip, userAgent }
+      { userId: target.id, ip, userAgent }
     ).catch(() => {
       // Swallowed on purpose: surfacing a send failure here would distinguish a
       // real account from an unknown one. EmailService audits its own failures.

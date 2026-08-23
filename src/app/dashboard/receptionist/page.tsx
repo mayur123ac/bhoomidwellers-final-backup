@@ -30,6 +30,7 @@ import {
 import { Ghost, AlertTriangle } from "lucide-react";
 import LoginTimerWidget from "@/components/LoginTimerWidget";
 import AttendanceBadge from "@/components/AttendanceBadge";
+import { useAttendance } from "@/components/AttendanceContext";
 import CrmUpdatesNotification from "@/components/CrmUpdatesNotification";
 import LostLeadModal from "@/components/LostLeadModal";
 import { updateLeadLostState, useLostLeadEvents } from "@/lib/lostLeadSync";
@@ -440,6 +441,7 @@ function RpPageHeader({
 // ─────────────────────────────────────────────────────────────────────────────
 export default function ReceptionistDashboard() {
   const router = useRouter();
+  const { isMarkedPresent, timeIn } = useAttendance();
   useActivityTracker();
   // The shared theme, from lib/theme.ts. This used to be a local useState that
   // reset to light on every navigation and was never stored anywhere; it now
@@ -1869,7 +1871,10 @@ export default function ReceptionistDashboard() {
                 badge navigates to /dashboard?tab=attendance, which middleware
                 bounces to /dashboard/receptionist — dropping the tab and landing
                 the user back on Dashboard, so the button appeared to do nothing. */}
-            <AttendanceBadge onNavigate={() => setActiveTab("attendance")} />
+            <AttendanceBadge 
+              timeIn={timeIn}
+              isMarkedPresent={isMarkedPresent}
+              onNavigate={() => setActiveTab("attendance")} />
             {/* HeaderControl is the Settings bar's control: 36px square, one
                 border, one radius, colour transitions only. Using the component
                 rather than restating its classes is what makes "the same size as

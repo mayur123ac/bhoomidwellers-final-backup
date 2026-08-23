@@ -317,6 +317,7 @@ export async function DELETE(
          (SELECT COUNT(*) FROM walkin_enquiries    WHERE channel_partner_id = $1 AND organization_id = $2) AS lead_count,
          (SELECT COUNT(*) FROM booking_applications WHERE sourced_by_channel_partner_id = $1 AND organization_id = $2) AS booking_count,
          (SELECT COUNT(*) FROM cp_commissions      WHERE channel_partner_id = $1 AND organization_id = $2) AS commission_count,
+         (SELECT COUNT(*) FROM cp_chat_messages    WHERE channel_partner_id = $1 AND organization_id = $2) AS chat_count,
          (SELECT name FROM channel_partners        WHERE id = $1 AND organization_id = $2)                 AS name`,
       [cpId, await getOrganizationId()]
     );
@@ -331,19 +332,21 @@ export async function DELETE(
     const leads = Number(refs.lead_count || 0);
     const bookings = Number(refs.booking_count || 0);
     const commissions = Number(refs.commission_count || 0);
+    const chats = Number(refs.chat_count || 0);
 
-    if (leads > 0 || bookings > 0 || commissions > 0) {
+    if (leads > 0 || bookings > 0 || commissions > 0 || chats > 0) {
       const parts = [
         leads && `${leads} lead${leads === 1 ? "" : "s"}`,
         bookings && `${bookings} booking${bookings === 1 ? "" : "s"}`,
         commissions && `${commissions} commission record${commissions === 1 ? "" : "s"}`,
+        chats && `${chats} chat message${chats === 1 ? "" : "s"}`,
       ].filter(Boolean);
       return NextResponse.json(
         {
           success: false,
           code: "HAS_REFERENCES",
           message: `"${refs.name}" is referenced by ${parts.join(", ")} and cannot be deleted. Mark them inactive instead — that stops new commission accruing without losing the history.`,
-          references: { leads, bookings, commissions },
+          references: { leads, bookings, commissions, chats },
         },
         { status: 409 }
       );

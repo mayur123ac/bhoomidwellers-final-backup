@@ -35,6 +35,7 @@ import HeaderClock from "@/components/HeaderClock";
 import AttendanceTimerWidget from "@/components/AttendanceTimerWidget";
 import LoginTimerWidget from "@/components/LoginTimerWidget";
 import AttendanceBadge from "@/components/AttendanceBadge";
+import { useAttendance } from "@/components/AttendanceContext";
 
 type RoleType = { _id: string; name: string };
 type EmployeeType = {
@@ -266,6 +267,7 @@ const ADMIN_EMAIL = "admin@bhoomi.com";
 // ============================================================================
 export default function EmployeesPage() {
   const router = useRouter();
+  const { isMarkedPresent, timeIn } = useAttendance();
   useActivityTracker();
 
   const [isDark, setIsDark] = useState(() => {
@@ -1169,7 +1171,10 @@ export default function EmployeesPage() {
                 rail uses, rather than the badge's default full page reload. Only
                 Admin reaches this page, and Admin can open /dashboard, so the
                 destination was already correct; only the round trip was not. */}
-            <AttendanceBadge onNavigate={() => router.push("/dashboard?tab=attendance")} />
+            <AttendanceBadge 
+              timeIn={timeIn}
+              isMarkedPresent={isMarkedPresent}
+              onNavigate={() => router.push("/dashboard?tab=attendance")} />
             {/* The light/dark toggle is hidden inside Bhoomi AI. The workspace
                 is always the dark canvas regardless of the CRM preference, so
                 the control would sit there claiming to change something it no

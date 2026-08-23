@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { transaction } from "@/lib/db";
 import { requireRoles } from "@/lib/serverAuth";
+import { getOrganizationId } from "@/lib/tenantContext";
 
 export const dynamic = "force-dynamic";
 
@@ -42,10 +43,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const result = await transaction(async (client) => {
       // FOR UPDATE: two agents holding the same flat at once is exactly the race
       // this feature exists to prevent, so the read must lock the row.
+      // TENANT: the unit id is a caller-supplied route parameter and this lookup
+      // had no organization predicate, so a Sales Manager of one builder could
+      // put ANOTHER builder's flat on hold — a cross-tenant write that returned
+      // 200 and wrote an inventory_unit_history row naming them as the actor.
+      // A foreign id now matches nothing and 404s, exactly like a missing one.
       const cur = await client.query(
         `SELECT id, status, flat_no, tower, held_by, held_for_lead_id, hold_expires_at, booking_id
-           FROM inventory_units WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
-        [Number(id)],
+           FROM inventory_units
+          WHERE id = $1 AND organization_id = $2 AND deleted_at IS NULL FOR UPDATE`,
+        [Number(id), await getOrganizationId(client)],
       );
       if (!cur.rows.length) {
         throw Object.assign(new Error("Unit not found."), { httpStatus: 404 });
@@ -109,10 +116,12 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     const role = String(gate.session.role || "").trim().toLowerCase().replace(/_/g, " ");
 
     const result = await transaction(async (client) => {
+      // TENANT: same gap as the POST above — releasing another builder's hold
+      // succeeded and was recorded against their unit's history.
       const cur = await client.query(
         `SELECT id, status, flat_no, held_by FROM inventory_units
-          WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
-        [Number(id)],
+          WHERE id = $1 AND organization_id = $2 AND deleted_at IS NULL FOR UPDATE`,
+        [Number(id), await getOrganizationId(client)],
       );
       if (!cur.rows.length) throw Object.assign(new Error("Unit not found."), { httpStatus: 404 });
       const unit = cur.rows[0];

@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
+import { getOrganizationId } from "@/lib/tenantContext";
 
 export const dynamic = "force-dynamic";
 
@@ -44,8 +45,12 @@ export async function GET(req: NextRequest) {
     if (!gate.ok) return gate.response;
 
     const { searchParams } = new URL(req.url);
-    const where: string[] = ["r.is_active"];
-    const vals: any[] = [];
+    // TENANT: $1. Price rules are commercially sensitive — rate per sqft, floor
+    // rise, premiums — and this endpoint returned every organization's, joined to
+    // their building and tower names. `project_id` is caller-supplied, so the
+    // predicate is on the rule itself, not just on the filter.
+    const vals: any[] = [await getOrganizationId()];
+    const where: string[] = ["r.is_active", "r.organization_id = $1", "p.organization_id = $1"];
     const projectId = searchParams.get("project_id");
     if (projectId) { vals.push(Number(projectId)); where.push(`r.project_id = $${vals.length}`); }
 
@@ -53,7 +58,8 @@ export async function GET(req: NextRequest) {
       `SELECT r.*, p.name AS project_name, t.name AS tower_name
          FROM inventory_price_rules r
          JOIN inventory_projects p ON p.id = r.project_id
-         LEFT JOIN inventory_towers t ON t.id = r.tower_id
+         LEFT JOIN inventory_towers t
+                ON t.id = r.tower_id AND t.organization_id = r.organization_id
         WHERE ${where.join(" AND ")}
         ORDER BY p.name, t.name NULLS FIRST, r.effective_from DESC`,
       vals,
@@ -77,6 +83,19 @@ export async function POST(req: NextRequest) {
     const projectId = Number(body.project_id);
     if (!projectId || !Number.isFinite(projectId)) {
       return NextResponse.json({ success: false, message: "project_id is required." }, { status: 400 });
+    }
+
+    // TENANT: project_id is caller-supplied and the INSERT below inherits
+    // organization_id FROM that project, so an unchecked id would have written a
+    // pricing rule into another builder's project — and their cost sheets resolve
+    // rules by project_id.
+    const ruleOrgId = await getOrganizationId();
+    const ruleProject = await query(
+      `SELECT id FROM inventory_projects
+        WHERE id = $1 AND organization_id = $2 AND deleted_at IS NULL`,
+      [projectId, ruleOrgId]);
+    if (!ruleProject.length) {
+      return NextResponse.json({ success: false, message: "Project not found." }, { status: 404 });
     }
 
     const base = numOr0(body.base_rate_per_sqft);
