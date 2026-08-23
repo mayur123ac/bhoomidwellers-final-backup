@@ -252,8 +252,24 @@ function buildTheme(isDark: boolean) {
   };
 }
 
+/* Compiled once per process rather than once per call. `new RegExp` inside the
+   per-lead loop below was the single hottest allocation on this page: extractField
+   runs ~10 times per lead and several fields are requested twice, so at 500 leads
+   that was ~5,000 regex compilations every poll. Mirrors dashboard/page.tsx:204. */
+const SALESFORM_FIELD_RE = new Map<string, RegExp>(
+  [
+    "Property Type", "Location", "Budget", "Use Type", "Planning to Purchase",
+    "Decision Maker", "Loan Planned", "Lead Status",
+  ].map((f) => [f, new RegExp(`• ${f}: (.*)`)])
+);
+
+const EMPTY_FUPS: any[] = [];
+
+/** Poll interval, matching the admin dashboard. Was 5 s here — see useAdminData. */
+const SALES_POLL_MS = 30_000;
+
 // ============================================================================
-// SHARED REAL-TIME DATA HOOK (unchanged)
+// SHARED REAL-TIME DATA HOOK
 // ============================================================================
 function useAdminData() {
   const [managers, setManagers] = useState<any[]>([]);
@@ -261,30 +277,65 @@ function useAdminData() {
   const [allLeads, setAllLeads] = useState<any[]>([]);
   const [followUps, setFollowUps] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  /* Guards against overlapping polls. One pass can take longer than the interval,
+     and without this the requests stack: each new one adds DB load and a fresh
+     main-thread merge while the previous is still running, so the page falls
+     progressively further behind and never recovers. */
+  const inFlight = useRef(false);
 
   const fetchAdminData = useCallback(async () => {
+    if (inFlight.current) return;
+    inFlight.current = true;
     try {
+      /* These three are independent, so they go out together. They used to be a
+         sequential await chain, which made every refresh the SUM of three Neon
+         round trips (~250 ms) instead of the slowest one. */
+      const [resUsers, resLeads, resFups] = await Promise.all([
+        fetch("/api/users/sales-manager"),
+        fetch("/api/walkin_enquiries?limit=10000&offset=0"),
+        fetch("/api/followups"),
+      ]);
+
       let smData: any[] = [];
-      const resUsers = await fetch("/api/users/sales-manager");
       if (resUsers.ok) { const json = await resUsers.json(); smData = json.data || []; }
 
       let pgLeads: any[] = [];
-      const resLeads = await fetch("/api/walkin_enquiries?limit=1000&offset=0");
       if (resLeads.ok) { const json = await resLeads.json(); pgLeads = Array.isArray(json.data) ? json.data : []; }
 
       let mongoFollowUps: any[] = [];
-      const resFups = await fetch("/api/followups");
       if (resFups.ok) { const json = await resFups.json(); mongoFollowUps = Array.isArray(json.data) ? json.data : []; }
 
+      /* Index the follow-ups by lead once, up front.
+         This used to be `mongoFollowUps.filter(...)` INSIDE the per-lead map,
+         which is O(leads × follow-ups). The admin dashboard measured that same
+         code at 5.8 SECONDS of frozen UI at scale, and 20 ms once indexed. The
+         output is identical — only the lookup changes. */
+      const fupsByLead = new Map<string, any[]>();
+      for (const f of mongoFollowUps) {
+        const key = String(f.leadId);
+        let bucket = fupsByLead.get(key);
+        if (!bucket) { bucket = []; fupsByLead.set(key, bucket); }
+        bucket.push(f);
+      }
+
       const mergedLeads = pgLeads.map((lead: any) => {
-        const leadFups = mongoFollowUps.filter((f: any) => String(f.leadId) === String(lead.id));
+        const leadFups = fupsByLead.get(String(lead.id)) || EMPTY_FUPS;
         const salesForms = leadFups.filter((f: any) => f.message?.includes("Detailed Salesform Submitted"));
         const latestFormMsg = salesForms.length > 0 ? salesForms[salesForms.length - 1].message : "";
 
+        /* Memoised per lead: extractField is called ~10 times per lead and several
+           fields are requested twice, so without the cache the same message is
+           re-scanned repeatedly. */
+        const fieldCache = new Map<string, string>();
         const extractField = (fieldName: string) => {
           if (!latestFormMsg) return "Pending";
-          const match = latestFormMsg.match(new RegExp(`• ${fieldName}: (.*)`));
-          return match ? match[1].trim() : "Pending";
+          const hit = fieldCache.get(fieldName);
+          if (hit !== undefined) return hit;
+          const re = SALESFORM_FIELD_RE.get(fieldName) ?? new RegExp(`• ${fieldName}: (.*)`);
+          const match = latestFormMsg.match(re);
+          const val = match ? match[1].trim() : "Pending";
+          fieldCache.set(fieldName, val);
+          return val;
         };
 
         const loanUpdates = leadFups.filter((f: any) => f.message?.includes("🏦 Loan Update:"));
@@ -334,6 +385,7 @@ function useAdminData() {
       setFollowUps(mongoFollowUps);
       setIsLoading(false);
     } catch (e) { console.error("Admin data sync failed", e); }
+    finally { inFlight.current = false; }
   }, []);
 
   const applyLeadUpdate = useCallback((updatedLead: any) => {
@@ -342,13 +394,40 @@ function useAdminData() {
 
   useEffect(() => {
     fetchAdminData();
-    const interval = setInterval(fetchAdminData, 5000);
-    return () => clearInterval(interval);
+    /* Was every 5 seconds, unguarded. That is 12 full refreshes a minute per open
+       tab — every lead and every follow-up in the organization, re-merged and
+       re-rendered — whether or not anyone was looking, and whether or not
+       anything had changed. A tab left open on a second monitor issued the same
+       full-database refresh all day while competing for the same 10-connection
+       pool as the people actually working.
+
+       Background tabs are now skipped outright, and returning to the tab
+       refreshes immediately, so pausing costs no freshness at the only moment it
+       matters — when someone looks at it again. This is the pattern the admin
+       dashboard already uses (dashboard/page.tsx:412-430). */
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      fetchAdminData();
+    }, SALES_POLL_MS);
+    const onVisible = () => { if (!document.hidden) fetchAdminData(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [fetchAdminData]);
 
   useLostLeadEvents(applyLeadUpdate, fetchAdminData);
 
-  return { managers, receptionists, allLeads, followUps, isLoading, refetch: fetchAdminData };
+  /* Push one newly-created follow-up into local state, so a mutation that only
+     adds a timeline entry does not have to re-download the organization. The
+     row comes straight from POST /api/followups, which returns it. */
+  const appendFollowUp = useCallback((row: any) => {
+    if (!row) return;
+    setFollowUps(prev => (prev.some(f => String(f._id) === String(row._id)) ? prev : [...prev, row]));
+  }, []);
+
+  return { managers, receptionists, allLeads, followUps, isLoading, refetch: fetchAdminData, appendFollowUp };
 }
 
 // ============================================================================
@@ -409,7 +488,7 @@ export default function SalesDashboard() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const { managers, receptionists, allLeads, followUps, isLoading, refetch } = useAdminData();
+  const { managers, receptionists, allLeads, followUps, isLoading, refetch, appendFollowUp } = useAdminData();
 
   // Settings → Additional Features. Read once here and passed down, rather than
   // called again inside SalesManagerView, so the two never disagree mid-render.
@@ -805,7 +884,7 @@ export default function SalesDashboard() {
           {(activeView === "sales" || activeView === "overview" || activeView === "forms" || activeView === "detail" || activeView === "closed-leads") ? (
             <SalesManagerView
               managers={managers} allLeads={allLeads} followUps={followUps}
-              isLoading={isLoading} adminUser={user} refetch={refetch}
+              isLoading={isLoading} adminUser={user} refetch={refetch} appendFollowUp={appendFollowUp}
               initialView={activeView} setMainView={setActiveView}
               isDark={isDark} t={t}
               featurePrefs={featurePrefs}
@@ -1087,7 +1166,7 @@ function DashboardAnalytics({ leads, isDark, t }: { leads: any[]; isDark: boolea
 // SALES MANAGER MODULE
 // ============================================================================
 function SalesManagerView({
-  managers, allLeads, followUps, isLoading, adminUser, refetch,
+  managers, allLeads, followUps, isLoading, adminUser, refetch, appendFollowUp,
   initialView, setMainView, isDark, t, featurePrefs,
   pendingLeadOpen, onPendingLeadOpenHandled,        // ← NEW
 }: any) {
@@ -1242,19 +1321,63 @@ function SalesManagerView({
   }, [allLeads, adminUser]);
   useEffect(() => { setCardsPage(1); }, [searchTerm, leadStatusFilter, showLostLeads, showNGDLeads, columnFilter]);
 
-  const baseManagerLeads = adminUser.role === "admin" ? allLeads : allLeads.filter((l: any) => l.assigned_to === adminUser.name);
-  const currentLeadFollowUps = followUps.filter((f: any) => String(f.leadId) === String(selectedLead?.id));
+  /* ── Why these are memoised ───────────────────────────────────────────────
+     These are the inputs to every useMemo/useCallback further down. Computed
+     inline, they produced a brand-new array (or function) identity on every
+     render, which meant every memo below them re-ran every time — the memos were
+     present but had never once hit. Since this whole view re-renders on each
+     keystroke in the search box and in the sales form, that was roughly eight
+     full passes over the lead list, plus two O(n log n) sorts, per character
+     typed. Memoising here is what makes the existing memoisation downstream
+     actually work; nothing about the values themselves changes. */
+  const baseManagerLeads = useMemo(
+    () => adminUser.role === "admin" ? allLeads : allLeads.filter((l: any) => l.assigned_to === adminUser.name),
+    [allLeads, adminUser.role, adminUser.name]
+  );
+
+  /* Follow-ups indexed by lead, built once per followUps change.
+     Three separate consumers below each used to scan the whole organization's
+     follow-up array: the current lead's timeline, the "enquiries attended"
+     count, and — worst — the sort comparator, which ran a full scan on EVERY
+     comparison, making the sort O(n log n × m). */
+  const fupsByLead = useMemo(() => {
+    const map = new Map<string, any[]>();
+    for (const f of followUps) {
+      const key = String(f.leadId);
+      let bucket = map.get(key);
+      if (!bucket) { bucket = []; map.set(key, bucket); }
+      bucket.push(f);
+    }
+    return map;
+  }, [followUps]);
+
+  const currentLeadFollowUps = useMemo(
+    () => fupsByLead.get(String(selectedLead?.id)) ?? EMPTY_FUPS,
+    [fupsByLead, selectedLead?.id]
+  );
   const isLeadLocked = !!selectedLead && (!!selectedLead.is_lost_lead || selectedLead.status === "Closing" || !!selectedLead.closingDate);
 
-  const pipelineManagerLeads = baseManagerLeads.filter((l: any) => l.status !== "Closing" && !l.closingDate);
-  const lostManagerLeads = pipelineManagerLeads.filter((l: any) => !!l.is_lost_lead);
-  const activeManagerLeads = pipelineManagerLeads.filter((l: any) => !l.is_lost_lead);
-  const closingLeads = baseManagerLeads.filter((l: any) => l.status === "Closing" || !!l.closingDate);
+  const pipelineManagerLeads = useMemo(
+    () => baseManagerLeads.filter((l: any) => l.status !== "Closing" && !l.closingDate),
+    [baseManagerLeads]
+  );
+  const lostManagerLeads = useMemo(
+    () => pipelineManagerLeads.filter((l: any) => !!l.is_lost_lead),
+    [pipelineManagerLeads]
+  );
+  const activeManagerLeads = useMemo(
+    () => pipelineManagerLeads.filter((l: any) => !l.is_lost_lead),
+    [pipelineManagerLeads]
+  );
+  const closingLeads = useMemo(
+    () => baseManagerLeads.filter((l: any) => l.status === "Closing" || !!l.closingDate),
+    [baseManagerLeads]
+  );
   const lostRatio = baseManagerLeads.length > 0 ? ((lostManagerLeads.length / baseManagerLeads.length) * 100).toFixed(1) : "0.0";
 
   const enquiriesAttended = useMemo(() =>
-    baseManagerLeads.filter((l: any) => followUps.some((f: any) => String(f.leadId) === String(l.id))).length
-    , [baseManagerLeads, followUps]);
+    baseManagerLeads.filter((l: any) => fupsByLead.has(String(l.id))).length
+    , [baseManagerLeads, fupsByLead]);
 
   const enquiriesThisMonth = useMemo(() =>
     baseManagerLeads.filter((l: any) => {
@@ -1277,7 +1400,10 @@ function SalesManagerView({
       : "0.0"
     , [closingLeads, baseManagerLeads]);
 
-  const passLostFilter = (lead: any) => {
+  /* useCallback because this is a dependency of the filter memos below. As a
+     plain function it got a fresh identity on every render and invalidated both
+     of them unconditionally. */
+  const passLostFilter = useCallback((lead: any) => {
     let passNGD = true;
     const isNGD = lead.status === "NON GENUINE DEMAND (NGD)" || lead.leadStatus === "NON GENUINE DEMAND (NGD)" || lead.leadInterestStatus === "NON GENUINE DEMAND (NGD)" || lead.leadInterestStatus === "Non Qualified Lead" || lead.leadInterestStatus === "Non Qualified Leads" || lead.leadInterestStatus === "Non qualified Lead";
     if (!showNGDLeads && isNGD) {
@@ -1288,7 +1414,7 @@ function SalesManagerView({
     if (leadStatusFilter === "lost") return !!lead.is_lost_lead;
     if (leadStatusFilter === "active") return !lead.is_lost_lead;
     return showLostLeads || !lead.is_lost_lead;
-  };
+  }, [showNGDLeads, leadStatusFilter, showLostLeads]);
 
   /* ── Lead ordering ──────────────────────────────────────────────────────
      From Settings → Additional Features → Lead sorting. The comparator lives in
@@ -1302,14 +1428,32 @@ function SalesManagerView({
   const leadSort = featurePrefs?.leadSort ?? "newest";
   const compactCards = featurePrefs?.toggles?.compactLeadCards === true;
 
+  /* An O(1) lookup against the index built above, not a scan.
+     This function is the comparator's key extractor, so it runs on every single
+     comparison. Filtering the whole organization's follow-up array inside it made
+     the sort O(n log n × m): under the "stale" lead-sort preference, at 500 leads
+     and 5,000 follow-ups, that is tens of millions of string comparisons per
+     sort — and the sort runs twice per render, i.e. twice per keystroke.
+     Same value, computed once per lead instead of once per comparison. */
+  const lastActivityByLead = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const [leadId, fups] of fupsByLead) {
+      let max = 0;
+      for (const f of fups) {
+        const t = new Date(f.createdAt).getTime();
+        if (t > max) max = t;
+      }
+      map.set(leadId, max);
+    }
+    return map;
+  }, [fupsByLead]);
+
   const lastActivityAt = useCallback(
     (lead: any) => {
-      const leadFups = (followUps ?? []).filter((f: any) => String(f.leadId) === String(lead?.id));
-      return leadFups.length > 0
-        ? Math.max(...leadFups.map((f: any) => new Date(f.createdAt).getTime()))
-        : new Date(lead?.created_at ?? 0).getTime();
+      const hit = lastActivityByLead.get(String(lead?.id));
+      return hit !== undefined ? hit : new Date(lead?.created_at ?? 0).getTime();
     },
-    [followUps]
+    [lastActivityByLead]
   );
 
   const sortLeads = useCallback(
@@ -1530,7 +1674,33 @@ function SalesManagerView({
     }
   };
 
-  const handleSendCustomNote = async (e: React.FormEvent<HTMLFormElement>) => { e.preventDefault(); if (!customNote.trim() || !selectedLead) return; const nm = { leadId: String(selectedLead.id), salesManagerName: adminUser.name, createdBy: adminUser.role === "admin" ? "admin" : "sales", message: customNote, siteVisitDate: null, createdAt: new Date().toISOString() }; setCustomNote(""); try { await fetch("/api/followups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(nm) }); refetch(); } catch (e) { console.log(e); } };
+  /* Adding a note used to call refetch(): every lead and every follow-up in the
+     organization, re-downloaded and re-merged, to display one line of text the
+     user had just typed.
+
+     POST /api/followups already returns the created row, so it is appended to
+     local state instead. This is safe for a plain note specifically because a
+     note changes nothing else — no lead status, no derived field, no visit date.
+     Mutations that DO change derived lead fields (the sales form, marking lost,
+     reopening) still refetch, because those fields are computed during the merge
+     in fetchAdminData rather than at render time. */
+  const handleSendCustomNote = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!customNote.trim() || !selectedLead) return;
+    const nm = { leadId: String(selectedLead.id), salesManagerName: adminUser.name, createdBy: adminUser.role === "admin" ? "admin" : "sales", message: customNote, siteVisitDate: null, createdAt: new Date().toISOString() };
+    setCustomNote("");
+    try {
+      const res = await fetch("/api/followups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(nm) });
+      const json = await res.json().catch(() => null);
+      if (json?.success && json.data) {
+        appendFollowUp(json.data);
+      } else {
+        // Could not read the row back — fall back to the full resync rather than
+        // leaving the timeline showing something the server may not have stored.
+        refetch();
+      }
+    } catch (e) { console.log(e); }
+  };
   const handleSalesFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!selectedLead || isSubmittingSalesForm) return;
