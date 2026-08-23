@@ -1123,18 +1123,32 @@ function SalesManagerView({
   // which (when wired up) swaps the whole detail view to ClosedLeadBookingView.
   const [loanDealBooking, setLoanDealBooking] = useState<any>(null);
   const [loanDealLatest, setLoanDealLatest] = useState<any>(null);
+  // One pass serves both consumers of the booking row.
+  //
+  // `loanDealBooking` (the Loan & Deal panel) and `bookingData` (the booking view)
+  // were fetched from the SAME URL by two adjacent effects, and both read
+  // `data[0]` — the identical row. Browsers do not coalesce two concurrent fetches
+  // to the same URL, so that was one wasted request and two wasted Neon round
+  // trips (~168 ms measured) on every single lead open.
+  //
+  // The loan request also used to wait for the booking request to resolve before
+  // it started. The two are independent, so they now run together and the slower
+  // one alone sets the floor.
   const fetchLoanDealData = useCallback(async (leadId: string | number) => {
-    try {
-      const res = await fetch(`/api/booking-applications?lead_id=${leadId}`);
-      const json = await res.json();
-      setLoanDealBooking(json.success && json.data?.length > 0 ? json.data[0] : null);
-    } catch { setLoanDealBooking(null); }
-    try {
-      const res = await fetch(`/api/loan?lead_id=${leadId}`);
-      const json = await res.json();
-      const rows = json.success ? json.data : [];
-      setLoanDealLatest(rows.length > 0 ? rows[rows.length - 1] : null);
-    } catch { setLoanDealLatest(null); }
+    const [bookingOutcome, loanOutcome] = await Promise.allSettled([
+      fetch(`/api/booking-applications?lead_id=${leadId}`).then((r) => r.json()),
+      fetch(`/api/loan?lead_id=${leadId}&latest=1`).then((r) => r.json()),
+    ]);
+
+    const bookingJson = bookingOutcome.status === "fulfilled" ? bookingOutcome.value : null;
+    const booking =
+      bookingJson?.success && bookingJson.data?.length > 0 ? bookingJson.data[0] : null;
+    setLoanDealBooking(booking);
+    setBookingData(booking);
+
+    const loanJson = loanOutcome.status === "fulfilled" ? loanOutcome.value : null;
+    const rows = loanJson?.success ? loanJson.data ?? [] : [];
+    setLoanDealLatest(rows.length > 0 ? rows[rows.length - 1] : null);
   }, []);
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [showSalesForm, setShowSalesForm] = useState(false);
@@ -1173,15 +1187,24 @@ function SalesManagerView({
     setAiPanelOpen(false);
     setShowSalesForm(false);
     setShowLoanForm(false);
+    // Reset the tab too. Without this, clicking through leads while parked on
+    // "Loan Tracking" keeps that tab mounted, and LoanDealView's lazy children
+    // (tranches, lender applications, PDD, financial status) fire on every lead
+    // open — four extra requests per lead that nobody asked for.
+    setDetailTab("personal");
   }, [selectedLead?.id]);
+  // Booking and loan both come from fetchLoanDealData now. The second effect that
+  // used to live here fetched /api/booking-applications?lead_id= a SECOND time,
+  // concurrently, for the same row.
   useEffect(() => {
     if (selectedLead?.id) fetchLoanDealData(selectedLead.id);
-    else { setLoanDealBooking(null); setLoanDealLatest(null); }
+    else {
+      setLoanDealBooking(null);
+      setLoanDealLatest(null);
+      setBookingData(null);
+      setShowBookingView(false);
+    }
   }, [selectedLead?.id, fetchLoanDealData]);
-  useEffect(() => {
-    if (selectedLead?.id) fetchBookingForLead(selectedLead.id);
-    else { setBookingData(null); setShowBookingView(false); }
-  }, [selectedLead?.id]);
 
   // Jump here from elsewhere in the page: Inventory (which also wants the
   // booking form once it loads) or a header notification (which wants the Lead

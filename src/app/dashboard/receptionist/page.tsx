@@ -697,18 +697,24 @@ export default function ReceptionistDashboard() {
   // which (when wired up) swaps the whole detail view to ClosedLeadBookingView.
   const [loanDealBooking, setLoanDealBooking] = useState<any>(null);
   const [loanDealLatest, setLoanDealLatest] = useState<any>(null);
+  // One pass serves both consumers of the booking row — same consolidation as the
+  // admin and sales panels. Two effects were fetching the SAME URL concurrently and
+  // both reading `data[0]`, and the loan request needlessly waited on the booking one.
   const fetchLoanDealData = useCallback(async (leadId: string | number) => {
-    try {
-      const res = await fetch(`/api/booking-applications?lead_id=${leadId}`);
-      const json = await res.json();
-      setLoanDealBooking(json.success && json.data?.length > 0 ? json.data[0] : null);
-    } catch { setLoanDealBooking(null); }
-    try {
-      const res = await fetch(`/api/loan?lead_id=${leadId}`);
-      const json = await res.json();
-      const rows = json.success ? json.data : [];
-      setLoanDealLatest(rows.length > 0 ? rows[rows.length - 1] : null);
-    } catch { setLoanDealLatest(null); }
+    const [bookingOutcome, loanOutcome] = await Promise.allSettled([
+      fetch(`/api/booking-applications?lead_id=${leadId}`).then((r) => r.json()),
+      fetch(`/api/loan?lead_id=${leadId}&latest=1`).then((r) => r.json()),
+    ]);
+
+    const bookingJson = bookingOutcome.status === "fulfilled" ? bookingOutcome.value : null;
+    const booking =
+      bookingJson?.success && bookingJson.data?.length > 0 ? bookingJson.data[0] : null;
+    setLoanDealBooking(booking);
+    setBookingData(booking);
+
+    const loanJson = loanOutcome.status === "fulfilled" ? loanOutcome.value : null;
+    const rows = loanJson?.success ? loanJson.data ?? [] : [];
+    setLoanDealLatest(rows.length > 0 ? rows[rows.length - 1] : null);
   }, []);
   const [customNote, setCustomNote] = useState("");
   const followUpEndRef = useRef<HTMLDivElement>(null);
@@ -935,18 +941,18 @@ export default function ReceptionistDashboard() {
     }
   }, [enquiries, followUps]);
 
-  // Fetch booking data when a lead is selected
+  // Booking and loan both arrive via fetchLoanDealData now. The separate
+  // fetchBookingForLead effect that used to sit here requested
+  // /api/booking-applications?lead_id= a SECOND time, concurrently, for the same row.
   useEffect(() => {
     if (selectedLead?.id) {
-      fetchBookingForLead(selectedLead.id);
+      fetchLoanDealData(selectedLead.id);
       setBookingDetailTab("personal");
+    } else {
+      setLoanDealBooking(null);
+      setLoanDealLatest(null);
+      setBookingData(null);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedLead?.id]);
-
-  useEffect(() => {
-    if (selectedLead?.id) fetchLoanDealData(selectedLead.id);
-    else { setLoanDealBooking(null); setLoanDealLatest(null); }
   }, [selectedLead?.id, fetchLoanDealData]);
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -1515,14 +1521,9 @@ export default function ReceptionistDashboard() {
     refetchAll();
   };
 
-  const fetchBookingForLead = async (leadId: string | number) => {
-    try {
-      const res = await fetch(`/api/booking-applications?lead_id=${leadId}`);
-      const json = await res.json();
-      if (json.success && json.data?.length > 0) setBookingData(json.data[0]);
-      else setBookingData(null);
-    } catch { setBookingData(null); }
-  };
+  // fetchBookingForLead was removed: it duplicated the booking request that
+  // fetchLoanDealData already makes, and had no callers left once the two
+  // lead-open effects were merged.
 
   const openLostLeadModal = () => {
     setLostReason("");

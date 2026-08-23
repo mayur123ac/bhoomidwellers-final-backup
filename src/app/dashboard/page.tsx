@@ -3394,32 +3394,43 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
   // which (when wired up) swaps the whole detail view to ClosedLeadBookingView.
   const [loanDealBooking, setLoanDealBooking] = useState<any>(null);
   const [loanDealLatest, setLoanDealLatest] = useState<any>(null);
+  // One pass serves both consumers of the booking row.
+  //
+  // `loanDealBooking` (the Loan & Deal panel) and `bookingData` (the booking view)
+  // came from the SAME URL via two separate effects, and both read `data[0]` — the
+  // identical row. Browsers do not coalesce concurrent fetches to the same URL, so
+  // that was one wasted request and two wasted Neon round trips (~168 ms) per lead
+  // open. The loan request also waited on the booking request; they are
+  // independent and now run together.
   const fetchLoanDealData = useCallback(async (leadId: string | number) => {
-    try {
-      const res = await fetch(`/api/booking-applications?lead_id=${leadId}`);
-      const json = await res.json();
-      setLoanDealBooking(json.success && json.data?.length > 0 ? json.data[0] : null);
-    } catch { setLoanDealBooking(null); }
-    try {
-      const res = await fetch(`/api/loan?lead_id=${leadId}`);
-      const json = await res.json();
-      const rows = json.success ? json.data : [];
-      setLoanDealLatest(rows.length > 0 ? rows[rows.length - 1] : null);
-    } catch { setLoanDealLatest(null); }
+    const [bookingOutcome, loanOutcome] = await Promise.allSettled([
+      fetch(`/api/booking-applications?lead_id=${leadId}`).then((r) => r.json()),
+      fetch(`/api/loan?lead_id=${leadId}&latest=1`).then((r) => r.json()),
+    ]);
+
+    const bookingJson = bookingOutcome.status === "fulfilled" ? bookingOutcome.value : null;
+    const booking =
+      bookingJson?.success && bookingJson.data?.length > 0 ? bookingJson.data[0] : null;
+    setLoanDealBooking(booking);
+    setBookingData(booking);
+
+    const loanJson = loanOutcome.status === "fulfilled" ? loanOutcome.value : null;
+    const rows = loanJson?.success ? loanJson.data ?? [] : [];
+    setLoanDealLatest(rows.length > 0 ? rows[rows.length - 1] : null);
   }, []);
 
+  // Keyed on the lead ID, not the lead OBJECT. `selectedLead` is rebuilt from the
+  // `mergedLeads` memo on every refetch(), so a `[selectedLead]` dependency
+  // re-fired this fetch after every follow-up note, sales-form submit and status
+  // change while a lead was simply sitting open.
   useEffect(() => {
-    if (selectedLead) {
-      fetchBookingForLead(selectedLead.id);
-    } else {
+    if (selectedLead?.id) fetchLoanDealData(selectedLead.id);
+    else {
+      setLoanDealBooking(null);
+      setLoanDealLatest(null);
       setBookingData(null);
       setShowBookingView(false);
     }
-  }, [selectedLead]);
-
-  useEffect(() => {
-    if (selectedLead?.id) fetchLoanDealData(selectedLead.id);
-    else { setLoanDealBooking(null); setLoanDealLatest(null); }
   }, [selectedLead?.id, fetchLoanDealData]);
 
   const handleReopenLead = async () => {
@@ -4240,32 +4251,43 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
   // which (when wired up) swaps the whole detail view to ClosedLeadBookingView.
   const [loanDealBooking, setLoanDealBooking] = useState<any>(null);
   const [loanDealLatest, setLoanDealLatest] = useState<any>(null);
+  // One pass serves both consumers of the booking row.
+  //
+  // `loanDealBooking` (the Loan & Deal panel) and `bookingData` (the booking view)
+  // came from the SAME URL via two separate effects, and both read `data[0]` — the
+  // identical row. Browsers do not coalesce concurrent fetches to the same URL, so
+  // that was one wasted request and two wasted Neon round trips (~168 ms) per lead
+  // open. The loan request also waited on the booking request; they are
+  // independent and now run together.
   const fetchLoanDealData = useCallback(async (leadId: string | number) => {
-    try {
-      const res = await fetch(`/api/booking-applications?lead_id=${leadId}`);
-      const json = await res.json();
-      setLoanDealBooking(json.success && json.data?.length > 0 ? json.data[0] : null);
-    } catch { setLoanDealBooking(null); }
-    try {
-      const res = await fetch(`/api/loan?lead_id=${leadId}`);
-      const json = await res.json();
-      const rows = json.success ? json.data : [];
-      setLoanDealLatest(rows.length > 0 ? rows[rows.length - 1] : null);
-    } catch { setLoanDealLatest(null); }
+    const [bookingOutcome, loanOutcome] = await Promise.allSettled([
+      fetch(`/api/booking-applications?lead_id=${leadId}`).then((r) => r.json()),
+      fetch(`/api/loan?lead_id=${leadId}&latest=1`).then((r) => r.json()),
+    ]);
+
+    const bookingJson = bookingOutcome.status === "fulfilled" ? bookingOutcome.value : null;
+    const booking =
+      bookingJson?.success && bookingJson.data?.length > 0 ? bookingJson.data[0] : null;
+    setLoanDealBooking(booking);
+    setBookingData(booking);
+
+    const loanJson = loanOutcome.status === "fulfilled" ? loanOutcome.value : null;
+    const rows = loanJson?.success ? loanJson.data ?? [] : [];
+    setLoanDealLatest(rows.length > 0 ? rows[rows.length - 1] : null);
   }, []);
 
+  // Keyed on the lead ID, not the lead OBJECT. `selectedLead` is rebuilt from the
+  // `mergedLeads` memo on every refetch(), so a `[selectedLead]` dependency
+  // re-fired this fetch after every follow-up note, sales-form submit and status
+  // change while a lead was simply sitting open.
   useEffect(() => {
-    if (selectedLead) {
-      fetchBookingForLead(selectedLead.id);
-    } else {
+    if (selectedLead?.id) fetchLoanDealData(selectedLead.id);
+    else {
+      setLoanDealBooking(null);
+      setLoanDealLatest(null);
       setBookingData(null);
       setShowBookingView(false);
     }
-  }, [selectedLead]);
-
-  useEffect(() => {
-    if (selectedLead?.id) fetchLoanDealData(selectedLead.id);
-    else { setLoanDealBooking(null); setLoanDealLatest(null); }
   }, [selectedLead?.id, fetchLoanDealData]);
 
   // Transfer States
@@ -5294,18 +5316,25 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
   // which (when wired up) swaps the whole detail view to ClosedLeadBookingView.
   const [loanDealBooking, setLoanDealBooking] = useState<any>(null);
   const [loanDealLatest, setLoanDealLatest] = useState<any>(null);
+  // One pass serves both consumers of the booking row — see the identical
+  // consolidation in the admin panel above. Two effects were fetching the SAME
+  // URL concurrently and both reading `data[0]`, and the loan request waited on
+  // the booking request for no reason.
   const fetchLoanDealData = useCallback(async (leadId: string | number) => {
-    try {
-      const res = await fetch(`/api/booking-applications?lead_id=${leadId}`);
-      const json = await res.json();
-      setLoanDealBooking(json.success && json.data?.length > 0 ? json.data[0] : null);
-    } catch { setLoanDealBooking(null); }
-    try {
-      const res = await fetch(`/api/loan?lead_id=${leadId}`);
-      const json = await res.json();
-      const rows = json.success ? json.data : [];
-      setLoanDealLatest(rows.length > 0 ? rows[rows.length - 1] : null);
-    } catch { setLoanDealLatest(null); }
+    const [bookingOutcome, loanOutcome] = await Promise.allSettled([
+      fetch(`/api/booking-applications?lead_id=${leadId}`).then((r) => r.json()),
+      fetch(`/api/loan?lead_id=${leadId}&latest=1`).then((r) => r.json()),
+    ]);
+
+    const bookingJson = bookingOutcome.status === "fulfilled" ? bookingOutcome.value : null;
+    const booking =
+      bookingJson?.success && bookingJson.data?.length > 0 ? bookingJson.data[0] : null;
+    setLoanDealBooking(booking);
+    setBookingData(booking);
+
+    const loanJson = loanOutcome.status === "fulfilled" ? loanOutcome.value : null;
+    const rows = loanJson?.success ? loanJson.data ?? [] : [];
+    setLoanDealLatest(rows.length > 0 ? rows[rows.length - 1] : null);
   }, []);
 
   const handleBookingSuccess = async (booking: any) => {
@@ -5314,18 +5343,17 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
     await refetch();
   };
 
+  // Keyed on the lead ID, not the lead OBJECT — `selectedLead` is rebuilt by the
+  // mergedLeads memo on every refetch(), which re-fired this on every mutation
+  // while a lead sat open.
   useEffect(() => {
-    if (selectedLead) {
-      fetchBookingForLead(selectedLead.id);
-    } else {
+    if (selectedLead?.id) fetchLoanDealData(selectedLead.id);
+    else {
+      setLoanDealBooking(null);
+      setLoanDealLatest(null);
       setBookingData(null);
       setShowBookingView(false);
     }
-  }, [selectedLead]);
-
-  useEffect(() => {
-    if (selectedLead?.id) fetchLoanDealData(selectedLead.id);
-    else { setLoanDealBooking(null); setLoanDealLatest(null); }
   }, [selectedLead?.id, fetchLoanDealData]);
 
   // ── Auto-drill into a lead when navigated from Enquiry Overview ──

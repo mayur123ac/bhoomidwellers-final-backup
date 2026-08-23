@@ -30,12 +30,34 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const leadId = searchParams.get("lead_id");
 
+    // Opt-in: return only the newest entry. Every caller in this app reads
+    // `rows[rows.length - 1]` and discards the rest, and loan_updates is
+    // append-only, so the log grows without bound per lead. The response stays an
+    // ARRAY ordered oldest-first, so indexing keeps working unchanged; with
+    // latest=1 it simply has one element. Omitting the param returns the full log
+    // exactly as before, so existing callers are unaffected.
+    const latestOnly = searchParams.get("latest") === "1";
+
+    // MT-05: loan_updates carries organization_id (added by the MT-04 migration,
+    // indexed as idx_loan_updates_org). This GET was the one path in the file that
+    // never applied it. lead_id is a GLOBALLY unique integer, so the lead_id branch
+    // let any signed-in user of any tenant read another tenant's loan history by
+    // guessing an id — and the branch below it returned every loan_update row in
+    // every organization. POST has always scoped correctly; this brings GET in line.
+    const orgId = await getOrganizationId();
+
     const loans = leadId
       ? await query(
-          `SELECT * FROM loan_updates WHERE lead_id = $1 ORDER BY created_at ASC`,
-          [leadId]
+          `SELECT * FROM loan_updates
+             WHERE lead_id = $1 AND organization_id = $2
+             ORDER BY created_at ${latestOnly ? "DESC" : "ASC"}
+             ${latestOnly ? "LIMIT 1" : ""}`,
+          [leadId, orgId]
         )
-      : await query(`SELECT * FROM loan_updates ORDER BY created_at ASC`);
+      : await query(
+          `SELECT * FROM loan_updates WHERE organization_id = $1 ORDER BY created_at ASC`,
+          [orgId]
+        );
 
     return NextResponse.json({ success: true, data: loans }, { status: 200 });
   } catch (error) {
