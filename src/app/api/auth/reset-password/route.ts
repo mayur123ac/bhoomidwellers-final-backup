@@ -22,7 +22,7 @@ import { transaction } from "@/lib/db";
 import { writeAuditLog, requestContext } from "@/lib/auditLog";
 import { hashPassword, passwordMeetsRules } from "@/lib/passwords";
 import {
-  canSelfResetPassword, checkOtp, findResetTarget, RESET_PURPOSE,
+  canSelfResetPassword, checkOtp, findResetTarget, RESET_PURPOSE, sessionRevocationNow,
 } from "@/lib/passwordReset";
 
 export const dynamic = "force-dynamic";
@@ -84,17 +84,20 @@ export async function POST(req: NextRequest) {
       );
       if (consumed.rows.length === 0) return null;
 
-      // password_changed_at is what revokes existing sessions.
+      // password_changed_at is what revokes existing sessions. Stamped from the
+      // APPLICATION clock, matching the `iat` on the cookie the user's next
+      // sign-in will carry — see sessionRevocationNow() in lib/passwordReset.ts
+      // for why SQL now() locked people out of the account they had just reset.
       const res = await client.query(
         `UPDATE users
             SET password = $2,
-                password_changed_at = now(),
+                password_changed_at = $3,
                 updated_at = now()
           WHERE id = $1
             AND deleted_at IS NULL
             AND is_active = true
         RETURNING id, email, role`,
-        [check.row.user_id, hashed]
+        [check.row.user_id, hashed, sessionRevocationNow()]
       );
       return res.rows[0] ?? null;
     });

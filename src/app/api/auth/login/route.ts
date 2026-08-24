@@ -116,6 +116,35 @@ export async function POST(req: Request) {
       );
     }
 
+    // ── A suspended organization cannot sign anyone in ────────────────────────
+    //
+    // `organizations.status` is set by Super Admin (PATCH
+    // /api/platform/organizations/[id]), which also revokes every live session
+    // belonging to the tenant. Without this check that revocation would last
+    // exactly as long as it takes the person to type their password again, and
+    // "suspended" would be a colour on a pill rather than a control.
+    //
+    // Ordered after the password check on purpose: an unauthenticated caller
+    // learns nothing about which organizations are suspended, because they never
+    // reach this line.
+    //
+    // A platform account has `organization_id IS NULL`, so this query returns no
+    // row for it and the Super Admin can still sign in to lift the suspension —
+    // which is the whole reason the platform account is not a tenant role.
+    if (user.organization_id) {
+      const orgRows = await query<{ status: string }>(
+        `SELECT COALESCE(NULLIF(btrim(status), ''), 'active') AS status
+           FROM organizations WHERE id = $1`,
+        [user.organization_id],
+      );
+      if (orgRows[0]?.status === "suspended") {
+        return NextResponse.json(
+          { message: "This organization's access has been suspended. Please contact your administrator." },
+          { status: 403 },
+        );
+      }
+    }
+
     const userData = {
       _id: String(user.id),
       name: user.name,

@@ -27,6 +27,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getServerSession, getSessionUserId } from "@/lib/serverAuth";
+import { sessionIsRevoked } from "@/lib/passwordReset";
 
 /** The canonical value stored in users.role. */
 export const SUPER_ADMIN_ROLE = "super_admin";
@@ -69,8 +70,13 @@ export async function getSuperAdmin(): Promise<SuperAdminIdentity | null> {
   // The authoritative check. `organization_id IS NULL` is in the WHERE clause
   // rather than asserted afterwards so the row simply does not come back for a
   // tenant-scoped account.
-  const rows = await query<SuperAdminIdentity & { password_changed_at: Date | null }>(
-    `SELECT id, name, email, role, password_changed_at
+  const rows = await query<
+    SuperAdminIdentity & {
+      password_changed_at: Date | null;
+      sessions_revoked_at: Date | null;
+    }
+  >(
+    `SELECT id, name, email, role, password_changed_at, sessions_revoked_at
        FROM users
       WHERE id = $1
         AND organization_id IS NULL
@@ -97,12 +103,20 @@ export async function getSuperAdmin(): Promise<SuperAdminIdentity | null> {
   // Compared at whole-second granularity because `iat` is whole seconds: a
   // sub-second `password_changed_at` would otherwise be "newer" than the token
   // issued moments later by the re-login, locking the account out of itself.
-  if (row.password_changed_at) {
-    const changedAtSeconds = Math.floor(new Date(row.password_changed_at).getTime() / 1000);
-    const issuedAt = Number((session as any).iat);
-    // A session with no `iat` predates the claim and cannot be shown to be
-    // current, so it is treated as stale rather than trusted.
-    if (!Number.isFinite(issuedAt) || issuedAt < changedAtSeconds) return null;
+  //
+  // `sessions_revoked_at` is read for the same reason and by the same rule. A
+  // platform account cannot be force-logged-out by anyone — there is no role
+  // above it — but the column is honoured here anyway so that "revoked" means
+  // one thing in this codebase rather than two.
+  if (row.password_changed_at || row.sessions_revoked_at) {
+    if (
+      sessionIsRevoked(session, {
+        passwordChangedAt: row.password_changed_at,
+        sessionsRevokedAt: row.sessions_revoked_at,
+      })
+    ) {
+      return null;
+    }
   }
 
   return { id: row.id, name: row.name, email: row.email, role: row.role };

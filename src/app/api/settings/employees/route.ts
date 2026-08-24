@@ -705,6 +705,12 @@ export async function PATCH(req: NextRequest) {
       );
     }
     updates.password = await hashPassword(String(body.password));
+    // Stamped so an ADMIN-set password revokes the target's live sessions, the
+    // same way a self-service change already does (/api/settings/password) and
+    // the same way the platform path does (lib/userSecurity.setUserPassword).
+    // Without this, the one route that changes someone ELSE'S password was the
+    // one route that left their old cookie working.
+    updates.password_changed_at = new Date();
   }
 
   if (Object.keys(updates).length === 0) {

@@ -89,6 +89,98 @@ export function sessionPredatesPasswordChange(
   return issuedAt < changedAtSeconds;
 }
 
+/**
+ * The moment to write into `password_changed_at` / `sessions_revoked_at`.
+ *
+ * ── Why this is not SQL `now()` ─────────────────────────────────────────────
+ * Revocation is a comparison between two timestamps, and they must come from
+ * the SAME clock:
+ *
+ *   iat                  stamped by signSession() from the APPLICATION clock.
+ *   password_changed_at
+ *   sessions_revoked_at  were stamped by SQL `now()` — the DATABASE clock.
+ *
+ * Those clocks are not the same clock. Measured against this project's Neon
+ * branch on 2026-08-24, the database ran 4.9 seconds ahead of the application
+ * host. With `now()`, a revocation therefore lands ~5 seconds in the
+ * application's future, and EVERY session minted in that window — including the
+ * one the user gets by immediately signing back in — is refused as "issued
+ * before the revocation". The symptom is a user who changes their password,
+ * logs in successfully, and is bounced to the login screen by the first request
+ * the new session makes.
+ *
+ * That was a latent defect in the pre-existing password-change paths; force
+ * logout makes it constant rather than occasional, because signing straight
+ * back in is the normal thing to do after being signed out.
+ *
+ * The alternative — tolerating N seconds of skew in the comparison — was
+ * rejected. It would let any session issued in the N seconds before a
+ * revocation survive it, and "someone signed in moments ago and I want them
+ * out" is precisely the case force logout exists for.
+ *
+ * So the stamp is taken from the application clock, the same one that produced
+ * `iat`, and the two are directly comparable. Every caller that writes either
+ * column binds this value instead of calling `now()`.
+ *
+ * ── Why it is the START OF THE NEXT SECOND, not this instant ────────────────
+ * `iat` is whole seconds. A session minted at 12:00:03.100 and a revocation at
+ * 12:00:03.900 therefore both reduce to 12:00:03, and `iat < revokedAt` is
+ * FALSE — the session survives a revocation that happened after it was issued.
+ * That is not a rounding curiosity: force logout is most often used moments
+ * after someone signs in, which is exactly when the two land in the same second.
+ *
+ * Advancing the stamp to the next second boundary resolves the ambiguity by
+ * failing CLOSED. Everything issued during the current second — the whole set
+ * of sessions that existed when the operator clicked — is refused, and the
+ * first sign-in from the following second onward is honoured.
+ *
+ * The cost is bounded by the remainder of one second: a user who signs back in
+ * within the same second as the revocation has that one request refused and is
+ * fine on the retry. Compared with a force logout that silently does nothing,
+ * that is the right way round.
+ */
+export function sessionRevocationNow(): Date {
+  return new Date((Math.floor(Date.now() / 1000) + 1) * 1000);
+}
+
+/**
+ * True when a session predates ANY revocation stamped on the account.
+ *
+ * There are two such stamps and they mean different things, so they are separate
+ * columns rather than one reused field:
+ *
+ *   password_changed_at   the credential changed, so anyone holding a session
+ *                         minted under the old one is out. Written by the
+ *                         self-service and administrator password paths.
+ *   sessions_revoked_at   the sessions were ended WITHOUT the credential
+ *                         changing. Written by Super Admin force logout and by
+ *                         organization suspension. The password still works;
+ *                         the holder simply has to sign in again.
+ *
+ * The later of the two wins, because either on its own is sufficient to kill a
+ * session and neither should be able to resurrect one the other killed.
+ *
+ * Reusing password_changed_at for a force logout was the obvious shortcut and is
+ * wrong twice over: it would tell the account "your password was changed" when
+ * it was not, and it would collide with the forgot-password flow, which reads
+ * that same column to decide whether a reset has already happened.
+ *
+ * The comparison itself is delegated, so the second-granularity rule documented
+ * on sessionPredatesPasswordChange() is stated once and cannot drift.
+ */
+export function sessionIsRevoked(
+  session: any,
+  stamps: {
+    passwordChangedAt?: Date | string | null;
+    sessionsRevokedAt?: Date | string | null;
+  }
+): boolean {
+  return (
+    sessionPredatesPasswordChange(session, stamps.passwordChangedAt ?? null) ||
+    sessionPredatesPasswordChange(session, stamps.sessionsRevokedAt ?? null)
+  );
+}
+
 export interface ResetTarget {
   id: number;
   name: string;

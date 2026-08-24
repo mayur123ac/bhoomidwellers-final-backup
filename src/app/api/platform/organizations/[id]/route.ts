@@ -7,6 +7,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { requireSuperAdmin } from "@/lib/superAdmin";
+import { requestContext, writeAuditLog } from "@/lib/auditLog";
+import { revokeOrganizationSessions } from "@/lib/userSecurity";
 
 export const dynamic = "force-dynamic";
 
@@ -77,5 +79,115 @@ export async function GET(
   } catch (err: any) {
     console.error("[GET /api/platform/organizations/[id]]", err);
     return NextResponse.json({ success: false, message: err.message }, { status: 500 });
+  }
+}
+
+/**
+ * Suspend or reactivate a tenant.
+ *
+ * ── Why suspension revokes sessions ─────────────────────────────────────────
+ * `organizations.status` already existed and the Organizations table already had
+ * a Suspend control; what neither had was a meaning. A status column that only
+ * repaints a pill is the frontend `isLoggedIn` variable the brief warns about,
+ * one level up: the tenant would be labelled suspended and its 24 people would
+ * carry on working.
+ *
+ * So suspension does two things. It sets the status, and it revokes every
+ * session belonging to the organization through the same mechanism a per-user
+ * force logout uses — `users.sessions_revoked_at` plus closing the tracked
+ * `employee_sessions` rows. Signing back in is then blocked by the login route,
+ * which refuses a suspended tenant.
+ *
+ * Reactivating clears the status and nothing else. It deliberately does NOT
+ * un-revoke: people sign in again, which is a two-second inconvenience and
+ * avoids resurrecting cookies minted before the suspension.
+ *
+ * The Super Admin's own account is untouched by all of this — it has no
+ * organization, so `WHERE organization_id = $1` cannot match it, and suspending
+ * every tenant on the estate still leaves the platform operator signed in.
+ */
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const gate = await requireSuperAdmin();
+  if (!gate.ok) return gate.response;
+
+  const { id } = await params;
+  if (!UUID_RE.test(id)) {
+    return NextResponse.json({ success: false, message: "Invalid organization id." }, { status: 400 });
+  }
+
+  try {
+    const body = await req.json().catch(() => ({}));
+    const status = (body?.status ?? "").toString().trim().toLowerCase();
+
+    // An allow-list, not a passthrough: `status` is a bare text column with no
+    // CHECK constraint, so anything written here becomes a value the
+    // Organizations filter and the status pill have to cope with forever.
+    if (status !== "active" && status !== "suspended") {
+      return NextResponse.json(
+        { success: false, message: "Status must be either 'active' or 'suspended'." },
+        { status: 400 }
+      );
+    }
+
+    const before = await query<{ id: string; name: string; status: string }>(
+      `SELECT id, name, COALESCE(NULLIF(btrim(status), ''), 'active') AS status
+         FROM organizations WHERE id = $1`,
+      [id]
+    );
+    if (before.length === 0) {
+      return NextResponse.json({ success: false, message: "Organization not found." }, { status: 404 });
+    }
+
+    const updated = await query<{ id: string; name: string; status: string }>(
+      `UPDATE organizations
+          SET status = $2, updated_at = now()
+        WHERE id = $1
+      RETURNING id, name, status`,
+      [id, status]
+    );
+
+    let revoked = { users: 0, closedSessions: 0 };
+    if (status === "suspended") {
+      revoked = await revokeOrganizationSessions(id);
+    }
+
+    const { ip, userAgent } = requestContext(req);
+    await writeAuditLog({
+      userId: gate.admin.id,
+      actorName: gate.admin.name,
+      action: status === "suspended" ? "platform.organization.suspend" : "platform.organization.reactivate",
+      entityType: "organization",
+      entityId: id,
+      oldValue: { status: before[0].status },
+      newValue: {
+        status,
+        organization: before[0].name,
+        usersSignedOut: revoked.users,
+        sessionsClosed: revoked.closedSessions,
+      },
+      ipAddress: ip,
+      userAgent,
+    });
+
+    return NextResponse.json(
+      {
+        success: true,
+        data: updated[0],
+        message:
+          status === "suspended"
+            ? `Organization suspended. ${revoked.users} ${revoked.users === 1 ? "user was" : "users were"} signed out and can no longer sign in.`
+            : "Organization reactivated. Its users can sign in again.",
+      },
+      { status: 200 }
+    );
+  } catch (err: any) {
+    console.error("[PATCH /api/platform/organizations/[id]]", err?.message);
+    return NextResponse.json(
+      { success: false, message: "Could not change the organization's status." },
+      { status: 500 }
+    );
   }
 }

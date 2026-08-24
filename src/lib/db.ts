@@ -85,11 +85,59 @@ export function getPool(): Pool {
   return pool;
 }
 
+/**
+ * Errors that mean "the connection never became usable", as opposed to "the
+ * statement failed".
+ *
+ * Neon suspends an idle compute and can restart it under us, which drops every
+ * pooled socket at once. The next `connect()` then either times out or is handed
+ * a socket the server has already closed.
+ */
+function isTransientConnectError(err: unknown): boolean {
+  const message = (err as { message?: string })?.message ?? "";
+  return (
+    message.includes("Connection terminated due to connection timeout") ||
+    message.includes("Connection terminated unexpectedly") ||
+    message.includes("terminating connection due to administrator command") ||
+    message.includes("ECONNRESET") ||
+    message.includes("EPIPE")
+  );
+}
+
+/**
+ * Run a statement, retrying ONCE if the connection could not be established.
+ *
+ * ── Why the retry is around connect() only ─────────────────────────────────
+ * This function runs INSERTs and UPDATEs as well as SELECTs, so a blanket retry
+ * would be a correctness bug: a write that failed with "Connection terminated
+ * unexpectedly" mid-flight may well have committed, and re-sending it could
+ * apply it twice. The retry therefore covers only the window BEFORE any
+ * statement is sent — if `connect()` fails, nothing reached the database and
+ * replaying is unambiguously safe. Once a client is in hand, a failure is
+ * surfaced to the caller exactly as before.
+ *
+ * ── Why it exists ──────────────────────────────────────────────────────────
+ * A Neon compute restart turned a single blip into a hard Next.js error page on
+ * /super-admin, because app/super-admin/layout.tsx does a database read to
+ * verify the operator and had nothing to fall back on. One retry against a
+ * freshly woken compute turns that into a slightly slow page.
+ */
 export async function query<T = any>(
   text: string,
   params?: any[]
 ): Promise<T[]> {
-  const client = await getPool().connect();
+  let client: PoolClient;
+  try {
+    client = await getPool().connect();
+  } catch (err) {
+    if (!isTransientConnectError(err)) throw err;
+    console.warn("[DB] connect failed transiently, retrying once:", (err as Error).message);
+    // A short pause: the compute is usually mid-wake, and an immediate retry
+    // just races the same cold start again.
+    await new Promise((resolve) => setTimeout(resolve, 750));
+    client = await getPool().connect();
+  }
+
   try {
     const result = await client.query(text, params);
     return result.rows as T[];

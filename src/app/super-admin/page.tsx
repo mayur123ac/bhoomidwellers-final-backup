@@ -32,6 +32,7 @@ import {
   IoBusinessOutline, IoBusiness,
   IoPeopleOutline, IoPeople,
   IoPulseOutline, IoPulse,
+  IoMegaphoneOutline, IoMegaphone,
   IoSettingsOutline, IoSettings,
   IoMoonOutline, IoSunnyOutline,
 } from "react-icons/io5";
@@ -47,18 +48,22 @@ import { superAdminTheme, tint } from "@/components/superadmin/theme";
 import { usePlatformData } from "@/components/superadmin/usePlatformData";
 import DashboardView from "@/components/superadmin/DashboardView";
 import OrganizationsView from "@/components/superadmin/OrganizationsView";
-import OrgDetailSheet from "@/components/superadmin/OrgDetailSheet";
+import OrganizationDetailView from "@/components/superadmin/OrganizationDetailView";
+import SystemUpdatesView from "@/components/superadmin/SystemUpdatesView";
 import UsersView from "@/components/superadmin/UsersView";
 import ActivityView from "@/components/superadmin/ActivityView";
 import SettingsView from "@/components/superadmin/SettingsView";
 import AddOrganizationModal, { type CreatedOrg } from "@/components/superadmin/AddOrganizationModal";
 
-type TabId = "dashboard" | "organizations" | "users" | "activity" | "settings";
+type TabId = "dashboard" | "organizations" | "users" | "updates" | "activity" | "settings";
 
 const NAV = [
   { id: "dashboard", icon: IoGridOutline, activeIcon: IoGrid, title: "Dashboard", short: "Home" },
   { id: "organizations", icon: IoBusinessOutline, activeIcon: IoBusiness, title: "Organizations", short: "Orgs" },
   { id: "users", icon: IoPeopleOutline, activeIcon: IoPeople, title: "Users", short: "Users" },
+  // System Updates sits with the other platform-wide tools rather than under
+  // Settings: it is a thing you DO across the estate, not a preference.
+  { id: "updates", icon: IoMegaphoneOutline, activeIcon: IoMegaphone, title: "System Updates", short: "Updates" },
   { id: "activity", icon: IoPulseOutline, activeIcon: IoPulse, title: "Activity", short: "Activity" },
 ] as const;
 
@@ -70,6 +75,7 @@ const SUBTITLES: Record<TabId, string> = {
   dashboard: "Platform health across every organization",
   organizations: "Every tenant on the platform",
   users: "Every user, across every organization",
+  updates: "Publish announcements and product updates across the CRM.",
   activity: "Platform-wide audit and activity",
   settings: "Platform configuration",
 };
@@ -127,6 +133,26 @@ export default function SuperAdminPanel() {
   const openOrg = data.orgs.find(o => o.id === openOrgId) ?? null;
   const activeTitle = tab === "settings" ? "Settings" : NAV.find(n => n.id === tab)?.title ?? "Dashboard";
 
+  /**
+   * Opening an organization from the Dashboard has to switch tabs too — the
+   * detail renders inside the Organizations tab, so setting the id alone would
+   * leave the operator on a dashboard that appeared not to respond.
+   */
+  const openOrganization = (id: string) => {
+    setOpenOrgId(id);
+    setTab("organizations");
+  };
+
+  /**
+   * Nav clicks. Choosing "Organizations" from the rail while a tenant's detail
+   * is open means "take me back to the list" — without this it would look like
+   * the nav had stopped working.
+   */
+  const selectTab = (id: TabId) => {
+    if (id === "organizations") setOpenOrgId(null);
+    setTab(id);
+  };
+
   const navButton = (
     item: typeof NAV[number] | typeof SETTINGS_ITEM,
     expanded: boolean
@@ -136,7 +162,7 @@ export default function SuperAdminPanel() {
     return (
       <button
         key={item.id}
-        onClick={() => setTab(item.id as TabId)}
+        onClick={() => selectTab(item.id as TabId)}
         title={!expanded ? item.title : undefined}
         aria-current={active ? "page" : undefined}
         className="w-full flex items-center gap-3 px-2.5 py-2.5 rounded-xl transition-colors duration-200"
@@ -220,7 +246,7 @@ export default function SuperAdminPanel() {
           return (
             <button
               key={item.id}
-              onClick={() => setTab(item.id as TabId)}
+              onClick={() => selectTab(item.id as TabId)}
               className="flex-1 flex flex-col items-center justify-center gap-1"
               aria-current={active ? "page" : undefined}
             >
@@ -393,12 +419,32 @@ export default function SuperAdminPanel() {
             ) : (
               <>
             {tab === "dashboard" && (
-              <DashboardView t={t} data={data} metrics={metrics} onOpenOrg={setOpenOrgId} />
+              <DashboardView t={t} data={data} metrics={metrics} onOpenOrg={openOrganization} />
             )}
             {tab === "organizations" && (
-              <OrganizationsView t={t} orgs={data.orgs} onOpenOrg={setOpenOrgId} onAddOrganization={() => setAddOpen(true)} />
+              openOrgId ? (
+                /* The detail replaces the list rather than floating over it: it
+                   carries a nine-column user table and a per-row actions menu,
+                   which a 440px drawer could not hold without the controls
+                   overflowing. Back returns to the list. */
+                <OrganizationDetailView
+                  t={t}
+                  organizationId={openOrgId}
+                  fallbackName={openOrg?.name ?? "Organization"}
+                  onBack={() => setOpenOrgId(null)}
+                  onOrgChanged={reload}
+                />
+              ) : (
+                <OrganizationsView
+                  t={t}
+                  orgs={data.orgs}
+                  onOpenOrg={setOpenOrgId}
+                  onAddOrganization={() => setAddOpen(true)}
+                />
+              )
             )}
             {tab === "users" && <UsersView t={t} users={data.users} />}
+            {tab === "updates" && <SystemUpdatesView t={t} />}
             {tab === "activity" && <ActivityView t={t} activity={data.activity} />}
             {tab === "settings" && <SettingsView t={t} onSignedOut={handleLogout} />}
               </>
@@ -407,7 +453,6 @@ export default function SuperAdminPanel() {
         </main>
       </div>
 
-      <OrgDetailSheet org={openOrg} t={t} onClose={() => setOpenOrgId(null)} />
 
       <AddOrganizationModal
         open={addOpen}

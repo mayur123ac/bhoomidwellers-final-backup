@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { requireSuperAdmin } from "@/lib/superAdmin";
 import { verifyPassword, hashPassword, passwordMeetsRules } from "@/lib/passwords";
+import { sessionRevocationNow } from "@/lib/passwordReset";
 
 export const dynamic = "force-dynamic";
 
@@ -55,16 +56,18 @@ export async function POST(req: NextRequest) {
     const hashed = await hashPassword(newPassword);
 
     const updated = await query<{ id: number; role: string; organization_id: string | null }>(
+      // Stamped from the APPLICATION clock so it is comparable with the `iat`
+      // the next sign-in mints — see sessionRevocationNow().
       `UPDATE users
           SET password = $2,
-              password_changed_at = now(),
+              password_changed_at = $3,
               updated_at = now()
         WHERE id = $1
           AND organization_id IS NULL
           AND deleted_at IS NULL
           AND lower(btrim(replace(role, '_', ' '))) = 'super admin'
       RETURNING id, role, organization_id`,
-      [gate.admin.id, hashed]
+      [gate.admin.id, hashed, sessionRevocationNow()]
     );
     if (updated.length === 0) return bad("Could not update the account.", 409);
 

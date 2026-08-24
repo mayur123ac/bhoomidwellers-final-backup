@@ -13,7 +13,7 @@ import type { SuperAdminTheme } from "./theme";
 import type { OrgRow } from "./mockData";
 import {
   Panel, SearchField, Segmented, StatusPill, MonoId,
-  PlaceholderAction, EmptyState, fmtDate, fmtRelative,
+  EmptyState, fmtDate, fmtRelative,
 } from "./ui";
 
 const FILTERS = ["all", "active", "inactive", "suspended"];
@@ -111,9 +111,19 @@ export default function OrganizationsView({
                       <td className="px-4 py-3 text-[12px]" style={{ color: t.textMuted }}>{fmtDate(o.createdOn)}</td>
                       <td className="px-4 py-3 text-[12px]" style={{ color: t.textMuted }}>{fmtRelative(o.lastActivity)}</td>
                       <td className="px-4 py-3">
+                        {/* Both actions open the same place. "Suspend" is not a
+                            one-click destructive control in a table row: it
+                            signs out everyone in the tenant, so it lives in the
+                            detail view behind a confirmation that names the
+                            number of people it will affect. */}
                         <div className="flex items-center justify-end gap-1.5" onClick={e => e.stopPropagation()}>
-                          <PlaceholderAction t={t} label="Suspend" />
-                          <PlaceholderAction t={t} label="Manage" />
+                          <button
+                            onClick={() => onOpenOrg(o.id)}
+                            className="px-2.5 py-1 rounded-lg text-[12px] font-medium whitespace-nowrap"
+                            style={{ color: t.text, background: t.raised }}
+                          >
+                            Manage
+                          </button>
                         </div>
                       </td>
                     </tr>

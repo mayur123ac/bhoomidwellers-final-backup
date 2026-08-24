@@ -11,7 +11,7 @@ import { useCallback, useEffect, useState } from "react";
 import { getStoredCrmUser } from "@/lib/authSession";
 import BolnaSettingsCard from "@/components/BolnaSettingsCard";
 import ManualCallingSettingsCard from "@/components/ManualCallingSettingsCard";
-import AdminUpdatesManager from "@/components/Settings/AdminUpdatesManager";
+
 import {
   Button,
   Card,
@@ -375,7 +375,14 @@ export default function WorkspaceSettingsPage() {
         </div>
       </section>
 
-      {user && <AdminUpdatesManager user={user} />}
+      {/* ── System Updates moved to the Super Admin panel ────────────────────
+          AdminUpdatesManager used to sit here and let any tenant Admin write to
+          `crm_updates`. That table has no organization_id — it is a PLATFORM
+          table, one canonical row per announcement — so a tenant Admin
+          publishing here was broadcasting to every organization on the estate.
+          Authoring is now Super Admin only (Super Admin → System Updates), and
+          this workspace page no longer offers it. Every CRM user still READS
+          System Updates from the header bell, unchanged. */}
     </>
   );
 }

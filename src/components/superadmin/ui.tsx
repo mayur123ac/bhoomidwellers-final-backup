@@ -70,6 +70,13 @@ export function StatTile({
 
 const STATUS_TONE = {
   active: "positive", inactive: "textMuted", suspended: "danger", notice: "info", warning: "warning", info: "info",
+  // Added with the Super Admin master controls. `online`/`offline` are login
+  // state; `published`/`draft` are an announcement's publication state. Both
+  // ride the same pill so the panel has one way of showing a state, and both
+  // resolve through the theme rather than a literal colour so they read on the
+  // navy ramp and the white one alike.
+  online: "positive", offline: "textMuted",
+  published: "positive", draft: "warning",
 } as const;
 
 /** Status pill. Colour comes from the theme so it reads on both ramps. */

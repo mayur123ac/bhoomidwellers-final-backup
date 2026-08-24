@@ -105,13 +105,26 @@ export async function requireSession(): Promise<SessionGate> {
 
   const userId = getSessionUserId(session);
 
-  // ── Sessions issued before the last password change are refused ──────────
+  // ── Sessions issued before a revocation are refused ──────────────────────
   //
   // A password reset has to mean "everyone holding the old credentials is out",
   // and the cookie is stateless — signed, self-expiring, with no server-side row
   // to delete — so there is nothing to revoke by deletion. Instead the cookie's
-  // `iat` is compared against `users.password_changed_at`; see
+  // `iat` is compared against a revocation timestamp on the users row; see
   // lib/passwordReset.ts for the comparison and why it is second-granular.
+  //
+  // There are two such timestamps and BOTH are read here:
+  //
+  //   password_changed_at   the credential changed.
+  //   sessions_revoked_at   a Super Admin force-logged this user out, or their
+  //                         organization was suspended. The password is
+  //                         untouched; the sessions are not.
+  //
+  // This is what makes Super Admin force logout a real revocation rather than a
+  // frontend flag: after it is stamped, every gated route in the CRM refuses the
+  // session that is already sitting in the user's browser. No new session store
+  // was introduced to achieve it — one more column, one more term in a
+  // comparison that already ran on every request.
   //
   // This lives here rather than in getServerSession() or verifySession() for two
   // reasons: this is already THE gate every API route goes through, and
@@ -121,17 +134,28 @@ export async function requireSession(): Promise<SessionGate> {
   // Known limit, stated rather than papered over: middleware still lets a page
   // shell render for a revoked session, because it cannot reach the database.
   // Every route that page calls returns 401, so the session is dead in practice
-  // — but the redirect happens on the first data fetch, not at the edge.
+  // — but the redirect happens on the first data fetch, not at the edge. Force
+  // logout additionally pushes an SSE FORCE_LOGOUT to the target, which the
+  // dashboard already listens for, so in practice the browser leaves at once.
   if (userId != null) {
     try {
       const { query } = await import("./db");
-      const rows = await query<{ password_changed_at: Date | null }>(
-        "SELECT password_changed_at FROM users WHERE id = $1 LIMIT 1",
+      const rows = await query<{
+        password_changed_at: Date | null;
+        sessions_revoked_at: Date | null;
+      }>(
+        "SELECT password_changed_at, sessions_revoked_at FROM users WHERE id = $1 LIMIT 1",
         [userId]
       );
-      const { sessionPredatesPasswordChange } = await import("./passwordReset");
-      if (rows.length > 0 && sessionPredatesPasswordChange(session, rows[0].password_changed_at)) {
-        return deny("Your password was changed. Please sign in again.", "SESSION_REVOKED", 401);
+      const { sessionIsRevoked } = await import("./passwordReset");
+      if (
+        rows.length > 0 &&
+        sessionIsRevoked(session, {
+          passwordChangedAt: rows[0].password_changed_at,
+          sessionsRevokedAt: rows[0].sessions_revoked_at,
+        })
+      ) {
+        return deny("Your session was ended. Please sign in again.", "SESSION_REVOKED", 401);
       }
     } catch {
       // A database hiccup must not lock everyone out of a working session; the

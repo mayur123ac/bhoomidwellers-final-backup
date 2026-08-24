@@ -11,6 +11,7 @@ import { query } from "@/lib/db";
 import { requireSession } from "@/lib/serverAuth";
 import { requestContext, writeAuditLog } from "@/lib/auditLog";
 import { checkPasswordRules, hashPassword, passwordMeetsRules, verifyPassword } from "@/lib/passwords";
+import { sessionRevocationNow } from "@/lib/passwordReset";
 import { EmailService } from "@/lib/email/EmailService";
 
 export const dynamic = "force-dynamic";
@@ -94,8 +95,12 @@ export async function POST(req: NextRequest) {
 
   const hashed = await hashPassword(newPassword);
   await query(
-    `UPDATE users SET password = $1, password_changed_at = NOW(), updated_at = NOW() WHERE id = $2`,
-    [hashed, gate.userId]
+    // password_changed_at is stamped from the APPLICATION clock, matching the
+    // `iat` it will be compared against. SQL NOW() is the database's clock, and
+    // the two can differ by seconds — see sessionRevocationNow() in
+    // lib/passwordReset.ts for the lockout that produced.
+    `UPDATE users SET password = $1, password_changed_at = $3, updated_at = NOW() WHERE id = $2`,
+    [hashed, gate.userId, sessionRevocationNow()]
   );
 
   const { ip, userAgent } = requestContext(req);
