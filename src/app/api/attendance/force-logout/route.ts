@@ -6,7 +6,7 @@ import { broadcastEvent } from "@/lib/eventBus";
 
 export async function POST(req: Request) {
   try {
-    const auth = await requireRole(["admin"]);
+    const auth = await requireRole(["admin", "super_admin", "site_head", "site head"]);
     if (!auth.isAuthorized) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }

@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
   try {
-    const auth = await requireRole(["admin", "super_admin"]);
+    const auth = await requireRole(["admin", "super_admin", "site_head", "site head"]);
     if (!auth.isAuthorized) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }

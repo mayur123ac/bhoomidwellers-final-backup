@@ -64,6 +64,7 @@ import {
 } from "@/lib/hooks/useNotificationFeed";
 import NotificationPopover from "@/components/notifications/NotificationPopover";
 import NotificationCenterView from "@/components/notifications/NotificationCenterView";
+import { Settings } from "lucide-react";
 
 const RevenueIntelligenceView = dynamic(() => import("./RevenueIntelligenceView"), { ssr: false });
 const GeoAnalyticsView = dynamic(() => import("./GeoAnalyticsView"), { ssr: false });
@@ -835,10 +836,10 @@ function AdminAtlasDashboardContent() {
     { id: "receptionist", icon: FaClipboardList, label: "Receptionist" },
     { id: "sales", icon: FaUsers, label: "Sales Managers" },
     { id: "site_head", icon: FaUniversity, label: "Site Heads" },
+    { id: "live_activity", icon: FaSignal, label: "Attendance Tracker" },
     { id: "site_visit_overview", icon: FaCalendarAlt, label: "Site Visit Overview" },
     { id: "attendance", icon: FaUserClock, label: "My Attendance" },
     { id: "monitoring", icon: FaChartPie, label: "Daily Monitor" },
-    { id: "live_activity", icon: FaSignal, label: "Attendance Tracker" },
     { id: "geo", icon: FaMapMarkerAlt, label: "Geo Analytics" },
     { id: "caller", icon: FaPhoneAlt, label: "Caller Panel" },
     { id: "employees", icon: FaIdCard, label: "Add Employee" },
@@ -853,12 +854,13 @@ function AdminAtlasDashboardContent() {
     // happened to be last, which made appending anything steal Bhoomi AI's slot.)
     { id: "ai", icon: BhoomiAiGlyph, label: "Bhoomi AI", pinned: true },
     { id: "settings", icon: FaCog, label: "Settings", pinned: true },
+
   ].filter(item => {
     if (isAdmin) return true;
 
     // Non-admin roles should only see what's allowed.
     // Admin only panels:
-    if (item.id === "revenue_intelligence" || item.id === "live_activity" || item.id === "geo") {
+    if (item.id === "revenue_intelligence" || item.id === "geo") {
       return false;
     }
 
@@ -883,6 +885,10 @@ function AdminAtlasDashboardContent() {
       return false;
     }
 
+    if (isSiteHead && (item.id === "live_activity" || item.id === "settings")) {
+      return true;
+    }
+
     // Site head cannot see caller, employees, notifications — all three live on
     // /dashboard/employees, which middleware puts on Site Head's forbidden list.
     // Offering a button that bounces straight back is worse than not offering it.
@@ -890,10 +896,12 @@ function AdminAtlasDashboardContent() {
       return false;
     }
 
+
     // Other non-admin roles logic can be added here
-    if (!isAdmin && (item.id === "employees" || item.id === "notifications" || item.id === "settings")) {
+    if (!isAdmin && (item.id === "employees" || item.id === "notifications")) {
       return false;
     }
+
 
     return true;
   });
@@ -904,9 +912,9 @@ function AdminAtlasDashboardContent() {
   const menuGroups: Record<string, string> = {
     dashboard: "Workspace", revenue_intelligence: "Workspace", inventory: "Workspace", channel_partners: "Workspace",
     cp_management: "Workspace", cp_chat: "Workspace",
-    receptionist: "Team", sales: "Team", site_head: "Team",
-    site_visit_overview: "Insights", attendance: "Insights", monitoring: "Insights", live_activity: "Insights", geo: "Insights",
-    caller: "Admin", employees: "Admin", notifications: "Admin",
+    receptionist: "Team", sales: "Team", site_head: "Team", live_activity: "Insights",
+    site_visit_overview: "Insights", attendance: "Insights", monitoring: "Insights", geo: "Insights",
+    caller: "Admin", employees: "Admin", notifications: "Admin"
   };
 
   // Bhoomi AI is a VIEW of this page, not a route.
@@ -1259,7 +1267,7 @@ function AdminAtlasDashboardContent() {
           )}
           {activeView === "live_activity" && (
             <div className="flex flex-col h-full overflow-hidden">
-              {isAdmin ? (
+              {(isAdmin || isSiteHead) ? (
                 <LiveActivityView theme={theme} isDark={isDark} />
               ) : (
                 <div className="flex items-center justify-center h-full flex-col gap-2">
