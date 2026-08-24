@@ -110,18 +110,68 @@ export function parseStatuses(payload: unknown): WebhookStatusUpdate[] {
   return out;
 }
 
-/** Counts inbound messages without acting on them. */
-function countInbound(payload: unknown): number {
-  const root = payload as any;
-  const entries = Array.isArray(root?.entry) ? root.entry : [];
-  let n = 0;
-  for (const entry of entries) {
-    const changes = Array.isArray(entry?.changes) ? entry.changes : [];
-    for (const change of changes) {
-      if (Array.isArray(change?.value?.messages)) n += change.value.messages.length;
-    }
-  }
-  return n;
+/**
+ * Applies one delivery receipt to a CONVERSATION message.
+ *
+ * The same business number carries two kinds of outbound traffic — automated
+ * notifications tracked in notification_logs, and customer conversation messages
+ * in whatsapp_messages — and Meta sends receipts for both down this one webhook
+ * with nothing to tell them apart but the wamid.
+ *
+ * So both handlers run, and each ignores ids it does not own. Order matters only
+ * in that neither may throw: a receipt for a notification must not prevent a
+ * conversation receipt later in the same payload from being applied.
+ */
+async function applyConversationStatus(u: WebhookStatusUpdate): Promise<boolean> {
+  const { applyDeliveryStatus, loadVisibility } = await import(
+    "@/lib/whatsappConversations"
+  );
+  const { broadcastWhatsAppEvent } = await import("@/lib/whatsappEvents");
+  const { query } = await import("@/lib/db");
+
+  const result = await applyDeliveryStatus({
+    whatsappMessageId: u.messageId,
+    status: u.status,
+    timestampUnix: u.timestampUnix,
+    errorCode: u.errorCode,
+    errorTitle: u.errorTitle,
+  });
+
+  if (!result.applied || !result.message || result.conversationId == null) return false;
+
+  // The organization is taken from the stored message, not from the payload:
+  // the row is already proof of which tenant owns the wamid.
+  const orgRows = await query<{ organization_id: string }>(
+    `SELECT organization_id FROM public.whatsapp_messages WHERE id = $1`,
+    [result.message.id]
+  );
+  const organizationId = orgRows[0]?.organization_id;
+  if (!organizationId) return true;
+
+  const visibility = await loadVisibility(organizationId, result.conversationId);
+
+  broadcastWhatsAppEvent(
+    organizationId,
+    {
+      type: "message_status",
+      conversationId: result.conversationId,
+      leadId: result.leadId,
+      messageId: String(result.message.id),
+      status: result.message.status,
+      deliveredAt: result.message.delivered_at
+        ? new Date(result.message.delivered_at).toISOString()
+        : null,
+      readAt: result.message.read_at
+        ? new Date(result.message.read_at).toISOString()
+        : null,
+      errorCode: result.message.error_code,
+      errorMessage: result.message.error_message,
+      ts: Date.now(),
+    },
+    visibility
+  );
+
+  return true;
 }
 
 let warnedNoSecret = false;
@@ -163,22 +213,61 @@ export async function handleWebhookPost(i: {
     return { status: 200, body: { ignored: true, object: object ?? null } };
   }
 
-  // ── Apply ────────────────────────────────────────────────────────────────
+  // ── Apply delivery receipts ──────────────────────────────────────────────
+  // Both stores are offered every receipt; each ignores what it does not own.
+  // Each is wrapped so that one failing store cannot abandon the rest of the
+  // payload — the remaining events would never be re-sent.
   const updates = parseStatuses(payload);
   let updated = 0;
+  let conversationUpdated = 0;
+
   for (const u of updates) {
-    if (await applyStatusUpdate(u)) updated += 1;
+    try {
+      if (await applyStatusUpdate(u)) updated += 1;
+    } catch (err) {
+      console.error("[whatsapp] notification status update failed:", (err as Error).message);
+    }
+    try {
+      if (await applyConversationStatus(u)) conversationUpdated += 1;
+    } catch (err) {
+      console.error("[whatsapp] conversation status update failed:", (err as Error).message);
+    }
   }
 
-  const inbound = countInbound(payload);
+  // ── Store inbound customer messages ──────────────────────────────────────
+  const { parseInbound, processInbound } = await import("./whatsappInbound");
+  const inboundMessages = parseInbound(payload);
+  let inboundResult = { stored: 0, duplicates: 0, unroutable: 0, failed: 0 };
+  if (inboundMessages.length > 0) {
+    try {
+      inboundResult = await processInbound(inboundMessages, payload);
+    } catch (err) {
+      // processInbound already contains per-message failures; reaching here means
+      // something outside the loop broke. Still answer 200 — see below.
+      console.error("[whatsapp] inbound processing failed:", (err as Error).message);
+    }
+  }
 
   // 200 for anything well-formed and correctly signed, even when nothing
   // matched. Meta retries non-2xx aggressively with backoff and disables the
   // subscription after sustained failures — and a wamid we do not recognise
   // (one sent by hand from WhatsApp Manager, say) is not an error.
+  //
+  // A message we could not store is therefore invisible in the HTTP status by
+  // design. whatsapp_webhook_failures is where it becomes visible instead.
   return {
     status: 200,
-    body: { received: true, statuses: updates.length, updated, inbound },
+    body: {
+      received: true,
+      statuses: updates.length,
+      updated,
+      conversationUpdated,
+      inbound: inboundMessages.length,
+      inboundStored: inboundResult.stored,
+      inboundDuplicates: inboundResult.duplicates,
+      inboundUnroutable: inboundResult.unroutable,
+      inboundFailed: inboundResult.failed,
+    },
     contentType: "application/json",
   };
 }

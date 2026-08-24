@@ -28,6 +28,7 @@ import LoginTimerWidget from "@/components/LoginTimerWidget";
 import AttendanceBadge from "@/components/AttendanceBadge";
 import { useAttendance } from "@/components/AttendanceContext";
 import CrmUpdatesNotification from "@/components/CrmUpdatesNotification";
+import WhatsAppConversationPanel from "@/components/whatsapp/WhatsAppConversationPanel";
 import LostLeadModal from "@/components/LostLeadModal";
 import { updateLeadLostState, useLostLeadEvents } from "@/lib/lostLeadSync";
 // The notification queue. Built and organization-scoped on the server — see
@@ -832,41 +833,11 @@ export default function ReceptionistDashboard() {
     setTimeout(() => setToastMsg(null), 3500);
   };
 
-  const handleSendWhatsApp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedLead || !waMessage.trim()) return;
-
-    const phone = String(selectedLead.phone || selectedLead.contact_no || "").replace(/\D/g, "");
-    if (!phone) {
-      alert("Lead phone number is missing.");
-      return;
-    }
-
-    setIsSendingWa(true);
-    try {
-      await fetch("/api/whatsapp-logs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          lead_id: String(selectedLead.id),
-          sender_name: user.name,
-          sender_number: user.whatsapp_number || "",
-          recipient_number: selectedLead.phone || selectedLead.contact_no,
-          message_preview: waMessage.trim(),
-        }),
-      });
-
-      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(waMessage.trim())}`, "_blank");
-      showToast("WhatsApp opened and logged!");
-      setIsWaModalOpen(false);
-      setWaMessage("");
-      fetchFollowUps();
-    } catch {
-      alert("Error logging WhatsApp message.");
-    } finally {
-      setIsSendingWa(false);
-    }
-  };
+  // handleSendWhatsApp was removed with the wa.me workflow. It logged a row
+  // saying a message had been composed and then handed off to another app, so
+  // the CRM never learned whether the message was delivered or what came back.
+  // Sending now goes through WhatsAppConversationPanel →
+  // POST /api/whatsapp/conversations/:id/messages.
 
   // ─────────────────────────────────────────────────────────────────────────
   // EFFECTS
@@ -4190,42 +4161,17 @@ export default function ReceptionistDashboard() {
       {/* ════════════════════════════════════════════════════
           TRANSFER LEAD MODAL
       ════════════════════════════════════════════════════ */}
+      {/* ── WHATSAPP CONVERSATION PANEL ──
+          The embedded two-way panel replaced the wa.me modal: sending goes
+          through the CRM backend and the customer's replies arrive over the
+          webhook, so the whole thread stays inside the CRM. */}
       {isWaModalOpen && selectedLead && (
-        <div className="fixed inset-0 bg-black/75 z-[220] flex justify-center items-center p-4 animate-fadeIn" style={{ backdropFilter: "blur(8px)" }}>
-          <div className={`rounded-2xl w-full max-w-lg shadow-2xl border overflow-hidden ${t.modalCard}`} style={t.modalGlass}>
-            <div className="p-5 border-b border-green-500/20 bg-green-500/10 flex justify-between items-center">
-              <div>
-                <h2 className="text-lg font-bold flex items-center gap-2 text-green-500"><FaWhatsapp /> Send WhatsApp</h2>
-                <p className={`text-xs mt-1 ${t.textMuted}`}>To: <strong>{selectedLead.name}</strong> ({maskPhone(selectedLead.phone || selectedLead.contact_no || "N/A")})</p>
-                {user.whatsapp_number && <p className={`text-[10px] mt-1 ${t.textFaint}`}>Logging sender: +{user.whatsapp_number}</p>}
-              </div>
-              <button onClick={() => { setIsWaModalOpen(false); setWaMessage(""); }} className={`p-2 ${t.textMuted} hover:text-red-500 transition-colors`}><FaTimes /></button>
-            </div>
-
-            <form onSubmit={handleSendWhatsApp}>
-              <div className={`p-6 ${t.modalInner}`}>
-                <label className={`block text-sm font-bold mb-2 ${isDark ? "text-green-400" : "text-green-600"}`}>
-                  Message (will be logged in CRM timeline)
-                </label>
-                <textarea
-                  required
-                  value={waMessage}
-                  onChange={e => setWaMessage(e.target.value)}
-                  rows={6}
-                  placeholder="Type your message here..."
-                  className={`w-full rounded-xl px-4 py-3 text-sm outline-none resize-none leading-relaxed border-2 transition-colors custom-scrollbar ${isDark ? "bg-[#14141B] border-green-500/30 text-white focus:border-green-500" : "bg-white border-green-200 text-[#1A1A1A] focus:border-green-500"}`}
-                />
-              </div>
-
-              <div className={`p-5 border-t flex justify-end gap-3 ${t.modalHeader} ${t.tableBorder}`}>
-                <button type="button" onClick={() => { setIsWaModalOpen(false); setWaMessage(""); }} className={`px-6 py-2.5 rounded-lg font-bold cursor-pointer transition-colors ${t.textMuted} hover:text-red-500`}>Cancel</button>
-                <button type="submit" disabled={isSendingWa || !waMessage.trim()} className={`px-8 py-2.5 rounded-lg font-bold transition-colors flex items-center gap-2 ${isSendingWa || !waMessage.trim() ? "opacity-50 cursor-not-allowed bg-green-600/40 text-white" : "cursor-pointer bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-600/20"}`}>
-                  {isSendingWa ? "Opening..." : <><FaWhatsapp /> Open WhatsApp</>}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <WhatsAppConversationPanel
+          theme={t}
+          isDark={isDark}
+          initialLeadId={Number(selectedLead.id)}
+          onClose={() => setIsWaModalOpen(false)}
+        />
       )}
       {isTransferModalOpen && selectedLead && (
         <div className="fixed inset-0 bg-black/75 z-[200] flex justify-center items-center p-4 sm:p-6 animate-fadeIn" style={{ backdropFilter: "blur(8px)" }}>
