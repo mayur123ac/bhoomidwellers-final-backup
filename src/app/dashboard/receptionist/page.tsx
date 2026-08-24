@@ -23,10 +23,6 @@ import {
   FaClock, FaMicrophone, FaWhatsapp, FaCheckCircle,
   FaExchangeAlt, FaUserTie, FaChartPie, FaInfoCircle, FaSyncAlt
 } from "react-icons/fa";
-import {
-  PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend,
-  BarChart, Bar, XAxis, YAxis, CartesianGrid,
-} from "recharts";
 import { Ghost, AlertTriangle } from "lucide-react";
 import LoginTimerWidget from "@/components/LoginTimerWidget";
 import AttendanceBadge from "@/components/AttendanceBadge";
@@ -69,6 +65,12 @@ import dynamic from "next/dynamic";
 // framer-motion and a month/week/day calendar that most front-desk sessions
 // never open, so it has no business in the initial bundle.
 const SiteVisitOverview = dynamic(() => import("../SiteVisitOverview"), { ssr: false });
+
+// PERF: recharts (~8 MB in node_modules) used to be a static import at the top of
+// this file, so it sat in the front-desk route's initial JavaScript and was parsed
+// before first paint even for staff who never scroll to a chart. ssr: false
+// because ResponsiveContainer measures the DOM, which the server cannot do.
+const ReceptionistDonutChart = dynamic(() => import("@/components/receptionist/ReceptionistDonutChart"), { ssr: false });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -543,11 +545,19 @@ export default function ReceptionistDashboard() {
   }, []);
 
   // ── Attendance: live clock tick (1-second interval for AttendanceView live timer) ──
+  //
+  // PERF: same fix as the sales dashboard. This ticked once a second regardless of
+  // what was on screen, re-rendering the whole front-desk page 60 times a minute.
+  // `now` has exactly one consumer, <AttendanceView>, which only renders on the
+  // attendance tab — so gating the interval on that tab is behaviour-identical.
   const [now, setNow] = useState(Date.now());
+  const clockRunning = activeTab === "attendance";
   useEffect(() => {
+    if (!clockRunning) return;
+    setNow(Date.now());   // resync immediately on open, don't show a stale second
     const interval = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [clockRunning]);
   const [isClosingModalOpen, setIsClosingModalOpen] = useState(false);
   const [bookingData, setBookingData] = useState<any>(null);
   const [bookingDetailTab, setBookingDetailTab] = useState<"personal" | "loan" | "booking">("personal");
@@ -2285,27 +2295,17 @@ export default function ReceptionistDashboard() {
                     </div>
                   ) : (
                     <div className="w-full h-[230px]">
-                      <ResponsiveContainer width="100%" height="100%">
-                        {(() => {
-                          let pieData: any[] = [];
-                          if (chartMode1 === "today") pieData = configTodayBarData;
-                          else if (chartMode1 === "monthly") pieData = configMonthlyBarData;
-                          else if (chartMode1 === "inception") pieData = configInceptionBarData;
-                          else {
-                            const src = chartMode1 === "3months" ? config3MonthBarData : chartMode1 === "6months" ? config6MonthBarData : configYearlyBarData;
-                            pieData = CONFIG_KEYS.map((key, i) => ({ name: key, count: src.reduce((s: number, item: any) => s + (item[key] || 0), 0), color: t.chartColors[i % t.chartColors.length] })).filter(d => d.count > 0);
-                          }
-                          return (
-                            <PieChart>
-                              <Pie data={pieData} dataKey="count" nameKey="name" cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={2} stroke="none">
-                                {pieData.map((_: any, i: number) => <Cell key={i} fill={pieData[i].color} />)}
-                              </Pie>
-                              <Tooltip content={<CustomTooltip />} />
-                              <Legend verticalAlign="bottom" align="center" wrapperStyle={{ fontSize: "10px", color: t.legendColor, paddingTop: "10px" }} />
-                            </PieChart>
-                          );
-                        })()}
-                      </ResponsiveContainer>
+                      {(() => {
+                        let pieData: any[] = [];
+                        if (chartMode1 === "today") pieData = configTodayBarData;
+                        else if (chartMode1 === "monthly") pieData = configMonthlyBarData;
+                        else if (chartMode1 === "inception") pieData = configInceptionBarData;
+                        else {
+                          const src = chartMode1 === "3months" ? config3MonthBarData : chartMode1 === "6months" ? config6MonthBarData : configYearlyBarData;
+                          pieData = CONFIG_KEYS.map((key, i) => ({ name: key, count: src.reduce((s: number, item: any) => s + (item[key] || 0), 0), color: t.chartColors[i % t.chartColors.length] })).filter(d => d.count > 0);
+                        }
+                        return <ReceptionistDonutChart data={pieData} legendColor={t.legendColor} tooltip={<CustomTooltip />} />;
+                      })()}
                     </div>
                   )}
                 </div>
@@ -2342,15 +2342,7 @@ export default function ReceptionistDashboard() {
                     </div>
                   ) : (
                     <div className="w-full h-[230px]">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie data={sourceDataFiltered} dataKey="count" nameKey="name" cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={2} stroke="none">
-                            {sourceDataFiltered.map((_: any, i: number) => <Cell key={i} fill={sourceDataFiltered[i].color} />)}
-                          </Pie>
-                          <Tooltip content={<CustomTooltip />} />
-                          <Legend verticalAlign="bottom" align="center" wrapperStyle={{ fontSize: "10px", color: t.legendColor, paddingTop: "10px" }} />
-                        </PieChart>
-                      </ResponsiveContainer>
+                      <ReceptionistDonutChart data={sourceDataFiltered} legendColor={t.legendColor} tooltip={<CustomTooltip />} />
                     </div>
                   )}
                 </div>

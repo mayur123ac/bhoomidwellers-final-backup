@@ -61,12 +61,47 @@ export async function restoreLostLead(params: {
 
 export const handleRestoreLead = restoreLostLead;
 
+/** Backoff floor and ceiling between fallback resyncs, in ms. */
+const FALLBACK_MIN_MS = 5_000;
+const FALLBACK_MAX_MS = 120_000;
+
 export function useLostLeadEvents(onLeadUpdate: (lead: LeadRecord) => void, onFallbackSync?: () => void) {
   useEffect(() => {
     let source: EventSource | null = null;
+    let closed = false;
+    let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
+    let backoffMs = FALLBACK_MIN_MS;
+
+    // `onerror` fires on EVERY drop, and EventSource reconnects automatically —
+    // so on a flaky connection this used to trigger a FULL dashboard refetch
+    // roughly every 3 seconds, indefinitely. Two guards:
+    //
+    //  1. A transient error where readyState is CONNECTING is the browser already
+    //     reconnecting on its own. Nothing has been missed yet, so there is
+    //     nothing to resync; only a CLOSED stream is a real failure.
+    //  2. Real failures resync on an exponential backoff (5s → 120s) instead of
+    //     once per drop, so a sustained outage costs a handful of requests rather
+    //     than one every few seconds.
+    const scheduleFallback = () => {
+      if (closed || !onFallbackSync || fallbackTimer) return;
+      fallbackTimer = setTimeout(() => {
+        fallbackTimer = null;
+        if (closed) return;
+        onFallbackSync();
+        backoffMs = Math.min(backoffMs * 2, FALLBACK_MAX_MS);
+      }, backoffMs);
+    };
 
     try {
       source = new EventSource("/api/leads/lost/events");
+      source.onopen = () => {
+        // A healthy stream resets the backoff, so the next outage starts at 5s.
+        backoffMs = FALLBACK_MIN_MS;
+        if (fallbackTimer) {
+          clearTimeout(fallbackTimer);
+          fallbackTimer = null;
+        }
+      };
       source.onmessage = (event) => {
         try {
           const payload = JSON.parse(event.data) as LostLeadUpdate;
@@ -76,13 +111,16 @@ export function useLostLeadEvents(onLeadUpdate: (lead: LeadRecord) => void, onFa
         } catch {}
       };
       source.onerror = () => {
-        onFallbackSync?.();
+        if (source?.readyState === EventSource.CONNECTING) return;
+        scheduleFallback();
       };
     } catch {
       onFallbackSync?.();
     }
 
     return () => {
+      closed = true;
+      if (fallbackTimer) clearTimeout(fallbackTimer);
       source?.close();
     };
   }, [onLeadUpdate, onFallbackSync]);
