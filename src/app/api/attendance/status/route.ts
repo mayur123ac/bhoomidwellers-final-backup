@@ -17,12 +17,30 @@ export async function GET() {
             return NextResponse.json({ success: false, message: "Cannot determine current user" }, { status: 400 });
         }
 
-        // attendance_records.login_time is `timestamp WITHOUT time zone` holding the
-        // IST wall clock (see the mark route). Comparing it with
-        // `login_time AT TIME ZONE 'Asia/Kolkata'` would re-interpret the naive value
-        // and shift it a second time, so compare the bare date against today in IST.
-        // The LEFT JOIN LATERAL guarantees exactly one row, so `today_ist` is always
-        // reported even when the employee has not marked attendance yet.
+        // attendance_records.login_time is a genuine `timestamptz`, so the IST-day
+        // match needs `login_time AT TIME ZONE 'Asia/Kolkata'` — converting it to a
+        // naive IST wall-clock value first — compared against today in IST; the
+        // bare column would compare under the DB session's own timezone (UTC on
+        // Neon) instead and misdate logins near the day boundary.
+        //
+        // The SELECTed `login_time` below is left as the raw timestamptz — NOT
+        // re-wrapped in `AT TIME ZONE` — on purpose. A naive (zone-less) value
+        // sent over JSON gets reconstructed by the pg driver using the Node
+        // process's own OS timezone, which only happens to equal IST on this dev
+        // machine; on a UTC production server the exact same code would silently
+        // return a value 5.5 hours off. A `timestamptz` carries its offset through
+        // JSON as a real 'Z'-suffixed instant, so it parses correctly everywhere
+        // and the client (AttendanceBadge / AttendanceView) does the IST
+        // conversion itself for display.
+        //
+        // `ORDER BY id ASC` — not DESC — for the same reason as the mark route:
+        // some employees already have more than one attendance_records row for
+        // the same IST day in production, and picking DESC would report whichever
+        // is newest, letting a later punch move the header's "marked at" time
+        // instead of keeping it pinned to the day's actual first punch.
+        //
+        // The LEFT JOIN LATERAL guarantees exactly one row, so `today_ist` is
+        // always reported even when the employee has not marked attendance yet.
         const existing = await query(`
             SELECT
                 (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date::text AS today_ist,
@@ -31,11 +49,11 @@ export async function GET() {
                 ar.attendance_status
             FROM (SELECT 1) AS _
             LEFT JOIN LATERAL (
-                SELECT id, login_time AT TIME ZONE 'Asia/Kolkata' AS login_time, attendance_status
+                SELECT id, login_time, attendance_status
                 FROM attendance_records
                 WHERE employee_id = $1 AND organization_id = $2
-                  AND DATE(login_time) = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date
-                ORDER BY id DESC
+                  AND DATE(login_time AT TIME ZONE 'Asia/Kolkata') = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date
+                ORDER BY id ASC
                 LIMIT 1
             ) ar ON true
         `, [userId, await getOrganizationId()]);

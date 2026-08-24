@@ -56,7 +56,7 @@ import { FaWandMagicSparkles } from "react-icons/fa6";
 
 import { BhoomiAiGlyph } from "@/components/bhoomi-ai/BhoomiAiIcon";
 import { type AdminNavItem } from "@/components/admin/AdminSidebar";
-import RoleSidebar, { normalizeRoleName, type RailTarget } from "@/components/RoleSidebar";
+import RoleSidebar, { type RailTarget } from "@/components/RoleSidebar";
 import AttendanceBadge from "@/components/AttendanceBadge";
 import { useAttendance } from "@/components/AttendanceContext";
 import CrmUpdatesNotification from "@/components/CrmUpdatesNotification";
@@ -302,39 +302,6 @@ export default function SettingsShell({ children }: { children: React.ReactNode 
     router.push(target.link);
   };
 
-  /**
-   * Where "Mark Attendance" goes from inside Settings.
-   *
-   * AttendanceBadge's own default is `/dashboard?tab=attendance`, which is right
-   * for Admin and Site Head — they can open /dashboard. It is wrong for a role
-   * middleware confines to its own path: a Receptionist is redirected to
-   * /dashboard/receptionist and the `?tab=` is dropped en route, so the click
-   * landed them on their default tab having done nothing.
-   *
-   * These two roles get their own panel plus `return_tab`, the same convention
-   * railSelect above uses and that both dashboards already read on mount.
-   * Sourcing Manager and Caller are deliberately absent — neither panel has an
-   * attendance view, so there is nowhere better to send them than the default.
-   */
-  const ATTENDANCE_HOME: Record<string, string> = {
-    "sales manager": "/dashboard/sales",
-    receptionist: "/dashboard/receptionist",
-  };
-
-  const goToAttendance = () => {
-    const path = ATTENDANCE_HOME[normalizeRoleName(user?.role)];
-    if (!path) {
-      window.location.href = "/dashboard?tab=attendance";
-      return;
-    }
-    try {
-      localStorage.setItem("return_tab", "attendance");
-    } catch {
-      /* ignore */
-    }
-    router.push(path);
-  };
-
   const handleLogout = () => {
     clearCrmSession();
     router.replace("/");
@@ -485,10 +452,10 @@ export default function SettingsShell({ children }: { children: React.ReactNode 
             }
           >
             <>
-              <AttendanceBadge 
+              <AttendanceBadge
                 timeIn={timeIn}
                 isMarkedPresent={isMarkedPresent}
-                onNavigate={goToAttendance} />
+                onLogout={handleLogout} />
 
               <HeaderControl
                 isDark={isDark}

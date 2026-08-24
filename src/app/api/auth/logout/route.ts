@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getServerSession } from "@/lib/serverAuth";
 import { getOrganizationId } from "@/lib/tenantContext";
+import { broadcastEvent } from "@/lib/eventBus";
 
 export async function POST(req: Request) {
   try {
@@ -10,14 +11,20 @@ export async function POST(req: Request) {
     if (session) {
       const userId = session._id;
       const now = new Date();
+      const orgId = await getOrganizationId();
 
       // Close the active session
       await query(
         `UPDATE employee_sessions
          SET session_end = $1, is_active = false
          WHERE user_id = $2 AND is_active = true AND organization_id = $3`,
-        [now, userId, await getOrganizationId()]
+        [now, userId, orgId]
       );
+
+      // Same push used by the mark route: without it, Admin/Site Head's Live
+      // Activity tracker keeps showing this user's timer ticking (and status
+      // ACTIVE) until they next reload the page.
+      broadcastEvent(orgId, { type: "ATTENDANCE_SYNC", userId }, ["admin", "site_head"]);
 
       // MT-03: the `UPDATE employee_attendance` that used to sit here has been
       // removed. Attendance moved to `attendance_records` (see api/attendance/*),

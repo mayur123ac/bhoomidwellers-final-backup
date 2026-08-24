@@ -242,6 +242,14 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
           fetchSessions(); // refresh list to drop the user
         }
 
+        // A punch-in or logout changes fields (login_time, attendance_status,
+        // session_end) that heartbeats never carry, so a full refetch is the
+        // only way this table reflects them the moment they happen instead of
+        // on the next manual reload.
+        if (data.type === "ATTENDANCE_SYNC") {
+          fetchSessions();
+        }
+
         // Handle Smart Alerts for Risk Engine
         if (data.type === "SMART_ALERT") {
           setSmartAlerts(prev => {

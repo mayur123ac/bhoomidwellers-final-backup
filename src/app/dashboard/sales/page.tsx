@@ -699,14 +699,14 @@ export default function SalesDashboard() {
         >
           <div className="flex items-center gap-2 relative" ref={topbarRef}>
             {/* <LoginTimerWidget isDark={isDark} /> */}
-            {/* Switches to the My Attendance view in place. Without a handler the
-                badge navigates to /dashboard?tab=attendance, which middleware
-                bounces to /dashboard/sales — dropping the tab and landing the
-                user back on Dashboard, so the button appeared to do nothing. */}
-            <AttendanceBadge 
+            {/* Compact Login/Logout punch control. Clicking "Login" hits
+                POST /api/attendance/mark directly (no navigation); once
+                marked it shows the live elapsed timer and clicking it runs
+                the same logout flow as the profile menu. */}
+            <AttendanceBadge
               timeIn={timeIn}
               isMarkedPresent={isMarkedPresent}
-              onNavigate={() => setActiveView("attendance")} />
+              onLogout={handleLogout} />
 
             {/* ── Theme Toggle ── */}
             <button

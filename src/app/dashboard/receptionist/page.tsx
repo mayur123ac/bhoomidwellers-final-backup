@@ -1888,14 +1888,14 @@ export default function ReceptionistDashboard() {
           <div className="flex items-center gap-2 relative" ref={topbarRef}>
             {/* HeaderClock is rendered by AppHeader itself — the copy that used
                 to be here is gone, not moved, or the bar would show two clocks. */}
-            {/* Switches to the My Attendance tab in place. Without a handler the
-                badge navigates to /dashboard?tab=attendance, which middleware
-                bounces to /dashboard/receptionist — dropping the tab and landing
-                the user back on Dashboard, so the button appeared to do nothing. */}
-            <AttendanceBadge 
+            {/* Compact Login/Logout punch control. Clicking "Login" hits
+                POST /api/attendance/mark directly (no navigation); once
+                marked it shows the live elapsed timer and clicking it runs
+                the same logout flow as the profile menu. */}
+            <AttendanceBadge
               timeIn={timeIn}
               isMarkedPresent={isMarkedPresent}
-              onNavigate={() => setActiveTab("attendance")} />
+              onLogout={handleLogout} />
             {/* HeaderControl is the Settings bar's control: 36px square, one
                 border, one radius, colour transitions only. Using the component
                 rather than restating its classes is what makes "the same size as

@@ -999,15 +999,16 @@ function AdminAtlasDashboardContent() {
           <div className="flex items-center gap-3 relative z-[50]" ref={topbarRef}>
             <HeaderClock isDark={isDark} />
             {/* <LoginTimerWidget isDark={isDark} /> */}
-            {/* Admin already reached the right place via the badge's default,
-                but by reloading /dashboard — the page it is already on — which
-                threw away every loaded view for a switch this page can do in
-                state. Same destination, no round trip. */}
+            {/* Compact Login/Logout punch control. Clicking "Login" hits
+                POST /api/attendance/mark directly (no navigation, no My
+                Attendance detour); once marked it shows the live elapsed
+                timer and clicking it runs the same logout flow as the
+                profile menu. */}
 
             <AttendanceBadge
               timeIn={timeIn}
               isMarkedPresent={isMarkedPresent}
-              onNavigate={() => setActiveView("attendance")} />
+              onLogout={handleLogout} />
             <button onClick={toggleTheme}
               aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
               aria-pressed={isDark}

@@ -2,10 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { requireRole, getSessionUserId } from "@/lib/serverAuth";
 import { getOrganizationId } from "@/lib/tenantContext";
+import { broadcastEvent } from "@/lib/eventBus";
 
 export async function POST(req: NextRequest) {
     try {
-        const auth = await requireRole(["admin", "site_head", "site head", "sales manager", "sales_manager", "receptionist"]);
+        // Matches /api/attendance/status's allow-list: any role that can see its
+        // own attendance state must also be able to punch in from the header
+        // control, not just the four that historically had a My Attendance page.
+        const auth = await requireRole(["admin", "site_head", "site head", "sales manager", "sales_manager", "receptionist", "sourcing_manager", "sourcing manager", "caller", "telecaller", "channel partner manager"]);
         if (!auth.isAuthorized) {
             return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
         }
@@ -43,12 +47,26 @@ export async function POST(req: NextRequest) {
         }
 
         // Check if attendance already exists today (IST), computed DB-side so it does
-        // not depend on the app server's clock/timezone.
+        // not depend on the app server's clock/timezone. login_time is a genuine
+        // `timestamptz` in production, so converting it with `AT TIME ZONE
+        // 'Asia/Kolkata'` first (to a naive IST wall-clock value) before taking
+        // DATE() is correct regardless of the DB session's own timezone (UTC on
+        // Neon) — comparing the bare column instead would silently use the
+        // session's zone and misdate logins near the IST day boundary.
+        //
+        // `ORDER BY id ASC` — not DESC — is what makes a punch sticky: some
+        // employees already have more than one attendance_records row for the
+        // same IST day in production (from sessions created before this check
+        // existed, or edge cases it still doesn't fully close). Picking DESC
+        // would surface whichever row happens to be newest and let a later
+        // punch silently override the header's "marked at" time; ASC always
+        // anchors the header to the employee's actual first punch of the day,
+        // exactly like a logout/re-login must never move it.
         const existing = await query(`
             SELECT id, attendance_status, login_time FROM attendance_records
             WHERE employee_id = $1 AND organization_id = $2
               AND DATE(login_time AT TIME ZONE 'Asia/Kolkata') = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date
-            ORDER BY id DESC
+            ORDER BY id ASC
             LIMIT 1
         `, [targetUserId, orgId]);
 
@@ -62,9 +80,11 @@ export async function POST(req: NextRequest) {
             }, { status: 200 });
         }
 
-        // login_time is `timestamp WITHOUT time zone`. Convert the instant to the IST
-        // wall clock DB-side so the stored value is identical no matter which
-        // timezone the Node process runs in (local dev = IST, Vercel/Neon = UTC).
+        // login_time is `timestamptz`, so this just stores the real instant —
+        // either the active session's session_start, or (COALESCE) the moment
+        // this INSERT runs, computed DB-side. No wall-clock conversion needed:
+        // a timestamptz carries its own offset, so it reads back correctly
+        // regardless of which timezone the Node process or DB session use.
         const result = await query(`
             INSERT INTO attendance_records (organization_id, employee_id, login_session_id, attendance_status, login_time)
             VALUES ($1, $2, $3, $4, COALESCE($5::timestamptz, CURRENT_TIMESTAMP))
@@ -81,6 +101,11 @@ export async function POST(req: NextRequest) {
                 timeIn: null,
             }, { status: 200 });
         }
+
+        // Push the punch to Admin/Site Head immediately — without this, their
+        // Live Activity tracker only picks up the new login_time/attendance_status
+        // on their next manual refresh, since heartbeats don't carry these fields.
+        broadcastEvent(orgId, { type: "ATTENDANCE_SYNC", userId: targetUserId }, ["admin", "site_head"]);
 
         return NextResponse.json({
             success: true,

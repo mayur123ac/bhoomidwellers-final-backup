@@ -1199,10 +1199,14 @@ export default function EmployeesPage() {
                 rail uses, rather than the badge's default full page reload. Only
                 Admin reaches this page, and Admin can open /dashboard, so the
                 destination was already correct; only the round trip was not. */}
+            {/* Compact Login/Logout punch control. Clicking "Login" hits
+                POST /api/attendance/mark directly (no navigation); once
+                marked it shows the live elapsed timer and clicking it runs
+                the same logout flow as the profile menu. */}
             <AttendanceBadge
               timeIn={timeIn}
               isMarkedPresent={isMarkedPresent}
-              onNavigate={() => router.push("/dashboard?tab=attendance")} />
+              onLogout={handleLogout} />
             {/* The light/dark toggle is hidden inside Bhoomi AI. The workspace
                 is always the dark canvas regardless of the CRM preference, so
                 the control would sit there claiming to change something it no
