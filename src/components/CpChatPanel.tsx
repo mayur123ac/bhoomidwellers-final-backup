@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   IoChatbubbleEllipsesOutline,
@@ -210,18 +210,24 @@ export default function CpChatPanel({
   const partner = data?.partner;
   const railRow = partners.find(p => p.id === cpId);
 
-  const filtered = partners.filter(p => {
+  // Memoised: this walks every partner and builds a concatenated lowercase
+  // string per row. Unmemoised it re-ran on every render of the panel —
+  // including every keystroke in the composer, which has nothing to do with the
+  // partner rail.
+  const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const matchSearch = !q || `${p.name || ""} ${p.company_name || ""} ${p.phone || ""} ${p.assigned_sourcing_manager_name || ""}`
-      .toLowerCase().includes(q);
+    return partners.filter(p => {
+      const matchSearch = !q || `${p.name || ""} ${p.company_name || ""} ${p.phone || ""} ${p.assigned_sourcing_manager_name || ""}`
+        .toLowerCase().includes(q);
 
-    const lastAt = ts(p.updated_at || p.created_at);
-    const unread = lastAt > 0 && lastAt > (seen[String(p.id)] || 0);
+      const lastAt = ts(p.updated_at || p.created_at);
+      const unread = lastAt > 0 && lastAt > (seen[String(p.id)] || 0);
 
-    if (listFilter === "Unread") return matchSearch && unread;
-    if (listFilter === "Favourites") return matchSearch && !!favourites[String(p.id)];
-    return matchSearch;
-  });
+      if (listFilter === "Unread") return matchSearch && unread;
+      if (listFilter === "Favourites") return matchSearch && !!favourites[String(p.id)];
+      return matchSearch;
+    });
+  }, [partners, search, listFilter, seen, favourites]);
 
   const toggleFavourite = () => {
     if (cpId == null) return;
@@ -242,8 +248,13 @@ export default function CpChatPanel({
    * strips them to the fields a Channel Partner may see, so the panel renders
    * what it is given rather than deciding for itself.
    */
-  const thread: ChatItem[] = [...(chat?.messages || []), ...pending]
-    .sort((a: ChatItem, b: ChatItem) => a.ts - b.ts);
+  // Memoised: copying and re-sorting the whole thread on every render made every
+  // composer keystroke O(n log n), and produced a new array identity each time,
+  // which is what the scroll-to-bottom effect below keys off.
+  const thread: ChatItem[] = useMemo(
+    () => [...(chat?.messages || []), ...pending].sort((a: ChatItem, b: ChatItem) => a.ts - b.ts),
+    [chat?.messages, pending]
+  );
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
