@@ -7,19 +7,16 @@ import { requireSession, requireRoles } from "@/lib/serverAuth";
 // C5: loan_updates is an append-only activity log — every POST inserts a NEW row
 // (it never updates in place), so the timeline is the history. The authoritative
 // current status lives elsewhere (booking_loan_details.loan_status post-booking, or
-// the lead's draft pre-booking). These columns add per-entry audit clarity.
-// Idempotent ADD COLUMN IF NOT EXISTS matches the codebase's ensure-table pattern,
-// so the live loan-save path works whether or not the columns were added manually.
-let loanColsEnsured = false;
-async function ensureLoanUpdatesColumns() {
-  if (loanColsEnsured) return;
-  await query(`
-    ALTER TABLE loan_updates
-      ADD COLUMN IF NOT EXISTS previous_status TEXT,
-      ADD COLUMN IF NOT EXISTS new_status TEXT
-  `);
-  loanColsEnsured = true;
-}
+// the lead's draft pre-booking). previous_status/new_status add per-entry audit
+// clarity.
+//
+// PERF: this file used to create those two columns at runtime via a module-flag
+// guarded `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`. The guard made it run once
+// per process, but that once was the first loan save after every cold start, and
+// ALTER TABLE takes an ACCESS EXCLUSIVE lock that blocks every concurrent reader
+// of loan_updates. The statement now lives in
+// scripts/migrations/2026-08-24_move_runtime_ddl_out_of_request_path.sql and is
+// already applied on production.
 
 // ── GET: Fetch loan updates, optionally scoped to one lead ────────────────────
 export async function GET(req: Request) {
@@ -104,8 +101,6 @@ export async function POST(req: Request) {
         { status: 403 }
       );
     }
-
-    await ensureLoanUpdatesColumns();
 
     // Audit pair: carry the last entry's status forward as previous_status.
     const prevRows = await query<{ new_status: string | null; status: string | null }>(

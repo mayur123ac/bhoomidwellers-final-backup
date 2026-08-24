@@ -3480,6 +3480,15 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
     }
   };
 
+  // Upgrade the summary held in `bookingData` (see fetchLoanDealData) to the full
+  // row, then show the booking view. Routing the button through here keeps the
+  // 121-column payload off the lead-detail path without ClosedLeadBookingView ever
+  // rendering against the summary.
+  const openBookingView = async (leadId: string | number) => {
+    const hasBooking = await fetchBookingForLead(leadId);
+    if (hasBooking) setShowBookingView(true);
+  };
+
   // Loan & Deal Tracking panel — independent of bookingData/fetchBookingForLead above,
   // which (when wired up) swaps the whole detail view to ClosedLeadBookingView.
   const [loanDealBooking, setLoanDealBooking] = useState<any>(null);
@@ -3492,9 +3501,15 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
   // that was one wasted request and two wasted Neon round trips (~168 ms) per lead
   // open. The loan request also waited on the booking request; they are
   // independent and now run together.
+  // PAYLOAD: `view=summary` is BOOKING_LIST_SQL (24 explicit columns, one join).
+  // The default `view=full` is BOOKING_SELECT_SQL: 121 columns across 6 joins, 2
+  // views and a json_agg, including PAN, Aadhaar, signature data and document URLs.
+  // Nothing on the lead-detail screen reads any of that — the summary enables the
+  // "View Booking Form" button and feeds LoanDealView/LoanDealForm, which read only
+  // `id` and `agreement_value`. openBookingView() loads the full row on click.
   const fetchLoanDealData = useCallback(async (leadId: string | number) => {
     const [bookingOutcome, loanOutcome] = await Promise.allSettled([
-      fetch(`/api/booking-applications?lead_id=${leadId}`).then((r) => r.json()),
+      fetch(`/api/booking-applications?lead_id=${leadId}&view=summary`).then((r) => r.json()),
       fetch(`/api/loan?lead_id=${leadId}&latest=1`).then((r) => r.json()),
     ]);
 
@@ -3929,7 +3944,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                       </div>
                       <div className="flex gap-2 flex-wrap justify-end">
                         {bookingData ? (
-                          <button onClick={() => setShowBookingView(true)} className="font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm">
+                          <button onClick={() => openBookingView(selectedLead.id)} className="font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm">
                             <FaEye /> View Booking Form
                           </button>
                         ) : (
@@ -4337,6 +4352,15 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
     }
   };
 
+  // Upgrade the summary held in `bookingData` (see fetchLoanDealData) to the full
+  // row, then show the booking view. Routing the button through here keeps the
+  // 121-column payload off the lead-detail path without ClosedLeadBookingView ever
+  // rendering against the summary.
+  const openBookingView = async (leadId: string | number) => {
+    const hasBooking = await fetchBookingForLead(leadId);
+    if (hasBooking) setShowBookingView(true);
+  };
+
   // Loan & Deal Tracking panel — independent of bookingData/fetchBookingForLead above,
   // which (when wired up) swaps the whole detail view to ClosedLeadBookingView.
   const [loanDealBooking, setLoanDealBooking] = useState<any>(null);
@@ -4349,9 +4373,15 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
   // that was one wasted request and two wasted Neon round trips (~168 ms) per lead
   // open. The loan request also waited on the booking request; they are
   // independent and now run together.
+  // PAYLOAD: `view=summary` is BOOKING_LIST_SQL (24 explicit columns, one join).
+  // The default `view=full` is BOOKING_SELECT_SQL: 121 columns across 6 joins, 2
+  // views and a json_agg, including PAN, Aadhaar, signature data and document URLs.
+  // Nothing on the lead-detail screen reads any of that — the summary enables the
+  // "View Booking Form" button and feeds LoanDealView/LoanDealForm, which read only
+  // `id` and `agreement_value`. openBookingView() loads the full row on click.
   const fetchLoanDealData = useCallback(async (leadId: string | number) => {
     const [bookingOutcome, loanOutcome] = await Promise.allSettled([
-      fetch(`/api/booking-applications?lead_id=${leadId}`).then((r) => r.json()),
+      fetch(`/api/booking-applications?lead_id=${leadId}&view=summary`).then((r) => r.json()),
       fetch(`/api/loan?lead_id=${leadId}&latest=1`).then((r) => r.json()),
     ]);
 
@@ -5023,7 +5053,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                       </div>
                       <div className="flex gap-3 flex-wrap justify-end">
                         {bookingData ? (
-                          <button onClick={() => setShowBookingView(true)} className="font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm">
+                          <button onClick={() => openBookingView(selectedLead.id)} className="font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm">
                             <FaEye /> View Booking Form
                           </button>
                         ) : (
@@ -5402,6 +5432,15 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
     }
   };
 
+  // Upgrade the summary held in `bookingData` (see fetchLoanDealData) to the full
+  // row, then show the booking view. Routing the button through here keeps the
+  // 121-column payload off the lead-detail path without ClosedLeadBookingView ever
+  // rendering against the summary.
+  const openBookingView = async (leadId: string | number) => {
+    const hasBooking = await fetchBookingForLead(leadId);
+    if (hasBooking) setShowBookingView(true);
+  };
+
   // Loan & Deal Tracking panel — independent of bookingData/fetchBookingForLead above,
   // which (when wired up) swaps the whole detail view to ClosedLeadBookingView.
   const [loanDealBooking, setLoanDealBooking] = useState<any>(null);
@@ -5410,9 +5449,15 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
   // consolidation in the admin panel above. Two effects were fetching the SAME
   // URL concurrently and both reading `data[0]`, and the loan request waited on
   // the booking request for no reason.
+  // PAYLOAD: `view=summary` is BOOKING_LIST_SQL (24 explicit columns, one join).
+  // The default `view=full` is BOOKING_SELECT_SQL: 121 columns across 6 joins, 2
+  // views and a json_agg, including PAN, Aadhaar, signature data and document URLs.
+  // Nothing on the lead-detail screen reads any of that — the summary enables the
+  // "View Booking Form" button and feeds LoanDealView/LoanDealForm, which read only
+  // `id` and `agreement_value`. openBookingView() loads the full row on click.
   const fetchLoanDealData = useCallback(async (leadId: string | number) => {
     const [bookingOutcome, loanOutcome] = await Promise.allSettled([
-      fetch(`/api/booking-applications?lead_id=${leadId}`).then((r) => r.json()),
+      fetch(`/api/booking-applications?lead_id=${leadId}&view=summary`).then((r) => r.json()),
       fetch(`/api/loan?lead_id=${leadId}&latest=1`).then((r) => r.json()),
     ]);
 
@@ -6149,7 +6194,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                           </div>
                           <div className="flex gap-3 flex-wrap justify-end">
                             {bookingData ? (
-                              <button onClick={() => setShowBookingView(true)} className="font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm">
+                              <button onClick={() => openBookingView(selectedLead.id)} className="font-bold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm">
                                 <FaEye /> View Booking Form
                               </button>
                             ) : (

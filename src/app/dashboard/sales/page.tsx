@@ -1213,9 +1213,18 @@ function SalesManagerView({
   // The loan request also used to wait for the booking request to resolve before
   // it started. The two are independent, so they now run together and the slower
   // one alone sets the floor.
+  //
+  // PAYLOAD: this eager fetch asks for `view=summary` (BOOKING_LIST_SQL — 24
+  // explicit columns, one join). The default `view=full` is BOOKING_SELECT_SQL:
+  // 121 columns across 6 joins, 2 views and a json_agg, including PAN, Aadhaar,
+  // signature data and document URLs. Nothing on the lead-detail screen reads any
+  // of that — the summary is used to enable the "View Booking Form" button, and by
+  // LoanDealView/LoanDealForm, which between them read `id` and `agreement_value`.
+  // The full row is fetched by openBookingView() below, when the user actually
+  // opens the booking.
   const fetchLoanDealData = useCallback(async (leadId: string | number) => {
     const [bookingOutcome, loanOutcome] = await Promise.allSettled([
-      fetch(`/api/booking-applications?lead_id=${leadId}`).then((r) => r.json()),
+      fetch(`/api/booking-applications?lead_id=${leadId}&view=summary`).then((r) => r.json()),
       fetch(`/api/loan?lead_id=${leadId}&latest=1`).then((r) => r.json()),
     ]);
 
@@ -1301,12 +1310,18 @@ function SalesManagerView({
     onPendingLeadOpenHandled?.();
   }, [pendingLeadOpen, allLeads]);
 
-  // Once the booking for that lead has finished loading, flip straight to the booking view.
+  // Once the booking summary for that lead has arrived, load the full row and flip
+  // straight to the booking view. `bookingData` is the summary at this point (see
+  // fetchLoanDealData), so it answers "does a booking exist?" — openBookingView
+  // fetches the shape ClosedLeadBookingView actually needs.
   useEffect(() => {
     if (autoOpenBooking && bookingData) {
-      setShowBookingView(true);
       setAutoOpenBooking(false);
+      if (selectedLead) openBookingView(selectedLead.id);
     }
+    // openBookingView is stable for this purpose; re-running on its identity would
+    // re-open the view on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoOpenBooking, bookingData]);
   useEffect(() => {
     if (selectedLead) {
@@ -1559,6 +1574,9 @@ function SalesManagerView({
     refetch();
   };
 
+  // The FULL booking row (view=full, the default). Only ClosedLeadBookingView and
+  // the booking edit modal need this shape, so it is loaded on demand — see
+  // openBookingView — rather than on every lead open.
   const fetchBookingForLead = async (leadId: string | number) => {
     try {
       const res = await fetch(`/api/booking-applications?lead_id=${leadId}`);
@@ -1566,6 +1584,14 @@ function SalesManagerView({
       if (json.success && json.data?.length > 0) setBookingData(json.data[0]);
       else setBookingData(null);
     } catch { setBookingData(null); }
+  };
+
+  // Upgrade the summary held in `bookingData` to the full row, then show the
+  // booking view. Both entry points (the button and the auto-open deep link) go
+  // through here so ClosedLeadBookingView never renders against the summary.
+  const openBookingView = async (leadId: string | number) => {
+    await fetchBookingForLead(leadId);
+    setShowBookingView(true);
   };
   const handleReopenLead = async () => {
     if (!selectedLead || selectedLead.status !== "Closing") return;
@@ -2343,7 +2369,7 @@ function SalesManagerView({
                 </div>
                 <div className="flex gap-2 sm:gap-3 flex-wrap justify-start md:justify-end flex-shrink-0">
                   {bookingData ? (
-                    <button onClick={() => setShowBookingView(true)} className="font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm flex-1 sm:flex-none justify-center">
+                    <button onClick={() => openBookingView(selectedLead.id)} className="font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm flex-1 sm:flex-none justify-center">
                       <FaEye /> View Booking Form
                     </button>
                   ) : (
