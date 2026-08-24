@@ -885,20 +885,18 @@ function AdminAtlasDashboardContent() {
       return false;
     }
 
-    if (isSiteHead && (item.id === "live_activity" || item.id === "settings")) {
+    if (isSiteHead && (item.id === "live_activity" || item.id === "settings" || item.id === "ai")) {
       return true;
     }
 
     // Site head cannot see caller, employees, notifications — all three live on
     // /dashboard/employees, which middleware puts on Site Head's forbidden list.
     // Offering a button that bounces straight back is worse than not offering it.
-    if (isSiteHead && (item.id === "caller" || item.id === "employees" || item.id === "notifications")) {
-      return false;
-    }
+
 
 
     // Other non-admin roles logic can be added here
-    if (!isAdmin && (item.id === "employees" || item.id === "notifications")) {
+    if (!isAdmin && (item.id === "caller" || item.id === "employees" || item.id === "notifications")) {
       return false;
     }
 
