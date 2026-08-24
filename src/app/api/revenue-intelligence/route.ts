@@ -47,17 +47,12 @@ async function getColumns(tableName: string) {
   return new Set(rows.map((row) => row.column_name));
 }
 
-async function ensureRevenueIndexes() {
-  await Promise.all([
-    query(`CREATE INDEX IF NOT EXISTS idx_rev_booking_status_date ON booking_applications (booking_status, booking_date)`),
-    query(`CREATE INDEX IF NOT EXISTS idx_rev_booking_created_at ON booking_applications (created_at DESC)`),
-    query(`CREATE INDEX IF NOT EXISTS idx_rev_financials_booking_id ON booking_financials (booking_id)`),
-    query(`CREATE INDEX IF NOT EXISTS idx_rev_loan_booking_id ON booking_loan_details (booking_id)`),
-    query(`CREATE INDEX IF NOT EXISTS idx_rev_loan_expected_disbursement ON booking_loan_details (expected_disbursement_date)`),
-    query(`CREATE INDEX IF NOT EXISTS idx_rev_registration_booking_id ON booking_registration_details (booking_id)`),
-    query(`CREATE INDEX IF NOT EXISTS idx_rev_registration_expected_date ON booking_registration_details (expected_registration_date)`),
-  ]);
-}
+// PERF: the seven indexes this route relies on used to be created here, by an
+// unguarded `ensureRevenueIndexes()` that fired seven `CREATE INDEX IF NOT EXISTS`
+// statements on EVERY request. Even as no-ops they are seven Neon round trips
+// (~84ms each, measured) bolted onto an already join-heavy dashboard. They now
+// live in scripts/migrations/2026-08-24_move_runtime_ddl_out_of_request_path.sql
+// and are already applied on production.
 
 function optionalWalkinColumn(columns: Set<string>, columnName: string, alias: string) {
   if (columns.has(columnName)) return `w.${columnName} AS ${alias}`;
@@ -175,8 +170,6 @@ export async function GET(req: NextRequest) {
         },
       });
     }
-
-    await ensureRevenueIndexes();
 
     const { searchParams } = new URL(req.url);
     const walkinColumns = await getColumns("walkin_enquiries");

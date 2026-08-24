@@ -23,10 +23,6 @@ import {
   FaClock, FaMicrophone, FaWhatsapp, FaCheckCircle,
   FaExchangeAlt, FaUserTie, FaChartPie, FaInfoCircle, FaSyncAlt
 } from "react-icons/fa";
-import {
-  PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend,
-  BarChart, Bar, XAxis, YAxis, CartesianGrid,
-} from "recharts";
 import { Ghost, AlertTriangle } from "lucide-react";
 import LoginTimerWidget from "@/components/LoginTimerWidget";
 import AttendanceBadge from "@/components/AttendanceBadge";
@@ -69,6 +65,12 @@ import dynamic from "next/dynamic";
 // framer-motion and a month/week/day calendar that most front-desk sessions
 // never open, so it has no business in the initial bundle.
 const SiteVisitOverview = dynamic(() => import("../SiteVisitOverview"), { ssr: false });
+
+// PERF: recharts (~8 MB in node_modules) used to be a static import at the top of
+// this file, so it sat in the front-desk route's initial JavaScript and was parsed
+// before first paint even for staff who never scroll to a chart. ssr: false
+// because ResponsiveContainer measures the DOM, which the server cannot do.
+const ReceptionistDonutChart = dynamic(() => import("@/components/receptionist/ReceptionistDonutChart"), { ssr: false });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -543,11 +545,19 @@ export default function ReceptionistDashboard() {
   }, []);
 
   // ── Attendance: live clock tick (1-second interval for AttendanceView live timer) ──
+  //
+  // PERF: same fix as the sales dashboard. This ticked once a second regardless of
+  // what was on screen, re-rendering the whole front-desk page 60 times a minute.
+  // `now` has exactly one consumer, <AttendanceView>, which only renders on the
+  // attendance tab — so gating the interval on that tab is behaviour-identical.
   const [now, setNow] = useState(Date.now());
+  const clockRunning = activeTab === "attendance";
   useEffect(() => {
+    if (!clockRunning) return;
+    setNow(Date.now());   // resync immediately on open, don't show a stale second
     const interval = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [clockRunning]);
   const [isClosingModalOpen, setIsClosingModalOpen] = useState(false);
   const [bookingData, setBookingData] = useState<any>(null);
   const [bookingDetailTab, setBookingDetailTab] = useState<"personal" | "loan" | "booking">("personal");
@@ -697,18 +707,24 @@ export default function ReceptionistDashboard() {
   // which (when wired up) swaps the whole detail view to ClosedLeadBookingView.
   const [loanDealBooking, setLoanDealBooking] = useState<any>(null);
   const [loanDealLatest, setLoanDealLatest] = useState<any>(null);
+  // One pass serves both consumers of the booking row — same consolidation as the
+  // admin and sales panels. Two effects were fetching the SAME URL concurrently and
+  // both reading `data[0]`, and the loan request needlessly waited on the booking one.
   const fetchLoanDealData = useCallback(async (leadId: string | number) => {
-    try {
-      const res = await fetch(`/api/booking-applications?lead_id=${leadId}`);
-      const json = await res.json();
-      setLoanDealBooking(json.success && json.data?.length > 0 ? json.data[0] : null);
-    } catch { setLoanDealBooking(null); }
-    try {
-      const res = await fetch(`/api/loan?lead_id=${leadId}`);
-      const json = await res.json();
-      const rows = json.success ? json.data : [];
-      setLoanDealLatest(rows.length > 0 ? rows[rows.length - 1] : null);
-    } catch { setLoanDealLatest(null); }
+    const [bookingOutcome, loanOutcome] = await Promise.allSettled([
+      fetch(`/api/booking-applications?lead_id=${leadId}`).then((r) => r.json()),
+      fetch(`/api/loan?lead_id=${leadId}&latest=1`).then((r) => r.json()),
+    ]);
+
+    const bookingJson = bookingOutcome.status === "fulfilled" ? bookingOutcome.value : null;
+    const booking =
+      bookingJson?.success && bookingJson.data?.length > 0 ? bookingJson.data[0] : null;
+    setLoanDealBooking(booking);
+    setBookingData(booking);
+
+    const loanJson = loanOutcome.status === "fulfilled" ? loanOutcome.value : null;
+    const rows = loanJson?.success ? loanJson.data ?? [] : [];
+    setLoanDealLatest(rows.length > 0 ? rows[rows.length - 1] : null);
   }, []);
   const [customNote, setCustomNote] = useState("");
   const followUpEndRef = useRef<HTMLDivElement>(null);
@@ -935,26 +951,36 @@ export default function ReceptionistDashboard() {
     }
   }, [enquiries, followUps]);
 
-  // Fetch booking data when a lead is selected
+  // Booking and loan both arrive via fetchLoanDealData now. The separate
+  // fetchBookingForLead effect that used to sit here requested
+  // /api/booking-applications?lead_id= a SECOND time, concurrently, for the same row.
   useEffect(() => {
     if (selectedLead?.id) {
-      fetchBookingForLead(selectedLead.id);
+      fetchLoanDealData(selectedLead.id);
       setBookingDetailTab("personal");
+    } else {
+      setLoanDealBooking(null);
+      setLoanDealLatest(null);
+      setBookingData(null);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedLead?.id]);
-
-  useEffect(() => {
-    if (selectedLead?.id) fetchLoanDealData(selectedLead.id);
-    else { setLoanDealBooking(null); setLoanDealLatest(null); }
   }, [selectedLead?.id, fetchLoanDealData]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // DATA FETCHING
   // ─────────────────────────────────────────────────────────────────────────
-  const fetchPage = async (currentOffset: number, append: boolean) => {
+  /* `search` is sent to the server rather than applied to the loaded rows.
+     This queue is paginated 20 at a time, so the client-side filter below could
+     only ever match leads that had already been scrolled into memory: searching
+     for a lead by name or phone returned "nothing found" unless the receptionist
+     had happened to load far enough down the list first. searchColumn=basic
+     matches exactly the three fields this queue has always searched — name,
+     phone and lead number — so the results are the same set, just drawn from the
+     whole organization instead of the current page. */
+  const fetchPage = async (currentOffset: number, append: boolean, search = "") => {
     try {
-      const res = await fetch(`/api/walkin_enquiries?limit=${PAGE_SIZE}&offset=${currentOffset}`);
+      const qs = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(currentOffset) });
+      if (search.trim()) { qs.set("q", search.trim()); qs.set("searchColumn", "basic"); }
+      const res = await fetch(`/api/walkin_enquiries?${qs.toString()}`);
       if (!res.ok) return;
       const json = await res.json();
       const dataArray: any[] = Array.isArray(json) ? json : (json.data ?? []);
@@ -995,7 +1021,7 @@ export default function ReceptionistDashboard() {
   const initialLoad = async () => {
     setIsFetchingEnquiries(true);
     setOffset(0); setHasMore(true); setEnquiries([]);
-    await fetchPage(0, false);
+    await fetchPage(0, false, searchRecep);
     setIsFetchingEnquiries(false);
   };
 
@@ -1004,9 +1030,29 @@ export default function ReceptionistDashboard() {
     setIsLoadingMore(true);
     const next = offset + PAGE_SIZE;
     setOffset(next);
-    await fetchPage(next, true);
+    // The search term goes with every page, so "load more" keeps paging through
+    // the FILTERED set rather than reverting to the unfiltered list.
+    await fetchPage(next, true, searchRecep);
     setIsLoadingMore(false);
-  }, [isLoadingMore, hasMore, offset]);
+  }, [isLoadingMore, hasMore, offset, searchRecep]);
+
+  /* Re-query from the top when the search term settles. Debounced, because this
+     runs on a keystroke and each pass is a round trip; 300 ms is below the point
+     where typing feels laggy and well above a fast typist's inter-key gap, so a
+     word costs one request rather than one per letter.
+
+     The leading `didMountSearch` guard keeps this from firing a duplicate first
+     page on mount, which initialLoad has already fetched. */
+  const didMountSearch = useRef(false);
+  useEffect(() => {
+    if (!didMountSearch.current) { didMountSearch.current = true; return; }
+    const id = setTimeout(() => {
+      setOffset(0); setHasMore(true);
+      fetchPage(0, false, searchRecep);
+    }, 300);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchRecep]);
 
   const fetchSourcingManagers = async () => {
     setIsFetchingSourcingManagers(true);
@@ -1515,14 +1561,9 @@ export default function ReceptionistDashboard() {
     refetchAll();
   };
 
-  const fetchBookingForLead = async (leadId: string | number) => {
-    try {
-      const res = await fetch(`/api/booking-applications?lead_id=${leadId}`);
-      const json = await res.json();
-      if (json.success && json.data?.length > 0) setBookingData(json.data[0]);
-      else setBookingData(null);
-    } catch { setBookingData(null); }
-  };
+  // fetchBookingForLead was removed: it duplicated the booking request that
+  // fetchLoanDealData already makes, and had no callers left once the two
+  // lead-open effects were merged.
 
   const openLostLeadModal = () => {
     setLostReason("");
@@ -2254,27 +2295,17 @@ export default function ReceptionistDashboard() {
                     </div>
                   ) : (
                     <div className="w-full h-[230px]">
-                      <ResponsiveContainer width="100%" height="100%">
-                        {(() => {
-                          let pieData: any[] = [];
-                          if (chartMode1 === "today") pieData = configTodayBarData;
-                          else if (chartMode1 === "monthly") pieData = configMonthlyBarData;
-                          else if (chartMode1 === "inception") pieData = configInceptionBarData;
-                          else {
-                            const src = chartMode1 === "3months" ? config3MonthBarData : chartMode1 === "6months" ? config6MonthBarData : configYearlyBarData;
-                            pieData = CONFIG_KEYS.map((key, i) => ({ name: key, count: src.reduce((s: number, item: any) => s + (item[key] || 0), 0), color: t.chartColors[i % t.chartColors.length] })).filter(d => d.count > 0);
-                          }
-                          return (
-                            <PieChart>
-                              <Pie data={pieData} dataKey="count" nameKey="name" cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={2} stroke="none">
-                                {pieData.map((_: any, i: number) => <Cell key={i} fill={pieData[i].color} />)}
-                              </Pie>
-                              <Tooltip content={<CustomTooltip />} />
-                              <Legend verticalAlign="bottom" align="center" wrapperStyle={{ fontSize: "10px", color: t.legendColor, paddingTop: "10px" }} />
-                            </PieChart>
-                          );
-                        })()}
-                      </ResponsiveContainer>
+                      {(() => {
+                        let pieData: any[] = [];
+                        if (chartMode1 === "today") pieData = configTodayBarData;
+                        else if (chartMode1 === "monthly") pieData = configMonthlyBarData;
+                        else if (chartMode1 === "inception") pieData = configInceptionBarData;
+                        else {
+                          const src = chartMode1 === "3months" ? config3MonthBarData : chartMode1 === "6months" ? config6MonthBarData : configYearlyBarData;
+                          pieData = CONFIG_KEYS.map((key, i) => ({ name: key, count: src.reduce((s: number, item: any) => s + (item[key] || 0), 0), color: t.chartColors[i % t.chartColors.length] })).filter(d => d.count > 0);
+                        }
+                        return <ReceptionistDonutChart data={pieData} legendColor={t.legendColor} tooltip={<CustomTooltip />} />;
+                      })()}
                     </div>
                   )}
                 </div>
@@ -2311,15 +2342,7 @@ export default function ReceptionistDashboard() {
                     </div>
                   ) : (
                     <div className="w-full h-[230px]">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie data={sourceDataFiltered} dataKey="count" nameKey="name" cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={2} stroke="none">
-                            {sourceDataFiltered.map((_: any, i: number) => <Cell key={i} fill={sourceDataFiltered[i].color} />)}
-                          </Pie>
-                          <Tooltip content={<CustomTooltip />} />
-                          <Legend verticalAlign="bottom" align="center" wrapperStyle={{ fontSize: "10px", color: t.legendColor, paddingTop: "10px" }} />
-                        </PieChart>
-                      </ResponsiveContainer>
+                      <ReceptionistDonutChart data={sourceDataFiltered} legendColor={t.legendColor} tooltip={<CustomTooltip />} />
                     </div>
                   )}
                 </div>

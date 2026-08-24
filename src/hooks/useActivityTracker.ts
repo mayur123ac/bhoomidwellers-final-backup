@@ -106,8 +106,38 @@ export function useActivityTracker() {
       let leadName = null;
       
       if (typeof document !== "undefined") {
-        const bodyText = document.body.innerText;
-        
+        // PERF: this used to read `document.body.innerText` unconditionally, every
+        // 2 seconds, on every page. `innerText` is layout-dependent — reading it
+        // forces a SYNCHRONOUS full-page reflow, and on the enquiry table that is
+        // hundreds of rows of layout recomputed 30 times a minute for a scan that
+        // usually matches nothing. It was a prime suspect for general screen lag.
+        //
+        // `textContent` is NOT layout-dependent (no reflow) and is a superset of
+        // the text `innerText` returns — innerText only ever ADDS newlines at
+        // block boundaries and DROPS hidden text; it never introduces characters
+        // textContent lacks. So every newline-free pattern below is a strict
+        // necessary condition that can be tested against textContent first, and
+        // we only pay for innerText when one of them could actually match.
+        //
+        // When nothing matches — the overwhelmingly common case, someone browsing
+        // a table — no reflow happens at all.
+        const flatText = document.body.textContent || "";
+        const mightMatch =
+          flatText.includes("WhatsApp Lead #") ||
+          flatText.includes("Transfer Lead #") ||
+          flatText.includes("Re-assign Lead #") ||
+          flatText.includes("Mark Lead #") ||
+          /Schedule .*?Site Visit/.test(flatText) ||
+          flatText.includes("Editing Sales Details") ||
+          flatText.includes("Editing Loan Details") ||
+          /Lead assigned to .*? Status:/.test(flatText);
+
+        // Only now, and only when a match is possible, take the reflow hit. The
+        // newline-dependent patterns (siteVisitMatch, idNameMatch) genuinely need
+        // innerText, so the original text source is preserved for matching —
+        // textContent is used purely as a cheap gate.
+        const bodyText = mightMatch ? document.body.innerText : "";
+
         // Match specific modal headers in the CRM
         const waMatch = bodyText.match(/WhatsApp Lead #(\d+)/);
         const transferMatch = bodyText.match(/Transfer Lead #(\d+)/);
@@ -161,7 +191,13 @@ export function useActivityTracker() {
       }
     };
 
-    const domInterval = setInterval(scanDomForActivity, 2000);
+    // A background tab cannot change what the user is looking at, so there is
+    // nothing for the scan to discover. Skipping the tick keeps a parked tab from
+    // touching the DOM at all.
+    const domInterval = setInterval(() => {
+      if (document.hidden) return;
+      scanDomForActivity();
+    }, 2000);
     return () => clearInterval(domInterval);
   }, [currentAction, activeLead.id, activeLead.name]);
 

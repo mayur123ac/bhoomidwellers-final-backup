@@ -1087,7 +1087,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
     setShowLoanEditor(true);
     setLoanEditorLoading(true);
     try {
-      const res = await fetch(`/api/loan?lead_id=${lead?.id}`);
+      const res = await fetch(`/api/loan?lead_id=${lead?.id}&latest=1`);
       const json = await res.json().catch(() => ({}));
       const rows = json?.success ? (json.data || json.updates || []) : [];
       setLoanEditorUpdate(Array.isArray(rows) && rows.length ? rows[rows.length - 1] : null);

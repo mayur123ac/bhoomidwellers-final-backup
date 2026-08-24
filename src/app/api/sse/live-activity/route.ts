@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
   try {
-    const auth = await requireRole(["admin", "super_admin"]);
+    const auth = await requireRole(["admin", "super_admin", "site_head", "site head"]);
     console.log("SSE auth result:", auth.isAuthorized, auth.session?.role); // ← add this
     if (!auth.isAuthorized || !auth.session) {
       return new Response("Unauthorized", { status: 401 });

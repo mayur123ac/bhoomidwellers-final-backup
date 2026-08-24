@@ -69,6 +69,41 @@ const STATE_LABEL: Record<CallState, string> = {
   ended: "Call ended",
 };
 
+/* ── /api/bolna/status, fetched once per page load ────────────────────────────
+   The widget mounts once per lead detail panel, and the answer is a per-tenant
+   integration setting that does not change while someone is clicking through
+   leads. Fetching it per mount cost one request and two Neon round trips on
+   every lead open for a value that was always identical.
+
+   Both a resolved value and the in-flight promise are cached, so several widgets
+   mounting in the same tick share one request rather than racing. This mirrors
+   hooks/useCallingConfig.ts, which already does exactly this for
+   /api/calling/status. Module scope is safe here because the response carries no
+   credentials and no per-user data — only three booleans about the tenant's
+   integration — and a page reload follows any settings change. */
+let bolnaStatusCache: BolnaStatusResponse | null = null;
+let bolnaStatusInFlight: Promise<BolnaStatusResponse | null> | null = null;
+
+function loadBolnaStatus(): Promise<BolnaStatusResponse | null> {
+  if (bolnaStatusCache) return Promise.resolve(bolnaStatusCache);
+  if (bolnaStatusInFlight) return bolnaStatusInFlight;
+
+  bolnaStatusInFlight = fetch("/api/bolna/status", { cache: "no-store" })
+    .then((r) => (r.ok ? (r.json() as Promise<BolnaStatusResponse>) : null))
+    .then((json) => {
+      // Only a successful answer is cached. A failed one must not pin the widget
+      // to "unconfigured" for the rest of the session.
+      if (json) bolnaStatusCache = json;
+      return json;
+    })
+    .catch(() => null)
+    .finally(() => {
+      bolnaStatusInFlight = null;
+    });
+
+  return bolnaStatusInFlight;
+}
+
 export default function BolnaCallWidget({
   leadId = null,
   callerLeadId = null,
@@ -126,30 +161,36 @@ export default function BolnaCallWidget({
   // The widget asks whether calling is available at all. It reads the public
   // half of the settings — /api/bolna/status returns no credentials, only
   // whether calls can be placed, so a non-admin user can render this.
+  //
+  // Deduped at module scope (see loadBolnaStatus below). This widget mounts once
+  // per lead detail, so an uncached fetch here meant one extra request and two
+  // Neon round trips EVERY time a lead was opened, to re-read a tenant setting
+  // that cannot change mid-session. useCallingConfig already solves this the same
+  // way for /api/calling/status.
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/bolna/status", { cache: "no-store" })
-      .then((r) => (r.ok ? (r.json() as Promise<BolnaStatusResponse>) : null))
-      .then((json) => {
-        if (cancelled) return;
-        setConfigured(Boolean(json?.configured));
-        setEnabled(json?.enabled !== false);
-        // The field is `webCallEnabled` — matching the route. Reading a name the
-        // endpoint does not send (browserCallEnabled) would silently yield
-        // undefined → false and hide browser calling forever.
-        setWebCallEnabled(Boolean(json?.webCallEnabled));
-      })
-      .catch(() => {
-        if (!cancelled) setConfigured(false);
-      });
+    loadBolnaStatus().then((json) => {
+      if (cancelled) return;
+      setConfigured(Boolean(json?.configured));
+      setEnabled(json?.enabled !== false);
+      // The field is `webCallEnabled` — matching the route. Reading a name the
+      // endpoint does not send (browserCallEnabled) would silently yield
+      // undefined → false and hide browser calling forever.
+      setWebCallEnabled(Boolean(json?.webCallEnabled));
+    });
     return () => {
       cancelled = true;
     };
   }, []);
 
+  // Call history is only fetched once we know calling is actually configured.
+  // It cannot be deferred to the history panel opening: the toggle that opens
+  // that panel only renders when `history.length > 0`, so a lazy load would hide
+  // its own trigger. Gating on `configured` is the part that is safe — for a
+  // tenant with no Bolna integration this request now never fires at all.
   useEffect(() => {
-    loadHistory();
-  }, [loadHistory]);
+    if (configured && enabled) loadHistory();
+  }, [configured, enabled, loadHistory]);
 
   const placePhoneCall = async () => {
     setDialing(true);

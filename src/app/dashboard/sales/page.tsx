@@ -36,10 +36,6 @@ import InlineContactField from "@/components/InlineContactField";
 import { contactFieldSave } from "@/lib/contactFieldSave";
 import UploadLeadSheet from "@/components/UploadLeadSheet";
 import SelfUploadLeadSheet from "@/components/SelfUploadLeadSheet";
-import {
-  PieChart, Pie, Cell, Tooltip as RTooltip, ResponsiveContainer,
-  BarChart, Bar, XAxis, YAxis, CartesianGrid
-} from "recharts";
 import LoginTimerWidget from "@/components/LoginTimerWidget";
 import AttendanceBadge from "@/components/AttendanceBadge";
 import { useAttendance } from "@/components/AttendanceContext";
@@ -71,6 +67,13 @@ import NotificationPopover from "@/components/notifications/NotificationPopover"
 import NotificationCenterView from "@/components/notifications/NotificationCenterView";
 
 const SiteVisitOverview = dynamic(() => import("../../dashboard/SiteVisitOverview"), { ssr: false });
+
+// PERF: recharts (~8 MB in node_modules) used to be a static import at the top of
+// this file, so it sat in the sales route's initial JavaScript and was parsed
+// before first paint even for users who never open the Overview charts. Loading
+// the chart module on demand keeps it out of that path. ssr: false because
+// ResponsiveContainer measures the DOM and has nothing to measure on the server.
+const DashboardAnalytics = dynamic(() => import("@/components/sales/SalesDashboardAnalytics"), { ssr: false });
 const CARDS_PER_PAGE = 20;
 // Views this page can be asked to open by name. Derived from the rail rather
 // than retyped, and filtered so a stale or hand-edited `return_tab` cannot set
@@ -252,8 +255,24 @@ function buildTheme(isDark: boolean) {
   };
 }
 
+/* Compiled once per process rather than once per call. `new RegExp` inside the
+   per-lead loop below was the single hottest allocation on this page: extractField
+   runs ~10 times per lead and several fields are requested twice, so at 500 leads
+   that was ~5,000 regex compilations every poll. Mirrors dashboard/page.tsx:204. */
+const SALESFORM_FIELD_RE = new Map<string, RegExp>(
+  [
+    "Property Type", "Location", "Budget", "Use Type", "Planning to Purchase",
+    "Decision Maker", "Loan Planned", "Lead Status",
+  ].map((f) => [f, new RegExp(`• ${f}: (.*)`)])
+);
+
+const EMPTY_FUPS: any[] = [];
+
+/** Poll interval, matching the admin dashboard. Was 5 s here — see useAdminData. */
+const SALES_POLL_MS = 30_000;
+
 // ============================================================================
-// SHARED REAL-TIME DATA HOOK (unchanged)
+// SHARED REAL-TIME DATA HOOK
 // ============================================================================
 function useAdminData() {
   const [managers, setManagers] = useState<any[]>([]);
@@ -261,30 +280,65 @@ function useAdminData() {
   const [allLeads, setAllLeads] = useState<any[]>([]);
   const [followUps, setFollowUps] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  /* Guards against overlapping polls. One pass can take longer than the interval,
+     and without this the requests stack: each new one adds DB load and a fresh
+     main-thread merge while the previous is still running, so the page falls
+     progressively further behind and never recovers. */
+  const inFlight = useRef(false);
 
   const fetchAdminData = useCallback(async () => {
+    if (inFlight.current) return;
+    inFlight.current = true;
     try {
+      /* These three are independent, so they go out together. They used to be a
+         sequential await chain, which made every refresh the SUM of three Neon
+         round trips (~250 ms) instead of the slowest one. */
+      const [resUsers, resLeads, resFups] = await Promise.all([
+        fetch("/api/users/sales-manager"),
+        fetch("/api/walkin_enquiries?limit=10000&offset=0"),
+        fetch("/api/followups"),
+      ]);
+
       let smData: any[] = [];
-      const resUsers = await fetch("/api/users/sales-manager");
       if (resUsers.ok) { const json = await resUsers.json(); smData = json.data || []; }
 
       let pgLeads: any[] = [];
-      const resLeads = await fetch("/api/walkin_enquiries?limit=1000&offset=0");
       if (resLeads.ok) { const json = await resLeads.json(); pgLeads = Array.isArray(json.data) ? json.data : []; }
 
       let mongoFollowUps: any[] = [];
-      const resFups = await fetch("/api/followups");
       if (resFups.ok) { const json = await resFups.json(); mongoFollowUps = Array.isArray(json.data) ? json.data : []; }
 
+      /* Index the follow-ups by lead once, up front.
+         This used to be `mongoFollowUps.filter(...)` INSIDE the per-lead map,
+         which is O(leads × follow-ups). The admin dashboard measured that same
+         code at 5.8 SECONDS of frozen UI at scale, and 20 ms once indexed. The
+         output is identical — only the lookup changes. */
+      const fupsByLead = new Map<string, any[]>();
+      for (const f of mongoFollowUps) {
+        const key = String(f.leadId);
+        let bucket = fupsByLead.get(key);
+        if (!bucket) { bucket = []; fupsByLead.set(key, bucket); }
+        bucket.push(f);
+      }
+
       const mergedLeads = pgLeads.map((lead: any) => {
-        const leadFups = mongoFollowUps.filter((f: any) => String(f.leadId) === String(lead.id));
+        const leadFups = fupsByLead.get(String(lead.id)) || EMPTY_FUPS;
         const salesForms = leadFups.filter((f: any) => f.message?.includes("Detailed Salesform Submitted"));
         const latestFormMsg = salesForms.length > 0 ? salesForms[salesForms.length - 1].message : "";
 
+        /* Memoised per lead: extractField is called ~10 times per lead and several
+           fields are requested twice, so without the cache the same message is
+           re-scanned repeatedly. */
+        const fieldCache = new Map<string, string>();
         const extractField = (fieldName: string) => {
           if (!latestFormMsg) return "Pending";
-          const match = latestFormMsg.match(new RegExp(`• ${fieldName}: (.*)`));
-          return match ? match[1].trim() : "Pending";
+          const hit = fieldCache.get(fieldName);
+          if (hit !== undefined) return hit;
+          const re = SALESFORM_FIELD_RE.get(fieldName) ?? new RegExp(`• ${fieldName}: (.*)`);
+          const match = latestFormMsg.match(re);
+          const val = match ? match[1].trim() : "Pending";
+          fieldCache.set(fieldName, val);
+          return val;
         };
 
         const loanUpdates = leadFups.filter((f: any) => f.message?.includes("🏦 Loan Update:"));
@@ -334,6 +388,7 @@ function useAdminData() {
       setFollowUps(mongoFollowUps);
       setIsLoading(false);
     } catch (e) { console.error("Admin data sync failed", e); }
+    finally { inFlight.current = false; }
   }, []);
 
   const applyLeadUpdate = useCallback((updatedLead: any) => {
@@ -342,13 +397,40 @@ function useAdminData() {
 
   useEffect(() => {
     fetchAdminData();
-    const interval = setInterval(fetchAdminData, 5000);
-    return () => clearInterval(interval);
+    /* Was every 5 seconds, unguarded. That is 12 full refreshes a minute per open
+       tab — every lead and every follow-up in the organization, re-merged and
+       re-rendered — whether or not anyone was looking, and whether or not
+       anything had changed. A tab left open on a second monitor issued the same
+       full-database refresh all day while competing for the same 10-connection
+       pool as the people actually working.
+
+       Background tabs are now skipped outright, and returning to the tab
+       refreshes immediately, so pausing costs no freshness at the only moment it
+       matters — when someone looks at it again. This is the pattern the admin
+       dashboard already uses (dashboard/page.tsx:412-430). */
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      fetchAdminData();
+    }, SALES_POLL_MS);
+    const onVisible = () => { if (!document.hidden) fetchAdminData(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [fetchAdminData]);
 
   useLostLeadEvents(applyLeadUpdate, fetchAdminData);
 
-  return { managers, receptionists, allLeads, followUps, isLoading, refetch: fetchAdminData };
+  /* Push one newly-created follow-up into local state, so a mutation that only
+     adds a timeline entry does not have to re-download the organization. The
+     row comes straight from POST /api/followups, which returns it. */
+  const appendFollowUp = useCallback((row: any) => {
+    if (!row) return;
+    setFollowUps(prev => (prev.some(f => String(f._id) === String(row._id)) ? prev : [...prev, row]));
+  }, []);
+
+  return { managers, receptionists, allLeads, followUps, isLoading, refetch: fetchAdminData, appendFollowUp };
 }
 
 // ============================================================================
@@ -394,11 +476,21 @@ export default function SalesDashboard() {
   const [activePopup, setActivePopup] = useState<"notifications" | "profile" | "visit" | null>(null);
   const topbarRef = useRef<HTMLDivElement>(null);
   // ── Attendance: live clock tick ──
+  //
+  // PERF: this ticked once a second unconditionally, and setNow lives at the top
+  // of this multi-thousand-line component — so the ENTIRE sales dashboard
+  // re-rendered 60 times a minute whether or not anyone was looking at a clock.
+  // `now` has exactly one consumer, <AttendanceView>, which only mounts on the
+  // attendance view, so gating the interval on that is behaviour-identical: when
+  // the view is closed nothing reads `now`.
   const [now, setNow] = useState(Date.now());
+  const clockRunning = activeView === "attendance";
   useEffect(() => {
+    if (!clockRunning) return;
+    setNow(Date.now());   // resync immediately on open, don't show a stale second
     const interval = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [clockRunning]);
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (topbarRef.current && !topbarRef.current.contains(event.target as Node)) {
@@ -409,7 +501,7 @@ export default function SalesDashboard() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const { managers, receptionists, allLeads, followUps, isLoading, refetch } = useAdminData();
+  const { managers, receptionists, allLeads, followUps, isLoading, refetch, appendFollowUp } = useAdminData();
 
   // Settings → Additional Features. Read once here and passed down, rather than
   // called again inside SalesManagerView, so the two never disagree mid-render.
@@ -805,7 +897,7 @@ export default function SalesDashboard() {
           {(activeView === "sales" || activeView === "overview" || activeView === "forms" || activeView === "detail" || activeView === "closed-leads") ? (
             <SalesManagerView
               managers={managers} allLeads={allLeads} followUps={followUps}
-              isLoading={isLoading} adminUser={user} refetch={refetch}
+              isLoading={isLoading} adminUser={user} refetch={refetch} appendFollowUp={appendFollowUp}
               initialView={activeView} setMainView={setActiveView}
               isDark={isDark} t={t}
               featurePrefs={featurePrefs}
@@ -966,128 +1058,12 @@ function LoanStatusBadge({ status }: { status: string }) {
 // ============================================================================
 // DASHBOARD ANALYTICS
 // ============================================================================
-function DashboardAnalytics({ leads, isDark, t }: { leads: any[]; isDark: boolean; t: ReturnType<typeof buildTheme> }) {
-  const [pieMode, setPieMode] = useState<"interest" | "loan" | "usetype" | "loanrequired" | "visits">("interest");
-  const [barMode, setBarMode] = useState<"weekly" | "source">("weekly");
-
-  const interestData = useMemo(() => { const c: Record<string, number> = { Interested: 0, "Not Interested": 0, "NON GENUINE DEMAND (NGD)": 0, Pending: 0 }; leads.forEach(l => { const s = l.leadInterestStatus; if (s === "NON GENUINE DEMAND (NGD)" || s === "Non Qualified Lead" || s === "Non Qualified Leads" || s === "Non qualified Lead") c["NON GENUINE DEMAND (NGD)"]++; else if (s && s !== "Pending" && c[s] !== undefined) c[s]++; else c["Pending"]++; }); return Object.entries(c).filter(([, v]) => v > 0).map(([name, value]) => ({ name, value })); }, [leads]);
-  const loanPieData = useMemo(() => { const c: Record<string, number> = { Approved: 0, "In Progress": 0, Rejected: 0, "N/A": 0 }; leads.forEach(l => { const s = l.loanStatus; if (s && c[s] !== undefined) c[s]++; else c["N/A"]++; }); return Object.entries(c).filter(([, v]) => v > 0).map(([name, value]) => ({ name, value })); }, [leads]);
-  const useTypeData = useMemo(() => { const c: Record<string, number> = {}; leads.forEach(l => { const ut = (l.useType && l.useType !== "Pending") ? l.useType : (l.purpose || "Unknown"); c[ut] = (c[ut] || 0) + 1; }); return Object.entries(c).filter(([k]) => k !== "Unknown").map(([name, value]) => ({ name, value })); }, [leads]);
-  const loanRequiredData = useMemo(() => { const c: Record<string, number> = { Yes: 0, No: 0, "Not Sure": 0, Pending: 0 }; leads.forEach(l => { const lp = l.loanPlanned; if (lp && c[lp] !== undefined) c[lp]++; else c["Pending"]++; }); return Object.entries(c).filter(([, v]) => v > 0).map(([name, value]) => ({ name, value })); }, [leads]);
-  const visitData = useMemo(() => { const s = leads.filter(l => l.mongoVisitDate).length; return [{ name: "Scheduled", value: s }, { name: "Pending", value: leads.length - s }]; }, [leads]);
-  const weeklyData = useMemo(() => { const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]; const counts = [0, 0, 0, 0, 0, 0, 0]; const now = new Date(); leads.forEach(l => { if (!l.created_at) return; const d = new Date(l.created_at); if (Math.floor((now.getTime() - d.getTime()) / 86400000) < 7) counts[d.getDay()]++; }); return days.map((day, i) => ({ day, leads: counts[i] })); }, [leads]);
-  const sourceData = useMemo(() => { const c: Record<string, number> = {}; leads.forEach(l => { const src = l.source || "Unknown"; c[src] = (c[src] || 0) + 1; }); return Object.entries(c).map(([source, count]) => ({ source, count })).sort((a, b) => b.count - a.count).slice(0, 6); }, [leads]);
-  const weeklyTotal = weeklyData.reduce((a, b) => a + b.leads, 0);
-
-  const interestColors: Record<string, string> = { Interested: "#4ade80", "Not Interested": "#f87171", "NON GENUINE DEMAND (NGD)": "#F97316", "Non Qualified Lead": "#F97316", Pending: "#6b7280" };
-  const loanColors: Record<string, string> = { Approved: "#4ade80", "In Progress": "#fbbf24", Rejected: "#f87171", "N/A": "#6b7280" };
-  const useTypeColors: Record<string, string> = { "Self Use": "#818cf8", Investment: "#34d399", "Personal use": "#f87171", "N/A": "#6b7280" };
-  const loanReqColors: Record<string, string> = { Yes: "#60a5fa", No: "#6b7280", "Not Sure": "#fbbf24", Pending: "#374151" };
-  const visitColors: Record<string, string> = { Scheduled: "#f97316", Pending: "#374151" };
-  const BAR_COLORS = isDark
-    ? ["#a855f7", "#818cf8", "#60a5fa", "#34d399", "#fbbf24", "#f87171", "#c084fc"]
-    : ["#00AEEF", "#9E217B", "#0077b6", "#34d399", "#fbbf24", "#f87171", "#60a5fa"];
-  const SRC_COLORS = isDark
-    ? ["#a855f7", "#60a5fa", "#4ade80", "#fbbf24", "#f87171", "#34d399"]
-    : ["#00AEEF", "#9E217B", "#0077b6", "#4ade80", "#fbbf24", "#f87171"];
-
-  const pieData = pieMode === "interest" ? interestData : pieMode === "loan" ? loanPieData : pieMode === "usetype" ? useTypeData : pieMode === "loanrequired" ? loanRequiredData : visitData;
-  const pieColors = pieMode === "interest" ? interestColors : pieMode === "loan" ? loanColors : pieMode === "usetype" ? useTypeColors : pieMode === "loanrequired" ? loanReqColors : visitColors;
-  const totalLeads = leads.length;
-
-  const BarTip = ({ active, payload, label }: any) => active && payload?.length
-    ? <div className={`rounded-lg px-3 py-2 text-xs shadow-xl border ${t.dropdown}`} style={t.dropdownGlass}><p className={t.textMuted}>{label || payload[0].name}</p><p className={`font-bold ${t.text}`}>{payload[0].value}</p></div>
-    : null;
-  const PieTip = ({ active, payload }: any) => active && payload?.length
-    ? <div className={`rounded-lg px-3 py-2 text-xs shadow-xl border ${t.dropdown}`} style={t.dropdownGlass}><p className={`font-bold ${t.text}`}>{payload[0].name}</p><p className={t.textMuted}>{payload[0].value} leads</p></div>
-    : null;
-
-  const axisColor = isDark ? "#9ca3af" : "#6B7280";
-  const gridColor = isDark ? "#2a2a2a" : "#E5E7EB";
-
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 sm:gap-3">
-        {/* Bar chart */}
-        <div className={`rounded-3xl p-3 sm:p-3 shadow-sm border ${t.tableWrap}`} style={t.tableGlass}>
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
-            <div>
-              <h3 className={`font-bold text-sm lg:text-base ${t.text}`}>{barMode === "weekly" ? "Leads This Week" : "Lead Source Distribution"}</h3>
-              {barMode === "weekly" && <p className={`text-xs mt-0.5 font-semibold ${t.accentText}`}>{weeklyTotal} total this week</p>}
-            </div>
-            <select value={barMode} onChange={e => setBarMode(e.target.value as any)} className={`rounded-lg px-3 py-1.5 text-xs outline-none cursor-pointer border w-full sm:w-auto ${t.selectSmall}`}>
-              <option value="weekly">Total Leads Assigned</option>
-              <option value="source">Lead Source Distribution</option>
-            </select>
-          </div>
-          <ResponsiveContainer width="100%" height={220}>
-            {barMode === "weekly" ? (
-              <BarChart data={weeklyData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
-                <XAxis dataKey="day" tick={{ fill: axisColor, fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: axisColor, fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
-                <RTooltip content={<BarTip />} cursor={{ fill: 'transparent' }} />
-                <Bar dataKey="leads" radius={[6, 6, 0, 0]}>{weeklyData.map((_: any, i: number) => <Cell key={i} fill={BAR_COLORS[i % 7]} />)}</Bar>
-              </BarChart>
-            ) : (
-              <BarChart data={sourceData} layout="vertical" margin={{ top: 0, right: 16, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={gridColor} horizontal={false} />
-                <XAxis type="number" tick={{ fill: axisColor, fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
-                <YAxis type="category" dataKey="source" width={100} tick={{ fill: axisColor, fontSize: 10 }} axisLine={false} tickLine={false} />
-                <RTooltip content={<BarTip />} cursor={{ fill: 'transparent' }} />
-                <Bar dataKey="count" radius={[0, 6, 6, 0]}>{sourceData.map((_: any, i: number) => <Cell key={i} fill={SRC_COLORS[i % 6]} />)}</Bar>
-              </BarChart>
-            )}
-          </ResponsiveContainer>
-        </div>
-
-        {/* Pie chart */}
-        <div className={`rounded-4xl p-3 sm:p-3 shadow-sm border ${t.tableWrap}`} style={t.tableGlass}>
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
-            <h3 className={`font-bold text-sm lg:text-base ${t.text}`}>
-              {pieMode === "interest" ? "Lead Interest Breakdown" : pieMode === "loan" ? "Loan Status Breakdown" : pieMode === "usetype" ? "Self-Use vs Investment" : pieMode === "loanrequired" ? "Loan Required?" : "Visit Scheduled vs Pending"}
-            </h3>
-            <select value={pieMode} onChange={e => setPieMode(e.target.value as any)} className={`rounded-lg px-3 py-1.5 text-xs outline-none cursor-pointer border w-full sm:w-auto ${t.selectSmall}`}>
-              <option value="interest">Lead Interest</option>
-              <option value="loan">Loan Status</option>
-              <option value="usetype">Self-Use vs Investment</option>
-              <option value="loanrequired">Loan Required?</option>
-              <option value="visits">Visit Scheduled vs Pending</option>
-            </select>
-          </div>
-          <div className="flex flex-col sm:flex-row items-center gap-2">
-            <ResponsiveContainer width="100%" height={200} className="sm:w-[55%]">
-              <PieChart>
-                <Pie data={pieData} cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={3} dataKey="value">
-                  {pieData.map((entry: any, i: number) => <Cell key={i} fill={pieColors[entry.name] ?? "#6b7280"} />)}
-                </Pie>
-                <RTooltip content={<PieTip />} />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="flex flex-col gap-2 w-full sm:w-[45%] flex-1">
-              {pieData.map((entry: any) => {
-                const color = pieColors[entry.name] ?? "#6b7280";
-                const pct = totalLeads > 0 ? Math.round((entry.value / totalLeads) * 100) : 0;
-                return (
-                  <div key={entry.name} className="flex items-center justify-between">
-                    <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} /><span className={`text-[11px] sm:text-xs font-medium ${t.textMuted}`}>{entry.name}</span></div>
-                    <div className="flex items-center gap-1.5"><span className={`text-[11px] sm:text-xs font-bold ${t.text}`}>{entry.value}</span><span className={`text-[10px] ${t.textFaint}`}>({pct}%)</span></div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ============================================================================
 // SALES MANAGER MODULE
 // ============================================================================
 function SalesManagerView({
-  managers, allLeads, followUps, isLoading, adminUser, refetch,
+  managers, allLeads, followUps, isLoading, adminUser, refetch, appendFollowUp,
   initialView, setMainView, isDark, t, featurePrefs,
   pendingLeadOpen, onPendingLeadOpenHandled,        // ← NEW
 }: any) {
@@ -1123,18 +1099,41 @@ function SalesManagerView({
   // which (when wired up) swaps the whole detail view to ClosedLeadBookingView.
   const [loanDealBooking, setLoanDealBooking] = useState<any>(null);
   const [loanDealLatest, setLoanDealLatest] = useState<any>(null);
+  // One pass serves both consumers of the booking row.
+  //
+  // `loanDealBooking` (the Loan & Deal panel) and `bookingData` (the booking view)
+  // were fetched from the SAME URL by two adjacent effects, and both read
+  // `data[0]` — the identical row. Browsers do not coalesce two concurrent fetches
+  // to the same URL, so that was one wasted request and two wasted Neon round
+  // trips (~168 ms measured) on every single lead open.
+  //
+  // The loan request also used to wait for the booking request to resolve before
+  // it started. The two are independent, so they now run together and the slower
+  // one alone sets the floor.
+  //
+  // PAYLOAD: this eager fetch asks for `view=summary` (BOOKING_LIST_SQL — 24
+  // explicit columns, one join). The default `view=full` is BOOKING_SELECT_SQL:
+  // 121 columns across 6 joins, 2 views and a json_agg, including PAN, Aadhaar,
+  // signature data and document URLs. Nothing on the lead-detail screen reads any
+  // of that — the summary is used to enable the "View Booking Form" button, and by
+  // LoanDealView/LoanDealForm, which between them read `id` and `agreement_value`.
+  // The full row is fetched by openBookingView() below, when the user actually
+  // opens the booking.
   const fetchLoanDealData = useCallback(async (leadId: string | number) => {
-    try {
-      const res = await fetch(`/api/booking-applications?lead_id=${leadId}`);
-      const json = await res.json();
-      setLoanDealBooking(json.success && json.data?.length > 0 ? json.data[0] : null);
-    } catch { setLoanDealBooking(null); }
-    try {
-      const res = await fetch(`/api/loan?lead_id=${leadId}`);
-      const json = await res.json();
-      const rows = json.success ? json.data : [];
-      setLoanDealLatest(rows.length > 0 ? rows[rows.length - 1] : null);
-    } catch { setLoanDealLatest(null); }
+    const [bookingOutcome, loanOutcome] = await Promise.allSettled([
+      fetch(`/api/booking-applications?lead_id=${leadId}&view=summary`).then((r) => r.json()),
+      fetch(`/api/loan?lead_id=${leadId}&latest=1`).then((r) => r.json()),
+    ]);
+
+    const bookingJson = bookingOutcome.status === "fulfilled" ? bookingOutcome.value : null;
+    const booking =
+      bookingJson?.success && bookingJson.data?.length > 0 ? bookingJson.data[0] : null;
+    setLoanDealBooking(booking);
+    setBookingData(booking);
+
+    const loanJson = loanOutcome.status === "fulfilled" ? loanOutcome.value : null;
+    const rows = loanJson?.success ? loanJson.data ?? [] : [];
+    setLoanDealLatest(rows.length > 0 ? rows[rows.length - 1] : null);
   }, []);
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [showSalesForm, setShowSalesForm] = useState(false);
@@ -1173,15 +1172,24 @@ function SalesManagerView({
     setAiPanelOpen(false);
     setShowSalesForm(false);
     setShowLoanForm(false);
+    // Reset the tab too. Without this, clicking through leads while parked on
+    // "Loan Tracking" keeps that tab mounted, and LoanDealView's lazy children
+    // (tranches, lender applications, PDD, financial status) fire on every lead
+    // open — four extra requests per lead that nobody asked for.
+    setDetailTab("personal");
   }, [selectedLead?.id]);
+  // Booking and loan both come from fetchLoanDealData now. The second effect that
+  // used to live here fetched /api/booking-applications?lead_id= a SECOND time,
+  // concurrently, for the same row.
   useEffect(() => {
     if (selectedLead?.id) fetchLoanDealData(selectedLead.id);
-    else { setLoanDealBooking(null); setLoanDealLatest(null); }
+    else {
+      setLoanDealBooking(null);
+      setLoanDealLatest(null);
+      setBookingData(null);
+      setShowBookingView(false);
+    }
   }, [selectedLead?.id, fetchLoanDealData]);
-  useEffect(() => {
-    if (selectedLead?.id) fetchBookingForLead(selectedLead.id);
-    else { setBookingData(null); setShowBookingView(false); }
-  }, [selectedLead?.id]);
 
   // Jump here from elsewhere in the page: Inventory (which also wants the
   // booking form once it loads) or a header notification (which wants the Lead
@@ -1199,12 +1207,18 @@ function SalesManagerView({
     onPendingLeadOpenHandled?.();
   }, [pendingLeadOpen, allLeads]);
 
-  // Once the booking for that lead has finished loading, flip straight to the booking view.
+  // Once the booking summary for that lead has arrived, load the full row and flip
+  // straight to the booking view. `bookingData` is the summary at this point (see
+  // fetchLoanDealData), so it answers "does a booking exist?" — openBookingView
+  // fetches the shape ClosedLeadBookingView actually needs.
   useEffect(() => {
     if (autoOpenBooking && bookingData) {
-      setShowBookingView(true);
       setAutoOpenBooking(false);
+      if (selectedLead) openBookingView(selectedLead.id);
     }
+    // openBookingView is stable for this purpose; re-running on its identity would
+    // re-open the view on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoOpenBooking, bookingData]);
   useEffect(() => {
     if (selectedLead) {
@@ -1219,19 +1233,63 @@ function SalesManagerView({
   }, [allLeads, adminUser]);
   useEffect(() => { setCardsPage(1); }, [searchTerm, leadStatusFilter, showLostLeads, showNGDLeads, columnFilter]);
 
-  const baseManagerLeads = adminUser.role === "admin" ? allLeads : allLeads.filter((l: any) => l.assigned_to === adminUser.name);
-  const currentLeadFollowUps = followUps.filter((f: any) => String(f.leadId) === String(selectedLead?.id));
+  /* ── Why these are memoised ───────────────────────────────────────────────
+     These are the inputs to every useMemo/useCallback further down. Computed
+     inline, they produced a brand-new array (or function) identity on every
+     render, which meant every memo below them re-ran every time — the memos were
+     present but had never once hit. Since this whole view re-renders on each
+     keystroke in the search box and in the sales form, that was roughly eight
+     full passes over the lead list, plus two O(n log n) sorts, per character
+     typed. Memoising here is what makes the existing memoisation downstream
+     actually work; nothing about the values themselves changes. */
+  const baseManagerLeads = useMemo(
+    () => adminUser.role === "admin" ? allLeads : allLeads.filter((l: any) => l.assigned_to === adminUser.name),
+    [allLeads, adminUser.role, adminUser.name]
+  );
+
+  /* Follow-ups indexed by lead, built once per followUps change.
+     Three separate consumers below each used to scan the whole organization's
+     follow-up array: the current lead's timeline, the "enquiries attended"
+     count, and — worst — the sort comparator, which ran a full scan on EVERY
+     comparison, making the sort O(n log n × m). */
+  const fupsByLead = useMemo(() => {
+    const map = new Map<string, any[]>();
+    for (const f of followUps) {
+      const key = String(f.leadId);
+      let bucket = map.get(key);
+      if (!bucket) { bucket = []; map.set(key, bucket); }
+      bucket.push(f);
+    }
+    return map;
+  }, [followUps]);
+
+  const currentLeadFollowUps = useMemo(
+    () => fupsByLead.get(String(selectedLead?.id)) ?? EMPTY_FUPS,
+    [fupsByLead, selectedLead?.id]
+  );
   const isLeadLocked = !!selectedLead && (!!selectedLead.is_lost_lead || selectedLead.status === "Closing" || !!selectedLead.closingDate);
 
-  const pipelineManagerLeads = baseManagerLeads.filter((l: any) => l.status !== "Closing" && !l.closingDate);
-  const lostManagerLeads = pipelineManagerLeads.filter((l: any) => !!l.is_lost_lead);
-  const activeManagerLeads = pipelineManagerLeads.filter((l: any) => !l.is_lost_lead);
-  const closingLeads = baseManagerLeads.filter((l: any) => l.status === "Closing" || !!l.closingDate);
+  const pipelineManagerLeads = useMemo(
+    () => baseManagerLeads.filter((l: any) => l.status !== "Closing" && !l.closingDate),
+    [baseManagerLeads]
+  );
+  const lostManagerLeads = useMemo(
+    () => pipelineManagerLeads.filter((l: any) => !!l.is_lost_lead),
+    [pipelineManagerLeads]
+  );
+  const activeManagerLeads = useMemo(
+    () => pipelineManagerLeads.filter((l: any) => !l.is_lost_lead),
+    [pipelineManagerLeads]
+  );
+  const closingLeads = useMemo(
+    () => baseManagerLeads.filter((l: any) => l.status === "Closing" || !!l.closingDate),
+    [baseManagerLeads]
+  );
   const lostRatio = baseManagerLeads.length > 0 ? ((lostManagerLeads.length / baseManagerLeads.length) * 100).toFixed(1) : "0.0";
 
   const enquiriesAttended = useMemo(() =>
-    baseManagerLeads.filter((l: any) => followUps.some((f: any) => String(f.leadId) === String(l.id))).length
-    , [baseManagerLeads, followUps]);
+    baseManagerLeads.filter((l: any) => fupsByLead.has(String(l.id))).length
+    , [baseManagerLeads, fupsByLead]);
 
   const enquiriesThisMonth = useMemo(() =>
     baseManagerLeads.filter((l: any) => {
@@ -1254,7 +1312,10 @@ function SalesManagerView({
       : "0.0"
     , [closingLeads, baseManagerLeads]);
 
-  const passLostFilter = (lead: any) => {
+  /* useCallback because this is a dependency of the filter memos below. As a
+     plain function it got a fresh identity on every render and invalidated both
+     of them unconditionally. */
+  const passLostFilter = useCallback((lead: any) => {
     let passNGD = true;
     const isNGD = lead.status === "NON GENUINE DEMAND (NGD)" || lead.leadStatus === "NON GENUINE DEMAND (NGD)" || lead.leadInterestStatus === "NON GENUINE DEMAND (NGD)" || lead.leadInterestStatus === "Non Qualified Lead" || lead.leadInterestStatus === "Non Qualified Leads" || lead.leadInterestStatus === "Non qualified Lead";
     if (!showNGDLeads && isNGD) {
@@ -1265,7 +1326,7 @@ function SalesManagerView({
     if (leadStatusFilter === "lost") return !!lead.is_lost_lead;
     if (leadStatusFilter === "active") return !lead.is_lost_lead;
     return showLostLeads || !lead.is_lost_lead;
-  };
+  }, [showNGDLeads, leadStatusFilter, showLostLeads]);
 
   /* ── Lead ordering ──────────────────────────────────────────────────────
      From Settings → Additional Features → Lead sorting. The comparator lives in
@@ -1279,14 +1340,32 @@ function SalesManagerView({
   const leadSort = featurePrefs?.leadSort ?? "newest";
   const compactCards = featurePrefs?.toggles?.compactLeadCards === true;
 
+  /* An O(1) lookup against the index built above, not a scan.
+     This function is the comparator's key extractor, so it runs on every single
+     comparison. Filtering the whole organization's follow-up array inside it made
+     the sort O(n log n × m): under the "stale" lead-sort preference, at 500 leads
+     and 5,000 follow-ups, that is tens of millions of string comparisons per
+     sort — and the sort runs twice per render, i.e. twice per keystroke.
+     Same value, computed once per lead instead of once per comparison. */
+  const lastActivityByLead = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const [leadId, fups] of fupsByLead) {
+      let max = 0;
+      for (const f of fups) {
+        const t = new Date(f.createdAt).getTime();
+        if (t > max) max = t;
+      }
+      map.set(leadId, max);
+    }
+    return map;
+  }, [fupsByLead]);
+
   const lastActivityAt = useCallback(
     (lead: any) => {
-      const leadFups = (followUps ?? []).filter((f: any) => String(f.leadId) === String(lead?.id));
-      return leadFups.length > 0
-        ? Math.max(...leadFups.map((f: any) => new Date(f.createdAt).getTime()))
-        : new Date(lead?.created_at ?? 0).getTime();
+      const hit = lastActivityByLead.get(String(lead?.id));
+      return hit !== undefined ? hit : new Date(lead?.created_at ?? 0).getTime();
     },
-    [followUps]
+    [lastActivityByLead]
   );
 
   const sortLeads = useCallback(
@@ -1392,6 +1471,9 @@ function SalesManagerView({
     refetch();
   };
 
+  // The FULL booking row (view=full, the default). Only ClosedLeadBookingView and
+  // the booking edit modal need this shape, so it is loaded on demand — see
+  // openBookingView — rather than on every lead open.
   const fetchBookingForLead = async (leadId: string | number) => {
     try {
       const res = await fetch(`/api/booking-applications?lead_id=${leadId}`);
@@ -1399,6 +1481,14 @@ function SalesManagerView({
       if (json.success && json.data?.length > 0) setBookingData(json.data[0]);
       else setBookingData(null);
     } catch { setBookingData(null); }
+  };
+
+  // Upgrade the summary held in `bookingData` to the full row, then show the
+  // booking view. Both entry points (the button and the auto-open deep link) go
+  // through here so ClosedLeadBookingView never renders against the summary.
+  const openBookingView = async (leadId: string | number) => {
+    await fetchBookingForLead(leadId);
+    setShowBookingView(true);
   };
   const handleReopenLead = async () => {
     if (!selectedLead || selectedLead.status !== "Closing") return;
@@ -1507,7 +1597,33 @@ function SalesManagerView({
     }
   };
 
-  const handleSendCustomNote = async (e: React.FormEvent<HTMLFormElement>) => { e.preventDefault(); if (!customNote.trim() || !selectedLead) return; const nm = { leadId: String(selectedLead.id), salesManagerName: adminUser.name, createdBy: adminUser.role === "admin" ? "admin" : "sales", message: customNote, siteVisitDate: null, createdAt: new Date().toISOString() }; setCustomNote(""); try { await fetch("/api/followups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(nm) }); refetch(); } catch (e) { console.log(e); } };
+  /* Adding a note used to call refetch(): every lead and every follow-up in the
+     organization, re-downloaded and re-merged, to display one line of text the
+     user had just typed.
+
+     POST /api/followups already returns the created row, so it is appended to
+     local state instead. This is safe for a plain note specifically because a
+     note changes nothing else — no lead status, no derived field, no visit date.
+     Mutations that DO change derived lead fields (the sales form, marking lost,
+     reopening) still refetch, because those fields are computed during the merge
+     in fetchAdminData rather than at render time. */
+  const handleSendCustomNote = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!customNote.trim() || !selectedLead) return;
+    const nm = { leadId: String(selectedLead.id), salesManagerName: adminUser.name, createdBy: adminUser.role === "admin" ? "admin" : "sales", message: customNote, siteVisitDate: null, createdAt: new Date().toISOString() };
+    setCustomNote("");
+    try {
+      const res = await fetch("/api/followups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(nm) });
+      const json = await res.json().catch(() => null);
+      if (json?.success && json.data) {
+        appendFollowUp(json.data);
+      } else {
+        // Could not read the row back — fall back to the full resync rather than
+        // leaving the timeline showing something the server may not have stored.
+        refetch();
+      }
+    } catch (e) { console.log(e); }
+  };
   const handleSalesFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!selectedLead || isSubmittingSalesForm) return;
@@ -2150,7 +2266,7 @@ function SalesManagerView({
                 </div>
                 <div className="flex gap-2 sm:gap-3 flex-wrap justify-start md:justify-end flex-shrink-0">
                   {bookingData ? (
-                    <button onClick={() => setShowBookingView(true)} className="font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm flex-1 sm:flex-none justify-center">
+                    <button onClick={() => openBookingView(selectedLead.id)} className="font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm flex-1 sm:flex-none justify-center">
                       <FaEye /> View Booking Form
                     </button>
                   ) : (

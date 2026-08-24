@@ -458,6 +458,21 @@ export default function EmployeesPage() {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
+        /* Index the site-visit follow-ups by lead once, before the loop below.
+           The loop used to run `fups.filter(...)` per lead, which is
+           O(leads × follow-ups) on the main thread every 10 seconds. Filtering
+           for the site-visit rows first shrinks the set considerably, since only
+           a small minority of follow-ups carry a visit date. Same output, one
+           pass instead of one pass per lead. */
+        const visitFupsByLead = new Map<string, any[]>();
+        for (const f of fups) {
+          if (!f.siteVisitDate?.trim()) continue;
+          const key = String(f.leadId);
+          let bucket = visitFupsByLead.get(key);
+          if (!bucket) { bucket = []; visitFupsByLead.set(key, bucket); }
+          bucket.push(f);
+        }
+
         // Helper to get exact Name and Role
         const getCreatorInfo = (lead: any) => {
           const assigneeName = lead.assigned_to || lead.assigned_receptionist || "Unassigned";
@@ -497,8 +512,8 @@ export default function EmployeesPage() {
 
           // 2. Site Visits (Visible up to 3 days before, expires 2 days after)
           // Find the latest site visit date from follow-ups OR fallback to column
-          const leadFups = fups.filter((f: any) => String(f.leadId) === String(lead.id) && f.siteVisitDate?.trim());
-          const vDate = leadFups.length > 0 ? leadFups[leadFups.length - 1].siteVisitDate : lead.site_visit_date;
+          const leadFups = visitFupsByLead.get(String(lead.id));
+          const vDate = leadFups && leadFups.length > 0 ? leadFups[leadFups.length - 1].siteVisitDate : lead.site_visit_date;
 
           if (vDate) {
             const visitDateObj = new Date(vDate);
@@ -538,8 +553,21 @@ export default function EmployeesPage() {
     };
 
     checkNotifs();
-    const interval = setInterval(checkNotifs, 10000);
-    return () => clearInterval(interval);
+    /* Was every 10 seconds with no guards: it pulls every lead AND every
+       follow-up in the organization to work out which site visits are due, and
+       did so six times a minute in a background tab nobody was looking at.
+       Visit dates change on the order of days, not seconds, so a minute is
+       ample; returning to the tab refreshes immediately. */
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      checkNotifs();
+    }, 60000);
+    const onVisible = () => { if (!document.hidden) checkNotifs(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [siteHeads]);
 
   // 👇 3. TRIGGER POPUP LOGIC (Exactly 2 Seconds, Duplicates Removed) 👇
@@ -852,11 +880,11 @@ export default function EmployeesPage() {
     { id: "receptionist", icon: FaClipboardList, label: "Receptionist", link: "/dashboard?tab=receptionist", section: null },
     { id: "sales", icon: FaUsers, label: "Sales Managers", link: "/dashboard?tab=sales", section: null },
     { id: "site_head", icon: FaUniversity, label: "Site Heads", link: "/dashboard?tab=site_head", section: null },
+    { id: "live_activity", icon: FaSignal, label: "Attendance Tracker", link: "/dashboard?tab=live_activity", section: null },
     { id: "site_visit_overview", icon: FaCalendarAlt, label: "Site Visit Overview", link: "/dashboard?tab=site_visit_overview", section: null },
     // ADD THESE THREE — they navigate back to dashboard with the right tab
     { id: "attendance", icon: FaUserClock, label: "My Attendance", link: "/dashboard?tab=attendance", section: null },
     { id: "monitoring", icon: FaChartPie, label: "Daily Monitor", link: "/dashboard?tab=monitoring", section: null },
-    { id: "live_activity", icon: FaSignal, label: "Attendance Tracker", link: "/dashboard?tab=live_activity", section: null },
     { id: "geo", icon: FaMapMarkerAlt, label: "Geo Analytics", link: "/dashboard?tab=geo", section: null },
     { id: "callers", icon: FaPhoneAlt, label: "Caller Panel", link: "/dashboard/employees", section: "callers" as const },
     { id: "employees", icon: FaIdCard, label: "Add Employee", link: "/dashboard/employees", section: "employees" as const },
@@ -941,8 +969,8 @@ export default function EmployeesPage() {
               const groupOf: Record<string, string> = {
                 dashboard: "Workspace", revenue_intelligence: "Workspace", inventory: "Workspace",
                 channel_partners: "Workspace", cp_management: "Workspace",
-                receptionist: "Team", sales: "Team", site_head: "Team",
-                site_visit_overview: "Insights", attendance: "Insights", monitoring: "Insights", live_activity: "Insights", geo: "Insights",
+                receptionist: "Team", sales: "Team", site_head: "Team", live_activity: "Team",
+                site_visit_overview: "Insights", attendance: "Insights", monitoring: "Insights", geo: "Insights",
                 callers: "Admin", employees: "Admin", notifications: "Admin",
               };
               const visibleItems = menuItems
@@ -1171,7 +1199,7 @@ export default function EmployeesPage() {
                 rail uses, rather than the badge's default full page reload. Only
                 Admin reaches this page, and Admin can open /dashboard, so the
                 destination was already correct; only the round trip was not. */}
-            <AttendanceBadge 
+            <AttendanceBadge
               timeIn={timeIn}
               isMarkedPresent={isMarkedPresent}
               onNavigate={() => router.push("/dashboard?tab=attendance")} />

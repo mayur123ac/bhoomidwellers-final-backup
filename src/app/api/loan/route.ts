@@ -7,19 +7,16 @@ import { requireSession, requireRoles } from "@/lib/serverAuth";
 // C5: loan_updates is an append-only activity log — every POST inserts a NEW row
 // (it never updates in place), so the timeline is the history. The authoritative
 // current status lives elsewhere (booking_loan_details.loan_status post-booking, or
-// the lead's draft pre-booking). These columns add per-entry audit clarity.
-// Idempotent ADD COLUMN IF NOT EXISTS matches the codebase's ensure-table pattern,
-// so the live loan-save path works whether or not the columns were added manually.
-let loanColsEnsured = false;
-async function ensureLoanUpdatesColumns() {
-  if (loanColsEnsured) return;
-  await query(`
-    ALTER TABLE loan_updates
-      ADD COLUMN IF NOT EXISTS previous_status TEXT,
-      ADD COLUMN IF NOT EXISTS new_status TEXT
-  `);
-  loanColsEnsured = true;
-}
+// the lead's draft pre-booking). previous_status/new_status add per-entry audit
+// clarity.
+//
+// PERF: this file used to create those two columns at runtime via a module-flag
+// guarded `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`. The guard made it run once
+// per process, but that once was the first loan save after every cold start, and
+// ALTER TABLE takes an ACCESS EXCLUSIVE lock that blocks every concurrent reader
+// of loan_updates. The statement now lives in
+// scripts/migrations/2026-08-24_move_runtime_ddl_out_of_request_path.sql and is
+// already applied on production.
 
 // ── GET: Fetch loan updates, optionally scoped to one lead ────────────────────
 export async function GET(req: Request) {
@@ -30,12 +27,34 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const leadId = searchParams.get("lead_id");
 
+    // Opt-in: return only the newest entry. Every caller in this app reads
+    // `rows[rows.length - 1]` and discards the rest, and loan_updates is
+    // append-only, so the log grows without bound per lead. The response stays an
+    // ARRAY ordered oldest-first, so indexing keeps working unchanged; with
+    // latest=1 it simply has one element. Omitting the param returns the full log
+    // exactly as before, so existing callers are unaffected.
+    const latestOnly = searchParams.get("latest") === "1";
+
+    // MT-05: loan_updates carries organization_id (added by the MT-04 migration,
+    // indexed as idx_loan_updates_org). This GET was the one path in the file that
+    // never applied it. lead_id is a GLOBALLY unique integer, so the lead_id branch
+    // let any signed-in user of any tenant read another tenant's loan history by
+    // guessing an id — and the branch below it returned every loan_update row in
+    // every organization. POST has always scoped correctly; this brings GET in line.
+    const orgId = await getOrganizationId();
+
     const loans = leadId
       ? await query(
-          `SELECT * FROM loan_updates WHERE lead_id = $1 ORDER BY created_at ASC`,
-          [leadId]
+          `SELECT * FROM loan_updates
+             WHERE lead_id = $1 AND organization_id = $2
+             ORDER BY created_at ${latestOnly ? "DESC" : "ASC"}
+             ${latestOnly ? "LIMIT 1" : ""}`,
+          [leadId, orgId]
         )
-      : await query(`SELECT * FROM loan_updates ORDER BY created_at ASC`);
+      : await query(
+          `SELECT * FROM loan_updates WHERE organization_id = $1 ORDER BY created_at ASC`,
+          [orgId]
+        );
 
     return NextResponse.json({ success: true, data: loans }, { status: 200 });
   } catch (error) {
@@ -82,8 +101,6 @@ export async function POST(req: Request) {
         { status: 403 }
       );
     }
-
-    await ensureLoanUpdatesColumns();
 
     // Audit pair: carry the last entry's status forward as previous_status.
     const prevRows = await query<{ new_status: string | null; status: string | null }>(
