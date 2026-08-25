@@ -4,7 +4,6 @@
 // optional "Assign To" dropdown, and confirm. Used by Admin & Site Head (mode="assign")
 // and wrapped by SelfUploadLeadSheet for Sales Managers (mode="self").
 import { useEffect, useRef, useState } from "react";
-import * as XLSX from "xlsx";
 import { FaFileExcel, FaUpload, FaTimes, FaCheckCircle, FaExclamationTriangle } from "react-icons/fa";
 
 type Mode = "assign" | "self";
@@ -113,8 +112,16 @@ export default function UploadLeadSheet({
   };
 
   // Fast client-side row count so oversized files fail before any upload.
+  //
+  // PERF: xlsx is by far the heaviest dependency this component pulls in, and it
+  // was reaching every dashboard that renders the import button — paid on first
+  // paint by every operator, including the ones who never import a sheet. It is
+  // only needed once a file has actually been chosen, and this function was
+  // already async and already awaiting the file read, so loading it here costs
+  // nothing that wasn't already a wait. Behaviour is unchanged.
   const countDataRows = async (selected: File): Promise<number> => {
     const buf = await selected.arrayBuffer();
+    const XLSX = await import("xlsx");
     const wb = XLSX.read(buf, { type: "array" });
     const sheetName = wb.SheetNames[0];
     if (!sheetName) return 0;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   IoChatbubbleEllipsesOutline,
@@ -27,6 +27,13 @@ import {
   IoChevronForwardOutline
 } from "react-icons/io5";
 import BookingApplicationView from "./BookingApplicationView";
+import { useCpResource } from "@/lib/hooks/useCpResource";
+import {
+  CpChatRailSkeleton,
+  CpChatThreadSkeleton,
+  CpChatDetailsSkeleton,
+  CpChatCardListSkeleton,
+} from "./cp/CpSkeletons";
 
 /** Who generated a message, resolved server-side from the persisted creator. */
 type Sender = {
@@ -117,12 +124,230 @@ function Row({ label, value, labelCls, valueCls }: {
   );
 }
 
-export default function CpChatPanel({
+/** The fields of a channel partner the conversation rail actually reads. */
+type PartnerRailRow = {
+  id: number;
+  name?: string;
+  company_name?: string;
+  phone?: string;
+  assigned_sourcing_manager_name?: string;
+  updated_at?: string;
+  created_at?: string;
+};
+
+/** Stable empty list — a `[]` literal would be a new identity every render. */
+const NO_PARTNERS: PartnerRailRow[] = [];
+
+/**
+ * One item in the thread: a message bubble, or a CRM event card.
+ *
+ * Split out and memoised. The panel re-renders for plenty of reasons the thread
+ * has no stake in — typing in the rail's search box, switching a filter chip,
+ * starring a partner, opening the mobile drawer — and each of those was
+ * rebuilding all 200 items. Now a render that leaves the messages alone leaves
+ * their DOM alone, and an arriving message renders only itself.
+ *
+ * The disclosure rules are unchanged: every field below still comes from the
+ * API's allow-list, and there is still no drill-through to the booking form or
+ * the lead record.
+ */
+const ChatMessage = React.memo(function ChatMessage({
+  m, newDay, isDark,
+}: { m: ChatItem; newDay: boolean; isDark: boolean }) {
+  const bgPanel = isDark ? "bg-[#1C1C1E]" : "bg-[#FFFFFF]";
+  const bgSubtle = isDark ? "bg-[#2C2C2E]" : "bg-[#F2F2F7]";
+  const borderSubtle = isDark ? "border-[#38383A]" : "border-[#E5E5EA]";
+  const textPrimary = isDark ? "text-white" : "text-[#1D1D1F]";
+  const textSecondary = isDark ? "text-[#98989D]" : "text-[#86868B]";
+  const accentBg = isDark ? "bg-[#FF3797]" : "bg-[#9E217B]";
+  const rowStyles = { labelCls: textSecondary, valueCls: textPrimary };
+
+  return (
+    <div className="w-full">
+      {newDay && (
+        <div className="flex justify-center my-6">
+          <span className={`text-[11px] font-medium ${textSecondary}`}>
+            {fmtDay(m.ts)}
+          </span>
+        </div>
+      )}
+
+      {m.kind === "text" || m.kind === "attachment" ? (
+        <div className={`flex w-full ${m.mine ? "justify-end" : "justify-start"} group`}>
+          <div className={`max-w-[75%] flex flex-col ${m.mine ? "items-end" : "items-start"}`}>
+            {/* Attribution: Role · Employee Name, above every
+                incoming message. Suppressed on your own
+                messages, where it would only repeat you. */}
+            {!m.mine && m.sender?.label && (
+              <span className={`text-[11px] font-medium mb-1 px-1 ${toneOf(m.sender).text}`}>
+                {m.sender.label}
+              </span>
+            )}
+            <div className={`px-4 py-2.5 flex flex-col relative ${m.mine
+              ? `rounded-2xl rounded-tr-sm ${accentBg} text-white`
+              : `rounded-2xl rounded-tl-sm ${isDark ? 'bg-[#2C2C2E] text-white' : 'bg-[#E5E5EA] text-[#1D1D1F]'}`
+              }`} style={{ opacity: m.pending ? 0.6 : 1 }}>
+              <p className="text-[15px] leading-snug whitespace-pre-wrap break-words">
+                {m.text}
+              </p>
+              <div className={`self-end flex items-center gap-1 text-[10px] mt-1 ${m.mine ? 'text-white/70' : textSecondary}`}>
+                <span>{m.pending ? "Sending..." : fmtClock(m.ts)}</span>
+                {m.mine && !m.pending && <IoCheckmarkDoneOutline size={12} />}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* CRM event card. Every field rendered below comes
+           from the API's allow-list — there is no drill-through
+           to the full booking form or lead record, because
+           those carry phone, PAN, Aadhaar and money. */
+        <div className="flex justify-center my-4 w-full">
+          <div className={`w-full max-w-sm rounded-2xl p-4 flex flex-col gap-3 shadow-sm border ${bgPanel} ${borderSubtle}`}>
+            <div className="flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${bgSubtle} ${toneOf(m.sender).text}`}>
+                {m.kind === "visit" ? <IoLocationOutline size={20} /> :
+                  m.kind === "booking_update" ? <IoBusinessOutline size={20} /> :
+                    <IoDocumentTextOutline size={20} />}
+              </div>
+              <div className="min-w-0">
+                <p className={`text-[14px] font-semibold tracking-tight uppercase ${textPrimary}`}>
+                  {m.title || (m.kind === "booking_update" ? "Booking Update" : "Customer Update")}
+                </p>
+                {m.sender?.label && (
+                  <p className={`text-[12px] font-medium truncate ${toneOf(m.sender).text}`}>
+                    {m.sender.label}
+                  </p>
+                )}
+                <p className={`text-[11px] ${textSecondary}`}>{fmtStamp(m.ts)}</p>
+              </div>
+            </div>
+            <div className={`p-3 rounded-xl flex flex-col gap-2 ${bgSubtle}`}>
+              {m.kind === "visit" && (
+                <>
+                  <Row label="Met with" value={m.personMet} {...rowStyles} />
+                  {m.gps ? (
+                    <div className="flex justify-between items-start gap-2">
+                      <span className={`text-[12px] ${textSecondary}`}>Location</span>
+                      <a href={`https://maps.google.com/?q=${encodeURIComponent(m.gps)}`}
+                        target="_blank" rel="noopener noreferrer"
+                        className="text-[12px] font-medium text-right text-blue-500 hover:underline">
+                        {m.location || "View on map"}
+                      </a>
+                    </div>
+                  ) : (
+                    <Row label="Location" value={m.location} {...rowStyles} />
+                  )}
+                  {m.notes && <Row label="Notes" value={m.notes} {...rowStyles} />}
+                </>
+              )}
+
+              {/* SITE VISIT UPDATE — customer, lead, status,
+                  feedback. No phone, no email, nothing else. */}
+              {m.kind === "customer_update" && (
+                <>
+                  <Row label="Customer" value={m.customer} {...rowStyles} />
+                  <Row label="Lead" value={m.leadRef} {...rowStyles} />
+                  <Row label="Status" value={m.status} {...rowStyles} />
+                  <Row label="Feedback" value={m.feedback} {...rowStyles} />
+                </>
+              )}
+
+              {/* BOOKING CARD — the approved fields only. */}
+              {m.kind === "booking_update" && (
+                <>
+                  <Row label="Booking ID" value={m.bookingNo} {...rowStyles} />
+                  <Row label="Customer" value={m.customer} {...rowStyles} />
+                  {m.unitConfig && <Row label="Unit" value={m.unitConfig} {...rowStyles} />}
+                  {m.building && <Row label="Building" value={m.building} {...rowStyles} />}
+                  {m.tower && <Row label="Tower" value={m.tower} {...rowStyles} />}
+                  {m.wing && <Row label="Wing" value={m.wing} {...rowStyles} />}
+                  {m.floor && <Row label="Floor" value={m.floor} {...rowStyles} />}
+                  {m.status && <Row label="Status" value={m.status} {...rowStyles} />}
+                  {m.onDate && <Row label="Date" value={fmtDate(m.onDate)} {...rowStyles} />}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+});
+
+/**
+ * The message composer, with its own draft state.
+ *
+ * It used to be inline, reading a `draft` held on the panel. Every keystroke
+ * therefore re-rendered the panel, and with it the whole thread — up to 200
+ * messages and event cards — plus the partner rail and the details column,
+ * before the character appeared. Owning the draft here confines a keystroke to
+ * this one textarea.
+ *
+ * `onSend` rejects when the message did not go: the draft is put back so
+ * nothing typed is lost, which is what the panel used to do.
+ */
+const Composer = React.memo(function Composer({
+  isDark, onSend,
+}: {
+  isDark: boolean;
+  onSend: (text: string) => Promise<void>;
+}) {
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState("");
+
+  const bgApp = isDark ? "bg-[#000000]" : "bg-[#F5F5F7]";
+  const bgPanel = isDark ? "bg-[#1C1C1E]" : "bg-[#FFFFFF]";
+  const borderSubtle = isDark ? "border-[#38383A]" : "border-[#E5E5EA]";
+  const textPrimary = isDark ? "text-white" : "text-[#1D1D1F]";
+
+  const submit = async () => {
+    const text = draft.trim();
+    if (!text || sending) return;
+    setDraft(""); setSending(true); setSendError("");
+    try {
+      await onSend(text);
+    } catch (e: any) {
+      setDraft(text);
+      setSendError(e?.message || "Message could not be sent.");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className={`flex-shrink-0 px-4 py-3 md:px-6 md:py-4 z-20 ${bgApp}`}>
+      {sendError && (
+        <p className="text-[11px] mb-2 text-red-500 font-medium ml-2">{sendError}</p>
+      )}
+      {/* iMessage style composer pill. No longer gated on the partner
+          having an enquiry — messages are partner-scoped now. */}
+      <div className={`flex items-end gap-2 rounded-3xl px-3 py-1.5 transition-all border ${bgPanel} ${borderSubtle}`}>
+        <textarea
+          rows={1} value={draft}
+          disabled={sending}
+          onChange={e => setDraft(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } }}
+          placeholder="iMessage"
+          className={`flex-1 bg-transparent outline-none resize-none text-[15px] max-h-24 py-2 disabled:cursor-not-allowed leading-snug ${textPrimary} placeholder:text-[#86868B]`}
+        />
+
+        <button onClick={submit} disabled={!draft.trim() || sending}
+          className={`flex items-center justify-center w-8 h-8 self-center rounded-full text-white transition-all ${!draft.trim() || sending
+            ? "bg-[#D1D1D6] dark:bg-[#38383A]"
+            : "bg-[#007AFF] hover:scale-105"
+            }`}>
+          <IoSend size={14} className="ml-0.5" />
+        </button>
+      </div>
+    </div>
+  );
+});
+
+function CpChatPanel({
   user, isDark, t, isAdmin = false,
 }: { user: any; isDark: boolean; t: any; isAdmin?: boolean }) {
-  const [partners, setPartners] = useState<any[]>([]);
-  const [loadingList, setLoadingList] = useState(true);
-  const [listError, setListError] = useState("");
   const [cpId, setCpId] = useState<number | null>(null);
   const [data, setData] = useState<any>(null);
   /** Thread + About, from /chat. Kept separate from `data` so the Enquiries and
@@ -138,9 +363,6 @@ export default function CpChatPanel({
   const [rightTab, setRightTab] = useState<"details" | "about">("details");
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
 
-  const [draft, setDraft] = useState("");
-  const [sending, setSending] = useState(false);
-  const [sendError, setSendError] = useState("");
   const [pending, setPending] = useState<ChatItem[]>([]);
   const [seen, setSeen] = useState<Record<string, number>>({});
   // viewBooking / viewEnquiry back the Bookings and Enquiries tabs, which are
@@ -157,23 +379,19 @@ export default function CpChatPanel({
   const borderSubtle = isDark ? "border-[#38383A]" : "border-[#E5E5EA]";
   const textPrimary = isDark ? "text-white" : "text-[#1D1D1F]";
   const textSecondary = isDark ? "text-[#98989D]" : "text-[#86868B]";
-  const accentColor = isDark ? "text-[#FF3797]" : "text-[#9E217B]";
-  const accentBg = isDark ? "bg-[#FF3797]" : "bg-[#9E217B]";
-  /** Passed to every <Row> so card rows inherit the panel's theme tokens. */
-  const rowStyles = { labelCls: textSecondary, valueCls: textPrimary };
+  // accentBg / rowStyles moved into <ChatMessage>, the only thing that read
+  // them, when the thread was split out and memoised.
+
+  // The conversation rail. Cached across mounts, so leaving CP Chat for another
+  // view and coming back paints the same list immediately instead of showing
+  // "Loading..." for another ~155 ms round trip; it revalidates behind the list
+  // and only re-renders if the rows actually changed.
+  const {
+    data: partners, loading: loadingList, error: listErrorValue,
+  } = useCpResource<PartnerRailRow[]>("/api/channel-partners", { initial: NO_PARTNERS });
+  const listError = listErrorValue && partners.length === 0 ? listErrorValue : "";
 
   useEffect(() => {
-    (async () => {
-      setLoadingList(true); setListError("");
-      try {
-        const res = await fetch("/api/channel-partners");
-        const json = await res.json();
-        if (!json.success) throw new Error(json.message || "Could not load partners.");
-        setPartners(json.data || []);
-      } catch (e: any) {
-        setListError(e?.message || "Could not load partners.");
-      } finally { setLoadingList(false); }
-    })();
     try { setSeen(JSON.parse(localStorage.getItem("cpChatSeen") || "{}")); } catch { }
     try { setFavourites(JSON.parse(localStorage.getItem("cpChatFavourites") || "{}")); } catch { }
   }, []);
@@ -214,8 +432,9 @@ export default function CpChatPanel({
   // string per row. Unmemoised it re-ran on every render of the panel —
   // including every keystroke in the composer, which has nothing to do with the
   // partner rail.
+  const deferredSearch = useDeferredValue(search);
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = deferredSearch.trim().toLowerCase();
     return partners.filter(p => {
       const matchSearch = !q || `${p.name || ""} ${p.company_name || ""} ${p.phone || ""} ${p.assigned_sourcing_manager_name || ""}`
         .toLowerCase().includes(q);
@@ -227,7 +446,7 @@ export default function CpChatPanel({
       if (listFilter === "Favourites") return matchSearch && !!favourites[String(p.id)];
       return matchSearch;
     });
-  }, [partners, search, listFilter, seen, favourites]);
+  }, [partners, deferredSearch, listFilter, seen, favourites]);
 
   const toggleFavourite = () => {
     if (cpId == null) return;
@@ -267,16 +486,17 @@ export default function CpChatPanel({
    * which is why the composer was disabled for any partner without a lead. CP
    * messages are partner-scoped now, so every partner can be messaged.
    */
-  const send = async () => {
-    const text = draft.trim();
-    if (!text || sending || cpId == null) return;
+  // Called by <Composer>, which owns the draft. Throws on failure so the
+  // composer can put the text back — the same recovery as before, just on the
+  // side of the boundary that holds the text.
+  const send = useCallback(async (text: string) => {
+    if (cpId == null) return;
     const optimistic: ChatItem = {
       id: `p${Date.now()}`, ts: Date.now(), kind: "text",
       sender: { role: "", name: user?.name || "You", label: user?.name || "You", tone: "magenta", system: false },
       mine: true, text, pending: true,
     };
     setPending(p => [...p, optimistic]);
-    setDraft(""); setSending(true); setSendError("");
     try {
       const res = await fetch(`/api/channel-partners/${cpId}/chat`, {
         method: "POST",
@@ -288,10 +508,9 @@ export default function CpChatPanel({
       await fetchChat(cpId);
     } catch (e: any) {
       setPending(p => p.filter(m => m.id !== optimistic.id));
-      setDraft(text);
-      setSendError(e?.message || "Message could not be sent.");
-    } finally { setSending(false); }
-  };
+      throw new Error(e?.message || "Message could not be sent.");
+    }
+  }, [cpId, user?.name, fetchChat]);
 
   // Restrained, subtle colors for avatars
   const getInitialsBg = (name: string) => {
@@ -309,7 +528,12 @@ export default function CpChatPanel({
     : partner ? fmtStamp(partner.updated_at || partner.created_at) : "—";
 
 
-  const rightPanelJSX = (
+  // PERF: this whole tree — two tab buttons, up to eleven profile rows, four
+  // stat tiles and three About sections — was built on EVERY render of the
+  // panel, including when no partner was selected and the desktop column was
+  // not even mounted. Memoised on what it actually reads, so a render that
+  // changes none of it reuses the previous elements.
+  const rightPanelJSX = useMemo(() => (
     <>
       <div className={`p-4 border-b ${borderSubtle}`}>
         <div className={`flex p-1 rounded-xl w-full ${bgSubtle}`}>
@@ -325,7 +549,12 @@ export default function CpChatPanel({
         </div>
       </div>
 
-      {rightTab === "details" ? (
+      {/* While the conversation is loading, every field here would read "—" and
+          every tile "0", then correct itself — which looks like real values
+          changing. The skeleton says "not yet" instead, at the same size. */}
+      {loading && !partner ? (
+        <CpChatDetailsSkeleton isDark={isDark} />
+      ) : rightTab === "details" ? (
         <div className="p-5 space-y-8">
           {/* Partner Profile */}
           <div className="space-y-4">
@@ -384,7 +613,9 @@ export default function CpChatPanel({
            contact record and counts of their activity. */
         <div className="p-5 space-y-8">
           {!about ? (
-            <p className={`text-[13px] ${textSecondary}`}>Loading partner details…</p>
+            // Reached when the thread loaded but carried no About block —
+            // distinct from the panel-wide loading case handled above.
+            <p className={`text-[13px] ${textSecondary}`}>Partner details are not available.</p>
           ) : (
             <>
               <section className="space-y-4">
@@ -457,7 +688,13 @@ export default function CpChatPanel({
         </div>
       )}
     </>
-  );
+  ), [
+    isDark, rightTab, loading, partner, about,
+    totalEnquiries, totalBookings, totalVisits, lastActiveStr,
+    // The style tokens below are all derived from isDark, which is already a
+    // dependency; listed so the rule can see they are covered.
+    borderSubtle, bgSubtle, bgPanel, textPrimary, textSecondary,
+  ]);
 
   return (
     <div className={`h-full flex overflow-hidden font-sans bg-transparent`}>
@@ -489,8 +726,11 @@ export default function CpChatPanel({
         </div>
 
         <div className="flex-1 overflow-y-auto custom-scrollbar">
+          {/* Loading / failed / empty, kept apart. The skeleton draws the same
+              48px avatar + two text lines the real rows do, so the rail does
+              not resize when the partners arrive. */}
           {loadingList ? (
-            <p className={`p-4 text-[13px] text-center ${textSecondary}`}>Loading...</p>
+            <CpChatRailSkeleton isDark={isDark} rows={7} />
           ) : listError ? (
             <p className="p-4 text-[13px] text-center text-red-500">{listError}</p>
           ) : filtered.length === 0 ? (
@@ -503,8 +743,8 @@ export default function CpChatPanel({
             return (
               <div key={p.id} onClick={() => setCpId(p.id)}
                 className={`flex items-center gap-3 px-5 py-3 cursor-pointer transition-colors ${active ? (isDark ? "bg-[#1C1C1E]" : "bg-white") : `hover:${bgSubtle}`}`}>
-                <div className={`w-12 h-12 rounded-full flex-shrink-0 flex items-center justify-center text-[15px] font-medium ${getInitialsBg(p.name)}`}>
-                  {initials(p.name)}
+                <div className={`w-12 h-12 rounded-full flex-shrink-0 flex items-center justify-center text-[15px] font-medium ${getInitialsBg(p.name || "")}`}>
+                  {initials(p.name || "")}
                 </div>
                 <div className="min-w-0 flex-1 border-b pb-3 pt-1 border-transparent" style={{ borderBottomColor: active ? 'transparent' : isDark ? '#38383A' : '#E5E5EA' }}>
                   <div className="flex justify-between items-baseline mb-0.5">
@@ -591,11 +831,16 @@ export default function CpChatPanel({
             {/* THREAD BODY */}
             <div className={`flex-1 overflow-y-auto custom-scrollbar px-4 md:px-6 py-6 ${bgApp}`}>
               {loading ? (
-                <div className="space-y-6 animate-pulse">
-                  {[0, 1, 2].map(i => (
-                    <div key={i} className={`h-12 rounded-2xl ${i % 2 ? "ml-auto w-1/2" : "w-2/3"} ${bgSubtle}`} />
-                  ))}
-                </div>
+                // Shaped like the tab it is standing in for, rather than three
+                // identical bars: a conversation on Chat, cards on the
+                // Enquiries and Bookings tabs.
+                activeTab === "chat" ? (
+                  <CpChatThreadSkeleton isDark={isDark} />
+                ) : activeTab === "enquiries" || activeTab === "bookings" ? (
+                  <CpChatCardListSkeleton isDark={isDark} rows={4} />
+                ) : (
+                  <CpChatThreadSkeleton isDark={isDark} />
+                )
               ) : error ? (
                 <div className={`max-w-sm mx-auto mt-10 rounded-2xl p-5 text-center flex flex-col items-center ${bgPanel}`}>
                   <IoWarningOutline className="text-3xl mb-3 text-red-500" />
@@ -616,117 +861,7 @@ export default function CpChatPanel({
                     {thread.map((m, i) => {
                       const prev = thread[i - 1];
                       const newDay = !prev || fmtDay(prev.ts) !== fmtDay(m.ts);
-                      return (
-                        <div key={m.id} className="w-full">
-                          {newDay && (
-                            <div className="flex justify-center my-6">
-                              <span className={`text-[11px] font-medium ${textSecondary}`}>
-                                {fmtDay(m.ts)}
-                              </span>
-                            </div>
-                          )}
-
-                          {m.kind === "text" || m.kind === "attachment" ? (
-                            <div className={`flex w-full ${m.mine ? "justify-end" : "justify-start"} group`}>
-                              <div className={`max-w-[75%] flex flex-col ${m.mine ? "items-end" : "items-start"}`}>
-                                {/* Attribution: Role · Employee Name, above every
-                                    incoming message. Suppressed on your own
-                                    messages, where it would only repeat you. */}
-                                {!m.mine && m.sender?.label && (
-                                  <span className={`text-[11px] font-medium mb-1 px-1 ${toneOf(m.sender).text}`}>
-                                    {m.sender.label}
-                                  </span>
-                                )}
-                                <div className={`px-4 py-2.5 flex flex-col relative ${m.mine
-                                  ? `rounded-2xl rounded-tr-sm ${accentBg} text-white`
-                                  : `rounded-2xl rounded-tl-sm ${isDark ? 'bg-[#2C2C2E] text-white' : 'bg-[#E5E5EA] text-[#1D1D1F]'}`
-                                  }`} style={{ opacity: m.pending ? 0.6 : 1 }}>
-                                  <p className="text-[15px] leading-snug whitespace-pre-wrap break-words">
-                                    {m.text}
-                                  </p>
-                                  <div className={`self-end flex items-center gap-1 text-[10px] mt-1 ${m.mine ? 'text-white/70' : textSecondary}`}>
-                                    <span>{m.pending ? "Sending..." : fmtClock(m.ts)}</span>
-                                    {m.mine && !m.pending && <IoCheckmarkDoneOutline size={12} />}
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          ) : (
-                            /* CRM event card. Every field rendered below comes
-                               from the API's allow-list — there is no drill-through
-                               to the full booking form or lead record, because
-                               those carry phone, PAN, Aadhaar and money. */
-                            <div className="flex justify-center my-4 w-full">
-                              <div className={`w-full max-w-sm rounded-2xl p-4 flex flex-col gap-3 shadow-sm border ${bgPanel} ${borderSubtle}`}>
-                                <div className="flex items-center gap-3">
-                                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${bgSubtle} ${toneOf(m.sender).text}`}>
-                                    {m.kind === "visit" ? <IoLocationOutline size={20} /> :
-                                      m.kind === "booking_update" ? <IoBusinessOutline size={20} /> :
-                                        <IoDocumentTextOutline size={20} />}
-                                  </div>
-                                  <div className="min-w-0">
-                                    <p className={`text-[14px] font-semibold tracking-tight uppercase ${textPrimary}`}>
-                                      {m.title || (m.kind === "booking_update" ? "Booking Update" : "Customer Update")}
-                                    </p>
-                                    {m.sender?.label && (
-                                      <p className={`text-[12px] font-medium truncate ${toneOf(m.sender).text}`}>
-                                        {m.sender.label}
-                                      </p>
-                                    )}
-                                    <p className={`text-[11px] ${textSecondary}`}>{fmtStamp(m.ts)}</p>
-                                  </div>
-                                </div>
-                                <div className={`p-3 rounded-xl flex flex-col gap-2 ${bgSubtle}`}>
-                                  {m.kind === "visit" && (
-                                    <>
-                                      <Row label="Met with" value={m.personMet} {...rowStyles} />
-                                      {m.gps ? (
-                                        <div className="flex justify-between items-start gap-2">
-                                          <span className={`text-[12px] ${textSecondary}`}>Location</span>
-                                          <a href={`https://maps.google.com/?q=${encodeURIComponent(m.gps)}`}
-                                            target="_blank" rel="noopener noreferrer"
-                                            className="text-[12px] font-medium text-right text-blue-500 hover:underline">
-                                            {m.location || "View on map"}
-                                          </a>
-                                        </div>
-                                      ) : (
-                                        <Row label="Location" value={m.location} {...rowStyles} />
-                                      )}
-                                      {m.notes && <Row label="Notes" value={m.notes} {...rowStyles} />}
-                                    </>
-                                  )}
-
-                                  {/* SITE VISIT UPDATE — customer, lead, status,
-                                      feedback. No phone, no email, nothing else. */}
-                                  {m.kind === "customer_update" && (
-                                    <>
-                                      <Row label="Customer" value={m.customer} {...rowStyles} />
-                                      <Row label="Lead" value={m.leadRef} {...rowStyles} />
-                                      <Row label="Status" value={m.status} {...rowStyles} />
-                                      <Row label="Feedback" value={m.feedback} {...rowStyles} />
-                                    </>
-                                  )}
-
-                                  {/* BOOKING CARD — the approved fields only. */}
-                                  {m.kind === "booking_update" && (
-                                    <>
-                                      <Row label="Booking ID" value={m.bookingNo} {...rowStyles} />
-                                      <Row label="Customer" value={m.customer} {...rowStyles} />
-                                      {m.unitConfig && <Row label="Unit" value={m.unitConfig} {...rowStyles} />}
-                                      {m.building && <Row label="Building" value={m.building} {...rowStyles} />}
-                                      {m.tower && <Row label="Tower" value={m.tower} {...rowStyles} />}
-                                      {m.wing && <Row label="Wing" value={m.wing} {...rowStyles} />}
-                                      {m.floor && <Row label="Floor" value={m.floor} {...rowStyles} />}
-                                      {m.status && <Row label="Status" value={m.status} {...rowStyles} />}
-                                      {m.onDate && <Row label="Date" value={fmtDate(m.onDate)} {...rowStyles} />}
-                                    </>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
+                      return <ChatMessage key={m.id} m={m} newDay={newDay} isDark={isDark} />;
                     })}
                     <div ref={endRef} className="h-4" />
                   </div>
@@ -768,34 +903,8 @@ export default function CpChatPanel({
               )}
             </div>
 
-            {/* COMPOSER */}
-            {activeTab === "chat" && (
-              <div className={`flex-shrink-0 px-4 py-3 md:px-6 md:py-4 z-20 ${bgApp}`}>
-                {sendError && (
-                  <p className="text-[11px] mb-2 text-red-500 font-medium ml-2">{sendError}</p>
-                )}
-                {/* iMessage style composer pill. No longer gated on the partner
-                    having an enquiry — messages are partner-scoped now. */}
-                <div className={`flex items-end gap-2 rounded-3xl px-3 py-1.5 transition-all border ${bgPanel} ${borderSubtle}`}>
-                  <textarea
-                    rows={1} value={draft}
-                    disabled={sending}
-                    onChange={e => setDraft(e.target.value)}
-                    onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-                    placeholder="iMessage"
-                    className={`flex-1 bg-transparent outline-none resize-none text-[15px] max-h-24 py-2 disabled:cursor-not-allowed leading-snug ${textPrimary} placeholder:text-[#86868B]`}
-                  />
-
-                  <button onClick={send} disabled={!draft.trim() || sending}
-                    className={`flex items-center justify-center w-8 h-8 self-center rounded-full text-white transition-all ${!draft.trim() || sending
-                      ? "bg-[#D1D1D6] dark:bg-[#38383A]"
-                      : "bg-[#007AFF] hover:scale-105"
-                      }`}>
-                    <IoSend size={14} className="ml-0.5" />
-                  </button>
-                </div>
-              </div>
-            )}
+            {/* COMPOSER — owns its own draft; see <Composer> above. */}
+            {activeTab === "chat" && <Composer isDark={isDark} onSend={send} />}
           </>
         )}
       </div>
@@ -916,3 +1025,9 @@ export default function CpChatPanel({
     </div>
   );
 }
+/**
+ * Memoised at the boundary — see the note on ChannelPartnerEnquiriesTable.
+ * The thread is the most expensive tree in the CRM to rebuild (up to 200
+ * messages and event cards), and both hosts re-render around it constantly.
+ */
+export default React.memo(CpChatPanel);

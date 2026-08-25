@@ -61,6 +61,19 @@ export interface ConversationMessage {
   readAt: string | null;
 }
 
+/** One approved template, as /api/whatsapp/templates already shapes it. */
+export interface TemplateOption {
+  name: string;
+  language: string;
+  category: string;
+  bodyText: string;
+  /** How many positional {{n}} placeholders the body carries. */
+  paramCount: number;
+  /** False when the template needs media, a carousel or a dynamic button. */
+  supported: boolean;
+  unsupportedReason: string | null;
+}
+
 interface Props {
   theme: any;
   isDark: boolean;
@@ -172,6 +185,18 @@ export default function WhatsAppConversationPanel({
   const [connected, setConnected] = useState(false);
   const [banner, setBanner] = useState<string | null>(null);
   const [mobileView, setMobileView] = useState<"list" | "thread">("list");
+
+  // ── template send (spec §13) ───────────────────────────────────────────────
+  // Outside the 24-hour window an approved template is the ONLY thing Meta will
+  // deliver, and the closed-window notice has always said so — but there was no
+  // way to act on it. /api/whatsapp/templates and the `template` branch of the
+  // send route were both already built and simply had no caller, so the composer
+  // told the employee to do something the UI did not let them do.
+  const [templates, setTemplates] = useState<TemplateOption[]>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
+  const [templatesError, setTemplatesError] = useState<string | null>(null);
+  const [pickedTemplate, setPickedTemplate] = useState<string>("");
+  const [templateParams, setTemplateParams] = useState<string[]>([]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
@@ -383,6 +408,64 @@ export default function WhatsAppConversationPanel({
     }
   }, [draft, sending, activeId]);
 
+  /**
+   * Sends an approved template.
+   *
+   * Deliberately a separate call from `send`: the server treats the two
+   * differently — a template skips the 24-hour window check entirely, because a
+   * template is precisely what Meta allows outside it — and mixing them into one
+   * function would blur which rule is being satisfied.
+   */
+  const sendTemplateMessage = useCallback(async () => {
+    if (!pickedTemplate || sending || activeId == null) return;
+
+    const chosen = templates.find((t) => t.name === pickedTemplate);
+    if (chosen && chosen.supported === false) {
+      setBanner(chosen.unsupportedReason ?? "This template cannot be sent from here.");
+      return;
+    }
+    const params = templateParams.slice(0, chosen?.paramCount ?? 0);
+    if (params.length < (chosen?.paramCount ?? 0) || params.some((p) => !p.trim())) {
+      setBanner("Fill in every template placeholder before sending.");
+      return;
+    }
+
+    setSending(true);
+    setBanner(null);
+
+    const clientToken =
+      globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+    try {
+      const res = await fetch(`/api/whatsapp/conversations/${activeId}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ template: pickedTemplate, params, clientToken }),
+      });
+      const json = await res.json();
+
+      // Same contract as `send`: the row comes back on failure too, so a
+      // rejected template is a visible bubble carrying Meta's reason.
+      if (json.data) {
+        setMessages((prev) => {
+          if (prev.some((m) => String(m.id) === String(json.data.id))) return prev;
+          return [...prev, normalizeMessage(json.data)];
+        });
+      }
+
+      if (json.success) {
+        setPickedTemplate("");
+        setTemplateParams([]);
+      } else {
+        setBanner(json.message ?? "Template could not be sent.");
+      }
+    } catch {
+      setBanner("Network error — the template was not sent. Check your connection and retry.");
+    } finally {
+      setSending(false);
+    }
+  }, [pickedTemplate, templateParams, templates, sending, activeId]);
+
   const retry = useCallback(async (messageId: string) => {
     setMessages((prev) =>
       prev.map((m) => (m.id === messageId ? { ...m, status: "sending" } : m))
@@ -438,6 +521,35 @@ export default function WhatsAppConversationPanel({
 
   const windowOpen = detail?.window?.open ?? false;
   const canType = activeId != null && windowOpen;
+
+  // Fetched only when it is actually needed — the route calls Meta live, so
+  // asking for templates on every thread open would be a Graph round trip per
+  // click for a list most threads never use.
+  useEffect(() => {
+    if (activeId == null || windowOpen) return;
+    let cancelled = false;
+    setTemplatesLoading(true);
+    setTemplatesError(null);
+    (async () => {
+      try {
+        const res = await fetch("/api/whatsapp/templates");
+        const json = await res.json();
+        if (cancelled) return;
+        if (json.success) setTemplates(json.data ?? []);
+        else setTemplatesError(json.message ?? "Could not load templates.");
+      } catch {
+        if (!cancelled) setTemplatesError("Could not reach the server for templates.");
+      } finally {
+        if (!cancelled) setTemplatesLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [activeId, windowOpen]);
+
+  const activeTemplate = useMemo(
+    () => templates.find((t) => t.name === pickedTemplate) ?? null,
+    [templates, pickedTemplate]
+  );
 
   // ── render ───────────────────────────────────────────────────────────────
 
@@ -669,6 +781,94 @@ export default function WhatsAppConversationPanel({
                       WhatsApp only allows free-form messages within 24 hours of the customer&apos;s
                       last message. Send an approved template to reach them.
                       {detail?.matchState !== "matched" && " Link this conversation to a lead first."}
+
+                      {/* The way to act on the sentence above. Templates are the
+                          only form Meta delivers to a cold contact, so this is
+                          the composer for a closed window — not an extra. */}
+                      <div className={`mt-2 border-t pt-2 ${theme.tableBorder}`}>
+                        {templatesLoading && <span>Loading approved templates…</span>}
+
+                        {!templatesLoading && templatesError && (
+                          <span className="text-red-500">{templatesError}</span>
+                        )}
+
+                        {!templatesLoading && !templatesError && templates.length === 0 && (
+                          <span>
+                            No approved templates exist on this WhatsApp Business account yet, so
+                            this customer cannot be reached until one is created and approved by
+                            Meta.
+                          </span>
+                        )}
+
+                        {!templatesLoading && templates.length > 0 && (
+                          <div className="flex flex-col gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <select
+                                value={pickedTemplate}
+                                onChange={(e) => {
+                                  setPickedTemplate(e.target.value);
+                                  setTemplateParams([]);
+                                }}
+                                disabled={sending || activeId == null}
+                                className={`rounded-lg border px-2 py-1.5 text-xs outline-none ${theme.chatInput} ${theme.text}`}
+                                aria-label="Approved template"
+                              >
+                                <option value="">Choose an approved template…</option>
+                                {templates.map((t) => (
+                                  <option
+                                    key={`${t.name}-${t.language}`}
+                                    value={t.name}
+                                    // Listed but unselectable: Meta rejects these
+                                    // with 132012 from here, and a failed bubble
+                                    // teaches nothing a disabled row doesn't.
+                                    disabled={t.supported === false}
+                                  >
+                                    {t.name} · {t.language} · {t.category}
+                                    {t.supported === false ? " — not sendable here" : ""}
+                                  </option>
+                                ))}
+                              </select>
+
+                              <button
+                                onClick={sendTemplateMessage}
+                                disabled={!pickedTemplate || sending || activeId == null}
+                                className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40 ${theme.btnSecondary}`}
+                              >
+                                {sending ? "Sending…" : "Send template"}
+                              </button>
+                            </div>
+
+                            {activeTemplate && (
+                              <>
+                                {/* The exact text the customer will receive.
+                                    Sending a template blind is how the wrong one
+                                    goes out to a real person. */}
+                                <p className={`rounded-lg px-2 py-1.5 text-[11px] ${theme.settingsBg} ${theme.text}`}>
+                                  {activeTemplate.bodyText || "(no body text)"}
+                                </p>
+
+                                {Array.from({ length: activeTemplate.paramCount }).map((_, i) => (
+                                  <input
+                                    key={i}
+                                    value={templateParams[i] ?? ""}
+                                    onChange={(e) =>
+                                      setTemplateParams((prev) => {
+                                        const next = [...prev];
+                                        next[i] = e.target.value;
+                                        return next;
+                                      })
+                                    }
+                                    disabled={sending}
+                                    placeholder={`Value for {{${i + 1}}}`}
+                                    maxLength={200}
+                                    className={`rounded-lg border px-2 py-1.5 text-xs outline-none ${theme.chatInput} ${theme.text}`}
+                                  />
+                                ))}
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
 

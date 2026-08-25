@@ -14,13 +14,15 @@
 // anything until a rate exists — so that queue is the live gap between "we have a
 // partner" and "we can pay them", not a cosmetic filter. Roles without commercial
 // visibility never see it: for them a missing rate is not actionable.
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaPlus, FaSearch, FaPen, FaTrash, FaExclamationTriangle, FaUserTie, FaTimes, FaUserCheck } from "react-icons/fa";
 import ChannelPartnerFormModal, { ChannelPartner } from "./ChannelPartnerFormModal";
 import ChannelPartnerDetailView from "./ChannelPartnerDetailView";
 import SearchableSelect, { SelectOption } from "./SearchableSelect";
 import { cpPermissionsFor, CpPermissions } from "@/lib/cpRbac";
+import { useCpResource, invalidateCpCache } from "@/lib/hooks/useCpResource";
+import { CpTableSkeletonRows } from "./cp/CpSkeletons";
 
 interface Props {
   user: { name: string; role: string };
@@ -43,12 +45,31 @@ const fmtDate = (raw: any) => {
   } catch { return null; }
 };
 
-export default function ChannelPartnerListView({ user, isDark, t, permissions, title }: Props) {
-  const perms: CpPermissions = { ...cpPermissionsFor(user?.role), ...permissions };
+/** A Sourcing Manager as /api/users/sourcing-manager returns them. */
+type SourcingManagerRow = {
+  id: number; name: string; username?: string; phone?: string; email?: string;
+};
+
+/** Stable empty lists — a `[]` literal would be a new identity every render. */
+const NO_PARTNERS: ChannelPartner[] = [];
+const NO_MANAGERS: SourcingManagerRow[] = [];
+
+/** Loading-bar widths per column, near the typical value so columns barely settle. */
+const COLUMN_BAR_WIDTHS: Record<string, number> = {
+  __select: 14, "CP Name": 104, Company: 112, "Owner / Contact": 96, Phone: 84,
+  RERA: 96, GST: 108, "Office Address": 160, "Sourcing Manager": 96, Rate: 40,
+  Leads: 24, Bookings: 24, Status: 56, "Registered By": 88, "Registered On": 78,
+};
+
+function ChannelPartnerListView({ user, isDark, t, permissions, title }: Props) {
+  // Memoised: this is spread into a fresh object every render otherwise, and it
+  // feeds `canSeeCommercials` into the fetch URL below.
+  const perms: CpPermissions = useMemo(
+    () => ({ ...cpPermissionsFor(user?.role), ...permissions }),
+    [user?.role, permissions]
+  );
   const { canCreate, canEdit, canDelete, canAssign, canSeeCommercials } = perms;
 
-  const [partners, setPartners] = useState<ChannelPartner[]>([]);
-  const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>("all");
   const [statusFilter, setStatusFilter] = useState("");
   // "" = any, "unassigned", or a specific manager id. Server-side rather than a
@@ -60,9 +81,6 @@ export default function ChannelPartnerListView({ user, isDark, t, permissions, t
   // Drill-down. Kept separate from `editing`: clicking the row opens the
   // commission history, while the row's Edit button still opens field editing.
   const [selectedPartner, setSelectedPartner] = useState<ChannelPartner | null>(null);
-  // Counted from the unfiltered list so the tab badge stays honest regardless of
-  // what the user has filtered down to.
-  const [needsRateCount, setNeedsRateCount] = useState(0);
   const [notice, setNotice] = useState<{ text: string; tone: "ok" | "warn" | "error" } | null>(null);
   // Delete flow: confirm target, then any refusal the server came back with.
   const [deleteTarget, setDeleteTarget] = useState<ChannelPartner | null>(null);
@@ -79,16 +97,12 @@ export default function ChannelPartnerListView({ user, isDark, t, permissions, t
   const [assignTo, setAssignTo] = useState("");
   const [assignBusy, setAssignBusy] = useState(false);
   const [assignError, setAssignError] = useState<string | null>(null);
-  const [managers, setManagers] = useState<any[]>([]);
 
   // Only the roles that can assign need the manager list.
-  useEffect(() => {
-    if (!canAssign) return;
-    fetch("/api/users/sourcing-manager")
-      .then(r => r.json())
-      .then(j => { if (j.success) setManagers(j.data || []); })
-      .catch(() => { });
-  }, [canAssign]);
+  const { data: managers } = useCpResource<SourcingManagerRow[]>(
+    canAssign ? "/api/users/sourcing-manager" : null,
+    { initial: NO_MANAGERS }
+  );
 
   const managerOptions: SelectOption[] = useMemo(
     () => managers.map((m: any) => ({
@@ -107,37 +121,52 @@ export default function ChannelPartnerListView({ user, isDark, t, permissions, t
     setTimeout(() => setNotice(null), 6000);
   };
 
-  const fetchPartners = useCallback(async () => {
-    setLoading(true);
-    try {
-      const p = new URLSearchParams();
-      if (canSeeCommercials && tab === "needs_rate") p.set("needs_rate", "true");
-      if (statusFilter) p.set("status", statusFilter);
-      if (assignedFilter) p.set("assigned_sourcing_manager_id", assignedFilter);
-      const res = await fetch(`/api/channel-partners?${p.toString()}`);
-      const json = await res.json();
-      if (json.success) setPartners(json.data);
+  // Same query string as before, so the server sees an identical request.
+  const listUrl = useMemo(() => {
+    const p = new URLSearchParams();
+    if (canSeeCommercials && tab === "needs_rate") p.set("needs_rate", "true");
+    if (statusFilter) p.set("status", statusFilter);
+    if (assignedFilter) p.set("assigned_sourcing_manager_id", assignedFilter);
+    return `/api/channel-partners?${p.toString()}`;
+  }, [canSeeCommercials, tab, statusFilter, assignedFilter]);
 
-      // Separate unfiltered call purely for the badge. Skipped entirely for roles
-      // that never see the queue.
-      if (canSeeCommercials) {
-        const cRes = await fetch("/api/channel-partners?needs_rate=true");
-        const cJson = await cRes.json();
-        if (cJson.success) setNeedsRateCount(cJson.count ?? cJson.data.length);
-      }
-    } catch { /* non-blocking */ } finally { setLoading(false); }
-  }, [tab, statusFilter, assignedFilter, canSeeCommercials]);
+  // PERF: the badge query used to be `await`ed AFTER the list resolved, inside
+  // the same function — a strict waterfall, and both halves are full HTTP round
+  // trips to Neon (measured at ~155 ms and ~160 ms). Every load, and every
+  // change of tab, status or manager filter, therefore cost ~315 ms of serial
+  // waiting for two independent reads. As two hooks they leave together, so the
+  // cost is now the slower of the two rather than their sum. The badge is
+  // skipped entirely for roles that never see the queue, exactly as before.
+  const {
+    data: partners, loading, error: listError, refetch: refetchList,
+  } = useCpResource<ChannelPartner[]>(listUrl, { initial: NO_PARTNERS });
+
+  const { data: needsRateRows, refetch: refetchNeedsRate } = useCpResource<ChannelPartner[]>(
+    canSeeCommercials ? "/api/channel-partners?needs_rate=true" : null,
+    { initial: NO_PARTNERS }
+  );
+  // The route returns `count: data.length`, so this is the same number the
+  // badge showed before.
+  const needsRateCount = needsRateRows.length;
 
   // A selection made under one filter must not survive into another, or an
   // "Assign" could sweep in rows the operator can no longer see.
   useEffect(() => { setSelectedIds([]); }, [tab, statusFilter, assignedFilter]);
 
-  useEffect(() => { fetchPartners(); }, [fetchPartners]);
+  // Every write here — assign, delete, save — changes rows that any of the
+  // cached partner lists could be holding, so they all go before refetching.
+  const fetchPartners = useCallback(() => {
+    invalidateCpCache("/api/channel-partners");
+    refetchList();
+    refetchNeedsRate();
+  }, [refetchList, refetchNeedsRate]);
 
   // Search is client-side: the partner master is small (tens of rows), so a
-  // round trip per keystroke would be slower than filtering in place.
+  // round trip per keystroke would be slower than filtering in place. Deferred
+  // so the character lands in the box before the table is rebuilt behind it.
+  const deferredSearch = useDeferredValue(search);
   const visible = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = deferredSearch.trim().toLowerCase();
     if (!q) return partners;
     return partners.filter(p =>
       (p.name || "").toLowerCase().includes(q) ||
@@ -147,21 +176,29 @@ export default function ChannelPartnerListView({ user, isDark, t, permissions, t
       (p.rera_registration_no || "").toLowerCase().includes(q) ||
       (p.phone || "").replace(/\D/g, "").includes(q.replace(/\D/g, "") || " ")
     );
-  }, [partners, search]);
+  }, [partners, deferredSearch]);
 
   const openAdd = () => { setEditing(null); setModalOpen(true); };
   const openEdit = (p: ChannelPartner) => { setEditing(p); setModalOpen(true); };
 
   // Selection is cleared whenever the underlying list changes, so a stale id from
   // a previous filter can never be swept into an assignment.
-  const visibleIds = visible.map(p => p.id);
-  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selectedIds.includes(id));
-  const toggleAllVisible = () =>
+  const visibleIds = useMemo(() => visible.map(p => p.id), [visible]);
+  // Was an O(visible × selected) scan re-run on every render — including every
+  // keystroke in the search box and every tick of the host page's clock.
+  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const allVisibleSelected = useMemo(
+    () => visibleIds.length > 0 && visibleIds.every(id => selectedSet.has(id)),
+    [visibleIds, selectedSet]
+  );
+  const toggleAllVisible = () => {
+    const visibleSet = new Set(visibleIds);
     setSelectedIds(allVisibleSelected
-      ? selectedIds.filter(id => !visibleIds.includes(id))
+      ? selectedIds.filter(id => !visibleSet.has(id))
       : [...new Set([...selectedIds, ...visibleIds])]);
-  const toggleOne = (id: number) =>
-    setSelectedIds(sel => sel.includes(id) ? sel.filter(x => x !== id) : [...sel, id]);
+  };
+  const toggleOne = useCallback((id: number) =>
+    setSelectedIds(sel => sel.includes(id) ? sel.filter(x => x !== id) : [...sel, id]), []);
 
   const submitAssign = async () => {
     setAssignBusy(true);
@@ -248,6 +285,7 @@ export default function ChannelPartnerListView({ user, isDark, t, permissions, t
     ...(canEdit || canDelete ? [""] : []),
   ];
 
+  const skeletonWidths = columns.map(c => COLUMN_BAR_WIDTHS[c] ?? 64);
   const showActions = canEdit || canDelete;
 
   return (
@@ -402,11 +440,34 @@ export default function ChannelPartnerListView({ user, isDark, t, permissions, t
             </tr>
           </thead>
           <tbody>
+            {/* Loading / failed / empty are three distinct answers. Only the
+                first gets a skeleton, and only while there is nothing cached to
+                paint instead. */}
             {loading && (
-              <tr><td colSpan={columns.length} className={`px-4 py-10 text-center text-xs ${t.textFaint}`}>Loading...</td></tr>
+              <CpTableSkeletonRows
+                isDark={isDark}
+                columns={columns.length}
+                rows={8}
+                widths={skeletonWidths}
+                cellClass="px-4 py-3"
+              />
             )}
 
-            {!loading && visible.length === 0 && (
+            {!loading && partners.length === 0 && listError && (
+              <tr>
+                <td colSpan={columns.length} className="px-4 py-16 text-center">
+                  <FaTimes className="mx-auto mb-3 text-2xl text-red-500" />
+                  <p className={`text-sm font-bold mb-1 ${t.text}`}>Could not load channel partners</p>
+                  <p className={`text-xs mb-4 ${t.textMuted}`}>{listError}</p>
+                  <button onClick={fetchPartners}
+                    className={`px-4 py-2 rounded-lg text-xs font-bold cursor-pointer ${t.btnPrimary}`}>
+                    Try again
+                  </button>
+                </td>
+              </tr>
+            )}
+
+            {!loading && !(partners.length === 0 && listError) && visible.length === 0 && (
               <tr>
                 <td colSpan={columns.length} className="px-4 py-16 text-center">
                   <FaUserTie className={`mx-auto mb-3 text-2xl ${t.textFaint}`} />
@@ -439,14 +500,14 @@ export default function ChannelPartnerListView({ user, isDark, t, permissions, t
                   // roles that can see it, so the row isn't clickable otherwise.
                   onClick={canSeeCommercials ? () => setSelectedPartner(p) : undefined}
                   className={`text-xs ${canSeeCommercials ? "cursor-pointer" : ""} ${t.tableRow} ${isDark ? "border-b border-[#222]" : ""} ${
-                    selectedIds.includes(p.id) ? (isDark ? "bg-[#9E217B]/10" : "bg-[#9E217B]/5") : ""
+                    selectedSet.has(p.id) ? (isDark ? "bg-[#9E217B]/10" : "bg-[#9E217B]/5") : ""
                   }`}
                 >
                   {canAssign && (
                     <td className="px-4 py-3">
                       <input
                         type="checkbox"
-                        checked={selectedIds.includes(p.id)}
+                        checked={selectedSet.has(p.id)}
                         // Row click drills into commissions; ticking must not do that too.
                         onClick={e => e.stopPropagation()}
                         onChange={() => toggleOne(p.id)}
@@ -609,7 +670,7 @@ export default function ChannelPartnerListView({ user, isDark, t, permissions, t
                   operator can check, but four names are. */}
               {selectedIds.length <= 6 && (
                 <p className={`text-[11px] mb-4 ${t.textFaint}`}>
-                  {partners.filter(p => selectedIds.includes(p.id)).map(p => p.name).join(", ")}
+                  {partners.filter(p => selectedSet.has(p.id)).map(p => p.name).join(", ")}
                 </p>
               )}
 
@@ -723,3 +784,10 @@ export default function ChannelPartnerListView({ user, isDark, t, permissions, t
     </div>
   );
 }
+
+/**
+ * Memoised at the boundary — see the note on ChannelPartnerEnquiriesTable. The
+ * admin dashboard that hosts this re-renders on a 30 s lead poll, on sidebar
+ * hover and on every notification toast, none of which change this table.
+ */
+export default React.memo(ChannelPartnerListView);

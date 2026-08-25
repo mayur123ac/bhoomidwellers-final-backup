@@ -15,11 +15,13 @@
 // fields under bare labels ("Phone Number", "City", "Email"). Since both
 // walkin_enquiries and channel_partners now carry city/pin_code/phone/email, every
 // header here is prefixed CP / Client so a row can never be misread.
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useDeferredValue, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaSearch, FaTimes, FaUserTie, FaExchangeAlt, FaHandshake } from "react-icons/fa";
 import SearchableSelect, { SelectOption } from "./SearchableSelect";
 import { normalizeRole } from "@/lib/cpRbac";
+import { useCpResource, invalidateCpCache } from "@/lib/hooks/useCpResource";
+import { CpTableSkeletonRows, CpHeaderSkeleton } from "./cp/CpSkeletons";
 
 interface Props {
   user: { name: string; role: string; _id?: string };
@@ -58,7 +60,137 @@ const cpField = (row: any, masterKey: string, enquiryKey?: string) =>
 const employeeCode = (id: any, username?: any) =>
   username || (id ? `#${id}` : null);
 
-export default function ChannelPartnerEnquiriesTable({
+/**
+ * An enquiry row as /api/cp-enquiries returns it, and the host page's theme
+ * token bag. Both are untyped bags in this file already — the aliases exist so
+ * the new prop signatures below name what they take instead of repeating `any`
+ * eight more times.
+ */
+/* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+type EnquiryRowData = Record<string, any>;
+type ThemeTokens = Props["t"];
+
+/** Stable empty arrays — a `[]` literal would be a new identity every render. */
+const NO_ROWS: EnquiryRowData[] = [];
+
+/**
+ * Roughly how wide each column's content usually is, in px, used only to size
+ * the loading bars. Keeping them near the real values is what stops the columns
+ * resizing under the operator when the rows arrive.
+ */
+const COLUMN_BAR_WIDTHS: Record<string, number> = {
+  "Sr. No.": 28, "Lead No.": 44, Created: 78, "CP Name": 104, "CP Company": 112,
+  "CP Phone": 84, "Office Address": 150, "Owner / Contact": 96, GST: 108, RERA: 96,
+  "CP City": 62, "CP Pin": 48, "Client Name": 104, "Client Phone": 84, "Alt Phone": 84,
+  "Client Email": 128, "Preferred Location": 108, Budget: 70, Requirement: 96,
+  "Sourcing Manager": 96, Status: 62,
+};
+
+const requirementOf = (r: EnquiryRowData) => {
+  const parts = [r.configuration, r.purpose]
+    .map(v => (v && v !== "N/A" && v !== "Pending" ? String(v) : null))
+    .filter(Boolean);
+  return parts.length ? parts.join(" · ") : null;
+};
+
+/**
+ * One enquiry row.
+ *
+ * Split out and memoised because the panel's own state changes constantly for
+ * reasons that have nothing to do with any row: the search box, the "saved"
+ * notice, the detail drawer, the reassign dialog. Each of those used to
+ * re-render all 210 rows and their ~4,400 cells. `row` identities come straight
+ * from the fetched array, so they only change when the data actually does.
+ */
+const EnquiryRow = React.memo(function EnquiryRow({
+  row: r, serial, isDark, t, canReassign, onOpen, onReassign,
+}: {
+  row: EnquiryRowData;
+  /** Position on screen, or null when the Sr. No. column is off. */
+  serial: number | null;
+  isDark: boolean;
+  t: ThemeTokens;
+  canReassign: boolean;
+  onOpen: (row: EnquiryRowData) => void;
+  onReassign: (row: EnquiryRowData) => void;
+}) {
+  const cell = `px-3 py-3 whitespace-nowrap ${t.textMuted}`;
+  return (
+    <tr onClick={() => onOpen(r)}
+      className={`text-xs cursor-pointer transition-colors ${t.tableRow} ${isDark ? "border-b border-white/5 hover:bg-white/5" : "border-b border-black/5 hover:bg-black/5"}`}>
+      {/* Position on screen, not an identifier — muted so it doesn't
+          compete with the lead number sitting next to it. */}
+      {serial !== null && (
+        <td className={`px-3 py-3 whitespace-nowrap ${t.textMuted}`}>{serial}</td>
+      )}
+      <td className={`px-3 py-3 font-semibold whitespace-nowrap ${t.text}`}>
+        #{String(r.sr_no || r.id).padStart(3, "0")}
+      </td>
+      <td className={cell}>{fmtDate(r.created_at) || dash(t)}</td>
+      <td className={`px-3 py-3 font-medium whitespace-nowrap ${t.text}`}>
+        {cpField(r, "partner_name", "cp_name") || dash(t)}
+      </td>
+      <td className={cell}>{cpField(r, "partner_company", "cp_company") || dash(t)}</td>
+      <td className={cell}>{cpField(r, "partner_phone", "cp_phone") || dash(t)}</td>
+      <td className={`px-3 py-3 ${t.textMuted}`}>
+        {r.office_address
+          ? <span className="block max-w-[180px] truncate" title={r.office_address}>{r.office_address}</span>
+          : dash(t)}
+      </td>
+      <td className={cell}>{r.owner_contact_person || dash(t)}</td>
+      <td className={cell}>{r.gst_number || dash(t)}</td>
+      <td className={cell}>{r.rera_registration_no || dash(t)}</td>
+      <td className={cell}>{r.partner_city || dash(t)}</td>
+      <td className={cell}>{r.partner_pin_code || dash(t)}</td>
+      <td className={`px-3 py-3 font-medium whitespace-nowrap ${t.text}`}>{r.client_name || dash(t)}</td>
+      <td className={cell}>{r.client_phone || dash(t)}</td>
+      <td className={cell}>{r.alt_phone || dash(t)}</td>
+      <td className={cell}>{r.email && r.email !== "N/A" ? r.email : dash(t)}</td>
+      <td className={cell}>{r.preferred_location || dash(t)}</td>
+      <td className={cell}>{r.budget && r.budget !== "Pending" ? r.budget : dash(t)}</td>
+      <td className={cell}>{requirementOf(r) || dash(t)}</td>
+      <td className="px-3 py-3 whitespace-nowrap">
+        {r.sourcing_manager_name ? (
+          <>
+            <span className={`font-medium ${t.text}`}>{r.sourcing_manager_name}</span>
+            {/* Inherited from the partner rather than set on this enquiry.
+                Worth marking: it means reassigning the partner moves this
+                lead too, which a per-enquiry assignment would not. */}
+            {r.sourcing_manager_inherited && (
+              <span className={`block text-[9px] mt-0.5 ${t.textFaint}`}>via partner</span>
+            )}
+          </>
+        ) : (
+          <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-500">
+            Unassigned
+          </span>
+        )}
+      </td>
+      <td className="px-3 py-3 whitespace-nowrap">
+        <span className={`px-2.5 py-1 rounded-full text-[10px] font-semibold border ${t.statusAssigned}`}>
+          {r.status || "Assigned"}
+        </span>
+      </td>
+      {canReassign && (
+        <td className="px-3 py-3 text-right whitespace-nowrap">
+          <button
+            // Row click opens the detail drawer; this must not trigger it too.
+            onClick={e => { e.stopPropagation(); onReassign(r); }}
+            className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold cursor-pointer whitespace-nowrap transition-colors ${r.effective_sourcing_manager_id
+              ? isDark ? "text-white hover:bg-white/10" : "text-black hover:bg-black/5"
+              : t.btnPrimary
+              }`}
+          >
+            <FaExchangeAlt className="inline text-[9px] mr-1" />
+            {r.effective_sourcing_manager_id ? "Reassign" : "Assign"}
+          </button>
+        </td>
+      )}
+    </tr>
+  );
+});
+
+function ChannelPartnerEnquiriesTable({
   user, isDark, t, title, subtitle, showSerial = false,
 }: Props) {
   const role = normalizeRole(user?.role);
@@ -70,11 +202,8 @@ export default function ChannelPartnerEnquiriesTable({
   const canReassign = isAdmin;
   const showFilter = isAdmin || role === "receptionist";
 
-  const [rows, setRows] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [smFilter, setSmFilter] = useState("");
-  const [managers, setManagers] = useState<any[]>([]);
   const [detail, setDetail] = useState<any>(null);
   const [assignmentHistory, setAssignmentHistory] = useState<any[]>([]);
   const [assignmentHistoryLoading, setAssignmentHistoryLoading] = useState(false);
@@ -84,27 +213,35 @@ export default function ChannelPartnerEnquiriesTable({
   const [reassignError, setReassignError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const fetchRows = useCallback(async () => {
-    setLoading(true);
-    try {
-      const p = new URLSearchParams();
-      if (showFilter && smFilter) p.set("sourcing_manager_id", smFilter);
-      const res = await fetch(`/api/cp-enquiries?${p.toString()}`);
-      const json = await res.json();
-      if (json.success) setRows(json.data || []);
-    } catch { /* non-blocking */ } finally { setLoading(false); }
+  // The same URL the panel has always requested — the query string is built
+  // identically, so the server sees no change. What is different is that the
+  // answer is remembered: leaving CP Management and coming back now paints the
+  // previous rows on the first frame and revalidates behind them, instead of
+  // dropping to a "Loading" row for another full round trip.
+  const rowsUrl = useMemo(() => {
+    const p = new URLSearchParams();
+    if (showFilter && smFilter) p.set("sourcing_manager_id", smFilter);
+    return `/api/cp-enquiries?${p.toString()}`;
   }, [showFilter, smFilter]);
 
-  useEffect(() => { fetchRows(); }, [fetchRows]);
+  const {
+    data: rows, loading, error: rowsError, refetch: refetchRows,
+  } = useCpResource<EnquiryRowData[]>(rowsUrl, { initial: NO_ROWS });
 
   // Only the roles that can filter or reassign need the manager list.
-  useEffect(() => {
-    if (!showFilter && !canReassign) return;
-    fetch("/api/users/sourcing-manager")
-      .then(r => r.json())
-      .then(j => { if (j.success) setManagers(j.data || []); })
-      .catch(() => { });
-  }, [showFilter, canReassign]);
+  const { data: managers } = useCpResource<EnquiryRowData[]>(
+    showFilter || canReassign ? "/api/users/sourcing-manager" : null,
+    { initial: NO_ROWS }
+  );
+
+  // Reassigning changes who owns a row, so every cached CP list is stale after
+  // one — including the other filters' lists and the partner registry, which
+  // shows the same ownership.
+  const fetchRows = useCallback(() => {
+    invalidateCpCache("/api/cp-enquiries");
+    invalidateCpCache("/api/channel-partners");
+    refetchRows();
+  }, [refetchRows]);
 
   const managerOptions: SelectOption[] = useMemo(
     () => managers.map(m => ({
@@ -130,8 +267,14 @@ export default function ChannelPartnerEnquiriesTable({
   }, [rows]);
   // Client-side search: the CP subset is a small slice of total leads, so filtering
   // in place beats a round trip per keystroke.
+  //
+  // Deferred, though: at 210 rows × 21 columns a keystroke re-filtered the list
+  // and re-rendered ~4,400 cells synchronously before the character appeared in
+  // the box. React now paints the input immediately and re-filters at a lower
+  // priority, so typing stays responsive and the caret never lags.
+  const deferredSearch = useDeferredValue(search);
   const visible = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = deferredSearch.trim().toLowerCase();
     if (!q) return rows;
     const digits = q.replace(/\D/g, "");
     return rows.filter(r =>
@@ -144,7 +287,7 @@ export default function ChannelPartnerEnquiriesTable({
       (digits.length >= 3 && [r.client_phone, r.alt_phone, r.partner_phone, r.cp_phone]
         .some(v => String(v ?? "").replace(/\D/g, "").includes(digits)))
     );
-  }, [rows, search]);
+  }, [rows, deferredSearch]);
 
   const flash = (msg: string) => { setNotice(msg); setTimeout(() => setNotice(null), 5000); };
 
@@ -170,14 +313,19 @@ export default function ChannelPartnerEnquiriesTable({
     }
   };
 
-  const columns = [
+  const columns = useMemo(() => [
     ...(showSerial ? ["Sr. No."] : []),
     "Lead No.", "Created", "CP Name", "CP Company", "CP Phone",
     "Office Address", "Owner / Contact", "GST", "RERA", "CP City", "CP Pin",
     "Client Name", "Client Phone", "Alt Phone", "Client Email",
     "Preferred Location", "Budget", "Requirement", "Sourcing Manager", "Status",
     ...(canReassign ? [""] : []),
-  ];
+  ], [showSerial, canReassign]);
+
+  const skeletonWidths = useMemo(
+    () => columns.map(c => COLUMN_BAR_WIDTHS[c] ?? 64),
+    [columns]
+  );
 
   // APPLE UI: Softer rounded inputs with translucent fills
   const inputCls = `rounded-xl px-3 py-2 text-xs outline-none transition-all ${isDark
@@ -185,14 +333,17 @@ export default function ChannelPartnerEnquiriesTable({
     : "bg-black/5 text-black placeholder-gray-500 focus:bg-black/10 border border-black/5"
     }`;
 
-  const cell = `px-3 py-3 whitespace-nowrap ${t.textMuted}`;
-
-  const requirementOf = (r: any) => {
-    const parts = [r.configuration, r.purpose]
-      .map(v => (v && v !== "N/A" && v !== "Pending" ? String(v) : null))
-      .filter(Boolean);
-    return parts.length ? parts.join(" · ") : null;
-  };
+  // Stable identities, so EnquiryRow's memo actually holds. Passed down instead
+  // of an inline arrow per row, which would be a new function on every render
+  // and defeat the memo for all 210 rows at once.
+  const openDetail = useCallback((r: EnquiryRowData) => setDetail(r), []);
+  const openReassign = useCallback((r: EnquiryRowData) => {
+    setReassignError(null);
+    // Pre-filled with the effective owner, so reassigning a lead that inherited
+    // its manager starts from who actually holds it.
+    setReassignTo(r.effective_sourcing_manager_id ? String(r.effective_sourcing_manager_id) : "");
+    setReassignTarget(r);
+  }, []);
 
   return (
     <div className="flex flex-col h-full overflow-hidden p-1">
@@ -204,15 +355,25 @@ export default function ChannelPartnerEnquiriesTable({
             <h2 className={`text-base font-bold tracking-tight ${t.text}`}>{title || "Channel Partner Enquiries"}</h2>
             {subtitle && <p className={`text-[11px] ${t.textFaint}`}>{subtitle}</p>}
           </div>
-          <span className={`text-xs ${t.textFaint}`}>({rows.length})</span>
+          {/* Counts are meaningless until the rows are in. Showing "(0) · 0
+              Closing · 0 Active" and then correcting it a third of a second
+              later reads as data changing, so the chips hold their size and
+              wait instead. */}
+          {loading ? (
+            <CpHeaderSkeleton isDark={isDark} chips={3} />
+          ) : (
+            <>
+              <span className={`text-xs ${t.textFaint}`}>({rows.length})</span>
 
-          <span className={`px-2.5 py-1 rounded-full text-[10px] font-semibold tracking-wide ${isDark ? "bg-amber-500/20 text-amber-400" : "bg-amber-500/10 text-amber-700"}`}>
-            {counts.closing} Closing
-          </span>
+              <span className={`px-2.5 py-1 rounded-full text-[10px] font-semibold tracking-wide ${isDark ? "bg-amber-500/20 text-amber-400" : "bg-amber-500/10 text-amber-700"}`}>
+                {counts.closing} Closing
+              </span>
 
-          <span className={`px-2.5 py-1 rounded-full text-[10px] font-semibold tracking-wide ${isDark ? "bg-emerald-500/20 text-emerald-400" : "bg-emerald-500/10 text-emerald-700"}`}>
-            {counts.active} Active
-          </span>
+              <span className={`px-2.5 py-1 rounded-full text-[10px] font-semibold tracking-wide ${isDark ? "bg-emerald-500/20 text-emerald-400" : "bg-emerald-500/10 text-emerald-700"}`}>
+                {counts.active} Active
+              </span>
+            </>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -261,11 +422,38 @@ export default function ChannelPartnerEnquiriesTable({
             </tr>
           </thead>
           <tbody>
+            {/* Loading, empty and failed are three different answers and each
+                gets its own. The skeleton is only for the first — and only when
+                there is nothing cached to show, which is what `loading` means
+                here (see useCpResource). */}
             {loading && (
-              <tr><td colSpan={columns.length} className={`px-4 py-10 text-center text-xs ${t.textFaint}`}>Loading…</td></tr>
+              <CpTableSkeletonRows
+                isDark={isDark}
+                columns={columns.length}
+                rows={10}
+                widths={skeletonWidths}
+              />
             )}
 
-            {!loading && visible.length === 0 && (
+            {!loading && rows.length === 0 && rowsError && (
+              <tr>
+                <td colSpan={columns.length} className="px-4 py-16 text-center">
+                  <FaTimes className="mx-auto mb-3 text-2xl text-red-500" />
+                  <p className={`text-sm font-semibold tracking-tight mb-1 ${t.text}`}>
+                    Could not load Channel Partner enquiries
+                  </p>
+                  <p className={`text-xs mb-4 ${t.textMuted}`}>{rowsError}</p>
+                  <button
+                    onClick={fetchRows}
+                    className={`px-4 py-2 rounded-xl text-xs font-semibold cursor-pointer ${t.btnPrimary}`}
+                  >
+                    Try again
+                  </button>
+                </td>
+              </tr>
+            )}
+
+            {!loading && !(rows.length === 0 && rowsError) && visible.length === 0 && (
               <tr>
                 <td colSpan={columns.length} className="px-4 py-16 text-center">
                   <FaUserTie className={`mx-auto mb-3 text-2xl ${t.textFaint}`} />
@@ -288,84 +476,16 @@ export default function ChannelPartnerEnquiriesTable({
             )}
 
             {!loading && visible.map((r, i) => (
-              <tr key={r.id} onClick={() => setDetail(r)}
-                className={`text-xs cursor-pointer transition-colors ${t.tableRow} ${isDark ? "border-b border-white/5 hover:bg-white/5" : "border-b border-black/5 hover:bg-black/5"}`}>
-                {/* Position on screen, not an identifier — muted so it doesn't
-                    compete with the lead number sitting next to it. */}
-                {showSerial && (
-                  <td className={`px-3 py-3 whitespace-nowrap ${t.textMuted}`}>{i + 1}</td>
-                )}
-                <td className={`px-3 py-3 font-semibold whitespace-nowrap ${t.text}`}>
-                  #{String(r.sr_no || r.id).padStart(3, "0")}
-                </td>
-                <td className={cell}>{fmtDate(r.created_at) || dash(t)}</td>
-                <td className={`px-3 py-3 font-medium whitespace-nowrap ${t.text}`}>
-                  {cpField(r, "partner_name", "cp_name") || dash(t)}
-                </td>
-                <td className={cell}>{cpField(r, "partner_company", "cp_company") || dash(t)}</td>
-                <td className={cell}>{cpField(r, "partner_phone", "cp_phone") || dash(t)}</td>
-                <td className={`px-3 py-3 ${t.textMuted}`}>
-                  {r.office_address
-                    ? <span className="block max-w-[180px] truncate" title={r.office_address}>{r.office_address}</span>
-                    : dash(t)}
-                </td>
-                <td className={cell}>{r.owner_contact_person || dash(t)}</td>
-                <td className={cell}>{r.gst_number || dash(t)}</td>
-                <td className={cell}>{r.rera_registration_no || dash(t)}</td>
-                <td className={cell}>{r.partner_city || dash(t)}</td>
-                <td className={cell}>{r.partner_pin_code || dash(t)}</td>
-                <td className={`px-3 py-3 font-medium whitespace-nowrap ${t.text}`}>{r.client_name || dash(t)}</td>
-                <td className={cell}>{r.client_phone || dash(t)}</td>
-                <td className={cell}>{r.alt_phone || dash(t)}</td>
-                <td className={cell}>{r.email && r.email !== "N/A" ? r.email : dash(t)}</td>
-                <td className={cell}>{r.preferred_location || dash(t)}</td>
-                <td className={cell}>{r.budget && r.budget !== "Pending" ? r.budget : dash(t)}</td>
-                <td className={cell}>{requirementOf(r) || dash(t)}</td>
-                <td className="px-3 py-3 whitespace-nowrap">
-                  {r.sourcing_manager_name ? (
-                    <>
-                      <span className={`font-medium ${t.text}`}>{r.sourcing_manager_name}</span>
-                      {/* Inherited from the partner rather than set on this enquiry.
-                          Worth marking: it means reassigning the partner moves this
-                          lead too, which a per-enquiry assignment would not. */}
-                      {r.sourcing_manager_inherited && (
-                        <span className={`block text-[9px] mt-0.5 ${t.textFaint}`}>via partner</span>
-                      )}
-                    </>
-                  ) : (
-                    <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-500">
-                      Unassigned
-                    </span>
-                  )}
-                </td>
-                <td className="px-3 py-3 whitespace-nowrap">
-                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-semibold border ${t.statusAssigned}`}>
-                    {r.status || "Assigned"}
-                  </span>
-                </td>
-                {canReassign && (
-                  <td className="px-3 py-3 text-right whitespace-nowrap">
-                    <button
-                      // Row click opens the detail drawer; this must not trigger it too.
-                      onClick={e => {
-                        e.stopPropagation();
-                        setReassignError(null);
-                        // Pre-filled with the effective owner, so reassigning a lead
-                        // that inherited its manager starts from who actually holds it.
-                        setReassignTo(r.effective_sourcing_manager_id ? String(r.effective_sourcing_manager_id) : "");
-                        setReassignTarget(r);
-                      }}
-                      className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold cursor-pointer whitespace-nowrap transition-colors ${r.effective_sourcing_manager_id
-                        ? isDark ? "text-white hover:bg-white/10" : "text-black hover:bg-black/5"
-                        : t.btnPrimary
-                        }`}
-                    >
-                      <FaExchangeAlt className="inline text-[9px] mr-1" />
-                      {r.effective_sourcing_manager_id ? "Reassign" : "Assign"}
-                    </button>
-                  </td>
-                )}
-              </tr>
+              <EnquiryRow
+                key={r.id}
+                row={r}
+                serial={showSerial ? i + 1 : null}
+                isDark={isDark}
+                t={t}
+                canReassign={canReassign}
+                onOpen={openDetail}
+                onReassign={openReassign}
+              />
             ))}
           </tbody>
         </table>
@@ -582,3 +702,13 @@ export default function ChannelPartnerEnquiriesTable({
     </div>
   );
 }
+/**
+ * Memoised at the boundary.
+ *
+ * Both hosts re-render for reasons this table has no stake in — the admin
+ * dashboard re-polls all leads every 30 s and re-renders on sidebar hover, and
+ * the sourcing dashboard re-renders on every header interaction. With the
+ * theme object now memoised in both, the props here are stable across those,
+ * so the table sits still instead of rebuilding its whole body.
+ */
+export default React.memo(ChannelPartnerEnquiriesTable);

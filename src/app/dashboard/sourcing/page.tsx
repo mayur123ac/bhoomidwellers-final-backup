@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { clearCrmSession, getStoredCrmUser, installLoggedOutBackGuard } from "@/lib/authSession";
 import { useCrmTheme } from "@/lib/hooks/useCrmTheme";
@@ -28,6 +28,17 @@ import UserAvatar from "@/components/UserAvatar";
 import HeaderClock from "@/components/HeaderClock";
 import AppHeader, { HeaderControl, AppLogo } from "@/components/AppHeader";
 
+/**
+ * The theme object two panels on this page are given.
+ *
+ * They read tokens off it and fall through to their own local styling when a
+ * token is missing, which is what an empty object gets them. It is hoisted to
+ * module scope purely for identity: written inline as `t={{}}` it was a fresh
+ * object on every render of this page, so a memoised child would have seen a
+ * changed prop every time and re-rendered anyway.
+ */
+const NO_THEME_TOKENS = Object.freeze({});
+
 const NAV_ITEMS = [
   { id: "overview", icon: IoGridOutline, activeIcon: IoGrid, title: "Dashboard" },
   { id: "my-cps", icon: IoPeopleOutline, activeIcon: IoPeople, title: "Channel Partners" },
@@ -38,13 +49,15 @@ const NAV_ITEMS = [
 export default function SourcingManagerDashboard() {
   const router = useRouter();
   const { isDark, toggleTheme } = useCrmTheme();
-  const t = buildTheme(isDark);
+  // Memoised on isDark: buildTheme returns a fresh ~60-key object, and it is
+  // handed straight to CP Enquiries and CP Chat. Rebuilt every render it made
+  // those two memo-proof.
+  const t = useMemo(() => buildTheme(isDark), [isDark]);
 
   const [user, setUser] = useState<any>({ name: "Loading...", role: "Sourcing Manager", email: "", password: "" });
   const [activeTab, setActiveTab] = useState("overview");
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const [activePopup, setActivePopup] = useState<"profile" | null>(null);
-  const [currentTime, setCurrentTime] = useState(new Date());
   const topbarRef = useRef<HTMLDivElement>(null);
 
   const [partners, setPartners] = useState<any[]>([]);
@@ -65,10 +78,11 @@ export default function SourcingManagerDashboard() {
     }
   }, []);
 
-  useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
+  /* PERF: a `currentTime` state was ticked here once a second and never read by
+     anything — the header's live clock is HeaderClock, which owns its own tick.
+     It re-rendered this whole page every second, and with it CP Enquiries and
+     CP Chat, whose tables and threads are the most expensive trees on the
+     route. Removed, matching /dashboard/receptionist. */
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -400,7 +414,7 @@ export default function SourcingManagerDashboard() {
             <div className="animate-fadeIn h-full flex flex-col">
               <AssignedChannelPartnersView
                 isDark={isDark}
-                t={{}}
+                t={NO_THEME_TOKENS}
                 title="Channel Partners"
                 subtitle="Your active network of channel partners"
                 onNewEntry={() => setQuickAddOpen(true)}
@@ -458,7 +472,7 @@ export default function SourcingManagerDashboard() {
 
                 <div className={`rounded-2xl p-5 ${bgCard}`}>
                   <h3 className="text-[10px] md:text-xs font-semibold tracking-wider mb-4 uppercase">Communication</h3>
-                  <WhatsAppSettingsCard user={user} setUser={setUser} isDark={isDark} t={{}} />
+                  <WhatsAppSettingsCard user={user} setUser={setUser} isDark={isDark} t={NO_THEME_TOKENS} />
                 </div>
               </div>
             </div>
@@ -476,7 +490,7 @@ export default function SourcingManagerDashboard() {
         partner={null}
         user={user}
         isDark={isDark}
-        t={{}}
+        t={NO_THEME_TOKENS}
         variant="office_visit"
       />
     </div>

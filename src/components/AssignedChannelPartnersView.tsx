@@ -14,12 +14,16 @@
 // partner-level notes or follow-up tables in this CRM: all three live on the lead,
 // so visit history / follow-ups / notes are reached through the partner's
 // enquiries. The drawer says so rather than showing empty sections that look broken.
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FaSearch, FaTimes, FaUserTie, FaHandshake, FaMapMarkerAlt, FaPhone,
   FaClipboardList, FaRegCommentDots, FaWalking, FaFileSignature, FaPlus,
 } from "react-icons/fa";
+import { useCpResource, invalidateCpCache } from "@/lib/hooks/useCpResource";
+import {
+  CpTableSkeletonRows, CpStatCardsSkeleton, CpDrawerSkeleton, SkeletonBar,
+} from "@/components/cp/CpSkeletons";
 
 interface Props {
   isDark: boolean;
@@ -47,15 +51,37 @@ const fmtDate = (raw: any, withTime = false) => {
 /** Values the enquiry form writes as placeholders rather than leaving null. */
 const real = (v: any) => (v && v !== "N/A" && v !== "Pending" ? v : null);
 
+/** One partner row, as this table reads it. */
+type PartnerRow = Record<string, any>;
+
+/** Stable empty list — a `[]` literal would be a new identity on every render. */
+const NO_ROWS: PartnerRow[] = [];
+
+/** Per-column skeleton widths, sized near the typical value in each column. */
+const COLUMN_BAR_WIDTHS = [110, 120, 100, 84, 70, 52, 96, 104, 28, 28, 68, 56, 88];
+
 // The signed-in user is never passed in: "assigned to me" is resolved server-side
 // from the session cookie, so this component cannot be pointed at another manager.
-export default function AssignedChannelPartnersView({
+function AssignedChannelPartnersView({
   isDark, t, title, subtitle, onNewEntry, refreshKey = 0,
 }: Props) {
-  const [rows, setRows] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+
+  // Cached read path. This panel is mounted by `activeView === …`, so leaving the
+  // tab and coming back used to unmount it, blank the table and pay the round
+  // trip again; now a return paints the previous rows on the first render and
+  // revalidates behind them.
+  const {
+    data: rows, loading, error: loadError, refetch,
+  } = useCpResource<PartnerRow[]>("/api/channel-partners?assigned_to_me=true", {
+    initial: NO_ROWS,
+    refreshKey,
+  });
+
+  const fetchRows = useCallback(() => {
+    invalidateCpCache("/api/channel-partners");
+    refetch();
+  }, [refetch]);
 
   // Defaults to most-leads-first, not alphabetical: the question this table exists
   // to answer is which partners are actually delivering.
@@ -66,23 +92,6 @@ export default function AssignedChannelPartnersView({
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [detailTab, setDetailTab] = useState<"profile" | "enquiries" | "visits" | "followups" | "bookings">("profile");
-
-  const fetchRows = useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
-    try {
-      const res = await fetch("/api/channel-partners?assigned_to_me=true");
-      const json = await res.json();
-      if (res.ok && json.success) setRows(json.data || []);
-      else setLoadError(json.message || `Request failed (${res.status}).`);
-    } catch (e: any) {
-      setLoadError(e?.message || "Network error.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { fetchRows(); }, [fetchRows, refreshKey]);
 
   // Fetch the full history whenever a partner is opened. Kept keyed on the id so
   // reopening the same partner after an edit elsewhere re-reads rather than
@@ -111,9 +120,11 @@ export default function AssignedChannelPartnersView({
   }, [detailFor]);
 
   // Client-side: one manager's partner list is tens of rows, so filtering in
-  // place beats a round trip per keystroke.
+  // place beats a round trip per keystroke. Deferred so the character the
+  // operator just typed paints before the list is re-filtered and re-sorted.
+  const deferredSearch = useDeferredValue(search);
   const visible = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = deferredSearch.trim().toLowerCase();
     const digits = q.replace(/\D/g, "");
     const filtered = !q ? rows : rows.filter(r =>
       [r.name, r.company_name, r.owner_contact_person, r.gst_number,
@@ -138,7 +149,7 @@ export default function AssignedChannelPartnersView({
           return byName(a, b);
       }
     });
-  }, [rows, search, sortBy]);
+  }, [rows, deferredSearch, sortBy]);
 
   const profileComplete = (p: any) =>
     !!(p.office_address && p.gst_number && p.rera_registration_no && p.owner_contact_person);
@@ -158,10 +169,10 @@ export default function AssignedChannelPartnersView({
     };
   }, [rows]);
 
-  const columns = [
+  const columns = useMemo(() => [
     "CP Name", "Company", "Owner / Contact", "Phone", "City", "Pin",
     "RERA", "GST", "Leads", "Bookings", "Profile", "Status", "Assigned On",
-  ];
+  ], []);
   const inputCls = `rounded-xl px-3 py-2 text-xs outline-none transition-all w-[170px] sm:w-56 max-w-full ${isDark
     ? "bg-[#1C1C1E] text-white placeholder-gray-500 border border-[#38383A] focus:bg-[#2C2C2E] focus:border-[#9E217B] focus:ring-2 focus:ring-[#9E217B]/10"
     : "bg-white text-gray-900 placeholder-gray-400 border border-gray-200 focus:bg-white focus:border-[#9E217B] focus:ring-2 focus:ring-[#9E217B]/10"
@@ -223,7 +234,11 @@ export default function AssignedChannelPartnersView({
             <h2 className={`text-base font-bold ${t.text}`}>{title || "My Channel Partners"}</h2>
             {subtitle && <p className={`text-[11px] ${t.textFaint}`}>{subtitle}</p>}
           </div>
-          <span className={`text-xs ${t.textFaint}`}>({rows.length})</span>
+          {/* `(0)` while the count is still unknown reads as "you have none",
+              which is a different fact from "not loaded yet". */}
+          {loading
+            ? <SkeletonBar isDark={isDark} w="26px" h={12} className="inline-block" />
+            : <span className={`text-xs ${t.textFaint}`}>({rows.length})</span>}
         </div>
         <div className="flex items-center gap-2">
           <select value={sortBy} onChange={e => setSortBy(e.target.value as any)}
@@ -253,6 +268,8 @@ export default function AssignedChannelPartnersView({
       {/* ── Portfolio summary ──
           What this manager's partners have actually produced, so the answer to
           "who is bringing us business" is on screen before any scrolling. */}
+      {loading && <CpStatCardsSkeleton isDark={isDark} />}
+
       {!loading && rows.length > 0 && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mx-2 mb-3">
           {[
@@ -309,10 +326,33 @@ export default function AssignedChannelPartnersView({
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={columns.length} className={`px-4 py-10 text-center text-xs ${t.textFaint}`}>Loading…</td></tr>
+              <CpTableSkeletonRows
+                isDark={isDark}
+                columns={columns.length}
+                rows={8}
+                widths={COLUMN_BAR_WIDTHS}
+              />
             )}
 
-            {!loading && visible.length === 0 && (
+            {/* A failed load is not an empty result: it gets its own row and a
+                way back, rather than "no partners assigned to you yet" — which
+                would be a lie about the data. */}
+            {!loading && rows.length === 0 && loadError && (
+              <tr>
+                <td colSpan={columns.length} className="px-4 py-16 text-center">
+                  <p className={`text-sm font-bold mb-1 ${t.text}`}>Couldn&apos;t load your channel partners</p>
+                  <p className={`text-xs mb-3 ${t.textMuted}`}>{loadError}</p>
+                  <button
+                    onClick={fetchRows}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${t.btnPrimary}`}
+                  >
+                    Try again
+                  </button>
+                </td>
+              </tr>
+            )}
+
+            {!loading && visible.length === 0 && !(rows.length === 0 && loadError) && (
               <tr>
                 <td colSpan={columns.length} className="px-4 py-16 text-center">
                   <FaUserTie className={`mx-auto mb-3 text-2xl ${t.textFaint}`} />
@@ -409,9 +449,7 @@ export default function AssignedChannelPartnersView({
                 </button>
               </div>
 
-              {detailLoading && (
-                <p className={`text-xs py-10 text-center ${t.textFaint}`}>Loading full history…</p>
-              )}
+              {detailLoading && <CpDrawerSkeleton isDark={isDark} />}
 
               {detailError && (
                 <div className="rounded-lg px-3 py-2 text-xs bg-red-500/10 border border-red-500/30 text-red-500">
@@ -616,3 +654,7 @@ export default function AssignedChannelPartnersView({
     </div>
   );
 }
+
+// Memoised: the sourcing dashboard re-renders on theme changes, sidebar toggles
+// and its own header state, none of which alter this panel's props.
+export default React.memo(AssignedChannelPartnersView);

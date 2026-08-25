@@ -13,7 +13,6 @@ import {
   FaFileInvoice, FaFileInvoiceDollar, FaPaperPlane, FaMicrophone, FaWhatsapp, FaTable, FaChartPie, FaEyeSlash, FaUniversity, FaHandshake, FaExchangeAlt, FaBriefcase, FaDownload, FaCog, FaMapMarkerAlt, FaSignal, FaUserClock, FaTrashAlt, FaBoxes, FaUserTie
 } from "react-icons/fa";
 import { BhoomiAiGlyph } from "@/components/bhoomi-ai/BhoomiAiIcon";
-import BhoomiAiPanel from "@/components/bhoomi-ai/BhoomiAiPanel";
 import { downloadCSV } from "@/lib/downloadCsv";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 import LoginTimerWidget from "@/components/LoginTimerWidget";
@@ -22,14 +21,11 @@ import { useAttendance } from "@/components/AttendanceContext";
 import BookingFormModal from "@/components/BookingFormModal";
 import BookingApplicationView from "@/components/BookingApplicationView";
 import ClosedLeadBookingView from "@/components/ClosedLeadBookingView";
-import WhatsAppConversationPanel from "@/components/whatsapp/WhatsAppConversationPanel";
 import LostLeadModal from "@/components/LostLeadModal";
 import CrmUpdatesNotification from "@/components/CrmUpdatesNotification";
 import PermanentLeadDeleteDialog from "@/components/PermanentLeadDeleteDialog";
 import BulkDeleteLeadsDialog from "@/components/BulkDeleteLeadsDialog";
-import LoanDealForm from "@/components/LoanDealForm";
 import LoanDealView from "@/components/LoanDealView";
-import InventoryManagementView from "@/components/InventoryManagementView";
 import ChannelPartnerListView from "@/components/ChannelPartnerListView";
 import CpChatPanel from "@/components/CpChatPanel";
 import ChannelPartnerEnquiriesTable from "@/components/ChannelPartnerEnquiriesTable";
@@ -89,6 +85,38 @@ const SiteVisitsChart = dynamic(
   () => import("@/components/admin/AdminDashboardCharts").then(m => m.SiteVisitsChart),
   { ssr: false }
 );
+
+// PERF: same treatment, extended to the four heaviest view/overlay components on
+// this route. Every one of them is already rendered behind a condition — an
+// `activeView` match or an open-modal flag — so nothing about when they appear
+// changes; they simply stop being downloaded and parsed before first paint by
+// operators who never open them.
+//
+// This matters to the Channel Partner screens specifically. CP Management, CP
+// Enquiries and CP Chat are `activeView` branches of THIS page, so the whole
+// route bundle has to arrive and execute before any of them can draw their first
+// row. Trimming it is the part of their load time that no amount of caching or
+// memoisation inside those panels could reach.
+//
+// The CP panels themselves are deliberately NOT lazy: they are the destination,
+// and putting a second network round trip between the sidebar click and the
+// table would trade a smaller first load for a slower arrival at the thing the
+// operator actually asked for.
+const InventoryManagementView = dynamic(() => import("@/components/InventoryManagementView"), {
+  ssr: false,
+  // Holds the view's full height so the surrounding layout doesn't collapse and
+  // re-expand while the chunk arrives. Deliberately theme-neutral: `loading`
+  // receives no props, and a translucent slate reads correctly on both themes.
+  loading: () => (
+    <div className="flex-1 m-1 rounded-3xl animate-pulse bg-slate-500/10" aria-hidden />
+  ),
+});
+const BhoomiAiPanel = dynamic(() => import("@/components/bhoomi-ai/BhoomiAiPanel"), { ssr: false });
+const WhatsAppConversationPanel = dynamic(
+  () => import("@/components/whatsapp/WhatsAppConversationPanel"),
+  { ssr: false }
+);
+const LoanDealForm = dynamic(() => import("@/components/LoanDealForm"), { ssr: false });
 
 // ─── SUN/MOON ICONS ───────────────────────────────────────────────────────────
 const SunIcon = () => (
@@ -589,11 +617,21 @@ function AdminAtlasDashboardContent() {
   // Dismissals moved into useNotificationFeed, keyed by notification id so a
   // lead that raises both a New Lead and a Site Visit reminder can have one
   // dismissed without silencing the other.
+  // PERF: this clock has exactly one reader — the `now` prop AttendanceView gets
+  // on the "My Attendance" view. Ticking it unconditionally re-rendered this
+  // entire component (and every panel it hosts: CP Management's 20-column table,
+  // the CP Chat thread, Inventory) once a second, on every view, forever, to
+  // update a widget that was not on screen. It now only ticks while the view
+  // that reads it is open; the header's own clock is HeaderClock, which has
+  // always owned its own tick.
   const [currentTime, setCurrentTime] = useState(new Date());
+  const needsClock = activeView === "attendance";
   useEffect(() => {
+    if (!needsClock) return;
+    setCurrentTime(new Date());
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [needsClock]);
   const [user, setUser] = useState<any>({ name: "Admin", role: "Admin", email: "", password: "" });
   const [activePopup, setActivePopup] = useState<"notifications" | "profile" | "updates" | null>(null);
   const topbarRef = useRef<HTMLDivElement>(null);
