@@ -53,6 +53,10 @@ export interface ImportRow {
   final_action: FinalAction | null;
   matched_record_id: number | null;
   target_record_id: number | null;
+  match_confidence: number | null;
+  match_reason: string | null;
+  user_override_action: ProposedAction | null;
+  pre_update_snapshot: Record<string, any> | null;
   warnings: string[];
   errors: string[];
   created_at: string;
@@ -78,6 +82,12 @@ export interface StageResult {
   validRows: number;
   invalidRows: number;
   sheetName: string;
+  dedupSummary?: {
+    creates: number;
+    updates: number;
+    skips: number;
+    manualReview: number;
+  };
 }
 
 export interface CommitResult {

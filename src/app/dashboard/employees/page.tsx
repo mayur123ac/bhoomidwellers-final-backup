@@ -13,6 +13,9 @@ import BhoomiAiPanel from "@/components/bhoomi-ai/BhoomiAiPanel";
 import { BhoomiAiGlyph } from "@/components/bhoomi-ai/BhoomiAiIcon";
 // The canvas colour, imported rather than retyped, so the header and the
 // workspace below it cannot drift to two slightly different darks.
+import { FiChevronDown, FiCheck } from "react-icons/fi";
+// Add this near your other state declarations:
+import { FiUser, FiHelpCircle, FiLogOut, FiChevronRight } from "react-icons/fi";
 import { CANVAS as AI_CANVAS } from "@/components/bhoomi-ai/theme";
 import { clearCrmSession, getStoredCrmUser, installLoggedOutBackGuard } from "@/lib/authSession";
 import { useOrgName } from "@/lib/hooks/useOrgName";
@@ -373,7 +376,7 @@ export default function EmployeesPage() {
   const [transferTo, setTransferTo] = useState("");
   const [transferLoading, setTransferLoading] = useState(false);
   const [transferConfirmed, setTransferConfirmed] = useState(false);
-
+  const [dropdownOpen, setDropdownOpen] = useState(false);
   const combinedAssignees = useMemo(() => {
     return [...salesManagers, ...siteHeads];
   }, [salesManagers, siteHeads]);
@@ -1306,35 +1309,122 @@ export default function EmployeesPage() {
             </div>
 
             <div className="relative">
-              <div onClick={() => { setIsProfileOpen(!isProfileOpen); setIsNotifOpen(false); }}
-                className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm cursor-pointer shadow-sm hover:opacity-80 transition-opacity border
-                  ${isDark ? "border-[#9E217B]/40 text-[#d946a8] bg-[#9E217B]/15" : "border-[#9E217B]/40 text-[#9E217B] bg-[#9E217B]/10"}`}>
+              <div
+                onClick={() => { setIsProfileOpen(!isProfileOpen); setIsNotifOpen(false); }}
+                className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm cursor-pointer shadow-sm hover:opacity-80 transition-opacity border ${isDark ? "border-[#9E217B]/40 text-[#d946a8] bg-[#9E217B]/15" : "border-[#9E217B]/40 text-[#9E217B] bg-[#9E217B]/10"
+                  }`}
+              >
                 {String(user?.name || "A").charAt(0).toUpperCase()}
               </div>
-              {isProfileOpen && (
-                <div className={`absolute top-12 right-0 w-64 border rounded-xl shadow-2xl p-5 z-50 animate-fadeIn ${t.dropdown}`}>
-                  <div className="mb-4">
-                    <h3 className={`font-bold text-lg ${t.text}`}>{user?.name || "Admin"}</h3>
-                    <p className={`text-sm truncate ${t.textMuted}`}>{user?.email || "admin@bhoomi.com"}</p>
-                  </div>
-                  <hr className={`mb-4 ${t.innerBorder}`} />
-                  <div className="space-y-4 mb-6 text-sm">
-                    <p className={`flex justify-between items-center ${t.textMuted}`}>Role:
-                      <span className={`font-bold capitalize px-2 py-0.5 rounded border ${isDark ? "text-[#d946a8] bg-[#9E217B]/10 border-[#9E217B]/30" : "text-[#9E217B] bg-[#9E217B]/10 border-[#9E217B]/30"}`}>{user?.role || "Admin"}</span>
-                    </p>
-                    <div>
-                      <p className={`text-xs mb-1 ${t.textMuted}`}>Password</p>
-                      <div className={`flex items-center justify-between border p-2 rounded-md ${t.dropdownInner}`}>
-                        <span className={`font-mono tracking-widest text-xs ${t.text}`}>{showPassword ? (user?.password || "N/A") : "••••••••"}</span>
-                        <button onClick={() => setShowPassword(!showPassword)} className={`${t.textMuted} cursor-pointer`}>
-                          {showPassword ? <FaEyeSlash /> : <FaEye />}
-                        </button>
+
+              <AnimatePresence>
+                {isProfileOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 8, scale: 0.98 }}
+                    transition={{ duration: 0.18, ease: "easeOut" }}
+                    className={`absolute top-12 right-0 w-[250px] rounded-[20px] p-4 z-[200] border shadow-2xl ${isDark ? "bg-[#1C1C1E]/95 border-white/10" : "bg-white/95 border-black/5"
+                      }`}
+                    style={{ backdropFilter: "blur(24px) saturate(180%)" }}
+                  >
+                    {/* ── HEADER: Avatar & Info ── */}
+                    <div className="flex items-center gap-3 mb-3">
+                      {/* Scaled-down 40px Apple-style Circular Avatar */}
+                      <div
+                        className={`w-10 h-10 rounded-full flex items-center justify-center text-[17px] font-semibold flex-shrink-0 ${isDark ? "bg-[#9E217B]/20 text-[#d946a8]" : "bg-purple-100 text-purple-900"
+                          }`}
+                      >
+                        {(user?.name || "Admin").charAt(0).toUpperCase()}
+                      </div>
+
+                      <div className="flex flex-col overflow-hidden">
+                        {/* 14px is the Apple standard for Callout/Menu Primary text */}
+                        <p className={`font-semibold text-[14px] tracking-tight truncate leading-tight ${t.text}`}>
+                          {user?.name || "Admin"}
+                        </p>
+                        {/* 12px for Subhead/Caption text */}
+                        <p className={`text-[12px] truncate mt-[1px] ${t.textMuted}`}>
+                          {user?.email || "admin@bhoomi.com"}
+                        </p>
                       </div>
                     </div>
-                  </div>
-                  <button onClick={handleLogout} className={`w-full py-2.5 rounded-lg font-semibold transition-colors cursor-pointer ${t.profileLogout}`}>Logout</button>
-                </div>
-              )}
+
+                    {/* ── STATUS ROW ── */}
+                    <div className="flex items-center gap-3 mb-4">
+                      <span
+                        className={`px-2 py-0.5 rounded text-[11px] font-medium border ${isDark
+                          ? "bg-[#9E217B]/10 text-[#d946a8] border-[#9E217B]/30"
+                          : "bg-purple-50 text-purple-800 border-purple-200"
+                          }`}
+                      >
+                        {user?.role || "Admin"}
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"></span>
+                        <span className={`text-[12px] font-medium ${t.textMuted}`}>
+                          Active
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Negative margins align the divider to the container edges exactly */}
+                    <hr className={`-mx-4 border-0 border-t ${isDark ? "border-white/10" : "border-black/5"}`} />
+
+                    {/* ── MENU ITEMS ── */}
+                    <div className="flex flex-col py-1.5">
+                      <button
+                        onClick={() => {
+                          setIsProfileOpen(false);
+                          // Ensure router is available in the scope
+                          router.push("/dashboard/settings/profile");
+                        }}
+                        className={`w-full flex items-center justify-between py-2.5 px-2 -mx-2 rounded-xl transition-colors cursor-pointer group ${isDark ? "hover:bg-white/5" : "hover:bg-black/[0.04]"
+                          }`}
+                      >
+                        <div className={`flex items-center gap-2.5 ${t.text}`}>
+                          {/* Icons reduced to 16px (w-4 h-4) */}
+                          <FiUser className={`w-4 h-4 ${t.textMuted} group-hover:${t.text}`} />
+                          {/* 13px is the strict macOS context menu font size */}
+                          <span className="text-[13px] font-medium">Account Settings</span>
+                        </div>
+                        <FiChevronRight className={`w-3.5 h-3.5 ${t.textMuted}`} />
+                      </button>
+
+                      <hr className={`border-0 border-t my-0.5 ${isDark ? "border-white/10" : "border-black/5"}`} />
+
+                      <button
+                        onClick={() => {
+                          setIsProfileOpen(false);
+                          // Help & Support routing
+                        }}
+                        className={`w-full flex items-center justify-between py-2.5 px-2 -mx-2 rounded-xl transition-colors cursor-pointer group ${isDark ? "hover:bg-white/5" : "hover:bg-black/[0.04]"
+                          }`}
+                      >
+                        <div className={`flex items-center gap-2.5 ${t.text}`}>
+                          <FiHelpCircle className={`w-4 h-4 ${t.textMuted} group-hover:${t.text}`} />
+                          <span className="text-[13px] font-medium">Help & Support</span>
+                        </div>
+                        <FiChevronRight className={`w-3.5 h-3.5 ${t.textMuted}`} />
+                      </button>
+                    </div>
+
+                    <hr className={`-mx-4 border-0 border-t mb-2.5 mt-1 ${isDark ? "border-white/10" : "border-black/5"}`} />
+
+                    {/* ── FOOTER: LOG OUT ── */}
+                    <button
+                      onClick={handleLogout}
+                      className={`w-full flex items-center gap-2.5 py-2.5 px-3 rounded-[12px] font-semibold text-[13px] transition-colors cursor-pointer ${isDark
+                        ? "text-red-400 bg-red-500/10 hover:bg-red-500/20"
+                        : "text-red-600 bg-red-50 hover:bg-red-100"
+                        }`}
+                    >
+                      <FiLogOut className="w-4 h-4" />
+                      Log Out
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
 
             {/* 👇 NOTIFICATION POPUP 👇 */}
@@ -2158,115 +2248,210 @@ export default function EmployeesPage() {
       <AnimatePresence>
         {transferModalOpen && transferFrom && (
           <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[999] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-[999] flex items-center justify-center p-4 sm:p-6 bg-black/40 backdrop-blur-[4px]"
             onClick={() => { if (!transferLoading) { setTransferModalOpen(false); } }}
           >
             <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              transition={{ duration: 0.2 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
               onClick={(e) => e.stopPropagation()}
-              className={`w-full max-w-md mx-4 rounded-2xl border shadow-2xl overflow-hidden ${t.panel}`}
-              style={{ boxShadow: "0 8px 40px rgba(0,0,0,0.25)" }}
+              className={`w-full max-w-[420px] rounded-[24px] shadow-2xl overflow-hidden border ${isDark ? "bg-[#1C1C1E]/95 border-white/10" : "bg-[#F2F2F7]/95 border-black/5"
+                }`}
+              style={{ backdropFilter: "blur(24px) saturate(180%)" }}
             >
-              {/* Header */}
-              <div className={`px-6 py-5 border-b flex items-center gap-3 ${t.panelHead}`}>
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isDark ? "bg-orange-500/15" : "bg-orange-50"}`}>
-                  <FaExchangeAlt className={`text-lg ${isDark ? "text-orange-400" : "text-orange-500"}`} />
+              {/* ── HEADER ── */}
+              <div className={`px-5 py-4 border-b flex items-center gap-3.5 ${isDark ? "border-white/10" : "border-black/5"}`}>
+                <div className="w-10 h-10 rounded-full flex items-center justify-center bg-orange-500/10 flex-shrink-0">
+                  <FaExchangeAlt className="text-[17px] text-orange-500" />
                 </div>
                 <div>
-                  <h2 className={`font-bold text-base ${t.text}`}>Transfer All Leads</h2>
-                  <p className={`text-[11px] ${t.textFaint}`}>Reassign workload between employees</p>
+                  <h2 className={`font-semibold text-[17px] tracking-tight leading-tight ${isDark ? "text-white" : "text-black"}`}>
+                    Transfer All Leads
+                  </h2>
+                  <p className={`text-[13px] tracking-tight mt-0.5 ${isDark ? "text-white/60" : "text-black/60"}`}>
+                    Reassign workload between employees
+                  </p>
                 </div>
               </div>
 
-              {/* Body */}
-              <div className="px-6 py-5 space-y-5">
-                {/* From */}
-                <div>
-                  <label className={`block text-xs mb-1.5 font-semibold ${t.textMuted}`}>🔄 Transfer From</label>
-                  <div className={`w-full rounded-lg px-4 py-2.5 text-sm font-semibold border ${isDark ? "bg-[#1a1a1a] border-[#333] text-gray-300" : "bg-[#F8FAFC] border-indigo-200 text-[#374151]"}`}>
-                    <div className="flex items-center gap-2">
-                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white ${isDark ? "bg-[#9E217B]" : "bg-[#9E217B]"}`}>
+              {/* ── BODY ── */}
+              <div className="px-5 py-5 space-y-5">
+
+                {/* iOS Grouped List for Inputs */}
+                <div className={`rounded-[12px] ${isDark ? "bg-[#2C2C2E]" : "bg-white"}`}>
+
+                  {/* Transfer From */}
+                  <div className={`px-4 py-3 border-b flex flex-col gap-1.5 ${isDark ? "border-white/10" : "border-black/5"}`}>
+                    <span className={`text-[12px] font-medium tracking-wide uppercase ${isDark ? "text-white/50" : "text-black/50"}`}>
+                      Transfer From
+                    </span>
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-semibold text-white bg-[#9E217B] flex-shrink-0">
                         {transferFrom.name.charAt(0).toUpperCase()}
                       </div>
-                      {transferFrom.name}
-                      <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full border ${isDark ? "text-[#d946a8] bg-[#9E217B]/10 border-[#9E217B]/30" : "text-[#9E217B] bg-[#9E217B]/10 border-[#9E217B]/30"}`}>{transferFrom.role}</span>
+                      <span className={`text-[15px] font-medium truncate ${isDark ? "text-white" : "text-black"}`}>
+                        {transferFrom.name}
+                      </span>
+                      <span className={`ml-auto text-[11px] font-medium px-2 py-0.5 rounded border flex-shrink-0 ${isDark ? "text-[#d946a8] bg-[#9E217B]/10 border-[#9E217B]/20" : "text-[#9E217B] bg-[#9E217B]/10 border-[#9E217B]/20"
+                        }`}>
+                        {transferFrom.role}
+                      </span>
                     </div>
+                  </div>
+
+                  {/* Transfer To */}
+
+                  <div className="px-4 py-3 flex flex-col gap-1.5 relative"> {/* <-- 1. MUST HAVE 'relative' */}
+                    <label className={`text-[12px] font-medium tracking-wide uppercase ${isDark ? "text-white/50" : "text-black/50"}`}>
+                      Transfer To
+                    </label>
+
+                    {/* Custom Select Trigger */}
+                    <button
+                      type="button"
+                      onClick={() => setDropdownOpen(!dropdownOpen)}
+                      className={`w-full text-left bg-transparent outline-none text-[15px] font-medium cursor-pointer flex justify-between items-center transition-opacity hover:opacity-70 ${!transferTo
+                        ? (isDark ? "text-white/30" : "text-black/30")
+                        : (isDark ? "text-white" : "text-black")
+                        }`}
+                    >
+                      <span className="truncate pr-2">
+                        {transferTo
+                          ? (() => {
+                            const emp = employees.find((e) => e.name === transferTo);
+                            return emp ? `${emp.name} (${emp.role})` : transferTo;
+                          })()
+                          : "-- Select target employee --"}
+                      </span>
+                      <FiChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform duration-200 ${dropdownOpen ? "rotate-180" : ""}`} />
+                    </button>
+
+                    {/* Custom Dropdown List */}
+                    <AnimatePresence>
+                      {dropdownOpen && (
+                        <>
+                          {/* Invisible backdrop to close dropdown when clicking outside */}
+                          <div
+                            className="fixed inset-0 z-40"
+                            onClick={() => setDropdownOpen(false)}
+                          />
+
+                          {/* 2. MUST HAVE 'absolute top-full left-0 w-full z-50' */}
+                          <motion.div
+                            initial={{ opacity: 0, y: -5, scale: 0.98 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: -5, scale: 0.98 }}
+                            transition={{ duration: 0.15, ease: "easeOut" }}
+                            className={`absolute top-full mt-2 left-0 w-full z-50 rounded-[14px] border shadow-2xl overflow-y-auto ${isDark ? "bg-[#2C2C2E]/95 border-white/10" : "bg-[#F2F2F7]/95 border-black/5"
+                              }`}
+                            style={{ backdropFilter: "blur(24px) saturate(180%)" }}
+                          >
+                            <div className="max-h-[200px] overflow-y-auto custom-scrollbar p-1.5 flex flex-col gap-0.5">
+                              {employees
+                                .filter(emp => emp._id !== transferFrom._id && emp.isActive && emp.email !== ADMIN_EMAIL)
+                                .map(emp => (
+                                  <button
+                                    key={emp._id}
+                                    type="button"
+                                    onClick={() => {
+                                      setTransferTo(emp.name);
+                                      setDropdownOpen(false);
+                                    }}
+                                    className={`w-full text-left px-3 py-2.5 rounded-[10px] text-[14px] transition-colors flex items-center justify-between group ${transferTo === emp.name
+                                      ? isDark
+                                        ? "bg-white/10 text-white font-semibold"
+                                        : "bg-black/5 text-black font-semibold"
+                                      : isDark
+                                        ? "text-white hover:bg-white/5"
+                                        : "text-black hover:bg-black/[0.04]"
+                                      }`}
+                                  >
+                                    <span className="truncate">
+                                      {emp.name} <span className="opacity-50 text-[12px] font-normal tracking-tight">({emp.role})</span>
+                                    </span>
+                                    {transferTo === emp.name && (
+                                      <FiCheck className="w-4 h-4 ml-2 flex-shrink-0" />
+                                    )}
+                                  </button>
+                                ))}
+
+                              {/* Fallback if list is empty */}
+                              {employees.filter(emp => emp._id !== transferFrom._id && emp.isActive && emp.email !== ADMIN_EMAIL).length === 0 && (
+                                <div className={`px-3 py-3 text-[13px] text-center italic ${isDark ? "text-white/40" : "text-black/40"}`}>
+                                  No other employees available
+                                </div>
+                              )}
+                            </div>
+                          </motion.div>
+                        </>
+                      )}
+                    </AnimatePresence>
                   </div>
                 </div>
 
-                {/* To */}
-                <div>
-                  <label className={`block text-xs mb-1.5 font-semibold ${t.textMuted}`}>🔁 Transfer To</label>
-                  <select
-                    value={transferTo}
-                    onChange={e => setTransferTo(e.target.value)}
-                    className={t.sel}
-                  >
-                    <option value="" disabled>-- Select target employee --</option>
-                    {employees
-                      .filter(emp => emp._id !== transferFrom._id && emp.isActive && emp.email !== ADMIN_EMAIL)
-                      .map(emp => (
-                        <option key={emp._id} value={emp.name}>{emp.name} ({emp.role})</option>
-                      ))}
-                  </select>
-                </div>
-
-                {/* Warning */}
-                <div className={`flex items-start gap-3 rounded-xl p-3.5 border ${isDark ? "bg-orange-500/5 border-orange-500/20" : "bg-orange-50 border-orange-200"}`}>
-                  <FaExclamationTriangle className={`text-sm mt-0.5 flex-shrink-0 ${isDark ? "text-orange-400" : "text-orange-500"}`} />
-                  <p className={`text-xs leading-relaxed ${isDark ? "text-orange-300/80" : "text-orange-700"}`}>
-                    This will transfer <strong>ALL</strong> leads currently assigned to <strong>{transferFrom.name}</strong> to the selected employee.
+                {/* Warning Banner */}
+                <div className={`flex items-start gap-3 rounded-[12px] p-3.5 ${isDark ? "bg-orange-500/15" : "bg-orange-50"}`}>
+                  <FaExclamationTriangle className={`text-[15px] mt-[2px] flex-shrink-0 ${isDark ? "text-orange-400" : "text-orange-500"}`} />
+                  <p className={`text-[13px] leading-relaxed tracking-tight ${isDark ? "text-orange-200" : "text-orange-800"}`}>
+                    This will transfer <strong className="font-semibold">ALL</strong> leads currently assigned to <strong className="font-semibold">{transferFrom.name}</strong> to the selected employee.
                   </p>
                 </div>
 
-                {/* Confirm checkbox */}
-                <label className={`flex items-center gap-3 cursor-pointer select-none group`}>
+                {/* Confirmation Checkbox */}
+                <label className="flex items-center gap-3 cursor-pointer select-none group px-1">
                   <input
                     type="checkbox"
                     checked={transferConfirmed}
                     onChange={e => setTransferConfirmed(e.target.checked)}
-                    className="w-4 h-4 rounded border-2 accent-[#9E217B] cursor-pointer"
+                    className="w-[18px] h-[18px] rounded-[4px] border-2 accent-orange-500 cursor-pointer"
                   />
-                  <span className={`text-xs ${t.textMuted} group-hover:${t.text}`}>
+                  <span className={`text-[13px] font-medium tracking-tight transition-colors ${isDark ? "text-white/60 group-hover:text-white/80" : "text-black/60 group-hover:text-black/80"
+                    }`}>
                     I understand this action cannot be undone
                   </span>
                 </label>
               </div>
 
-              {/* Footer */}
-              <div className={`px-6 py-4 border-t flex items-center justify-end gap-3 ${t.innerBorder}`}>
+              {/* ── FOOTER ── */}
+              <div className={`px-5 py-4 border-t flex items-center justify-end gap-2.5 ${isDark ? "border-white/10" : "border-black/5"}`}>
                 <button
                   onClick={() => { setTransferModalOpen(false); setTransferFrom(null); setTransferTo(""); setTransferConfirmed(false); }}
                   disabled={transferLoading}
-                  className={`text-sm font-semibold px-5 py-2.5 rounded-lg cursor-pointer border transition-colors ${isDark ? "bg-[#1a1a1a] hover:bg-[#222] border-[#333] text-gray-300" : "bg-white hover:bg-[#F8FAFC] border-indigo-200 text-[#374151]"}`}
+                  className={`px-5 py-2.5 rounded-[12px] text-[14px] font-semibold transition-colors ${isDark ? "bg-white/10 hover:bg-white/15 text-white" : "bg-black/5 hover:bg-black/10 text-black"
+                    }`}
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleTransferLeads}
                   disabled={!transferTo || !transferConfirmed || transferLoading}
-                  className={`text-sm font-bold px-5 py-2.5 rounded-lg cursor-pointer transition-all flex items-center gap-2 shadow-lg
-                    ${!transferTo || !transferConfirmed || transferLoading
-                      ? isDark ? "bg-[#222] border border-[#333] text-gray-600 cursor-not-allowed shadow-none" : "bg-[#F1F5F9] border border-indigo-200 text-[#9CA3AF] cursor-not-allowed shadow-none"
-                      : "bg-orange-600 hover:bg-orange-500 text-white border border-orange-500 shadow-orange-600/20"
+                  className={`px-5 py-2.5 rounded-[12px] text-[14px] font-semibold transition-all flex items-center gap-2 ${!transferTo || !transferConfirmed || transferLoading
+                    ? isDark
+                      ? "bg-white/5 text-white/30 cursor-not-allowed"
+                      : "bg-black/5 text-black/30 cursor-not-allowed"
+                    : "bg-orange-500 hover:bg-orange-600 text-white shadow-sm active:scale-95"
                     }`}
                 >
                   {transferLoading ? (
                     <>
-                      <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                      <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
                       Transferring...
                     </>
                   ) : (
-                    <>
-                      <FaExchangeAlt className="text-xs" /> Transfer Now
-                    </>
+                    "Transfer Now"
                   )}
                 </button>
               </div>
+
             </motion.div>
           </motion.div>
         )}

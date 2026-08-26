@@ -31,7 +31,7 @@ export interface ParseResult {
 }
 
 // Max data rows (excluding header) accepted in a single import.
-export const MAX_IMPORT_ROWS = 500;
+export const MAX_IMPORT_ROWS = 2000;
 
 // Thrown when a sheet exceeds MAX_IMPORT_ROWS; the API route maps this to a 400.
 export class RowCapError extends Error {
@@ -247,7 +247,7 @@ export function parseLeadSheet(buffer: ArrayBuffer | Buffer): ParseResult {
   // Enforce the row cap (data rows, excluding the header) before doing any work.
   const dataRowCount = rows.length - 1;
   if (dataRowCount > MAX_IMPORT_ROWS) {
-    throw new RowCapError("Please split into files of 500 rows or fewer.");
+    throw new RowCapError("Please split into files of 2,000 rows or fewer.");
   }
 
   for (let i = 1; i < rows.length; i++) {

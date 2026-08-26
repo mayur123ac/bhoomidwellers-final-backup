@@ -16,12 +16,13 @@
 // an optional `status`, and the local nav renders from that list — so adding a
 // section is one entry here, and a section that isn't built yet is visibly
 // labelled rather than silently linking to a blank page.
-
+import { FiUser, FiHelpCircle, FiLogOut, FiChevronRight } from "react-icons/fi";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCrmTheme } from "@/lib/hooks/useCrmTheme";
 import type { IconType } from "react-icons";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   FaBell,
   FaBoxes,
@@ -67,10 +68,11 @@ import { useAttendance } from "@/components/AttendanceContext";
 import CrmUpdatesNotification from "@/components/CrmUpdatesNotification";
 import UserAvatar from "@/components/UserAvatar";
 import AppHeader, { HeaderControl } from "@/components/AppHeader";
+import HeaderClock from "@/components/HeaderClock";
 import { clearCrmSession, getStoredCrmUser } from "@/lib/authSession";
 import { canViewPartners } from "@/lib/cpRbac";
 import { SectionErrorBoundary, SETTINGS_THEME_CSS, T, ToastProvider } from "./ui";
-
+import { useOrgName } from "@/lib/hooks/useOrgName";
 export interface NavItem {
   href: string;
   label: string;
@@ -203,6 +205,7 @@ function railForRole(role: unknown): RailItem[] {
   ];
 }
 
+
 const RAIL_GROUPS: Record<string, string> = {
   dashboard: "Workspace",
   revenue_intelligence: "Workspace",
@@ -262,6 +265,7 @@ export default function SettingsShell({ children }: { children: React.ReactNode 
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const { name: orgName, loading: orgLoading } = useOrgName();
 
   // The one theme preference the whole CRM shares, now owned by lib/theme.ts.
   // Settings has no store of its own, so Dashboard → Employees → Settings never
@@ -334,9 +338,9 @@ export default function SettingsShell({ children }: { children: React.ReactNode 
   const pageStyle = isDark
     ? { background: "#0a0a0a" }
     : {
-        background:
-          "linear-gradient(135deg,#fdf0f8 0%,#f8fafc 30%,#faf0fb 62%,#f8fafc 78%,#fce8f6 100%)",
-      };
+      background:
+        "linear-gradient(135deg,#fdf0f8 0%,#f8fafc 30%,#faf0fb 62%,#f8fafc 78%,#fce8f6 100%)",
+    };
 
   if (!ready) {
     return (
@@ -382,9 +386,8 @@ export default function SettingsShell({ children }: { children: React.ReactNode 
                   <Link
                     href={item.href}
                     aria-current={active ? "page" : undefined}
-                    className={`flex min-h-[42px] items-center gap-2.5 rounded-lg px-3 text-sm transition-colors ${
-                      active ? "" : "st-hover-surface"
-                    }`}
+                    className={`flex min-h-[42px] items-center gap-2.5 rounded-lg px-3 text-sm transition-colors ${active ? "" : "st-hover-surface"
+                      }`}
                     style={{
                       background: active ? T.accentSoft : "transparent",
                       color: active ? T.teal : T.text,
@@ -428,213 +431,269 @@ export default function SettingsShell({ children }: { children: React.ReactNode 
     >
       <style dangerouslySetInnerHTML={{ __html: SETTINGS_THEME_CSS }} />
       <ToastProvider>
-      <div
-        className={`flex h-screen font-sans overflow-hidden relative transition-colors duration-300 ${
-          isDark ? "text-gray-200" : "text-[#1A1A1A]"
-        }`}
-        style={pageStyle}
-      >
-        {/* ── Global rail, chosen by role rather than by route ──
+        <div
+          className={`flex h-screen font-sans overflow-hidden relative transition-colors duration-300 ${isDark ? "text-gray-200" : "text-[#1A1A1A]"
+            }`}
+          style={pageStyle}
+        >
+          {/* ── Global rail, chosen by role rather than by route ──
             A Sales Manager keeps their own rail here; everyone else keeps the
             admin one they already had. `activeId="settings"` is the id of the
             Settings item in BOTH rails, so it highlights either way. */}
-        <RoleSidebar
-          role={user?.role}
-          activeId="settings"
-          onNavigate={railSelect}
-          expanded={isSidebarHovered}
-          onExpandedChange={setIsSidebarHovered}
-          adminItems={railForRole(user?.role)}
-          adminGroups={RAIL_GROUPS}
-          adminLogoSrc="/assets/logobrowser_trans.svg"
-          // Settings has no bottom nav bar, so the rail stays on at every width
-          // — the body already reserves 72px for it unconditionally.
-          hideOnMobile={false}
-        />
+          <RoleSidebar
+            role={user?.role}
+            activeId="settings"
+            onNavigate={railSelect}
+            expanded={isSidebarHovered}
+            onExpandedChange={setIsSidebarHovered}
+            adminItems={railForRole(user?.role)}
+            adminGroups={RAIL_GROUPS}
+            adminLogoSrc="/assets/logobrowser_trans.svg"
+            // Settings has no bottom nav bar, so the rail stays on at every width
+            // — the body already reserves 72px for it unconditionally.
+            hideOnMobile={false}
+          />
 
-        {/* ── Main ── */}
-        <div className="flex-1 flex flex-col pl-[72px] h-screen overflow-hidden">
-          {/* ── Global header ──
+          {/* ── Main ── */}
+          <div className="flex-1 flex flex-col pl-[72px] h-screen overflow-hidden">
+            {/* ── Global header ──
               The bar is now the shared AppHeader; only the page context and the
               controls below are Settings' own. Every control keeps the handler
               and popup it already had. */}
-          <AppHeader
-            isDark={isDark}
-            context={`Settings${currentSection ? ` · ${currentSection.label}` : ""}`}
-            role={user?.role}
-            leading={
-              // Opens the Settings local nav on narrow screens, where the
-              // sections column is hidden.
-              <HeaderControl
-                isDark={isDark}
-                onClick={() => setDrawerOpen(true)}
-                label="Open settings sections"
-                className="lg:hidden"
-              >
-                <FaSlidersH className="w-3.5 h-3.5" />
-              </HeaderControl>
-            }
-          >
-            <>
-              <AttendanceBadge
-                timeIn={timeIn}
-                isMarkedPresent={isMarkedPresent}
-                onLogout={handleLogout} />
+            <AppHeader
+              isDark={isDark}
+              context={`Settings${currentSection ? ` · ${currentSection.label}` : ""}`}
+              role={user?.role}
+              leading={
+                // Opens the Settings local nav on narrow screens, where the
+                // sections column is hidden.
+                <HeaderControl
+                  isDark={isDark}
+                  onClick={() => setDrawerOpen(true)}
+                  label="Open settings sections"
+                  className="lg:hidden"
+                >
+                  <FaSlidersH className="w-3.5 h-3.5" />
+                </HeaderControl>
+              }
+            >
+              <>
+                <HeaderClock isDark={isDark} />
 
-              <HeaderControl
-                isDark={isDark}
-                onClick={toggleTheme}
-                label={isDark ? "Switch to light mode" : "Switch to dark mode"}
-              >
-                {isDark ? <SunIcon /> : <MoonIcon />}
-              </HeaderControl>
+                <AttendanceBadge
+                  timeIn={timeIn}
+                  isMarkedPresent={isMarkedPresent}
+                  onLogout={handleLogout} />
 
-              {/* The bell used to be a bare glyph between two bordered buttons.
+                <HeaderControl
+                  isDark={isDark}
+                  onClick={toggleTheme}
+                  label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+                >
+                  {isDark ? <SunIcon /> : <MoonIcon />}
+                </HeaderControl>
+
+                {/* The bell used to be a bare glyph between two bordered buttons.
                   Wrapping it gives it the same chrome without touching what it
                   does — the component still owns its own popup and unread
                   count, and renders its badge over this frame. */}
-              <div className="relative flex items-center">
-                <CrmUpdatesNotification user={user} theme={chrome} isDark={isDark} />
-              </div>
+                <div className="relative flex items-center">
+                  <CrmUpdatesNotification user={user} theme={chrome} isDark={isDark} />
+                </div>
 
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setIsProfileOpen(!isProfileOpen)}
-                  aria-label="Account menu"
-                  className={`h-9 w-9 flex-shrink-0 rounded-full flex items-center justify-center overflow-hidden font-semibold text-[13px] cursor-pointer transition-colors duration-150 border ${
-                    isDark
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setIsProfileOpen(!isProfileOpen)}
+                    aria-label="Account menu"
+                    className={`h-9 w-9 flex-shrink-0 rounded-full flex items-center justify-center overflow-hidden font-semibold text-[13px] cursor-pointer transition-colors duration-150 border ${isDark
                       ? "border-white/10 text-[#e879c4] bg-[#9E217B]/20 hover:bg-[#9E217B]/30"
                       : "border-[#E5E7EB] text-[#9E217B] bg-[#9E217B]/10 hover:bg-[#9E217B]/15"
-                  }`}
-                >
-                  <UserAvatar name={user?.name} fallback="A" alt="" />
-                </button>
-                {isProfileOpen && (
-                  <div
-                    className={`absolute top-12 right-0 w-64 border rounded-xl shadow-2xl p-5 z-50 animate-fadeIn ${chrome.dropdown}`}
+                      }`}
                   >
-                    <div className="mb-4">
-                      <h3 className={`font-bold text-lg ${chrome.text}`}>{user?.name || "Account"}</h3>
-                      <p className={`text-sm truncate ${chrome.textMuted}`}>
-                        {user?.email || ""}
-                      </p>
-                    </div>
-                    <hr className={`mb-4 ${chrome.tableBorder}`} />
-                    <div className="space-y-4 mb-6 text-sm">
-                      <p className={`flex justify-between items-center ${chrome.textMuted}`}>
-                        Role:
-                        <span
-                          className={`font-bold capitalize px-2 py-0.5 rounded border ${
-                            isDark
-                              ? "text-[#d946a8] bg-[#9E217B]/10 border-[#9E217B]/30"
-                              : "text-[#9E217B] bg-[#9E217B]/10 border-[#9E217B]/30"
+                    <UserAvatar name={user?.name} fallback="A" alt="" />
+                  </button>
+
+                  <AnimatePresence>
+                    {isProfileOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 8, scale: 0.98 }}
+                        transition={{ duration: 0.18, ease: "easeOut" }}
+                        className={`absolute top-12 right-0 w-[250px] rounded-[20px] p-4 z-[200] border shadow-2xl ${isDark ? "bg-[#1C1C1E]/95 border-white/10" : "bg-white/95 border-black/5"
                           }`}
-                        >
-                          {user?.role || "Member"}
-                        </span>
-                      </p>
-                      <div>
-                        <p className={`text-xs mb-1 ${chrome.textMuted}`}>Password</p>
-                        <div
-                          className={`flex items-center justify-between border p-2 rounded-md ${
-                            isDark ? "bg-[#121212] border-[#2a2a2a]" : "bg-white border-indigo-200"
-                          }`}
-                        >
-                          <span className={`font-mono tracking-widest text-xs ${chrome.text}`}>
-                            {showPassword ? user?.password || "N/A" : "••••••••"}
-                          </span>
-                          <button
-                            onClick={() => setShowPassword(!showPassword)}
-                            className={`${chrome.textMuted} cursor-pointer`}
-                            aria-label={showPassword ? "Hide password" : "Show password"}
+                        style={{ backdropFilter: "blur(24px) saturate(180%)" }}
+                      >
+                        {/* ── HEADER: Avatar & Info ── */}
+                        <div className="flex items-center gap-3 mb-3">
+                          {/* Scaled-down 40px Apple-style Circular Avatar */}
+                          <div
+                            className={`w-10 h-10 rounded-full flex items-center justify-center text-[17px] font-semibold flex-shrink-0 ${isDark ? "bg-[#9E217B]/20 text-[#d946a8]" : "bg-purple-100 text-purple-900"
+                              }`}
                           >
-                            {showPassword ? <FaEyeSlash /> : <FaEye />}
+                            {(user?.name || "Account").charAt(0).toUpperCase()}
+                          </div>
+
+                          <div className="flex flex-col overflow-hidden">
+                            {/* 14px is the Apple standard for Callout/Menu Primary text */}
+                            <p className={`font-semibold text-[14px] tracking-tight truncate leading-tight ${isDark ? "text-white" : "text-black"}`}>
+                              {user?.name || "Account"}
+                            </p>
+                            {/* 12px for Subhead/Caption text */}
+                            <p className={`text-[12px] truncate mt-[1px] ${isDark ? "text-white/60" : "text-black/60"}`}>
+                              {user?.email || "No email"}
+                            </p>
+                            <p className={`text-[12px] truncate mt-[1px] ${isDark ? "text-white/60" : "text-black/60"}`}>
+                              {orgLoading ? "Loading org name..." : orgName || "No org name"}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* ── STATUS ROW ── */}
+                        <div className="flex items-center gap-3 mb-4">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[11px] font-medium border ${isDark
+                              ? "bg-[#9E217B]/10 text-[#d946a8] border-[#9E217B]/30"
+                              : "bg-purple-50 text-purple-800 border-purple-200"
+                              }`}
+                          >
+                            {user?.role || "Member"}
+                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"></span>
+                            <span className={`text-[12px] font-medium ${isDark ? "text-white/60" : "text-black/60"}`}>
+                              Active
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Negative margins align the divider to the container edges exactly */}
+                        <hr className={`-mx-4 border-0 border-t ${isDark ? "border-white/10" : "border-black/5"}`} />
+
+                        {/* ── MENU ITEMS ── */}
+                        <div className="flex flex-col py-1.5">
+                          <button
+                            onClick={() => {
+                              setIsProfileOpen(false);
+                              // Ensure router is available in the scope
+                              router.push("/dashboard/settings/profile");
+                            }}
+                            className={`w-full flex items-center justify-between py-2.5 px-2 -mx-2 rounded-xl transition-colors cursor-pointer group ${isDark ? "hover:bg-white/5" : "hover:bg-black/[0.04]"
+                              }`}
+                          >
+                            <div className={`flex items-center gap-2.5 ${isDark ? "text-white" : "text-black"}`}>
+                              {/* Icons reduced to 16px (w-4 h-4) */}
+                              <FiUser className={`w-4 h-4 ${isDark ? "text-white/60" : "text-black/60"} group-hover:${isDark ? "text-white" : "text-black"}`} />
+                              {/* 13px is the strict macOS context menu font size */}
+                              <span className="text-[13px] font-medium">Account Settings</span>
+                            </div>
+                            <FiChevronRight className={`w-3.5 h-3.5 ${isDark ? "text-white/60" : "text-black/60"}`} />
+                          </button>
+
+                          <hr className={`border-0 border-t my-0.5 ${isDark ? "border-white/10" : "border-black/5"}`} />
+
+                          <button
+                            onClick={() => {
+                              setIsProfileOpen(false);
+                              // Add Help & Support routing here
+                            }}
+                            className={`w-full flex items-center justify-between py-2.5 px-2 -mx-2 rounded-xl transition-colors cursor-pointer group ${isDark ? "hover:bg-white/5" : "hover:bg-black/[0.04]"
+                              }`}
+                          >
+                            <div className={`flex items-center gap-2.5 ${isDark ? "text-white" : "text-black"}`}>
+                              <FiHelpCircle className={`w-4 h-4 ${isDark ? "text-white/60" : "text-black/60"} group-hover:${isDark ? "text-white" : "text-black"}`} />
+                              <span className="text-[13px] font-medium">Help & Support</span>
+                            </div>
+                            <FiChevronRight className={`w-3.5 h-3.5 ${isDark ? "text-white/60" : "text-black/60"}`} />
                           </button>
                         </div>
-                      </div>
-                    </div>
-                    <button
-                      onClick={handleLogout}
-                      className={`w-full py-2.5 rounded-lg font-semibold transition-colors cursor-pointer ${
-                        isDark
-                          ? "bg-[#3B1F1F] text-[#F28B82] hover:bg-red-900/40 border border-red-900/30"
-                          : "bg-[#9E217B]/10 text-[#9E217B] hover:bg-[#9E217B] hover:text-white border border-[#9E217B]/30"
-                      }`}
-                    >
-                      Logout
-                    </button>
-                  </div>
-                )}
-              </div>
-            </>
-          </AppHeader>
 
-          {/* ── Settings body ──
+                        <hr className={`-mx-4 border-0 border-t mb-2.5 mt-1 ${isDark ? "border-white/10" : "border-black/5"}`} />
+
+                        {/* ── FOOTER: LOG OUT ── */}
+                        <button
+                          onClick={handleLogout}
+                          className={`w-full flex items-center gap-2.5 py-2.5 px-3 rounded-[12px] font-semibold text-[13px] transition-colors cursor-pointer ${isDark
+                            ? "text-red-400 bg-red-500/10 hover:bg-red-500/20"
+                            : "text-red-600 bg-red-50 hover:bg-red-100"
+                            }`}
+                        >
+                          <FiLogOut className="w-4 h-4" />
+                          Log Out
+                        </button>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </>
+            </AppHeader>
+
+            {/* ── Settings body ──
               The page shell owns the only vertical scroller; the columns inside
               scroll with it, so there is never a second scrollbar. */}
-          <div className={`flex-1 overflow-y-auto ${chrome.scroll}`}>
-            <div className="mx-auto flex w-full max-w-[1400px] gap-6 px-4 py-6 sm:px-6">
-              {/* Local nav — sections *within* Settings, not application nav. */}
-              <aside
-                className="hidden w-60 flex-shrink-0 self-start rounded-xl border lg:block"
-                style={{
-                  background: T.surface,
-                  borderColor: T.border,
-                  boxShadow: isDark ? "none" : "0 1px 3px rgba(16,24,40,0.06)",
-                  position: "sticky",
-                  top: 0,
-                }}
-              >
-                {localNav}
-              </aside>
+            <div className={`flex-1 overflow-y-auto ${chrome.scroll}`}>
+              <div className="mx-auto flex w-full max-w-[1400px] gap-6 px-4 py-6 sm:px-6">
+                {/* Local nav — sections *within* Settings, not application nav. */}
+                <aside
+                  className="hidden w-60 flex-shrink-0 self-start rounded-xl border lg:block"
+                  style={{
+                    background: T.surface,
+                    borderColor: T.border,
+                    boxShadow: isDark ? "none" : "0 1px 3px rgba(16,24,40,0.06)",
+                    position: "sticky",
+                    top: 0,
+                  }}
+                >
+                  {localNav}
+                </aside>
 
-              {/* min-w-0 lets wide tables scroll inside their own container
+                {/* min-w-0 lets wide tables scroll inside their own container
                   instead of stretching the page. Keyed on pathname so a crash in
                   one section clears when the user navigates to another. */}
-              <main className="min-w-0 flex-1">
-                <SectionErrorBoundary key={pathname}>{children}</SectionErrorBoundary>
-              </main>
+                <main className="min-w-0 flex-1">
+                  <SectionErrorBoundary key={pathname}>{children}</SectionErrorBoundary>
+                </main>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* ── Local-nav drawer (narrow screens) ── */}
-        {drawerOpen && (
-          <div
-            className="fixed inset-0 z-[60] bg-black/50 lg:hidden"
-            onMouseDown={(e) => {
-              if (e.target === e.currentTarget) setDrawerOpen(false);
-            }}
-          >
+          {/* ── Local-nav drawer (narrow screens) ── */}
+          {drawerOpen && (
             <div
-              className="ml-auto h-full w-72 overflow-y-auto custom-scrollbar shadow-xl"
-              style={{ background: T.surface }}
-              role="dialog"
-              aria-label="Settings sections"
+              className="fixed inset-0 z-[60] bg-black/50 lg:hidden"
+              onMouseDown={(e) => {
+                if (e.target === e.currentTarget) setDrawerOpen(false);
+              }}
             >
               <div
-                className="flex items-center justify-between border-b px-4 py-3"
-                style={{ borderColor: T.border }}
+                className="ml-auto h-full w-72 overflow-y-auto custom-scrollbar shadow-xl"
+                style={{ background: T.surface }}
+                role="dialog"
+                aria-label="Settings sections"
               >
-                <span className="text-sm font-semibold" style={{ color: T.text }}>
-                  Settings
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setDrawerOpen(false)}
-                  aria-label="Close settings sections"
-                  className="flex h-11 w-11 items-center justify-center rounded-lg"
-                  style={{ color: T.muted }}
+                <div
+                  className="flex items-center justify-between border-b px-4 py-3"
+                  style={{ borderColor: T.border }}
                 >
-                  <FaTimes />
-                </button>
+                  <span className="text-sm font-semibold" style={{ color: T.text }}>
+                    Settings
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setDrawerOpen(false)}
+                    aria-label="Close settings sections"
+                    className="flex h-11 w-11 items-center justify-center rounded-lg"
+                    style={{ color: T.muted }}
+                  >
+                    <FaTimes />
+                  </button>
+                </div>
+                {localNav}
               </div>
-              {localNav}
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
       </ToastProvider>
     </div>
   );

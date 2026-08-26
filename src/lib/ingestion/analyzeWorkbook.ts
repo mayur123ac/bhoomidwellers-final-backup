@@ -373,7 +373,7 @@ export function parseWithMapping(
   // Enforce the row cap.
   const dataRowCount = rows.length - 1;
   if (dataRowCount > MAX_IMPORT_ROWS) {
-    throw new RowCapError("Please split into files of 500 rows or fewer.");
+    throw new RowCapError("Please split into files of 2,000 rows or fewer.");
   }
 
   const validRows: ParsedLead[] = [];

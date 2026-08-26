@@ -70,6 +70,7 @@ interface Template {
 }
 
 interface ImportRow {
+  id: string;
   source_row_number: number;
   raw_data: Record<string, any>;
   normalized_data: {
@@ -84,6 +85,10 @@ interface ImportRow {
   };
   validation_status: "valid" | "invalid";
   proposed_action: string;
+  user_override_action: string | null;
+  match_confidence: number | null;
+  match_reason: string | null;
+  matched_record_id: number | null;
   errors: string[];
   warnings: string[];
 }
@@ -94,6 +99,12 @@ interface StageResult {
   validRows: number;
   invalidRows: number;
   sheetName: string;
+  dedupSummary?: {
+    creates: number;
+    updates: number;
+    skips: number;
+    manualReview: number;
+  };
 }
 
 interface PreviewData {
@@ -393,6 +404,7 @@ export default function UploadLeadSheet({
           validRows: data.validRows,
           invalidRows: data.invalidRows,
           sheetName: data.sheetName,
+          dedupSummary: data.dedupSummary,
         };
         setJobId(data.jobId);
         setStageResult(result);
@@ -815,6 +827,53 @@ export default function UploadLeadSheet({
                     </span>
                   </div>
 
+                  {/* Dedup summary bar */}
+                  {stageResult.dedupSummary && (
+                    <div className="flex flex-wrap items-center gap-2 mb-3">
+                      {stageResult.dedupSummary.creates > 0 && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">
+                          {stageResult.dedupSummary.creates} new
+                        </span>
+                      )}
+                      {stageResult.dedupSummary.updates > 0 && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700">
+                          {stageResult.dedupSummary.updates} update
+                        </span>
+                      )}
+                      {stageResult.dedupSummary.skips > 0 && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-600">
+                          {stageResult.dedupSummary.skips} skip
+                        </span>
+                      )}
+                      {stageResult.dedupSummary.manualReview > 0 && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-100 text-orange-700">
+                          {stageResult.dedupSummary.manualReview} review
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Manual review warning */}
+                  {(() => {
+                    const unresolvedReview = validRows.filter(
+                      (r) => r.proposed_action === "manual_review" && !r.user_override_action
+                    ).length;
+                    return unresolvedReview > 0 ? (
+                      <div
+                        className="rounded-lg p-2.5 mb-3 text-[11px]"
+                        style={{
+                          background: isDark ? "#3b2d1d" : "#fffbeb",
+                          border: "1px solid #fbbf24",
+                        }}
+                      >
+                        <p className="font-bold text-amber-500 flex items-center gap-1.5">
+                          <FaExclamationTriangle size={10} />
+                          {unresolvedReview} row(s) need review. Override them or they will be skipped on commit.
+                        </p>
+                      </div>
+                    ) : null;
+                  })()}
+
                   {validRows.length > 0 && (
                     <div
                       className="rounded-lg overflow-x-auto mb-3"
@@ -823,7 +882,8 @@ export default function UploadLeadSheet({
                       <table className="w-full text-left text-[11px]">
                         <thead>
                           <tr style={{ background: subtleBg }}>
-                            {["Name", "Phone", "Form No", "Date", "Source", "CP", "Config", "Budget"].map((h) => (
+                            <th className="px-2.5 py-1.5 font-bold whitespace-nowrap" style={{ color: mutedColor }}>Action</th>
+                            {["Name", "Phone", "Form No", "Date", "Source", "CP"].map((h) => (
                               <th key={h} className="px-2.5 py-1.5 font-bold whitespace-nowrap" style={{ color: mutedColor }}>
                                 {h}
                               </th>
@@ -833,8 +893,74 @@ export default function UploadLeadSheet({
                         <tbody>
                           {validRows.map((r, i) => {
                             const d = r.normalized_data;
+                            const effectiveAction = r.user_override_action || r.proposed_action;
+                            const actionColors: Record<string, { bg: string; text: string; label: string }> = {
+                              create: { bg: "bg-emerald-100", text: "text-emerald-700", label: "New" },
+                              update: { bg: "bg-blue-100", text: "text-blue-700", label: "Update" },
+                              skip: { bg: "bg-gray-100", text: "text-gray-600", label: "Skip" },
+                              manual_review: { bg: "bg-orange-100", text: "text-orange-700", label: "Review" },
+                            };
+                            const ac = actionColors[effectiveAction] || actionColors.create;
                             return (
                               <tr key={i} style={{ borderTop: `1px solid ${panelBorder}` }}>
+                                <td className="px-2.5 py-1.5 whitespace-nowrap">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold ${ac.bg} ${ac.text}`}>
+                                      {ac.label}
+                                    </span>
+                                    {r.matched_record_id && (
+                                      <select
+                                        value={effectiveAction}
+                                        onChange={async (e) => {
+                                          const newAction = e.target.value;
+                                          try {
+                                            const res = await fetch(
+                                              `/api/import/${jobId}/rows/${r.id}/override`,
+                                              {
+                                                method: "PATCH",
+                                                headers: { "Content-Type": "application/json" },
+                                                body: JSON.stringify({ action: newAction }),
+                                              }
+                                            );
+                                            if (res.ok) {
+                                              // Update local state
+                                              setPreviewData((prev) =>
+                                                prev
+                                                  ? {
+                                                      ...prev,
+                                                      rows: prev.rows.map((row) =>
+                                                        row.id === r.id
+                                                          ? { ...row, user_override_action: newAction }
+                                                          : row
+                                                      ),
+                                                    }
+                                                  : prev
+                                              );
+                                            }
+                                          } catch {
+                                            // Silent fail for override
+                                          }
+                                        }}
+                                        className="text-[9px] px-1 py-0 rounded outline-none"
+                                        style={{
+                                          background: subtleBg,
+                                          color: textColor,
+                                          border: `1px solid ${panelBorder}`,
+                                          width: 60,
+                                        }}
+                                      >
+                                        <option value="create">New</option>
+                                        <option value="update">Update</option>
+                                        <option value="skip">Skip</option>
+                                      </select>
+                                    )}
+                                  </div>
+                                  {r.match_confidence != null && r.match_confidence > 0 && (
+                                    <span className="block text-[8px] mt-0.5" style={{ color: mutedColor }}>
+                                      {r.match_confidence}% {r.match_reason}
+                                    </span>
+                                  )}
+                                </td>
                                 <td className="px-2.5 py-1.5 whitespace-nowrap">{d.name || "—"}</td>
                                 <td className="px-2.5 py-1.5 whitespace-nowrap">{d.phone || "—"}</td>
                                 <td className="px-2.5 py-1.5 whitespace-nowrap">{d.external_ref || "—"}</td>
@@ -843,8 +969,6 @@ export default function UploadLeadSheet({
                                 </td>
                                 <td className="px-2.5 py-1.5 whitespace-nowrap">{d.source || "—"}</td>
                                 <td className="px-2.5 py-1.5 whitespace-nowrap">{d.cp_name || "—"}</td>
-                                <td className="px-2.5 py-1.5 whitespace-nowrap">{d.configuration || "—"}</td>
-                                <td className="px-2.5 py-1.5 whitespace-nowrap">{d.budget || "—"}</td>
                               </tr>
                             );
                           })}
@@ -1026,16 +1150,25 @@ export default function UploadLeadSheet({
                 )}
 
                 {/* Import button (preview step) */}
-                {step === "preview" && stageResult && (
-                  <button
-                    onClick={confirmImport}
-                    disabled={!jobId || !stageResult || stageResult.validRows === 0 || importing || staging}
-                    className="px-4 py-2 text-xs font-bold rounded-lg text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                    style={{ background: "#059669" }}
-                  >
-                    {importing ? "Importing..." : `Import ${stageResult.validRows} Lead(s)`}
-                  </button>
-                )}
+                {step === "preview" && stageResult && (() => {
+                  const ds = stageResult.dedupSummary;
+                  const createCount = ds?.creates ?? stageResult.validRows;
+                  const updateCount = ds?.updates ?? 0;
+                  const parts: string[] = [];
+                  if (createCount > 0) parts.push(`${createCount} new`);
+                  if (updateCount > 0) parts.push(`${updateCount} update`);
+                  const label = parts.length > 0 ? `Commit (${parts.join(", ")})` : `Import ${stageResult.validRows} Lead(s)`;
+                  return (
+                    <button
+                      onClick={confirmImport}
+                      disabled={!jobId || !stageResult || stageResult.validRows === 0 || importing || staging}
+                      className="px-4 py-2 text-xs font-bold rounded-lg text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                      style={{ background: "#059669" }}
+                    >
+                      {importing ? "Importing..." : label}
+                    </button>
+                  );
+                })()}
               </div>
             </div>
           </div>

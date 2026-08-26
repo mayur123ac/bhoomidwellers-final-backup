@@ -9,6 +9,7 @@ import { query, transaction, recalculateSrNos } from "@/lib/db";
 import { parseLeadSheet } from "@/lib/ingestion/parseLeadSheet";
 import type { ParsedLead } from "@/lib/ingestion/parseLeadSheet";
 import { isChannelPartnerSource, resolveChannelPartnerId } from "@/lib/cpCommissionEngine";
+import { runDedup, getMergeFields } from "./dedup";
 import type {
   ImportJob,
   ImportRow,
@@ -82,6 +83,7 @@ export interface StageImportParams {
  * `ready_for_review` status so the user can preview before committing.
  */
 export async function stageImport(params: StageImportParams): Promise<StageResult> {
+  const stageStart = Date.now();
   const {
     buffer,
     filename,
@@ -284,10 +286,19 @@ export async function stageImport(params: StageImportParams): Promise<StageResul
       }
     }
 
-    // 4e. Transition to ready_for_review
+    // 4e. Run deduplication engine on valid rows
+    const dedupResults = await runDedup(jobId, orgId, client);
+    const dedupSummary = {
+      creates: dedupResults.filter((r) => r.proposedAction === "create").length,
+      updates: dedupResults.filter((r) => r.proposedAction === "update").length,
+      skips: dedupResults.filter((r) => r.proposedAction === "skip").length,
+      manualReview: dedupResults.filter((r) => r.proposedAction === "manual_review").length,
+    };
+
+    // 4f. Transition to ready_for_review
     await transitionStatus(client, jobId, "parsing", "ready_for_review");
 
-    // 4f. UPDATE with column_mapping, assigned_to, overseeing_site_head
+    // 4g. UPDATE with column_mapping, assigned_to, overseeing_site_head
     await client.query(
       `UPDATE import_jobs
           SET column_mapping = $1,
@@ -303,12 +314,18 @@ export async function stageImport(params: StageImportParams): Promise<StageResul
       ]
     );
 
+    const stageElapsed = Date.now() - stageStart;
+    console.log(
+      `[import:stage] job=${jobId} file="${filename}" rows=${totalRows} valid=${validRows.length} invalid=${errorRows.length} dedup=${JSON.stringify(dedupSummary)} elapsed=${stageElapsed}ms`
+    );
+
     return {
       jobId,
       totalRows,
       validRows: validRows.length,
       invalidRows: errorRows.length,
       sheetName,
+      dedupSummary,
     };
   });
 }
@@ -423,9 +440,16 @@ export async function commitImport(
     );
   }
 
+  const startTime = Date.now();
+
   // 2–3. Transition + insert inside a single transaction
   return transaction(async (client) => {
-    // 2. Transition to committing
+    // 2a. Advisory lock to prevent concurrent commits of the same job
+    // Uses a hash of the jobId as the lock key
+    const lockKey = Math.abs(jobId.split("").reduce((a, c) => ((a << 5) - a + c.charCodeAt(0)) | 0, 0));
+    await client.query(`SELECT pg_advisory_xact_lock($1)`, [lockKey]);
+
+    // 2b. Transition to committing (will fail if another process already transitioned)
     await transitionStatus(client, jobId, "ready_for_review", "committing");
 
     // 3a. Fetch all valid staged rows
@@ -444,13 +468,119 @@ export async function commitImport(
 
     for (const staged of stagedRows) {
       try {
-        // 3b. Reconstruct a ParsedLead from normalized_data
+        // 3b. Determine effective action (user override takes precedence)
+        const action = staged.user_override_action || staged.proposed_action || "create";
+
+        // 3b2. Skip / manual_review rows are not committed
+        if (action === "skip" || action === "manual_review") {
+          skipped++;
+          await client.query(
+            `UPDATE import_rows SET final_action = 'skipped', updated_at = now()
+              WHERE id = $1`,
+            [staged.id]
+          );
+          continue;
+        }
+
+        // 3b3. Reconstruct a ParsedLead from normalized_data
         const data: ParsedLead =
           typeof staged.normalized_data === "string"
-            ? JSON.parse(staged.normalized_data)
+            ? JSON.parse(staged.normalized_data as string)
             : staged.normalized_data;
 
         const rowSource = clamp(data.source || "Direct Walk-in", 100);
+
+        // ── UPDATE path ─────────────────────────────────────────────
+        if (action === "update" && staged.matched_record_id) {
+          // 3u1. Fetch existing record (scoped to org)
+          const existingRes = await client.query(
+            `SELECT * FROM walkin_enquiries WHERE id = $1 AND organization_id = $2`,
+            [staged.matched_record_id, orgId]
+          );
+          if (existingRes.rows.length === 0) {
+            // Matched record gone — fall through to create
+          } else {
+            const existing = existingRes.rows[0];
+
+            // 3u2. Save pre-update snapshot for rollback
+            await client.query(
+              `UPDATE import_rows SET pre_update_snapshot = $1, updated_at = now()
+                WHERE id = $2`,
+              [JSON.stringify(existing), staged.id]
+            );
+
+            // 3u3. Compute merge fields
+            const mergeFields = getMergeFields(
+              existing,
+              data,
+              job.assigned_to || "",
+              job.overseeing_site_head || null
+            );
+
+            // 3u4. Execute UPDATE if there are fields to change
+            const fieldNames = Object.keys(mergeFields);
+            if (fieldNames.length > 0) {
+              const setClauses = fieldNames
+                .map((f, i) => `"${f}" = $${i + 3}`)
+                .join(", ");
+              const values = fieldNames.map((f) => mergeFields[f]);
+              await client.query(
+                `UPDATE walkin_enquiries SET ${setClauses}, updated_at = now()
+                  WHERE id = $1 AND organization_id = $2`,
+                [staged.matched_record_id, orgId, ...values]
+              );
+            }
+
+            // 3u5. Mark row as updated
+            updated++;
+            await client.query(
+              `UPDATE import_rows
+                  SET final_action = 'updated', target_record_id = $1, updated_at = now()
+                WHERE id = $2`,
+              [staged.matched_record_id, staged.id]
+            );
+
+            // 3u6. Historical booking claims for updates too
+            const nd = staged.normalized_data as any;
+            const bookingStatus = nd?._booking_status;
+            const bookingDate = nd?._booking_date;
+            const bookingAmount = nd?._booking_amount;
+            const bookingAmountRaw = nd?._booking_amount_raw;
+            const bookingRef = nd?._booking_reference;
+            const claimedBooked = bookingStatus === true ||
+              (typeof bookingStatus === "string" && ["yes", "y", "booked", "true", "1"].includes(bookingStatus.toLowerCase()));
+
+            if (claimedBooked || bookingDate || bookingAmount || bookingRef) {
+              await client.query(
+                `INSERT INTO historical_booking_claims (
+                    organization_id, lead_id, import_job_id, import_row_id,
+                    claimed_booked, booking_date, booking_amount, booking_amount_raw,
+                    booking_reference, source_row_number, source_filename,
+                    requires_reconciliation
+                  ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+                [
+                  orgId, staged.matched_record_id, jobId, staged.id,
+                  claimedBooked, bookingDate || null, bookingAmount || null, bookingAmountRaw || null,
+                  bookingRef || null, staged.source_row_number, job.filename, true
+                ]
+              );
+            }
+
+            // 3u7. Follow-up for updates
+            const feedback = (data.feedback || "").trim();
+            if (feedback) {
+              await client.query(
+                `INSERT INTO follow_ups (lead_id, message, created_by_name, created_at, followup_date, organization_id)
+                 VALUES ($1, $2, $3, $4, NULL, $5)`,
+                [staged.matched_record_id, feedback, clamp(committedByName, 150), data.enquiry_date, orgId]
+              );
+            }
+
+            continue;
+          }
+        }
+
+        // ── CREATE path (default) ───────────────────────────────────
 
         // 3f. CP resolution
         const channelPartnerId = isChannelPartnerSource(rowSource)
@@ -622,6 +752,11 @@ export async function commitImport(
     );
     await transitionStatus(client, jobId, "committing", "completed");
 
+    const elapsed = Date.now() - startTime;
+    console.log(
+      `[import:commit] job=${jobId} rows=${stagedRows.length} created=${created} updated=${updated} skipped=${skipped} failed=${failed} elapsed=${elapsed}ms`
+    );
+
     return { jobId, created, updated, skipped, failed };
   });
 }
@@ -670,7 +805,11 @@ export async function rollbackImport(
   }
 
   return transaction(async (client) => {
-    // 2. Transition to rolling_back
+    // 2a. Advisory lock
+    const lockKey = Math.abs(jobId.split("").reduce((a, c) => ((a << 5) - a + c.charCodeAt(0)) | 0, 0));
+    await client.query(`SELECT pg_advisory_xact_lock($1)`, [lockKey]);
+
+    // 2b. Transition to rolling_back
     await transitionStatus(client, jobId, "completed", "rolling_back");
 
     // 3a. Find all created rows with target_record_ids
@@ -720,10 +859,56 @@ export async function rollbackImport(
       );
     }
 
-    // 3e. Recalculate Sr. Nos
+    // 3e. Restore updated rows from pre_update_snapshot
+    const updatedRes = await client.query(
+      `SELECT id, target_record_id, pre_update_snapshot FROM import_rows
+        WHERE import_job_id = $1 AND organization_id = $2
+          AND final_action = 'updated' AND pre_update_snapshot IS NOT NULL`,
+      [jobId, orgId]
+    );
+
+    for (const row of updatedRes.rows) {
+      const snapshot =
+        typeof row.pre_update_snapshot === "string"
+          ? JSON.parse(row.pre_update_snapshot)
+          : row.pre_update_snapshot;
+
+      // Build SET clause from snapshot, excluding identity columns
+      const fields = Object.keys(snapshot).filter(
+        (k) => k !== "id" && k !== "organization_id" && k !== "created_at"
+      );
+      if (fields.length > 0 && row.target_record_id) {
+        const setClauses = fields.map((f, i) => `"${f}" = $${i + 3}`).join(", ");
+        const values = fields.map((f) => snapshot[f]);
+        await client.query(
+          `UPDATE walkin_enquiries SET ${setClauses}
+            WHERE id = $1 AND organization_id = $2`,
+          [row.target_record_id, orgId, ...values]
+        );
+        rolledBack++;
+      }
+
+      // Delete booking claims created for updated leads
+      if (row.target_record_id) {
+        await client.query(
+          `DELETE FROM historical_booking_claims
+            WHERE lead_id = $1 AND organization_id = $2 AND import_job_id = $3`,
+          [row.target_record_id, orgId, jobId]
+        );
+      }
+    }
+
+    // Mark updated rows as rolled_back
+    await client.query(
+      `UPDATE import_rows SET final_action = 'rolled_back', updated_at = now()
+        WHERE import_job_id = $1 AND organization_id = $2 AND final_action = 'updated'`,
+      [jobId, orgId]
+    );
+
+    // 3f. Recalculate Sr. Nos
     await recalculateSrNos(client);
 
-    // 3f. Transition to rolled_back
+    // 3g. Transition to rolled_back
     await client.query(
       `UPDATE import_jobs
           SET rolled_back_at = now(), updated_at = now()

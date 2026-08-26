@@ -1960,30 +1960,47 @@ export default function ReceptionistDashboard() {
             <AnimatePresence>
               {activePopup === "profile" && (
                 <motion.div
-                  initial={{ opacity: 0, y: -8, scale: 0.98 }}
+                  initial={{ opacity: 0, y: 8, scale: 0.98 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: -6, scale: 0.98 }}
-                  transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-                  className={`absolute top-12 right-0 w-64 rounded-xl shadow-2xl p-5 z-50 border ${t.dropdown}`} style={t.dropdownGlass}
+                  exit={{ opacity: 0, y: 8, scale: 0.98 }}
+                  transition={{ duration: 0.18, ease: "easeOut" }}
+                  className={`absolute top-12 right-0 w-60 rounded-[1.25rem] p-4 z-50 border shadow-2xl ${isDark ? "bg-[#1C1C1E]/95 border-white/10" : "bg-white/95 border-black/5"
+                    }`}
+                  style={{ backdropFilter: "blur(20px) saturate(180%)" }}
                 >
-                  <div className="mb-4">
-                    <h3 className={`font-bold text-lg ${t.text}`}>{user?.name || "User"}</h3>
-                    <p className={`text-sm truncate ${t.textMuted}`}>{user?.email || "No email"}</p>
-                  </div>
-                  <hr className={`mb-4 border-0 border-t ${t.tableBorder}`} />
-                  <div className="space-y-4 mb-6 text-sm">
-                    <p className={`flex justify-between items-center ${t.textMuted}`}>Role:
-                      <span className={`font-bold capitalize px-2 py-0.5 rounded text-xs ${isDark ? "text-[#d4006e] bg-[#9E217B]/10" : "text-[#00AEEF] bg-[#00AEEF]/10"}`}>{user?.role}</span>
-                    </p>
-                    <div>
-                      <p className={`text-xs mb-1 ${t.textFaint}`}>Password</p>
-                      <div className={`flex items-center justify-between p-2 rounded-md border ${t.settingsBg}`} style={t.settingsBgGl}>
-                        <span className={`font-mono tracking-widest ${t.text}`}>{showPassword ? user.password : "••••••••••••"}</span>
-                        <button onClick={() => setShowPassword(!showPassword)} className={`${t.textMuted} cursor-pointer`}><FaEyeSlash /></button>
-                      </div>
-                    </div>
-                  </div>
-                  <button onClick={handleLogout} className={`w-full py-2.5 rounded-lg font-semibold transition-colors cursor-pointer ${t.btnDanger}`}>Logout</button>
+                  <p className={`font-semibold text-[14px] tracking-tight leading-tight ${t.text}`}>
+                    {user?.name || "User"}
+                  </p>
+                  <p className={`text-[11px] truncate mt-0.5 ${t.textMuted}`}>
+                    {user?.email || "No email"}
+                  </p>
+
+                  <hr className={`my-3 border-0 border-t ${isDark ? "border-white/10" : "border-black/5"}`} />
+
+                  <p className={`text-[12px] leading-relaxed ${t.textMuted}`}>
+                    Logged in as a <span className={`font-semibold capitalize ${isDark ? "text-white" : "text-black"}`}>{user?.role || "Receptionist"}</span>.
+                  </p>
+
+                  <button
+                    onClick={() => {
+                      setActivePopup(null);
+                      router.push("/dashboard/settings/profile");
+                    }}
+                    className={`w-full mt-4 py-2 rounded-xl font-medium text-[13px] transition-colors ${isDark
+                      ? "bg-white/10 hover:bg-white/15 text-white"
+                      : "bg-black/[0.04] hover:bg-black/[0.08] text-black"
+                      }`}
+                  >
+                    Account Settings
+                  </button>
+
+                  {/* Destructive, so it is the only red control in the menu. */}
+                  <button
+                    onClick={handleLogout}
+                    className="w-full mt-2 py-2 rounded-xl font-medium text-[13px] transition-colors text-red-500 bg-red-500/10 hover:bg-red-500/20"
+                  >
+                    Log Out
+                  </button>
                 </motion.div>
               )}
             </AnimatePresence>

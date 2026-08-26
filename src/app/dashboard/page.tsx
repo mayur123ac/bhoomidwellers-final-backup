@@ -13,6 +13,7 @@ import {
   FaCheckCircle, FaCalendarAlt, FaTimes,
   FaFileInvoice, FaFileInvoiceDollar, FaPaperPlane, FaMicrophone, FaWhatsapp, FaTable, FaChartPie, FaEyeSlash, FaUniversity, FaHandshake, FaExchangeAlt, FaBriefcase, FaDownload, FaCog, FaMapMarkerAlt, FaSignal, FaUserClock, FaTrashAlt, FaBoxes, FaUserTie
 } from "react-icons/fa";
+import { FiUser, FiHelpCircle, FiLogOut, FiChevronRight } from "react-icons/fi";
 import { BhoomiAiGlyph } from "@/components/bhoomi-ai/BhoomiAiIcon";
 import { downloadCSV } from "@/lib/downloadCsv";
 import AdminSidebar from "@/components/admin/AdminSidebar";
@@ -619,6 +620,7 @@ function AdminAtlasDashboardContent() {
   // sidebar cleanly omits the line instead of flashing stale data.
   const { name: orgName, loading: orgLoading } = useOrgName();
   const sidebarOrgName = orgLoading ? null : orgName;
+
   // Dismissals moved into useNotificationFeed, keyed by notification id so a
   // lead that raises both a New Lead and a Site Visit reminder can have one
   // dismissed without silencing the other.
@@ -637,7 +639,8 @@ function AdminAtlasDashboardContent() {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, [needsClock]);
-  const [user, setUser] = useState<any>({ name: "Admin", role: "Admin", email: "", password: "" });
+  const [user, setUser] = useState<any>({ name: "Admin", role: "Admin", email: "", password: "", org: "" });
+
   const [activePopup, setActivePopup] = useState<"notifications" | "profile" | "updates" | null>(null);
   const topbarRef = useRef<HTMLDivElement>(null);
 
@@ -1119,32 +1122,113 @@ function AdminAtlasDashboardContent() {
               <AnimatePresence>
                 {activePopup === "profile" && (
                   <motion.div
-                    initial={{ opacity: 0, y: -8, scale: 0.98 }}
+                    initial={{ opacity: 0, y: 8, scale: 0.98 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: -6, scale: 0.98 }}
-                    transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-                    className={`absolute top-12 right-0 w-64 border rounded-xl shadow-2xl p-5 z-[200] ${theme.dropdown}`} style={theme.dropdownGlass}
+                    exit={{ opacity: 0, y: 8, scale: 0.98 }}
+                    transition={{ duration: 0.18, ease: "easeOut" }}
+                    className={`absolute top-12 right-0 w-[250px] rounded-[20px] p-4 z-[200] border shadow-2xl ${isDark ? "bg-[#1C1C1E]/95 border-white/10" : "bg-white/95 border-black/5"
+                      }`}
+                    style={{ backdropFilter: "blur(24px) saturate(180%)" }}
                   >
-                    <div className="mb-4">
-                      <h3 className={`font-bold text-lg ${theme.text}`}>{user?.name || "Admin"}</h3>
-                      <p className={`text-sm truncate ${theme.textMuted}`}>{user?.email || "admin@bhoomi.com"}</p>
-                    </div>
-                    <hr className={`mb-4 ${theme.tableBorder}`} />
-                    <div className="space-y-4 mb-6 text-sm">
-                      <p className={`flex justify-between items-center ${theme.textMuted}`}>Role:
-                        <span className={`font-bold capitalize px-2 py-0.5 rounded border ${isDark ? "text-[#d946a8] bg-[#9E217B]/10 border-[#9E217B]/30" : "text-[#9E217B] bg-[#9E217B]/10 border-[#9E217B]/30"}`}>{user?.role || "Admin"}</span>
-                      </p>
-                      <div>
-                        <p className={`text-xs mb-1 ${theme.textMuted}`}>Password</p>
-                        <div className={`flex items-center justify-between border p-2 rounded-md ${theme.innerBlock}`}>
-                          <span className={`font-mono tracking-widest text-xs ${theme.text}`}>{showPassword ? (user?.password || "N/A") : "••••••••"}</span>
-                          <button onClick={() => setShowPassword(!showPassword)} className={`${theme.textMuted} cursor-pointer`}>
-                            {showPassword ? <FaEyeSlash /> : <FaEye />}
-                          </button>
-                        </div>
+                    {/* ── HEADER: Avatar & Info ── */}
+                    <div className="flex items-center gap-3 mb-3">
+                      {/* Scaled-down 40px Apple-style Circular Avatar */}
+                      <div
+                        className={`w-10 h-10 rounded-full flex items-center justify-center text-[17px] font-semibold flex-shrink-0 ${isDark ? "bg-[#9E217B]/20 text-[#d946a8]" : "bg-purple-100 text-purple-900"
+                          }`}
+                      >
+                        {(user?.name || "Admin").charAt(0).toUpperCase()}
+                      </div>
+
+                      <div className="flex flex-col overflow-hidden">
+                        {/* 14px is the Apple standard for Callout/Menu Primary text */}
+                        <p className={`font-semibold text-[14px] tracking-tight truncate leading-tight ${theme.text}`}>
+                          {user?.name || "Admin"}
+                        </p>
+                        {/* 12px for Subhead/Caption text */}
+                        <p className={`text-[12px] truncate mt-[1px] ${theme.textMuted}`}>
+                          {user?.email || "admin@bhoomi.com"}
+                        </p>
+                        <p className={`text-[12px] truncate ${theme.textMuted}`}>
+                          {orgName || "Bhoomi Dwellers"}
+                        </p>
                       </div>
                     </div>
-                    <button onClick={handleLogout} className={`w-full py-2.5 rounded-lg font-semibold transition-colors cursor-pointer ${theme.btnDanger}`}>Logout</button>
+
+                    {/* ── STATUS ROW ── */}
+                    <div className="flex items-center gap-3 mb-4">
+                      <span
+                        className={`px-2 py-0.5 rounded text-[11px] font-medium border ${isDark
+                          ? "bg-[#9E217B]/10 text-[#d946a8] border-[#9E217B]/30"
+                          : "bg-purple-50 text-purple-800 border-purple-200"
+                          }`}
+                      >
+                        {user?.role || "Admin"}
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"></span>
+                        <span className={`text-[12px] font-medium ${theme.textMuted}`}>
+                          Active
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Negative margins align the divider to the container edges exactly */}
+                    <hr className={`-mx-4 border-0 border-t ${isDark ? "border-white/10" : "border-black/5"}`} />
+
+                    {/* ── MENU ITEMS ── */}
+                    <div className="flex flex-col py-1.5">
+                      <button
+                        onClick={() => {
+                          setActivePopup(null);
+                          router.push("/dashboard/settings/profile");
+                        }}
+                        className={`w-full flex items-center justify-between py-2.5 px-2 -mx-2 rounded-xl transition-colors cursor-pointer group ${isDark ? "hover:bg-white/5" : "hover:bg-black/[0.04]"
+                          }`}
+                      >
+                        <div className={`flex items-center gap-2.5 ${theme.text}`}>
+                          {/* Icons reduced to 16px (w-4 h-4) */}
+                          <FiUser className={`w-4 h-4 ${theme.textMuted} group-hover:${theme.text}`} />
+                          {/* 13px is the strict macOS context menu font size */}
+                          <span className="text-[13px] font-medium">Account Settings</span>
+                        </div>
+                        <FiChevronRight className={`w-3.5 h-3.5 ${theme.textMuted}`} />
+                      </button>
+
+                      <hr className={`border-0 border-t my-0.5 ${isDark ? "border-white/10" : "border-black/5"}`} />
+
+                      <button
+                        onClick={() => {
+                          setActivePopup(null);
+                          // Help & Support routing
+                        }}
+                        className={`w-full flex items-center justify-between py-2.5 px-2 -mx-2 rounded-xl transition-colors cursor-pointer group ${isDark ? "hover:bg-white/5" : "hover:bg-black/[0.04]"
+                          }`}
+                      >
+                        <div className={`flex items-center gap-2.5 ${theme.text}`}>
+                          <FiHelpCircle className={`w-4 h-4 ${theme.textMuted} group-hover:${theme.text}`} />
+                          <span className="text-[13px] font-medium">Help & Support</span>
+                        </div>
+                        {/* <FiChevronRight className={`w-3.5 h-3.5 ${theme.textMuted}`} /> */}<span className={`px-2 py-0.5 rounded-md text-[8px] font-small border ${isDark
+                          ? "bg-white/10 text-white/60 border-white/10"
+                          : "bg-gray-100 text-gray-600 border-gray-200"
+                          }`}>Coming Soon</span>
+                      </button>
+                    </div>
+
+                    <hr className={`-mx-4 border-0 border-t mb-2.5 mt-1 ${isDark ? "border-white/10" : "border-black/5"}`} />
+
+                    {/* ── FOOTER: LOG OUT ── */}
+                    <button
+                      onClick={handleLogout}
+                      className={`w-full flex items-center gap-2.5 py-2.5 px-3 rounded-[12px] font-semibold text-[13px] transition-colors cursor-pointer ${isDark
+                        ? "text-red-400 bg-red-500/10 hover:bg-red-500/20"
+                        : "text-red-600 bg-red-50 hover:bg-red-100"
+                        }`}
+                    >
+                      <FiLogOut className="w-4 h-4" />
+                      Log Out
+                    </button>
                   </motion.div>
                 )}
               </AnimatePresence>

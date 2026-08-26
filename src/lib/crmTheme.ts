@@ -9,7 +9,7 @@ export function buildTheme(isDark: boolean) {
     pageWrap: isDark ? "bg-[#0A0A0F] text-white" : "text-[#1A1A1A]",
     mainBg: isDark ? "bg-[#0A0A0F]" : "bg-transparent",
     sidebar: isDark ? "bg-[#121218] border-[#2A2A35]" : "bg-[#1A1A1A] border-[#2A2A2A]",
-    header: isDark ? "bg-[#121218] border-[#2A2A35]" : "bg-white border-[#9CA3AF]",
+    header: isDark ? "bg-[#121218] border-[#2A2A35]" : "bg-white border-none",
     headerGlass: isDark ? {} : { boxShadow: "0 1px 0 #9CA3AF, 0 4px 16px rgba(0,174,239,0.06)" },
 
     // ── Cards (No intense glow in light mode, border changes to Magenta on hover) ──
