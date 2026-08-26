@@ -66,6 +66,7 @@ type Dialog =
   | { kind: "status"; user: OrgUser; next: boolean }
   | { kind: "details"; user: OrgUser }
   | { kind: "suspendOrg"; next: "suspended" | "active" }
+  | { kind: "renameOrg" }
   | null;
 
 export default function OrganizationDetailView({
@@ -96,6 +97,7 @@ export default function OrganizationDetailView({
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [newEmail, setNewEmail] = useState("");
+  const [newOrgName, setNewOrgName] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -140,6 +142,7 @@ export default function OrganizationDetailView({
     setNewPassword("");
     setConfirmPassword("");
     setNewEmail("");
+    setNewOrgName("");
   }
 
   /** Cancel / backdrop / Escape. Refuses while a write is in flight. */
@@ -186,6 +189,28 @@ export default function OrganizationDetailView({
       onOrgChanged();
     } catch (e: any) {
       setDialogError(e?.message || "Could not change the status.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function renameOrg() {
+    setBusy(true);
+    setDialogError("");
+    try {
+      const res = await fetch(`/api/platform/organizations/${organizationId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newOrgName }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.message || "Could not rename the organization.");
+      setDialog(null);
+      setToast(json.message);
+      await load();
+      onOrgChanged(); // Refresh parent list
+    } catch (e: any) {
+      setDialogError(e?.message || "Could not rename the organization.");
     } finally {
       setBusy(false);
     }
@@ -331,9 +356,24 @@ export default function OrganizationDetailView({
             </svg>
             All organizations
           </button>
-          <h2 className="text-[20px] sm:text-[23px] font-semibold tracking-tight leading-tight" style={{ color: t.text }}>
-            {orgName}
-          </h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-[20px] sm:text-[23px] font-semibold tracking-tight leading-tight" style={{ color: t.text }}>
+              {orgName}
+            </h2>
+            <button
+              onClick={() => {
+                setDialogError("");
+                setNewOrgName(orgName);
+                setDialog({ kind: "renameOrg" });
+              }}
+              className="px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors"
+              style={{ color: t.text, background: t.raised }}
+              onMouseEnter={e => { e.currentTarget.style.background = t.hover; }}
+              onMouseLeave={e => { e.currentTarget.style.background = t.raised; }}
+            >
+              Edit
+            </button>
+          </div>
           <div className="flex items-center gap-2 mt-2 flex-wrap">
             <StatusPill status={orgStatus} t={t} />
             <MonoId value={organizationId} t={t} short={false} />
@@ -809,6 +849,47 @@ export default function OrganizationDetailView({
             ))}
           </div>
         )}
+      </Modal>
+
+      {/* ══ Rename Organization ══ */}
+      <Modal
+        open={dialog?.kind === "renameOrg"}
+        t={t}
+        busy={busy}
+        title="Edit Organisation Name"
+        onClose={closeDialog}
+        footer={
+          <>
+            <Btn t={t} tone="quiet" onClick={closeDialog} disabled={busy}>Cancel</Btn>
+            <Btn
+              t={t}
+              tone="primary"
+              disabled={!newOrgName.trim() || newOrgName.trim() === orgName || busy}
+              onClick={() => dialog?.kind === "renameOrg" && renameOrg()}
+            >
+              {busy ? "Saving…" : "Save Changes"}
+            </Btn>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div
+            className="rounded-xl px-3.5 py-3 text-[12px] leading-relaxed"
+            style={{ color: t.textMuted, background: t.raised }}
+          >
+            This is the canonical name used to identify the organisation across the CRM.
+            Changing it will immediately reflect in the sidebar for all users of this organisation.
+          </div>
+          <Field
+            t={t}
+            label="Organisation Name"
+            type="text"
+            value={newOrgName}
+            onChange={setNewOrgName}
+            error={!newOrgName.trim() && dialog?.kind === "renameOrg" ? "Name cannot be empty." : undefined}
+          />
+          {dialogError && <ErrorNote t={t}>{dialogError}</ErrorNote>}
+        </div>
       </Modal>
     </div>
   );

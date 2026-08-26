@@ -172,12 +172,13 @@ export default function Login() {
         `}
       >
         <p
-          className={`text-[9px] sm:text-[10px] font-semibold tracking-[0.15em] sm:tracking-[0.18em] uppercase text-center transition-colors duration-300 ${isDark ? "text-[#3A3A55]" : "text-[#9898B8]"}`}
+          className={`text-[9px] sm:text-[10px] font-semibold tracking-[0.15em] sm:tracking-[0.18em] uppercase text-center transition-colors duration-300 ${isDark ? "text-[#3A3A55]" : "text-[#9898B8]"
+            }`}
           style={{ fontFamily: "'DM Sans', sans-serif", letterSpacing: "0.18em" }}
         >
           © {new Date().getFullYear()} Bhoomi Dwellers.{" "}
           <span className={isDark ? "text-[#4A4A6A]" : "text-[#7878A8]"}>
-            Engineered for Excellence.
+            Technology powered by FORGE CRM.
           </span>
         </p>
       </div>

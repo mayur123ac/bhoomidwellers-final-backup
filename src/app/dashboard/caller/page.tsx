@@ -765,8 +765,8 @@ export default function PresalesCallerPanel() {
         const dateCol = findCol(["date"]);
         const leads: RawLead[] = json.map((row, i) => ({
           id: String(i + 1).padStart(4, "0"),
-          name: String(row[nameCol] || row[rawCols[3]] || row[rawCols[0]] || `Lead ${i + 1}`),
-          phone: String(row[phoneCol] || row[rawCols[4]] || ""),
+          name: String(row[nameCol] || `Lead ${i + 1}`),
+          phone: String(row[phoneCol] || ""),
           email: emailCol ? String(row[emailCol]) : "",
           source: sourceCol ? String(row[sourceCol]) : "",
           budget: "", location: "",

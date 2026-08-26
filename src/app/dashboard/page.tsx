@@ -5,6 +5,7 @@ import { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue, Su
 import { useRouter, useSearchParams } from "next/navigation";
 import { clearCrmSession, getStoredCrmUser, installLoggedOutBackGuard } from "@/lib/authSession";
 import { useCrmTheme } from "@/lib/hooks/useCrmTheme";
+import { useOrgName } from "@/lib/hooks/useOrgName";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FaThLarge, FaClipboardList, FaUsers, FaIdCard,
@@ -614,6 +615,10 @@ function AdminAtlasDashboardContent() {
   }, [searchParams]);
 
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
+  // Org name for the sidebar header. Fetched once; null while loading so the
+  // sidebar cleanly omits the line instead of flashing stale data.
+  const { name: orgName, loading: orgLoading } = useOrgName();
+  const sidebarOrgName = orgLoading ? null : orgName;
   // Dismissals moved into useNotificationFeed, keyed by notification id so a
   // lead that raises both a New Lead and a Site Visit reminder can have one
   // dismissed without silencing the other.
@@ -998,6 +1003,7 @@ function AdminAtlasDashboardContent() {
         isHovered={isSidebarHovered}
         onHoverChange={setIsSidebarHovered}
         onSelect={(item) => handleMenuClick(item.id)}
+        orgName={sidebarOrgName}
       />
 
       <style dangerouslySetInnerHTML={{
@@ -1910,19 +1916,19 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
   };
 
   return (
-    <div className={`h-full flex flex-col p-8 overflow-y-auto ${theme.scroll}`}>
+    <div className={`h-full flex flex-col p-4 sm:p-6 lg:p-8 overflow-y-auto ${theme.scroll}`}>
 
       {/* ── Welcome banner ── */}
-      <div className={`${theme.card} rounded-3xl p-6 mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2`} style={theme.cardGlass}>
-        <h2 className={`text-lg font-bold ${theme.text}`}>Welcome back, {user?.name || "Admin"}!</h2>
-        <p className={`text-sm ${theme.textMuted}`}>Here is what's happening with your team today.</p>
+      <div className={`${theme.card} rounded-2xl sm:rounded-3xl p-5 sm:p-6 mb-6 lg:mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4`} style={theme.cardGlass}>
+        <h2 className={`text-base sm:text-lg font-bold ${theme.text}`}>Welcome back, {user?.name || "Admin"}!</h2>
+        <p className={`text-xs sm:text-sm ${theme.textMuted}`}>Here is what's happening with your team today.</p>
       </div>
 
       {/* ── Quick Stats ──
           Each card filters the Enquiry Overview table below to its own segment
           and scrolls to it. Counts come from STAT_MATCHERS, the same predicates
           the filter uses, so the number and the filtered rows always match. */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-7 gap-2 mb-8">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-2 sm:gap-3 mb-6 lg:mb-8">
         {([
           { id: "all", valueCls: theme.text },
           { id: "active", valueCls: isDark ? "text-green-400" : "text-emerald-600" },
@@ -1942,15 +1948,15 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
               title={isActive
                 ? `Showing ${STAT_LABELS[id]} — click again to clear`
                 : `Filter the table to ${STAT_LABELS[id]}`}
-              className={`${theme.card} rounded-3xl p-5 text-left w-full transition-all cursor-pointer hover:-translate-y-0.5 hover:shadow-lg ${isActive ? "ring-2 ring-[#9E217B] ring-offset-1 ring-offset-transparent" : ""
+              className={`${theme.card} rounded-2xl sm:rounded-3xl p-4 sm:p-5 text-left w-full transition-all cursor-pointer hover:-translate-y-0.5 hover:shadow-lg ${isActive ? "ring-2 ring-[#9E217B] ring-offset-1 ring-offset-transparent" : ""
                 }`}
               style={theme.cardGlass}
             >
-              <p className={`text-xs font-bold uppercase tracking-wider flex items-center justify-between gap-1 ${theme.textFaint}`}>
-                {STAT_LABELS[id]}
-                {isActive && <FaTimes className="w-2.5 h-2.5 opacity-70" />}
+              <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider flex items-center justify-between gap-1 ${theme.textFaint}`}>
+                <span className="truncate">{STAT_LABELS[id]}</span>
+                {isActive && <FaTimes className="w-2.5 h-2.5 opacity-70 shrink-0" />}
               </p>
-              <p className={`text-2xl font-black mt-1 ${valueCls}`}>
+              <p className={`text-xl sm:text-2xl font-black mt-1.5 sm:mt-2 ${valueCls}`}>
                 {statCounts[id as StatCardFilter]}
               </p>
             </button>
@@ -1959,13 +1965,13 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
       </div>
 
       {/* ── Top performers + site visits ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-8">
-        <div className={`lg:col-span-2 ${theme.card} rounded-3xl p-6 flex flex-col`} style={theme.cardGlass}>
-          <h2 className={`text-lg font-bold mb-1 flex items-center gap-2 ${theme.text}`}>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-3 mb-6 lg:mb-8">
+        <div className={`lg:col-span-2 ${theme.card} rounded-2xl sm:rounded-3xl p-5 sm:p-6 flex flex-col`} style={theme.cardGlass}>
+          <h2 className={`text-base sm:text-lg font-bold mb-1 flex items-center gap-2 ${theme.text}`}>
             <FaChartPie className="text-[#9E217B]" /> Top Performers
           </h2>
-          <p className={`text-xs mb-6 ${theme.textFaint}`}>Sales managers ranked by active leads.</p>
-          <div className="flex-1 min-h-[280px]">
+          <p className={`text-xs mb-4 sm:mb-6 ${theme.textFaint}`}>Sales managers ranked by active leads.</p>
+          <div className="flex-1 min-h-[250px] sm:min-h-[280px]">
             {isLoading
               ? <div className={`h-full flex items-center justify-center text-sm ${theme.textMuted}`}>Loading...</div>
               : managerStats.length === 0
@@ -1976,8 +1982,8 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
           </div>
         </div>
 
-        <div className={`lg:col-span-1 ${theme.card} rounded-3xl p-6 flex flex-col`} style={theme.cardGlass}>
-          <h2 className={`text-lg font-bold mb-1 flex items-center gap-2 ${theme.text}`}>
+        <div className={`lg:col-span-1 ${theme.card} rounded-2xl sm:rounded-3xl p-5 sm:p-6 flex flex-col`} style={theme.cardGlass}>
+          <h2 className={`text-base sm:text-lg font-bold mb-1 flex items-center gap-2 ${theme.text}`}>
             <FaCalendarAlt className="text-orange-500" /> Site Visits
           </h2>
           <p className={`text-xs mb-4 ${theme.textFaint}`}>Upcoming visits by manager.</p>
@@ -1994,14 +2000,14 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
       </div>
 
       {/* ── Team Performance Card ── */}
-      <div className={`${theme.card} rounded-3xl p-6 mb-8`} style={theme.cardGlass}>
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-5">
-          <div>
-            <h2 className={`text-lg font-bold flex items-center gap-2 ${theme.text}`}>
-              <FaTable className="text-[#9E217B]" />
-              {perfMode === "overall" ? "Team Performance" : "Individual Performance Table"}
+      <div className={`${theme.card} rounded-2xl sm:rounded-3xl p-4 sm:p-6 mb-6 lg:mb-8`} style={theme.cardGlass}>
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-5">
+          <div className="w-full lg:w-auto">
+            <h2 className={`text-base sm:text-lg font-bold flex items-center gap-2 ${theme.text}`}>
+              <FaTable className="text-[#9E217B] shrink-0" />
+              <span className="truncate">{perfMode === "overall" ? "Team Performance" : "Individual Performance Table"}</span>
             </h2>
-            <p className={`text-sm mt-1 ${theme.textMuted}`}>
+            <p className={`text-xs sm:text-sm mt-1 sm:mt-1.5 ${theme.textMuted}`}>
               {perfMode === "overall"
                 ? "Viewing analytics and data for all logged in enquiries."
                 : perfMode === "manager"
@@ -2011,11 +2017,11 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                     : "Select a receptionist to view their real-time data."}
             </p>
           </div>
-          <div className="w-full sm:w-72 relative">
+          <div className="w-full lg:w-72 xl:w-80 relative shrink-0">
             <select
               value={perfMode}
               onChange={(e) => setPerfMode(e.target.value as any)}
-              className={`w-full text-sm font-bold rounded-xl px-4 py-3 sm:py-4 outline-none cursor-pointer appearance-none border-2 transition-colors ${isDark ? "bg-[#14141B] border-[#9E217B]/40 text-[#d946a8]" : "bg-white border-[#9E217B]/40 text-[#9E217B]"}`}
+              className={`w-full text-sm font-bold rounded-xl px-4 py-3 sm:py-3.5 outline-none cursor-pointer appearance-none border-2 transition-colors ${isDark ? "bg-[#14141B] border-[#9E217B]/40 text-[#d946a8]" : "bg-white border-[#9E217B]/40 text-[#9E217B]"}`}
             >
               <option value="overall">Overall Team Performance</option>
               <option value="manager">Sales Managers</option>
@@ -2027,30 +2033,30 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
 
         {/* Selector dropdowns */}
         {perfMode === "manager" && (
-          <div className="w-full sm:w-72 relative mb-4">
-            <FaChevronLeft className={`absolute left-3 top-1/2 -translate-y-1/2 text-xs z-10 ${theme.textFaint}`} />
+          <div className="w-full sm:w-80 relative mb-4">
+            <FaChevronLeft className={`absolute left-4 top-1/2 -translate-y-1/2 text-xs z-10 ${theme.textFaint}`} />
             <select value={selectedManagerName} onChange={e => { setSelectedManagerName(e.target.value); setManagerLeadSearch(""); }}
-              className={`w-full text-sm font-bold rounded-xl pl-9 pr-4 py-3 outline-none cursor-pointer appearance-none ${theme.select}`}>
+              className={`w-full text-sm font-bold rounded-xl pl-10 pr-4 py-3 sm:py-3.5 outline-none cursor-pointer appearance-none ${theme.select}`}>
               <option value="" disabled>-- Select Sales Manager --</option>
               {managers.map((m: any) => <option key={m.id || m._id || m.name} value={m.name}>{m.name}</option>)}
             </select>
           </div>
         )}
         {perfMode === "receptionist" && (
-          <div className="w-full sm:w-72 relative mb-4">
-            <FaChevronLeft className={`absolute left-3 top-1/2 -translate-y-1/2 text-xs z-10 ${theme.textFaint}`} />
+          <div className="w-full sm:w-80 relative mb-4">
+            <FaChevronLeft className={`absolute left-4 top-1/2 -translate-y-1/2 text-xs z-10 ${theme.textFaint}`} />
             <select value={selectedReceptionistName} onChange={e => { setSelectedReceptionistName(e.target.value); setRecepLeadSearch(""); }}
-              className={`w-full text-sm font-bold rounded-xl pl-9 pr-4 py-3 outline-none cursor-pointer appearance-none ${theme.select}`}>
+              className={`w-full text-sm font-bold rounded-xl pl-10 pr-4 py-3 sm:py-3.5 outline-none cursor-pointer appearance-none ${theme.select}`}>
               <option value="" disabled>-- Select Receptionist --</option>
               {(receptionists || []).map((r: any) => <option key={r.id || r._id || r.name} value={r.name}>{r.name}</option>)}
             </select>
           </div>
         )}
         {perfMode === "site_head" && (
-          <div className="w-full sm:w-72 relative mb-4">
-            <FaChevronLeft className={`absolute left-3 top-1/2 -translate-y-1/2 text-xs z-10 ${theme.textFaint}`} />
+          <div className="w-full sm:w-80 relative mb-4">
+            <FaChevronLeft className={`absolute left-4 top-1/2 -translate-y-1/2 text-xs z-10 ${theme.textFaint}`} />
             <select value={selectedSiteHeadName} onChange={e => { setSelectedSiteHeadName(e.target.value); setSiteHeadLeadSearch(""); }}
-              className={`w-full text-sm font-bold rounded-xl pl-9 pr-4 py-3 outline-none cursor-pointer appearance-none ${theme.select}`}>
+              className={`w-full text-sm font-bold rounded-xl pl-10 pr-4 py-3 sm:py-3.5 outline-none cursor-pointer appearance-none ${theme.select}`}>
               <option value="" disabled>-- Select Site Head --</option>
               {(siteHeads || []).map((sh: any) => <option key={sh.id || sh._id || sh.name} value={sh.name}>{sh.name}</option>)}
             </select>
@@ -2063,21 +2069,21 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
       ════════════════════════════════════════════════ */}
       {/* Scroll target for the Quick Stats cards. scroll-mt keeps the heading
           clear of the sticky header rather than tucking under it. */}
-      <div ref={overviewTableRef} className="scroll-mt-24" />
+      <div ref={overviewTableRef} className="scroll-mt-20 sm:scroll-mt-24" />
 
       {statCardFilter !== "all" && (
-        <div className={`mb-3 flex items-center justify-between gap-3 rounded-xl border px-4 py-2.5 ${isDark ? "border-[#9E217B]/40 bg-[#9E217B]/10" : "border-[#9E217B]/30 bg-[#9E217B]/5"
+        <div className={`mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-xl border px-4 py-3 ${isDark ? "border-[#9E217B]/40 bg-[#9E217B]/10" : "border-[#9E217B]/30 bg-[#9E217B]/5"
           }`}>
-          <p className={`text-xs font-bold ${theme.text}`}>
+          <p className={`text-xs sm:text-sm font-bold ${theme.text}`}>
             Filtered to <span className="text-[#9E217B]">{STAT_LABELS[statCardFilter]}</span>
-            <span className={`ml-2 font-medium ${theme.textMuted}`}>
+            <span className={`block sm:inline sm:ml-2 mt-1 sm:mt-0 font-medium ${theme.textMuted}`}>
               {filteredOverviewLeads.length} of {allLeads.length} leads
             </span>
           </p>
           <button
             type="button"
             onClick={() => setStatCardFilter("all")}
-            className="text-[11px] font-black px-3 py-1.5 rounded-lg text-white bg-[#9E217B] hover:bg-[#8a1d6b] transition-colors cursor-pointer inline-flex items-center gap-1.5"
+            className="w-full sm:w-auto text-[11px] sm:text-xs font-black px-4 py-2 sm:py-1.5 rounded-lg text-white bg-[#9E217B] hover:bg-[#8a1d6b] transition-colors cursor-pointer flex items-center justify-center gap-1.5"
           >
             <FaTimes className="w-2.5 h-2.5" /> Clear filter
           </button>
@@ -2125,38 +2131,38 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
           InterestBadge={InterestBadge}
         />
       ) : perfMode === "manager" && !selectedManagerName ? (
-        <div className={`flex-1 flex flex-col items-center justify-center border-2 border-dashed rounded-xl min-h-[300px] ${theme.textMuted} ${theme.tableBorder}`}>
-          <FaTable className="text-4xl mb-4 opacity-20" />
-          <p>Select a manager to view their table.</p>
+        <div className={`flex-1 flex flex-col items-center justify-center border-2 border-dashed rounded-xl min-h-[250px] sm:min-h-[300px] p-6 text-center ${theme.textMuted} ${theme.tableBorder}`}>
+          <FaTable className="text-3xl sm:text-4xl mb-3 sm:mb-4 opacity-20" />
+          <p className="text-sm">Select a manager to view their table.</p>
         </div>
 
         /* ════════════════════════════════════════════════
             SITE HEAD MODE — no selection yet
         ════════════════════════════════════════════════ */
       ) : perfMode === "site_head" && !selectedSiteHeadName ? (
-        <div className={`flex-1 flex flex-col items-center justify-center border-2 border-dashed rounded-xl min-h-[300px] ${theme.textMuted} ${theme.tableBorder}`}>
-          <FaTable className="text-4xl mb-4 opacity-20" />
-          <p>Select a site head to view their table.</p>
+        <div className={`flex-1 flex flex-col items-center justify-center border-2 border-dashed rounded-xl min-h-[250px] sm:min-h-[300px] p-6 text-center ${theme.textMuted} ${theme.tableBorder}`}>
+          <FaTable className="text-3xl sm:text-4xl mb-3 sm:mb-4 opacity-20" />
+          <p className="text-sm">Select a site head to view their table.</p>
         </div>
 
         /* ════════════════════════════════════════════════
             SITE HEAD MODE — selected
         ════════════════════════════════════════════════ */
       ) : perfMode === "site_head" ? (
-        <div className="animate-fadeIn space-y-5">
+        <div className="animate-fadeIn space-y-4 sm:space-y-5">
           {/* Stat cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div className={`${theme.innerBlock} rounded-xl p-5`} style={theme.settingsBgGl}>
-              <p className={`text-xs font-bold uppercase tracking-wider mb-1 ${theme.textMuted}`}>Total Assigned</p>
-              <p className={`text-2xl font-black ${theme.text}`}>{activeSiteHeadLeads.length}</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className={`${theme.innerBlock} rounded-xl p-4 sm:p-5`} style={theme.settingsBgGl}>
+              <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-1 ${theme.textMuted}`}>Total Assigned</p>
+              <p className={`text-xl sm:text-2xl font-black ${theme.text}`}>{activeSiteHeadLeads.length}</p>
             </div>
-            <div className={`${theme.innerBlock} rounded-xl p-5`} style={theme.settingsBgGl}>
-              <p className={`text-xs font-bold uppercase tracking-wider mb-1 ${theme.textMuted}`}>Site Visits</p>
-              <p className="text-2xl font-black text-orange-500">{siteHeadVisitCount}</p>
+            <div className={`${theme.innerBlock} rounded-xl p-4 sm:p-5`} style={theme.settingsBgGl}>
+              <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-1 ${theme.textMuted}`}>Site Visits</p>
+              <p className="text-xl sm:text-2xl font-black text-orange-500">{siteHeadVisitCount}</p>
             </div>
-            <div className={`${theme.innerBlock} rounded-xl p-5`} style={theme.settingsBgGl}>
-              <p className={`text-xs font-bold uppercase tracking-wider mb-1 ${theme.textMuted}`}>Loans Active</p>
-              <p className={`text-2xl font-black ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>
+            <div className={`${theme.innerBlock} rounded-xl p-4 sm:p-5`} style={theme.settingsBgGl}>
+              <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-1 ${theme.textMuted}`}>Loans Active</p>
+              <p className={`text-xl sm:text-2xl font-black ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>
                 {activeSiteHeadLeads.filter((l: any) => l.loanPlanned === "Yes").length}
               </p>
             </div>
@@ -2165,10 +2171,10 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
           {/* Analytics */}
           {activeSiteHeadLeads.length > 0 && (
             <div>
-              <div className="flex items-center gap-3 mb-4">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
                 <FaChartPie className="text-[#9E217B]" />
-                <h3 className={`font-bold text-sm uppercase tracking-wider ${theme.text}`}>Lead Analytics — {selectedSiteHeadName}</h3>
-                <span className={`text-xs px-2 py-0.5 rounded border ${theme.settingsBg} ${theme.textMuted}`}>{activeSiteHeadLeads.length} leads</span>
+                <h3 className={`font-bold text-xs sm:text-sm uppercase tracking-wider truncate ${theme.text}`}>Lead Analytics — {selectedSiteHeadName}</h3>
+                <span className={`text-[10px] sm:text-xs px-2 py-0.5 rounded border whitespace-nowrap ${theme.settingsBg} ${theme.textMuted}`}>{activeSiteHeadLeads.length} leads</span>
               </div>
               <DashboardAnalytics leads={activeSiteHeadLeads} theme={theme} isDark={isDark} />
             </div>
@@ -2176,38 +2182,42 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
 
           {/* Table */}
           <div className={`${theme.tableWrap} rounded-xl overflow-hidden`} style={theme.tableGlass}>
-            <div className={`p-5 flex flex-wrap justify-between items-center gap-2 ${theme.tableHead}`}>
-              <h3 className={`font-bold flex items-center gap-2 ${theme.text}`}>
-                <FaUsers className="text-[#9E217B]" /> Leads Database ({selectedSiteHeadName})
+            <div className={`p-4 sm:p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 ${theme.tableHead}`}>
+              <h3 className={`font-bold flex items-center gap-2 text-sm sm:text-base ${theme.text}`}>
+                <FaUsers className="text-[#9E217B] shrink-0" /> <span className="truncate">Leads Database ({selectedSiteHeadName})</span>
               </h3>
-              <div className="flex items-center gap-3 flex-wrap">
-                <TableSearchInput value={siteHeadLeadSearch} onChange={setSiteHeadLeadSearch} theme={theme} />
-                <button
-                  onClick={() => downloadCSV(activeSiteHeadLeads.map(formatLeadForExport), `${selectedSiteHeadName}_Leads.csv`)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold border rounded-lg transition-colors hover:opacity-80 ${isDark ? 'bg-[#222] border-[#333] text-white' : 'bg-white border-indigo-200 text-indigo-600'}`}
-                >
-                  <FaDownload size={12} /> Export CSV
-                </button>
-                <span className={`text-xs px-3 py-1 rounded-full ${theme.btnClosingBadge}`}>
-                  {filterLeads(activeSiteHeadLeads, siteHeadLeadSearch).length} leads
-                </span>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
+                <div className="w-full sm:w-auto flex-1">
+                  <TableSearchInput value={siteHeadLeadSearch} onChange={setSiteHeadLeadSearch} theme={theme} />
+                </div>
+                <div className="flex items-center justify-between sm:justify-start gap-3">
+                  <button
+                    onClick={() => downloadCSV(activeSiteHeadLeads.map(formatLeadForExport), `${selectedSiteHeadName}_Leads.csv`)}
+                    className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 text-[11px] sm:text-xs font-bold border rounded-lg transition-colors hover:opacity-80 whitespace-nowrap ${isDark ? 'bg-[#222] border-[#333] text-white' : 'bg-white border-indigo-200 text-indigo-600'}`}
+                  >
+                    <FaDownload size={12} /> Export
+                  </button>
+                  <span className={`text-[10px] sm:text-xs px-3 py-1 rounded-full whitespace-nowrap ${theme.btnClosingBadge}`}>
+                    {filterLeads(activeSiteHeadLeads, siteHeadLeadSearch).length} leads
+                  </span>
+                </div>
               </div>
             </div>
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto w-full">
               <div ref={loadLessRef} style={{ height: "1px", width: "100%" }} />
-              <table className="w-full text-left text-sm">
-                <thead className={`text-xs uppercase ${theme.tableHead} ${theme.textHeader}`}>
+              <table className="w-full text-left text-sm min-w-[1200px]">
+                <thead className={`text-[10px] sm:text-xs uppercase whitespace-nowrap ${theme.tableHead} ${theme.textHeader}`}>
                   <tr>
                     {["LEAD NO.", "NAME", "PROP. TYPE", "BUDGET", "SOURCE", "CP NAME", "CP PHONE", "STATUS", "INTEREST", "SITE VISIT", "DATE CREATED", "BACKDATED ENTRY", "ASSIGNED TO", "REASSIGN"].map(h => (
-                      <th key={h} className="px-4 py-2.5">{h}</th>
+                      <th key={h} className="px-3 sm:px-4 py-2.5 sm:py-3">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className={`divide-y ${theme.tableDivide}`}>
                   {isLoading ? (
-                    <tr><td colSpan={12} className={`text-center py-8 ${theme.textMuted}`}>Syncing...</td></tr>
+                    <tr><td colSpan={14} className={`text-center py-8 text-xs sm:text-sm ${theme.textMuted}`}>Syncing...</td></tr>
                   ) : filterLeads(activeSiteHeadLeads, siteHeadLeadSearch).length === 0 ? (
-                    <tr><td colSpan={12} className={`text-center py-8 ${theme.textMuted}`}>
+                    <tr><td colSpan={14} className={`text-center py-8 text-xs sm:text-sm ${theme.textMuted}`}>
                       {siteHeadLeadSearch ? "No leads match your search." : `No leads for ${selectedSiteHeadName}.`}
                     </td></tr>
                   ) : filterLeads(activeSiteHeadLeads, siteHeadLeadSearch).slice(0, visibleCount).map((lead: any) => {
@@ -2219,8 +2229,8 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
 
                     return (
                       <tr key={lead.id} className={`transition-colors cursor-pointer ${theme.tableRow}`} onClick={() => onNavigateToSales && onNavigateToSales(lead)}>
-                        <td className={`px-4 py-3 sm:py-4.5 font-bold ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>#{lead.sr_no || lead.id}</td>
-                        <td className={`px-4 py-2.5 font-medium ${theme.text}`}>
+                        <td className={`px-3 sm:px-4 py-3 sm:py-4.5 font-bold whitespace-nowrap ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>#{lead.sr_no || lead.id}</td>
+                        <td className={`px-3 sm:px-4 py-2.5 font-medium whitespace-nowrap min-w-[140px] ${theme.text}`}>
                           {(lead.assigned_to || lead.assigned_receptionist) ? (
                             <span
                               className={`cursor-pointer hover:underline transition-colors ${isDark ? "hover:text-[#d946a8]" : "hover:text-[#9E217B]"}`}
@@ -2233,33 +2243,33 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                             lead.name
                           )}
                         </td>
-                        <td className={`px-4 py-2.5 ${theme.textMuted}`}>{(lead.propType && lead.propType !== "Pending" && lead.propType !== "N/A" ? lead.propType : lead.configuration && lead.configuration !== "Pending" && lead.configuration !== "N/A" ? lead.configuration : "Pending")}</td>
-                        <td className={`px-4 py-2.5 font-semibold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget || lead.budget || "N/A"}</td>
-                        <td className={`px-4 py-2.5 text-xs ${theme.textMuted}`}>{lead.source || "—"}</td>
-                        <td className={`px-4 py-2.5 ${theme.textMuted}`}>{lead.cpName || lead.cp_name || "—"}</td>
-                        <td className={`px-4 py-2.5 font-mono text-xs ${theme.textMuted}`}>{lead.cpPhone || lead.cp_phone || "—"}</td>
-                        <td className="px-4 py-2.5">
-                          <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase border flex-shrink-0 whitespace-nowrap ${lead.status === "Closing" ? theme.statusClosing : lead.status === "Visit Scheduled" ? theme.statusVisit : theme.statusAssigned}`}>
+                        <td className={`px-3 sm:px-4 py-2.5 whitespace-nowrap ${theme.textMuted}`}>{(lead.propType && lead.propType !== "Pending" && lead.propType !== "N/A" ? lead.propType : lead.configuration && lead.configuration !== "Pending" && lead.configuration !== "N/A" ? lead.configuration : "Pending")}</td>
+                        <td className={`px-3 sm:px-4 py-2.5 font-semibold whitespace-nowrap ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget || lead.budget || "N/A"}</td>
+                        <td className={`px-3 sm:px-4 py-2.5 text-xs whitespace-nowrap ${theme.textMuted}`}>{lead.source || "—"}</td>
+                        <td className={`px-3 sm:px-4 py-2.5 whitespace-nowrap ${theme.textMuted}`}>{lead.cpName || lead.cp_name || "—"}</td>
+                        <td className={`px-3 sm:px-4 py-2.5 font-mono text-xs whitespace-nowrap ${theme.textMuted}`}>{lead.cpPhone || lead.cp_phone || "—"}</td>
+                        <td className="px-3 sm:px-4 py-2.5 whitespace-nowrap">
+                          <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase border flex-shrink-0 ${lead.status === "Closing" ? theme.statusClosing : lead.status === "Visit Scheduled" ? theme.statusVisit : theme.statusAssigned}`}>
                             {lead.status || "Assigned"}
                           </span>
                         </td>
-                        <td className="px-4 py-2.5">
+                        <td className="px-3 sm:px-4 py-2.5 whitespace-nowrap">
                           {lead.leadInterestStatus && lead.leadInterestStatus !== "Pending"
                             ? <InterestBadge status={lead.leadInterestStatus} size="sm" isDark={isDark} />
                             : <span className={`text-xs italic ${theme.textFaint}`}>—</span>}
                         </td>
-                        <td className="px-4 py-3 sm:py-4.5">
+                        <td className="px-3 sm:px-4 py-3 sm:py-4.5 whitespace-nowrap">
                           {lead.mongoVisitDate
                             ? <span className="text-orange-500 font-medium">{formatDate(lead.mongoVisitDate).split(",")[0]}</span>
                             : <span className={`text-xs italic ${theme.textFaint}`}>Pending</span>}
                         </td>
-                        <td className={`px-4 py-2.5 text-xs whitespace-normal min-w-[120px] ${theme.textFaint}`}>
+                        <td className={`px-3 sm:px-4 py-2.5 text-xs whitespace-nowrap min-w-[120px] ${theme.textFaint}`}>
                           {lead.created_at ? formatDate(lead.created_at) : "—"}
                         </td>
-                        <td className={`px-4 py-2.5 text-xs whitespace-normal min-w-[120px] ${theme.textFaint}`}>
+                        <td className={`px-3 sm:px-4 py-2.5 text-xs whitespace-nowrap min-w-[120px] ${theme.textFaint}`}>
                           {lead.auto_date_enabled === false && lead.enquiry_date ? formatDate(lead.enquiry_date).split(",")[0] : "—"}
                         </td>
-                        <td className={`px-4 py-2.5 ${theme.textMuted}`}>
+                        <td className={`px-3 sm:px-4 py-2.5 whitespace-nowrap min-w-[140px] ${theme.textMuted}`}>
                           {assignedName ? (
                             <div className="flex flex-col gap-0.5">
                               <span className={`font-semibold ${theme.text}`}>{assignedName}</span>
@@ -2269,13 +2279,13 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                             </div>
                           ) : "—"}
                         </td>
-                        <td className="px-4 py-2.5" onClick={e => e.stopPropagation()}>
+                        <td className="px-3 sm:px-4 py-2.5 whitespace-nowrap" onClick={e => e.stopPropagation()}>
                           {lead.status === "Closing" || lead.status === "Closed" || !!lead.closingDate ? (
-                            <span className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase border whitespace-nowrap ${isDark ? "text-gray-400 border-gray-600 bg-gray-800/50" : "text-gray-500 border-gray-300 bg-gray-100"}`}>
+                            <span className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase border ${isDark ? "text-gray-400 border-gray-600 bg-gray-800/50" : "text-gray-500 border-gray-300 bg-gray-100"}`}>
                               Marked closed
                             </span>
                           ) : (
-                            <button className={`text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${isDark ? "bg-orange-600 hover:bg-orange-500 text-white" : "bg-orange-100 hover:bg-orange-200 text-orange-700"}`}
+                            <button className={`text-[11px] sm:text-xs font-bold px-2.5 sm:px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer ${isDark ? "bg-orange-600 hover:bg-orange-500 text-white" : "bg-orange-100 hover:bg-orange-200 text-orange-700"}`}
                               onClick={e => { e.stopPropagation(); setReassignLead(lead); setReassignTarget(""); setReassignNote(""); setIsReassignModalOpen(true); }}>
                               <FaExchangeAlt /> Reassign
                             </button>
@@ -2294,7 +2304,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                 </div>
               )}
               {visibleCount >= filterLeads(activeSiteHeadLeads, siteHeadLeadSearch).length && activeSiteHeadLeads.length > 20 && (
-                <div className={`text-center py-2.5 text-xs font-medium ${theme.textFaint}`}>
+                <div className={`text-center py-3 text-xs font-medium ${theme.textFaint}`}>
                   ✓ All {filterLeads(activeSiteHeadLeads, siteHeadLeadSearch).length} leads loaded
                 </div>
               )}
@@ -2306,43 +2316,43 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
             RECEPTIONIST MODE — no selection yet
         ════════════════════════════════════════════════ */
       ) : perfMode === "receptionist" && !selectedReceptionistName ? (
-        <div className={`flex-1 flex flex-col items-center justify-center border-2 border-dashed rounded-xl min-h-[300px] ${theme.textMuted} ${theme.tableBorder}`}>
-          <FaTable className="text-4xl mb-4 opacity-20" />
-          <p>Select a receptionist to view their table.</p>
+        <div className={`flex-1 flex flex-col items-center justify-center border-2 border-dashed rounded-xl min-h-[250px] sm:min-h-[300px] p-6 text-center ${theme.textMuted} ${theme.tableBorder}`}>
+          <FaTable className="text-3xl sm:text-4xl mb-3 sm:mb-4 opacity-20" />
+          <p className="text-sm">Select a receptionist to view their table.</p>
         </div>
 
         /* ════════════════════════════════════════════════
             RECEPTIONIST MODE — selected
         ════════════════════════════════════════════════ */
       ) : perfMode === "receptionist" ? (
-        <div className="animate-fadeIn space-y-5">
+        <div className="animate-fadeIn space-y-4 sm:space-y-5">
           {/* Stat cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <div className={`${theme.innerBlock} rounded-xl p-5`} style={theme.settingsBgGl}>
-              <p className={`text-xs font-bold uppercase tracking-wider mb-1 ${theme.textMuted}`}>Total Leads</p>
-              <p className={`text-2xl font-black ${theme.text}`}>{recepAllLeads.length}</p>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
+            <div className={`${theme.innerBlock} rounded-xl p-4 sm:p-5`} style={theme.settingsBgGl}>
+              <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-1 ${theme.textMuted}`}>Total Leads</p>
+              <p className={`text-xl sm:text-2xl font-black ${theme.text}`}>{recepAllLeads.length}</p>
             </div>
-            <div className={`${theme.innerBlock} rounded-xl p-5`} style={theme.settingsBgGl}>
-              <p className={`text-xs font-bold uppercase tracking-wider mb-1 ${theme.textMuted}`}>Assigned To</p>
-              <p className="text-2xl font-black text-[#00AEEF]">{recepAssignedLeads.length}</p>
+            <div className={`${theme.innerBlock} rounded-xl p-4 sm:p-5`} style={theme.settingsBgGl}>
+              <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-1 ${theme.textMuted}`}>Assigned To</p>
+              <p className="text-xl sm:text-2xl font-black text-[#00AEEF]">{recepAssignedLeads.length}</p>
             </div>
-            <div className={`${theme.innerBlock} rounded-xl p-5`} style={theme.settingsBgGl}>
-              <p className={`text-xs font-bold uppercase tracking-wider mb-1 ${theme.textMuted}`}>Self-Managed</p>
-              <p className="text-2xl font-black text-orange-500">{recepSelfLeads.length}</p>
+            <div className={`${theme.innerBlock} rounded-xl p-4 sm:p-5`} style={theme.settingsBgGl}>
+              <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-1 ${theme.textMuted}`}>Self-Managed</p>
+              <p className="text-xl sm:text-2xl font-black text-orange-500">{recepSelfLeads.length}</p>
             </div>
-            <div className={`${theme.innerBlock} rounded-xl p-5`} style={theme.settingsBgGl}>
-              <p className={`text-xs font-bold uppercase tracking-wider mb-1 ${theme.textMuted}`}>Closed</p>
-              <p className={`text-2xl font-black ${isDark ? "text-yellow-400" : "text-amber-500"}`}>{recepClosed}</p>
+            <div className={`${theme.innerBlock} rounded-xl p-4 sm:p-5`} style={theme.settingsBgGl}>
+              <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-1 ${theme.textMuted}`}>Closed</p>
+              <p className={`text-xl sm:text-2xl font-black ${isDark ? "text-yellow-400" : "text-amber-500"}`}>{recepClosed}</p>
             </div>
           </div>
 
           {/* Analytics */}
           {recepAllLeads.length > 0 && (
             <div>
-              <div className="flex items-center gap-3 mb-4">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
                 <FaChartPie className="text-[#00AEEF]" />
-                <h3 className={`font-bold text-sm uppercase tracking-wider ${theme.text}`}>Lead Analytics — {selectedReceptionistName}</h3>
-                <span className={`text-xs px-2 py-0.5 rounded border ${theme.settingsBg} ${theme.textMuted}`}>{recepAllLeads.length} leads</span>
+                <h3 className={`font-bold text-xs sm:text-sm uppercase tracking-wider truncate ${theme.text}`}>Lead Analytics — {selectedReceptionistName}</h3>
+                <span className={`text-[10px] sm:text-xs px-2 py-0.5 rounded border whitespace-nowrap ${theme.settingsBg} ${theme.textMuted}`}>{recepAllLeads.length} leads</span>
               </div>
               <DashboardAnalytics leads={recepAllLeads} theme={theme} isDark={isDark} />
             </div>
@@ -2350,39 +2360,43 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
 
           {/* Table */}
           <div className={`${theme.tableWrap} rounded-xl overflow-hidden`} style={theme.tableGlass}>
-            <div className={`p-5 flex flex-wrap justify-between items-center gap-2 ${theme.tableHead}`}>
-              <h3 className={`font-bold flex items-center gap-2 ${theme.text}`}>
-                <FaClipboardList className="text-[#00AEEF]" /> All Leads — {selectedReceptionistName}
+            <div className={`p-4 sm:p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 ${theme.tableHead}`}>
+              <h3 className={`font-bold flex items-center gap-2 text-sm sm:text-base ${theme.text}`}>
+                <FaClipboardList className="text-[#00AEEF] shrink-0" /> <span className="truncate">All Leads — {selectedReceptionistName}</span>
               </h3>
-              <div className="flex items-center gap-3 flex-wrap">
-                <TableSearchInput value={recepLeadSearch} onChange={setRecepLeadSearch} theme={theme} />
-                <button
-                  onClick={() => downloadCSV(recepAllLeads.map(formatLeadForExport), `${selectedReceptionistName}_Leads.csv`)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold border rounded-lg transition-colors hover:opacity-80 ${isDark ? 'bg-[#222] border-[#333] text-white' : 'bg-white border-indigo-200 text-indigo-600'}`}
-                >
-                  <FaDownload size={12} /> Export CSV
-                </button>
-                <span className={`text-xs px-2 py-0.5 rounded border ${theme.settingsBg} ${theme.textMuted}`}>
-                  {recepAssignedLeads.length} assigned · {recepSelfLeads.length} self-managed
-                </span>
-                <span className={`text-xs px-3 py-1 rounded-full ${theme.btnClosingBadge}`}>Live Sync Active</span>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
+                <div className="w-full sm:w-auto flex-1">
+                  <TableSearchInput value={recepLeadSearch} onChange={setRecepLeadSearch} theme={theme} />
+                </div>
+                <div className="flex flex-wrap items-center justify-between sm:justify-start gap-2 sm:gap-3">
+                  <button
+                    onClick={() => downloadCSV(recepAllLeads.map(formatLeadForExport), `${selectedReceptionistName}_Leads.csv`)}
+                    className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 text-[11px] sm:text-xs font-bold border rounded-lg transition-colors hover:opacity-80 whitespace-nowrap ${isDark ? 'bg-[#222] border-[#333] text-white' : 'bg-white border-indigo-200 text-indigo-600'}`}
+                  >
+                    <FaDownload size={12} /> Export
+                  </button>
+                  <span className={`text-[10px] sm:text-xs px-2 py-1 rounded border whitespace-nowrap ${theme.settingsBg} ${theme.textMuted}`}>
+                    {recepAssignedLeads.length} assigned · {recepSelfLeads.length} self
+                  </span>
+                  <span className={`text-[10px] sm:text-xs px-3 py-1 rounded-full whitespace-nowrap ${theme.btnClosingBadge}`}>Live Sync Active</span>
+                </div>
               </div>
             </div>
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto w-full">
               <div ref={loadLessRef} style={{ height: "1px", width: "100%" }} />
-              <table className="w-full text-left text-sm">
-                <thead className={`text-xs uppercase ${theme.tableHead} ${theme.textHeader}`}>
+              <table className="w-full text-left text-sm min-w-[1200px]">
+                <thead className={`text-[10px] sm:text-xs uppercase whitespace-nowrap ${theme.tableHead} ${theme.textHeader}`}>
                   <tr>
                     {["LEAD NO.", "NAME", "PROP. TYPE", "BUDGET", "SOURCE", "CP NAME", "CP PHONE", "STATUS", "INTEREST", "SITE VISIT", "DATE CREATED", "BACKDATED ENTRY", "ASSIGNED TO", "REASSIGN"].map(h => (
-                      <th key={h} className="px-4 py-2.5">{h}</th>
+                      <th key={h} className="px-3 sm:px-4 py-2.5 sm:py-3">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className={`divide-y ${theme.tableDivide}`}>
                   {isLoading ? (
-                    <tr><td colSpan={12} className={`text-center py-8 ${theme.textMuted}`}>Syncing...</td></tr>
+                    <tr><td colSpan={14} className={`text-center py-8 text-xs sm:text-sm ${theme.textMuted}`}>Syncing...</td></tr>
                   ) : filterLeads(recepAllLeads, recepLeadSearch).length === 0 ? (
-                    <tr><td colSpan={12} className={`text-center py-8 ${theme.textMuted}`}>
+                    <tr><td colSpan={14} className={`text-center py-8 text-xs sm:text-sm ${theme.textMuted}`}>
                       {recepLeadSearch ? "No leads match your search." : `No leads for ${selectedReceptionistName}.`}
                     </td></tr>
                   ) : filterLeads(recepAllLeads, recepLeadSearch).slice(0, visibleCount).map((lead: any) => {
@@ -2394,8 +2408,8 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
 
                     return (
                       <tr key={lead.id} className={`transition-colors cursor-pointer ${theme.tableRow}`} onClick={() => onNavigateToSales && onNavigateToSales(lead)}>
-                        <td className={`px-4 py-3 sm:py-4.5 font-bold ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>#{lead.sr_no || lead.id}</td>
-                        <td className={`px-4 py-2.5 font-medium ${theme.text}`}>
+                        <td className={`px-3 sm:px-4 py-3 sm:py-4.5 font-bold whitespace-nowrap ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>#{lead.sr_no || lead.id}</td>
+                        <td className={`px-3 sm:px-4 py-2.5 font-medium whitespace-nowrap min-w-[140px] ${theme.text}`}>
                           {(lead.assigned_to || lead.assigned_receptionist) ? (
                             <span
                               className={`cursor-pointer hover:underline transition-colors ${isDark ? "hover:text-[#d946a8]" : "hover:text-[#9E217B]"}`}
@@ -2408,33 +2422,33 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                             lead.name
                           )}
                         </td>
-                        <td className={`px-4 py-2.5 ${theme.textMuted}`}>{(lead.propType && lead.propType !== "Pending" && lead.propType !== "N/A" ? lead.propType : lead.configuration && lead.configuration !== "Pending" && lead.configuration !== "N/A" ? lead.configuration : "Pending")}</td>
-                        <td className={`px-4 py-2.5 font-semibold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget || lead.budget || "N/A"}</td>
-                        <td className={`px-4 py-2.5 text-xs ${theme.textMuted}`}>{lead.source || "—"}</td>
-                        <td className={`px-4 py-2.5 ${theme.textMuted}`}>{lead.cpName || lead.cp_name || "—"}</td>
-                        <td className={`px-4 py-2.5 font-mono text-xs ${theme.textMuted}`}>{lead.cpPhone || lead.cp_phone || "—"}</td>
-                        <td className="px-4 py-2.5">
-                          <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase border flex-shrink-0 whitespace-nowrap ${lead.status === "Closing" ? theme.statusClosing : lead.status === "Visit Scheduled" ? theme.statusVisit : theme.statusAssigned}`}>
+                        <td className={`px-3 sm:px-4 py-2.5 whitespace-nowrap ${theme.textMuted}`}>{(lead.propType && lead.propType !== "Pending" && lead.propType !== "N/A" ? lead.propType : lead.configuration && lead.configuration !== "Pending" && lead.configuration !== "N/A" ? lead.configuration : "Pending")}</td>
+                        <td className={`px-3 sm:px-4 py-2.5 font-semibold whitespace-nowrap ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget || lead.budget || "N/A"}</td>
+                        <td className={`px-3 sm:px-4 py-2.5 text-xs whitespace-nowrap ${theme.textMuted}`}>{lead.source || "—"}</td>
+                        <td className={`px-3 sm:px-4 py-2.5 whitespace-nowrap ${theme.textMuted}`}>{lead.cpName || lead.cp_name || "—"}</td>
+                        <td className={`px-3 sm:px-4 py-2.5 font-mono text-xs whitespace-nowrap ${theme.textMuted}`}>{lead.cpPhone || lead.cp_phone || "—"}</td>
+                        <td className="px-3 sm:px-4 py-2.5 whitespace-nowrap">
+                          <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase border flex-shrink-0 ${lead.status === "Closing" ? theme.statusClosing : lead.status === "Visit Scheduled" ? theme.statusVisit : theme.statusAssigned}`}>
                             {lead.status || "Assigned"}
                           </span>
                         </td>
-                        <td className="px-4 py-2.5">
+                        <td className="px-3 sm:px-4 py-2.5 whitespace-nowrap">
                           {lead.leadInterestStatus && lead.leadInterestStatus !== "Pending"
                             ? <InterestBadge status={lead.leadInterestStatus} size="sm" isDark={isDark} />
                             : <span className={`text-xs italic ${theme.textFaint}`}>—</span>}
                         </td>
-                        <td className="px-4 py-3 sm:py-4.5">
+                        <td className="px-3 sm:px-4 py-3 sm:py-4.5 whitespace-nowrap">
                           {lead.mongoVisitDate
                             ? <span className="text-orange-500 font-medium">{formatDate(lead.mongoVisitDate).split(",")[0]}</span>
                             : <span className={`text-xs italic ${theme.textFaint}`}>Pending</span>}
                         </td>
-                        <td className={`px-4 py-2.5 text-xs whitespace-normal min-w-[120px] ${theme.textFaint}`}>
+                        <td className={`px-3 sm:px-4 py-2.5 text-xs whitespace-nowrap min-w-[120px] ${theme.textFaint}`}>
                           {lead.created_at ? formatDate(lead.created_at) : "—"}
                         </td>
-                        <td className={`px-4 py-2.5 text-xs whitespace-normal min-w-[120px] ${theme.textFaint}`}>
+                        <td className={`px-3 sm:px-4 py-2.5 text-xs whitespace-nowrap min-w-[120px] ${theme.textFaint}`}>
                           {lead.auto_date_enabled === false && lead.enquiry_date ? formatDate(lead.enquiry_date).split(",")[0] : "—"}
                         </td>
-                        <td className={`px-4 py-2.5 ${theme.textMuted}`}>
+                        <td className={`px-3 sm:px-4 py-2.5 whitespace-nowrap min-w-[140px] ${theme.textMuted}`}>
                           {assignedName ? (
                             <div className="flex flex-col gap-0.5">
                               <span className={`font-semibold ${theme.text}`}>{assignedName}</span>
@@ -2444,13 +2458,13 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                             </div>
                           ) : "—"}
                         </td>
-                        <td className="px-4 py-2.5" onClick={e => e.stopPropagation()}>
+                        <td className="px-3 sm:px-4 py-2.5 whitespace-nowrap" onClick={e => e.stopPropagation()}>
                           {lead.status === "Closing" || lead.status === "Closed" || !!lead.closingDate ? (
-                            <span className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase border whitespace-nowrap ${isDark ? "text-gray-400 border-gray-600 bg-gray-800/50" : "text-gray-500 border-gray-300 bg-gray-100"}`}>
+                            <span className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase border ${isDark ? "text-gray-400 border-gray-600 bg-gray-800/50" : "text-gray-500 border-gray-300 bg-gray-100"}`}>
                               Marked closed
                             </span>
                           ) : (
-                            <button className={`text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${isDark ? "bg-orange-600 hover:bg-orange-500 text-white" : "bg-orange-100 hover:bg-orange-200 text-orange-700"}`}
+                            <button className={`text-[11px] sm:text-xs font-bold px-2.5 sm:px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer ${isDark ? "bg-orange-600 hover:bg-orange-500 text-white" : "bg-orange-100 hover:bg-orange-200 text-orange-700"}`}
                               onClick={e => { e.stopPropagation(); setReassignLead(lead); setReassignTarget(""); setReassignNote(""); setIsReassignModalOpen(true); }}>
                               <FaExchangeAlt /> Reassign
                             </button>
@@ -2469,7 +2483,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                 </div>
               )}
               {visibleCount >= filterLeads(recepAllLeads, recepLeadSearch).length && recepAllLeads.length > 20 && (
-                <div className={`text-center py-2.5 text-xs font-medium ${theme.textFaint}`}>
+                <div className={`text-center py-3 text-xs font-medium ${theme.textFaint}`}>
                   ✓ All {filterLeads(recepAllLeads, recepLeadSearch).length} leads loaded
                 </div>
               )}
@@ -2481,20 +2495,20 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
             MANAGER MODE — selected
         ════════════════════════════════════════════════ */
       ) : (
-        <div className="animate-fadeIn space-y-5">
+        <div className="animate-fadeIn space-y-4 sm:space-y-5">
           {/* Stat cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div className={`${theme.innerBlock} rounded-xl p-5`} style={theme.settingsBgGl}>
-              <p className={`text-xs font-bold uppercase tracking-wider mb-1 ${theme.textMuted}`}>Total Assigned</p>
-              <p className={`text-2xl font-black ${theme.text}`}>{activeManagerLeads.length}</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className={`${theme.innerBlock} rounded-xl p-4 sm:p-5`} style={theme.settingsBgGl}>
+              <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-1 ${theme.textMuted}`}>Total Assigned</p>
+              <p className={`text-xl sm:text-2xl font-black ${theme.text}`}>{activeManagerLeads.length}</p>
             </div>
-            <div className={`${theme.innerBlock} rounded-xl p-5`} style={theme.settingsBgGl}>
-              <p className={`text-xs font-bold uppercase tracking-wider mb-1 ${theme.textMuted}`}>Site Visits</p>
-              <p className="text-2xl font-black text-orange-500">{visitCount}</p>
+            <div className={`${theme.innerBlock} rounded-xl p-4 sm:p-5`} style={theme.settingsBgGl}>
+              <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-1 ${theme.textMuted}`}>Site Visits</p>
+              <p className="text-xl sm:text-2xl font-black text-orange-500">{visitCount}</p>
             </div>
-            <div className={`${theme.innerBlock} rounded-xl p-5`} style={theme.settingsBgGl}>
-              <p className={`text-xs font-bold uppercase tracking-wider mb-1 ${theme.textMuted}`}>Loans Active</p>
-              <p className={`text-2xl font-black ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>
+            <div className={`${theme.innerBlock} rounded-xl p-4 sm:p-5`} style={theme.settingsBgGl}>
+              <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-1 ${theme.textMuted}`}>Loans Active</p>
+              <p className={`text-xl sm:text-2xl font-black ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>
                 {activeManagerLeads.filter((l: any) => l.loanPlanned === "Yes").length}
               </p>
             </div>
@@ -2503,10 +2517,10 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
           {/* Analytics */}
           {activeManagerLeads.length > 0 && (
             <div>
-              <div className="flex items-center gap-3 mb-4">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
                 <FaChartPie className="text-[#9E217B]" />
-                <h3 className={`font-bold text-sm uppercase tracking-wider ${theme.text}`}>Lead Analytics — {selectedManagerName}</h3>
-                <span className={`text-xs px-2 py-0.5 rounded border ${theme.settingsBg} ${theme.textMuted}`}>{activeManagerLeads.length} leads</span>
+                <h3 className={`font-bold text-xs sm:text-sm uppercase tracking-wider truncate ${theme.text}`}>Lead Analytics — {selectedManagerName}</h3>
+                <span className={`text-[10px] sm:text-xs px-2 py-0.5 rounded border whitespace-nowrap ${theme.settingsBg} ${theme.textMuted}`}>{activeManagerLeads.length} leads</span>
               </div>
               <DashboardAnalytics leads={activeManagerLeads} theme={theme} isDark={isDark} />
             </div>
@@ -2514,38 +2528,42 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
 
           {/* Table */}
           <div className={`${theme.tableWrap} rounded-xl overflow-hidden`} style={theme.tableGlass}>
-            <div className={`p-5 flex flex-wrap justify-between items-center gap-2 ${theme.tableHead}`}>
-              <h3 className={`font-bold flex items-center gap-2 ${theme.text}`}>
-                <FaUsers className="text-[#9E217B]" /> Leads Database ({selectedManagerName})
+            <div className={`p-4 sm:p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 ${theme.tableHead}`}>
+              <h3 className={`font-bold flex items-center gap-2 text-sm sm:text-base ${theme.text}`}>
+                <FaUsers className="text-[#9E217B] shrink-0" /> <span className="truncate">Leads Database ({selectedManagerName})</span>
               </h3>
-              <div className="flex items-center gap-3 flex-wrap">
-                <TableSearchInput value={managerLeadSearch} onChange={setManagerLeadSearch} theme={theme} />
-                <button
-                  onClick={() => downloadCSV(activeManagerLeads.map(formatLeadForExport), `${selectedManagerName}_Leads.csv`)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold border rounded-lg transition-colors hover:opacity-80 ${isDark ? 'bg-[#222] border-[#333] text-white' : 'bg-white border-indigo-200 text-indigo-600'}`}
-                >
-                  <FaDownload size={12} /> Export CSV
-                </button>
-                <span className={`text-xs px-3 py-1 rounded-full ${theme.btnClosingBadge}`}>
-                  {filterLeads(activeManagerLeads, managerLeadSearch).length} leads
-                </span>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
+                <div className="w-full sm:w-auto flex-1">
+                  <TableSearchInput value={managerLeadSearch} onChange={setManagerLeadSearch} theme={theme} />
+                </div>
+                <div className="flex items-center justify-between sm:justify-start gap-3">
+                  <button
+                    onClick={() => downloadCSV(activeManagerLeads.map(formatLeadForExport), `${selectedManagerName}_Leads.csv`)}
+                    className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 text-[11px] sm:text-xs font-bold border rounded-lg transition-colors hover:opacity-80 whitespace-nowrap ${isDark ? 'bg-[#222] border-[#333] text-white' : 'bg-white border-indigo-200 text-indigo-600'}`}
+                  >
+                    <FaDownload size={12} /> Export
+                  </button>
+                  <span className={`text-[10px] sm:text-xs px-3 py-1 rounded-full whitespace-nowrap ${theme.btnClosingBadge}`}>
+                    {filterLeads(activeManagerLeads, managerLeadSearch).length} leads
+                  </span>
+                </div>
               </div>
             </div>
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto w-full">
               <div ref={loadLessRef} style={{ height: "1px", width: "100%" }} />
               <table className="w-full text-left text-sm min-w-[1200px]">
-                <thead className={`text-xs uppercase ${theme.tableHead} ${theme.textHeader}`}>
+                <thead className={`text-[10px] sm:text-xs uppercase whitespace-nowrap ${theme.tableHead} ${theme.textHeader}`}>
                   <tr>
                     {["LEAD NO.", "NAME", "PROP. TYPE", "BUDGET", "SOURCE", "CP NAME", "CP PHONE", "STATUS", "INTEREST", "SITE VISIT", "DATE CREATED", "BACKDATED ENTRY", "ASSIGNED TO", "REASSIGN"].map(h => (
-                      <th key={h} className="px-4 py-2.5">{h}</th>
+                      <th key={h} className="px-3 sm:px-4 py-2.5 sm:py-3">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className={`divide-y ${theme.tableDivide}`}>
                   {isLoading ? (
-                    <tr><td colSpan={12} className={`text-center py-8 ${theme.textMuted}`}>Syncing...</td></tr>
+                    <tr><td colSpan={14} className={`text-center py-8 text-xs sm:text-sm ${theme.textMuted}`}>Syncing...</td></tr>
                   ) : filterLeads(activeManagerLeads, managerLeadSearch).length === 0 ? (
-                    <tr><td colSpan={12} className={`text-center py-8 ${theme.textMuted}`}>
+                    <tr><td colSpan={14} className={`text-center py-8 text-xs sm:text-sm ${theme.textMuted}`}>
                       {managerLeadSearch ? "No leads match your search." : `No leads for ${selectedManagerName}.`}
                     </td></tr>
                   ) : filterLeads(activeManagerLeads, managerLeadSearch).slice(0, visibleCount).map((lead: any) => {
@@ -2557,8 +2575,8 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
 
                     return (
                       <tr key={lead.id} className={`transition-colors cursor-pointer ${theme.tableRow}`} onClick={() => onNavigateToSales && onNavigateToSales(lead)}>
-                        <td className={`px-4 py-3 sm:py-4.5 font-bold ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>#{lead.sr_no || lead.id}</td>
-                        <td className={`px-4 py-2.5 font-medium ${theme.text}`}>
+                        <td className={`px-3 sm:px-4 py-3 sm:py-4.5 font-bold whitespace-nowrap ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>#{lead.sr_no || lead.id}</td>
+                        <td className={`px-3 sm:px-4 py-2.5 font-medium whitespace-nowrap min-w-[140px] ${theme.text}`}>
                           {(lead.assigned_to || lead.assigned_receptionist) ? (
                             <span
                               className={`cursor-pointer hover:underline transition-colors ${isDark ? "hover:text-[#d946a8]" : "hover:text-[#9E217B]"}`}
@@ -2571,33 +2589,33 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                             lead.name
                           )}
                         </td>
-                        <td className={`px-2 py-2 ${theme.textMuted}`}>{(lead.propType && lead.propType !== "Pending" && lead.propType !== "N/A" ? lead.propType : lead.configuration && lead.configuration !== "Pending" && lead.configuration !== "N/A" ? lead.configuration : "Pending")}</td>
-                        <td className={`px-2 py-2 font-semibold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget || lead.budget || "N/A"}</td>
-                        <td className={`px-2 py-2 text-xs ${theme.textMuted}`}>{lead.source || "—"}</td>
-                        <td className={`px-2 py-2 ${theme.textMuted}`}>{lead.cpName || lead.cp_name || "—"}</td>
-                        <td className={`px-2 py-2 font-mono text-xs ${theme.textMuted}`}>{lead.cpPhone || lead.cp_phone || "—"}</td>
-                        <td className="px-4 py-2.5">
-                          <span className={`px-2 p2-1 rounded-full text-[10px] font-bold uppercase border flex-shrink-0 whitespace-nowrap ${lead.status === "Closing" ? theme.statusClosing : lead.status === "Visit Scheduled" ? theme.statusVisit : theme.statusAssigned}`}>
+                        <td className={`px-3 sm:px-4 py-2.5 whitespace-nowrap ${theme.textMuted}`}>{(lead.propType && lead.propType !== "Pending" && lead.propType !== "N/A" ? lead.propType : lead.configuration && lead.configuration !== "Pending" && lead.configuration !== "N/A" ? lead.configuration : "Pending")}</td>
+                        <td className={`px-3 sm:px-4 py-2.5 font-semibold whitespace-nowrap ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget || lead.budget || "N/A"}</td>
+                        <td className={`px-3 sm:px-4 py-2.5 text-xs whitespace-nowrap ${theme.textMuted}`}>{lead.source || "—"}</td>
+                        <td className={`px-3 sm:px-4 py-2.5 whitespace-nowrap ${theme.textMuted}`}>{lead.cpName || lead.cp_name || "—"}</td>
+                        <td className={`px-3 sm:px-4 py-2.5 font-mono text-xs whitespace-nowrap ${theme.textMuted}`}>{lead.cpPhone || lead.cp_phone || "—"}</td>
+                        <td className="px-3 sm:px-4 py-2.5 whitespace-nowrap">
+                          <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase border flex-shrink-0 ${lead.status === "Closing" ? theme.statusClosing : lead.status === "Visit Scheduled" ? theme.statusVisit : theme.statusAssigned}`}>
                             {lead.status || "Assigned"}
                           </span>
                         </td>
-                        <td className="px-4 py-2.5">
+                        <td className="px-3 sm:px-4 py-2.5 whitespace-nowrap">
                           {lead.leadInterestStatus && lead.leadInterestStatus !== "Pending"
                             ? <InterestBadge status={lead.leadInterestStatus} size="sm" isDark={isDark} />
                             : <span className={`text-xs italic ${theme.textFaint}`}>—</span>}
                         </td>
-                        <td className="px-4 py-3 sm:py-4.5">
+                        <td className="px-3 sm:px-4 py-3 sm:py-4.5 whitespace-nowrap">
                           {lead.mongoVisitDate
                             ? <span className="text-orange-500 font-medium">{formatDate(lead.mongoVisitDate).split(",")[0]}</span>
                             : <span className={`text-xs italic ${theme.textFaint}`}>Pending</span>}
                         </td>
-                        <td className={`px-4 py-2.5 text-xs whitespace-normal min-w-[120px] ${theme.textFaint}`}>
+                        <td className={`px-3 sm:px-4 py-2.5 text-xs whitespace-nowrap min-w-[120px] ${theme.textFaint}`}>
                           {lead.created_at ? formatDate(lead.created_at) : "—"}
                         </td>
-                        <td className={`px-4 py-2.5 text-xs whitespace-normal min-w-[120px] ${theme.textFaint}`}>
+                        <td className={`px-3 sm:px-4 py-2.5 text-xs whitespace-nowrap min-w-[120px] ${theme.textFaint}`}>
                           {lead.auto_date_enabled === false && lead.enquiry_date ? formatDate(lead.enquiry_date).split(",")[0] : "—"}
                         </td>
-                        <td className={`px-4 py-2.5 ${theme.textMuted}`}>
+                        <td className={`px-3 sm:px-4 py-2.5 whitespace-nowrap min-w-[140px] ${theme.textMuted}`}>
                           {assignedName ? (
                             <div className="flex flex-col gap-0.5">
                               <span className={`font-semibold ${theme.text}`}>{assignedName}</span>
@@ -2607,13 +2625,13 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                             </div>
                           ) : "—"}
                         </td>
-                        <td className="px-4 py-2.5" onClick={e => e.stopPropagation()}>
+                        <td className="px-3 sm:px-4 py-2.5 whitespace-nowrap" onClick={e => e.stopPropagation()}>
                           {lead.status === "Closing" || lead.status === "Closed" || !!lead.closingDate ? (
-                            <span className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase border whitespace-nowrap ${isDark ? "text-gray-400 border-gray-600 bg-gray-800/50" : "text-gray-500 border-gray-300 bg-gray-100"}`}>
+                            <span className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase border ${isDark ? "text-gray-400 border-gray-600 bg-gray-800/50" : "text-gray-500 border-gray-300 bg-gray-100"}`}>
                               Marked closed
                             </span>
                           ) : (
-                            <button className={`text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${isDark ? "bg-orange-600 hover:bg-orange-500 text-white" : "bg-orange-100 hover:bg-orange-200 text-orange-700"}`}
+                            <button className={`text-[11px] sm:text-xs font-bold px-2.5 sm:px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer ${isDark ? "bg-orange-600 hover:bg-orange-500 text-white" : "bg-orange-100 hover:bg-orange-200 text-orange-700"}`}
                               onClick={e => { e.stopPropagation(); setReassignLead(lead); setReassignTarget(""); setReassignNote(""); setIsReassignModalOpen(true); }}>
                               <FaExchangeAlt /> Reassign
                             </button>
@@ -2632,7 +2650,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                 </div>
               )}
               {visibleCount >= filterLeads(activeManagerLeads, managerLeadSearch).length && activeManagerLeads.length > 20 && (
-                <div className={`text-center py-2.5 text-xs font-medium ${theme.textFaint}`}>
+                <div className={`text-center py-3 text-xs font-medium ${theme.textFaint}`}>
                   ✓ All {filterLeads(activeManagerLeads, managerLeadSearch).length} leads loaded
                 </div>
               )}
@@ -2642,35 +2660,27 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
       )}
 
       {toastMsg && (
-        <div className={`fixed top-6 left-1/2 transform -translate-x-1/2 z-[100] px-3 py-3 rounded-xl shadow-lg flex items-center gap-2 animate-fadeIn bg-[#9E217B] border-[#b8268f] text-white`}>
-          <div className="text-lg"><FaCheckCircle /></div>
-          <span className="text-sm font-bold">{toastMsg}</span>
+        <div className={`fixed top-4 sm:top-6 left-1/2 transform -translate-x-1/2 z-[100] px-4 py-3 rounded-xl shadow-lg flex items-center gap-2 animate-fadeIn bg-[#9E217B] border-[#b8268f] text-white w-[90%] sm:w-auto max-w-sm`}>
+          <div className="text-lg shrink-0"><FaCheckCircle /></div>
+          <span className="text-sm font-bold truncate">{toastMsg}</span>
         </div>
       )}
 
       {isReassignModalOpen && reassignLead && (
-        <div className="fixed inset-0 bg-black/75 z-[200] flex justify-center items-center p-5 sm:p-6 animate-fadeIn" style={{ backdropFilter: "blur(8px)" }}>
-          <div className={`rounded-xl w-full max-w-lg shadow-2xl border overflow-hidden ${theme.modalCard}`} style={theme.modalGlass}>
-            <div className={`p-5 border-b flex justify-between items-center ${isDark ? "bg-orange-900/20 border-orange-500/20" : "bg-orange-50 border-orange-200"}`}>
-              <div>
-                <h2 className={`text-lg font-bold flex items-center gap-2 ${isDark ? "text-orange-400" : "text-orange-700"}`}><FaExchangeAlt /> Re-assign Lead #{reassignLead.id}</h2>
-                <p className={`text-xs mt-1 ${theme.textMuted}`}>Currently assigned to: <strong>{reassignLead.assigned_to || reassignLead.assignedTo || "Unassigned"}</strong></p>
+        <div className="fixed inset-0 bg-black/75 z-[200] flex justify-center items-center p-4 sm:p-5 lg:p-6 animate-fadeIn" style={{ backdropFilter: "blur(8px)" }}>
+          <div className={`rounded-2xl sm:rounded-xl w-full max-w-lg shadow-2xl border overflow-hidden flex flex-col max-h-[90vh] ${theme.modalCard}`} style={theme.modalGlass}>
+            <div className={`p-4 sm:p-5 border-b flex justify-between items-center shrink-0 ${isDark ? "bg-orange-900/20 border-orange-500/20" : "bg-orange-50 border-orange-200"}`}>
+              <div className="min-w-0 pr-4">
+                <h2 className={`text-base sm:text-lg font-bold flex items-center gap-2 truncate ${isDark ? "text-orange-400" : "text-orange-700"}`}><FaExchangeAlt className="shrink-0" /> Re-assign Lead #{reassignLead.id}</h2>
+                <p className={`text-xs mt-1 truncate ${theme.textMuted}`}>Currently assigned to: <strong>{reassignLead.assigned_to || reassignLead.assignedTo || "Unassigned"}</strong></p>
               </div>
-              <button onClick={() => { setIsReassignModalOpen(false); setReassignNote(""); setReassignTarget(""); }} className={`p-2 ${theme.textMuted} hover:text-red-500 transition-colors`}><FaTimes /></button>
+              <button onClick={() => { setIsReassignModalOpen(false); setReassignNote(""); setReassignTarget(""); }} className={`p-2 shrink-0 ${theme.textMuted} hover:text-red-500 transition-colors`}><FaTimes /></button>
             </div>
-            <div className={`p-6 ${theme.modalInner}`}>
-              {/* <ActivityTimeline
-                lead={reassignLead}
-                isDark={isDark}
-                theme={theme}
-                compact
-                maxAuditItems={3}
-                className="mb-5"
-              /> */}
-              <div className="mb-5">
-                <label className={`block text-sm font-bold mb-2 ${isDark ? "text-orange-400" : "text-orange-700"}`}>Assign to *</label>
+            <div className={`p-4 sm:p-6 overflow-y-auto ${theme.modalInner}`}>
+              <div className="mb-4 sm:mb-5">
+                <label className={`block text-xs sm:text-sm font-bold mb-2 ${isDark ? "text-orange-400" : "text-orange-700"}`}>Assign to *</label>
                 <select required value={reassignTarget} onChange={e => setReassignTarget(e.target.value)}
-                  className={`w-full rounded-xl p-5 text-sm outline-none transition-colors border-2 cursor-pointer ${isDark ? "bg-[#14141B] border-orange-500/40 text-white" : "bg-white border-orange-300 text-[#1A1A1A]"}`}>
+                  className={`w-full rounded-xl p-3.5 sm:p-4 text-sm outline-none transition-colors border-2 cursor-pointer ${isDark ? "bg-[#14141B] border-orange-500/40 text-white" : "bg-white border-orange-300 text-[#1A1A1A]"}`}>
                   <option value="" disabled>-- Select Manager --</option>
                   {isFetchingManagers ? <option disabled>Loading managers…</option> : combinedAssignees.filter((m: any) => m.name !== (reassignLead.assigned_to || reassignLead.assignedTo)).length > 0 ? combinedAssignees.filter((m: any) => m.name !== (reassignLead.assigned_to || reassignLead.assignedTo)).map((m: any, i: number) => (
                     <option key={i} value={m.name}>{m.name} ({String(m.role || "Sales Manager").replace("_", " ")})</option>
@@ -2678,18 +2688,18 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                 </select>
               </div>
               <div>
-                <label className={`block text-sm font-bold mb-2 ${isDark ? "text-orange-400" : "text-orange-700"}`}>Reason for Re-assign * (min 10 chars)</label>
+                <label className={`block text-xs sm:text-sm font-bold mb-2 ${isDark ? "text-orange-400" : "text-orange-700"}`}>Reason for Re-assign * (min 10 chars)</label>
                 <textarea required value={reassignNote} onChange={e => setReassignNote(e.target.value)} rows={4}
                   placeholder="e.g. Wrong manager was selected initially."
                   className={`w-full rounded-xl px-4 py-3 sm:py-4 text-sm outline-none resize-none border-2 transition-colors ${isDark ? "bg-[#14141B] border-orange-500/30 text-white focus:border-orange-500" : "bg-white border-orange-200 text-[#1A1A1A] focus:border-orange-500"}`} />
                 {reassignNote.length > 0 && reassignNote.length < 10 && <p className="text-xs text-amber-500 mt-1">⚠ Min 10 characters required.</p>}
               </div>
             </div>
-            <div className={`p-5 border-t flex justify-end gap-3 ${theme.modalHeader} ${theme.tableBorder}`}>
+            <div className={`p-4 sm:p-5 border-t flex flex-col-reverse sm:flex-row justify-end gap-3 shrink-0 ${theme.modalHeader} ${theme.tableBorder}`}>
               <button onClick={() => { setIsReassignModalOpen(false); setReassignNote(""); setReassignTarget(""); }}
-                className={`px-4 py-3 sm:py-4.5 rounded-lg font-bold cursor-pointer transition-colors ${theme.textMuted} hover:text-red-500`}>Cancel</button>
+                className={`w-full sm:w-auto px-4 py-3 sm:py-3 rounded-lg font-bold cursor-pointer transition-colors ${theme.textMuted} hover:text-red-500 bg-gray-100 dark:bg-gray-800 sm:bg-transparent`}>Cancel</button>
               <button onClick={handleReassignLead} disabled={isReassigning || !reassignTarget || !reassignNote.trim()}
-                className={`px-8 py-2.5 rounded-lg font-bold transition-colors flex items-center gap-2 ${isReassigning || !reassignTarget || !reassignNote.trim() ? "opacity-50 cursor-not-allowed bg-orange-400 text-white" : "cursor-pointer bg-orange-500 hover:bg-orange-400 text-white shadow-lg shadow-orange-500/20"}`}>
+                className={`w-full sm:w-auto px-6 py-3 sm:py-2.5 rounded-lg font-bold transition-colors flex items-center justify-center gap-2 ${isReassigning || !reassignTarget || !reassignNote.trim() ? "opacity-50 cursor-not-allowed bg-orange-400 text-white" : "cursor-pointer bg-orange-500 hover:bg-orange-400 text-white shadow-lg shadow-orange-500/20"}`}>
                 {isReassigning ? "Reassigning…" : <><FaExchangeAlt /> Confirm Re-assign</>}
               </button>
             </div>
@@ -2699,27 +2709,27 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
 
       {/* ── DELETE CONFIRMATION MODAL ── */}
       {false && deleteConfirmLead && (
-        <div className="fixed inset-0 bg-black/75 z-[200] flex justify-center items-center p-5 sm:p-6 animate-fadeIn" style={{ backdropFilter: "blur(8px)" }}>
-          <div className={`rounded-xl w-full max-w-md shadow-2xl border overflow-hidden ${theme.modalCard}`} style={theme.modalGlass}>
-            <div className={`p-5 border-b flex justify-between items-center ${isDark ? "bg-red-900/20 border-red-500/20" : "bg-red-50 border-red-200"}`}>
-              <div>
-                <h2 className={`text-lg font-bold flex items-center gap-2 ${isDark ? "text-red-400" : "text-red-700"}`}>
-                  <FaTrashAlt /> Delete Lead #{deleteConfirmLead.id}
+        <div className="fixed inset-0 bg-black/75 z-[200] flex justify-center items-center p-4 sm:p-5 lg:p-6 animate-fadeIn" style={{ backdropFilter: "blur(8px)" }}>
+          <div className={`rounded-2xl sm:rounded-xl w-full max-w-md shadow-2xl border overflow-hidden flex flex-col max-h-[90vh] ${theme.modalCard}`} style={theme.modalGlass}>
+            <div className={`p-4 sm:p-5 border-b flex justify-between items-center shrink-0 ${isDark ? "bg-red-900/20 border-red-500/20" : "bg-red-50 border-red-200"}`}>
+              <div className="min-w-0 pr-4">
+                <h2 className={`text-base sm:text-lg font-bold flex items-center gap-2 truncate ${isDark ? "text-red-400" : "text-red-700"}`}>
+                  <FaTrashAlt className="shrink-0" /> Delete Lead #{deleteConfirmLead.id}
                 </h2>
-                <p className={`text-xs mt-1 ${theme.textMuted}`}>This action is permanent and cannot be undone.</p>
+                <p className={`text-xs mt-1 truncate ${theme.textMuted}`}>This action is permanent and cannot be undone.</p>
               </div>
-              <button onClick={() => setDeleteConfirmLead(null)} className={`p-2 ${theme.textMuted} hover:text-red-500 transition-colors`}><FaTimes /></button>
+              <button onClick={() => setDeleteConfirmLead(null)} className={`p-2 shrink-0 ${theme.textMuted} hover:text-red-500 transition-colors`}><FaTimes /></button>
             </div>
-            <div className={`p-6 ${theme.modalInner}`}>
+            <div className={`p-4 sm:p-6 overflow-y-auto ${theme.modalInner}`}>
               <p className={`text-sm ${theme.text}`}>
                 Are you sure you want to permanently delete <strong>{deleteConfirmLead.name}</strong> (Lead #{deleteConfirmLead.id})? Use this only to remove duplicate / double-entered leads.
               </p>
             </div>
-            <div className={`p-5 border-t flex justify-end gap-3 ${theme.modalHeader} ${theme.tableBorder}`}>
+            <div className={`p-4 sm:p-5 border-t flex flex-col-reverse sm:flex-row justify-end gap-3 shrink-0 ${theme.modalHeader} ${theme.tableBorder}`}>
               <button onClick={() => setDeleteConfirmLead(null)}
-                className={`px-4 py-3 sm:py-4.5 rounded-lg font-bold cursor-pointer transition-colors ${theme.textMuted} hover:text-red-500`}>Cancel</button>
+                className={`w-full sm:w-auto px-4 py-3 sm:py-3 rounded-lg font-bold cursor-pointer transition-colors ${theme.textMuted} hover:text-red-500 bg-gray-100 dark:bg-gray-800 sm:bg-transparent`}>Cancel</button>
               <button onClick={() => handleDeleteLead()} disabled={isDeleting}
-                className={`px-8 py-2.5 rounded-lg font-bold transition-colors flex items-center gap-2 ${isDeleting ? "opacity-50 cursor-not-allowed bg-red-400 text-white" : "cursor-pointer bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/20"}`}>
+                className={`w-full sm:w-auto px-6 py-3 sm:py-2.5 rounded-lg font-bold transition-colors flex items-center justify-center gap-2 ${isDeleting ? "opacity-50 cursor-not-allowed bg-red-400 text-white" : "cursor-pointer bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/20"}`}>
                 {isDeleting ? "Deleting…" : <><FaTrashAlt /> Confirm Delete</>}
               </button>
             </div>

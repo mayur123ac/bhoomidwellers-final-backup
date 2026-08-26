@@ -29,6 +29,7 @@ import ReceptionistSidebar, {
   RECEPTIONIST_NAV,
   type ReceptionistNavItem,
 } from "@/components/receptionist/ReceptionistSidebar";
+import { useOrgName } from "@/lib/hooks/useOrgName";
 
 /** Underscores and casing vary in the users table — "site_head" and "Site Head". */
 export function normalizeRoleName(role: unknown): string {
@@ -96,6 +97,15 @@ export default function RoleSidebar({
 }) {
   const kind = railKindForRole(role);
 
+  // Fetch the organisation name once at this level so all three rails share a
+  // single fetch — the hook always runs (React rules), but only one sidebar
+  // renders. While loading the name is null and the sidebar simply omits it
+  // rather than flashing a stale or incorrect value.
+  const { name: orgName, loading: orgLoading } = useOrgName();
+  // Pass null while loading so no stale value appears; once loaded pass the name
+  // (which may still be null if the org has no name — both are handled gracefully).
+  const resolvedOrgName = orgLoading ? null : orgName;
+
   // The Sales rail's ids double as the dashboard's `activeView` values, so the
   // tab a click should land on is the id itself — except Settings, which is a
   // route of its own rather than a view of the dashboard.
@@ -136,6 +146,7 @@ export default function RoleSidebar({
         expanded={expanded}
         onExpandedChange={onExpandedChange}
         hideOnMobile={hideOnMobile}
+        orgName={resolvedOrgName}
       />
     );
   }
@@ -156,6 +167,7 @@ export default function RoleSidebar({
         expanded={expanded}
         onExpandedChange={onExpandedChange}
         hideOnMobile={hideOnMobile}
+        orgName={resolvedOrgName}
       />
     );
   }
@@ -169,6 +181,7 @@ export default function RoleSidebar({
       onHoverChange={onExpandedChange}
       groups={adminGroups}
       logoSrc={adminLogoSrc}
+      orgName={resolvedOrgName}
     />
   );
 }

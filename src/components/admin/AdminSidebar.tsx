@@ -37,6 +37,7 @@ export default function AdminSidebar<T extends AdminNavItem>({
   onHoverChange,
   groups,
   logoSrc = "/assets/logobrowser_trans.png",
+  orgName,
 }: {
   items: T[];
   /** id of the item to render active, or null when nothing in the rail is. */
@@ -47,6 +48,8 @@ export default function AdminSidebar<T extends AdminNavItem>({
   /** item id → group heading, shown above the first item of each run. */
   groups?: Record<string, string>;
   logoSrc?: string;
+  /** Organisation display name shown beneath "Admin Panel" in the header. */
+  orgName?: string | null;
 }) {
   // Quick Jump lives with the rail: it only ever filtered this list, and keeping
   // it here means the three host pages don't each need the state.
@@ -173,6 +176,22 @@ export default function AdminSidebar<T extends AdminNavItem>({
             >
               Admin Panel
             </p>
+            {orgName && (
+              <p
+                className="text-[9.5px] font-semibold mt-0.5"
+                style={{
+                  color: "rgba(255,255,255,0.45)",
+                  maxWidth: "140px",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                  letterSpacing: "0.02em",
+                }}
+                title={orgName}
+              >
+                {orgName}
+              </p>
+            )}
           </motion.div>
         </div>
 

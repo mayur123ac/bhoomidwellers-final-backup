@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { clearCrmSession, getStoredCrmUser, installLoggedOutBackGuard } from "@/lib/authSession";
 import { useCrmTheme } from "@/lib/hooks/useCrmTheme";
+import { useOrgName } from "@/lib/hooks/useOrgName";
 import { buildTheme } from "@/lib/crmTheme";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -57,6 +58,9 @@ export default function SourcingManagerDashboard() {
   const [user, setUser] = useState<any>({ name: "Loading...", role: "Sourcing Manager", email: "", password: "" });
   const [activeTab, setActiveTab] = useState("overview");
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
+  // Org name for the sidebar header — fetched once; null while loading.
+  const { name: sourcingOrgName, loading: sourcingOrgLoading } = useOrgName();
+  const sidebarOrgName = sourcingOrgLoading ? null : sourcingOrgName;
   const [activePopup, setActivePopup] = useState<"profile" | null>(null);
   const topbarRef = useRef<HTMLDivElement>(null);
 
@@ -162,6 +166,22 @@ export default function SourcingManagerDashboard() {
           <div className={`ml-3 flex flex-col whitespace-nowrap transition-opacity duration-300 ${sidebarExpanded ? 'opacity-100' : 'opacity-0'}`}>
             <span className="font-semibold text-[13px] tracking-tight leading-tight">Bhoomi CRM</span>
             <span className={`text-[10px] ${textSecondary}`}>Sourcing Manager</span>
+            {sidebarOrgName && (
+              <span
+                className="text-[9.5px] font-semibold mt-0.5"
+                style={{
+                  color: "rgba(255,255,255,0.45)",
+                  maxWidth: "130px",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                  letterSpacing: "0.02em",
+                }}
+                title={sidebarOrgName}
+              >
+                {sidebarOrgName}
+              </span>
+            )}
           </div>
         </div>
 

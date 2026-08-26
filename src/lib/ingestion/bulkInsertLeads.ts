@@ -82,18 +82,18 @@ export async function bulkInsertLeads(
           $23, $24, $25, $26,
           $27
         )
-        ON CONFLICT (external_ref) WHERE external_ref IS NOT NULL DO NOTHING
+        ON CONFLICT (organization_id, external_ref) WHERE external_ref IS NOT NULL DO NOTHING
         RETURNING id`,
         [
           clamp(row.name, 150), // $1
           clamp(row.phone, 20), // $2
-          "N/A", // $3  email
-          "N/A", // $4  address
-          "N/A", // $5  occupation
-          "N/A", // $6  organization
+          null, // $3  email
+          null, // $4  address
+          null, // $5  occupation
+          null, // $6  organization
           clamp(row.budget || "Pending", 100), // $7
-          clamp(row.configuration || "N/A", 100), // $8
-          "N/A", // $9  purpose
+          clamp(row.configuration || null, 100), // $8
+          null, // $9  purpose
           rowSource, // $10
           clamp(row.alt_phone, 20), // $11 alt_phone
           null, // $12 source_other

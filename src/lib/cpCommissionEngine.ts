@@ -451,9 +451,10 @@ export async function findOrCreateChannelPartner(
     const hit = await client.query(
       `SELECT id FROM channel_partners
         WHERE ${SQL_NORMALIZED_PHONE} = $1
+          AND organization_id = $2
         ORDER BY id ASC
         LIMIT 1`,
-      [normalizedPhone]
+      [normalizedPhone, orgId]
     );
 
     if (hit.rows.length > 0) {
@@ -497,9 +498,10 @@ export async function findOrCreateChannelPartner(
   const nameHit = await client.query(
     `SELECT id FROM channel_partners
       WHERE ${SQL_NORMALIZED_NAME} = $1
+        AND organization_id = $2
       ORDER BY id ASC
       LIMIT 1`,
-    [normalizedName]
+    [normalizedName, orgId]
   );
 
   if (nameHit.rows.length > 0) {

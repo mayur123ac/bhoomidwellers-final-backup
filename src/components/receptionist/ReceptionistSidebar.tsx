@@ -78,6 +78,7 @@ export default function ReceptionistSidebar({
   expanded,
   onExpandedChange,
   hideOnMobile = true,
+  orgName,
 }: {
   items?: ReceptionistNavItem[];
   /** id to render active, or null when nothing in the rail is. */
@@ -91,6 +92,8 @@ export default function ReceptionistSidebar({
    * on a phone would have no way out of Settings at all.
    */
   hideOnMobile?: boolean;
+  /** Organisation display name shown beneath "Receptionist" in the header. */
+  orgName?: string | null;
 }) {
   const mainItems = items.filter((i) => !i.pinned);
   const pinnedItems = items.filter((i) => i.pinned);
@@ -200,6 +203,22 @@ export default function ReceptionistSidebar({
             <p className="text-[#d946a8] text-[10px] font-semibold whitespace-nowrap opacity-80">
               Receptionist
             </p>
+            {orgName && (
+              <p
+                className="text-[9.5px] font-semibold mt-0.5"
+                style={{
+                  color: "rgba(255,255,255,0.45)",
+                  maxWidth: "120px",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                  letterSpacing: "0.02em",
+                }}
+                title={orgName}
+              >
+                {orgName}
+              </p>
+            )}
           </div>
         </div>
         <div

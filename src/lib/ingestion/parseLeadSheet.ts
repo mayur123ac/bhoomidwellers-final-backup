@@ -43,7 +43,7 @@ export class RowCapError extends Error {
 
 // Canonical fields and their accepted header aliases.
 // Matching is case-insensitive, whitespace/punctuation-stripped, with Levenshtein <= 2 tolerance.
-const FIELD_ALIASES: Record<string, string[]> = {
+export const FIELD_ALIASES: Record<string, string[]> = {
   name: ["Name", "Client Name", "NAME"],
   phone: ["Contact", "Mobile", "Phone", "CONTACT"],
   external_ref: ["Form No", "Form Number", "Enquiry No"],
@@ -57,17 +57,21 @@ const FIELD_ALIASES: Record<string, string[]> = {
   feedback: ["Feedback", "FEEDBACK", "Remarks"],
   configuration: ["Prop Type", "Property Type", "Configuration"],
   budget: ["Budget", "BUDGET"],
+  booking_status: ["Booking", "Booked", "Booking Status", "Is Booked"],
+  booking_date: ["Booking Date", "Booking Dt"],
+  booking_amount: ["Booking Amount", "Booking Value", "Booking Amt"],
+  booking_reference: ["Booking No", "Booking Number", "Booking Ref", "Booking Reference"],
 };
 
 // Normalize a header for comparison: lowercase, strip whitespace & punctuation.
-function normalizeHeader(h: string): string {
+export function normalizeHeader(h: string): string {
   return String(h)
     .toLowerCase()
     .replace(/[^a-z0-9]/g, "");
 }
 
 // Standard Levenshtein edit distance.
-function levenshtein(a: string, b: string): number {
+export function levenshtein(a: string, b: string): number {
   if (a === b) return 0;
   if (!a.length) return b.length;
   if (!b.length) return a.length;
@@ -93,7 +97,7 @@ function levenshtein(a: string, b: string): number {
 }
 
 // Precompute normalized aliases once.
-const NORMALIZED_ALIASES: { field: string; norm: string }[] = [];
+export const NORMALIZED_ALIASES: { field: string; norm: string }[] = [];
 for (const [field, aliases] of Object.entries(FIELD_ALIASES)) {
   for (const alias of aliases) {
     NORMALIZED_ALIASES.push({ field, norm: normalizeHeader(alias) });
@@ -101,7 +105,7 @@ for (const [field, aliases] of Object.entries(FIELD_ALIASES)) {
 }
 
 // Given a raw header cell, return the canonical field it maps to (or null).
-function matchHeader(rawHeader: string): string | null {
+export function matchHeader(rawHeader: string): string | null {
   const norm = normalizeHeader(rawHeader);
   if (!norm) return null;
 
@@ -140,7 +144,7 @@ function buildUTCDate(year: number, month: number, day: number): string | null {
 
 // Parse a date cell (Excel serial, Date object, DD-MM-YYYY, DD/MM/YYYY, or DD-MMM-YYYY)
 // into an ISO string. Returns null if unparseable — caller flags the row. Never defaults.
-function parseEnquiryDate(value: any): string | null {
+export function parseEnquiryDate(value: any): string | null {
   if (value === null || value === undefined || value === "") return null;
 
   // Already a JS Date (SheetJS can emit these with cellDates).
@@ -184,7 +188,7 @@ function parseEnquiryDate(value: any): string | null {
   return null;
 }
 
-function cellToString(value: any): string {
+export function cellToString(value: any): string {
   if (value === null || value === undefined) return "";
   return String(value).trim();
 }
@@ -193,7 +197,7 @@ function cellToString(value: any): string {
 // numbers into one cell ("9876543210, 9123456789"), which overflows the column.
 // Split explicit multi-number cells into a primary + secondary; strip formatting
 // so a single spaced number ("+91 98765 43210") collapses to fit.
-function normalizePhones(raw: string): { phone: string; alt: string | null } {
+export function normalizePhones(raw: string): { phone: string; alt: string | null } {
   const s = raw.trim();
   if (!s) return { phone: "", alt: null };
 

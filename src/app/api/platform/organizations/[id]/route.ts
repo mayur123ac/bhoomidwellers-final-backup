@@ -191,3 +191,105 @@ export async function PATCH(
     );
   }
 }
+
+/**
+ * Rename a tenant's canonical organisation name (organizations.name).
+ *
+ * ── Why PUT and not PATCH ────────────────────────────────────────────────────
+ * PATCH is already claimed for the status transition above, and the two
+ * operations are intentionally kept separate: a status change and a rename have
+ * different risk profiles, different audit actions, and different UIs. Overloading
+ * PATCH with a discriminator field would work but would make the per-operation
+ * reasoning harder. PUT communicates "replace one specific field" cleanly.
+ *
+ * ── What this updates ────────────────────────────────────────────────────────
+ * Only `organizations.name`. This is the canonical tenant identifier used by the
+ * sidebar (/api/settings/org-name), the Super Admin list, and the detail header.
+ * It is NOT `organization_settings.workspace_name` — that column defaults to
+ * "Bhoomi Dwellers" for every tenant, so we deliberately avoid it as a source of
+ * the tenant's identity. This PUT must never touch workspace_name.
+ *
+ * ── Authorization ────────────────────────────────────────────────────────────
+ * Only `requireSuperAdmin()` — platform-level, null-organization accounts. A
+ * tenant Admin has no route to this handler.
+ */
+export async function PUT(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const gate = await requireSuperAdmin();
+  if (!gate.ok) return gate.response;
+
+  const { id } = await params;
+  if (!UUID_RE.test(id)) {
+    return NextResponse.json({ success: false, message: "Invalid organization id." }, { status: 400 });
+  }
+
+  try {
+    const body = await req.json().catch(() => ({}));
+    const raw: string = (body?.name ?? "").toString();
+    const name = raw.trim();
+
+    // Validation: non-empty and within a sensible upper bound.
+    if (!name) {
+      return NextResponse.json(
+        { success: false, message: "Organisation name cannot be empty." },
+        { status: 400 }
+      );
+    }
+    const MAX = 120;
+    if (name.length > MAX) {
+      return NextResponse.json(
+        { success: false, message: `Organisation name must be ${MAX} characters or fewer.` },
+        { status: 400 }
+      );
+    }
+
+    // Read before-state for the audit log and the 404 guard.
+    const before = await query<{ id: string; name: string }>(
+      `SELECT id, name FROM organizations WHERE id = $1`,
+      [id]
+    );
+    if (before.length === 0) {
+      return NextResponse.json({ success: false, message: "Organization not found." }, { status: 404 });
+    }
+
+    const updated = await query<{ id: string; name: string }>(
+      `UPDATE organizations
+          SET name = $2, updated_at = now()
+        WHERE id = $1
+      RETURNING id, name`,
+      [id, name]
+    );
+
+    const { ip, userAgent } = requestContext(req);
+    await writeAuditLog({
+      userId: gate.admin.id,
+      actorName: gate.admin.name,
+      action: "platform.organization.rename",
+      entityType: "organization",
+      entityId: id,
+      oldValue: { name: before[0].name },
+      newValue: { name },
+      ipAddress: ip,
+      userAgent,
+    });
+
+    return NextResponse.json(
+      {
+        success: true,
+        data: updated[0],
+        message: `Organisation renamed to "${name}".`,
+      },
+      { status: 200 }
+    );
+  } catch (err: any) {
+    console.error("[PUT /api/platform/organizations/[id]]", err?.message);
+    return NextResponse.json(
+      { success: false, message: "Could not rename the organisation." },
+      { status: 500 }
+    );
+  }
+}
+
+

@@ -15,6 +15,7 @@ import { BhoomiAiGlyph } from "@/components/bhoomi-ai/BhoomiAiIcon";
 // workspace below it cannot drift to two slightly different darks.
 import { CANVAS as AI_CANVAS } from "@/components/bhoomi-ai/theme";
 import { clearCrmSession, getStoredCrmUser, installLoggedOutBackGuard } from "@/lib/authSession";
+import { useOrgName } from "@/lib/hooks/useOrgName";
 import { motion, AnimatePresence } from "framer-motion";
 import * as XLSX from "xlsx";
 import {
@@ -238,7 +239,7 @@ const parseExcelFile = (file: File): Promise<any[]> => new Promise((resolve, rej
         sr_no: srNoCol ? String(row[srNoCol]) : String(i + 1),
         form_no: formNoCol ? String(row[formNoCol]) : "",
         lead_date: dateCol ? String(row[dateCol]) : "",
-        name: String(row[nameCol] || row[cols[0]] || `Lead ${i + 1}`),
+        name: String(row[nameCol] || `Lead ${i + 1}`),
         contact_no: String(row[phoneCol] || ""),
         email: emailCol ? String(row[emailCol]) : "",
         source: sourceCol ? String(row[sourceCol]) : "",
@@ -281,6 +282,9 @@ export default function EmployeesPage() {
 
   const [activeSection, setActiveSection] = useState<"employees" | "callers" | "ai" | "notifications">("employees");
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
+  // Org name for the sidebar header — fetched once, null while loading.
+  const { name: empPageOrgName, loading: empPageOrgLoading } = useOrgName();
+  const sidebarOrgName = empPageOrgLoading ? null : empPageOrgName;
   const [user, setUser] = useState<any>(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -943,6 +947,22 @@ export default function EmployeesPage() {
           >
             <p className="font-black text-white text-[15px] leading-tight tracking-wide whitespace-nowrap">Bhoomi CRM</p>
             <p className="text-[10px] font-medium whitespace-nowrap" style={{ color: "rgba(217,70,168,0.7)" }}>Admin Panel</p>
+            {sidebarOrgName && (
+              <p
+                className="text-[9.5px] font-semibold mt-0.5"
+                style={{
+                  color: "rgba(255,255,255,0.45)",
+                  maxWidth: "140px",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                  letterSpacing: "0.02em",
+                }}
+                title={sidebarOrgName}
+              >
+                {sidebarOrgName}
+              </p>
+            )}
           </motion.div>
         </div>
 
@@ -1673,7 +1693,13 @@ export default function EmployeesPage() {
              "System Ready…" line, while this fully wired panel sat unused in
              components/bhoomi-ai/. It owns the /api/admin/ai/chat calls,
              history, abort, retry and error handling. */
-          <BhoomiAiPanel isDark={isDark} t={t} user={user} />
+          <div className="flex-1 min-h-0 bg-[#131314] text-[#E3E3E3]">
+            <BhoomiAiPanel
+              isDark={true}
+              t={t}
+              user={user}
+            />
+          </div>
 
         ) : callerSubView === "control" ? (
 
