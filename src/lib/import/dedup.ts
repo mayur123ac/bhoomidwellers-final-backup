@@ -92,31 +92,35 @@ async function findCandidates(
   const params: any[] = [orgId]; // $1 = orgId
   let idx = 2;
 
+  // Track which param index holds the phone value for the fuzzy exclusion
+  let phoneParamIdx: number | null = null;
+
   if (externalRef) {
     params.push(externalRef);
     unions.push(
-      `SELECT id, name, phone, alt_phone, external_ref, 'exact_external_ref' AS match_type, 100 AS confidence
+      `(SELECT id, name, phone, alt_phone, external_ref, 'exact_external_ref' AS match_type, 100 AS confidence
        FROM walkin_enquiries
        WHERE organization_id = $1 AND external_ref = $${idx}
-       LIMIT 5`
+       LIMIT 5)`
     );
     idx++;
   }
 
   if (phone) {
     params.push(phone);
+    phoneParamIdx = idx;
     unions.push(
-      `SELECT id, name, phone, alt_phone, external_ref, 'exact_phone' AS match_type, 95 AS confidence
+      `(SELECT id, name, phone, alt_phone, external_ref, 'exact_phone' AS match_type, 95 AS confidence
        FROM walkin_enquiries
        WHERE organization_id = $1 AND phone = $${idx}
-       LIMIT 5`
+       LIMIT 5)`
     );
     // Cross-match: import phone vs existing alt_phone
     unions.push(
-      `SELECT id, name, phone, alt_phone, external_ref, 'exact_alt_phone' AS match_type, 85 AS confidence
+      `(SELECT id, name, phone, alt_phone, external_ref, 'exact_alt_phone' AS match_type, 85 AS confidence
        FROM walkin_enquiries
        WHERE organization_id = $1 AND alt_phone = $${idx}
-       LIMIT 5`
+       LIMIT 5)`
     );
     idx++;
   }
@@ -125,25 +129,25 @@ async function findCandidates(
     params.push(altPhone);
     // Cross-match: import alt_phone vs existing phone
     unions.push(
-      `SELECT id, name, phone, alt_phone, external_ref, 'phone_as_alt' AS match_type, 85 AS confidence
+      `(SELECT id, name, phone, alt_phone, external_ref, 'phone_as_alt' AS match_type, 85 AS confidence
        FROM walkin_enquiries
        WHERE organization_id = $1 AND phone = $${idx}
-       LIMIT 5`
+       LIMIT 5)`
     );
     idx++;
   }
 
   // Fuzzy: last 6 digits of phone (handles +91 prefix differences)
-  if (phone && phone.replace(/\D/g, "").length >= 6) {
+  if (phone && phone.replace(/\D/g, "").length >= 6 && phoneParamIdx !== null) {
     const digits = phone.replace(/\D/g, "");
     const suffix = digits.slice(-6);
     params.push(`%${suffix}`);
     unions.push(
-      `SELECT id, name, phone, alt_phone, external_ref, 'fuzzy_phone_suffix' AS match_type, 60 AS confidence
+      `(SELECT id, name, phone, alt_phone, external_ref, 'fuzzy_phone_suffix' AS match_type, 60 AS confidence
        FROM walkin_enquiries
        WHERE organization_id = $1 AND phone LIKE $${idx}
-         AND phone != ${phone ? `$${params.indexOf(phone) + 1}` : "'__never__'"}
-       LIMIT 5`
+         AND phone != $${phoneParamIdx}
+       LIMIT 5)`
     );
     idx++;
   }

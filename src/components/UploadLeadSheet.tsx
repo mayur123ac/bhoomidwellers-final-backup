@@ -734,10 +734,10 @@ export default function UploadLeadSheet({
                             </tr>
                           </thead>
                           <tbody>
-                            {mappingSuggestions.map((s) => {
+                            {mappingSuggestions.map((s, idx) => {
                               const currentValue = mappingOverrides[s.excelColumn] ?? "";
                               return (
-                                <tr key={s.excelColumn} style={{ borderTop: `1px solid ${panelBorder}` }}>
+                                <tr key={`${s.excelColumn}_${idx}`} style={{ borderTop: `1px solid ${panelBorder}` }}>
                                   <td className="px-2.5 py-1.5 whitespace-nowrap font-semibold">
                                     {s.excelColumn}
                                   </td>
