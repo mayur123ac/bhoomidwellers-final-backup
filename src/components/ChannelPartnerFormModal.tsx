@@ -327,7 +327,7 @@ export default function ChannelPartnerFormModal({
     }
   }, [isOpen, partner]);
 
-  const inputCls = `w-full rounded-lg px-3 py-2 text-sm outline-none transition-colors border ${t.inputInner} ${t.text} ${t.inputFocus}`;
+  const inputCls = `w-full rounded-lg px-3 py-2 text-sm outline-none transition-colors border border-gray-400 ${t.inputInner} ${t.text} ${t.inputFocus}`;
   const selectCls = `${inputCls} cursor-pointer`;
   const labelCls = `text-[11px] mb-1 block ${t.textMuted}`;
 
@@ -547,7 +547,7 @@ export default function ChannelPartnerFormModal({
   const phoneField = (
     <div>
       <label className={labelCls}>Contact Phone {isOfficeVisit && <span className={t.textFaint}></span>}</label>
-      <div className={`flex items-center rounded-lg border overflow-hidden ${duplicatePhone ? "border-red-500" : t.inputInner
+      <div className={`flex items-center rounded-lg border border-gray-400 overflow-hidden ${duplicatePhone ? "border-red-500" : t.inputInner
         }`}>
         <span className={`px-2.5 py-2 text-sm select-none ${t.textFaint}`}>+91</span>
         <input
@@ -707,7 +707,10 @@ export default function ChannelPartnerFormModal({
           <motion.div
             initial={{ scale: 0.96, y: 12 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.96, y: 12 }}
             onClick={e => e.stopPropagation()}
-            className={`w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl p-6 ${t.modalCard || t.card}`}
+            className={`w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl md:rounded-3xl p-6 md:p-8 shadow-[0_20px_50px_rgba(0,0,0,0.2)] border-gray-400 ${isDark
+              ? "bg-[#1C1C1E] border-white/50"
+              : "bg-white border-gray-200"
+              } ${t.modalCard || t.card}`}
           >
             <div className="flex items-start justify-between mb-5">
               <div>
