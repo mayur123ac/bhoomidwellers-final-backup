@@ -1421,7 +1421,7 @@ function AdminAtlasDashboardContent() {
               <GeoAnalyticsView allLeads={allLeads} theme={theme} isDark={isDark} />
             </div>
           )}
-          {isAdmin && <AdminAssistantDock theme={theme} isDark={isDark} />}
+          {(isAdmin || isSiteHead) && <AdminAssistantDock theme={theme} isDark={isDark} />}
         </main>
       </div>
 

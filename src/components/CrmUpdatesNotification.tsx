@@ -215,40 +215,36 @@ export default function CrmUpdatesNotification({
                 updates.map(update => (
                   <div
                     key={update.id}
-                    className={`p-4 border-b last:border-b-0 transition-colors ${
-                      !update.has_read
+                    className={`p-4 border-b last:border-b-0 transition-colors ${!update.has_read
                         ? isDark
                           ? "bg-[#9E217B]/10 border-[#9E217B]/20"
                           : "bg-[#9E217B]/5 border-[#9E217B]/10"
                         : isDark
-                        ? "hover:bg-white/5 border-[#333]"
-                        : "hover:bg-black/5 border-[#E5E7EB]"
-                    }`}
+                          ? "hover:bg-white/5 border-[#333]"
+                          : "hover:bg-black/5 border-[#E5E7EB]"
+                      }`}
                   >
                     <div className="flex justify-between items-start mb-2 gap-2">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            isDark ? "bg-indigo-900/40 text-indigo-300" : "bg-indigo-100 text-indigo-700"
-                          }`}
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold ${isDark ? "bg-indigo-900/40 text-indigo-300" : "bg-indigo-100 text-indigo-700"
+                            }`}
                         >
                           v{String(update.version).replace(/^v/i, "")}
                         </span>
                         {/* The type. Carried in the row all along, shown now. */}
                         {update.category && (
                           <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
-                              isDark ? "bg-white/10 text-gray-300" : "bg-black/5 text-gray-600"
-                            }`}
+                            className={`px-2 py-0.5 rounded text-[10px] font-semibold ${isDark ? "bg-white/10 text-gray-300" : "bg-black/5 text-gray-600"
+                              }`}
                           >
                             {update.category}
                           </span>
                         )}
                         {update.is_important && (
                           <span
-                            className={`flex items-center gap-1 text-[10px] font-bold ${
-                              isDark ? "text-red-400" : "text-red-600"
-                            }`}
+                            className={`flex items-center gap-1 text-[10px] font-bold ${isDark ? "text-red-400" : "text-red-600"
+                              }`}
                           >
                             <FaExclamationCircle /> Important
                           </span>

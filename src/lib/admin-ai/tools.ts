@@ -63,6 +63,15 @@ export const adminAiTools = [
   {
     type: "function" as const,
     function: {
+      name: "getSalesManagerAttendance",
+      description:
+        "Today's attendance for all sales managers: who marked attendance (with login time), who did not, and total counts. Use for questions about SM attendance, who is present today, or who has not logged in.",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
       name: "getLeadsSummary",
       description:
         "Walk-in enquiry counts: total, lost, in closing, and a breakdown by source. Optionally filtered to one month. Use for lead volume and lead-source questions, including month-on-month comparisons (call once per month).",

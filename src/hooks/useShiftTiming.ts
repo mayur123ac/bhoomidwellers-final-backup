@@ -26,7 +26,7 @@ export function useShiftTiming(pollingIntervalMs = 10000) {
         throw new Error("Failed to fetch shift timing");
       }
       const data = await res.json();
-      setTiming((prev) => 
+      setTiming((prev) =>
         JSON.stringify(prev) === JSON.stringify(data) ? prev : data
       );
       setError(null);

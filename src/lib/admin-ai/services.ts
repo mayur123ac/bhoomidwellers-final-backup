@@ -303,11 +303,9 @@ export async function getPendingDisbursements(_args: any, scope: AiScope) {
 /* ─────────────────────── people & performance ─────────────────────── */
 
 export async function getSalesManagerPerformance(_args: any, scope: AiScope) {
-  // The only tool with no per-user version. It exists to rank employees against
-  // each other, so "scoped to your own leads" would return a single row that
-  // still discloses nothing useful and invites the model to describe it as a
-  // ranking. A Receptionist or Site Head asking who is performing best is told
-  // no, which is the honest answer.
+  // Ranking employees against each other is only meaningful for roles that
+  // oversee them. Admin and Site Head (both canReadAllRecords) may see this;
+  // a Receptionist asking who is performing best is refused.
   if (restricted(scope)) return refuse("Sales manager performance");
 
   // The sales manager lives on the originating lead, not the booking — there is
@@ -454,6 +452,65 @@ export async function getRegistrationSummary(_args: any, scope: AiScope) {
   };
 }
 
+/* ─────────────────────── attendance ─────────────────────── */
+
+export async function getSalesManagerAttendance(_args: any, scope: AiScope) {
+  // Only Admin and Site Head may see attendance across employees.
+  if (restricted(scope)) return refuse("Sales manager attendance");
+
+  // Today in IST — Neon runs UTC so we must convert explicitly.
+  const rows = await query<any>(
+    `WITH sm AS (
+       SELECT id, name
+         FROM users
+        WHERE LOWER(TRIM(role)) IN ('sales_manager', 'sales manager')
+          AND is_active = true
+          AND organization_id = $1
+     ),
+     today_att AS (
+       SELECT DISTINCT ON (ar.employee_id)
+              ar.employee_id,
+              ar.attendance_status,
+              ar.login_time
+         FROM attendance_records ar
+        WHERE DATE(ar.login_time AT TIME ZONE 'Asia/Kolkata') =
+              (NOW() AT TIME ZONE 'Asia/Kolkata')::date
+          AND ar.organization_id = $1
+        ORDER BY ar.employee_id, ar.login_time DESC
+     )
+     SELECT sm.id, sm.name,
+            COALESCE(ta.attendance_status, 'Not Marked') AS attendance_status,
+            ta.login_time
+       FROM sm
+       LEFT JOIN today_att ta ON ta.employee_id = sm.id
+      ORDER BY ta.login_time IS NULL, sm.name`,
+    [scope.organizationId]
+  );
+
+  const present = rows.filter((r: any) =>
+    r.attendance_status !== "Not Marked" && r.attendance_status !== "Absent"
+  );
+  const absent = rows.filter((r: any) =>
+    r.attendance_status === "Not Marked" || r.attendance_status === "Absent"
+  );
+
+  return {
+    date: "today",
+    totalSalesManagers: rows.length,
+    presentCount: present.length,
+    absentOrNotMarkedCount: absent.length,
+    present: present.map((r: any) => ({
+      name: r.name,
+      status: r.attendance_status,
+      loginTime: r.login_time,
+    })),
+    absentOrNotMarked: absent.map((r: any) => ({
+      name: r.name,
+      status: r.attendance_status,
+    })),
+  };
+}
+
 /* ─────────────────── unstructured retrieval (RAG) ─────────────────── */
 
 export async function searchKnowledgeBase(args: any, scope: AiScope) {
@@ -530,6 +587,7 @@ export const adminToolRegistry: Record<string, AdminToolEntry> = {
   getLoanSummary: { module: "loans", handler: getLoanSummary },
   getPendingDisbursements: { module: "loans", handler: getPendingDisbursements },
   getSalesManagerPerformance: { module: "performance", handler: getSalesManagerPerformance },
+  getSalesManagerAttendance: { module: "attendance", handler: getSalesManagerAttendance },
   getLeadsSummary: { module: "leads", handler: getLeadsSummary },
   getInventorySummary: { module: "inventory", handler: getInventorySummary },
   getRegistrationSummary: { module: "registration", handler: getRegistrationSummary },

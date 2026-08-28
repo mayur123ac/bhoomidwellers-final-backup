@@ -9,6 +9,7 @@ import {
   FaCheckCircle, FaTimesCircle, FaSyncAlt, FaCalendarCheck,
   FaUsers, FaClipboardList,
 } from "react-icons/fa";
+
 // ─── Types ─────────────────────────────────────────────────────────────────
 interface SiteVisit {
   id: number;
@@ -25,12 +26,14 @@ interface SiteVisit {
   created_at?: string;
   updated_at?: string;
 }
+
 interface CalendarDay {
   date: Date;
   isCurrentMonth: boolean;
   isToday: boolean;
   visits: SiteVisit[];
 }
+
 // ─── Status Config ─────────────────────────────────────────────────────────
 const STATUS_CONFIG = {
   scheduled: { label: "Upcoming", color: "#9E217B", bg: "rgba(158,33,123,0.15)", text: "#d946a8", border: "rgba(158,33,123,0.4)", icon: FaClock },
@@ -38,17 +41,18 @@ const STATUS_CONFIG = {
   cancelled: { label: "Cancelled", color: "#ef4444", bg: "rgba(239,68,68,0.15)", text: "#f87171", border: "rgba(239,68,68,0.4)", icon: FaTimesCircle },
   rescheduled: { label: "Rescheduled", color: "#f97316", bg: "rgba(249,115,22,0.15)", text: "#fb923c", border: "rgba(249,115,22,0.4)", icon: FaSyncAlt },
 };
+
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-// ─── Calendar grid tokens (light-mode visibility fix) ──────────────────────
-// Centralized so the whole calendar (header row + day grid + week view)
-// shares one consistent, clearly visible grid-line / surface treatment.
-const GRID_LINE_LIGHT = "#a2bee2ff";       // slate-300 — visible grout/border color
+
+// ─── Calendar grid tokens ──────────────────────
+const GRID_LINE_LIGHT = "#a2bee2ff";
 const GRID_LINE_DARK = "rgba(255,255,255,0.08)";
-const GRID_HEADER_BG_LIGHT = "#F1F5F9";  // slate-100 — distinguishes header strip from cells
+const GRID_HEADER_BG_LIGHT = "#F1F5F9";
 const GRID_HEADER_BG_DARK = "#1a1a1a";
-const GRID_CELL_BG_LIGHT = "#ffffff";    // cells are bright white "tiles" against the grout
+const GRID_CELL_BG_LIGHT = "#ffffff";
 const GRID_CELL_BG_DARK = "#151515";
+
 // ─── Helpers ───────────────────────────────────────────────────────────────
 function formatDateTime(iso: string) {
   try {
@@ -57,16 +61,19 @@ function formatDateTime(iso: string) {
     });
   } catch { return iso; }
 }
+
 function formatTime(iso: string) {
   try {
     return new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
   } catch { return ""; }
 }
+
 function formatShortDate(iso: string) {
   try {
     return new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
   } catch { return iso; }
 }
+
 function downloadCSV(data: any[], filename: string) {
   if (!data || data.length === 0) { alert("No data to export."); return; }
   const headers = Object.keys(data[0]);
@@ -80,38 +87,39 @@ function downloadCSV(data: any[], filename: string) {
   link.click();
   document.body.removeChild(link);
 }
+
 // ─── Stat Card ─────────────────────────────────────────────────────────────
 function StatCard({ label, value, color, bg, icon: Icon, isDark }: any) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      className="rounded-4xl p-5 flex items-center gap-4 flex-shrink-0"
+      className="rounded-3xl md:rounded-4xl p-4 md:p-5 flex items-center gap-3 md:gap-4 flex-shrink-0"
       style={{
         background: isDark ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.9)",
         border: `1px solid ${isDark ? "rgba(66, 64, 64, 0.5)" : "rgba(139, 138, 138, 0.5)"}`,
         boxShadow: isDark ? `0 4px 20px ${color}20` : `0 4px 20px rgba(0,0,0,0.06), 0 0 0 1px ${color}20`,
         backdropFilter: "blur(12px)",
-
       }}
     >
-      <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: bg }}>
-        <Icon style={{ color, fontSize: 20 }} />
+      <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: bg }}>
+        <Icon style={{ color, fontSize: 18 }} className="md:text-[20px]" />
       </div>
       <div>
-        <p className="text-2xl font-black" style={{ color }}>{value}</p>
-        <p className="text-xs font-semibold mt-0.5" style={{ color: isDark ? "rgba(255,255,255,0.5)" : "rgba(0,0,0,0.5)" }}>{label}</p>
+        <p className="text-xl md:text-2xl font-black" style={{ color }}>{value}</p>
+        <p className="text-[10px] md:text-xs font-semibold mt-0.5 leading-tight" style={{ color: isDark ? "rgba(255,255,255,0.5)" : "rgba(0,0,0,0.5)" }}>{label}</p>
       </div>
     </motion.div>
   );
 }
+
 // ─── Event Pill ────────────────────────────────────────────────────────────
 function EventPill({ visit, onClick }: { visit: SiteVisit; onClick: () => void }) {
   const cfg = STATUS_CONFIG[visit.status] || STATUS_CONFIG.scheduled;
   return (
     <div
       onClick={(e) => { e.stopPropagation(); onClick(); }}
-      className="rounded-md px-2 py-1 text-[10px] font-semibold cursor-pointer truncate transition-all duration-150 hover:brightness-125 hover:scale-[1.02]"
+      className="rounded-md px-1.5 md:px-2 py-0.5 md:py-1 text-[9px] md:text-[10px] font-semibold cursor-pointer truncate transition-all duration-150 hover:brightness-125 hover:scale-[1.02]"
       style={{ background: cfg.bg, color: cfg.text, border: `1px solid ${cfg.border}` }}
       title={`${visit.lead_name || `Lead #${visit.lead_id}`} — ${formatTime(visit.visit_date)}`}
     >
@@ -119,6 +127,7 @@ function EventPill({ visit, onClick }: { visit: SiteVisit; onClick: () => void }
     </div>
   );
 }
+
 // ─── Form Modal ────────────────────────────────────────────────────────────
 function VisitFormModal({
   open, onClose, onSave, existingVisit, allLeads, adminUser, isDark, theme
@@ -132,6 +141,7 @@ function VisitFormModal({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [leadSearch, setLeadSearch] = useState("");
+
   const filteredLeads = useMemo(() => {
     if (!leadSearch) return allLeads.slice(0, 50);
     const q = leadSearch.toLowerCase();
@@ -139,6 +149,7 @@ function VisitFormModal({
       l.name?.toLowerCase().includes(q) || String(l.id).includes(q) || l.phone?.includes(q)
     ).slice(0, 50);
   }, [leadSearch, allLeads]);
+
   useEffect(() => {
     if (existingVisit) {
       setLeadId(String(existingVisit.lead_id));
@@ -152,6 +163,7 @@ function VisitFormModal({
     }
     setError(null);
   }, [existingVisit, open]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!leadId || !visitDate) { setError("Lead and Visit Date are required."); return; }
@@ -181,13 +193,15 @@ function VisitFormModal({
       setIsSaving(false);
     }
   };
-  const inputClass = `w-full rounded-xl px-4 py-3 text-sm outline-none transition-colors duration-200 ${isDark ? "bg-[#222] border border-[#333] text-white focus:border-[#9E217B]" : "bg-white border border-indigo-200 text-[#1A1A1A] focus:border-[#9E217B]"}`;
+
+  const inputClass = `w-full rounded-xl px-4 py-3.5 md:py-3 text-[13px] md:text-sm outline-none transition-colors duration-200 ${isDark ? "bg-[#222] border border-[#333] text-white focus:border-[#9E217B]" : "bg-white border border-indigo-200 text-[#1A1A1A] focus:border-[#9E217B]"}`;
+
   return (
     <AnimatePresence>
       {open && (
         <motion.div
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+          className="fixed inset-0 z-[200] flex items-center justify-center p-3 md:p-4"
           style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(8px)" }}
           onClick={onClose}
         >
@@ -195,7 +209,7 @@ function VisitFormModal({
             initial={{ scale: 0.92, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.92, opacity: 0, y: 20 }}
             transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
             onClick={e => e.stopPropagation()}
-            className="w-full max-w-md rounded-2xl overflow-hidden"
+            className="w-full max-w-md rounded-2xl md:rounded-3xl overflow-hidden"
             style={{
               background: isDark ? "#1a1a1a" : "#fff",
               border: isDark ? "1px solid #2a2a2a" : "1px solid #E5E7EB",
@@ -203,33 +217,34 @@ function VisitFormModal({
             }}
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-5" style={{ borderBottom: isDark ? "1px solid #2a2a2a" : "1px solid #E5E7EB", background: isDark ? "#151515" : "#F8FAFC" }}>
+            <div className="flex items-center justify-between px-5 md:px-6 py-4 md:py-5" style={{ borderBottom: isDark ? "1px solid #2a2a2a" : "1px solid #E5E7EB", background: isDark ? "#151515" : "#F8FAFC" }}>
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: "rgba(158,33,123,0.15)" }}>
                   <FaCalendarAlt style={{ color: "#d946a8" }} />
                 </div>
                 <div>
-                  <h2 className="font-bold text-sm" style={{ color: isDark ? "#fff" : "#1A1A1A" }}>{existingVisit ? "Reschedule Visit" : "New Site Visit"}</h2>
-                  <p className="text-xs" style={{ color: isDark ? "rgba(255,255,255,0.4)" : "#6B7280" }}>Admin scheduling</p>
+                  <h2 className="font-bold text-[13px] md:text-sm" style={{ color: isDark ? "#fff" : "#1A1A1A" }}>{existingVisit ? "Reschedule Visit" : "New Site Visit"}</h2>
+                  <p className="text-[11px] md:text-xs" style={{ color: isDark ? "rgba(255,255,255,0.4)" : "#6B7280" }}>Admin scheduling</p>
                 </div>
               </div>
-              <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer transition-colors" style={{ color: isDark ? "#666" : "#9CA3AF" }}>
+              <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer transition-colors" style={{ color: isDark ? "#666" : "#9CA3AF", background: isDark ? "rgba(255,255,255,0.06)" : "#F3F4F6" }}>
                 <FaTimes />
               </button>
             </div>
+
             {/* Form */}
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+            <form onSubmit={handleSubmit} className="p-5 md:p-6 space-y-4 md:space-y-5">
               {!existingVisit && (
-                <div>
-                  <label className="text-xs font-semibold mb-2 block" style={{ color: isDark ? "rgba(255,255,255,0.6)" : "#6B7280" }}>Search Lead *</label>
+                <div className="relative">
+                  <label className="text-[11px] md:text-xs font-semibold mb-2 block" style={{ color: isDark ? "rgba(255,255,255,0.6)" : "#6B7280" }}>Search Lead *</label>
                   <input className={inputClass} placeholder="Search by name, ID or phone..." value={leadSearch} onChange={e => setLeadSearch(e.target.value)} />
                   {leadSearch && (
-                    <div className="mt-1 rounded-xl border overflow-hidden max-h-40 overflow-y-auto" style={{ background: isDark ? "#222" : "#fff", borderColor: isDark ? "#333" : "#E5E7EB" }}>
+                    <div className="absolute left-0 right-0 z-50 mt-1 rounded-xl border overflow-hidden max-h-48 overflow-y-auto" style={{ background: isDark ? "#222" : "#fff", borderColor: isDark ? "#333" : "#E5E7EB", boxShadow: "0 10px 25px rgba(0,0,0,0.1)" }}>
                       {filteredLeads.length === 0 ? (
-                        <p className="p-3 text-xs text-center" style={{ color: isDark ? "#666" : "#9CA3AF" }}>No leads found</p>
+                        <p className="p-4 text-[13px] text-center" style={{ color: isDark ? "#666" : "#9CA3AF" }}>No leads found</p>
                       ) : filteredLeads.map(l => (
                         <div key={l.id} onClick={() => { setLeadId(String(l.id)); setLeadSearch(`${l.name} (#${l.id})`); }}
-                          className="px-4 py-2.5 text-xs cursor-pointer transition-colors"
+                          className="px-4 py-3 md:py-2.5 text-[13px] md:text-xs cursor-pointer transition-colors"
                           style={{ borderBottom: isDark ? "1px solid #2a2a2a" : "1px solid #F3F4F6", color: isDark ? "#ccc" : "#374151" }}
                           onMouseEnter={e => (e.currentTarget.style.background = isDark ? "#2a2a2a" : "#F9FAFB")}
                           onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
@@ -242,11 +257,11 @@ function VisitFormModal({
                 </div>
               )}
               <div>
-                <label className="text-xs font-semibold mb-2 block" style={{ color: isDark ? "rgba(255,255,255,0.6)" : "#6B7280" }}>Visit Date & Time *</label>
+                <label className="text-[11px] md:text-xs font-semibold mb-2 block" style={{ color: isDark ? "rgba(255,255,255,0.6)" : "#6B7280" }}>Visit Date & Time *</label>
                 <input type="datetime-local" className={inputClass} value={visitDate} onChange={e => setVisitDate(e.target.value)} required />
               </div>
               <div>
-                <label className="text-xs font-semibold mb-2 block" style={{ color: isDark ? "rgba(255,255,255,0.6)" : "#6B7280" }}>Remarks / Notes</label>
+                <label className="text-[11px] md:text-xs font-semibold mb-2 block" style={{ color: isDark ? "rgba(255,255,255,0.6)" : "#6B7280" }}>Remarks / Notes</label>
                 <textarea
                   className={`${inputClass} resize-none`}
                   rows={3} placeholder="Add notes (optional)..."
@@ -259,12 +274,12 @@ function VisitFormModal({
                   <p className="text-xs" style={{ color: "#f87171" }}>{error}</p>
                 </div>
               )}
-              <div className="flex gap-3 pt-2">
-                <button type="button" onClick={onClose} className="flex-1 py-3 rounded-xl text-sm font-semibold transition-colors cursor-pointer"
+              <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                <button type="button" onClick={onClose} className="w-full sm:flex-1 py-3.5 md:py-3 rounded-xl text-[13px] md:text-sm font-semibold transition-colors cursor-pointer order-2 sm:order-1"
                   style={{ background: isDark ? "rgba(255,255,255,0.06)" : "#F3F4F6", color: isDark ? "#aaa" : "#6B7280" }}>
                   Cancel
                 </button>
-                <button type="submit" disabled={isSaving} className="flex-1 py-3 rounded-xl text-sm font-semibold cursor-pointer transition-all"
+                <button type="submit" disabled={isSaving} className="w-full sm:flex-1 py-3.5 md:py-3 rounded-xl text-[13px] md:text-sm font-semibold cursor-pointer transition-all order-1 sm:order-2"
                   style={{ background: "linear-gradient(135deg, #9E217B, #d946a8)", color: "#fff", opacity: isSaving ? 0.7 : 1 }}>
                   {isSaving ? "Saving..." : existingVisit ? "Reschedule" : "Schedule Visit"}
                 </button>
@@ -276,6 +291,7 @@ function VisitFormModal({
     </AnimatePresence>
   );
 }
+
 // ─── Detail Drawer ──────────────────────────────────────────────────────────
 function DetailDrawer({
   visit, allLeads, open, onClose, onEdit, onDelete, onStatusChange, isDark, theme, adminUser
@@ -287,6 +303,7 @@ function DetailDrawer({
 }) {
   const lead = useMemo(() => visit ? allLeads.find(l => l.id === visit.lead_id) : null, [visit, allLeads]);
   const cfg = visit ? (STATUS_CONFIG[visit.status] || STATUS_CONFIG.scheduled) : STATUS_CONFIG.scheduled;
+
   return (
     <AnimatePresence>
       {open && visit && (
@@ -305,18 +322,18 @@ function DetailDrawer({
             }}
           >
             {/* Drawer Header */}
-            <div className="flex items-center justify-between px-6 py-5 flex-shrink-0"
+            <div className="flex items-center justify-between px-5 md:px-6 py-4 md:py-5 flex-shrink-0"
               style={{ borderBottom: isDark ? "1px solid #2a2a2a" : "1px solid #E5E7EB", background: isDark ? "#1a1a1a" : "#F8FAFC" }}>
               <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ background: cfg.bg, color: cfg.text, border: `1px solid ${cfg.border}` }}>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="text-[10px] md:text-xs font-bold px-2.5 py-1 rounded-full" style={{ background: cfg.bg, color: cfg.text, border: `1px solid ${cfg.border}` }}>
                     {cfg.label}
                   </span>
                 </div>
-                <h2 className="font-bold text-base" style={{ color: isDark ? "#fff" : "#1A1A1A" }}>
+                <h2 className="font-bold text-[15px] md:text-base leading-tight" style={{ color: isDark ? "#fff" : "#1A1A1A" }}>
                   {lead?.name || `Lead #${visit.lead_id}`}
                 </h2>
-                <p className="text-xs mt-0.5" style={{ color: isDark ? "rgba(255,255,255,0.4)" : "#9CA3AF" }}>
+                <p className="text-[11px] md:text-xs mt-0.5" style={{ color: isDark ? "rgba(255,255,255,0.4)" : "#9CA3AF" }}>
                   {formatDateTime(visit.visit_date)}
                 </p>
               </div>
@@ -325,9 +342,9 @@ function DetailDrawer({
                 <FaTimes />
               </button>
             </div>
+
             {/* Drawer Body */}
-            <div className="flex-1 overflow-y-auto p-2 space-y-6" style={{ scrollbarWidth: "thin" }}>
-              {/* Visit Info */}
+            <div className="flex-1 overflow-y-auto p-4 md:p-5 space-y-6" style={{ scrollbarWidth: "thin" }}>
               <Section title="Visit Details" isDark={isDark}>
                 <InfoRow icon={FaCalendarAlt} label="Visit Date" value={formatDateTime(visit.visit_date)} isDark={isDark} />
                 <InfoRow icon={FaClock} label="Visit Time" value={formatTime(visit.visit_date)} isDark={isDark} />
@@ -335,7 +352,7 @@ function DetailDrawer({
                 <InfoRow icon={FaUsers} label="Role" value={visit.role} isDark={isDark} />
                 {visit.notes && <InfoRow icon={FaClipboardList} label="Remarks" value={visit.notes} isDark={isDark} />}
               </Section>
-              {/* Lead Info */}
+
               <Section title="Lead Information" isDark={isDark}>
                 <InfoRow icon={FaUser} label="Lead Name" value={lead?.name || `#${visit.lead_id}`} isDark={isDark} />
                 <InfoRow icon={FaPhone} label="Phone" value={lead?.phone || "N/A"} isDark={isDark} />
@@ -343,10 +360,11 @@ function DetailDrawer({
                 <InfoRow icon={FaMapMarkerAlt} label="Lead Status" value={lead?.status || "N/A"} isDark={isDark} />
                 <InfoRow icon={FaCalendarCheck} label="Created At" value={visit.created_at ? formatDateTime(visit.created_at) : "N/A"} isDark={isDark} />
               </Section>
+
               {/* Status Change */}
               {visit.status !== "completed" && visit.status !== "cancelled" && (
                 <Section title="Update Status" isDark={isDark}>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-2 md:gap-3">
                     <ActionBtn label="Mark Completed" icon={FaCheck} color="#22c55e" onClick={() => onStatusChange("completed")} />
                     <ActionBtn label="Mark Cancelled" icon={FaBan} color="#ef4444" onClick={() => onStatusChange("cancelled")} />
                     {visit.status === "scheduled" && (
@@ -356,15 +374,16 @@ function DetailDrawer({
                 </Section>
               )}
             </div>
+
             {/* Drawer Footer */}
-            <div className="flex gap-3 px-6 py-4 flex-shrink-0" style={{ borderTop: isDark ? "1px solid #2a2a2a" : "1px solid #E5E7EB" }}>
-              <button onClick={onEdit} className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all hover:brightness-110"
+            <div className="flex flex-col sm:flex-row gap-3 px-5 md:px-6 py-4 flex-shrink-0" style={{ borderTop: isDark ? "1px solid #2a2a2a" : "1px solid #E5E7EB" }}>
+              <button onClick={onEdit} className="w-full sm:w-auto flex flex-1 justify-center items-center gap-2 px-4 py-3 md:py-2.5 rounded-xl text-[13px] md:text-xs font-semibold cursor-pointer transition-all hover:brightness-110"
                 style={{ background: "rgba(158,33,123,0.12)", color: "#d946a8", border: "1px solid rgba(158,33,123,0.3)" }}>
-                <FaEdit /> Edit
+                <FaEdit /> Edit Visit
               </button>
-              <button onClick={onDelete} className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all hover:brightness-110"
+              <button onClick={onDelete} className="w-full sm:w-auto flex flex-1 justify-center items-center gap-2 px-4 py-3 md:py-2.5 rounded-xl text-[13px] md:text-xs font-semibold cursor-pointer transition-all hover:brightness-110"
                 style={{ background: "rgba(239,68,68,0.1)", color: "#f87171", border: "1px solid rgba(239,68,68,0.3)" }}>
-                <FaTrash /> Delete
+                <FaTrash /> Delete Visit
               </button>
             </div>
           </motion.div>
@@ -373,61 +392,65 @@ function DetailDrawer({
     </AnimatePresence>
   );
 }
+
 function Section({ title, children, isDark }: { title: string; children: React.ReactNode; isDark: boolean }) {
   return (
     <div>
       <h3 className="text-[11px] font-bold uppercase tracking-widest mb-3" style={{ color: "#d946a8" }}>{title}</h3>
-      <div className="rounded-xl p-4 space-y-3" style={{ background: isDark ? "rgba(255,255,255,0.04)" : "#F8FAFC", border: isDark ? "1px solid #2a2a2a" : "1px solid #E5E7EB" }}>
+      <div className="rounded-xl p-4 md:p-5 space-y-4" style={{ background: isDark ? "rgba(255,255,255,0.04)" : "#F8FAFC", border: isDark ? "1px solid #2a2a2a" : "1px solid #E5E7EB" }}>
         {children}
       </div>
     </div>
   );
 }
+
 function InfoRow({ icon: Icon, label, value, isDark }: { icon: any; label: string; value: string; isDark: boolean }) {
   return (
-    <div className="flex items-start gap-3">
-      <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: "rgba(158,33,123,0.1)" }}>
-        <Icon style={{ color: "#d946a8", fontSize: 11 }} />
+    <div className="flex items-start gap-3 md:gap-4">
+      <div className="w-7 h-7 md:w-8 md:h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: "rgba(158,33,123,0.1)" }}>
+        <Icon style={{ color: "#d946a8" }} className="text-[11px] md:text-[13px]" />
       </div>
       <div className="min-w-0">
-        <p className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: isDark ? "rgba(255,255,255,0.35)" : "#9CA3AF" }}>{label}</p>
-        <p className="text-xs font-semibold mt-0.5 break-words" style={{ color: isDark ? "rgba(255,255,255,0.85)" : "#374151" }}>{value || "—"}</p>
+        <p className="text-[10px] md:text-[11px] font-semibold uppercase tracking-wide" style={{ color: isDark ? "rgba(255,255,255,0.35)" : "#9CA3AF" }}>{label}</p>
+        <p className="text-[13px] md:text-[14px] font-semibold mt-0.5 break-words" style={{ color: isDark ? "rgba(255,255,255,0.85)" : "#374151" }}>{value || "—"}</p>
       </div>
     </div>
   );
 }
+
 function ActionBtn({ label, icon: Icon, color, onClick }: { label: string; icon: any; color: string; onClick: () => void }) {
   return (
-    <button onClick={onClick} className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold cursor-pointer transition-all hover:brightness-110"
+    <button onClick={onClick} className="flex-1 sm:flex-none flex justify-center items-center gap-2 px-3 py-3 md:py-2 rounded-xl md:rounded-lg text-[13px] md:text-xs font-semibold cursor-pointer transition-all hover:brightness-110"
       style={{ background: `${color}18`, color, border: `1px solid ${color}40` }}>
-      <Icon style={{ fontSize: 11 }} /> {label}
+      <Icon style={{ fontSize: 12 }} /> {label}
     </button>
   );
 }
+
 // ─── Confirm Dialog ─────────────────────────────────────────────────────────
 function ConfirmDialog({ open, message, onConfirm, onCancel, isDark }: any) {
   return (
     <AnimatePresence>
       {open && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[300] flex items-center justify-center p-4"
+          className="fixed inset-0 z-[300] flex items-center justify-center p-4 md:p-6"
           style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(8px)" }}>
           <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
-            className="rounded-2xl p-6 w-full max-w-sm"
+            className="rounded-3xl p-6 md:p-8 w-full max-w-sm"
             style={{ background: isDark ? "#1a1a1a" : "#fff", border: isDark ? "1px solid #2a2a2a" : "1px solid #E5E7EB", boxShadow: "0 24px 80px rgba(0,0,0,0.3)" }}>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "rgba(239,68,68,0.15)" }}>
-                <FaExclamationTriangle style={{ color: "#f87171" }} />
+            <div className="flex items-center gap-3 mb-5 md:mb-6">
+              <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center" style={{ background: "rgba(239,68,68,0.15)" }}>
+                <FaExclamationTriangle className="text-lg md:text-xl" style={{ color: "#f87171" }} />
               </div>
               <div>
-                <h3 className="font-bold text-sm" style={{ color: isDark ? "#fff" : "#1A1A1A" }}>Confirm Action</h3>
-                <p className="text-xs mt-0.5" style={{ color: isDark ? "rgba(255,255,255,0.4)" : "#6B7280" }}>{message}</p>
+                <h3 className="font-bold text-sm md:text-base" style={{ color: isDark ? "#fff" : "#1A1A1A" }}>Confirm Action</h3>
+                <p className="text-[11px] md:text-xs mt-0.5 leading-relaxed" style={{ color: isDark ? "rgba(255,255,255,0.6)" : "#6B7280" }}>{message}</p>
               </div>
             </div>
-            <div className="flex gap-3">
-              <button onClick={onCancel} className="flex-1 py-2.5 rounded-xl text-sm font-semibold cursor-pointer"
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button onClick={onCancel} className="w-full sm:flex-1 py-3.5 md:py-3 rounded-xl text-[13px] md:text-sm font-semibold cursor-pointer order-2 sm:order-1"
                 style={{ background: isDark ? "rgba(255,255,255,0.06)" : "#F3F4F6", color: isDark ? "#aaa" : "#6B7280" }}>Cancel</button>
-              <button onClick={onConfirm} className="flex-1 py-2.5 rounded-xl text-sm font-semibold cursor-pointer"
+              <button onClick={onConfirm} className="w-full sm:flex-1 py-3.5 md:py-3 rounded-xl text-[13px] md:text-sm font-semibold cursor-pointer order-1 sm:order-2"
                 style={{ background: "linear-gradient(135deg, #ef4444, #dc2626)", color: "#fff" }}>Confirm</button>
             </div>
           </motion.div>
@@ -436,6 +459,7 @@ function ConfirmDialog({ open, message, onConfirm, onCancel, isDark }: any) {
     </AnimatePresence>
   );
 }
+
 // ─── Main Component ─────────────────────────────────────────────────────────
 export default function SiteVisitOverview({
   allLeads, receptionists, managers, siteHeads, adminUser, theme, isDark
@@ -456,6 +480,7 @@ export default function SiteVisitOverview({
   const [confirmAction, setConfirmAction] = useState<() => void>(() => { });
   const [showFilters, setShowFilters] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
+
   // Filters
   const [filterEmployee, setFilterEmployee] = useState("");
   const [filterRole, setFilterRole] = useState("");
@@ -464,10 +489,12 @@ export default function SiteVisitOverview({
   const [filterLeadStatus, setFilterLeadStatus] = useState("");
   const [searchLead, setSearchLead] = useState("");
   const [searchPhone, setSearchPhone] = useState("");
+
   const showToast = (msg: string, type: "success" | "error" = "success") => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3500);
   };
+
   // ── Fetch all visits ─────────────────────────────────────────────────────
   const fetchAllVisits = useCallback(async () => {
     try {
@@ -475,15 +502,10 @@ export default function SiteVisitOverview({
       const res = await fetch("/api/site-visits/all");
       const json = await res.json();
       if (json.success) {
-        // Scope visits to only the leads passed in via `allLeads`.
-        // Admin passes the full lead set (no behavior change).
-        // Sales Manager / Site Head pass their own leads only, so this
-        // naturally restricts the calendar to "my site visits" only.
         const ownLeadIds = new Set(allLeads.map((l: any) => l.id));
         const scopedVisits = (json.data || []).filter((v: SiteVisit) => ownLeadIds.has(v.lead_id));
         setVisits(scopedVisits);
       } else {
-        // Fallback: fetch per-lead visits from existing leads data
         const leadsWithVisits = allLeads.filter(l => l.mongoVisitDate);
         const syntheticVisits: SiteVisit[] = leadsWithVisits.map(l => ({
           id: l.id,
@@ -500,7 +522,6 @@ export default function SiteVisitOverview({
         setVisits(syntheticVisits);
       }
     } catch {
-      // Fallback from allLeads
       const leadsWithVisits = allLeads.filter(l => l.mongoVisitDate);
       const syntheticVisits: SiteVisit[] = leadsWithVisits.map(l => ({
         id: l.id,
@@ -519,7 +540,9 @@ export default function SiteVisitOverview({
       setIsLoading(false);
     }
   }, [allLeads, siteHeads, receptionists]);
+
   useEffect(() => { fetchAllVisits(); }, [fetchAllVisits]);
+
   // ── Enrich visits with lead info ─────────────────────────────────────────
   const enrichedVisits = useMemo(() => {
     return visits.map(v => {
@@ -533,17 +556,20 @@ export default function SiteVisitOverview({
       };
     });
   }, [visits, allLeads]);
+
   // ── Available filter options ─────────────────────────────────────────────
   const allEmployees = useMemo(() => {
     const names = new Set<string>();
     enrichedVisits.forEach(v => { if (v.created_by) names.add(v.created_by); });
     return Array.from(names).sort();
   }, [enrichedVisits]);
+
   const allProjects = useMemo(() => {
     const names = new Set<string>();
     allLeads.forEach(l => { if (l.preferredLocation) names.add(l.preferredLocation); });
     return Array.from(names).filter(Boolean).sort();
   }, [allLeads]);
+
   // ── Filtered visits ─────────────────────────────────────────────────────
   const filteredVisits = useMemo(() => {
     return enrichedVisits.filter(v => {
@@ -561,10 +587,13 @@ export default function SiteVisitOverview({
       return true;
     });
   }, [enrichedVisits, filterEmployee, filterRole, filterStatus, filterProject, filterLeadStatus, searchLead, searchPhone, allLeads]);
+
   const hasFilters = filterEmployee || filterRole || filterStatus || filterProject || filterLeadStatus || searchLead || searchPhone;
+
   // ── Stats ──────────────────────────────────────────────────────────────
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+
   const stats = useMemo(() => {
     const total = filteredVisits.length;
     const todayVisits = filteredVisits.filter(v => {
@@ -578,6 +607,7 @@ export default function SiteVisitOverview({
     const empToday = new Set(todayVisits.map(v => v.created_by)).size;
     return { total, todayUpcoming: upcoming.filter(v => { const d = new Date(v.visit_date); d.setHours(0, 0, 0, 0); return d.getTime() === today.getTime(); }).length, completed: completed.length, cancelled: cancelled.length, rescheduled: rescheduled.length, empToday };
   }, [filteredVisits]);
+
   // ── Calendar Helpers ─────────────────────────────────────────────────────
   const getVisitsForDate = useCallback((date: Date) => {
     return filteredVisits.filter(v => {
@@ -586,6 +616,7 @@ export default function SiteVisitOverview({
       return vd.getTime() === dd.getTime();
     });
   }, [filteredVisits]);
+
   // ── Month View Calendar Days ──────────────────────────────────────────
   const calendarDays = useMemo((): CalendarDay[] => {
     const year = currentDate.getFullYear();
@@ -612,6 +643,7 @@ export default function SiteVisitOverview({
     }
     return days;
   }, [currentDate, getVisitsForDate]);
+
   // ── Week View ─────────────────────────────────────────────────────────
   const weekDays = useMemo(() => {
     const d = new Date(currentDate);
@@ -623,6 +655,7 @@ export default function SiteVisitOverview({
     }
     return days;
   }, [currentDate, getVisitsForDate]);
+
   // ── Navigation ────────────────────────────────────────────────────────
   const navigate = (dir: 1 | -1) => {
     const d = new Date(currentDate);
@@ -631,6 +664,7 @@ export default function SiteVisitOverview({
     else d.setDate(d.getDate() + dir);
     setCurrentDate(d);
   };
+
   const viewTitle = useMemo(() => {
     if (calView === "month") return `${MONTHS[currentDate.getMonth()]} ${currentDate.getFullYear()}`;
     if (calView === "week") {
@@ -640,6 +674,7 @@ export default function SiteVisitOverview({
     }
     return currentDate.toLocaleDateString("en-IN", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
   }, [currentDate, calView]);
+
   // ── Actions ──────────────────────────────────────────────────────────
   const handleStatusChange = async (visitId: number, status: string) => {
     try {
@@ -651,6 +686,7 @@ export default function SiteVisitOverview({
       fetchAllVisits();
     } catch { showToast("❌ Update failed.", "error"); }
   };
+
   const handleDelete = async (visitId: number) => {
     setConfirmMsg("This will permanently delete the site visit. This action cannot be undone.");
     setConfirmAction(() => async () => {
@@ -665,6 +701,7 @@ export default function SiteVisitOverview({
     });
     setShowConfirm(true);
   };
+
   // ── Export ────────────────────────────────────────────────────────────
   const handleExport = () => {
     const data = filteredVisits.map(v => ({
@@ -682,9 +719,10 @@ export default function SiteVisitOverview({
     }));
     downloadCSV(data, `site-visits-${new Date().toISOString().slice(0, 10)}.csv`);
   };
-  const inputClass = `rounded-xl px-3 py-2 text-xs outline-none transition-colors ${isDark ? "bg-[#222] border border-[#333] text-white" : "bg-white border border-indigo-200 text-[#1A1A1A]"}`;
-  const selectClass = `${inputClass} cursor-pointer`;
-  // ── Calendar grid surface helpers (light-mode visibility fix) ───────────
+
+  const selectClass = `w-full rounded-xl px-4 py-3.5 md:py-2 text-[13px] md:text-xs outline-none transition-colors duration-200 cursor-pointer ${isDark ? "bg-[#222] border border-[#333] text-white focus:border-[#9E217B]" : "bg-white border border-indigo-200 text-[#1A1A1A] focus:border-[#9E217B]"}`;
+
+  // ── Calendar grid surface helpers ───────────
   const gridLineColor = isDark ? GRID_LINE_DARK : GRID_LINE_LIGHT;
   const gridHeaderBg = isDark ? GRID_HEADER_BG_DARK : GRID_HEADER_BG_LIGHT;
   const gridCellBg = isDark ? GRID_CELL_BG_DARK : GRID_CELL_BG_LIGHT;
@@ -692,24 +730,28 @@ export default function SiteVisitOverview({
   const todayCellBg = isDark ? "rgba(158,33,123,0.12)" : "rgba(158,33,123,0.06)";
   const todayCellBgHover = isDark ? "rgba(158,33,123,0.18)" : "rgba(158,33,123,0.1)";
   const cellHoverBg = isDark ? "rgba(255,255,255,0.04)" : "#F8FAFC";
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Toast */}
       <AnimatePresence>
         {toast && (
           <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
-            className="fixed top-20 left-1/2 -translate-x-1/2 z-[500] px-5 py-3 rounded-xl shadow-2xl text-sm font-bold text-white"
+            className="fixed top-20 left-1/2 -translate-x-1/2 z-[500] px-5 py-3 rounded-xl shadow-2xl text-[13px] md:text-sm font-bold text-white"
             style={{ background: toast.type === "success" ? "linear-gradient(135deg,#22c55e,#16a34a)" : "linear-gradient(135deg,#ef4444,#dc2626)" }}>
             {toast.msg}
           </motion.div>
         )}
       </AnimatePresence>
+
       <ConfirmDialog open={showConfirm} message={confirmMsg} onConfirm={confirmAction} onCancel={() => setShowConfirm(false)} isDark={isDark} />
+
       <VisitFormModal
         open={showForm} onClose={() => { setShowForm(false); setEditingVisit(null); }}
         onSave={() => { fetchAllVisits(); showToast("✅ Site visit saved!"); }}
         existingVisit={editingVisit} allLeads={allLeads} adminUser={adminUser} isDark={isDark} theme={theme}
       />
+
       <DetailDrawer
         visit={selectedVisit} allLeads={allLeads} open={showDrawer}
         onClose={() => { setShowDrawer(false); setSelectedVisit(null); }}
@@ -718,33 +760,37 @@ export default function SiteVisitOverview({
         onStatusChange={(status) => selectedVisit && handleStatusChange(selectedVisit.id, status)}
         isDark={isDark} theme={theme} adminUser={adminUser}
       />
+
       <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
-        <div className="p-6 md:p-8 max-w-[1400px] mx-auto space-y-6">
+        <div className="p-1 sm:p-6 md:p-8 max-w-[1400px] mx-auto space-y-5 md:space-y-6">
+
           {/* Page Header */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <div className="flex items-center gap-3 mb-1">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "linear-gradient(135deg,rgba(158,33,123,0.2),rgba(217,70,168,0.1))", border: "1px solid rgba(158,33,123,0.3)" }}>
-                  <FaCalendarAlt style={{ color: "#d946a8", fontSize: 18 }} />
+              <div className="flex items-center gap-2.5 md:gap-3 mb-1.5 md:mb-1">
+                <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg md:rounded-xl flex items-center justify-center" style={{ background: "linear-gradient(135deg,rgba(158,33,123,0.2),rgba(217,70,168,0.1))", border: "1px solid rgba(158,33,123,0.3)" }}>
+                  <FaCalendarAlt className="text-base md:text-lg" style={{ color: "#d946a8" }} />
                 </div>
-                <h1 className="text-xl font-black" style={{ color: isDark ? "#fff" : "#1A1A1A" }}>Site Visit Overview</h1>
+                <h1 className="text-lg md:text-xl font-black" style={{ color: isDark ? "#fff" : "#1A1A1A" }}>Site Visit Overview</h1>
               </div>
-              <p className="text-sm ml-1" style={{ color: isDark ? "rgba(255,255,255,0.4)" : "#6B7280" }}>View and manage all scheduled site visits across the organization.</p>
+              <p className="text-[11px] md:text-sm ml-1" style={{ color: isDark ? "rgba(255,255,255,0.4)" : "#6B7280" }}>View and manage all scheduled site visits across the organization.</p>
             </div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <button onClick={handleExport} className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all hover:brightness-110"
+
+            <div className="flex items-center gap-2.5 flex-wrap w-full sm:w-auto">
+              <button onClick={handleExport} className="flex-1 sm:flex-none flex justify-center items-center gap-2 px-4 py-3 md:py-2.5 rounded-xl text-[13px] md:text-xs font-semibold cursor-pointer transition-all hover:brightness-110"
                 style={{ background: "rgba(0,174,239,0.12)", color: "#00AEEF", border: "1px solid rgba(0,174,239,0.3)" }}>
                 <FaDownload /> Export CSV
               </button>
               <button onClick={() => { setEditingVisit(null); setShowForm(true); }}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer transition-all hover:brightness-110"
+                className="flex-1 sm:flex-none flex justify-center items-center gap-2 px-4 py-3 md:py-2.5 rounded-xl text-[13px] md:text-xs font-bold cursor-pointer transition-all hover:brightness-110 shadow-lg"
                 style={{ background: "linear-gradient(135deg, #9E217B, #d946a8)", color: "#fff", boxShadow: "0 4px 16px rgba(158,33,123,0.3)" }}>
                 <FaPlus /> Add Site Visit
               </button>
             </div>
           </div>
+
           {/* Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4">
             <StatCard label="Total Visits" value={stats.total} color="#93116eff" bg="rgba(158,33,123,0.15)" icon={FaCalendarAlt} isDark={isDark} />
             <StatCard label="Today's Upcoming" value={stats.todayUpcoming} color="#d62f9fff" bg="rgba(217,70,168,0.15)" icon={FaClock} isDark={isDark} />
             <StatCard label="Completed" value={stats.completed} color="#119e45ff" bg="rgba(34,197,94,0.15)" icon={FaCheckCircle} isDark={isDark} />
@@ -752,66 +798,65 @@ export default function SiteVisitOverview({
             <StatCard label="Cancelled" value={stats.cancelled} color="#e02c2cff" bg="rgba(233, 57, 57, 0.15)" icon={FaTimesCircle} isDark={isDark} />
             <StatCard label="Employees Today" value={stats.empToday} color="#008fc4ff" bg="rgba(0,174,239,0.15)" icon={FaUsers} isDark={isDark} />
           </div>
-          {/* Calendar Controls */}
-          <div className="rounded-3xl overflow-hidden" style={{ background: isDark ? "rgba(171, 155, 155, 0.03)" : "rgba(255,255,255,0.9)", border: isDark ? "1px solid rgba(158,33,123,0.15)" : `1px solid ${GRID_LINE_LIGHT}`, boxShadow: isDark ? "0 8px 32px rgba(0,0,0,0.3)" : "0 8px 32px rgba(0,0,0,0.06)", backdropFilter: "blur(12px)" }}>
-            {/* Calendar Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-6 py-4" style={{ borderBottom: isDark ? "1px solid rgba(255,255,255,0.06)" : `1px solid ${GRID_LINE_LIGHT}` }}>
-              <div className="flex items-center gap-3">
-                <button onClick={() => setCurrentDate(new Date())} className="px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all hover:brightness-110"
-                  style={{ background: "rgba(158,33,123,0.12)", color: "#d946a8", border: "1px solid rgba(158,33,123,0.3)" }}>
-                  Today
-                </button>
-                <button onClick={() => navigate(-1)} className="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer transition-colors"
-                  style={{ background: isDark ? "rgba(255,255,255,0.06)" : "#F3F4F6", color: isDark ? "#aaa" : "#6B7280" }}>
-                  <FaChevronLeft style={{ fontSize: 11 }} />
-                </button>
-                <button onClick={() => navigate(1)} className="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer transition-colors"
-                  style={{ background: isDark ? "rgba(255,255,255,0.06)" : "#F3F4F6", color: isDark ? "#aaa" : "#6B7280" }}>
-                  <FaChevronRight style={{ fontSize: 11 }} />
-                </button>
-                <h2 className="font-bold text-sm" style={{ color: isDark ? "#fff" : "#1A1A1A" }}>{viewTitle}</h2>
+
+          {/* Calendar Controls & View */}
+          <div className="rounded-2xl md:rounded-3xl overflow-hidden" style={{ background: isDark ? "rgba(171, 155, 155, 0.03)" : "rgba(255,255,255,0.9)", border: isDark ? "1px solid rgba(158,33,123,0.15)" : `1px solid ${GRID_LINE_LIGHT}`, boxShadow: isDark ? "0 8px 32px rgba(0,0,0,0.3)" : "0 8px 32px rgba(0,0,0,0.06)", backdropFilter: "blur(12px)" }}>
+
+            {/* Calendar Toolbar */}
+            {/* Calendar Toolbar */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2 sm:gap-4 px-3 sm:px-4 md:px-6 py-2 sm:py-4" style={{ borderBottom: isDark ? "1px solid rgba(255,255,255,0.06)" : `1px solid ${GRID_LINE_LIGHT}` }}>
+
+              {/* Top / Left: Navigation & Today */}
+              <div className="flex flex-wrap sm:flex-nowrap items-center justify-between lg:justify-start gap-2 sm:gap-3 w-full lg:w-auto">
+                <div className="flex items-center gap-1.5 md:gap-2 order-1 sm:order-none">
+                  <button onClick={() => navigate(-1)} className="w-8 h-8 sm:w-10 sm:h-10 md:w-8 md:h-8 rounded-md sm:rounded-lg flex items-center justify-center cursor-pointer transition-colors" style={{ background: isDark ? "rgba(255,255,255,0.06)" : "#F3F4F6", color: isDark ? "#aaa" : "#6B7280" }}><FaChevronLeft style={{ fontSize: 11 }} /></button>
+                  <button onClick={() => navigate(1)} className="w-8 h-8 sm:w-10 sm:h-10 md:w-8 md:h-8 rounded-md sm:rounded-lg flex items-center justify-center cursor-pointer transition-colors" style={{ background: isDark ? "rgba(255,255,255,0.06)" : "#F3F4F6", color: isDark ? "#aaa" : "#6B7280" }}><FaChevronRight style={{ fontSize: 11 }} /></button>
+                </div>
+                <h2 className="font-bold text-[13px] md:text-sm order-2 sm:order-none text-center flex-1 sm:flex-none whitespace-nowrap min-w-[130px]" style={{ color: isDark ? "#fff" : "#1A1A1A" }}>{viewTitle}</h2>
+                <button onClick={() => setCurrentDate(new Date())} className="order-3 sm:order-none px-3 sm:px-4 py-1.5 sm:py-2.5 md:py-1.5 rounded-md sm:rounded-lg text-xs md:text-[11px] font-semibold cursor-pointer transition-all hover:brightness-110" style={{ background: "rgba(158,33,123,0.12)", color: "#d946a8", border: "1px solid rgba(158,33,123,0.3)" }}>Today</button>
               </div>
-              <div className="flex items-center gap-2">
-                {/* Search */}
-                <div className="relative">
-                  <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: isDark ? "#555" : "#9CA3AF", fontSize: 11 }} />
+
+              {/* Bottom / Right: Search, Filter, Toggles */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 md:gap-2 w-full lg:w-auto mt-0 sm:mt-1 lg:mt-0">
+                <div className="relative flex-1 w-full sm:w-auto">
+                  <FaSearch className="absolute left-3 sm:left-3.5 md:left-3 top-1/2 -translate-y-1/2" style={{ color: isDark ? "#555" : "#9CA3AF", fontSize: 11 }} />
                   <input
-                    className={`pl-8 pr-3 py-2 rounded-xl text-xs outline-none w-36 transition-colors ${isDark ? "bg-[#222] border border-[#333] text-white" : "bg-white border border-indigo-200 text-[#1A1A1A]"}`}
+                    className={`w-full sm:w-48 pl-8 sm:pl-9 md:pl-8 pr-3 py-1.5 sm:py-3 md:py-2 rounded-md sm:rounded-xl text-xs sm:text-[13px] md:text-xs outline-none transition-colors ${isDark ? "bg-[#222] border border-[#333] text-white" : "bg-white border border-indigo-200 text-[#1A1A1A]"}`}
                     placeholder="Search lead..."
                     value={searchLead} onChange={e => setSearchLead(e.target.value)}
                   />
                 </div>
-                {/* Filter Button */}
-                <button onClick={() => setShowFilters(f => !f)}
-                  className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-all"
-                  style={{
-                    background: showFilters || hasFilters ? "rgba(158,33,123,0.15)" : isDark ? "rgba(255,255,255,0.06)" : "#F3F4F6",
-                    color: showFilters || hasFilters ? "#d946a8" : isDark ? "#aaa" : "#6B7280",
-                    border: showFilters || hasFilters ? "1px solid rgba(158,33,123,0.35)" : isDark ? "1px solid #333" : "1px solid #E5E7EB",
-                  }}>
-                  <FaFilter style={{ fontSize: 10 }} /> Filter {hasFilters ? "●" : ""}
-                </button>
-                {/* View Toggle */}
-                <div className="flex rounded-xl overflow-hidden" style={{ border: isDark ? "1px solid #333" : "1px solid #E5E7EB" }}>
-                  {(["month", "week", "day"] as const).map(v => (
-                    <button key={v} onClick={() => setCalView(v)}
-                      className="px-3 py-2 text-xs font-semibold capitalize cursor-pointer transition-all"
-                      style={{
-                        background: calView === v ? "linear-gradient(135deg, #9E217B, #d946a8)" : isDark ? "rgba(255,255,255,0.04)" : "#fff",
-                        color: calView === v ? "#fff" : isDark ? "#aaa" : "#6B7280",
-                      }}>
-                      {v}
-                    </button>
-                  ))}
+                <div className="flex items-stretch gap-2 sm:gap-2.5 md:gap-2 w-full sm:w-auto">
+                  <button onClick={() => setShowFilters(f => !f)}
+                    className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-3 md:py-2 rounded-md sm:rounded-xl text-xs sm:text-[13px] md:text-xs font-semibold cursor-pointer transition-all"
+                    style={{
+                      background: showFilters || hasFilters ? "rgba(158,33,123,0.15)" : isDark ? "rgba(255,255,255,0.06)" : "#F3F4F6",
+                      color: showFilters || hasFilters ? "#d946a8" : isDark ? "#aaa" : "#6B7280",
+                      border: showFilters || hasFilters ? "1px solid rgba(158,33,123,0.35)" : isDark ? "1px solid #333" : "1px solid #E5E7EB",
+                    }}>
+                    <FaFilter style={{ fontSize: 10 }} /> Filter {hasFilters ? "●" : ""}
+                  </button>
+                  <div className="flex flex-1 sm:flex-none rounded-md sm:rounded-xl overflow-hidden" style={{ border: isDark ? "1px solid #333" : "1px solid #E5E7EB" }}>
+                    {(["month", "week", "day"] as const).map(v => (
+                      <button key={v} onClick={() => setCalView(v)}
+                        className="flex-1 sm:flex-none px-2 sm:px-3.5 py-1.5 sm:py-3 md:py-2 text-xs sm:text-[13px] md:text-xs font-semibold capitalize cursor-pointer transition-all"
+                        style={{
+                          background: calView === v ? "linear-gradient(135deg, #9E217B, #d946a8)" : isDark ? "rgba(255,255,255,0.04)" : "#fff",
+                          color: calView === v ? "#fff" : isDark ? "#aaa" : "#6B7280",
+                        }}>
+                        {v}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
-            {/* Filters Panel */}
+
             <AnimatePresence>
               {showFilters && (
                 <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}
                   className="overflow-hidden" style={{ borderBottom: isDark ? "1px solid rgba(255,255,255,0.06)" : `1px solid ${GRID_LINE_LIGHT}` }}>
-                  <div className="p-4 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+                  <div className="p-2 sm:p-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2 sm:gap-3">
                     <select className={selectClass} value={filterEmployee} onChange={e => setFilterEmployee(e.target.value)}>
                       <option value="">All Employees</option>
                       {allEmployees.map(e => <option key={e}>{e}</option>)}
@@ -832,42 +877,38 @@ export default function SiteVisitOverview({
                       <option value="">Lead Status</option>
                       {["Assigned", "Contacted", "Interested", "Visit Scheduled", "Closing", "Lost"].map(s => <option key={s}>{s}</option>)}
                     </select>
-                    <input className={inputClass} placeholder="Phone..." value={searchPhone} onChange={e => setSearchPhone(e.target.value)} />
+                    <input className={selectClass} placeholder="Search Phone..." value={searchPhone} onChange={e => setSearchPhone(e.target.value)} />
                     <button onClick={() => { setFilterEmployee(""); setFilterRole(""); setFilterStatus(""); setFilterProject(""); setFilterLeadStatus(""); setSearchLead(""); setSearchPhone(""); }}
-                      className="flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-all"
+                      className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-3.5 md:py-2 rounded-md sm:rounded-xl text-xs sm:text-[13px] md:text-xs font-semibold cursor-pointer transition-all w-full"
                       style={{ background: "rgba(239,68,68,0.1)", color: "#f87171", border: "1px solid rgba(239,68,68,0.3)" }}>
-                      <FaTimes style={{ fontSize: 10 }} /> Clear
+                      <FaTimes style={{ fontSize: 10 }} /> Clear All
                     </button>
                   </div>
                 </motion.div>
               )}
             </AnimatePresence>
+
             {/* Calendar Body */}
             <AnimatePresence mode="wait">
               <motion.div key={`${calView}-${currentDate.toISOString()}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}>
+
                 {/* ── Month View ── */}
                 {calView === "month" && (
                   <div>
-                    {/* Day headers — separated from the body by a clear border and a distinct
-                        background, with thin "grout" lines between each day name */}
-                    <div
-                      className="grid grid-cols-7 gap-px"
-                      style={{ background: gridLineColor, borderBottom: `1px solid ${gridLineColor}` }}
-                    >
+                    {/* Day headers */}
+                    <div className="grid grid-cols-7 gap-px" style={{ background: gridLineColor, borderBottom: `1px solid ${gridLineColor}` }}>
                       {DAYS.map(d => (
-                        <div key={d} className="py-3 text-center text-[11px] font-bold uppercase tracking-wider"
+                        <div key={d} className="py-2.5 md:py-3 text-center text-[9px] md:text-[11px] font-bold uppercase tracking-wider"
                           style={{ color: gridHeaderText, background: gridHeaderBg }}>
                           {d}
                         </div>
                       ))}
                     </div>
-                    {/* Day cells — rendered as bright tiles separated by a visible 1px grout
-                        line (the grid container's own background shows through the gaps),
-                        which reads far more clearly than a faint border in light mode */}
+                    {/* Day cells */}
                     <div className="grid grid-cols-7 gap-px" style={{ background: gridLineColor }}>
                       {calendarDays.map((day, idx) => (
                         <div key={idx}
-                          className="min-h-[120px] p-2 relative transition-colors duration-150 cursor-pointer"
+                          className="min-h-[45px]  sm:min-h-[120px] p-1 sm:p-2 relative transition-colors duration-150 cursor-pointer"
                           style={{
                             background: day.isToday ? todayCellBg : gridCellBg,
                             boxShadow: isDark ? "none" : "inset 0 1px 0 rgba(255,255,255,0.8)",
@@ -877,13 +918,15 @@ export default function SiteVisitOverview({
                           onMouseLeave={e => e.currentTarget.style.background = day.isToday ? todayCellBg : gridCellBg}
                         >
                           <span
-                            className={`text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full mb-1.5 ${day.isToday ? "text-white" : ""}`}
+                            className={`text-[10px] md:text-xs font-bold w-5 h-5 md:w-6 md:h-6 mx-auto sm:mx-0 flex items-center justify-center rounded-full mb-1 sm:mb-1.5 ${day.isToday ? "text-white" : ""}`}
                             style={{
                               color: day.isToday ? "#fff" : day.isCurrentMonth ? isDark ? "rgba(255,255,255,0.8)" : "#7689a8ff" : isDark ? "rgba(255,255,255,0.2)" : "#D1D5DB",
                               background: day.isToday ? "linear-gradient(135deg,#9E217B,#d946a8)" : "transparent",
                             }}
                           >{day.date.getDate()}</span>
-                          <div className="space-y-1">
+
+                          {/* Desktop: show event pills */}
+                          <div className="hidden sm:block space-y-1">
                             {day.visits.slice(0, 3).map(v => (
                               <EventPill key={v.id} visit={v} onClick={() => { setSelectedVisit(v); setShowDrawer(true); }} />
                             ))}
@@ -891,27 +934,35 @@ export default function SiteVisitOverview({
                               <div className="text-[10px] font-bold px-2" style={{ color: isDark ? "rgba(217,70,168,0.8)" : "#9E217B" }}>+{day.visits.length - 3} more</div>
                             )}
                           </div>
+
+                          {/* Mobile: show tiny dot indicators */}
+                          {day.visits.length > 0 && (
+                            <div className="sm:hidden flex justify-center gap-[3px] flex-wrap mt-1">
+                              {day.visits.slice(0, 4).map(v => {
+                                const cfg = STATUS_CONFIG[v.status] || STATUS_CONFIG.scheduled;
+                                return <span key={v.id} className="w-[5px] h-[5px] rounded-full" style={{ background: cfg.color }} />;
+                              })}
+                              {day.visits.length > 4 && <span className="text-[8px] font-bold leading-none ml-[1px]" style={{ color: isDark ? "rgba(217,70,168,0.8)" : "#9E217B" }}>+</span>}
+                            </div>
+                          )}
                         </div>
-                        
                       ))}
                     </div>
                   </div>
                 )}
+
                 {/* ── Week View ── */}
                 {calView === "week" && (
                   <div>
-                    <div
-                      className="grid grid-cols-7 gap-px"
-                      style={{ background: gridLineColor, borderBottom: `1px solid ${gridLineColor}` }}
-                    >
+                    <div className="grid grid-cols-7 gap-px" style={{ background: gridLineColor, borderBottom: `1px solid ${gridLineColor}` }}>
                       {weekDays.map(({ date }) => {
                         const isToday = new Date(date).setHours(0, 0, 0, 0) === new Date().setHours(0, 0, 0, 0);
                         return (
-                          <div key={date.toISOString()} className="py-3 px-2 text-center" style={{ background: gridHeaderBg }}>
-                            <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: gridHeaderText }}>
+                          <div key={date.toISOString()} className="py-2.5 px-1 md:px-2 text-center" style={{ background: gridHeaderBg }}>
+                            <p className="text-[9px] md:text-[10px] font-bold uppercase tracking-wider" style={{ color: gridHeaderText }}>
                               {DAYS[date.getDay()]}
                             </p>
-                            <p className={`text-lg font-black mt-0.5 w-9 h-9 mx-auto flex items-center justify-center rounded-full ${isToday ? "text-white" : ""}`}
+                            <p className={`text-base md:text-lg font-black mt-0.5 w-7 h-7 md:w-9 md:h-9 mx-auto flex items-center justify-center rounded-full ${isToday ? "text-white" : ""}`}
                               style={{
                                 color: isToday ? "#fff" : isDark ? "#fff" : "#1A1A1A",
                                 background: isToday ? "linear-gradient(135deg,#9E217B,#d946a8)" : "transparent",
@@ -924,10 +975,10 @@ export default function SiteVisitOverview({
                     </div>
                     <div className="grid grid-cols-7 gap-px" style={{ background: gridLineColor }}>
                       {weekDays.map(({ date, visits: dayVisits }) => (
-                        <div key={date.toISOString()} className="p-2 min-h-[300px] space-y-1.5"
+                        <div key={date.toISOString()} className="p-1 md:p-2 min-h-[200px] md:min-h-[300px] space-y-1.5"
                           style={{ background: gridCellBg, boxShadow: isDark ? "none" : "inset 0 1px 0 rgba(255,255,255,0.8)" }}>
                           {dayVisits.length === 0 ? (
-                            <p className="text-[10px] text-center mt-8" style={{ color: isDark ? "rgba(255,255,255,0.15)" : "#D1D5DB" }}>—</p>
+                            <p className="text-[10px] text-center mt-6" style={{ color: isDark ? "rgba(255,255,255,0.15)" : "#D1D5DB" }}>—</p>
                           ) : dayVisits.map(v => (
                             <EventPill key={v.id} visit={v} onClick={() => { setSelectedVisit(v); setShowDrawer(true); }} />
                           ))}
@@ -936,11 +987,12 @@ export default function SiteVisitOverview({
                     </div>
                   </div>
                 )}
+
                 {/* ── Day View ── */}
                 {calView === "day" && (() => {
                   const dayVisits = getVisitsForDate(currentDate).sort((a, b) => new Date(a.visit_date).getTime() - new Date(b.visit_date).getTime());
                   return (
-                    <div className="p-6 min-h-[300px]">
+                    <div className="p-4 md:p-6 min-h-[300px]">
                       {dayVisits.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-16 gap-3">
                           <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: "rgba(158,33,123,0.1)" }}>
@@ -950,40 +1002,43 @@ export default function SiteVisitOverview({
                           <p className="text-xs text-center max-w-xs" style={{ color: isDark ? "rgba(255,255,255,0.35)" : "#9CA3AF" }}>
                             No site visits scheduled for this day. Create a site visit or wait for employees to schedule visits.
                           </p>
-                          <button onClick={() => { setEditingVisit(null); setShowForm(true); }} className="mt-2 px-5 py-2.5 rounded-xl text-xs font-bold cursor-pointer"
+                          <button onClick={() => { setEditingVisit(null); setShowForm(true); }} className="mt-3 px-6 py-3 rounded-xl text-[13px] font-bold cursor-pointer"
                             style={{ background: "linear-gradient(135deg, #9E217B, #d946a8)", color: "#fff" }}>
                             <FaPlus className="inline mr-2" /> Schedule Visit
                           </button>
                         </div>
                       ) : (
-                        <div className="space-y-3">
+                        <div className="space-y-3 md:space-y-4">
                           {dayVisits.map(v => {
                             const cfg = STATUS_CONFIG[v.status] || STATUS_CONFIG.scheduled;
                             const lead = allLeads.find(l => l.id === v.lead_id);
                             return (
                               <motion.div key={v.id} initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }}
-                                className="flex gap-4 p-4 rounded-2xl cursor-pointer transition-all hover:scale-[1.01]"
+                                className="flex flex-col sm:flex-row gap-3 md:gap-4 p-4 md:p-5 rounded-2xl cursor-pointer transition-all hover:scale-[1.01]"
                                 style={{ background: isDark ? "rgba(255,255,255,0.04)" : "#F8FAFC", border: `1px solid ${cfg.border}`, boxShadow: `0 4px 16px ${cfg.color}15` }}
                                 onClick={() => { setSelectedVisit(v); setShowDrawer(true); }}>
-                                <div className="flex flex-col items-center gap-1 flex-shrink-0 w-16 text-center">
-                                  <span className="text-lg font-black" style={{ color: cfg.text }}>{formatTime(v.visit_date)}</span>
-                                  <span className="text-[9px] font-bold px-2 py-0.5 rounded-full" style={{ background: cfg.bg, color: cfg.text }}>{cfg.label}</span>
+
+                                <div className="flex sm:flex-col items-center sm:justify-start gap-2 flex-shrink-0 sm:w-20 sm:text-center">
+                                  <span className="text-base sm:text-lg font-black" style={{ color: cfg.text }}>{formatTime(v.visit_date)}</span>
+                                  <span className="text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ml-auto sm:ml-0" style={{ background: cfg.bg, color: cfg.text }}>{cfg.label}</span>
                                 </div>
-                                <div className="w-px self-stretch" style={{ background: cfg.border }} />
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-start justify-between gap-2">
+
+                                <div className="hidden sm:block w-px self-stretch" style={{ background: cfg.border }} />
+
+                                <div className="flex-1 min-w-0 mt-1 sm:mt-0">
+                                  <div className="flex items-start justify-between gap-3">
                                     <div>
-                                      <h4 className="font-bold text-sm" style={{ color: isDark ? "#fff" : "#1A1A1A" }}>{v.lead_name || `Lead #${v.lead_id}`}</h4>
-                                      <p className="text-xs mt-0.5" style={{ color: isDark ? "rgba(255,255,255,0.4)" : "#6B7280" }}>{v.lead_phone || lead?.phone || "—"}</p>
+                                      <h4 className="font-bold text-[15px]" style={{ color: isDark ? "#fff" : "#1A1A1A" }}>{v.lead_name || `Lead #${v.lead_id}`}</h4>
+                                      <p className="text-[13px] mt-0.5 font-medium" style={{ color: isDark ? "rgba(255,255,255,0.4)" : "#6B7280" }}>{v.lead_phone || lead?.phone || "—"}</p>
                                     </div>
-                                    <FaEye style={{ color: isDark ? "#555" : "#D1D5DB", flexShrink: 0, marginTop: 2 }} />
+                                    <FaEye className="text-sm sm:text-base mt-1" style={{ color: isDark ? "#555" : "#D1D5DB", flexShrink: 0 }} />
                                   </div>
-                                  <div className="flex items-center gap-3 mt-2 flex-wrap">
-                                    <span className="text-[10px] font-semibold flex items-center gap-1" style={{ color: isDark ? "rgba(255,255,255,0.5)" : "#9CA3AF" }}>
-                                      <FaUser style={{ fontSize: 9 }} /> {v.created_by}
+                                  <div className="flex items-center gap-2.5 mt-3 flex-wrap">
+                                    <span className="text-[11px] font-semibold flex items-center gap-1.5" style={{ color: isDark ? "rgba(255,255,255,0.5)" : "#9CA3AF" }}>
+                                      <FaUser className="text-[10px]" /> {v.created_by}
                                     </span>
-                                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{ background: "rgba(158,33,123,0.12)", color: "#d946a8" }}>{v.role}</span>
-                                    {v.notes && <span className="text-[10px]" style={{ color: isDark ? "rgba(255,255,255,0.35)" : "#9CA3AF" }}>📝 {v.notes}</span>}
+                                    <span className="text-[9px] font-bold px-2 py-1 rounded-md uppercase tracking-wider" style={{ background: "rgba(158,33,123,0.12)", color: "#d946a8" }}>{v.role}</span>
+                                    {v.notes && <span className="text-[11px] font-medium" style={{ color: isDark ? "rgba(255,255,255,0.35)" : "#9CA3AF" }}>📝 {v.notes}</span>}
                                   </div>
                                 </div>
                               </motion.div>
@@ -996,15 +1051,17 @@ export default function SiteVisitOverview({
                 })()}
               </motion.div>
             </AnimatePresence>
+
             {/* Legend */}
-            <div className="flex items-center gap-5 px-6 py-4 flex-wrap" style={{ borderTop: isDark ? "1px solid rgba(255,255,255,0.05)" : `1px solid ${GRID_LINE_LIGHT}` }}>
+            <div className="flex justify-center sm:justify-start items-center gap-4 md:gap-5 px-4 md:px-6 py-4 flex-wrap" style={{ borderTop: isDark ? "1px solid rgba(255,255,255,0.05)" : `1px solid ${GRID_LINE_LIGHT}` }}>
               {Object.entries(STATUS_CONFIG).map(([key, cfg]) => (
                 <div key={key} className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full" style={{ background: cfg.color }} />
-                  <span className="text-xs font-semibold" style={{ color: isDark ? "rgba(255,255,255,0.5)" : "#6B7280" }}>{cfg.label}</span>
+                  <div className="w-2.5 h-2.5 rounded-full" style={{ background: cfg.color }} />
+                  <span className="text-[11px] md:text-xs font-semibold" style={{ color: isDark ? "rgba(255,255,255,0.5)" : "#6B7280" }}>{cfg.label}</span>
                 </div>
               ))}
             </div>
+
           </div>
         </div>
       </div>

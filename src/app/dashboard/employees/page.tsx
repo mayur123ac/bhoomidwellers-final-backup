@@ -40,6 +40,7 @@ import AttendanceTimerWidget from "@/components/AttendanceTimerWidget";
 import LoginTimerWidget from "@/components/LoginTimerWidget";
 import AttendanceBadge from "@/components/AttendanceBadge";
 import { useAttendance } from "@/components/AttendanceContext";
+import AdminAssistantDock from "@/components/AdminAssistantDock";
 
 type RoleType = { _id: string; name: string };
 type EmployeeType = {
@@ -1196,7 +1197,7 @@ export default function EmployeesPage() {
             className={`font-bold text-lg tracking-wide flex items-center gap-3 ${aiHeader ? "" : t.headerTitle}`}
             style={aiHeader ? { color: "#E3E3E3" } : undefined}
           >
-            <img src="/assets/bhoomidwellersLogo_trans.png" alt="Bhoomi CRM" className="h-20 md:h-18 w-auto object-contain -ml-2" />
+            <img src="/assets/bhoomidwellers.png" alt="Bhoomi CRM" className="h-20 md:h-18 w-auto object-contain -ml-2" />
             <span
               className={`text-xs sm:text-sm font-normal ${aiHeader ? "" : t.textFaint}`}
               style={aiHeader ? { color: "#C4C7C5" } : undefined}
@@ -1405,7 +1406,10 @@ export default function EmployeesPage() {
                           <FiHelpCircle className={`w-4 h-4 ${t.textMuted} group-hover:${t.text}`} />
                           <span className="text-[13px] font-medium">Help & Support</span>
                         </div>
-                        <FiChevronRight className={`w-3.5 h-3.5 ${t.textMuted}`} />
+                        {/* <FiChevronRight className={`w-3.5 h-3.5 ${theme.textMuted}`} /> */}<span className={`px-2 py-0.5 rounded-md text-[8px] font-small border ${isDark
+                          ? "bg-white/10 text-white/60 border-white/10"
+                          : "bg-gray-100 text-gray-600 border-gray-200"
+                          }`}>Coming Soon</span>
                       </button>
                     </div>
 
@@ -2498,6 +2502,7 @@ export default function EmployeesPage() {
           50% { opacity: 0.55; }
         }
       `}} />
+      <AdminAssistantDock theme={t} isDark={isDark} />
     </div>
   );
 }

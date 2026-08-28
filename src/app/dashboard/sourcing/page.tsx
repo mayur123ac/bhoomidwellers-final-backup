@@ -28,7 +28,7 @@ import WhatsAppSettingsCard from "@/components/WhatsAppSettingsCard";
 import UserAvatar from "@/components/UserAvatar";
 import HeaderClock from "@/components/HeaderClock";
 import AppHeader, { HeaderControl, AppLogo } from "@/components/AppHeader";
-
+import { APP_HEADER_HEIGHT, APP_HEADER_PADDING } from "@/components/AppHeader";
 /**
  * The theme object two panels on this page are given.
  *
@@ -255,6 +255,7 @@ export default function SourcingManagerDashboard() {
             isDark={isDark}
             context={NAV_ITEMS.find(n => n.id === activeTab)?.title || "Settings"}
             role={user?.role || "Sourcing Manager"}
+
           >
             {/* Removed the redundant extra logo and fixed the duplicated wrapper div */}
             <div className="flex items-center gap-1.5 md:gap-2 relative" ref={topbarRef}>

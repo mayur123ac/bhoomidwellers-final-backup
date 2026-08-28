@@ -105,19 +105,22 @@ function savePosition(ns: string, pos: Position) {
 function defaultPosition(): Position {
   const vw = typeof window !== "undefined" ? window.innerWidth : 1024;
   const vh = typeof window !== "undefined" ? window.innerHeight : 768;
+  const mobileBottomNavOffset = vw < 768 ? 64 : 0;
   return {
     x: vw - BTN_SIZE - EDGE_MARGIN,
-    y: vh - BTN_SIZE - 100,
+    y: vh - BTN_SIZE - 100 - mobileBottomNavOffset,
   };
 }
 
-/** Compute where the button should dock (bottom-right safe area). */
+/** Compute where the button should dock (bottom-right safe area).
+ *  On mobile (< 768px), add extra offset to clear the bottom navigation bar. */
 export function computeDockTarget(): Position {
   const vw = typeof window !== "undefined" ? window.innerWidth : 1024;
   const vh = typeof window !== "undefined" ? window.innerHeight : 768;
+  const mobileBottomNavOffset = vw < 768 ? 64 : 0;
   return {
     x: vw - BTN_SIZE - EDGE_MARGIN - 4,
-    y: vh - BTN_SIZE - EDGE_MARGIN - 8,
+    y: vh - BTN_SIZE - EDGE_MARGIN - 8 - mobileBottomNavOffset,
   };
 }
 
@@ -133,6 +136,7 @@ export default function AdminAssistantLauncher({
   onDockComplete,
   fading = false,
 }: Props) {
+  const [mounted, setMounted] = useState(false);
   const [mood, setMood] = useState<Mood>("neutral");
   const [pos, setPos] = useState<Position>(() => {
     if (typeof window === "undefined") return { x: 0, y: 0 };
@@ -145,6 +149,11 @@ export default function AdminAssistantLauncher({
   const [idle, setIdle] = useState(false);
   const [pressed, setPressed] = useState(false);
   const [isDocking, setIsDocking] = useState(false);
+
+  // Defer rendering until after mount so the position is computed with the real
+  // viewport size, avoiding an SSR hydration mismatch that can leave the button
+  // stuck at (0,0) behind the sidebar.
+  useEffect(() => { setMounted(true); }, []);
 
   const btnRef = useRef<HTMLButtonElement>(null);
   const dragState = useRef<{
@@ -296,6 +305,9 @@ export default function AdminAssistantLauncher({
     resetIdle();
   }, [pos, onOpen, storageNamespace, resetIdle]);
 
+  // Don't render during SSR — position depends on viewport dimensions.
+  if (!mounted) return null;
+
   return (
     <>
       <style>{CSS}</style>
@@ -315,7 +327,7 @@ export default function AdminAssistantLauncher({
         data-docking={isDocking || undefined}
         data-fading={fading || undefined}
         data-idle={idle && !dragging && !pressed && !isDocking ? "" : undefined}
-        className="fab-btn fixed z-50 grid place-items-center touch-none select-none"
+        className="fab-btn fixed z-[60] grid place-items-center touch-none select-none"
         style={{
           left: pos.x,
           top: pos.y,

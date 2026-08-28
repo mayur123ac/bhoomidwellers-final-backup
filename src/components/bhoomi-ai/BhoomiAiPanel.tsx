@@ -202,14 +202,14 @@ export default function BhoomiAiPanel({ isDark, t, user }: Props) {
       </header>
 
       {/* ── Main Canvas (Flex layout handles smooth translation of composer) ── */}
-      <div className="flex-1 flex flex-col relative z-10 px-4 sm:px-6 w-full max-w-4xl mx-auto">
+      <div className="flex-1 min-h-0 flex flex-col relative z-10 px-4 sm:px-6 w-full max-w-4xl mx-auto">
 
         {/* Spacer to push content down when empty */}
         {empty && <div className="flex-1" />}
 
         {/* Scrollable Conversation Area (Hidden when empty) */}
         {!empty && (
-          <div ref={scrollRef} className="flex-1 overflow-y-auto custom-scrollbar scroll-smooth pt-4 pb-8">
+          <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto custom-scrollbar scroll-smooth pt-4 pb-8">
             <div className="flex flex-col space-y-8">
               <AnimatePresence initial={false}>
                 {turns.map((turn, i) => (

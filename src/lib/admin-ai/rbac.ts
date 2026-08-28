@@ -36,7 +36,7 @@ import { getOrganizationId } from "../tenantContext";
  * Adding a role here is therefore still a real decision: it is only safe while
  * every handler in services.ts consults `canReadAllRecords`.
  */
-const AI_ROLES = ["admin", "site head", "receptionist"];
+const AI_ROLES = ["admin", "site head", "receptionist", "sales manager"];
 
 export function canUseAdminAi(role: unknown): boolean {
   return AI_ROLES.includes(normalizeRole(role));
@@ -134,7 +134,7 @@ export async function authorizeAiRequest(): Promise<AiAuthResult> {
   }
 
   const role = normalizeRole(session.role);
-  const canReadAllRecords = role === "admin";
+  const canReadAllRecords = role === "admin" || role === "site head";
   const userName = String(session.name ?? "").trim();
 
   // A non-admin scope is only safe because it carries a name to filter on. An

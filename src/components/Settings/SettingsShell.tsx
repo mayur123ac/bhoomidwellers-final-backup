@@ -449,13 +449,13 @@ export default function SettingsShell({ children }: { children: React.ReactNode 
             adminItems={railForRole(user?.role)}
             adminGroups={RAIL_GROUPS}
             adminLogoSrc="/assets/logobrowser_trans.svg"
-            // Settings has no bottom nav bar, so the rail stays on at every width
-            // — the body already reserves 72px for it unconditionally.
-            hideOnMobile={false}
+            // On mobile, hide the global rail — the settings local nav drawer
+            // (opened by the header's leading button) provides navigation instead.
+            hideOnMobile={true}
           />
 
           {/* ── Main ── */}
-          <div className="flex-1 flex flex-col pl-[72px] h-screen overflow-hidden">
+          <div className="flex-1 flex flex-col md:pl-[72px] h-screen overflow-hidden">
             {/* ── Global header ──
               The bar is now the shared AppHeader; only the page context and the
               controls below are Settings' own. Every control keeps the handler
@@ -605,7 +605,10 @@ export default function SettingsShell({ children }: { children: React.ReactNode 
                               <FiHelpCircle className={`w-4 h-4 ${isDark ? "text-white/60" : "text-black/60"} group-hover:${isDark ? "text-white" : "text-black"}`} />
                               <span className="text-[13px] font-medium">Help & Support</span>
                             </div>
-                            <FiChevronRight className={`w-3.5 h-3.5 ${isDark ? "text-white/60" : "text-black/60"}`} />
+                            {/* <FiChevronRight className={`w-3.5 h-3.5 ${theme.textMuted}`} /> */}<span className={`px-2 py-0.5 rounded-md text-[8px] font-small border ${isDark
+                              ? "bg-white/10 text-white/60 border-white/10"
+                              : "bg-gray-100 text-gray-600 border-gray-200"
+                              }`}>Coming Soon</span>
                           </button>
                         </div>
 
@@ -690,6 +693,17 @@ export default function SettingsShell({ children }: { children: React.ReactNode 
                   </button>
                 </div>
                 {localNav}
+                {/* Mobile: Back to Dashboard link since the global rail is hidden */}
+                <div className="md:hidden px-4 py-3 border-t" style={{ borderColor: T.border }}>
+                  <Link
+                    href="/dashboard/sales"
+                    className="flex items-center gap-2 text-sm font-semibold rounded-lg px-3 py-2.5 transition-colors"
+                    style={{ color: T.teal }}
+                    onClick={() => setDrawerOpen(false)}
+                  >
+                    ← Back to Dashboard
+                  </Link>
+                </div>
               </div>
             </div>
           )}

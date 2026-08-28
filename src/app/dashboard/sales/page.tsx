@@ -5,6 +5,7 @@
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { useActivityTracker, emitActivity } from "@/hooks/useActivityTracker";
 import SalesSidebar, { SALES_NAV } from "@/components/sales/SalesSidebar";
+import MobileNavDrawer from "@/components/sales/MobileNavDrawer";
 import { useFeaturePrefs } from "@/hooks/useFeaturePrefs";
 import { compareLeads } from "@/lib/featurePrefs";
 import { useRouter } from "next/navigation";
@@ -20,9 +21,10 @@ import {
   Lightbulb, ClipboardList, Wifi, CheckCircle, XCircle, HelpCircle,
   Clock, MapPin, Zap, TrendingUp, Home, Building2, Globe, Star,
   Share2, Image, Banknote, Users, BadgeCheck, CalendarCheck, Ghost,
-  ArrowRight, Target, BrainCircuit, Flame, ChevronLeft, ChevronRight, ChevronDown, Trash2
+  ArrowRight, Target, BrainCircuit, Flame, ChevronLeft, ChevronRight, ChevronDown, Trash2,
+  Menu, MoreVertical
 } from "lucide-react";
-
+import { FiUser, FiHelpCircle, FiLogOut, FiChevronRight } from "react-icons/fi";
 import {
   FaThLarge, FaCog, FaFileInvoice,
   FaChevronLeft, FaCheckCircle, FaPaperPlane, FaTimes, FaPhoneAlt,
@@ -66,6 +68,8 @@ import {
 } from "@/lib/hooks/useNotificationFeed";
 import NotificationPopover from "@/components/notifications/NotificationPopover";
 import NotificationCenterView from "@/components/notifications/NotificationCenterView";
+import BhoomiAiPanel from "@/components/bhoomi-ai/BhoomiAiPanel";
+import { CRMContextManager } from "@/lib/admin-ai/contextManager";
 
 const SiteVisitOverview = dynamic(() => import("../../dashboard/SiteVisitOverview"), { ssr: false });
 
@@ -459,6 +463,7 @@ export default function SalesDashboard() {
     return t.statusAssigned;
   };
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [user, setUser] = useState({ name: "Loading...", role: "Sales Manager", email: "", password: "" });
   const [activeView, setActiveView] = useState("overview");
   const [showPassword, setShowPassword] = useState(false);
@@ -690,31 +695,28 @@ export default function SalesDashboard() {
       <div className="flex-1 flex flex-col h-full overflow-hidden relative md:ml-[72px]">
 
 
-        {/* HEADER — the shared global bar. Every control below keeps its own
-            handler, popup and state; only the frame, the page context and the
-            control chrome are now common with the rest of the CRM. */}
+        {/* HEADER — responsive: compact on mobile, full on desktop */}
         <AppHeader
           isDark={isDark}
           context={SALES_CONTEXT[activeView] ?? SALES_CONTEXT.overview}
           role={user?.role || "Sales Manager"}
+          logoSrc="/assets/bhoomidwellers.png"
         >
-          <div className="flex items-center gap-2 relative" ref={topbarRef}>
-            {/* <LoginTimerWidget isDark={isDark} /> */}
-            {/* Compact Login/Logout punch control. Clicking "Login" hits
-                POST /api/attendance/mark directly (no navigation); once
-                marked it shows the live elapsed timer and clicking it runs
-                the same logout flow as the profile menu. */}
-            <AttendanceBadge
-              timeIn={timeIn}
-              isMarkedPresent={isMarkedPresent}
-              onLogout={handleLogout} />
+          <div className="flex items-center gap-1 sm:gap-2 relative" ref={topbarRef}>
+            {/* Attendance badge — hidden on very small screens, shown sm+ */}
+            <div className="hidden sm:block">
+              <AttendanceBadge
+                timeIn={timeIn}
+                isMarkedPresent={isMarkedPresent}
+                onLogout={handleLogout} />
+            </div>
 
-            {/* ── Theme Toggle ── */}
+            {/* Theme Toggle — hidden on mobile, in hamburger menu */}
             <button
               onClick={toggleTheme}
               aria-pressed={isDark}
               aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
-              className={`h-9 w-9 flex-shrink-0 rounded-lg border flex items-center justify-center transition-colors duration-150 cursor-pointer ${t.toggleWrap}`}
+              className={`hidden sm:flex h-9 w-9 flex-shrink-0 rounded-lg border items-center justify-center transition-colors duration-150 cursor-pointer ${t.toggleWrap}`}
             >
               {isDark ? <SunIcon /> : <MoonIcon />}
             </button>
@@ -725,7 +727,7 @@ export default function SalesDashboard() {
                 onClick={() => { setActivePopup(activePopup === "visit" ? null : "visit"); }}
                 className={`relative h-9 w-9 flex-shrink-0 rounded-lg border flex items-center justify-center transition-colors duration-150 cursor-pointer ${t.toggleWrap} hover:border-orange-500/50 ${t.textMuted}`}
               >
-                <FaCalendarAlt className="text-sm sm:text-base" />
+                <FaCalendarAlt className="text-sm" />
                 {visitNotificationLeads.length > 0 && (
                   <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 bg-orange-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center">
                     {visitNotificationLeads.length > 9 ? "9+" : visitNotificationLeads.length}
@@ -739,10 +741,8 @@ export default function SalesDashboard() {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: -6, scale: 0.98 }}
                     transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-                    className={`absolute top-12 right-[-40] sm:right-0 w-72 sm:w-80 rounded-xl shadow-2xl z-50 overflow-hidden border ${t.dropdown}`} style={t.dropdownGlass}
+                    className={`absolute top-12 -right-2 sm:right-0 w-[calc(100vw-24px)] sm:w-80 max-w-[320px] rounded-xl shadow-2xl z-50 overflow-hidden border ${t.dropdown}`} style={t.dropdownGlass}
                   >
-                    {/* Three at most, sorted by the closest visit first, and no
-                        internal scrollbar. The footer carries the real count. */}
                     <NotificationPopover
                       title="Site Visit Reminders"
                       caption="Scheduled for today & tomorrow"
@@ -754,9 +754,6 @@ export default function SalesDashboard() {
                       onDismiss={(n) => notifications.dismiss(n.id)}
                       onSeeAll={() => seeAllNotifications("site_visit")}
                       renderDetail={(n) => {
-                        // Property and budget are display extras the feed does
-                        // not carry; they come from this page's own
-                        // organization-scoped lead list, matched by id.
                         const lead: any = leadById(n.leadId);
                         if (!lead) return null;
                         return (
@@ -782,7 +779,7 @@ export default function SalesDashboard() {
                 onClick={() => { setActivePopup(activePopup === "notifications" ? null : "notifications"); }}
                 className={`relative h-9 w-9 flex-shrink-0 rounded-lg border flex items-center justify-center transition-colors duration-150 cursor-pointer ${t.toggleWrap} hover:border-purple-500/50 ${t.textMuted}`}
               >
-                <FaBell className="text-sm sm:text-base" />
+                <FaBell className="text-sm" />
                 {followUpLeads.length > 0 && (
                   <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 bg-red-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center">
                     {followUpLeads.length > 9 ? "9+" : followUpLeads.length}
@@ -796,11 +793,8 @@ export default function SalesDashboard() {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: -6, scale: 0.98 }}
                     transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-                    className={`absolute top-12 right-0 sm:right-0 w-72 sm:w-80 rounded-xl shadow-2xl z-50 overflow-hidden border ${t.dropdown}`} style={t.dropdownGlass}
+                    className={`absolute top-12 -right-2 sm:right-0 w-[calc(100vw-24px)] sm:w-80 max-w-[320px] rounded-xl shadow-2xl z-50 overflow-hidden border ${t.dropdown}`} style={t.dropdownGlass}
                   >
-                    {/* Three at most, sorted by the highest daysSince first. The
-                        list itself no longer scrolls — the footer opens the
-                        Notification Center, which does. */}
                     <NotificationPopover
                       title="Follow-up Reminders"
                       caption="Leads with no activity in 2+ days"
@@ -812,12 +806,6 @@ export default function SalesDashboard() {
                       onDismiss={(n) => notifications.dismiss(n.id)}
                       onSeeAll={() => seeAllNotifications("follow_up")}
                       renderDetail={(n) => {
-                        // Property and budget are display extras the feed does
-                        // not carry; they come from this page's own
-                        // organization-scoped lead list, matched by id. The
-                        // interest badge DOES come from the feed, so the badge
-                        // and the exclusion rule that hides "Not Interested"
-                        // leads read the same value.
                         const lead: any = leadById(n.leadId);
                         return (
                           <>
@@ -848,8 +836,8 @@ export default function SalesDashboard() {
               </AnimatePresence>
             </div>
 
-            {/* Profile */}
-            <div className="relative">
+            {/* Profile — hidden on mobile (accessible in hamburger) */}
+            <div className="relative hidden sm:block">
               <div
                 onClick={() => { setActivePopup(activePopup === "profile" ? null : "profile"); }}
                 className={`h-9 w-9 flex-shrink-0 rounded-full flex items-center justify-center overflow-hidden font-semibold text-[13px] cursor-pointer border transition-colors duration-150 ${isDark
@@ -857,40 +845,94 @@ export default function SalesDashboard() {
                   : "border border-[#00AEEF]/40 bg-[#9E217B]/20 text-[#d946a8]"
                   }`}
               >
-                <UserAvatar name={user?.name} fallbackNode={<FaUserCircle className="text-lg sm:text-lg" />} alt="" />
+                <UserAvatar name={user?.name} fallbackNode={<FaUserCircle className="text-lg" />} alt="" />
               </div>
               <AnimatePresence>
                 {activePopup === "profile" && (
                   <motion.div
-                    initial={{ opacity: 0, y: -8, scale: 0.98 }}
+                    initial={{ opacity: 0, y: 8, scale: 0.98 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: -6, scale: 0.98 }}
-                    transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-                    className={`absolute top-12 right-0 w-64 rounded-xl shadow-2xl p-3 z-50 border ${t.dropdown}`} style={t.dropdownGlass}
+                    exit={{ opacity: 0, y: 8, scale: 0.98 }}
+                    transition={{ duration: 0.18, ease: "easeOut" }}
+                    className={`absolute top-12 right-0 w-[250px] rounded-[20px] p-4 z-[200] border shadow-2xl ${isDark ? "bg-[#1C1C1E]/95 border-white/10" : "bg-white/95 border-black/5"
+                      }`}
+                    style={{ backdropFilter: "blur(24px) saturate(180%)" }}
                   >
-                    <div className="mb-4">
-                      <h3 className={`font-bold text-lg ${t.text}`}>{user.name}</h3>
-                      <p className={`text-sm truncate ${t.textMuted}`}>{user.email}</p>
-                    </div>
-                    <hr className={`mb-4 border-0 border-t ${t.tableBorder}`} />
-                    <div className="space-y-4 mb-6 text-sm">
-                      <p className={`flex justify-between items-center ${t.textMuted}`}>
-                        Role:
-                        <span className={`font-bold capitalize px-2 py-0.5 rounded text-xs ${isDark ? "text-purple-400 bg-purple-500/10 border border-purple-500/30" : "text-[#00AEEF] bg-[#00AEEF]/10 border border-[#00AEEF]/30"}`}>{user?.role}</span>
-                      </p>
-                      <div>
-                        <p className={`text-xs mb-1 ${t.textFaint}`}>Password</p>
-                        <div className={`flex items-center justify-between p-2 rounded-md border ${t.settingsBg}`} style={t.settingsBgGl}>
-                          <span className={`font-mono tracking-widest text-xs ${t.text}`}>{showPassword ? user.password : "••••••••"}</span>
-                          <button onClick={() => setShowPassword(!showPassword)} className={`${t.textFaint} cursor-pointer hover:text-current`}><FaEyeSlash /></button>
-                        </div>
+                    <div className="flex items-center gap-3 mb-3">
+                      <div
+                        className={`w-10 h-10 rounded-full flex items-center justify-center text-[17px] font-semibold flex-shrink-0 ${isDark ? "bg-[#9E217B]/20 text-[#d946a8]" : "bg-purple-100 text-purple-900"
+                          }`}
+                      >
+                        {(user?.name || "User").charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex flex-col overflow-hidden">
+                        <p className={`font-semibold text-[14px] tracking-tight truncate leading-tight ${t.text}`}>
+                          {user?.name || "User"}
+                        </p>
+                        <p className={`text-[12px] truncate mt-[1px] ${t.textMuted}`}>
+                          {user?.email || "No email"}
+                        </p>
                       </div>
                     </div>
-                    <button onClick={handleLogout} className={`w-full py-2.5 rounded-lg font-semibold transition-colors cursor-pointer ${t.btnDanger}`}>Logout</button>
+                    <div className="flex items-center gap-3 mb-4">
+                      <span
+                        className={`px-2 py-0.5 rounded text-[11px] font-medium border capitalize ${isDark
+                          ? "bg-[#9E217B]/10 text-[#d946a8] border-[#9E217B]/30"
+                          : "bg-purple-50 text-purple-800 border-purple-200"
+                          }`}
+                      >
+                        {user?.role || "Role"}
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"></span>
+                        <span className={`text-[12px] font-medium ${t.textMuted}`}>Active</span>
+                      </div>
+                    </div>
+                    <hr className={`-mx-4 border-0 border-t ${isDark ? "border-white/10" : "border-black/5"}`} />
+                    <div className="flex flex-col py-1.5">
+                      <button
+                        onClick={() => { setActivePopup(null); router.push("/dashboard/settings/profile"); }}
+                        className={`w-full flex items-center justify-between py-2.5 px-2 -mx-2 rounded-xl transition-colors cursor-pointer group ${isDark ? "hover:bg-white/5" : "hover:bg-black/[0.04]"}`}
+                      >
+                        <div className={`flex items-center gap-2.5 ${t.text}`}>
+                          <FiUser className={`w-4 h-4 ${t.textMuted}`} />
+                          <span className="text-[13px] font-medium">Account Settings</span>
+                        </div>
+                        <FiChevronRight className={`w-3.5 h-3.5 ${t.textMuted}`} />
+                      </button>
+                      <hr className={`border-0 border-t my-0.5 ${isDark ? "border-white/10" : "border-black/5"}`} />
+                      <button
+                        onClick={() => { setActivePopup(null); }}
+                        className={`w-full flex items-center justify-between py-2.5 px-2 -mx-2 rounded-xl transition-colors cursor-pointer group ${isDark ? "hover:bg-white/5" : "hover:bg-black/[0.04]"}`}
+                      >
+                        <div className={`flex items-center gap-2.5 ${t.text}`}>
+                          <FiHelpCircle className={`w-4 h-4 ${t.textMuted}`} />
+                          <span className="text-[13px] font-medium">Help & Support</span>
+                        </div>
+                        <span className={`px-2 py-0.5 rounded-md text-[8px] font-small border ${isDark ? "bg-white/10 text-white/60 border-white/10" : "bg-gray-100 text-gray-600 border-gray-200"}`}>Coming Soon</span>
+                      </button>
+                    </div>
+                    <hr className={`-mx-4 border-0 border-t mb-2.5 mt-1 ${isDark ? "border-white/10" : "border-black/5"}`} />
+                    <button
+                      onClick={handleLogout}
+                      className={`w-full flex items-center gap-2.5 py-2.5 px-3 rounded-[12px] font-semibold text-[13px] transition-colors cursor-pointer ${isDark ? "text-red-400 bg-red-500/10 hover:bg-red-500/20" : "text-red-600 bg-red-50 hover:bg-red-100"}`}
+                    >
+                      <FiLogOut className="w-4 h-4" />
+                      Log Out
+                    </button>
                   </motion.div>
                 )}
               </AnimatePresence>
             </div>
+
+            {/* Hamburger — mobile only */}
+            <button
+              onClick={() => setMobileDrawerOpen(true)}
+              className={`md:hidden h-9 w-9 flex-shrink-0 rounded-lg border flex items-center justify-center transition-colors duration-150 cursor-pointer ${t.toggleWrap}`}
+              aria-label="Open navigation menu"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
           </div>
         </AppHeader>
 
@@ -958,24 +1000,43 @@ export default function SalesDashboard() {
         </main>
       </div>
 
-      {/* ── BOTTOM NAV (MOBILE) ── */}
-      <nav className={`md:hidden flex w-full h-16 sm:h-20 border-t items-center justify-around flex-shrink-0 z-40 pb-2 sm:pb-0 ${t.sidebar}`}>
+      {/* ── MOBILE NAV DRAWER ── */}
+      <MobileNavDrawer
+        open={mobileDrawerOpen}
+        onClose={() => setMobileDrawerOpen(false)}
+        activeId={activeView === "detail" ? "forms" : activeView}
+        onSelect={(item) => {
+          if (item.id === "settings") { router.push("/dashboard/settings/profile"); return; }
+          setActiveView(item.id);
+        }}
+        isDark={isDark}
+        userName={user?.name}
+        userRole={user?.role}
+        onToggleTheme={toggleTheme}
+        isMarkedPresent={isMarkedPresent}
+        timeIn={timeIn}
+      />
+
+      {/* ── BOTTOM NAV (MOBILE) — simplified to 4 core items ── */}
+      {/* <nav className={`hidden md:flex  w-full border-t items-center justify-around flex-shrink-0 z-40 ${t.sidebar}`}
+        style={{ height: "calc(56px + env(safe-area-inset-bottom))", paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
         {[
-          { view: "overview", icon: <FaThLarge className="w-5 h-5 sm:w-6 sm:h-6" />, title: "Dashboard" },
-          { view: "forms", icon: <FaFileInvoice className="w-5 h-5 sm:w-6 sm:h-6" />, title: "Assigned" },
-          { view: "closed-leads", icon: <FaCheckCircle className="w-5 h-5 sm:w-6 sm:h-6" />, title: "Closed" },
-          { view: "inventory", icon: <FaBuilding className="w-5 h-5 sm:w-6 sm:h-6" />, title: "Inventory" },
-          { view: "site_visits", icon: <FaCalendarAlt className="w-5 h-5 sm:w-6 sm:h-6" />, title: "Visits" },
-          { view: "attendance", icon: <FaClock className="w-5 h-5" />, title: "My Attendance" },
-          { view: "assistant", icon: <FaRobot className="w-5 h-5 sm:w-6 sm:h-6" />, title: "AI" },
-        ].map(({ view, icon, title }) => (
-          <div key={view} onClick={() => setActiveView(view)} className="relative flex flex-col justify-center items-center h-full flex-1 cursor-pointer" title={title}>
-            {(activeView === view || (view === "forms" && activeView === "detail")) &&
-              <div className={`absolute top-0 left-1/2 -translate-x-1/2 h-1 w-8 rounded-b ${t.navIndicator}`} />}
-            <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center transition-colors ${activeView === view || (view === "forms" && activeView === "detail") ? t.navActive : t.navInactive}`}>{icon}</div>
-          </div>
-        ))}
-      </nav>
+          { view: "overview", icon: <FaThLarge className="w-5 h-5" />, title: "Home" },
+          { view: "forms", icon: <FaFileInvoice className="w-5 h-5" />, title: "Leads" },
+          { view: "inventory", icon: <FaBuilding className="w-5 h-5" />, title: "Inventory" },
+          { view: "assistant", icon: <FaRobot className="w-5 h-5" />, title: "AI" },
+        ].map(({ view, icon, title }) => {
+          const isActive = activeView === view || (view === "forms" && (activeView === "detail" || activeView === "closed-leads"));
+          return (
+            <button key={view} onClick={() => setActiveView(view)} className="relative flex flex-col items-center justify-center flex-1 h-full min-w-[44px] min-h-[44px] cursor-pointer" title={title}>
+              {isActive && <div className={`absolute top-0 left-1/2 -translate-x-1/2 h-[3px] w-8 rounded-b ${t.navIndicator}`} />}
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${isActive ? t.navActive : t.navInactive}`}>{icon}</div>
+              <span className={`text-[10px] font-semibold mt-0.5 ${isActive ? "text-[#d946a8]" : isDark ? "text-gray-500" : "text-gray-400"}`}>{title}</span>
+            </button>
+          );
+        })}
+      </nav> */}
 
       <style dangerouslySetInnerHTML={{
         __html: `
@@ -1026,6 +1087,14 @@ export default function SalesDashboard() {
             50%     { transform:translateY(-5px) }
           }
           .animate-bounce { animation: bounce 0.7s infinite }
+
+          /* ── Mobile responsive overrides ── */
+          @media (max-width: 479px) {
+            /* Prevent any element from causing horizontal overflow */
+            .custom-scrollbar { max-width: 100vw; }
+            /* Ensure notification popovers stay on screen */
+            .absolute { max-width: calc(100vw - 16px); }
+          }
         `}} />
     </div>
   );
@@ -1747,13 +1816,15 @@ function SalesManagerView({
                   }`}>{adminUser.role}</span>
               </h1>
               <button
-                className={`text-sm font-semibold flex items-center justify-center w-full sm:w-auto gap-2 cursor-pointer px-4 py-2 rounded-lg transition-all ${t.btnPrimary}`}
+                className={`text-xs sm:text-sm px-1 py-1.5 sm:px-4 sm:py-2 font-semibold flex items-center justify-center w-auto sm:w-24 gap-1.5 sm:gap-2 rounded-md sm:rounded-lg transition-all ${t.btnPrimary}`}
                 onClick={() => refetch()}
-              >↻ Refresh</button>
+              >
+                ↻ Refresh
+              </button>
             </div>
 
             {/* ── 5-CARD STATS GRID ── */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-2 sm:gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-6 gap-2 sm:gap-3">
               {[
                 { label: "Total Enquiries", value: baseManagerLeads.length, sub: `${activeManagerLeads.length} active`, glow: t.statGlow1, textColor: t.text },
                 { label: "Enquiries Attended", value: enquiriesAttended, sub: `of ${activeManagerLeads.length} total`, glow: t.statGlow1, textColor: isDark ? "text-purple-400" : "text-[#00AEEF]" },
@@ -1762,22 +1833,30 @@ function SalesManagerView({
                 { label: "Closing Rate", value: `${closingPct}%`, sub: `${closingLeads.length} of ${activeManagerLeads.length} leads`, glow: t.statGlow5, textColor: isDark ? "text-green-400" : "text-emerald-600" },
                 { label: "Lost Leads", value: lostManagerLeads.length, sub: `${lostRatio}% lost ratio`, glow: "bg-red-500/10", textColor: isDark ? "text-red-300" : "text-red-600" },
               ].map((stat, i) => (
-                <div key={i} className={`rounded-4xl p-4 sm:p-4 shadow-sm border relative overflow-hidden transition-all flex flex-col justify-between ${t.card}`} style={t.cardGlass}>
-                  <div className={`absolute -right-6 -top-6 w-24 h-24 rounded-full blur-2xl pointer-events-none ${stat.glow}`} />
-                  <div className="flex items-start justify-between mb-2">
-                    <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider leading-tight ${t.textFaint}`}>{stat.label}</p>
+                <div key={i} className={`rounded-2xl sm:rounded-4xl px-2.5 py-2 sm:p-4 shadow-sm border relative overflow-hidden transition-all flex flex-col justify-between ${t.card}`} style={t.cardGlass}>
+                  <div className={`absolute -right-4 -top-4 sm:-right-6 sm:-top-6 w-16 h-16 sm:w-24 sm:h-24 rounded-full blur-xl sm:blur-2xl pointer-events-none ${stat.glow}`} />
+
+                  <div className="flex items-start justify-between mb-1 sm:mb-2 gap-1">
+                    <p className={`text-[9px] sm:text-xs font-bold uppercase tracking-wider leading-tight ${t.textFaint}`}>
+                      {stat.label}
+                    </p>
                     {(stat as any).monthSelect && (
                       <select
                         value={selectedMonth} onChange={e => setSelectedMonth(Number(e.target.value))}
-                        className={`text-[9px] rounded px-1.5 py-0.5 outline-none cursor-pointer border flex-shrink-0 ml-1 ${t.selectSmall}`}
+                        className={`text-[8px] sm:text-[10px] rounded px-1 py-0.5 sm:px-1.5 sm:py-1 outline-none cursor-pointer border flex-shrink-0 min-w-[36px] sm:min-w-0 ${t.selectSmall}`}
                       >
                         {MONTH_NAMES.map((m, idx) => <option key={idx} value={idx}>{m.slice(0, 3)}</option>)}
                       </select>
                     )}
                   </div>
+
                   <div>
-                    <p className={`text-2xl sm:text-2xl font-black ${stat.textColor}`}>{isLoading ? "…" : stat.value}</p>
-                    <p className={`text-[10px] mt-1 ${t.textFaint}`}>{stat.sub}</p>
+                    <p className={`text-xl sm:text-2xl font-black ${stat.textColor}`}>
+                      {isLoading ? "…" : stat.value}
+                    </p>
+                    <p className={`text-[9px] sm:text-[10px] mt-0.5 sm:mt-1 leading-tight ${t.textFaint}`}>
+                      {stat.sub}
+                    </p>
                   </div>
                 </div>
               ))}
@@ -1786,32 +1865,32 @@ function SalesManagerView({
             {!isLoading && <DashboardAnalytics leads={baseManagerLeads} isDark={isDark} t={t} />}
 
             {/* Overview table */}
-            <div className={`rounded-4xl border shadow-sm overflow-hidden ${t.tableWrap}`} style={t.tableGlass}>
-              <div className={`p-3 sm:p-3 border-b flex flex-col gap-3 ${t.tableBorder} ${t.modalHeader}`}>
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <h3 className={`font-bold flex items-center gap-2 text-sm sm:text-base ${t.text}`}>
-                    <FaClipboardList className={t.accentText} /> Leads Database
+            <div className={`rounded-2xl sm:rounded-4xl border shadow-sm overflow-hidden ${t.tableWrap}`} style={t.tableGlass}>
+              <div className={`p-2.5 sm:p-3 border-b flex flex-col gap-2 sm:gap-3 ${t.tableBorder} ${t.modalHeader}`}>
+                <div className="flex items-center justify-between flex-wrap gap-1.5 sm:gap-2">
+                  <h3 className={`font-bold flex items-center gap-1.5 sm:gap-2 text-xs sm:text-base ${t.text}`}>
+                    <FaClipboardList className={`text-[11px] sm:text-base ${t.accentText}`} /> Leads Database
                   </h3>
-                  <span className={`text-xs font-bold px-3 py-1 rounded-full border ${t.btnClosingBadge}`}>
+                  <span className={`text-[10px] sm:text-xs font-bold px-2 sm:px-3 py-0.5 sm:py-1 rounded-full border ${t.btnClosingBadge}`}>
                     Total: {filteredDatabaseLeads.length}
                   </span>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
 
-                  <label className={`flex items-center gap-1.5 text-xs font-semibold cursor-pointer select-none border rounded-xl px-3 py-2 ${t.selectSmall}`}>
+                  <label className={`flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs font-semibold cursor-pointer select-none border rounded-lg sm:rounded-xl px-2 sm:px-3 py-1.5 sm:py-2 ${t.selectSmall}`}>
                     <input
                       type="checkbox"
                       checked={showLostLeads}
                       onChange={e => setShowLostLeads(e.target.checked)}
                       disabled={leadStatusFilter !== "all"}
-                      className="accent-[#9E217B] w-3.5 h-3.5 cursor-pointer"
+                      className="accent-[#9E217B] w-3 h-3 sm:w-3.5 sm:h-3.5 cursor-pointer"
                     />
                     Show Lost
                   </label>
                   <select
                     value={columnFilter}
                     onChange={e => setColumnFilter(e.target.value)}
-                    className={`rounded-xl px-3 py-2 text-xs font-semibold outline-none cursor-pointer border ${t.select}`}
+                    className={`rounded-lg sm:rounded-xl px-2 sm:px-3 py-1.5 sm:py-2 text-[10px] sm:text-xs font-semibold outline-none cursor-pointer border ${t.select}`}
                   >
                     <option value="all">All Columns</option>
                     <option value="name">Name</option>
@@ -1821,37 +1900,37 @@ function SalesManagerView({
                     <option value="source">Source</option>
                     <option value="status">Status</option>
                   </select>
-                  <div className="relative flex-1 min-w-[180px]">
-                    <FaSearch className={`absolute left-3 top-1/2 -translate-y-1/2 text-xs ${t.textFaint}`} />
+                  <div className="relative flex-1 min-w-[140px] sm:min-w-[180px]">
+                    <FaSearch className={`absolute left-2.5 sm:left-3 top-1/2 -translate-y-1/2 text-[10px] sm:text-xs ${t.textFaint}`} />
                     <input
                       type="text"
                       placeholder="Search leads..."
                       value={searchTerm}
                       onChange={e => setSearchTerm(e.target.value)}
-                      className={`w-full rounded-xl pl-9 pr-4 py-2 text-sm outline-none transition-colors border ${t.inputBg} ${t.text} ${t.inputFocus}`}
+                      className={`w-full rounded-lg sm:rounded-xl pl-7 sm:pl-9 pr-3 sm:pr-4 py-1.5 sm:py-2 text-xs sm:text-sm outline-none transition-colors border ${t.inputBg} ${t.text} ${t.inputFocus}`}
                     />
                     {searchTerm && (
-                      <button onClick={() => setSearchTerm("")} className={`absolute right-3 top-1/2 -translate-y-1/2 ${t.textFaint} hover:text-red-400`}>
-                        <FaTimes className="text-xs" />
+                      <button onClick={() => setSearchTerm("")} className={`absolute right-2.5 sm:right-3 top-1/2 -translate-y-1/2 ${t.textFaint} hover:text-red-400`}>
+                        <FaTimes className="text-[10px] sm:text-xs" />
                       </button>
                     )}
                   </div>
                 </div>
               </div>
               <div className="overflow-x-auto w-full custom-scrollbar">
-                <table className="w-full text-left text-sm whitespace-nowrap">
+                <table className="w-full text-left text-xs sm:text-sm whitespace-nowrap">
                   <thead className={t.tableHead}>
                     <tr>
                       {["LEAD NO.", "NAME", "PROP. TYPE", "BUDGET", "SOURCE", "CP NAME", "CP COMPANY", "CP PHONE", "STATUS", "LOST STATUS", "INTEREST", "DATE CREATED", "BACKDATED ENTRY", "SITE VISIT", ...(isAdmin ? ["ACTIONS"] : [])].map(h => (
-                        <th key={h} className={`px-4 sm:px-3 py-3 sm:py-2.5 font-bold tracking-wider border-b ${t.textHeader} ${t.tableBorder}`}>{h}</th>
+                        <th key={h} className={`px-2.5 sm:px-3 py-2 sm:py-2.5 text-[9px] sm:text-xs font-bold tracking-wider border-b ${t.textHeader} ${t.tableBorder}`}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody className={`divide-y ${t.tableDivide}`}>
                     {isLoading
-                      ? <tr><td colSpan={isAdmin ? 15 : 14} className={`text-center py-8 ${t.textMuted}`}>Loading...</td></tr>
+                      ? <tr><td colSpan={isAdmin ? 15 : 14} className={`text-center py-6 sm:py-8 text-xs sm:text-sm ${t.textMuted}`}>Loading...</td></tr>
                       : filteredDatabaseLeads.length === 0
-                        ? <tr><td colSpan={isAdmin ? 15 : 14} className={`text-center py-8 ${t.textMuted}`}>No leads found.</td></tr>
+                        ? <tr><td colSpan={isAdmin ? 15 : 14} className={`text-center py-6 sm:py-8 text-xs sm:text-sm ${t.textMuted}`}>No leads found.</td></tr>
                         : filteredDatabaseLeads.map((lead: any) => {
                           const isClosed = lead.status === "Closing" || lead.status === "Completed" || lead.status === "Closed" || lead.closingDate;
                           const isLost = !!lead.is_lost_lead;
@@ -1862,53 +1941,53 @@ function SalesManagerView({
                               setMainView("detail");
                               setSubView("detail");
                             }}>
-                              <td className={`px-4 sm:px-3 py-3 sm:py-2.5 font-bold ${t.accentText}`}>#{lead.sr_no || lead.id}</td>
-                              <td className={`px-4 py-3 sm:py-2.5 font-medium ${t.text}`}>{lead.name}</td>
-                              <td className={`px-4 py-3 sm:py-2.5 ${t.textMuted}`}>{lead.propType || lead.configuration || "Pending"}</td>
-                              <td className={`px-4 py-3 sm:py-2.5 font-semibold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget}</td>
-                              <td className={`px-4 py-3 sm:py-2.5 text-xs ${t.textMuted}`}>{lead.source || "—"}</td>
-                              <td className={`px-4 py-3 sm:py-2.5 ${t.textMuted}`}>{lead.cpName || lead.cp_name || "—"}</td>
-                              <td className={`px-4 py-3 sm:py-2.5 ${t.textMuted}`}>{lead.cpCompany || lead.cp_company || "—"}</td>
-                              <td className={`px-4 py-3 sm:py-2.5 font-mono text-xs ${t.textMuted}`}>{lead.cpPhone || lead.cp_phone || "—"}</td>
-                              <td className="px-4 py-3 sm:py-2.5">
-                                <span className={`px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold uppercase border ${isLost
+                              <td className={`px-2.5 sm:px-3 py-2 sm:py-2.5 text-[11px] sm:text-sm font-bold ${t.accentText}`}>#{lead.sr_no || lead.id}</td>
+                              <td className={`px-2.5 sm:px-4 py-2 sm:py-2.5 text-[11px] sm:text-sm font-medium ${t.text}`}>{lead.name}</td>
+                              <td className={`px-2.5 sm:px-4 py-2 sm:py-2.5 text-[11px] sm:text-sm ${t.textMuted}`}>{lead.propType || lead.configuration || "Pending"}</td>
+                              <td className={`px-2.5 sm:px-4 py-2 sm:py-2.5 text-[11px] sm:text-sm font-semibold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget}</td>
+                              <td className={`px-2.5 sm:px-4 py-2 sm:py-2.5 text-[10px] sm:text-xs ${t.textMuted}`}>{lead.source || "—"}</td>
+                              <td className={`px-2.5 sm:px-4 py-2 sm:py-2.5 text-[11px] sm:text-sm ${t.textMuted}`}>{lead.cpName || lead.cp_name || "—"}</td>
+                              <td className={`px-2.5 sm:px-4 py-2 sm:py-2.5 text-[11px] sm:text-sm ${t.textMuted}`}>{lead.cpCompany || lead.cp_company || "—"}</td>
+                              <td className={`px-2.5 sm:px-4 py-2 sm:py-2.5 font-mono text-[10px] sm:text-xs ${t.textMuted}`}>{lead.cpPhone || lead.cp_phone || "—"}</td>
+                              <td className="px-2.5 sm:px-4 py-2 sm:py-2.5">
+                                <span className={`px-1.5 sm:px-2 py-0.5 rounded-full text-[8px] sm:text-[10px] font-bold uppercase border ${isLost
                                   ? t.statusLost
                                   : isNGD
                                     ? t.statusNGD
                                     : getStatusStyle(lead.status)
                                   }`}>{isLost ? "LOST" : isNGD ? "NGD" : isClosed ? "CLOSED" : (lead.status || "Assigned")}</span>
                               </td>
-                              <td className="px-4 py-3 sm:py-2.5">
+                              <td className="px-2.5 sm:px-4 py-2 sm:py-2.5">
                                 {isLost ? (
-                                  <span className={`px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold uppercase border inline-flex items-center gap-1 ${t.statusLost}`}>
-                                    <Ghost className="w-3 h-3" /> Lost Lead
+                                  <span className={`px-1.5 sm:px-2 py-0.5 rounded-full text-[8px] sm:text-[10px] font-bold uppercase border inline-flex items-center gap-1 ${t.statusLost}`}>
+                                    <Ghost className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> Lost Lead
                                   </span>
-                                ) : <span className={`text-xs font-semibold ${t.textMuted}`}>Active</span>}
+                                ) : <span className={`text-[10px] sm:text-xs font-semibold ${t.textMuted}`}>Active</span>}
                               </td>
-                              <td className="px-4 py-3 sm:py-2.5">
+                              <td className="px-2.5 sm:px-4 py-2 sm:py-2.5">
                                 {lead.leadInterestStatus && lead.leadInterestStatus !== "Pending"
                                   ? <InterestBadge status={lead.leadInterestStatus} size="sm" />
-                                  : <span className={`text-xs italic ${t.textFaint}`}>—</span>}
+                                  : <span className={`text-[10px] sm:text-xs italic ${t.textFaint}`}>—</span>}
                               </td>
-                              <td className={`px-4 py-3 sm:py-2.5 text-xs whitespace-normal min-w-[120px] ${t.textFaint}`}>
+                              <td className={`px-2.5 sm:px-4 py-2 sm:py-2.5 text-[10px] sm:text-xs whitespace-normal min-w-[100px] sm:min-w-[120px] ${t.textFaint}`}>
                                 {formatDate(lead.created_at)}
                               </td>
-                              <td className={`px-4 py-3 sm:py-2.5 text-xs whitespace-normal min-w-[120px] ${t.textFaint}`}>
+                              <td className={`px-2.5 sm:px-4 py-2 sm:py-2.5 text-[10px] sm:text-xs whitespace-normal min-w-[100px] sm:min-w-[120px] ${t.textFaint}`}>
                                 {lead.auto_date_enabled === false && lead.enquiry_date ? formatDate(lead.enquiry_date).split(",")[0] : "-"}
                               </td>
-                              <td className="px-4 sm:px-3 py-3 sm:py-2.5">{lead.mongoVisitDate ? <span className="text-orange-400 font-medium whitespace-nowrap text-xs sm:text-sm">{formatDate(lead.mongoVisitDate).split(",")[0]}</span> : <span className={`text-xs italic ${t.textFaint}`}>Pending</span>}</td>
+                              <td className="px-2.5 sm:px-3 py-2 sm:py-2.5">{lead.mongoVisitDate ? <span className="text-orange-400 font-medium whitespace-nowrap text-[10px] sm:text-sm">{formatDate(lead.mongoVisitDate).split(",")[0]}</span> : <span className={`text-[10px] sm:text-xs italic ${t.textFaint}`}>Pending</span>}</td>
                               {isAdmin && (
-                                <td className="px-4 sm:px-3 py-3 sm:py-2.5" onClick={e => e.stopPropagation()}>
+                                <td className="px-2.5 sm:px-3 py-2 sm:py-2.5" onClick={e => e.stopPropagation()}>
                                   <button
                                     type="button"
                                     onClick={() => openPermanentDeleteDialog(lead)}
                                     title="Delete Permanently"
-                                    className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors cursor-pointer ${isDark
+                                    className={`w-6 h-6 sm:w-8 sm:h-8 flex items-center justify-center rounded-md sm:rounded-lg transition-colors cursor-pointer ${isDark
                                       ? "bg-red-900/20 text-red-300 hover:bg-red-600 hover:text-white"
                                       : "bg-red-50 text-red-600 hover:bg-red-600 hover:text-white"
                                       }`}
                                   >
-                                    <Trash2 className="w-4 h-4" />
+                                    <Trash2 className="w-3 h-3 sm:w-4 sm:h-4" />
                                   </button>
                                 </td>
                               )}
@@ -2032,7 +2111,7 @@ function SalesManagerView({
                       return (
                         <div
                           key={lead.id}
-                          className={`rounded-3xl p-3 sm:p-3 border shadow-sm transition-all group flex flex-col justify-between cursor-pointer h-full ${isLost ? t.cardLost : isClosing ? t.cardClosing : isNGD ? t.cardNGD : t.card}`}
+                          className={`rounded-3xl p-3  sm:p-2 border shadow-sm transition-all group flex flex-col justify-between cursor-pointer h-full ${isLost ? t.cardLost : isClosing ? t.cardClosing : isNGD ? t.cardNGD : t.card}`}
                           style={t.cardGlass}
                           onClick={() => { setSelectedLead(lead); setMainView("detail"); setSubView("detail"); }}
                         >
@@ -2214,59 +2293,49 @@ function SalesManagerView({
             </div>
           ) : (
             <div className="animate-fadeIn w-full flex flex-col gap-2 pb-1">
-              {/* Detail header */}
-              <div className={`flex flex-col md:flex-row md:items-center justify-between gap-2 rounded-xl border p-3 shadow-sm flex-shrink-0 ${selectedLead.is_lost_lead ? t.cardLost : t.card}`} style={t.cardGlass}>
-                <div className="flex items-center gap-3 sm:gap-2 min-w-0">
-                  <button onClick={() => { setMainView("forms"); setSubView("cards"); }} className={`w-9 h-9 sm:w-10 sm:h-10 flex flex-shrink-0 items-center justify-center border rounded-xl transition-colors cursor-pointer shadow-sm ${t.textMuted} ${t.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}><FaChevronLeft className="text-sm" /></button>
-                  <h1 className={`text-[18px] sm:text-[18px] md:text-[18px] font-bold flex items-center gap-2 sm:gap-3 flex-wrap min-w-0 ${t.text}`}>
-                    <span className={t.accentText}>#{selectedLead.sr_no || selectedLead.id}</span>
-                    <span className="truncate max-w-[200px] sm:max-w-none text-[18px]">{selectedLead.name}</span>
-                    {selectedLead.status === "Closing" && (
-                      <span className={`text-[10px] sm:text-[11px] font-bold px-2 sm:px-3 py-1 rounded-full border flex items-center gap-1.5 flex-shrink-0 ${t.statusClosing}`}>
-                        <FaHandshake className="text-xs" /> Closing
-                      </span>
-                    )}
-                    {selectedLead.is_lost_lead && (
-                      <span className={`text-[10px] sm:text-[11px] font-bold px-2 sm:px-3 py-1 rounded-full border flex items-center gap-1.5 flex-shrink-0 ${t.statusLost}`}>
-                        <Ghost className="w-3 h-3" /> Lost Lead
-                      </span>
-                    )}
-                  </h1>
+              {/* Detail header — responsive: stacked on mobile */}
+              <div className={`flex flex-col gap-2 rounded-xl border p-2.5 sm:p-3 shadow-sm flex-shrink-0 ${selectedLead.is_lost_lead ? t.cardLost : t.card}`} style={t.cardGlass}>
+                {/* Row 1: Back + Name + Status */}
+                <div className="flex items-center gap-2 min-w-0">
+                  <button onClick={() => { setMainView("forms"); setSubView("cards"); }} className={`w-9 h-9 flex flex-shrink-0 items-center justify-center border rounded-xl transition-colors cursor-pointer shadow-sm ${t.textMuted} ${t.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}><FaChevronLeft className="text-sm" /></button>
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <span className={`text-base sm:text-lg font-bold flex-shrink-0 ${t.accentText}`}>#{selectedLead.sr_no || selectedLead.id}</span>
+                    <span className={`text-base sm:text-lg font-bold truncate ${t.text}`}>{selectedLead.name}</span>
+                  </div>
+                  {selectedLead.status === "Closing" && (
+                    <span className={`text-[9px] sm:text-[11px] font-bold px-2 py-0.5 sm:py-1 rounded-full border flex items-center gap-1 flex-shrink-0 ${t.statusClosing}`}>
+                      <FaHandshake className="text-[10px]" /> <span className="hidden xs:inline">Closing</span>
+                    </span>
+                  )}
+                  {selectedLead.is_lost_lead && (
+                    <span className={`text-[9px] sm:text-[11px] font-bold px-2 py-0.5 sm:py-1 rounded-full border flex items-center gap-1 flex-shrink-0 ${t.statusLost}`}>
+                      <Ghost className="w-3 h-3" /> <span className="hidden xs:inline">Lost</span>
+                    </span>
+                  )}
                 </div>
-                <div className="flex gap-2 sm:gap-3 flex-wrap justify-start md:justify-end flex-shrink-0">
+                {/* Row 2: Actions — responsive grid on mobile, flex-row on desktop */}
+                <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-1.5 sm:gap-2">
                   {bookingData ? (
-                    <button onClick={() => openBookingView(selectedLead.id)} className="font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm flex-1 sm:flex-none justify-center">
-                      <FaEye /> View Booking Form
+                    <button onClick={() => openBookingView(selectedLead.id)} className="font-bold px-2.5 py-2 sm:py-1.5 rounded-xl text-[11px] sm:text-xs flex items-center gap-1.5 transition-colors cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm justify-center min-h-[40px]">
+                      <FaEye /> Booking
                     </button>
                   ) : (
-                    <button disabled title="Booking Form has not been submitted yet." className="font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-colors opacity-50 cursor-not-allowed bg-indigo-400 text-white shadow-sm flex-1 sm:flex-none justify-center">
-                      <FaEye /> View Booking Form
-                    </button>
-                  )}
-                  {isAdmin && (
-                    <button
-                      type="button"
-                      onClick={() => openPermanentDeleteDialog()}
-                      className={`font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md flex-1 sm:flex-none justify-center ${isDark
-                        ? "bg-red-950/50 text-red-200 border border-red-900/50 hover:bg-red-600 hover:text-white"
-                        : "bg-red-50 text-red-700 border border-red-200 hover:bg-red-600 hover:text-white"
-                        }`}
-                    >
-                      <Trash2 className="w-4 h-4" /> Delete Permanently
+                    <button disabled title="Booking Form has not been submitted yet." className="font-bold px-2.5 py-2 sm:py-1.5 rounded-xl text-[11px] sm:text-xs flex items-center gap-1.5 transition-colors opacity-50 cursor-not-allowed bg-indigo-400 text-white shadow-sm justify-center min-h-[40px]">
+                      <FaEye /> Booking
                     </button>
                   )}
                   {isLeadLocked ? (
                     <>
-                      <span className={`text-[10px] sm:text-[11px] font-bold px-3 py-1.5 rounded-full border flex items-center gap-1.5 ${selectedLead.is_lost_lead ? t.statusLost : t.statusClosing}`}>
-                        {selectedLead.is_lost_lead ? <><Ghost className="w-3 h-3" /> Lost Lead • Read Only</> : <><FaCheckCircle className="text-xs" /> Lead Closed • Read Only</>}
+                      <span className={`text-[10px] font-bold px-2 py-1.5 rounded-full border flex items-center gap-1 justify-center ${selectedLead.is_lost_lead ? t.statusLost : t.statusClosing}`}>
+                        {selectedLead.is_lost_lead ? <><Ghost className="w-3 h-3" /> Read Only</> : <><FaCheckCircle className="text-[10px]" /> Read Only</>}
                       </span>
                       {selectedLead.is_lost_lead ? (
-                        <button onClick={handleRestoreLead} disabled={isSavingLost} className={`font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md flex-1 sm:flex-none justify-center ${t.btnPrimary} disabled:opacity-60`}>
-                          <FaCheckCircle className="text-xs" /> Restore Lead
+                        <button onClick={handleRestoreLead} disabled={isSavingLost} className={`font-bold px-2.5 py-2 sm:py-1.5 rounded-xl text-[11px] sm:text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md justify-center min-h-[40px] ${t.btnPrimary} disabled:opacity-60`}>
+                          <FaCheckCircle className="text-[10px]" /> Restore
                         </button>
                       ) : (
-                        <button onClick={handleReopenLead} disabled={isReopening} className={`font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md flex-1 sm:flex-none justify-center ${t.btnPrimary} disabled:opacity-60`}>
-                          ↩️ Reopen Lead
+                        <button onClick={handleReopenLead} disabled={isReopening} className={`font-bold px-2.5 py-2 sm:py-1.5 rounded-xl text-[11px] sm:text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md justify-center min-h-[40px] ${t.btnPrimary} disabled:opacity-60`}>
+                          ↩️ Reopen
                         </button>
                       )}
                     </>
@@ -2274,21 +2343,33 @@ function SalesManagerView({
                     !showSalesForm && !showLoanForm && (
                       <>
                         <button onClick={() => { prefillSalesForm(); setShowSalesForm(true); setShowLoanForm(false); emitActivity({ type: 'LEAD_INTERACTION', action: 'Editing Closing Form', leadId: selectedLead?.id, leadName: selectedLead?.name, module: 'Sales Form' }); }}
-                          className={`font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md flex-1 sm:flex-none justify-center ${t.btnPrimary} ${isDark ? "shadow-purple-600/20" : "shadow-[#00AEEF]/20"}`}>
-                          <FaFileInvoice /> <span className="hidden sm:inline">Fill</span> Salesform
+                          className={`font-bold px-2.5 py-2 sm:py-1.5 rounded-xl text-[11px] sm:text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md justify-center min-h-[40px] ${t.btnPrimary} ${isDark ? "shadow-purple-600/20" : "shadow-[#00AEEF]/20"}`}>
+                          <FaFileInvoice /> Salesform
                         </button>
                         <button onClick={() => { setShowLoanForm(true); setShowSalesForm(false); emitActivity({ type: 'LEAD_INTERACTION', action: 'Editing Loan Form', leadId: selectedLead?.id, leadName: selectedLead?.name, module: 'Loan Form' }); }}
-                          className={`font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md flex-1 sm:flex-none justify-center ${t.btnSecondary} ${isDark ? "shadow-blue-600/20" : "shadow-[#00AEEF]/20"}`}>
-                          <FaUniversity /> <span className="hidden sm:inline">Track</span> Loan
+                          className={`font-bold px-2.5 py-2 sm:py-1.5 rounded-xl text-[11px] sm:text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md justify-center min-h-[40px] ${t.btnSecondary} ${isDark ? "shadow-blue-600/20" : "shadow-[#00AEEF]/20"}`}>
+                          <FaUniversity /> Loan
                         </button>
-                        <button onClick={openLostLeadModal} className={`font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md flex-1 sm:flex-none justify-center ${t.btnDanger}`}>
-                          <AlertTriangle className="w-4 h-4" /> Mark <span className="hidden sm:inline">as</span> Lost Lead
+                        <button onClick={openLostLeadModal} className={`font-bold px-2.5 py-2 sm:py-1.5 rounded-xl text-[11px] sm:text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md justify-center min-h-[40px] ${t.btnDanger}`}>
+                          <AlertTriangle className="w-3.5 h-3.5" /> Lost
                         </button>
-                        <button onClick={() => setIsClosingModalOpen(true)} className={`font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md flex-1 sm:flex-none justify-center ${t.btnWarning} shadow-amber-600/20`}>
-                          <FaHandshake /> Mark <span className="hidden sm:inline">as</span> Closing
+                        <button onClick={() => setIsClosingModalOpen(true)} className={`font-bold px-2.5 py-2 sm:py-1.5 rounded-xl text-[11px] sm:text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md justify-center min-h-[40px] ${t.btnWarning} shadow-amber-600/20`}>
+                          <FaHandshake /> Closing
                         </button>
                       </>
                     )
+                  )}
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => openPermanentDeleteDialog()}
+                      className={`font-bold px-2.5 py-2 sm:py-1.5 rounded-xl text-[11px] sm:text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md justify-center min-h-[40px] col-span-2 sm:col-span-1 ${isDark
+                        ? "bg-red-950/50 text-red-200 border border-red-900/50 hover:bg-red-600 hover:text-white"
+                        : "bg-red-50 text-red-700 border border-red-200 hover:bg-red-600 hover:text-white"
+                        }`}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" /> Delete
+                    </button>
                   )}
                 </div>
               </div>
@@ -2994,369 +3075,14 @@ function AssistantView({ allLeads, isDark, t, user }: {
   allLeads: any[]; isDark: boolean;
   t: ReturnType<typeof buildTheme>; user: any
 }) {
-  const CACHE_KEY = "crm_sm_ai_chat_v2";
-  const CACHE_TTL = 2 * 24 * 60 * 60 * 1000;
-  const firstName = (user?.name || "").split(" ")[0] || "there";
-
-  const [chatInput, setChatInput] = useState("");
-  const [chatMessages, setChatMessages] = useState<{
-    sender: string; text: string; ts?: string; typing?: boolean
-  }[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const chatEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chatMessages, isLoading]);
+    CRMContextManager.set({ module: "My AI", rows: allLeads });
+    return () => CRMContextManager.set(null);
+  }, [allLeads]);
 
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(CACHE_KEY);
-      if (!raw) return;
-      const { messages, savedAt } = JSON.parse(raw);
-      if (Date.now() - savedAt > CACHE_TTL) {
-        localStorage.removeItem(CACHE_KEY); return;
-      }
-      if (Array.isArray(messages)) setChatMessages(messages);
-    } catch { localStorage.removeItem(CACHE_KEY); }
-  }, []);
-
-  useEffect(() => {
-    if (chatMessages.length === 0) return;
-    try {
-      localStorage.setItem(CACHE_KEY, JSON.stringify({
-        messages: chatMessages, savedAt: Date.now()
-      }));
-    } catch { }
-  }, [chatMessages]);
-
-  const getTime = () => new Date().toLocaleTimeString("en-IN", {
-    hour: "2-digit", minute: "2-digit"
-  });
-
-  const sendMessage = async (text: string) => {
-    if (!text.trim() || isLoading) return;
-    setChatInput("");
-    setChatMessages(prev => [...prev, { sender: "user", text, ts: getTime() }]);
-    setIsLoading(true);
-    setChatMessages(prev => [...prev, {
-      sender: "ai", text: "", ts: getTime(), typing: true
-    }]);
-    try {
-      const res = await fetch("/api/ai-assistant/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: text, leads: allLeads })
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      await new Promise(r => setTimeout(r, 400));
-      setChatMessages(prev => prev.map((m, i) =>
-        i === prev.length - 1 && m.typing
-          ? { sender: "ai", text: data.response, ts: getTime(), typing: false }
-          : m
-      ));
-    } catch (err) {
-      setChatMessages(prev => prev.map((m, i) =>
-        i === prev.length - 1 && m.typing
-          ? { sender: "ai", text: `Something went wrong: ${err instanceof Error ? err.message : String(err)}`, ts: getTime(), typing: false }
-          : m
-      ));
-    } finally {
-      setIsLoading(false);
-      inputRef.current?.focus();
-    }
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    sendMessage(chatInput);
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage(chatInput);
-    }
-  };
-
-  const isEmpty = chatMessages.length === 0;
-
-  const chips = [
-    { emoji: "📋", label: "What's my work today?", prompt: "What is my work today? List my follow-ups and priorities." },
-    { emoji: "🔥", label: "Show high priority leads", prompt: "Show me my high priority leads" },
-    { emoji: "📞", label: "Who should I call next?", prompt: "Who should I call next and why?" },
-    { emoji: "📊", label: "My pipeline summary", prompt: "Give me a summary of my lead pipeline" },
-  ];
-
-  return (
-    <div
-      className="flex flex-col h-full relative overflow-hidden"
-      style={{ background: isDark ? "#0a0a0f" : "#f8fafc" }}
-    >
-      {/* Radial glow — fades when chat is active */}
-      <div
-        className="pointer-events-none absolute inset-0 flex items-center justify-center transition-opacity duration-700"
-        style={{ opacity: isEmpty ? 1 : 0.35, zIndex: 0 }}
-      >
-        <div style={{
-          width: "640px", height: "420px", borderRadius: "50%",
-          background: isDark
-            ? "radial-gradient(ellipse at center, rgba(99,102,241,0.22) 0%, rgba(59,130,246,0.10) 40%, transparent 70%)"
-            : "radial-gradient(ellipse at center, rgba(0,174,239,0.12) 0%, rgba(158,33,123,0.06) 40%, transparent 70%)",
-        }} />
-      </div>
-
-      {/* Header bar */}
-      <div
-        className="flex-shrink-0 flex items-center justify-between px-5 py-3 relative z-10"
-        style={{
-          borderBottom: isDark ? "1px solid rgba(255,255,255,0.07)" : "1px solid rgba(0,0,0,0.08)",
-          background: "rgba(10,10,15,0.8)",
-          backdropFilter: "blur(12px)",
-        }}
-      >
-        <div className="flex items-center gap-2.5">
-          <div style={{
-            width: "34px", height: "34px", borderRadius: "10px", flexShrink: 0,
-            background: "linear-gradient(135deg, #7c3aed, #4f46e5)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-          }}>
-            <Bot className="text-white w-4 h-4" />
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-white leading-tight">My AI</p>
-            <p className="text-[11px]" style={{ color: "rgba(255,255,255,0.4)" }}>
-              {allLeads.length} leads in scope
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          {chatMessages.length > 0 && (
-            <button
-              onClick={() => { setChatMessages([]); localStorage.removeItem(CACHE_KEY); }}
-              className="text-[11px] px-3 py-1 rounded-full cursor-pointer transition-colors"
-              style={{
-                color: "rgba(255,255,255,0.4)",
-                border: "1px solid rgba(255,255,255,0.10)"
-              }}
-              onMouseEnter={e => (e.currentTarget.style.color = "rgba(248,113,113,0.9)")}
-              onMouseLeave={e => (e.currentTarget.style.color = "rgba(255,255,255,0.4)")}
-            >
-              Clear chat
-            </button>
-          )}
-          <div className="flex items-center gap-1.5">
-            <div className="w-2 h-2 rounded-full bg-green-400"
-              style={{ boxShadow: "0 0 6px rgba(74,222,128,0.7)" }} />
-            <span className="text-[11px] text-green-400 font-semibold">Online</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Scroll area */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar relative z-10"
-        style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.08) transparent" }}>
-
-        {isEmpty ? (
-          /* ── IDLE / WELCOME STATE ── */
-          <div className="flex flex-col items-center justify-center h-full px-6 py-12 text-center">
-            <h1 className="font-light text-white text-center mb-10"
-              style={{ fontSize: "clamp(26px,3.5vw,40px)", letterSpacing: "-0.02em" }}>
-              What&apos;s on today, {firstName}?
-            </h1>
-            <div className="grid grid-cols-2 gap-3 w-full max-w-lg">
-              {chips.map(c => (
-                <button
-                  key={c.prompt}
-                  onClick={() => sendMessage(c.prompt)}
-                  className="text-left transition-all cursor-pointer"
-                  style={{
-                    background: isDark ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.9)",
-                    border: isDark ? "1px solid rgba(255,255,255,0.09)" : "1px solid rgba(0,0,0,0.08)",
-                    color: isDark ? "rgba(255,255,255,0.72)" : "#334155",
-                    borderRadius: "14px", padding: "14px 16px",
-                  }}
-                  onMouseEnter={e => {
-                    (e.currentTarget as HTMLElement).style.background = isDark ? "rgba(255,255,255,0.09)" : "rgba(0,174,239,0.08)";
-
-                    // FIND (chip hover leave):
-                  }}
-                  onMouseLeave={e => {
-                    (e.currentTarget as HTMLElement).style.background = isDark ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.9)";
-                  }}
-                >
-                  <span className="block text-lg mb-1">{c.emoji}</span>
-                  {c.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : (
-          /* ── ACTIVE CHAT MESSAGES ── */
-          <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
-            {chatMessages.map((msg, idx) => (
-              <div key={idx} className={`flex gap-3 ${msg.sender === "user" ? "flex-row-reverse" : "flex-row"}`}>
-                {/* Avatar */}
-                <div className="flex-shrink-0 mt-0.5">
-                  {msg.sender === "ai" ? (
-                    <div style={{
-                      width: "30px", height: "30px", borderRadius: "9px", flexShrink: 0,
-                      background: "linear-gradient(135deg, #7c3aed, #4f46e5)",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                    }}>
-                      <Bot className="text-white w-3.5 h-3.5" />
-                    </div>
-                  ) : (
-                    <div style={{
-                      width: "30px", height: "30px", borderRadius: "9px", flexShrink: 0,
-                      background: isDark ? "rgba(255,255,255,0.08)" : "#f1f5f9",
-                      border: isDark ? "1px solid rgba(255,255,255,0.12)" : "1px solid #e2e8f0",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                    }}>
-                      <User className="w-3.5 h-3.5" style={{ color: "rgba(255,255,255,0.6)" }} />
-                    </div>
-                  )}
-                </div>
-
-                {/* Bubble */}
-                <div className={`flex flex-col gap-1 ${msg.sender === "user" ? "items-end max-w-[72%]" : "items-start max-w-[82%]"}`}>
-                  <div
-                    className="text-sm leading-relaxed"
-                    style={{
-                      padding: "10px 14px",
-                      borderRadius: msg.sender === "user" ? "18px 18px 4px 18px" : "4px 18px 18px 18px",
-                      ...(msg.sender === "user" ? {
-                        background: "linear-gradient(135deg, #7c3aed, #4f46e5)",
-                        color: "#fff",
-                      } : {
-                        background: isDark ? "rgba(255,255,255,0.06)" : "#f1f5f9",
-                        border: isDark ? "1px solid rgba(255,255,255,0.10)" : "1px solid #cbd5e1",
-                        color: isDark ? "rgba(255,255,255,0.9)" : "#0f172a",
-                      }),
-                    }}
-                  >
-                    {msg.typing ? (
-                      <div className="flex items-center gap-1.5 py-0.5">
-                        {[0, 200, 400].map((d, i) => (
-                          <span key={i} className="block w-1.5 h-1.5 rounded-full animate-bounce"
-                            style={{ background: "rgba(165,180,252,0.7)", animationDelay: `${d}ms` }} />
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="whitespace-pre-wrap break-words">{msg.text}</p>
-                    )}
-                  </div>
-                  {msg.ts && !msg.typing && (
-                    <span className="text-[10px] px-1"
-                      style={{ color: "rgba(255,255,255,0.22)" }}>
-                      {msg.ts}
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
-            <div ref={chatEndRef} />
-          </div>
-        )}
-      </div>
-
-      {/* ── INPUT BAR ── */}
-      <div
-        className="flex-shrink-0 relative z-10"
-        style={{
-          padding: "14px 20px 16px",
-          borderTop: isDark ? "1px solid rgba(255,255,255,0.06)" : "1px solid #cbd5e1",
-          background: isDark ? "rgba(10,10,15,0.92)" : "rgba(255,255,255,0.95)",
-          backdropFilter: "blur(12px)",
-        }}
-      >
-        <div className="max-w-2xl mx-auto">
-          <form onSubmit={handleSubmit}>
-            <div className="relative flex items-end gap-2">
-              <textarea
-                ref={inputRef}
-                value={chatInput}
-                onChange={e => {
-                  setChatInput(e.target.value);
-                  e.target.style.height = "auto";
-                  e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
-                }}
-                onKeyDown={handleKeyDown}
-                placeholder="Ask about your leads, follow-ups..."
-                disabled={isLoading}
-                rows={1}
-                className="flex-1 text-sm outline-none resize-none transition-all"
-                style={{
-                  background: isDark ? "rgba(255,255,255,0.06)" : "#ffffff",
-                  border: isDark ? "1px solid rgba(255,255,255,0.08)" : "1px solid #94a3b8",
-                  color: isDark ? "rgba(255,255,255,0.88)" : "#1e293b",
-                  borderRadius: "24px",
-                  padding: "12px 52px 12px 18px",
-                  maxHeight: "120px", minHeight: "48px",
-                }}
-                onFocus={e => {
-                  e.currentTarget.style.borderColor = "rgba(99,102,241,0.6)";
-                  e.currentTarget.style.boxShadow = "0 0 0 3px rgba(99,102,241,0.12)";
-                }}
-                onBlur={e => {
-                  e.currentTarget.style.borderColor = "rgba(255,255,255,0.10)";
-                  e.currentTarget.style.boxShadow = "none";
-                }}
-              />
-              <button
-                type="submit"
-                disabled={isLoading || !chatInput.trim()}
-                className="absolute right-3 bottom-2.5 flex items-center justify-center cursor-pointer transition-all"
-                style={{
-                  width: "34px", height: "34px", borderRadius: "50%", border: "none",
-                  background: chatInput.trim() && !isLoading ? "#4f46e5" : "rgba(255,255,255,0.08)",
-                  opacity: chatInput.trim() && !isLoading ? 1 : 0.4,
-                }}
-              >
-                <Send className="w-3.5 h-3.5 text-white" />
-              </button>
-            </div>
-          </form>
-
-          {/* Quick chips */}
-          <div className="flex gap-2 mt-3 overflow-x-auto pb-1"
-            style={{ scrollbarWidth: "none" }}>
-            {chips.map(c => (
-              <button
-                key={c.prompt}
-                onClick={() => sendMessage(c.prompt)}
-                disabled={isLoading}
-                className="flex items-center gap-1.5 text-xs whitespace-nowrap cursor-pointer transition-colors flex-shrink-0"
-                style={{
-                  border: isDark ? "1px solid rgba(255,255,255,0.11)" : "1px solid #94a3b8",
-                  borderRadius: "999px",
-                  padding: "5px 13px",
-                  color: isDark ? "rgba(255,255,255,0.55)" : "#64748b",
-                  background: "transparent",
-                }}
-                onMouseEnter={e => {
-                  (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.06)";
-                }}
-                onMouseLeave={e => {
-                  (e.currentTarget as HTMLElement).style.background = "transparent";
-                }}
-              >
-                {c.emoji} {c.label}
-              </button>
-            ))}
-          </div>
-
-          <p className="text-center mt-2 text-[10px]"
-            style={{ color: isDark ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.25)" }}>
-            Press Enter to send · Shift+Enter for new line
-          </p>
-        </div>
-      </div>
-    </div>
-  );
+  return <BhoomiAiPanel isDark={isDark} t={t} user={user} />;
 }
+
 // ============================================================================
 // SITE VISIT SCHEDULER COMPONENT
 // ============================================================================

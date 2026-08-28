@@ -8,7 +8,7 @@ import HeaderClock from "@/components/HeaderClock"; // Uncomment if used in your
  * Note: We do not hardcode the total height. We use the base height (44px/52px) 
  * PLUS the iOS safe-area-inset to natively push content below the Dynamic Island/Notch.
  */
-export const APP_HEADER_HEIGHT = "min-h-[calc(44px+env(safe-area-inset-top))] sm:min-h-[calc(52px+env(safe-area-inset-top))]";
+export const APP_HEADER_HEIGHT = "min-h-[calc(45px+env(safe-area-inset-top))] sm:min-h-[calc(52px+env(safe-area-inset-top))]";
 export const APP_HEADER_PADDING = "px-4 sm:px-6";
 
 const appleFontStack = `-apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif`;
@@ -20,7 +20,7 @@ const appleFontStack = `-apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pr
  * The brand mark.
  */
 export function AppLogo({
-  src = "/assets/bhoomidwellersLogo_trans.png",
+  src = "/assets/bhoomidwellers.png",
   style,
   className = "",
 }: {
@@ -33,8 +33,7 @@ export function AppLogo({
       src={src}
       alt="Bhoomi Dwellers"
       className={`object-contain flex-shrink-0 transition-opacity duration-200 hover:opacity-80 ${className}`}
-      // Increased height from 24px to 32px and maxWidth to 200px
-      style={{ width: "auto", height: "48px", maxWidth: "200px", ...style }}
+      style={{ width: "auto", height: "clamp(52px, 8vw, 70px)", maxWidth: "200px", ...style }}
     />
   );
 }
@@ -104,7 +103,7 @@ export default function AppHeader({
   role,
   leading,
   children,
-  logoSrc = "/assets/bhoomidwellersLogo_trans.png",
+  logoSrc = "/assets/bhoomidwellers.png",
   surfaceClassName,
   surfaceStyle,
 }: {
@@ -121,7 +120,7 @@ export default function AppHeader({
 
   // Apple iOS standard navigation bar surface (Chrome)
   const defaultGlassStyle: React.CSSProperties = {
-    backgroundColor: isDark ? "rgba(28, 28, 30, 0.75)" : "rgba(255, 255, 255, 0.75)",
+    backgroundColor: isDark ? "#1C1C1E" : "rgba(255, 255, 255, 0.75)",
     backdropFilter: "blur(20px) saturate(180%)",
     WebkitBackdropFilter: "blur(20px) saturate(180%)",
     borderBottom: `0.5px solid ${isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.15)"}`,
@@ -143,7 +142,7 @@ export default function AppHeader({
           <>
             <Divider isDark={isDark} />
             <h1
-              className="font-semibold truncate"
+              className="font-semibold truncate hidden md:inline sm:inline"
               style={{
                 // Apple standard: 17px for navigation titles, -0.41px tracking
                 fontSize: "17px",

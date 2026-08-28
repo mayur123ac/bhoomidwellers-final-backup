@@ -104,7 +104,7 @@ export default function AttendanceBadge({
         onClick={handleLoginClick}
         disabled={isPunching}
         title="Punch in for today"
-        className="h-8 sm:h-9 flex items-center gap-1.5 sm:gap-2 rounded-md bg-[#FF3B30]/10 px-2.5 sm:px-3 text-[#FF3B30] hover:bg-[#FF3B30]/20 transition-colors duration-150 cursor-pointer border border-transparent disabled:opacity-60 disabled:cursor-wait"
+        className="h-8 sm:h-9 flex items-center gap-1.5 sm:gap-2 rounded-md bg-[#FF3B30]/10 px-2 sm:px-3 text-[#FF3B30] hover:bg-[#FF3B30]/20 transition-colors duration-150 cursor-pointer border border-transparent disabled:opacity-60 disabled:cursor-wait"
       >
         <span className="w-1.5 h-1.5 rounded-full bg-[#FF3B30] flex-shrink-0" />
         <span className="hidden sm:inline text-[11px] sm:text-[12px] font-medium tracking-wide whitespace-nowrap">

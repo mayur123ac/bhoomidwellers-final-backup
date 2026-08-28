@@ -227,7 +227,7 @@ export default function SMAssistantDock({ lead, isDark, isOpen, onToggle, onOpen
           role="dialog"
           aria-label="Sales AI"
           onKeyDown={(e) => { if (e.key === "Escape") handleClose(); }}
-          className={`bdai-panel fixed z-50 flex flex-col overflow-hidden rounded-[22px] border
+          className={`bdai-panel fixed z-[60] flex flex-col overflow-hidden rounded-[22px] border
             inset-x-3 bottom-3 sm:inset-x-auto sm:w-[420px] ${panelPhaseClass} ${shell}`}
           style={panelStyle}
         >

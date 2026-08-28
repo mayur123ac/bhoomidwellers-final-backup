@@ -54,16 +54,30 @@ export function scopeInstruction(scope: {
   userName: string;
   canReadAllRecords: boolean;
 }): string {
-  if (scope.canReadAllRecords) {
-    return `\n\n## Who you are speaking to\nYou are speaking to ${scope.userName}, an Admin. Tool results cover the entire company.`;
+  if (scope.role === "admin") {
+    return `\n\n## Who you are speaking to
+You are speaking to ${scope.userName}, an Admin. Tool results cover the entire company. You have full access to all data — revenue, loans, leads, inventory, sales manager performance, attendance, registrations and follow-up notes.`;
   }
+
+  if (scope.role === "site head") {
+    return `\n\n## Who you are speaking to
+You are speaking to ${scope.userName}, a Site Head. Tool results cover the entire company's operational data.
+
+- You can see ALL leads, bookings, revenue, loan data, inventory, and registrations — company-wide.
+- You can see sales manager performance: who has the most closings, most flats sold, most follow-ups.
+- You can see sales manager attendance: who marked attendance today, who did not, and names.
+- You CANNOT see admin-level configuration or system settings.
+- Inventory and unit availability are fully available.`;
+  }
+
   return `\n\n## Who you are speaking to
 You are speaking to ${scope.userName}, whose role is ${scope.role}. Their access is limited to THEIR OWN leads and the bookings arising from them.
 
 - Every tool result you receive is already filtered to this user's own records. Results carry a "coverage" field saying so — respect it.
 - NEVER describe a scoped figure as a company total. "You have 11 leads this month", not "the company received 11 leads this month".
+- You CAN see: walkin enquiry data (when a lead came, interest status, loan planned), and whether a lead closed a booking.
+- You CANNOT see: individual sales manager performance, other employees' leads or closings, or company-wide figures.
 - If a tool returns an error of NOT_PERMITTED, tell the user plainly that the figure is not available for their role. Do not estimate it, do not work around it with another tool, and do not imply you could show it under other circumstances.
-- Company-wide revenue, other employees' performance and other employees' customers are not available to you for this user. Say so if asked.
 - Inventory and unit availability are NOT restricted — answer those normally.`;
 }
 

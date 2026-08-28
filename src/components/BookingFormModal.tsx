@@ -1457,7 +1457,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+          className="fixed inset-0 z-[200] flex items-center justify-center p-2 sm:p-4"
           style={{ background: "rgba(0,0,0,0.75)", backdropFilter: "blur(6px)" }}
         >
           <motion.div
@@ -1465,10 +1465,10 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
             animate={{ scale: 1, y: 0 }}
             exit={{ scale: 0.93, y: 24 }}
             transition={{ type: "spring", stiffness: 300, damping: 28 }}
-            className={`w-full max-w-3xl max-h-[92vh] flex flex-col rounded-4xl shadow-2xl border overflow-hidden ${isDark ? "bg-[#0D0D12] border-[#2A2A35]" : "bg-white border-[#9CA3AF]"}`}
+            className={`w-full max-w-3xl max-h-[95vh] sm:max-h-[92vh] flex flex-col rounded-2xl sm:rounded-4xl shadow-2xl border overflow-hidden ${isDark ? "bg-[#0D0D12] border-[#2A2A35]" : "bg-white border-[#9CA3AF]"}`}
           >
             {/* ── Header ── */}
-            <div className={`flex items-center justify-between px-6 py-4 border-b flex-shrink-0 ${isDark ? "bg-[#121218] border-[#2A2A35]" : "bg-[#F8FAFC] border-[#E5E7EB]"}`}>
+            <div className={`flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b flex-shrink-0 ${isDark ? "bg-[#121218] border-[#2A2A35]" : "bg-[#F8FAFC] border-[#E5E7EB]"}`}>
               <div>
                 {confirmedBooking ? (
                   <h2 className={`text-lg font-bold ${textMain}`}>Booking Confirmed</h2>
@@ -1608,7 +1608,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
               <>
 
                 {/* ── Stepper ── */}
-                <div className={`flex items-center gap-0 px-6 py-3 border-b flex-shrink-0 overflow-x-auto ${isDark ? "bg-[#0D0D12] border-[#2A2A35]" : "bg-white border-[#F1F5F9]"}`}>
+                <div className={`flex items-center gap-0 px-3 sm:px-6 py-2 sm:py-3 border-b flex-shrink-0 overflow-x-auto ${isDark ? "bg-[#0D0D12] border-[#2A2A35]" : "bg-white border-[#F1F5F9]"}`}>
                   {STEPS.map((s, i) => (
                     <React.Fragment key={s.id}>
                       <div className="flex items-center gap-2 flex-shrink-0">
@@ -1625,7 +1625,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                 </div>
 
                 {/* ── Body ── */}
-                <div className={`flex-1 overflow-y-auto p-6 custom-scrollbar ${bg}`}>
+                <div className={`flex-1 overflow-y-auto p-3 sm:p-6 custom-scrollbar ${bg}`}>
                   <AnimatePresence mode="wait">
                     <motion.div
                       key={step}
@@ -3292,7 +3292,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                 </div>
 
                 {/* ── Footer ── */}
-                <div className={`flex items-center justify-between px-6 py-4 border-t flex-shrink-0 ${isDark ? "bg-[#121218] border-[#2A2A35]" : "bg-[#F8FAFC] border-[#E5E7EB]"}`}>
+                <div className={`flex items-center justify-between px-3 sm:px-6 py-3 sm:py-4 border-t flex-shrink-0 ${isDark ? "bg-[#121218] border-[#2A2A35]" : "bg-[#F8FAFC] border-[#E5E7EB]"}`} style={{ paddingBottom: "calc(12px + env(safe-area-inset-bottom))" }}>
                   <button
                     onClick={prevStep}
                     disabled={step === 1}

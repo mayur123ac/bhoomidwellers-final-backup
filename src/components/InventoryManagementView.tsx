@@ -956,7 +956,7 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
 
     return (
       <div className="flex flex-col h-full overflow-hidden">
-        <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 sm:gap-3 mb-3">
           <div>
             <h1 className={`text-lg font-bold ${t.text}`}>Inventory</h1>
             <p className={`text-[11px] ${t.textMuted}`}>
@@ -1023,21 +1023,23 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
         )}
 
         {/* ── Building filters ── */}
-        <div className={`flex items-center gap-2 flex-wrap mb-3 p-2.5 rounded-xl border ${t.innerBlock}`}>
+        <div className={`flex flex-col sm:flex-row sm:items-center gap-2 flex-wrap mb-3 p-2.5 rounded-xl border ${t.innerBlock}`}>
           <input value={bFilters.search} onChange={e => setBFilters(f => ({ ...f, search: e.target.value }))}
-            placeholder="Search buildings…" className={`${inputCls} w-56`} />
-          <select value={bFilters.project} onChange={e => setBFilters(f => ({ ...f, project: e.target.value }))} className={`${selectCls} w-40`}>
-            <option value="">All projects</option>
-            {buildings.map(b => <option key={b.key} value={b.key}>{b.project_name}</option>)}
-          </select>
-          <select value={bFilters.tower} onChange={e => setBFilters(f => ({ ...f, tower: e.target.value }))} className={`${selectCls} w-32`}>
-            <option value="">All towers</option>
-            {towerNames.map(x => <option key={x} value={x}>{x}</option>)}
-          </select>
-          <select value={bFilters.status} onChange={e => setBFilters(f => ({ ...f, status: e.target.value }))} className={`${selectCls} w-40`}>
-            <option value="">Any stock</option>
-            {BUILDING_STATUS_FILTERS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-          </select>
+            placeholder="Search buildings…" className={`${inputCls} w-full sm:w-56`} />
+          <div className="flex flex-wrap gap-2">
+            <select value={bFilters.project} onChange={e => setBFilters(f => ({ ...f, project: e.target.value }))} className={`${selectCls} flex-1 min-w-[120px] sm:w-40`}>
+              <option value="">All projects</option>
+              {buildings.map(b => <option key={b.key} value={b.key}>{b.project_name}</option>)}
+            </select>
+            <select value={bFilters.tower} onChange={e => setBFilters(f => ({ ...f, tower: e.target.value }))} className={`${selectCls} flex-1 min-w-[100px] sm:w-32`}>
+              <option value="">All towers</option>
+              {towerNames.map(x => <option key={x} value={x}>{x}</option>)}
+            </select>
+            <select value={bFilters.status} onChange={e => setBFilters(f => ({ ...f, status: e.target.value }))} className={`${selectCls} flex-1 min-w-[120px] sm:w-40`}>
+              <option value="">Any stock</option>
+              {BUILDING_STATUS_FILTERS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+            </select>
+          </div>
           {anyBFilter && (
             <button onClick={() => setBFilters({ search: "", project: "", tower: "", status: "" })}
               className={`text-[11px] font-semibold px-2 py-1.5 rounded-lg ${t.textMuted} hover:text-red-500`}>Clear</button>
@@ -1055,7 +1057,7 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
                 : "No buildings match these filters."}
             </p>
           ) : (
-            <div className="grid gap-3 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
+            <div className="grid gap-2 sm:gap-3 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3">
               {visible.map(b => (
                 <BuildingCard key={b.key} b={b} t={t} onOpen={() => openBuilding(b)} />
               ))}
