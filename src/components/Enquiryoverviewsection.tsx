@@ -89,10 +89,54 @@ function DraggableTableContainer({ children, className, isDark }: { children: Re
             >
                 <style>{`
           .draggable-table-scroll::-webkit-scrollbar {
-            height: 10px !important;
+            height: 6px !important;
           }
           .draggable-table-scroll::-webkit-scrollbar-thumb {
             border-radius: 10px;
+          }
+          @media (min-width: 640px) {
+            .draggable-table-scroll::-webkit-scrollbar {
+              height: 10px !important;
+            }
+          }
+          @media (max-width: 639px) {
+            .mobile-compact-search input {
+              height: 32px !important;
+              font-size: 12px !important;
+              padding-left: 28px !important;
+              padding-right: 8px !important;
+            }
+            .mobile-compact-search input::placeholder {
+              text-overflow: ellipsis;
+              overflow: hidden;
+              white-space: nowrap;
+            }
+            .mobile-compact-search svg {
+              width: 12px !important;
+              height: 12px !important;
+            }
+            .mobile-contact-cell .flex,
+            .mobile-contact-cell div {
+              gap: 4px !important;
+            }
+            .mobile-contact-cell a {
+              font-size: 11px !important;
+              letter-spacing: -0.2px;
+            }
+            .mobile-contact-cell .text-xs,
+            .mobile-contact-cell span {
+              font-size: 10px !important;
+            }
+            .mobile-compact-toolbar button {
+              height: 28px !important;
+              padding: 0 8px !important;
+              font-size: 11px !important;
+            }
+            .mobile-compact-filters select {
+              height: 28px !important;
+              font-size: 11px !important;
+              padding: 0 6px !important;
+            }
           }
         `}</style>
                 {children}
@@ -247,11 +291,11 @@ const COLUMNS: Column[] = [
     {
         key: "lead_no",
         label: "Lead No.",
-        minWidth: "min-w-[76px]",
+        minWidth: "min-w-[60px] sm:min-w-[76px]",
         locked: true,
         sortValue: (l) => Number(l.sr_no || l.id) || 0,
         render: (l, { isDark }) => (
-            <span className={`font-bold ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>
+            <span className={`font-bold text-[11px] sm:text-[13px] ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>
                 #{l.sr_no || l.id}
             </span>
         ),
@@ -259,12 +303,12 @@ const COLUMNS: Column[] = [
     {
         key: "name",
         label: "Name",
-        minWidth: "min-w-[190px]",
+        minWidth: "min-w-[110px] sm:min-w-[190px]",
         locked: true,
         sortValue: (l) => String(l.name || "").toLowerCase(),
         render: (l, { isDark, theme, onNavigateToSales }) => (
             <span
-                className={`font-bold text-[13px] leading-tight transition-colors ${theme.text} ${onNavigateToSales
+                className={`font-bold text-[12px] sm:text-[13px] leading-tight transition-colors whitespace-normal break-words sm:whitespace-nowrap ${theme.text} ${onNavigateToSales
                     ? isDark
                         ? "hover:text-[#d946a8] cursor-pointer"
                         : "hover:text-[#9E217B] cursor-pointer"
@@ -284,16 +328,18 @@ const COLUMNS: Column[] = [
     {
         key: "contact",
         label: "Contact",
-        minWidth: "min-w-[180px]",
+        minWidth: "min-w-[125px] sm:min-w-[180px]",
         sortValue: (l) => String(l.phone || ""),
         render: (l, { isDark }) => (
-            <ContactCell phone={l.phone} email={l.email} isDark={isDark} />
+            <div className="mobile-contact-cell">
+                <ContactCell phone={l.phone} email={l.email} isDark={isDark} />
+            </div>
         ),
     },
     {
         key: "prop_type",
         label: "Property Type",
-        minWidth: "min-w-[110px]",
+        minWidth: "min-w-[90px] sm:min-w-[110px]",
         sortValue: (l) => propTypeOf(l).toLowerCase(),
         render: (l, { theme }) => (
             <span className={`text-xs ${theme.textMuted}`}>{propTypeOf(l)}</span>
@@ -303,7 +349,7 @@ const COLUMNS: Column[] = [
         key: "budget",
         label: "Budget",
         align: "right",
-        minWidth: "min-w-[100px]",
+        minWidth: "min-w-[75px] sm:min-w-[100px]",
         sortValue: (l) => {
             const raw = String(l.salesBudget || l.budget || "");
             const n = parseFloat(raw.replace(/[^0-9.]/g, ""));
@@ -316,7 +362,7 @@ const COLUMNS: Column[] = [
                 <span className="text-xs italic opacity-35">—</span>
             ) : (
                 <span
-                    className={`font-semibold text-[13px] tabular-nums ${isDark ? "text-emerald-400" : "text-emerald-600"
+                    className={`font-semibold text-[11px] sm:text-[13px] tabular-nums ${isDark ? "text-emerald-400" : "text-emerald-600"
                         }`}
                 >
                     {v}
@@ -327,43 +373,43 @@ const COLUMNS: Column[] = [
     {
         key: "source",
         label: "Source",
-        minWidth: "min-w-[110px]",
+        minWidth: "min-w-[90px] sm:min-w-[110px]",
         sortValue: (l) => String(l.source || "").toLowerCase(),
         render: (l, { theme }) => (
-            <span className={`text-xs ${theme.textMuted}`}>{txt(l.source)}</span>
+            <span className={`text-[11px] sm:text-xs ${theme.textMuted}`}>{txt(l.source)}</span>
         ),
     },
     {
         key: "cp_name",
         label: "CP Name",
-        minWidth: "min-w-[130px]",
+        minWidth: "min-w-[100px] sm:min-w-[130px]",
         sortValue: (l) => String(l.cpName || l.cp_name || "").toLowerCase(),
         render: (l, { theme }) => (
-            <span className={`text-xs ${theme.textMuted}`}>{txt(l.cpName || l.cp_name)}</span>
+            <span className={`text-[11px] sm:text-xs ${theme.textMuted}`}>{txt(l.cpName || l.cp_name)}</span>
         ),
     },
     {
         key: "cp_company",
         label: "CP Company",
-        minWidth: "min-w-[120px]",
+        minWidth: "min-w-[100px] sm:min-w-[120px]",
         sortValue: (l) => String(l.cpCompany || l.cp_company || "").toLowerCase(),
         render: (l, { theme }) => (
-            <span className={`text-xs ${theme.textMuted}`}>{txt(l.cpCompany || l.cp_company)}</span>
+            <span className={`text-[11px] sm:text-xs ${theme.textMuted}`}>{txt(l.cpCompany || l.cp_company)}</span>
         ),
     },
     {
         key: "cp_phone",
         label: "CP Phone",
-        minWidth: "min-w-[115px]",
+        minWidth: "min-w-[95px] sm:min-w-[115px]",
         sortValue: (l) => String(l.cpPhone || l.cp_phone || ""),
         render: (l, { theme }) => {
             const v = l.cpPhone || l.cp_phone;
-            if (isBlank(v)) return <span className="text-xs italic opacity-35">—</span>;
+            if (isBlank(v)) return <span className="text-[11px] sm:text-xs italic opacity-35">—</span>;
             return (
                 <a
                     href={`tel:${String(v).replace(/[^0-9+]/g, "")}`}
                     onClick={(e) => e.stopPropagation()}
-                    className={`font-mono text-xs hover:underline ${theme.textMuted}`}
+                    className={`font-mono text-[11px] sm:text-xs hover:underline ${theme.textMuted}`}
                 >
                     {v}
                 </a>
@@ -374,7 +420,7 @@ const COLUMNS: Column[] = [
         key: "status",
         label: "Status",
         align: "center",
-        minWidth: "min-w-[130px]",
+        minWidth: "min-w-[100px] sm:min-w-[130px]",
         sortValue: (l) => String(l.status || "Assigned").toLowerCase(),
         render: (l, { isDark }) => <StatusChip status={l.status || "Assigned"} isDark={isDark} />,
     },
@@ -382,7 +428,7 @@ const COLUMNS: Column[] = [
         key: "lost_status",
         label: "Lost Status",
         align: "center",
-        minWidth: "min-w-[110px]",
+        minWidth: "min-w-[90px] sm:min-w-[110px]",
         sortValue: (l) => (l.is_lost_lead ? 1 : 0),
         render: (l, { isDark }) => (
             <StatusChip status={l.is_lost_lead ? "Lost Lead" : "Active"} isDark={isDark} size="sm" />
@@ -392,47 +438,47 @@ const COLUMNS: Column[] = [
         key: "interest",
         label: "Interest",
         align: "center",
-        minWidth: "min-w-[115px]",
+        minWidth: "min-w-[95px] sm:min-w-[115px]",
         sortValue: (l) => String(l.leadInterestStatus || "").toLowerCase(),
         render: (l, { isDark, InterestBadge }) =>
             l.leadInterestStatus && l.leadInterestStatus !== "Pending" ? (
                 <InterestBadge status={l.leadInterestStatus} size="sm" isDark={isDark} />
             ) : (
-                <span className="text-xs italic opacity-35">—</span>
+                <span className="text-[11px] sm:text-xs italic opacity-35">—</span>
             ),
     },
     {
         key: "site_visit",
         label: "Site Visit",
-        minWidth: "min-w-[105px]",
+        minWidth: "min-w-[85px] sm:min-w-[105px]",
         sortValue: (l) => (l.mongoVisitDate ? new Date(l.mongoVisitDate).getTime() : 0),
         render: (l, { formatDate }) =>
             l.mongoVisitDate ? (
-                <span className="text-orange-500 font-semibold text-xs whitespace-nowrap">
+                <span className="text-orange-500 font-semibold text-[11px] sm:text-xs whitespace-nowrap">
                     {formatDate(l.mongoVisitDate).split(",")[0]}
                 </span>
             ) : (
-                <span className="text-xs italic opacity-35">Pending</span>
+                <span className="text-[11px] sm:text-xs italic opacity-35">Pending</span>
             ),
     },
     {
         key: "created_at",
         label: "Created On",
-        minWidth: "min-w-[115px]",
+        minWidth: "min-w-[95px] sm:min-w-[115px]",
         sortValue: (l) => (l.created_at ? new Date(l.created_at).getTime() : 0),
         render: (l, { theme, formatDate }) =>
             l.created_at ? (
-                <span className={`text-xs whitespace-nowrap ${theme.textFaint}`}>
+                <span className={`text-[11px] sm:text-xs whitespace-nowrap ${theme.textFaint}`}>
                     {formatDate(l.created_at)}
                 </span>
             ) : (
-                <span className="text-xs italic opacity-35">—</span>
+                <span className="text-[11px] sm:text-xs italic opacity-35">—</span>
             ),
     },
     {
         key: "backdated",
         label: "Backdated Entry",
-        minWidth: "min-w-[120px]",
+        minWidth: "min-w-[100px] sm:min-w-[120px]",
         sortValue: (l) =>
             l.auto_date_enabled === false && l.enquiry_date
                 ? new Date(l.enquiry_date).getTime()
@@ -440,7 +486,7 @@ const COLUMNS: Column[] = [
         render: (l, { isDark, formatDate }) =>
             l.auto_date_enabled === false && l.enquiry_date ? (
                 <span
-                    className={`inline-flex items-center px-2 py-[3px] rounded-md text-[10px] font-bold border whitespace-nowrap ${isDark
+                    className={`inline-flex items-center px-2 py-[3px] rounded-md text-[9px] sm:text-[10px] font-bold border whitespace-nowrap ${isDark
                         ? "bg-amber-500/10 text-amber-300 border-amber-500/25"
                         : "bg-amber-50 text-amber-700 border-amber-200"
                         }`}
@@ -449,22 +495,22 @@ const COLUMNS: Column[] = [
                     {formatDate(l.enquiry_date).split(",")[0]}
                 </span>
             ) : (
-                <span className="text-xs italic opacity-30">—</span>
+                <span className="text-[11px] sm:text-xs italic opacity-30">—</span>
             ),
     },
     {
         key: "assigned_to",
         label: "Assigned To",
-        minWidth: "min-w-[150px]",
+        minWidth: "min-w-[110px] sm:min-w-[150px]",
         sortValue: (l) => String(l.assigned_receptionist || l.assigned_to || "").toLowerCase(),
         render: (l, { theme, isDark, siteHeads }) => {
             const { name, role } = assignedInfo(l, siteHeads);
-            if (!name) return <span className="text-xs italic opacity-35">—</span>;
+            if (!name) return <span className="text-[11px] sm:text-xs italic opacity-35">—</span>;
             return (
-                <div className="flex flex-col gap-[3px]">
-                    <span className={`font-semibold text-xs ${theme.text}`}>{name}</span>
+                <div className="flex flex-col gap-[2px] sm:gap-[3px]">
+                    <span className={`font-semibold text-[11px] sm:text-xs ${theme.text}`}>{name}</span>
                     <span
-                        className={`text-[9px] font-bold uppercase tracking-wide px-1.5 py-[2px] rounded border w-fit ${isDark
+                        className={`text-[8px] sm:text-[9px] font-bold uppercase tracking-wide px-1 sm:px-1.5 py-[2px] rounded border w-fit ${isDark
                             ? "bg-white/[0.04] border-white/10 text-gray-400"
                             : "bg-gray-50 border-gray-200 text-gray-500"
                             }`}
@@ -479,7 +525,7 @@ const COLUMNS: Column[] = [
         key: "reassign",
         label: "Reassign",
         align: "center",
-        minWidth: "min-w-[115px]",
+        minWidth: "min-w-[100px] sm:min-w-[115px]",
         defaultHidden: true, // available inside the ⋮ actions menu
         render: (l, { isDark, onReassign }) =>
             isClosedOut(l) ? (
@@ -490,7 +536,7 @@ const COLUMNS: Column[] = [
                         e.stopPropagation();
                         onReassign(l);
                     }}
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap transition-all duration-200 hover:-translate-y-[1px] ${isDark
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] sm:text-[11px] font-bold whitespace-nowrap transition-all duration-200 hover:-translate-y-[1px] ${isDark
                         ? "bg-orange-600/90 hover:bg-orange-500 text-white"
                         : "bg-orange-100 hover:bg-orange-200 text-orange-700"
                         }`}
@@ -503,7 +549,7 @@ const COLUMNS: Column[] = [
         key: "actions",
         label: "Actions",
         align: "center",
-        minWidth: "min-w-[96px]",
+        minWidth: "min-w-[80px] sm:min-w-[96px]",
         locked: true,
         render: (l, ctx) => {
             const items: MenuItem[] = [];
@@ -553,7 +599,7 @@ const COLUMNS: Column[] = [
                             title="AI Call Lead"
                             aria-label={`AI call ${l.name || "lead"}`}
                             className={`
-                w-8 h-8 grid place-items-center rounded-lg transition-all duration-200
+                w-7 h-7 sm:w-8 sm:h-8 grid place-items-center rounded-lg transition-all duration-200
                 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d946a8]
                 ${ctx.isDark
                                     ? "text-gray-400 hover:bg-[#9E217B]/20 hover:text-[#d946a8]"
@@ -561,7 +607,7 @@ const COLUMNS: Column[] = [
                                 }
               `}
                         >
-                            <FaPhoneAlt className="text-[11px]" />
+                            <FaPhoneAlt className="text-[10px] sm:text-[11px]" />
                         </button>
                     )}
                     <ActionMenu items={items} isDark={ctx.isDark} />
@@ -792,11 +838,11 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
                 <div>
                     <div className="flex items-center gap-3 mb-4">
                         <FaChartPie className="text-[#00AEEF]" />
-                        <h3 className={`font-bold text-sm uppercase tracking-wider ${theme.text}`}>
+                        <h3 className={`font-bold text-[13px] sm:text-sm uppercase tracking-wider ${theme.text}`}>
                             Overall Lead Analytics
                         </h3>
                         <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${theme.settingsBg} ${theme.textMuted}`}
+                            className={`text-[9px] sm:text-[10px] font-bold px-2 py-0.5 rounded-md border ${theme.settingsBg} ${theme.textMuted}`}
                         >
                             {allLeads.length.toLocaleString("en-IN")} leads
                         </span>
@@ -809,19 +855,19 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
             <style>{`@keyframes barIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}`}</style>
 
             {/* ── Table card ── */}
-            <div className={`${theme.tableWrap} rounded-3xl overflow-hidden`} style={theme.tableGlass}>
+            <div className={`${theme.tableWrap} rounded-2xl sm:rounded-3xl overflow-hidden`} style={theme.tableGlass}>
                 {/* ═══ Toolbar row 1: title + search + actions ═══ */}
                 <div
-                    className={`px-5 pt-4 pb-3 flex flex-wrap items-center gap-3 ${theme.tableHead}`}
+                    className={`px-3 sm:px-5 pt-4 sm:pt-4 pb-2 sm:pb-3 flex flex-wrap items-center justify-between sm:justify-start gap-2 sm:gap-3 ${theme.tableHead}`}
                 >
                     {/* left */}
-                    <div className="flex items-center gap-2.5 shrink-0">
-                        <FaTable className="text-[#00AEEF] text-sm" />
-                        <h3 className={`font-bold text-[15px] tracking-tight ${theme.text}`}>
+                    <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+                        <FaTable className="text-[#00AEEF] text-[11px] sm:text-sm" />
+                        <h3 className={`font-bold text-[13px] sm:text-[15px] tracking-tight ${theme.text}`}>
                             Enquiry Overview
                         </h3>
                         <span
-                            className={`text-[10px] font-bold px-2 py-1 rounded-md tabular-nums ${theme.btnClosingBadge}`}
+                            className={`text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md tabular-nums ${theme.btnClosingBadge}`}
                             title={
                                 sortedLeads.length !== allLeads.length
                                     ? `${sortedLeads.length} of ${allLeads.length} leads match the current filters`
@@ -835,11 +881,13 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
                         </span>
                     </div>
 
-                    {/* center */}
-                    <SearchBar value={overviewSearch} onChange={setOverviewSearch} isDark={isDark} />
+                    {/* center (drops to new line on mobile to avoid squishing) */}
+                    <div className="w-full order-last sm:order-none mt-2 sm:mt-0 sm:w-auto sm:flex-1 mobile-compact-search">
+                        <SearchBar value={overviewSearch} onChange={setOverviewSearch} isDark={isDark} />
+                    </div>
 
                     {/* right */}
-                    <div className="flex items-center gap-2 flex-wrap ml-auto">
+                    <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap sm:ml-auto mobile-compact-toolbar">
                         <ColumnSelector
                             columns={COLUMNS.map((c) => ({ key: c.key, label: c.label, locked: c.locked }))}
                             hidden={hiddenCols}
@@ -860,28 +908,28 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
                             onClick={() =>
                                 downloadCSV(allLeads.map(formatLeadForExport), "Overall_Enquiries.csv")
                             }
-                            icon={<FaDownload className="text-[11px]" />}
+                            icon={<FaDownload className="text-[10px] sm:text-[11px]" />}
                             isDark={isDark}
                             title="Download all leads as CSV"
                         >
-                            Export
+                            <span className="hidden sm:inline">Export</span>
                         </ToolbarButton>
 
                         {isAdmin && (
                             <ToolbarButton
                                 onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
-                                icon={<FaCheckCircle className="text-[11px]" />}
+                                icon={<FaCheckCircle className="text-[10px] sm:text-[11px]" />}
                                 isDark={isDark}
                                 active={selectMode}
                                 title="Select multiple leads"
                             >
-                                {selectMode ? "Cancel" : "Select"}
+                                <span className="hidden sm:inline">{selectMode ? "Cancel" : "Select"}</span>
                             </ToolbarButton>
                         )}
 
                         <ToolbarButton
                             onClick={refetch}
-                            icon={<FaSyncAlt className="text-[11px]" />}
+                            icon={<FaSyncAlt className="text-[10px] sm:text-[11px]" />}
                             isDark={isDark}
                             title="Refresh leads"
                         />
@@ -890,17 +938,17 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
 
                 {/* ═══ Toolbar row 2: filters ═══ */}
                 <div
-                    className={`px-5 pb-3.5 pt-3.5 flex flex-wrap items-center gap-x-5 gap-y-2.5 border-b ${isDark ? "border-white/[0.06]" : "border-indigo-300"
+                    className={`px-3 sm:px-5 pb-2.5 sm:pb-3.5 pt-2.5 sm:pt-3.5 flex flex-wrap items-center gap-x-2.5 sm:gap-x-5 gap-y-2 border-b mobile-compact-filters ${isDark ? "border-white/[0.06]" : "border-indigo-300"
                         }`}
                 >
-                    <span className="text-[10px] font-bold uppercase tracking-wider opacity-40">
+                    <span className="hidden sm:inline text-[10px] font-bold uppercase tracking-wider opacity-40">
                         Filters
                     </span>
 
                     <select
                         value={lostLeadFilter}
                         onChange={(e) => setLostLeadFilter(e.target.value as any)}
-                        className={`h-8 px-2.5 rounded-lg text-xs font-bold outline-none border cursor-pointer transition-colors ${theme.select}`}
+                        className={`h-7 sm:h-8 px-1.5 sm:px-2.5 rounded-md sm:rounded-lg text-[10px] sm:text-xs font-bold outline-none border cursor-pointer transition-colors ${theme.select}`}
                     >
                         <option value="all">All leads</option>
                         <option value="active">Active only</option>
@@ -910,7 +958,7 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
                     <select
                         value={overviewSearchColumn}
                         onChange={(e) => setOverviewSearchColumn(e.target.value)}
-                        className={`h-8 px-2.5 rounded-lg text-xs font-bold outline-none border cursor-pointer transition-colors ${theme.select}`}
+                        className={`h-7 sm:h-8 px-1.5 sm:px-2.5 rounded-md sm:rounded-lg text-[10px] sm:text-xs font-bold outline-none border cursor-pointer transition-colors ${theme.select}`}
                         title="Restrict search to one column"
                     >
                         <option value="all">Search: all columns</option>
@@ -928,7 +976,7 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
                         <option value="assigned_to">Assigned To</option>
                     </select>
 
-                    <div className={`w-px h-5 ${isDark ? "bg-white/10" : "bg-gray-200"}`} />
+                    <div className={`w-px h-4 sm:h-5 ${isDark ? "bg-white/10" : "bg-gray-200"}`} />
 
                     <ToggleSwitch
                         checked={showLostLeads}
@@ -961,7 +1009,7 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
                     {hasFilters && (
                         <button
                             onClick={clearFilters}
-                            className="ml-auto text-[11px] font-bold text-[#00AEEF] hover:underline"
+                            className="ml-auto text-[10px] sm:text-[11px] font-bold text-[#00AEEF] hover:underline"
                         >
                             Clear filters
                         </button>
@@ -971,24 +1019,24 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
                 {/* ═══ Bulk action bar ═══ */}
                 {selectMode && selectedIds.size > 0 && (
                     <div
-                        className={`flex flex-wrap items-center justify-between gap-3 px-5 py-2.5 border-b animate-[barIn_180ms_ease-out] ${isDark ? "bg-red-950/25 border-red-900/40" : "bg-red-50 border-red-100"
+                        className={`flex flex-wrap items-center justify-between gap-2 sm:gap-3 px-3 sm:px-5 py-2 sm:py-2.5 border-b animate-[barIn_180ms_ease-out] ${isDark ? "bg-red-950/25 border-red-900/40" : "bg-red-50 border-red-100"
                             }`}
                     >
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2 sm:gap-3">
                             <span
-                                className={`text-xs font-black tabular-nums ${isDark ? "text-red-200" : "text-red-700"
+                                className={`text-[11px] sm:text-xs font-black tabular-nums ${isDark ? "text-red-200" : "text-red-700"
                                     }`}
                             >
                                 {selectedIds.size} selected
                             </span>
                             {selectedIds.size > 100 && (
-                                <span className="text-[11px] font-semibold text-red-400">
+                                <span className="text-[10px] sm:text-[11px] font-semibold text-red-400">
                                     Maximum 100 per delete
                                 </span>
                             )}
                             <button
                                 onClick={() => setSelectedIds(new Set())}
-                                className={`text-[11px] font-bold hover:underline ${isDark ? "text-red-300/70" : "text-red-600/70"
+                                className={`text-[10px] sm:text-[11px] font-bold hover:underline ${isDark ? "text-red-300/70" : "text-red-600/70"
                                     }`}
                             >
                                 Clear selection
@@ -1003,7 +1051,7 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
                                 }
                                 onOpenBulkDelete();
                             }}
-                            icon={<FaTrashAlt className="text-[11px]" />}
+                            icon={<FaTrashAlt className="text-[10px] sm:text-[11px]" />}
                             isDark={isDark}
                             tone="danger"
                         >
@@ -1014,7 +1062,7 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
 
                 {/* ═══ Table ═══ */}
                 <DraggableTableContainer isDark={isDark}>
-                    <table className="w-full text-left text-sm border-separate border-spacing-0">
+                    <table className="w-full text-left text-[13px] sm:text-sm border-separate border-spacing-0">
                         {/* No backdrop-filter here, deliberately.
                             theme.tableHead is bg-[#1A1A28] / bg-[#F1F5F9] — fully
                             opaque, no alpha. A blur behind an opaque layer is
@@ -1029,7 +1077,7 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
                             <tr>
                                 {selectMode && (
                                     <th
-                                        className={`w-[46px] px-4 py-3 border-b ${isDark ? "border-white/[0.08]" : "border-indigo-500"
+                                        className={`w-[36px] sm:w-[46px] px-2 py-2 sm:px-4 sm:py-3 border-b ${isDark ? "border-white/[0.08]" : "border-indigo-500"
                                             }`}
                                     >
                                         <Checkbox
@@ -1049,8 +1097,8 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
                                             onClick={() => sortable && toggleSort(col.key)}
                                             title={sortable ? `Sort by ${col.label}` : undefined}
                                             className={`
-                        group px-3 py-3 whitespace-nowrap border-b
-                        text-[10px] font-bold uppercase tracking-[0.09em]
+                        group px-2 py-2 sm:px-3 sm:py-3 whitespace-nowrap border-b
+                        text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.05em] sm:tracking-[0.09em]
                         ${col.minWidth}
                         ${isDark ? "border-white/[0.08]" : "border-gray-300"}
                         ${sortable ? "cursor-pointer select-none" : ""}
@@ -1064,7 +1112,7 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
                       `}
                                         >
                                             <span
-                                                className={`inline-flex items-center gap-1.5 ${col.align === "right"
+                                                className={`inline-flex items-center gap-1 sm:gap-1.5 ${col.align === "right"
                                                     ? "flex-row-reverse"
                                                     : col.align === "center"
                                                         ? "justify-center"
@@ -1141,7 +1189,7 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
                                             {selectMode && (
                                                 <td
                                                     onClick={(e) => e.stopPropagation()}
-                                                    className={`px-4 py-3.5 border-b ${isDark ? "border-white/[0.045]" : "border-gray-300"
+                                                    className={`px-2 py-2 sm:px-4 sm:py-3.5 border-b ${isDark ? "border-white/[0.045]" : "border-gray-300"
                                                         }`}
                                                 >
                                                     <Checkbox checked={isSelected} onChange={() => toggleSelectOne(id)} />
@@ -1152,7 +1200,7 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
                                                 <td
                                                     key={col.key}
                                                     className={`
-                            px-3 py-3.5 whitespace-nowrap border-b
+                            px-2 py-2.5 sm:px-3 sm:py-3.5 whitespace-nowrap border-b
                             ${isDark ? "border-white/[0.045]" : "border-indigo-300"}
                             ${col.align === "right" ? "text-right" : col.align === "center" ? "text-center" : "text-left"}
                             ${colIdx === 0 && isDuplicate

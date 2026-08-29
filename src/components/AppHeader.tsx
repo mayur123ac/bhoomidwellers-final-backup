@@ -161,7 +161,7 @@ export default function AppHeader({
           <>
             <Divider isDark={isDark} />
             <h1
-              className="font-semibold truncate min-w-0"
+              className="font-bold truncate min-w-0"
               style={{
                 // Drops to 14px on tiny screens, scales to 17px on desktop
                 fontSize: "clamp(14px, 4vw, 17px)",
