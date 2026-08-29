@@ -286,6 +286,7 @@ export default function EmployeesPage() {
 
   const [activeSection, setActiveSection] = useState<"employees" | "callers" | "ai" | "notifications">("employees");
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   // Org name for the sidebar header — fetched once, null while loading.
   const { name: empPageOrgName, loading: empPageOrgLoading } = useOrgName();
   const sidebarOrgName = empPageOrgLoading ? null : empPageOrgName;
@@ -919,17 +920,31 @@ export default function EmployeesPage() {
       style={t.pageStyle}
     >
       <AnimatePresence>
-        {isSidebarHovered && (
+        {(isSidebarHovered || isMobileSidebarOpen) && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}
-            className="fixed inset-0 bg-black/60 z-40 pointer-events-none backdrop-blur-[1px]" />
+            className={`fixed inset-0 bg-black/60 z-40 backdrop-blur-[1px] ${isMobileSidebarOpen ? "md:pointer-events-none pointer-events-auto" : "pointer-events-none"}`}
+            onClick={() => { if (isMobileSidebarOpen) setIsMobileSidebarOpen(false); }}
+          />
         )}
       </AnimatePresence>
 
       {/* ── SIDEBAR ── */}
       <motion.aside
-        initial={{ width: "72px" }} animate={{ width: isSidebarHovered ? "248px" : "72px" }} transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
-        onMouseEnter={() => setIsSidebarHovered(true)} onMouseLeave={() => setIsSidebarHovered(false)}
-        className="fixed left-0 top-0 h-screen z-50 flex flex-col overflow-hidden"
+        /* Desktop: collapse from 248px → 72px when not hovered. Mobile: always 248px
+           (CSS translate handles show/hide, framer-motion width is irrelevant). */
+        initial={{ width: "72px" }}
+        animate={{ width: isSidebarHovered ? "248px" : "72px" }}
+        transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+        onMouseEnter={() => setIsSidebarHovered(true)}
+        onMouseLeave={() => setIsSidebarHovered(false)}
+        className={[
+          "fixed left-0 top-0 h-screen z-50 flex flex-col overflow-hidden",
+          /* MOBILE: always 248px wide drawer; translate controls visibility */
+          "w-[248px] transition-transform duration-300",
+          isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full",
+          /* DESKTOP: framer-motion handles width, no translate */
+          "md:w-auto md:translate-x-0",
+        ].join(" ")}
         style={{
           background: "linear-gradient(180deg, #0f0f1a 0%, #111128 40%, #0f0f1a 100%)",
           borderRight: "1px solid rgba(158,33,123,0.15)",
@@ -945,7 +960,7 @@ export default function EmployeesPage() {
           />
           <motion.div
             initial={{ opacity: 0, x: -8 }}
-            animate={{ opacity: isSidebarHovered ? 1 : 0, x: isSidebarHovered ? 0 : -8 }}
+            animate={{ opacity: (isSidebarHovered || isMobileSidebarOpen) ? 1 : 0, x: (isSidebarHovered || isMobileSidebarOpen) ? 0 : -8 }}
             transition={{ duration: 0.25, ease: "easeOut" }}
             className="ml-3 overflow-hidden"
           >
@@ -973,7 +988,7 @@ export default function EmployeesPage() {
         {/* Divider */}
         <div className="mx-4 mb-4 flex-shrink-0" style={{ height: "1px", background: "linear-gradient(90deg, transparent, rgba(158,33,123,0.3), transparent)" }} />
 
-        {isSidebarHovered && (
+        {(isSidebarHovered || isMobileSidebarOpen) && (
           <div className="px-4 mb-2 flex-shrink-0 animate-fadeIn">
             <input
               type="text"
@@ -1013,24 +1028,26 @@ export default function EmployeesPage() {
                     {showGroupLabel && (
                       <p
                         className="text-[10px] font-bold uppercase tracking-wider text-gray-600 px-4 pt-3 pb-1 overflow-hidden whitespace-nowrap transition-opacity duration-200"
-                        style={{ opacity: isSidebarHovered ? 1 : 0 }}
+                        style={{ opacity: (isSidebarHovered || isMobileSidebarOpen) ? 1 : 0 }}
                       >
                         {groupOf[item.id]}
                       </p>
                     )}
                     <div
                       key={item.id}
-                      title={!isSidebarHovered ? item.label : undefined}
+                      title={!(isSidebarHovered || isMobileSidebarOpen) ? item.label : undefined}
                       className="relative cursor-pointer group"
                       onClick={() => {
                         if (item.section) {
                           setActiveSection(item.section!);
                           setIsSidebarHovered(false);
+                          setIsMobileSidebarOpen(false);
                           if (item.section === "callers" && callerSubView === "control") setCallerSubView("table");
                         } else {
                           localStorage.setItem("return_tab", item.id);
                           router.push(item.link);
                           setIsSidebarHovered(false);
+                          setIsMobileSidebarOpen(false);
                         }
                       }}
                     >
@@ -1071,9 +1088,9 @@ export default function EmployeesPage() {
                           className={`text-[12.5px] font-semibold whitespace-nowrap overflow-hidden transition-all duration-300 ${isActive ? "text-[#d946a8]" : "text-gray-400 group-hover:text-gray-100"
                             }`}
                           style={{
-                            maxWidth: isSidebarHovered ? "140px" : "0px",
-                            opacity: isSidebarHovered ? 1 : 0,
-                            transform: isSidebarHovered ? "translateX(0)" : "translateX(-6px)",
+                            maxWidth: (isSidebarHovered || isMobileSidebarOpen) ? "140px" : "0px",
+                            opacity: (isSidebarHovered || isMobileSidebarOpen) ? 1 : 0,
+                            transform: (isSidebarHovered || isMobileSidebarOpen) ? "translateX(0)" : "translateX(-6px)",
                             letterSpacing: "0.01em",
                           }}
                         >
@@ -1098,7 +1115,7 @@ export default function EmployeesPage() {
             return (
               <div
                 key={item.id}
-                title={!isSidebarHovered ? item.label : undefined}
+                title={!(isSidebarHovered || isMobileSidebarOpen) ? item.label : undefined}
                 /* Only the first pinned item takes mt-auto — that is what pushes
                    the whole block to the bottom. Putting it on every item would
                    spread them apart down the rail instead of stacking them. */
@@ -1107,10 +1124,12 @@ export default function EmployeesPage() {
                   if (item.section) {
                     setActiveSection(item.section!);
                     setIsSidebarHovered(false);
+                    setIsMobileSidebarOpen(false);
                   } else {
                     localStorage.setItem("return_tab", item.id);
                     router.push(item.link);
                     setIsSidebarHovered(false);
+                    setIsMobileSidebarOpen(false);
                   }
                 }}
               >
@@ -1151,9 +1170,9 @@ export default function EmployeesPage() {
                     className={`text-[12.5px] font-semibold whitespace-nowrap overflow-hidden transition-all duration-300 ${isActive ? "text-[#d946a8]" : "text-gray-400 group-hover:text-gray-100"
                       }`}
                     style={{
-                      maxWidth: isSidebarHovered ? "140px" : "0px",
-                      opacity: isSidebarHovered ? 1 : 0,
-                      transform: isSidebarHovered ? "translateX(0)" : "translateX(-6px)",
+                      maxWidth: (isSidebarHovered || isMobileSidebarOpen) ? "140px" : "0px",
+                      opacity: (isSidebarHovered || isMobileSidebarOpen) ? 1 : 0,
+                      transform: (isSidebarHovered || isMobileSidebarOpen) ? "translateX(0)" : "translateX(-6px)",
                       letterSpacing: "0.01em",
                     }}
                   >
@@ -1170,7 +1189,7 @@ export default function EmployeesPage() {
       </motion.aside>
 
       {/* ── MAIN ── */}
-      <div className={`flex-1 flex flex-col pl-[72px] h-screen overflow-hidden transition-colors duration-300 ${t.mainBg}`}>
+      <div className={`flex-1 flex flex-col pl-0 md:pl-[72px] h-screen overflow-hidden transition-colors duration-300 ${t.mainBg}`}>
 
         {/* HEADER */}
         {/* ── Header ──
@@ -1181,7 +1200,7 @@ export default function EmployeesPage() {
             everywhere except this one tab. The logo, the Admin Root badge and
             Mark Attendance keep their own colours in both states. */}
         <header
-          className={`h-16 flex items-center justify-between px-8 z-30 flex-shrink-0 transition-colors duration-300 ${aiHeader ? "" : t.header}`}
+          className={`h-16 flex items-center justify-between px-4 md:px-8 z-30 flex-shrink-0 transition-colors duration-300 ${aiHeader ? "" : t.header}`}
           style={{
             borderBottom: aiHeader
               ? "1px solid rgba(255,255,255,0.08)"
@@ -1193,11 +1212,20 @@ export default function EmployeesPage() {
               : isDark ? "rgba(10,10,15,0.85)" : "rgba(255,255,255,0.9)",
           }}
         >
-          <h1
-            className={`font-bold text-lg tracking-wide flex items-center gap-3 ${aiHeader ? "" : t.headerTitle}`}
-            style={aiHeader ? { color: "#E3E3E3" } : undefined}
-          >
-            <img src="/assets/bhoomidwellers.png" alt="Bhoomi CRM" className="h-20 md:h-18 w-auto object-contain -ml-2" />
+          <div className="flex items-center">
+            <button
+              onClick={() => setIsMobileSidebarOpen(true)}
+              className={`md:hidden p-2 -ml-2 mr-2 rounded-lg transition-colors ${aiHeader ? "text-[#C4C7C5] hover:text-white" : t.textMuted + " hover:text-[#9E217B]"}`}
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+            <h1
+              className={`font-bold text-lg tracking-wide flex items-center gap-3 ${aiHeader ? "" : t.headerTitle}`}
+              style={aiHeader ? { color: "#E3E3E3" } : undefined}
+            >
+              <img src="/assets/bhoomidwellers.png" alt="Bhoomi CRM" className="h-20 md:h-18 w-auto object-contain -ml-2" />
             <span
               className={`text-xs sm:text-sm font-normal ${aiHeader ? "" : t.textFaint}`}
               style={aiHeader ? { color: "#C4C7C5" } : undefined}
@@ -1215,6 +1243,7 @@ export default function EmployeesPage() {
               {callerSubView === "control" ? "Admin Acting as Caller" : "Admin Root"}
             </span>
           </h1>
+          </div>
           <div className="flex items-center gap-3 relative z-[50]" ref={topbarRef}>
             <HeaderClock isDark={isDark} />
             {/* <LoginTimerWidget isDark={isDark} /> */}

@@ -616,6 +616,7 @@ function AdminAtlasDashboardContent() {
   }, [searchParams]);
 
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   // Org name for the sidebar header. Fetched once; null while loading so the
   // sidebar cleanly omits the line instead of flashing stale data.
   const { name: orgName, loading: orgLoading } = useOrgName();
@@ -1005,8 +1006,10 @@ function AdminAtlasDashboardContent() {
         groups={menuGroups}
         isHovered={isSidebarHovered}
         onHoverChange={setIsSidebarHovered}
-        onSelect={(item) => handleMenuClick(item.id)}
+        onSelect={(item) => { handleMenuClick(item.id); setIsMobileSidebarOpen(false); }}
         orgName={sidebarOrgName}
+        isMobileOpen={isMobileSidebarOpen}
+        onMobileClose={() => setIsMobileSidebarOpen(false)}
       />
 
       <style dangerouslySetInnerHTML={{
@@ -1017,7 +1020,7 @@ function AdminAtlasDashboardContent() {
         .sidebar-scroll::-webkit-scrollbar-thumb:hover{background:rgba(217,70,168,0.5)}
       `}} />
 
-      <div className={`flex-1 flex flex-col pl-[72px] h-screen overflow-hidden ${theme.mainBg}`}>
+      <div className={`flex-1 flex flex-col pl-0 md:pl-[72px] h-screen overflow-hidden ${theme.mainBg}`}>
         <header
           // APP_HEADER_HEIGHT rather than a literal: this bar was h-14 while
           // every other bar in the CRM is h-16, so the whole header changed
@@ -1032,6 +1035,17 @@ function AdminAtlasDashboardContent() {
           }}
         >
           <h1 className={`font-bold text-lg capitalize tracking-wide flex items-center gap-3 ${theme.text}`}>
+            {/* Hamburger — mobile only, opens the sidebar drawer */}
+            <button
+              type="button"
+              aria-label="Open navigation"
+              onClick={() => setIsMobileSidebarOpen(true)}
+              className={`md:hidden -ml-1 mr-1 w-9 h-9 flex items-center justify-center rounded-xl transition-colors ${theme.toggleWrap}`}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
             <AppLogo />
             <span className={`text-xs sm:text-sm font-normal ${theme.textFaint}`}>— {activeView.replace("_", " ")}</span>
             <span

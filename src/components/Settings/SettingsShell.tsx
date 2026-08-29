@@ -23,6 +23,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useCrmTheme } from "@/lib/hooks/useCrmTheme";
 import type { IconType } from "react-icons";
 import { motion, AnimatePresence } from "framer-motion";
+import { Menu } from "lucide-react";
 import {
   FaBell,
   FaBoxes,
@@ -62,7 +63,9 @@ import { FaWandMagicSparkles } from "react-icons/fa6";
 
 import { BhoomiAiGlyph } from "@/components/bhoomi-ai/BhoomiAiIcon";
 import { type AdminNavItem } from "@/components/admin/AdminSidebar";
-import RoleSidebar, { type RailTarget } from "@/components/RoleSidebar";
+import RoleSidebar, { type RailTarget, railKindForRole } from "@/components/RoleSidebar";
+import MobileNavDrawer from "@/components/sales/MobileNavDrawer";
+import SalesSettingsBells from "@/components/sales/SalesSettingsBells";
 import AttendanceBadge from "@/components/AttendanceBadge";
 import { useAttendance } from "@/components/AttendanceContext";
 import CrmUpdatesNotification from "@/components/CrmUpdatesNotification";
@@ -265,6 +268,7 @@ export default function SettingsShell({ children }: { children: React.ReactNode 
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const { name: orgName, loading: orgLoading } = useOrgName();
 
   // The one theme preference the whole CRM shares, now owned by lib/theme.ts.
@@ -356,6 +360,7 @@ export default function SettingsShell({ children }: { children: React.ReactNode 
   }
 
   const admin = isAdminRole(user?.role);
+  const isSalesManager = railKindForRole(user?.role) === "sales";
   // The local nav hides what this user cannot use. The API routes enforce it
   // independently — hiding a link is presentation, not access control.
   const groups = NAV.map((g) => ({
@@ -420,6 +425,39 @@ export default function SettingsShell({ children }: { children: React.ReactNode 
     </nav>
   );
 
+  const horizontalLocalNav = (
+    <nav className="flex items-center gap-2 overflow-x-auto pb-3 custom-scrollbar-light w-full" aria-label="Settings sections">
+      {groups.flatMap(g => g.items).map(item => {
+        const active = pathname === item.href;
+        const Icon = item.icon;
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            aria-current={active ? "page" : undefined}
+            className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm whitespace-nowrap transition-colors flex-shrink-0 border border-transparent ${
+              active ? "" : "st-hover-surface hover:border-gray-200 dark:hover:border-white/10"
+            }`}
+            style={{
+              background: active ? T.accentSoft : "transparent",
+              color: active ? T.teal : T.text,
+              fontWeight: active ? 600 : 500,
+              boxShadow: active ? `inset 0 0 0 1px ${T.teal}` : undefined,
+            }}
+          >
+            <Icon className="h-4 w-4" style={{ color: active ? T.teal : T.muted }} />
+            {item.label}
+            {item.status === "planned" && (
+              <span className="ml-1 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide" style={{ background: T.neutralSoft, color: T.neutralText }}>
+                Soon
+              </span>
+            )}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+
   return (
     // The theme host sits outside ToastProvider so the toast stack — which
     // renders as a sibling of the children — resolves the same variables.
@@ -466,44 +504,54 @@ export default function SettingsShell({ children }: { children: React.ReactNode 
               role={user?.role}
               leading={
                 // Opens the Settings local nav on narrow screens, where the
-                // sections column is hidden.
-                <HeaderControl
-                  isDark={isDark}
-                  onClick={() => setDrawerOpen(true)}
-                  label="Open settings sections"
-                  className="lg:hidden"
-                >
-                  <FaSlidersH className="w-3.5 h-3.5" />
-                </HeaderControl>
+                // sections column is hidden. Admin only.
+                !isSalesManager ? (
+                  <HeaderControl
+                    isDark={isDark}
+                    onClick={() => setDrawerOpen(true)}
+                    label="Open settings sections"
+                    className="lg:hidden"
+                  >
+                    <FaSlidersH className="w-3.5 h-3.5" />
+                  </HeaderControl>
+                ) : null
               }
             >
               <>
-                <HeaderClock isDark={isDark} />
+                {!isSalesManager && <HeaderClock isDark={isDark} />}
 
-                <AttendanceBadge
-                  timeIn={timeIn}
-                  isMarkedPresent={isMarkedPresent}
-                  onLogout={handleLogout} />
+                {!isSalesManager && (
+                  <AttendanceBadge
+                    timeIn={timeIn}
+                    isMarkedPresent={isMarkedPresent}
+                    onLogout={handleLogout} />
+                )}
 
-                <HeaderControl
-                  isDark={isDark}
-                  onClick={toggleTheme}
-                  label={isDark ? "Switch to light mode" : "Switch to dark mode"}
-                >
-                  {isDark ? <SunIcon /> : <MoonIcon />}
-                </HeaderControl>
+                {!isSalesManager && (
+                  <HeaderControl
+                    isDark={isDark}
+                    onClick={toggleTheme}
+                    label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+                  >
+                    {isDark ? <SunIcon /> : <MoonIcon />}
+                  </HeaderControl>
+                )}
 
-                {/* The bell used to be a bare glyph between two bordered buttons.
-                  Wrapping it gives it the same chrome without touching what it
-                  does — the component still owns its own popup and unread
-                  count, and renders its badge over this frame. */}
-                <div className="relative flex items-center">
-                  <CrmUpdatesNotification user={user} theme={chrome} isDark={isDark} />
-                </div>
+                {/* Sales Manager gets Calendar + Bell; Admin gets System Updates */}
+                {isSalesManager ? (
+                  <div className="flex items-center gap-1 sm:gap-2">
+                    <SalesSettingsBells isDark={isDark} />
+                  </div>
+                ) : (
+                  <div className="relative flex items-center">
+                    <CrmUpdatesNotification user={user} theme={chrome} isDark={isDark} />
+                  </div>
+                )}
 
-                <div className="relative">
-                  <button
-                    type="button"
+                {!isSalesManager && (
+                  <div className="relative">
+                    <button
+                      type="button"
                     onClick={() => setIsProfileOpen(!isProfileOpen)}
                     aria-label="Account menu"
                     className={`h-9 w-9 flex-shrink-0 rounded-full flex items-center justify-center overflow-hidden font-semibold text-[13px] cursor-pointer transition-colors duration-150 border ${isDark
@@ -629,6 +677,18 @@ export default function SettingsShell({ children }: { children: React.ReactNode 
                     )}
                   </AnimatePresence>
                 </div>
+                )}
+
+                {/* Sales Manager Mobile Hamburger */}
+                {isSalesManager && (
+                  <button
+                    onClick={() => setMobileNavOpen(true)}
+                    className={`md:hidden h-8 w-8 sm:h-9 sm:w-9 flex-shrink-0 rounded-full sm:rounded-lg border border-transparent sm:border flex items-center justify-center transition-colors duration-150 cursor-pointer ${isDark ? "bg-white/10 text-[#EBEBF5] sm:bg-[#1C1C2A] sm:border-[#2A2A38] sm:text-yellow-300 hover:bg-white/20" : "bg-black/5 text-[#3C3C43] sm:bg-[#F1F5F9] sm:border-[#9CA3AF] sm:text-[#1A1A1A] hover:bg-black/10"} sm:hover:bg-[inherit]`}
+                    aria-label="Open navigation menu"
+                  >
+                    <Menu className="w-4 h-4 sm:w-5 sm:h-5" />
+                  </button>
+                )}
               </>
             </AppHeader>
 
@@ -638,23 +698,50 @@ export default function SettingsShell({ children }: { children: React.ReactNode 
             <div className={`flex-1 overflow-y-auto ${chrome.scroll}`}>
               <div className="mx-auto flex w-full max-w-[1400px] gap-6 px-4 py-6 sm:px-6">
                 {/* Local nav — sections *within* Settings, not application nav. */}
-                <aside
-                  className="hidden w-60 flex-shrink-0 self-start rounded-xl border lg:block"
-                  style={{
-                    background: T.surface,
-                    borderColor: T.border,
-                    boxShadow: isDark ? "none" : "0 1px 3px rgba(16,24,40,0.06)",
-                    position: "sticky",
-                    top: 0,
-                  }}
-                >
-                  {localNav}
-                </aside>
+                {!isSalesManager && (
+                  <aside
+                    className="hidden w-60 flex-shrink-0 self-start rounded-xl border lg:block"
+                    style={{
+                      background: T.surface,
+                      borderColor: T.border,
+                      boxShadow: isDark ? "none" : "0 1px 3px rgba(16,24,40,0.06)",
+                      position: "sticky",
+                      top: 0,
+                    }}
+                  >
+                    {localNav}
+                  </aside>
+                )}
 
                 {/* min-w-0 lets wide tables scroll inside their own container
                   instead of stretching the page. Keyed on pathname so a crash in
                   one section clears when the user navigates to another. */}
-                <main className="min-w-0 flex-1">
+                <main className="min-w-0 flex-1 flex flex-col">
+                  {isSalesManager && (
+                    <div className="mb-6">
+                      {/* Mobile Dropdown Trigger */}
+                      <div className="lg:hidden">
+                        <button
+                          onClick={() => setDrawerOpen(true)}
+                          className="flex items-center justify-between w-full p-3 rounded-xl border transition-colors"
+                          style={{ borderColor: T.border, background: T.surface }}
+                        >
+                          <div className="flex items-center gap-2">
+                            {currentSection && <currentSection.icon className="w-4 h-4" style={{ color: T.teal }} />}
+                            <span className="font-semibold text-sm" style={{ color: T.text }}>
+                              {currentSection?.label || "Settings"}
+                            </span>
+                          </div>
+                          <FaSlidersH className="w-4 h-4" style={{ color: T.muted }} />
+                        </button>
+                      </div>
+
+                      {/* Desktop Horizontal Tabs */}
+                      <div className="hidden lg:block border-b pb-1" style={{ borderColor: T.border }}>
+                        {horizontalLocalNav}
+                      </div>
+                    </div>
+                  )}
                   <SectionErrorBoundary key={pathname}>{children}</SectionErrorBoundary>
                 </main>
               </div>
@@ -706,6 +793,25 @@ export default function SettingsShell({ children }: { children: React.ReactNode 
                 </div>
               </div>
             </div>
+          )}
+
+          {isSalesManager && (
+            <MobileNavDrawer
+              open={mobileNavOpen}
+              onClose={() => setMobileNavOpen(false)}
+              activeId="settings"
+              onSelect={(item) => {
+                if (item.id === "settings") { setMobileNavOpen(false); return; }
+                railSelect({ id: item.id, label: item.label, link: "/dashboard/sales", tab: item.id });
+              }}
+              isDark={isDark}
+              userName={user?.name}
+              userRole={user?.role}
+              onToggleTheme={toggleTheme}
+              isMarkedPresent={isMarkedPresent}
+              timeIn={timeIn}
+              onLogout={handleLogout}
+            />
           )}
         </div>
       </ToastProvider>

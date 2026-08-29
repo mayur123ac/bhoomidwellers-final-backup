@@ -3,7 +3,8 @@
 import { useEffect, useRef } from "react";
 import type { SalesNavItem } from "./SalesSidebar";
 import { SALES_NAV } from "./SalesSidebar";
-import { FaTimes, FaSun, FaMoon, FaCheckCircle, FaClock } from "react-icons/fa";
+import { FaTimes, FaSun, FaMoon, FaCheckCircle, FaClock, FaSignOutAlt, FaUserCircle } from "react-icons/fa";
+import UserAvatar from "@/components/UserAvatar";
 
 export default function MobileNavDrawer({
   open,
@@ -17,6 +18,7 @@ export default function MobileNavDrawer({
   onToggleTheme,
   isMarkedPresent,
   timeIn,
+  onLogout,
 }: {
   open: boolean;
   onClose: () => void;
@@ -29,6 +31,7 @@ export default function MobileNavDrawer({
   onToggleTheme?: () => void;
   isMarkedPresent?: boolean;
   timeIn?: string | null;
+  onLogout?: () => void;
 }) {
   const drawerRef = useRef<HTMLDivElement>(null);
 
@@ -125,13 +128,18 @@ export default function MobileNavDrawer({
 
         {/* User info */}
         {userName && (
-          <div className="px-4 py-3">
-            <p className={`text-xs font-medium truncate ${isDark ? "text-gray-400" : "text-gray-500"}`}>
-              Signed in as
-            </p>
-            <p className={`text-sm font-semibold truncate ${isDark ? "text-white" : "text-gray-900"}`}>
-              {userName}
-            </p>
+          <div className="px-4 py-3 flex items-center gap-3">
+            <div className="w-10 h-10 flex-shrink-0 rounded-full overflow-hidden border border-[#d946a8]/30 flex items-center justify-center bg-black/10">
+              <UserAvatar name={userName} fallbackNode={<FaUserCircle className="w-full h-full text-gray-400" />} alt={userName} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className={`text-[11px] font-medium truncate ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                Signed in as
+              </p>
+              <p className={`text-[13.5px] font-bold truncate tracking-tight ${isDark ? "text-white" : "text-gray-900"}`}>
+                {userName}
+              </p>
+            </div>
           </div>
         )}
 
@@ -189,6 +197,21 @@ export default function MobileNavDrawer({
                 : "linear-gradient(90deg, transparent, rgba(0,0,0,0.06), transparent)",
             }}
           />
+
+          {/* Sign Out */}
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              className={`w-full flex items-center gap-2 px-3 py-2 mb-3 rounded-xl text-sm font-semibold transition-colors min-h-[44px] group ${
+                isDark
+                  ? "text-red-400 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20"
+                  : "text-red-600 bg-red-50 hover:bg-red-100 border border-red-200"
+              }`}
+            >
+              <FaSignOutAlt className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
+              Sign Out
+            </button>
+          )}
 
           {/* Theme toggle + Attendance status row */}
           <div className="flex items-center justify-between gap-3 mb-3">

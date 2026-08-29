@@ -3,40 +3,46 @@
 import type React from "react";
 import HeaderClock from "@/components/HeaderClock"; // Uncomment if used in your tree
 
+
+import Image from "next/image";
+
+
 /** 
- * Apple standard navigation bar heights.
- * Note: We do not hardcode the total height. We use the base height (44px/52px) 
- * PLUS the iOS safe-area-inset to natively push content below the Dynamic Island/Notch.
+ * Apple standard navigation bar heights adjusted for safe touch areas.
+ * Increased base mobile height to 56px to comfortably house 44px touch targets.
  */
-export const APP_HEADER_HEIGHT = "min-h-[calc(45px+env(safe-area-inset-top))] sm:min-h-[calc(52px+env(safe-area-inset-top))]";
-export const APP_HEADER_PADDING = "px-4 sm:px-6";
+export const APP_HEADER_HEIGHT = "min-h-[calc(56px+env(safe-area-inset-top))] sm:min-h-[calc(64px+env(safe-area-inset-top))]";
+export const APP_HEADER_PADDING = "px-4 sm:px-6"; // Standard 16px padding on mobile
 
 const appleFontStack = `-apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif`;
 
 /**
  * The brand mark.
  */
-/**
- * The brand mark.
- */
+interface AppLogoProps {
+  src?: string;
+  width?: number;
+  height?: number;
+  className?: string;
+}
 export function AppLogo({
   src = "/assets/bhoomidwellers.png",
-  style,
+  width = 32,
+  height = 32,
   className = "",
-}: {
-  src?: string;
-  className?: string;
-  style?: React.CSSProperties;
-}) {
+}: AppLogoProps) {
   return (
-    <img
+    <Image
       src={src}
       alt="Bhoomi Dwellers"
-      className={`object-contain flex-shrink-0 transition-opacity duration-200 hover:opacity-80 ${className}`}
-      style={{ width: "auto", height: "clamp(52px, 8vw, 70px)", maxWidth: "200px", ...style }}
+      width={width}
+      height={height}
+      className={`object-contain ${className}`}
+      priority
     />
   );
 }
+
 /**
  * Circular icon buttons for Theme, Profile, Notifications.
  * HIG strictly dictates a 44x44pt minimum touch target. We achieve this by adding padding 
@@ -135,17 +141,30 @@ export default function AppHeader({
       }}
     >
       {/* ── Left: brand → context → role ── */}
-      <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-        <AppLogo src={logoSrc} />
+      <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
+
+        {/* 1. Mobile Logo: Shows ONLY on small screens. Capped width prevents crushing right-side controls. */}
+        <img
+          src="/assets/logobrowser_trans.png"
+          alt="Bhoomi Dwellers"
+          className="block sm:hidden h-7 sm:h-8 w-auto max-w-[110px] object-contain flex-shrink-0 transition-opacity duration-200 hover:opacity-80"
+        />
+
+        {/* 2. Desktop Logo: Shows ONLY on screens 'sm' and larger */}
+        <img
+          src={logoSrc}
+          alt="Bhoomi Dwellers"
+          className="hidden sm:block h-8 sm:h-9 w-auto max-w-[200px] object-contain flex-shrink-0 transition-opacity duration-200 hover:opacity-80"
+        />
 
         {context && (
           <>
             <Divider isDark={isDark} />
             <h1
-              className="font-semibold truncate hidden md:inline sm:inline"
+              className="font-semibold truncate min-w-0"
               style={{
-                // Apple standard: 17px for navigation titles, -0.41px tracking
-                fontSize: "17px",
+                // Drops to 14px on tiny screens, scales to 17px on desktop
+                fontSize: "clamp(14px, 4vw, 17px)",
                 letterSpacing: "-0.41px",
                 lineHeight: "22px",
                 color: isDark ? "#FFFFFF" : "#000000"
@@ -158,8 +177,8 @@ export default function AppHeader({
 
         {role && (
           <span
-            // Apple standard: fully rounded capsule for tags, small semibold text
-            className="hidden md:inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold tracking-wide capitalize whitespace-nowrap flex-shrink-0"
+            // Kept hidden on mobile to save space, visible on small tablets and up
+            className="hidden sm:inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold tracking-wide capitalize whitespace-nowrap flex-shrink-0"
             style={{
               background: isDark ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.06)",
               color: isDark ? "rgba(235, 235, 245, 0.8)" : "rgba(60, 60, 67, 0.8)",
@@ -171,7 +190,7 @@ export default function AppHeader({
       </div>
 
       {/* ── Right: controls ── */}
-      <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
+      <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
         {leading}
         {children}
       </div>

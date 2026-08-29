@@ -172,7 +172,8 @@ function buildTheme(isDark: boolean) {
     dropdownItem: isDark ? "hover:bg-[#222] border-[#222]" : "hover:bg-[#F8FAFC] border-[#F0F0F0]",
 
     // ── Typography ──
-    text: isDark ? "text-white" : "text-[#0f172a]",
+    text: isDark ? "text-white" : "text-[#00AEEF]",
+    textname: isDark ? "text-[#d946a8]" : "text-[#334155]",
     textMuted: isDark ? "text-gray-400" : "text-[#334155]",
     textFaint: isDark ? "text-gray-500" : "text-[#475569]",
     textHeader: isDark ? "text-xs text-gray-500 uppercase" : "text-xs text-[#334155] font-bold uppercase",
@@ -204,7 +205,7 @@ function buildTheme(isDark: boolean) {
     statGlow5: isDark ? "bg-green-600/10" : "bg-emerald-400/10",
 
     // ── Brand accent ──
-    accentText: isDark ? "text-[#d946a8] text-[22px]" : "text-[#00AEEF]",
+    accentText: isDark ? "text-[#d946a8] text-[12px]" : "text-[#00AEEF]",
     accentBg: isDark ? "bg-[#d946a8]/10 text-[#d946a8] border border-[#d946a8]/30" : "bg-[#00AEEF]/10 text-[#00AEEF] border border-[#00AEEF]/30",
     sectionTitle: isDark ? "text-[#d946a8]" : "text-[#9E217B]",
     sectionBorder: isDark ? "border-[#d946a8]/20" : "border-[#9E217B]/25",
@@ -725,7 +726,7 @@ export default function SalesDashboard() {
             <div className="relative">
               <button
                 onClick={() => { setActivePopup(activePopup === "visit" ? null : "visit"); }}
-                className={`relative h-9 w-9 flex-shrink-0 rounded-lg border flex items-center justify-center transition-colors duration-150 cursor-pointer ${t.toggleWrap} hover:border-orange-500/50 ${t.textMuted}`}
+                className={`relative h-8 w-8 sm:h-9 sm:w-9 flex-shrink-0 rounded-full sm:rounded-lg border border-transparent sm:border flex items-center justify-center transition-colors duration-150 cursor-pointer ${isDark ? "bg-white/10 text-[#EBEBF5] sm:bg-[#1C1C2A] sm:border-[#2A2A38] sm:text-yellow-300 hover:bg-white/20" : "bg-black/5 text-[#3C3C43] sm:bg-[#F1F5F9] sm:border-[#9CA3AF] sm:text-[#1A1A1A] hover:bg-black/10"} sm:hover:bg-[inherit] sm:hover:border-orange-500/50`}
               >
                 <FaCalendarAlt className="text-sm" />
                 {visitNotificationLeads.length > 0 && (
@@ -777,7 +778,7 @@ export default function SalesDashboard() {
             <div className="relative">
               <button
                 onClick={() => { setActivePopup(activePopup === "notifications" ? null : "notifications"); }}
-                className={`relative h-9 w-9 flex-shrink-0 rounded-lg border flex items-center justify-center transition-colors duration-150 cursor-pointer ${t.toggleWrap} hover:border-purple-500/50 ${t.textMuted}`}
+                className={`relative h-8 w-8 sm:h-9 sm:w-9 flex-shrink-0 rounded-full sm:rounded-lg border border-transparent sm:border flex items-center justify-center transition-colors duration-150 cursor-pointer ${isDark ? "bg-white/10 text-[#EBEBF5] sm:bg-[#1C1C2A] sm:border-[#2A2A38] sm:text-yellow-300 hover:bg-white/20" : "bg-black/5 text-[#3C3C43] sm:bg-[#F1F5F9] sm:border-[#9CA3AF] sm:text-[#1A1A1A] hover:bg-black/10"} sm:hover:bg-[inherit] sm:hover:border-purple-500/50`}
               >
                 <FaBell className="text-sm" />
                 {followUpLeads.length > 0 && (
@@ -928,15 +929,15 @@ export default function SalesDashboard() {
             {/* Hamburger — mobile only */}
             <button
               onClick={() => setMobileDrawerOpen(true)}
-              className={`md:hidden h-9 w-9 flex-shrink-0 rounded-lg border flex items-center justify-center transition-colors duration-150 cursor-pointer ${t.toggleWrap}`}
+              className={`md:hidden h-8 w-8 sm:h-9 sm:w-9 flex-shrink-0 rounded-full sm:rounded-lg border border-transparent sm:border flex items-center justify-center transition-colors duration-150 cursor-pointer ${isDark ? "bg-white/10 text-[#EBEBF5] sm:bg-[#1C1C2A] sm:border-[#2A2A38] sm:text-yellow-300 hover:bg-white/20" : "bg-black/5 text-[#3C3C43] sm:bg-[#F1F5F9] sm:border-[#9CA3AF] sm:text-[#1A1A1A] hover:bg-black/10"} sm:hover:bg-[inherit]`}
               aria-label="Open navigation menu"
             >
-              <Menu className="w-5 h-5" />
+              <Menu className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
           </div>
         </AppHeader>
 
-        <main className={`flex-1 overflow-hidden custom-scrollbar ${t.mainBg} ${activeView === "assistant" ? "p-0" : "p-1 sm:p-3 lg:p-3 overflow-y-auto"}`}>
+        <main className={`flex-1 overflow-hidden custom-scrollbar ${t.mainBg} ${activeView === "assistant" ? "p-0" : "p-4 sm:p-3 lg:p-3 overflow-y-auto"}`}>
           {(activeView === "sales" || activeView === "overview" || activeView === "forms" || activeView === "detail" || activeView === "closed-leads") ? (
             <SalesManagerView
               managers={managers} allLeads={allLeads} followUps={followUps}
@@ -1015,6 +1016,7 @@ export default function SalesDashboard() {
         onToggleTheme={toggleTheme}
         isMarkedPresent={isMarkedPresent}
         timeIn={timeIn}
+        onLogout={handleLogout}
       />
 
       {/* ── BOTTOM NAV (MOBILE) — simplified to 4 core items ── */}
@@ -2205,48 +2207,104 @@ function SalesManagerView({
               </div>
             </div>
 
-            <div className={`rounded-3xl border overflow-hidden ${t.tableWrap}`} style={t.tableGlass}>
-              <div className={`p-3 border-b flex justify-between items-center ${t.tableBorder}`}>
-                <p className={`text-sm font-semibold ${t.text}`}>{filteredClosedLeads.length} closed leads</p>
+            <div className={`rounded-2xl border shadow-sm overflow-hidden flex flex-col ${t.tableWrap}`} style={t.tableGlass}>
+              {/* ── Table Header Area ── */}
+              <div className={`px-4 sm:px-6 py-4 sm:py-5 border-b flex justify-between items-center ${t.tableHeader || t.tableHead} ${t.tableBorder}`}>
+                <h2 className={`text-base sm:text-lg font-semibold tracking-tight flex items-center gap-3 ${t.text}`}>
+                  Closed Leads
+                  <span className={`px-3 py-0.5 rounded-full text-xs font-bold border ${t.btnClosingBadge || (isDark ? "bg-white/10 border-white/5" : "bg-black/5 border-black/5")}`}>
+                    {filteredClosedLeads.length}
+                  </span>
+                </h2>
               </div>
+
+              {/* ── Scrollable Table Wrapper ── */}
               <div className="overflow-x-auto w-full custom-scrollbar">
                 <table className="w-full text-left border-collapse whitespace-nowrap">
-                  <thead><tr className={t.tableHead}>
-                    {["Lead No.", "Client Name", "Budget", "Property", "Status", "Site Visit", "Closing Date", "Actions"].map(h => (
-                      <th key={h} className={`px-4 sm:px-3 py-3 sm:py-2.5 font-bold uppercase tracking-wider border-b ${t.textHeader} ${t.tableBorder}`}>{h}</th>
-                    ))}
-                  </tr></thead>
+                  <thead>
+                    <tr className={t.tableHead}>
+                      {["Lead No.", "Client Name", "Budget", "Property", "Source", "Cp Name", "Cp Company", "Cp Number", "Status", "Site Visit", "Closing Date", "Actions"].map(h => (
+                        <th
+                          key={h}
+                          className={`px-4 sm:px-6 py-3 sm:py-4 font-semibold text-[11px] sm:text-xs uppercase tracking-wider border-b ${t.textHeader} ${t.tableBorder}`}
+                        >
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
                   <tbody className={`${t.tableDivide} divide-y`}>
-                    {isLoading ? <tr><td colSpan={8} className={`p-8 text-center text-sm ${t.textMuted}`}>Loading...</td></tr>
-                      : filteredClosedLeads.length === 0 ? (
-                        <tr><td colSpan={8} className={`p-12 text-center ${t.textMuted}`}>
-                          <FaHandshake className={`text-5xl mx-auto mb-4 ${t.textFaint}`} />
-                          <p className="text-lg font-semibold">No closed leads yet.</p>
-                        </td></tr>
-                      ) : filteredClosedLeads.map((lead: any) => (
-                        <tr key={lead.id} className={`transition-colors cursor-pointer ${t.tableRow}`} onClick={() => {
-                          setSelectedLead(lead);
-                          setMainView("detail");
-                          setSubView("detail");
-                        }}>
-                          <td className={`px-4 sm:px-3 py-3 sm:py-2.5 font-bold ${t.accentText}`}>#{lead.sr_no || lead.id}</td>
-                          <td className={`px-4 py-3 sm:py-2.5 font-semibold ${t.text}`}>{lead.name}</td>
-                          <td className={`px-4 py-3 sm:py-2.5 font-bold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget || lead.budget}</td>
-                          <td className={`px-4 py-3 sm:py-2.5 ${t.textMuted}`}>{lead.propType || lead.configuration || "N/A"}</td>
-                          <td className="px-4 py-3 sm:py-2.5">
-                            <span className={`px-2 py-1 rounded-full text-[9px] sm:text-[10px] font-bold uppercase border ${t.statusClosing}`}>{lead.status}</span>
+                    {isLoading ? (
+                      <tr>
+                        <td colSpan={8} className={`p-10 text-center text-sm font-medium ${t.textMuted}`}>
+                          <div className="flex flex-col items-center justify-center gap-3">
+                            <div className="w-5 h-5 rounded-full border-2 border-current border-t-transparent animate-spin opacity-50" />
+                            Loading closed leads...
+                          </div>
+                        </td>
+                      </tr>
+                    ) : filteredClosedLeads.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className={`p-16 text-center ${t.textMuted}`}>
+                          <FaHandshake className={`text-5xl mx-auto mb-4 opacity-20 ${t.textFaint}`} />
+                          <p className="text-base font-semibold tracking-tight">No closed leads yet.</p>
+                          <p className={`text-xs mt-1 font-medium ${t.textFaint}`}>Successfully closed deals will appear here.</p>
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredClosedLeads.map((lead: any) => (
+                        <tr
+                          key={lead.id}
+                          className={`transition-all duration-200 cursor-pointer group ${t.tableRow}`}
+                          onClick={() => {
+                            setSelectedLead(lead);
+                            setMainView("detail");
+                            setSubView("detail");
+                          }}
+                        >
+                          <td className={`px-4 sm:px-6 py-3.5 sm:py-4 font-mono text-xs sm:text-sm font-bold ${t.accentText}`}>
+                            #{lead.sr_no || lead.id}
                           </td>
-                          <td className={`px-4 py-3 sm:py-2.5 text-[10px] sm:text-xs ${lead.mongoVisitDate ? "text-orange-400" : t.textFaint}`}>
+                          <td className={`px-4 sm:px-6 py-3.5 sm:py-4 font-semibold tracking-tight text-[13px] sm:text-sm ${t.text}`}>
+                            {lead.name}
+                          </td>
+                          <td className={`px-4 sm:px-6 py-3.5 sm:py-4 font-semibold text-[13px] sm:text-sm tracking-tight ${isDark ? "text-green-400" : "text-emerald-600"}`}>
+                            {lead.salesBudget || lead.budget}
+                          </td>
+                          <td className={`px-4 sm:px-6 py-3.5 sm:py-4 text-xs sm:text-sm font-medium ${t.textMuted}`}>
+                            {lead.propType || lead.configuration || "N/A"}
+                          </td>
+                          <td className={`px-4 sm:px-6 py-3.5 sm:py-4 text-xs sm:text-sm font-medium ${t.textMuted}`}>
+                            {lead.source || lead.source || "N/A"}
+                          </td>
+                          <td className={`px-4 sm:px-6 py-3.5 sm:py-4 text-xs sm:text-sm font-medium ${t.textMuted}`}>
+                            {lead.cpName || lead.cp_name || "N/A"}
+                          </td>
+                          <td className={`px-4 sm:px-6 py-3.5 sm:py-4 text-xs sm:text-sm font-medium ${t.textMuted}`}>
+                            {lead.cpCompany || lead.cp_company || "N/A"}
+                          </td>
+                          <td className={`px-4 sm:px-6 py-3.5 sm:py-4 text-xs sm:text-sm font-medium ${t.textMuted}`}>
+                            {lead.cpPhone || "N/A"}
+                          </td>
+                          <td className="px-4 sm:px-6 py-3.5 sm:py-4">
+                            <span className={`px-2.5 py-1 rounded-md text-[10px] sm:text-[11px] font-bold uppercase tracking-wider border flex-shrink-0 ${t.statusClosing}`}>
+                              {lead.status}
+                            </span>
+                          </td>
+                          <td className={`px-4 sm:px-6 py-3.5 sm:py-4 text-xs font-medium ${lead.mongoVisitDate ? "text-orange-500" : t.textFaint}`}>
                             {lead.mongoVisitDate ? formatDate(lead.mongoVisitDate).split(",")[0] : "—"}
                           </td>
-                          <td className={`px-4 py-3 sm:py-2.5 text-[10px] sm:text-xs ${t.textFaint}`}>
+                          <td className={`px-4 sm:px-6 py-3.5 sm:py-4 text-xs font-medium ${t.textFaint}`}>
                             {lead.closingDate ? formatDate(lead.closingDate).split(",")[0] : "—"}
                           </td>
-                          <td className="px-4 py-3 sm:py-2.5">
-                            <button className={`text-xs font-bold px-3 py-1.5 rounded-lg w-full sm:w-auto ${t.btnWarning}`}>View History</button>
+                          <td className="px-4 sm:px-6 py-3.5 sm:py-4">
+                            <span className={`text-[11px] sm:text-xs font-bold px-4 py-2 rounded-lg transition-all shadow-sm active:scale-95 inline-block text-center whitespace-nowrap opacity-90 group-hover:opacity-100 ${t.btnWarning}`}>
+                              View History
+                            </span>
                           </td>
                         </tr>
-                      ))}
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -2294,81 +2352,142 @@ function SalesManagerView({
           ) : (
             <div className="animate-fadeIn w-full flex flex-col gap-2 pb-1">
               {/* Detail header — responsive: stacked on mobile */}
-              <div className={`flex flex-col gap-2 rounded-xl border p-2.5 sm:p-3 shadow-sm flex-shrink-0 ${selectedLead.is_lost_lead ? t.cardLost : t.card}`} style={t.cardGlass}>
-                {/* Row 1: Back + Name + Status */}
-                <div className="flex items-center gap-2 min-w-0">
-                  <button onClick={() => { setMainView("forms"); setSubView("cards"); }} className={`w-9 h-9 flex flex-shrink-0 items-center justify-center border rounded-xl transition-colors cursor-pointer shadow-sm ${t.textMuted} ${t.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}><FaChevronLeft className="text-sm" /></button>
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <span className={`text-base sm:text-lg font-bold flex-shrink-0 ${t.accentText}`}>#{selectedLead.sr_no || selectedLead.id}</span>
-                    <span className={`text-base sm:text-lg font-bold truncate ${t.text}`}>{selectedLead.name}</span>
+              {/* Detail header — single row on desktop, stacked on mobile */}
+              <div className={`flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 rounded-[1.25rem] border p-3.5 sm:p-2.5 shadow-sm flex-shrink-0 transition-colors ${selectedLead.is_lost_lead ? t.cardLost : t.card}`} style={t.cardGlass}>
+
+                {/* Back + Lead Name */}
+                {/* Back + Lead Name */}
+                <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 lg:flex-shrink-0">
+                  <button
+                    onClick={() => { setMainView("forms"); setSubView("cards"); }}
+                    className={`w-9 h-9 sm:w-10 sm:h-10 flex flex-shrink-0 items-center justify-center border rounded-full transition-all cursor-pointer active:scale-95 shadow-sm ${t.textMuted} ${t.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-gray-50"}`}
+                    aria-label="Back to leads"
+                  >
+                    <FaChevronLeft className="text-[13px] sm:text-sm" />
+                  </button>
+
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-2.5 min-w-0 flex-1">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className={`text-base md:text-lg lg:text-xl font-bold tracking-tight truncat flex-shrink-0 ${t.textname}`}>
+                        #{selectedLead.sr_no || selectedLead.id}
+                      </span>
+                      <span
+                        className={`text-base md:text-lg lg:text-xl font-bold tracking-tight truncate ${t.text}`}
+                      >
+                        {selectedLead.name}
+                      </span>
+                    </div>
+
+                    {/* Badges row for mobile (wraps under name), inline for desktop */}
+                    <div className="flex items-center gap-1.5 mt-0.5 sm:mt-0">
+                      {selectedLead.status === "Closing" && (
+                        <span className={`text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-md border flex items-center gap-1.5 flex-shrink-0 tracking-wide uppercase ${t.statusClosing}`}>
+                          <FaHandshake className="text-[11px]" /> <span>Closing</span>
+                        </span>
+                      )}
+                      {selectedLead.is_lost_lead && (
+                        <span className={`text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-md border flex items-center gap-1.5 flex-shrink-0 tracking-wide uppercase ${t.statusLost}`}>
+                          <Ghost className="w-3 h-3" /> <span>Lost</span>
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  {selectedLead.status === "Closing" && (
-                    <span className={`text-[9px] sm:text-[11px] font-bold px-2 py-0.5 sm:py-1 rounded-full border flex items-center gap-1 flex-shrink-0 ${t.statusClosing}`}>
-                      <FaHandshake className="text-[10px]" /> <span className="hidden xs:inline">Closing</span>
-                    </span>
-                  )}
-                  {selectedLead.is_lost_lead && (
-                    <span className={`text-[9px] sm:text-[11px] font-bold px-2 py-0.5 sm:py-1 rounded-full border flex items-center gap-1 flex-shrink-0 ${t.statusLost}`}>
-                      <Ghost className="w-3 h-3" /> <span className="hidden xs:inline">Lost</span>
-                    </span>
-                  )}
                 </div>
-                {/* Row 2: Actions — responsive grid on mobile, flex-row on desktop */}
-                <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-1.5 sm:gap-2">
-                  {bookingData ? (
-                    <button onClick={() => openBookingView(selectedLead.id)} className="font-bold px-2.5 py-2 sm:py-1.5 rounded-xl text-[11px] sm:text-xs flex items-center gap-1.5 transition-colors cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm justify-center min-h-[40px]">
-                      <FaEye /> Booking
-                    </button>
-                  ) : (
-                    <button disabled title="Booking Form has not been submitted yet." className="font-bold px-2.5 py-2 sm:py-1.5 rounded-xl text-[11px] sm:text-xs flex items-center gap-1.5 transition-colors opacity-50 cursor-not-allowed bg-indigo-400 text-white shadow-sm justify-center min-h-[40px]">
-                      <FaEye /> Booking
-                    </button>
-                  )}
+
+                {/* Actions — wraps 2-per-row on mobile, single row beside the name on desktop */}
+                <div className="flex flex-wrap items-stretch lg:flex-nowrap lg:items-center gap-2 mt-1 lg:mt-0 [&>button]:flex-auto lg:[&>button]:flex-none [&>span]:flex-auto lg:[&>span]:flex-none">
+
+                  {/* Booking Action */}
+                  <button
+                    onClick={bookingData ? () => openBookingView(selectedLead.id) : undefined}
+                    disabled={!bookingData}
+                    title={!bookingData ? "Booking Form has not been submitted yet." : undefined}
+                    className={`font-semibold px-3 py-1.5 sm:px-3 sm:py-2 rounded-xl text-[8px] sm:text-[13px] flex items-center justify-center gap-1.5 transition-all shadow-sm min-h-[40px] sm:min-h-[38px] ${bookingData
+                      ? "cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white hover:shadow-md active:scale-[0.98]"
+                      : "opacity-50 cursor-not-allowed bg-indigo-400 text-white"
+                      }`}
+                  >
+                    <FaEye className="text-[10px]" /> Booking
+                  </button>
+
+                  {/* Lead Locked State (Read Only / Restore / Reopen) */}
                   {isLeadLocked ? (
                     <>
-                      <span className={`text-[10px] font-bold px-2 py-1.5 rounded-full border flex items-center gap-1 justify-center ${selectedLead.is_lost_lead ? t.statusLost : t.statusClosing}`}>
-                        {selectedLead.is_lost_lead ? <><Ghost className="w-3 h-3" /> Read Only</> : <><FaCheckCircle className="text-[10px]" /> Read Only</>}
+                      <span className={`text-[11px] sm:text-[12px] font-semibold px-3 py-2 sm:py-2 rounded-xl border flex items-center justify-center gap-1.5 min-h-[44px] sm:min-h-[38px] ${selectedLead.is_lost_lead ? t.statusLost : t.statusClosing}`}>
+                        {selectedLead.is_lost_lead ? <Ghost className="w-3.5 h-3.5" /> : <FaCheckCircle className="text-[13px]" />}
+                        Read Only
                       </span>
+
                       {selectedLead.is_lost_lead ? (
-                        <button onClick={handleRestoreLead} disabled={isSavingLost} className={`font-bold px-2.5 py-2 sm:py-1.5 rounded-xl text-[11px] sm:text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md justify-center min-h-[40px] ${t.btnPrimary} disabled:opacity-60`}>
-                          <FaCheckCircle className="text-[10px]" /> Restore
+                        <button
+                          onClick={handleRestoreLead}
+                          disabled={isSavingLost}
+                          className={`font-semibold px-3 py-2 sm:py-2 rounded-xl text-[8px] sm:text-[13px] flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-[0.98] min-h-[44px] sm:min-h-[38px] ${t.btnPrimary} disabled:opacity-60 disabled:cursor-not-allowed`}
+                        >
+                          <FaCheckCircle className="text-[13px]" /> Restore
                         </button>
                       ) : (
-                        <button onClick={handleReopenLead} disabled={isReopening} className={`font-bold px-2.5 py-2 sm:py-1.5 rounded-xl text-[11px] sm:text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md justify-center min-h-[40px] ${t.btnPrimary} disabled:opacity-60`}>
-                          ↩️ Reopen
+                        <button
+                          onClick={handleReopenLead}
+                          disabled={isReopening}
+                          className={`font-semibold px-3 py-2 sm:py-2 rounded-xl text-[8px] sm:text-[13px] flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-[0.98] min-h-[44px] sm:min-h-[38px] ${t.btnPrimary} disabled:opacity-60 disabled:cursor-not-allowed`}
+                        >
+                          <span className="text-[14px]">↩️</span> Reopen
                         </button>
                       )}
                     </>
                   ) : (
+                    /* Active Lead Actions (Sales, Loan, Lost, Closing) */
                     !showSalesForm && !showLoanForm && (
                       <>
-                        <button onClick={() => { prefillSalesForm(); setShowSalesForm(true); setShowLoanForm(false); emitActivity({ type: 'LEAD_INTERACTION', action: 'Editing Closing Form', leadId: selectedLead?.id, leadName: selectedLead?.name, module: 'Sales Form' }); }}
-                          className={`font-bold px-2.5 py-2 sm:py-1.5 rounded-xl text-[11px] sm:text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md justify-center min-h-[40px] ${t.btnPrimary} ${isDark ? "shadow-purple-600/20" : "shadow-[#00AEEF]/20"}`}>
-                          <FaFileInvoice /> Salesform
+                        <button
+                          onClick={() => {
+                            prefillSalesForm(); setShowSalesForm(true); setShowLoanForm(false);
+                            emitActivity({ type: 'LEAD_INTERACTION', action: 'Editing Closing Form', leadId: selectedLead?.id, leadName: selectedLead?.name, module: 'Sales Form' });
+                          }}
+                          className={`font-semibold px-3 py-2 sm:py-2 rounded-xl text-[10px] sm:text-[13px] flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] shadow-sm min-h-[44px] sm:min-h-[38px] ${t.btnPrimary} ${isDark ? "shadow-purple-900/20" : "shadow-[#00AEEF]/10"}`}
+                        >
+                          <FaFileInvoice className="text-[10px]" /> Sales
                         </button>
-                        <button onClick={() => { setShowLoanForm(true); setShowSalesForm(false); emitActivity({ type: 'LEAD_INTERACTION', action: 'Editing Loan Form', leadId: selectedLead?.id, leadName: selectedLead?.name, module: 'Loan Form' }); }}
-                          className={`font-bold px-2.5 py-2 sm:py-1.5 rounded-xl text-[11px] sm:text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md justify-center min-h-[40px] ${t.btnSecondary} ${isDark ? "shadow-blue-600/20" : "shadow-[#00AEEF]/20"}`}>
-                          <FaUniversity /> Loan
+
+                        <button
+                          onClick={() => {
+                            setShowLoanForm(true); setShowSalesForm(false);
+                            emitActivity({ type: 'LEAD_INTERACTION', action: 'Editing Loan Form', leadId: selectedLead?.id, leadName: selectedLead?.name, module: 'Loan Form' });
+                          }}
+                          className={`font-semibold px-3 py-2 sm:py-2 rounded-xl text-[10px] sm:text-[13px] flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] shadow-sm min-h-[44px] sm:min-h-[38px] ${t.btnSecondary} ${isDark ? "shadow-blue-900/20" : "shadow-[#00AEEF]/10"}`}
+                        >
+                          <FaUniversity className="text-[10px]" /> Loan
                         </button>
-                        <button onClick={openLostLeadModal} className={`font-bold px-2.5 py-2 sm:py-1.5 rounded-xl text-[11px] sm:text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md justify-center min-h-[40px] ${t.btnDanger}`}>
-                          <AlertTriangle className="w-3.5 h-3.5" /> Lost
+
+                        <button
+                          onClick={openLostLeadModal}
+                          className={`font-semibold px-3 py-2 sm:py-2 rounded-xl text-[10px] sm:text-[13px] flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] shadow-sm min-h-[44px] sm:min-h-[38px] ${t.btnDanger}`}
+                        >
+                          <AlertTriangle className="w-4 h-4" /> Lost
                         </button>
-                        <button onClick={() => setIsClosingModalOpen(true)} className={`font-bold px-2.5 py-2 sm:py-1.5 rounded-xl text-[11px] sm:text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md justify-center min-h-[40px] ${t.btnWarning} shadow-amber-600/20`}>
-                          <FaHandshake /> Closing
+
+                        <button
+                          onClick={() => setIsClosingModalOpen(true)}
+                          className={`font-semibold px-3 py-2 sm:py-2 rounded-xl text-[10px] sm:text-[13px] flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] shadow-sm min-h-[44px] sm:min-h-[38px] ${t.btnWarning} shadow-amber-600/10`}
+                        >
+                          <FaHandshake className="text-[10px]" /> Closing
                         </button>
                       </>
                     )
                   )}
+
+                  {/* Admin Delete Action */}
                   {isAdmin && (
                     <button
                       type="button"
                       onClick={() => openPermanentDeleteDialog()}
-                      className={`font-bold px-2.5 py-2 sm:py-1.5 rounded-xl text-[11px] sm:text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md justify-center min-h-[40px] col-span-2 sm:col-span-1 ${isDark
-                        ? "bg-red-950/50 text-red-200 border border-red-900/50 hover:bg-red-600 hover:text-white"
-                        : "bg-red-50 text-red-700 border border-red-200 hover:bg-red-600 hover:text-white"
+                      className={`font-semibold px-3 py-2 sm:py-2 rounded-xl text-[12px] sm:text-[13px] flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] shadow-sm min-h-[44px] sm:min-h-[38px] ${isDark
+                        ? "bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500 hover:text-white"
+                        : "bg-red-50 text-red-600 border border-red-100 hover:bg-red-600 hover:border-red-600 hover:text-white"
                         }`}
                     >
-                      <Trash2 className="w-3.5 h-3.5" /> Delete
+                      <Trash2 className="w-4 h-4" /> Delete Lead
                     </button>
                   )}
                 </div>
@@ -2440,7 +2559,7 @@ function SalesManagerView({
                         <button onClick={() => setDetailTab("loan")} className={`flex-1 py-2 text-xs sm:text-sm font-bold rounded-lg transition-colors cursor-pointer ${detailTab === "loan" ? t.btnSecondary : `${t.textMuted} ${isDark ? "hover:text-white hover:bg-[#222]" : "hover:text-[#1A1A1A] hover:bg-[#F1F5F9]"}`}`}>Loan Tracking</button>
                       </div>
 
-                      <div className={`overflow-y-auto custom-scrollbar rounded-xl p-3 sm:p-6 shadow-lg border max-h-[100vh] lg:max-h-[calc(100vh-325px)] ${t.chatPanel}`} style={t.chatPanelGl}>
+                      <div className={`overflow-y-auto custom-scrollbar rounded-xl p-3 sm:p-6 shadow-lg border max-h-[100vh] lg:max-h-[calc(100vh-225px)] ${t.chatPanel}`} style={t.chatPanelGl}>
                         {detailTab === "personal" ? (
                           <div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 sm:gap-y-4 gap-x-4 text-xs sm:text-sm">
@@ -2458,10 +2577,6 @@ function SalesManagerView({
                               <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Planning to Buy?</p><p className={`font-semibold ${t.text}`}>{selectedLead.planningPurchase || "Pending"}</p></div>
                               <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Loan Required?</p><p className={`font-semibold ${t.text}`}>{loanDealLatest?.loan_required || selectedLead.loanPlanned || "Pending"}</p></div>
                               <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Status</p><span className={`text-xs sm:text-sm font-bold ${getStatusStyle(selectedLead.status)}`}>{selectedLead.status || "Assigned"}</span></div>
-                              {/* <div className={`col-span-1 sm:col-span-2 p-3 sm:p-3 rounded-xl border ${t.settingsBg}`} style={t.settingsBgGl}>
-                              <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-0.5 sm:mb-1 ${isDark?"text-[#00AEEF]":"text-[#00AEEF]"}`}>📍 Site Visit Date</p>
-                              <p className={`text-sm sm:text-base font-black ${t.text}`}>{selectedLead.mongoVisitDate?formatDate(selectedLead.mongoVisitDate):"Not Scheduled"}</p>
-                            </div> */}
                             </div>
                             {selectedLead.is_lost_lead && (
                               <div className={`mt-4 border rounded-xl p-3 sm:p-3 ${t.statusLost}`}>
@@ -2534,21 +2649,14 @@ function SalesManagerView({
                             onSuccess={refetch}
                           />
                         </div>
-                        {/* <ActivityTimeline
-                        lead={selectedLead}
-                        isDark={isDark}
-                        theme={t}
-                        className="mt-3"
-                      /> */}
-
                       </div>
 
                       {/* Contact actions. Sits where the Twilio "Browser Call"
-                          tile used to be, so the call affordance stays in the
-                          place users already reach for. Self-gating: the widget
-                          renders nothing when Bolna is unconfigured, and the
-                          WhatsApp button below is unaffected either way. */}
-                      <div className="flex-shrink-0 mb-3">
+                      tile used to be, so the call affordance stays in the
+                      place users already reach for. Self-gating: the widget
+                      renders nothing when Bolna is unconfigured, and the
+                      WhatsApp button below is unaffected either way. */}
+                      {/* <div className="flex-shrink-0 mb-3">
                         <BolnaCallWidget
                           leadId={Number(selectedLead.id)}
                           leadName={selectedLead.name}
@@ -2556,11 +2664,14 @@ function SalesManagerView({
                           userData={{ project: selectedLead.propType || selectedLead.configuration }}
                           compact
                         />
-                      </div>
+                      </div> */}
 
                       {/* Two columns now that Manual Call and AI Call join the
-                          WhatsApp tile. */}
+                      WhatsApp tile. */}
                       <div className="grid grid-cols-2 gap-3 flex-shrink-0">
+                        <button className={`border flex flex-col items-center justify-center py-3 rounded-xl transition-all cursor-pointer gap-1 ${isDark ? "bg-[#9E217B]/10 border-[#9E217B]/30 hover:bg-[#9E217B] text-[#d946a8] hover:text-white" : "bg-[#9E217B]/10 border-[#9E217B]/30 hover:bg-[#9E217B] text-[#9E217B] hover:text-white"}`}>
+                          <FaMicrophone className="text-lg" /><span className="font-bold text-[10px]">Browser Call</span>
+                        </button>
                         <button
                           onClick={() => setIsWaModalOpen(true)}
                           className="bg-green-600/10 border border-green-500/30 hover:bg-green-600 text-green-400 hover:text-white flex flex-col items-center justify-center py-2 sm:py-3 rounded-xl transition-all cursor-pointer gap-1 min-h-[48px]">
@@ -2575,13 +2686,14 @@ function SalesManagerView({
                           iconClass="text-lg"
                           paddingClass="py-3"
                         />
+
                       </div>
                     </div>
                   )}
                 </div>
 
                 {/* RIGHT PANEL: FOLLOW-UPS */}
-                <div className={`flex flex-col rounded-xl overflow-hidden shadow-2xl border h-[540px] lg:h-[calc(100vh-185px)] lg:sticky lg:top-4 w-full lg:w-0 lg:flex-1 ${t.chatPanel}`} style={t.chatPanelGl}>
+                <div className={`flex flex-col rounded-xl overflow-hidden shadow-2xl border h-[560px] lg:h-[calc(100vh-170px)] lg:sticky lg:top-4 w-full lg:w-0 lg:flex-1 ${t.chatPanel}`} style={t.chatPanelGl}>
                   <div className={`flex-1 p-3 sm:p-6 overflow-y-auto custom-scrollbar flex flex-col gap-2 sm:gap-3 ${t.chatArea}`}>
                     {/* System message */}
                     <div className="flex justify-start">
@@ -2627,8 +2739,8 @@ function SalesManagerView({
                     <div ref={followUpEndRef} />
                   </div>
                   {/* Composer stays open on closed/lost leads — notes are a record of
-                      what happened, not an edit to the deal. The Salesform/Loan/Closing
-                      buttons above remain gated on isLeadLocked. */}
+                  what happened, not an edit to the deal. The Salesform/Loan/Closing
+                  buttons above remain gated on isLeadLocked. */}
                   <form onSubmit={handleSendCustomNote} className={`p-3 sm:p-3 border-t flex gap-2 sm:gap-3 items-center flex-shrink-0 ${t.header} ${t.tableBorder}`} style={t.headerGlass}>
                     <input
                       ref={inputRef}
@@ -2642,6 +2754,7 @@ function SalesManagerView({
 
               </div>{/* end three-part body */}
             </div>
+
           )
         )}
         {/* ── AI ASSISTANT (floating, same launcher as the Admin dock) ──

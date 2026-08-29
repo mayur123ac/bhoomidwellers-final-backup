@@ -52,7 +52,6 @@ export const SALES_RAIL_WIDTH = 72;
  */
 export const SALES_NAV: SalesNavItem[] = [
   { id: "overview", icon: FaThLarge, label: "Dashboard" },
-  { id: "forms", icon: FaFileInvoice, label: "Assigned Leads" },
   { id: "closed-leads", icon: FaCheckCircle, label: "Closed Leads" },
   { id: "inventory", icon: FaBuilding, label: "Inventory" },
   { id: "site_visits", icon: FaCalendarAlt, label: "Site Visits" },
