@@ -172,7 +172,7 @@ function buildTheme(isDark: boolean) {
     dropdownItem: isDark ? "hover:bg-[#222] border-[#222]" : "hover:bg-[#F8FAFC] border-[#F0F0F0]",
 
     // ── Typography ──
-    text: isDark ? "text-white" : "text-[#00AEEF]",
+    text: isDark ? "text-white" : "text-[#1e1e1e]",
     textname: isDark ? "text-[#d946a8]" : "text-[#334155]",
     textMuted: isDark ? "text-gray-400" : "text-[#334155]",
     textFaint: isDark ? "text-gray-500" : "text-[#475569]",

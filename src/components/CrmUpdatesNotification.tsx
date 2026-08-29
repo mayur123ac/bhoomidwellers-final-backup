@@ -180,7 +180,7 @@ export default function CrmUpdatesNotification({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6, scale: 0.98 }}
             transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-            className={`absolute top-12 right-0 w-[360px] max-w-[calc(100vw-2rem)] border rounded-xl shadow-2xl flex flex-col z-50 ${theme.dropdown}`}
+            className={`fixed right-4 top-14 md:absolute md:top-12 md:right-0 w-[360px] max-w-[calc(100vw-2rem)] border rounded-xl shadow-2xl flex flex-col z-50 ${theme.dropdown}`}
             style={theme.dropdownGlass}
           >
             <div className={`p-4 border-b flex justify-between items-center ${theme.tableBorder}`}>

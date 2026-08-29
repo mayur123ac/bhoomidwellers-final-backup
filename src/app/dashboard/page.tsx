@@ -13,10 +13,10 @@ import {
   FaCheckCircle, FaCalendarAlt, FaTimes,
   FaFileInvoice, FaFileInvoiceDollar, FaPaperPlane, FaMicrophone, FaWhatsapp, FaTable, FaChartPie, FaEyeSlash, FaUniversity, FaHandshake, FaExchangeAlt, FaBriefcase, FaDownload, FaCog, FaMapMarkerAlt, FaSignal, FaUserClock, FaTrashAlt, FaBoxes, FaUserTie
 } from "react-icons/fa";
-import { FiUser, FiHelpCircle, FiLogOut, FiChevronRight } from "react-icons/fi";
 import { BhoomiAiGlyph } from "@/components/bhoomi-ai/BhoomiAiIcon";
 import { downloadCSV } from "@/lib/downloadCsv";
 import AdminSidebar from "@/components/admin/AdminSidebar";
+import AdminMobileDrawer from "@/components/admin/AdminMobileDrawer";
 import LoginTimerWidget from "@/components/LoginTimerWidget";
 import AttendanceBadge from "@/components/AttendanceBadge";
 import { useAttendance } from "@/components/AttendanceContext";
@@ -51,9 +51,10 @@ import dynamic from "next/dynamic";
 import AttendanceView from "@/components/AttendanceView";
 import AdminAssistantDock from "@/components/AdminAssistantDock";
 import { CRMContextManager } from "@/lib/admin-ai/contextManager";
-import UserAvatar from "@/components/UserAvatar";
 import HeaderClock from "@/components/HeaderClock";
-import { APP_HEADER_HEIGHT, APP_HEADER_PADDING, AppLogo } from "@/components/AppHeader";
+import AppHeader from "@/components/AppHeader";
+import UserAvatar from "@/components/UserAvatar";
+import { FiUser, FiHelpCircle, FiLogOut, FiChevronRight } from "react-icons/fi";
 // The notification queue. Built and organization-scoped on the server — see
 // lib/notifications/feed.ts for why it is no longer derived in this file.
 import {
@@ -63,7 +64,7 @@ import {
 } from "@/lib/hooks/useNotificationFeed";
 import NotificationPopover from "@/components/notifications/NotificationPopover";
 import NotificationCenterView from "@/components/notifications/NotificationCenterView";
-import { Settings } from "lucide-react";
+import { Settings, Menu } from "lucide-react";
 
 const RevenueIntelligenceView = dynamic(() => import("./RevenueIntelligenceView"), { ssr: false });
 const GeoAnalyticsView = dynamic(() => import("./GeoAnalyticsView"), { ssr: false });
@@ -1000,16 +1001,33 @@ function AdminAtlasDashboardContent() {
       {/* ── SIDEBAR ──
           Shared with /dashboard/employees and the Settings panel so the rail
           cannot drift between the three routes. */}
+      {/* Desktop rail only — mobile drawer is handled by AdminMobileDrawer below */}
       <AdminSidebar
         items={menuItems}
         activeId={activeView}
         groups={menuGroups}
         isHovered={isSidebarHovered}
         onHoverChange={setIsSidebarHovered}
-        onSelect={(item) => { handleMenuClick(item.id); setIsMobileSidebarOpen(false); }}
+        onSelect={(item) => { handleMenuClick(item.id); }}
         orgName={sidebarOrgName}
-        isMobileOpen={isMobileSidebarOpen}
-        onMobileClose={() => setIsMobileSidebarOpen(false)}
+      />
+
+      {/* Mobile drawer — slides from right, matches Sales Manager MobileNavDrawer */}
+      <AdminMobileDrawer
+        open={isMobileSidebarOpen}
+        onClose={() => setIsMobileSidebarOpen(false)}
+        activeId={activeView}
+        onSelect={(item) => { handleMenuClick(item.id); setIsMobileSidebarOpen(false); }}
+        isDark={isDark}
+        orgName={sidebarOrgName}
+        userName={user?.name}
+        userRole={user?.role}
+        onToggleTheme={toggleTheme}
+        isMarkedPresent={isMarkedPresent}
+        timeIn={timeIn}
+        onLogout={handleLogout}
+        menuItems={menuItems}
+        groups={menuGroups}
       />
 
       <style dangerouslySetInnerHTML={{
@@ -1021,66 +1039,28 @@ function AdminAtlasDashboardContent() {
       `}} />
 
       <div className={`flex-1 flex flex-col pl-0 md:pl-[72px] h-screen overflow-hidden ${theme.mainBg}`}>
-        <header
-          // APP_HEADER_HEIGHT rather than a literal: this bar was h-14 while
-          // every other bar in the CRM is h-16, so the whole header changed
-          // height when you walked from Overview into Settings.
-          className={`${APP_HEADER_HEIGHT} ${APP_HEADER_PADDING} flex items-center justify-between z-[40] transition-colors duration-300 relative ${theme.header}`}
-          style={{
-            borderBottom: isDark ? "1px solid rgba(158,33,123,0.12)" : "1px solid rgba(0,0,0,0.07)",
-            backdropFilter: "blur(16px)",
-            WebkitBackdropFilter: "blur(16px)",
-            background: isDark ? "rgba(10,10,20,0.88)" : "rgba(255,255,255,0.92)",
-            boxShadow: isDark ? "0 1px 0 rgba(158,33,123,0.08)" : "0 1px 0 rgba(0,0,0,0.05)",
-          }}
+        <AppHeader
+          isDark={isDark}
+          context={activeView.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
+          role={user?.role || "Admin"}
         >
-          <h1 className={`font-bold text-lg capitalize tracking-wide flex items-center gap-3 ${theme.text}`}>
-            {/* Hamburger — mobile only, opens the sidebar drawer */}
-            <button
-              type="button"
-              aria-label="Open navigation"
-              onClick={() => setIsMobileSidebarOpen(true)}
-              className={`md:hidden -ml-1 mr-1 w-9 h-9 flex items-center justify-center rounded-xl transition-colors ${theme.toggleWrap}`}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-            </button>
-            <AppLogo />
-            <span className={`text-xs sm:text-sm font-normal ${theme.textFaint}`}>— {activeView.replace("_", " ")}</span>
-            <span
-              className="text-xs font-semibold px-2.5 py-1 rounded-full capitalize"
-              style={{
-                background: "rgba(158,33,123,0.1)",
-                border: "1px solid rgba(158,33,123,0.25)",
-                color: isDark ? "#d946a8" : "#9E217B",
-              }}
-            >{user?.role || "Admin"}</span>
-          </h1>
+          <div className="flex items-center gap-4 flex-shrink-0 relative z-[50]" ref={topbarRef}>
+            {/* Desktop-only controls: hidden on mobile */}
+            <div className="hidden md:flex items-center gap-3">
+              <HeaderClock isDark={isDark} />
+              <button onClick={toggleTheme}
+                aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+                aria-pressed={isDark}
+                className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center cursor-pointer justify-center shadow-sm ${theme.toggleWrap}`}>
+                {isDark ? <SunIcon /> : <MoonIcon />}
+              </button>
+            </div>
 
-          <div className="flex items-center gap-3 relative z-[50]" ref={topbarRef}>
-            <HeaderClock isDark={isDark} />
-            {/* <LoginTimerWidget isDark={isDark} /> */}
-            {/* Compact Login/Logout punch control. Clicking "Login" hits
-                POST /api/attendance/mark directly (no navigation, no My
-                Attendance detour); once marked it shows the live elapsed
-                timer and clicking it runs the same logout flow as the
-                profile menu. */}
-
+            {/* Attendance: visible on all screen sizes */}
             <AttendanceBadge
               timeIn={timeIn}
               isMarkedPresent={isMarkedPresent}
               onLogout={handleLogout} />
-            <button onClick={toggleTheme}
-              aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
-              aria-pressed={isDark}
-              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center cursor-pointer justify-center shadow-sm ${theme.toggleWrap}`}>
-              {isDark ? <SunIcon /> : <MoonIcon />}
-            </button>
-
-            {/* Settings moved out of the header — it is the last item in the
-                global sidebar now, so it sits with the rest of the navigation
-                instead of being a header control. */}
 
             {/* CRM System Updates */}
             <CrmUpdatesNotification user={user} theme={theme} isDark={isDark} isOpen={activePopup === "updates"} onToggle={() => setActivePopup(activePopup === "updates" ? null : "updates")} />
@@ -1102,7 +1082,7 @@ function AdminAtlasDashboardContent() {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: -6, scale: 0.98 }}
                     transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-                    className={`absolute top-12 right-0 w-[320px] border rounded-xl shadow-2xl flex flex-col z-50 overflow-hidden ${theme.dropdown}`} style={theme.dropdownGlass}
+                    className={`fixed right-4 top-14 md:absolute md:top-12 md:right-0 w-[320px] max-w-[calc(100vw-2rem)] border rounded-xl shadow-2xl flex flex-col z-50 overflow-hidden ${theme.dropdown}`} style={theme.dropdownGlass}
                   >
                     {/* Three at most, newest first, and no internal scrollbar.
                         Clicking a row opens that lead's detail panel; the footer
@@ -1127,7 +1107,8 @@ function AdminAtlasDashboardContent() {
               </AnimatePresence>
             </div>
 
-            <div className="relative">
+            {/* Profile icon — desktop only */}
+            <div className="relative hidden md:block">
               <div onClick={() => setActivePopup(activePopup === "profile" ? null : "profile")}
                 className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm cursor-pointer shadow-sm hover:opacity-80 transition-opacity border
                   ${isDark ? "border-[#9E217B]/40 text-[#d946a8] bg-[#9E217B]/15" : "border-[#9E217B]/40 text-[#9E217B] bg-[#9E217B]/10"}`}>
@@ -1140,105 +1121,56 @@ function AdminAtlasDashboardContent() {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 8, scale: 0.98 }}
                     transition={{ duration: 0.18, ease: "easeOut" }}
-                    className={`absolute top-12 right-0 w-[250px] rounded-[20px] p-4 z-[200] border shadow-2xl ${isDark ? "bg-[#1C1C1E]/95 border-white/10" : "bg-white/95 border-black/5"
-                      }`}
+                    className={`absolute top-12 right-0 w-[250px] rounded-[20px] p-4 z-[200] border shadow-2xl ${isDark ? "bg-[#1C1C1E]/95 border-white/10" : "bg-white/95 border-black/5"}`}
                     style={{ backdropFilter: "blur(24px) saturate(180%)" }}
                   >
-                    {/* ── HEADER: Avatar & Info ── */}
                     <div className="flex items-center gap-3 mb-3">
-                      {/* Scaled-down 40px Apple-style Circular Avatar */}
-                      <div
-                        className={`w-10 h-10 rounded-full flex items-center justify-center text-[17px] font-semibold flex-shrink-0 ${isDark ? "bg-[#9E217B]/20 text-[#d946a8]" : "bg-purple-100 text-purple-900"
-                          }`}
-                      >
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center text-[17px] font-semibold flex-shrink-0 ${isDark ? "bg-[#9E217B]/20 text-[#d946a8]" : "bg-purple-100 text-purple-900"}`}>
                         {(user?.name || "Admin").charAt(0).toUpperCase()}
                       </div>
-
                       <div className="flex flex-col overflow-hidden">
-                        {/* 14px is the Apple standard for Callout/Menu Primary text */}
-                        <p className={`font-semibold text-[14px] tracking-tight truncate leading-tight ${theme.text}`}>
-                          {user?.name || "Admin"}
-                        </p>
-                        {/* 12px for Subhead/Caption text */}
-                        <p className={`text-[12px] truncate mt-[1px] ${theme.textMuted}`}>
-                          {user?.email || "admin@bhoomi.com"}
-                        </p>
-                        <p className={`text-[12px] truncate ${theme.textMuted}`}>
-                          {orgName || "Bhoomi Dwellers"}
-                        </p>
+                        <p className={`font-semibold text-[14px] tracking-tight truncate leading-tight ${theme.text}`}>{user?.name || "Admin"}</p>
+                        <p className={`text-[12px] truncate mt-[1px] ${theme.textMuted}`}>{user?.email || "admin@bhoomi.com"}</p>
+                        <p className={`text-[12px] truncate ${theme.textMuted}`}>{orgName || "Bhoomi Dwellers"}</p>
                       </div>
                     </div>
-
-                    {/* ── STATUS ROW ── */}
                     <div className="flex items-center gap-3 mb-4">
-                      <span
-                        className={`px-2 py-0.5 rounded text-[11px] font-medium border ${isDark
-                          ? "bg-[#9E217B]/10 text-[#d946a8] border-[#9E217B]/30"
-                          : "bg-purple-50 text-purple-800 border-purple-200"
-                          }`}
-                      >
+                      <span className={`px-2 py-0.5 rounded text-[11px] font-medium border ${isDark ? "bg-[#9E217B]/10 text-[#d946a8] border-[#9E217B]/30" : "bg-purple-50 text-purple-800 border-purple-200"}`}>
                         {user?.role || "Admin"}
                       </span>
                       <div className="flex items-center gap-1.5">
                         <span className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"></span>
-                        <span className={`text-[12px] font-medium ${theme.textMuted}`}>
-                          Active
-                        </span>
+                        <span className={`text-[12px] font-medium ${theme.textMuted}`}>Active</span>
                       </div>
                     </div>
-
-                    {/* Negative margins align the divider to the container edges exactly */}
                     <hr className={`-mx-4 border-0 border-t ${isDark ? "border-white/10" : "border-black/5"}`} />
-
-                    {/* ── MENU ITEMS ── */}
                     <div className="flex flex-col py-1.5">
                       <button
-                        onClick={() => {
-                          setActivePopup(null);
-                          router.push("/dashboard/settings/profile");
-                        }}
-                        className={`w-full flex items-center justify-between py-2.5 px-2 -mx-2 rounded-xl transition-colors cursor-pointer group ${isDark ? "hover:bg-white/5" : "hover:bg-black/[0.04]"
-                          }`}
+                        onClick={() => { setActivePopup(null); router.push("/dashboard/settings/profile"); }}
+                        className={`w-full flex items-center justify-between py-2.5 px-2 -mx-2 rounded-xl transition-colors cursor-pointer group ${isDark ? "hover:bg-white/5" : "hover:bg-black/[0.04]"}`}
                       >
                         <div className={`flex items-center gap-2.5 ${theme.text}`}>
-                          {/* Icons reduced to 16px (w-4 h-4) */}
-                          <FiUser className={`w-4 h-4 ${theme.textMuted} group-hover:${theme.text}`} />
-                          {/* 13px is the strict macOS context menu font size */}
+                          <FiUser className={`w-4 h-4 ${theme.textMuted}`} />
                           <span className="text-[13px] font-medium">Account Settings</span>
                         </div>
                         <FiChevronRight className={`w-3.5 h-3.5 ${theme.textMuted}`} />
                       </button>
-
                       <hr className={`border-0 border-t my-0.5 ${isDark ? "border-white/10" : "border-black/5"}`} />
-
                       <button
-                        onClick={() => {
-                          setActivePopup(null);
-                          // Help & Support routing
-                        }}
-                        className={`w-full flex items-center justify-between py-2.5 px-2 -mx-2 rounded-xl transition-colors cursor-pointer group ${isDark ? "hover:bg-white/5" : "hover:bg-black/[0.04]"
-                          }`}
+                        onClick={() => { setActivePopup(null); }}
+                        className={`w-full flex items-center justify-between py-2.5 px-2 -mx-2 rounded-xl transition-colors cursor-pointer group ${isDark ? "hover:bg-white/5" : "hover:bg-black/[0.04]"}`}
                       >
                         <div className={`flex items-center gap-2.5 ${theme.text}`}>
-                          <FiHelpCircle className={`w-4 h-4 ${theme.textMuted} group-hover:${theme.text}`} />
+                          <FiHelpCircle className={`w-4 h-4 ${theme.textMuted}`} />
                           <span className="text-[13px] font-medium">Help & Support</span>
                         </div>
-                        {/* <FiChevronRight className={`w-3.5 h-3.5 ${theme.textMuted}`} /> */}<span className={`px-2 py-0.5 rounded-md text-[8px] font-small border ${isDark
-                          ? "bg-white/10 text-white/60 border-white/10"
-                          : "bg-gray-100 text-gray-600 border-gray-200"
-                          }`}>Coming Soon</span>
+                        <span className={`px-2 py-0.5 rounded-md text-[8px] font-small border ${isDark ? "bg-white/10 text-white/60 border-white/10" : "bg-gray-100 text-gray-600 border-gray-200"}`}>Coming Soon</span>
                       </button>
                     </div>
-
                     <hr className={`-mx-4 border-0 border-t mb-2.5 mt-1 ${isDark ? "border-white/10" : "border-black/5"}`} />
-
-                    {/* ── FOOTER: LOG OUT ── */}
                     <button
                       onClick={handleLogout}
-                      className={`w-full flex items-center gap-2.5 py-2.5 px-3 rounded-[12px] font-semibold text-[13px] transition-colors cursor-pointer ${isDark
-                        ? "text-red-400 bg-red-500/10 hover:bg-red-500/20"
-                        : "text-red-600 bg-red-50 hover:bg-red-100"
-                        }`}
+                      className={`w-full flex items-center gap-2.5 py-2.5 px-3 rounded-[12px] font-semibold text-[13px] transition-colors cursor-pointer ${isDark ? "text-red-400 bg-red-500/10 hover:bg-red-500/20" : "text-red-600 bg-red-50 hover:bg-red-100"}`}
                     >
                       <FiLogOut className="w-4 h-4" />
                       Log Out
@@ -1247,6 +1179,16 @@ function AdminAtlasDashboardContent() {
                 )}
               </AnimatePresence>
             </div>
+
+            {/* Hamburger — mobile only, last item to match Sales Manager layout */}
+            <button
+              type="button"
+              onClick={() => setIsMobileSidebarOpen(true)}
+              className={`md:hidden h-8 w-8 sm:h-9 sm:w-9 flex-shrink-0 rounded-full sm:rounded-lg border border-transparent sm:border flex items-center justify-center transition-colors duration-150 cursor-pointer ${isDark ? "bg-white/10 text-[#EBEBF5] sm:bg-[#1C1C2A] sm:border-[#2A2A38] sm:text-yellow-300 hover:bg-white/20" : "bg-black/5 text-[#3C3C43] sm:bg-[#F1F5F9] sm:border-[#9CA3AF] sm:text-[#1A1A1A] hover:bg-black/10"} sm:hover:bg-[inherit]`}
+              aria-label="Open navigation menu"
+            >
+              <Menu className="w-4 h-4 sm:w-5 sm:h-5" />
+            </button>
 
             {/* 👇 NEW: UPDATED POPUP TOAST WITH DYNAMIC ICONS 👇 */}
             {activeNotif && (
@@ -1285,7 +1227,7 @@ function AdminAtlasDashboardContent() {
               </div>
             )}
           </div>
-        </header>
+        </AppHeader>
 
         <main className={`flex-1 overflow-hidden transition-colors duration-300 ${theme.mainBg}`}>
           {/* Bhoomi AI owns its own dark canvas and expects to fill the height it

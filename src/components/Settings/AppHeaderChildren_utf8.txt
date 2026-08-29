@@ -1,0 +1,174 @@
+﻿              <>
+                {!isSalesManager && <HeaderClock isDark={isDark} />}
+
+                {!isSalesManager && (
+                  <AttendanceBadge
+                    timeIn={timeIn}
+                    isMarkedPresent={isMarkedPresent}
+                    onLogout={handleLogout} />
+                )}
+
+                {!isSalesManager && (
+                  <HeaderControl
+                    isDark={isDark}
+                    onClick={toggleTheme}
+                    label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+                  >
+                    {isDark ? <SunIcon /> : <MoonIcon />}
+                  </HeaderControl>
+                )}
+
+                {/* Sales Manager gets Calendar + Bell; Admin gets System Updates */}
+                {isSalesManager ? (
+                  <div className="flex items-center gap-1 sm:gap-2">
+                    <SalesSettingsBells isDark={isDark} />
+                  </div>
+                ) : (
+                  <div className="relative flex items-center">
+                    <CrmUpdatesNotification user={user} theme={chrome} isDark={isDark} />
+                  </div>
+                )}
+
+                {!isSalesManager && (
+                  <div className="relative">
+                    <button
+                      type="button"
+                    onClick={() => setIsProfileOpen(!isProfileOpen)}
+                    aria-label="Account menu"
+                    className={`h-9 w-9 flex-shrink-0 rounded-full flex items-center justify-center overflow-hidden font-semibold text-[13px] cursor-pointer transition-colors duration-150 border ${isDark
+                      ? "border-white/10 text-[#e879c4] bg-[#9E217B]/20 hover:bg-[#9E217B]/30"
+                      : "border-[#E5E7EB] text-[#9E217B] bg-[#9E217B]/10 hover:bg-[#9E217B]/15"
+                      }`}
+                  >
+                    <UserAvatar name={user?.name} fallback="A" alt="" />
+                  </button>
+
+                  <AnimatePresence>
+                    {isProfileOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 8, scale: 0.98 }}
+                        transition={{ duration: 0.18, ease: "easeOut" }}
+                        className={`absolute top-12 right-0 w-[250px] rounded-[20px] p-4 z-[200] border shadow-2xl ${isDark ? "bg-[#1C1C1E]/95 border-white/10" : "bg-white/95 border-black/5"
+                          }`}
+                        style={{ backdropFilter: "blur(24px) saturate(180%)" }}
+                      >
+                        {/* â”€â”€ HEADER: Avatar & Info â”€â”€ */}
+                        <div className="flex items-center gap-3 mb-3">
+                          {/* Scaled-down 40px Apple-style Circular Avatar */}
+                          <div
+                            className={`w-10 h-10 rounded-full flex items-center justify-center text-[17px] font-semibold flex-shrink-0 ${isDark ? "bg-[#9E217B]/20 text-[#d946a8]" : "bg-purple-100 text-purple-900"
+                              }`}
+                          >
+                            {(user?.name || "Account").charAt(0).toUpperCase()}
+                          </div>
+
+                          <div className="flex flex-col overflow-hidden">
+                            {/* 14px is the Apple standard for Callout/Menu Primary text */}
+                            <p className={`font-semibold text-[14px] tracking-tight truncate leading-tight ${isDark ? "text-white" : "text-black"}`}>
+                              {user?.name || "Account"}
+                            </p>
+                            {/* 12px for Subhead/Caption text */}
+                            <p className={`text-[12px] truncate mt-[1px] ${isDark ? "text-white/60" : "text-black/60"}`}>
+                              {user?.email || "No email"}
+                            </p>
+                            <p className={`text-[12px] truncate mt-[1px] ${isDark ? "text-white/60" : "text-black/60"}`}>
+                              {orgLoading ? "Loading org name..." : orgName || "No org name"}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* â”€â”€ STATUS ROW â”€â”€ */}
+                        <div className="flex items-center gap-3 mb-4">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[11px] font-medium border ${isDark
+                              ? "bg-[#9E217B]/10 text-[#d946a8] border-[#9E217B]/30"
+                              : "bg-purple-50 text-purple-800 border-purple-200"
+                              }`}
+                          >
+                            {user?.role || "Member"}
+                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"></span>
+                            <span className={`text-[12px] font-medium ${isDark ? "text-white/60" : "text-black/60"}`}>
+                              Active
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Negative margins align the divider to the container edges exactly */}
+                        <hr className={`-mx-4 border-0 border-t ${isDark ? "border-white/10" : "border-black/5"}`} />
+
+                        {/* â”€â”€ MENU ITEMS â”€â”€ */}
+                        <div className="flex flex-col py-1.5">
+                          <button
+                            onClick={() => {
+                              setIsProfileOpen(false);
+                              // Ensure router is available in the scope
+                              router.push("/dashboard/settings/profile");
+                            }}
+                            className={`w-full flex items-center justify-between py-2.5 px-2 -mx-2 rounded-xl transition-colors cursor-pointer group ${isDark ? "hover:bg-white/5" : "hover:bg-black/[0.04]"
+                              }`}
+                          >
+                            <div className={`flex items-center gap-2.5 ${isDark ? "text-white" : "text-black"}`}>
+                              {/* Icons reduced to 16px (w-4 h-4) */}
+                              <FiUser className={`w-4 h-4 ${isDark ? "text-white/60" : "text-black/60"} group-hover:${isDark ? "text-white" : "text-black"}`} />
+                              {/* 13px is the strict macOS context menu font size */}
+                              <span className="text-[13px] font-medium">Account Settings</span>
+                            </div>
+                            <FiChevronRight className={`w-3.5 h-3.5 ${isDark ? "text-white/60" : "text-black/60"}`} />
+                          </button>
+
+                          <hr className={`border-0 border-t my-0.5 ${isDark ? "border-white/10" : "border-black/5"}`} />
+
+                          <button
+                            onClick={() => {
+                              setIsProfileOpen(false);
+                              // Add Help & Support routing here
+                            }}
+                            className={`w-full flex items-center justify-between py-2.5 px-2 -mx-2 rounded-xl transition-colors cursor-pointer group ${isDark ? "hover:bg-white/5" : "hover:bg-black/[0.04]"
+                              }`}
+                          >
+                            <div className={`flex items-center gap-2.5 ${isDark ? "text-white" : "text-black"}`}>
+                              <FiHelpCircle className={`w-4 h-4 ${isDark ? "text-white/60" : "text-black/60"} group-hover:${isDark ? "text-white" : "text-black"}`} />
+                              <span className="text-[13px] font-medium">Help & Support</span>
+                            </div>
+                            {/* <FiChevronRight className={`w-3.5 h-3.5 ${theme.textMuted}`} /> */}<span className={`px-2 py-0.5 rounded-md text-[8px] font-small border ${isDark
+                              ? "bg-white/10 text-white/60 border-white/10"
+                              : "bg-gray-100 text-gray-600 border-gray-200"
+                              }`}>Coming Soon</span>
+                          </button>
+                        </div>
+
+                        <hr className={`-mx-4 border-0 border-t mb-2.5 mt-1 ${isDark ? "border-white/10" : "border-black/5"}`} />
+
+                        {/* â”€â”€ FOOTER: LOG OUT â”€â”€ */}
+                        <button
+                          onClick={handleLogout}
+                          className={`w-full flex items-center gap-2.5 py-2.5 px-3 rounded-[12px] font-semibold text-[13px] transition-colors cursor-pointer ${isDark
+                            ? "text-red-400 bg-red-500/10 hover:bg-red-500/20"
+                            : "text-red-600 bg-red-50 hover:bg-red-100"
+                            }`}
+                        >
+                          <FiLogOut className="w-4 h-4" />
+                          Log Out
+                        </button>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+                )}
+
+                {/* Sales Manager Mobile Hamburger */}
+                {isSalesManager && (
+                  <button
+                    onClick={() => setMobileNavOpen(true)}
+                    className={`md:hidden h-8 w-8 sm:h-9 sm:w-9 flex-shrink-0 rounded-full sm:rounded-lg border border-transparent sm:border flex items-center justify-center transition-colors duration-150 cursor-pointer ${isDark ? "bg-white/10 text-[#EBEBF5] sm:bg-[#1C1C2A] sm:border-[#2A2A38] sm:text-yellow-300 hover:bg-white/20" : "bg-black/5 text-[#3C3C43] sm:bg-[#F1F5F9] sm:border-[#9CA3AF] sm:text-[#1A1A1A] hover:bg-black/10"} sm:hover:bg-[inherit]`}
+                    aria-label="Open navigation menu"
+                  >
+                    <Menu className="w-4 h-4 sm:w-5 sm:h-5" />
+                  </button>
+                )}
+              </>
+            </AppHeader>

@@ -1911,7 +1911,7 @@ export default function ReceptionistDashboard() {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: -6, scale: 0.98 }}
                     transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-                    className={`absolute top-12 right-0 w-[320px] border rounded-xl shadow-2xl flex flex-col z-50 overflow-hidden ${t.dropdown}`} style={t.dropdownGlass}
+                    className={`fixed right-4 top-14 md:absolute md:top-12 md:right-0 w-[320px] max-w-[calc(100vw-2rem)] border rounded-xl shadow-2xl flex flex-col z-50 overflow-hidden ${t.dropdown}`} style={t.dropdownGlass}
                   >
                     {/* Three at most, newest first, no internal scrollbar, and a
                         centred "You're all caught up" instead of a blank box.

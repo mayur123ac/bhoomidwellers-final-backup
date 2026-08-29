@@ -154,7 +154,7 @@ export default function AppHeader({
         <img
           src={logoSrc}
           alt="Bhoomi Dwellers"
-          className="hidden sm:block h-8 sm:h-9 w-auto max-w-[200px] object-contain flex-shrink-0 transition-opacity duration-200 hover:opacity-80"
+          className="hidden sm:block h-8 sm:h-14 w-auto max-w-[200px] object-contain flex-shrink-0 transition-opacity duration-200 hover:opacity-80"
         />
 
         {context && (
@@ -167,7 +167,7 @@ export default function AppHeader({
                 fontSize: "clamp(14px, 4vw, 17px)",
                 letterSpacing: "-0.41px",
                 lineHeight: "22px",
-                color: isDark ? "#FFFFFF" : "#000000"
+                color: isDark ? "#FFFFFF" : "#000000ff"
               }}
             >
               {context}
@@ -190,7 +190,7 @@ export default function AppHeader({
       </div>
 
       {/* ── Right: controls ── */}
-      <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
+      <div className="flex items-center gap-4 sm:gap-1.5 flex-shrink-0">
         {leading}
         {children}
       </div>

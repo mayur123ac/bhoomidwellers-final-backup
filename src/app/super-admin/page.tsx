@@ -418,35 +418,35 @@ export default function SuperAdminPanel() {
               </div>
             ) : (
               <>
-            {tab === "dashboard" && (
-              <DashboardView t={t} data={data} metrics={metrics} onOpenOrg={openOrganization} />
-            )}
-            {tab === "organizations" && (
-              openOrgId ? (
-                /* The detail replaces the list rather than floating over it: it
-                   carries a nine-column user table and a per-row actions menu,
-                   which a 440px drawer could not hold without the controls
-                   overflowing. Back returns to the list. */
-                <OrganizationDetailView
-                  t={t}
-                  organizationId={openOrgId}
-                  fallbackName={openOrg?.name ?? "Organization"}
-                  onBack={() => setOpenOrgId(null)}
-                  onOrgChanged={reload}
-                />
-              ) : (
-                <OrganizationsView
-                  t={t}
-                  orgs={data.orgs}
-                  onOpenOrg={setOpenOrgId}
-                  onAddOrganization={() => setAddOpen(true)}
-                />
-              )
-            )}
-            {tab === "users" && <UsersView t={t} users={data.users} />}
-            {tab === "updates" && <SystemUpdatesView t={t} />}
-            {tab === "activity" && <ActivityView t={t} activity={data.activity} />}
-            {tab === "settings" && <SettingsView t={t} onSignedOut={handleLogout} />}
+                {tab === "dashboard" && (
+                  <DashboardView t={t} data={data} metrics={metrics} onOpenOrg={openOrganization} />
+                )}
+                {tab === "organizations" && (
+                  openOrgId ? (
+                    /* The detail replaces the list rather than floating over it: it
+                       carries a nine-column user table and a per-row actions menu,
+                       which a 440px drawer could not hold without the controls
+                       overflowing. Back returns to the list. */
+                    <OrganizationDetailView
+                      t={t}
+                      organizationId={openOrgId}
+                      fallbackName={openOrg?.name ?? "Organization"}
+                      onBack={() => setOpenOrgId(null)}
+                      onOrgChanged={reload}
+                    />
+                  ) : (
+                    <OrganizationsView
+                      t={t}
+                      orgs={data.orgs}
+                      onOpenOrg={setOpenOrgId}
+                      onAddOrganization={() => setAddOpen(true)}
+                    />
+                  )
+                )}
+                {tab === "users" && <UsersView t={t} users={data.users} />}
+                {tab === "updates" && <SystemUpdatesView t={t} />}
+                {tab === "activity" && <ActivityView t={t} activity={data.activity} />}
+                {tab === "settings" && <SettingsView t={t} onSignedOut={handleLogout} />}
               </>
             )}
           </div>

@@ -16,7 +16,6 @@ import { BhoomiAiGlyph } from "@/components/bhoomi-ai/BhoomiAiIcon";
 import { FiChevronDown, FiCheck } from "react-icons/fi";
 // Add this near your other state declarations:
 import { FiUser, FiHelpCircle, FiLogOut, FiChevronRight } from "react-icons/fi";
-import { CANVAS as AI_CANVAS } from "@/components/bhoomi-ai/theme";
 import { clearCrmSession, getStoredCrmUser, installLoggedOutBackGuard } from "@/lib/authSession";
 import { useOrgName } from "@/lib/hooks/useOrgName";
 import { motion, AnimatePresence } from "framer-motion";
@@ -41,6 +40,10 @@ import LoginTimerWidget from "@/components/LoginTimerWidget";
 import AttendanceBadge from "@/components/AttendanceBadge";
 import { useAttendance } from "@/components/AttendanceContext";
 import AdminAssistantDock from "@/components/AdminAssistantDock";
+import AdminSidebar from "@/components/admin/AdminSidebar";
+import AdminMobileDrawer from "@/components/admin/AdminMobileDrawer";
+import AppHeader from "@/components/AppHeader";
+import { Menu } from "lucide-react";
 
 type RoleType = { _id: string; name: string };
 type EmployeeType = {
@@ -368,7 +371,7 @@ export default function EmployeesPage() {
   const [salesManagers, setSalesManagers] = useState<any[]>([]);
   const [siteHeads, setSiteHeads] = useState<any[]>([]);
 
-  const [navSearch, setNavSearch] = useState("");
+  // navSearch removed — now handled internally by AdminSidebar
   const [isFetchingManagers, setIsFetchingManagers] = useState(true);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
@@ -868,11 +871,6 @@ export default function EmployeesPage() {
      Add Employee, Caller Panel and WhatsApp Alerts — those keep the white CRM
      header unchanged. The rail is deliberately not included: it is already the
      CRM's dark navy in both states. */
-  const aiHeader = activeSection === "ai";
-  /* CrmUpdatesNotification colours its glyph from `theme.textMuted`. On the dark
-     bar the light-mode value is nearly invisible, so it gets the canvas's muted
-     tone — the same override the bell beside it uses. */
-  const aiHeaderTheme = aiHeader ? { ...t, textMuted: "text-[#C4C7C5]" } : t;
 
   const menuItems = [
     { id: "dashboard", icon: FaThLarge, label: "Overview", link: "/dashboard", section: null },
@@ -911,6 +909,14 @@ export default function EmployeesPage() {
       : []),
   ];
 
+  const menuGroups: Record<string, string> = {
+    dashboard: "Workspace", revenue_intelligence: "Workspace", inventory: "Workspace",
+    channel_partners: "Workspace", cp_management: "Workspace",
+    receptionist: "Team", sales: "Team", site_head: "Team", live_activity: "Team",
+    site_visit_overview: "Insights", attendance: "Insights", monitoring: "Insights", geo: "Insights",
+    callers: "Admin", employees: "Admin", notifications: "Admin",
+  };
+
   if (isAuthorized === null) return <div className="min-h-screen bg-[#0a0a0a]" />;
   const selectedManageUser = employees.find(e => e._id === selectedManageUserId);
 
@@ -919,378 +925,93 @@ export default function EmployeesPage() {
       className={`flex h-screen font-sans overflow-hidden relative transition-colors duration-300 ${t.pageWrap}`}
       style={t.pageStyle}
     >
-      <AnimatePresence>
-        {(isSidebarHovered || isMobileSidebarOpen) && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}
-            className={`fixed inset-0 bg-black/60 z-40 backdrop-blur-[1px] ${isMobileSidebarOpen ? "md:pointer-events-none pointer-events-auto" : "pointer-events-none"}`}
-            onClick={() => { if (isMobileSidebarOpen) setIsMobileSidebarOpen(false); }}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* ── SIDEBAR ── */}
-      <motion.aside
-        /* Desktop: collapse from 248px → 72px when not hovered. Mobile: always 248px
-           (CSS translate handles show/hide, framer-motion width is irrelevant). */
-        initial={{ width: "72px" }}
-        animate={{ width: isSidebarHovered ? "248px" : "72px" }}
-        transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
-        onMouseEnter={() => setIsSidebarHovered(true)}
-        onMouseLeave={() => setIsSidebarHovered(false)}
-        className={[
-          "fixed left-0 top-0 h-screen z-50 flex flex-col overflow-hidden",
-          /* MOBILE: always 248px wide drawer; translate controls visibility */
-          "w-[248px] transition-transform duration-300",
-          isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full",
-          /* DESKTOP: framer-motion handles width, no translate */
-          "md:w-auto md:translate-x-0",
-        ].join(" ")}
-        style={{
-          background: "linear-gradient(180deg, #0f0f1a 0%, #111128 40%, #0f0f1a 100%)",
-          borderRight: "1px solid rgba(158,33,123,0.15)",
-          boxShadow: "4px 0 24px rgba(0,0,0,0.4), inset -1px 0 0 rgba(158,33,123,0.08)",
+      {/* Desktop rail only — mobile drawer is handled by AdminMobileDrawer */}
+      <AdminSidebar
+        items={menuItems}
+        activeId={activeSection}
+        groups={menuGroups}
+        isHovered={isSidebarHovered}
+        onHoverChange={setIsSidebarHovered}
+        onSelect={(item: any) => {
+          if (item.section) {
+            setActiveSection(item.section);
+          } else {
+            localStorage.setItem("return_tab", item.id);
+            router.push(item.link);
+          }
         }}
-      >
-        {/* Logo */}
-        <div className="flex items-center px-4 py-5 mb-2 whitespace-nowrap flex-shrink-0">
-          <img
-            src="/assets/logobrowser_trans.svg"
-            alt="Logo"
-            className="w-10 h-10 min-w-[40px] rounded-xl object-cover flex-shrink-0"
-          />
-          <motion.div
-            initial={{ opacity: 0, x: -8 }}
-            animate={{ opacity: (isSidebarHovered || isMobileSidebarOpen) ? 1 : 0, x: (isSidebarHovered || isMobileSidebarOpen) ? 0 : -8 }}
-            transition={{ duration: 0.25, ease: "easeOut" }}
-            className="ml-3 overflow-hidden"
-          >
-            <p className="font-black text-white text-[15px] leading-tight tracking-wide whitespace-nowrap">Bhoomi CRM</p>
-            <p className="text-[10px] font-medium whitespace-nowrap" style={{ color: "rgba(217,70,168,0.7)" }}>Admin Panel</p>
-            {sidebarOrgName && (
-              <p
-                className="text-[9.5px] font-semibold mt-0.5"
-                style={{
-                  color: "rgba(255,255,255,0.45)",
-                  maxWidth: "140px",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                  letterSpacing: "0.02em",
-                }}
-                title={sidebarOrgName}
-              >
-                {sidebarOrgName}
-              </p>
-            )}
-          </motion.div>
-        </div>
+        orgName={sidebarOrgName}
+      />
 
-        {/* Divider */}
-        <div className="mx-4 mb-4 flex-shrink-0" style={{ height: "1px", background: "linear-gradient(90deg, transparent, rgba(158,33,123,0.3), transparent)" }} />
+      {/* Mobile drawer — slides from right, matches Sales Manager MobileNavDrawer */}
+      <AdminMobileDrawer
+        open={isMobileSidebarOpen}
+        onClose={() => setIsMobileSidebarOpen(false)}
+        activeId={activeSection}
+        onSelect={(item: any) => {
+          if (item.section) {
+            setActiveSection(item.section);
+          } else {
+            localStorage.setItem("return_tab", item.id);
+            router.push(item.link);
+          }
+          setIsMobileSidebarOpen(false);
+        }}
+        isDark={isDark}
+        orgName={sidebarOrgName}
+        userName={user?.name}
+        userRole={user?.role}
+        onToggleTheme={() => {
+          const next = !isDark;
+          setIsDark(next);
+          try { localStorage.setItem("crm_theme", next ? "dark" : "light"); } catch { }
+        }}
+        isMarkedPresent={isMarkedPresent}
+        timeIn={timeIn}
+        onLogout={handleLogout}
+        menuItems={menuItems}
+        groups={menuGroups}
+      />
 
-        {(isSidebarHovered || isMobileSidebarOpen) && (
-          <div className="px-4 mb-2 flex-shrink-0 animate-fadeIn">
-            <input
-              type="text"
-              value={navSearch}
-              onChange={(e) => setNavSearch(e.target.value)}
-              placeholder="Quick jump..."
-              autoFocus
-              className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-gray-300 placeholder:text-gray-600 outline-none focus:border-[#9E217B]/50"
-            />
-          </div>
-        )}
-
-        <nav className="flex flex-col gap-2 px-2 flex-1 overflow-y-auto overflow-x-hidden sidebar-scroll">
-          {/* Main nav items (all except last) */}
-          <div className="flex flex-col gap-2">
-            {(() => {
-              const groupOf: Record<string, string> = {
-                dashboard: "Workspace", revenue_intelligence: "Workspace", inventory: "Workspace",
-                channel_partners: "Workspace", cp_management: "Workspace",
-                receptionist: "Team", sales: "Team", site_head: "Team", live_activity: "Team",
-                site_visit_overview: "Insights", attendance: "Insights", monitoring: "Insights", geo: "Insights",
-                callers: "Admin", employees: "Admin", notifications: "Admin",
-              };
-              const visibleItems = menuItems
-                // Was `.slice(0, -1)` — position-based, so only ever one item
-                // could be pinned. Filtering on the flag lets Bhoomi AI and
-                // Settings both sit in the bottom block.
-                .filter((i) => !i.pinned)
-                .filter((i) => i.label.toLowerCase().includes(navSearch.toLowerCase()));
-
-              return visibleItems.map((item, idx) => {
-                const isActive = item.section ? activeSection === item.section : false;
-                const prevItem = visibleItems[idx - 1];
-                const showGroupLabel = groupOf[item.id] && groupOf[item.id] !== groupOf[prevItem?.id];
-                return (
-                  <div key={`wrap-${item.id}`}>
-                    {showGroupLabel && (
-                      <p
-                        className="text-[10px] font-bold uppercase tracking-wider text-gray-600 px-4 pt-3 pb-1 overflow-hidden whitespace-nowrap transition-opacity duration-200"
-                        style={{ opacity: (isSidebarHovered || isMobileSidebarOpen) ? 1 : 0 }}
-                      >
-                        {groupOf[item.id]}
-                      </p>
-                    )}
-                    <div
-                      key={item.id}
-                      title={!(isSidebarHovered || isMobileSidebarOpen) ? item.label : undefined}
-                      className="relative cursor-pointer group"
-                      onClick={() => {
-                        if (item.section) {
-                          setActiveSection(item.section!);
-                          setIsSidebarHovered(false);
-                          setIsMobileSidebarOpen(false);
-                          if (item.section === "callers" && callerSubView === "control") setCallerSubView("table");
-                        } else {
-                          localStorage.setItem("return_tab", item.id);
-                          router.push(item.link);
-                          setIsSidebarHovered(false);
-                          setIsMobileSidebarOpen(false);
-                        }
-                      }}
-                    >
-                      {isActive && (
-                        <div
-                          className="absolute inset-0 rounded-xl pointer-events-none"
-                          style={{
-                            background: "radial-gradient(ellipse at left center, rgba(217,70,168,0.12) 0%, transparent 70%)",
-                            animation: "sm-glow-pulse 3s ease-in-out infinite",
-                          }}
-                        />
-                      )}
-                      <div
-                        className={`flex items-center gap-3 px-4.5 py-2.5 rounded-xl transition-all duration-200 relative overflow-hidden ${isActive ? "text-[#d946a8]" : "text-gray-500 hover:text-gray-200"
-                          }`}
-                        style={isActive ? {
-                          background: "linear-gradient(135deg, rgba(158,33,123,0.22) 0%, rgba(217,70,168,0.07) 100%)",
-                          boxShadow: "inset 0 0 0 1px rgba(217,70,168,0.28), 0 2px 16px rgba(158,33,123,0.12)",
-                        } : {}}
-                      >
-                        {isActive && (
-                          <div
-                            className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-[#d946a8]"
-                            style={{ boxShadow: "0 0 10px rgba(217,70,168,0.9), 0 0 4px rgba(217,70,168,0.6)" }}
-                          />
-                        )}
-                        {!isActive && (
-                          <div className="absolute inset-0 rounded-xl bg-white/0 group-hover:bg-white/[0.04] transition-colors duration-200" />
-                        )}
-                        <div
-                          className={`flex-shrink-0 transition-all duration-200 ${isActive ? "text-[#d946a8]" : "text-gray-600 group-hover:text-gray-300"
-                            }`}
-                          style={isActive ? { filter: "drop-shadow(0 0 5px rgba(217,70,168,0.65))" } : {}}
-                        >
-                          <item.icon style={{ width: "17px", height: "17px" }} />
-                        </div>
-                        <span
-                          className={`text-[12.5px] font-semibold whitespace-nowrap overflow-hidden transition-all duration-300 ${isActive ? "text-[#d946a8]" : "text-gray-400 group-hover:text-gray-100"
-                            }`}
-                          style={{
-                            maxWidth: (isSidebarHovered || isMobileSidebarOpen) ? "140px" : "0px",
-                            opacity: (isSidebarHovered || isMobileSidebarOpen) ? 1 : 0,
-                            transform: (isSidebarHovered || isMobileSidebarOpen) ? "translateX(0)" : "translateX(-6px)",
-                            letterSpacing: "0.01em",
-                          }}
-                        >
-                          {item.label}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              });
-            })()}
-          </div>
-
-          {/* Bottom-pinned block: Bhoomi AI, then Settings.
-              This used to render exactly one item — menuItems[length-1] — which
-              is why Settings could not live here and had to be a gear in the
-              header. It now renders every item flagged `pinned`, matching the
-              convention AdminSidebar already uses on /dashboard, so the two
-              rails agree on what sits at the bottom and in what order. */}
-          {menuItems.filter((i) => i.pinned).map((item, pinIdx) => {
-            const isActive = item.section ? activeSection === item.section : false;
-            return (
-              <div
-                key={item.id}
-                title={!(isSidebarHovered || isMobileSidebarOpen) ? item.label : undefined}
-                /* Only the first pinned item takes mt-auto — that is what pushes
-                   the whole block to the bottom. Putting it on every item would
-                   spread them apart down the rail instead of stacking them. */
-                className={`relative cursor-pointer group${pinIdx === 0 ? " mt-auto" : ""}`}
-                onClick={() => {
-                  if (item.section) {
-                    setActiveSection(item.section!);
-                    setIsSidebarHovered(false);
-                    setIsMobileSidebarOpen(false);
-                  } else {
-                    localStorage.setItem("return_tab", item.id);
-                    router.push(item.link);
-                    setIsSidebarHovered(false);
-                    setIsMobileSidebarOpen(false);
-                  }
-                }}
-              >
-                {isActive && (
-                  <div
-                    className="absolute inset-0 rounded-xl pointer-events-none"
-                    style={{
-                      background: "radial-gradient(ellipse at left center, rgba(217,70,168,0.12) 0%, transparent 70%)",
-                      animation: "sm-glow-pulse 3s ease-in-out infinite",
-                    }}
-                  />
-                )}
-                <div
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 relative overflow-hidden ${isActive ? "text-[#d946a8]" : "text-gray-500 hover:text-gray-200"
-                    }`}
-                  style={isActive ? {
-                    background: "linear-gradient(135deg, rgba(158,33,123,0.22) 0%, rgba(217,70,168,0.07) 100%)",
-                    boxShadow: "inset 0 0 0 1px rgba(217,70,168,0.28), 0 2px 16px rgba(158,33,123,0.12)",
-                  } : {}}
-                >
-                  {isActive && (
-                    <div
-                      className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-[#d946a8]"
-                      style={{ boxShadow: "0 0 10px rgba(217,70,168,0.9), 0 0 4px rgba(217,70,168,0.6)" }}
-                    />
-                  )}
-                  {!isActive && (
-                    <div className="absolute inset-0 rounded-xl bg-white/0 group-hover:bg-white/[0.04] transition-colors duration-200" />
-                  )}
-                  <div
-                    className={`flex-shrink-0 transition-all duration-200 ${isActive ? "text-[#d946a8]" : "text-gray-600 group-hover:text-gray-300"
-                      }`}
-                    style={isActive ? { filter: "drop-shadow(0 0 5px rgba(217,70,168,0.65))" } : {}}
-                  >
-                    <item.icon style={{ width: "17px", height: "17px" }} />
-                  </div>
-                  <span
-                    className={`text-[12.5px] font-semibold whitespace-nowrap overflow-hidden transition-all duration-300 ${isActive ? "text-[#d946a8]" : "text-gray-400 group-hover:text-gray-100"
-                      }`}
-                    style={{
-                      maxWidth: (isSidebarHovered || isMobileSidebarOpen) ? "140px" : "0px",
-                      opacity: (isSidebarHovered || isMobileSidebarOpen) ? 1 : 0,
-                      transform: (isSidebarHovered || isMobileSidebarOpen) ? "translateX(0)" : "translateX(-6px)",
-                      letterSpacing: "0.01em",
-                    }}
-                  >
-                    {item.label}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
-        </nav>
-
-        {/* Bottom gradient fade */}
-        <div className="flex-shrink-0" style={{ height: "60px", background: "linear-gradient(0deg, #0f0f1a 0%, transparent 100%)" }} />
-      </motion.aside>
 
       {/* ── MAIN ── */}
       <div className={`flex-1 flex flex-col pl-0 md:pl-[72px] h-screen overflow-hidden transition-colors duration-300 ${t.mainBg}`}>
 
-        {/* HEADER */}
-        {/* ── Header ──
-            In the Bhoomi AI section the bar joins the workspace: same #131314,
-            same hairline, so the dark canvas does not start at an abrupt white
-            edge. Every other section keeps the white CRM header exactly as it
-            was — `aiHeader` is the only thing that changes it, and it is false
-            everywhere except this one tab. The logo, the Admin Root badge and
-            Mark Attendance keep their own colours in both states. */}
-        <header
-          className={`h-16 flex items-center justify-between px-4 md:px-8 z-30 flex-shrink-0 transition-colors duration-300 ${aiHeader ? "" : t.header}`}
-          style={{
-            borderBottom: aiHeader
-              ? "1px solid rgba(255,255,255,0.08)"
-              : isDark ? "1px solid rgba(158,33,123,0.12)" : "1px solid rgba(0,0,0,0.08)",
-            backdropFilter: aiHeader ? undefined : "blur(12px)",
-            WebkitBackdropFilter: aiHeader ? undefined : "blur(12px)",
-            background: aiHeader
-              ? AI_CANVAS
-              : isDark ? "rgba(10,10,15,0.85)" : "rgba(255,255,255,0.9)",
-          }}
+        <AppHeader
+          isDark={isDark}
+          context={activeSection === "callers"
+            ? callerSubView === "control" ? "Caller Control" : "Caller Panel"
+            : activeSection === "ai" ? "Bhoomi AI"
+              : activeSection === "notifications" ? "WhatsApp Alerts" : "Add Employee"}
+          role={callerSubView === "control" ? "Admin Acting as Caller" : "Admin Root"}
         >
-          <div className="flex items-center">
-            <button
-              onClick={() => setIsMobileSidebarOpen(true)}
-              className={`md:hidden p-2 -ml-2 mr-2 rounded-lg transition-colors ${aiHeader ? "text-[#C4C7C5] hover:text-white" : t.textMuted + " hover:text-[#9E217B]"}`}
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-            </button>
-            <h1
-              className={`font-bold text-lg tracking-wide flex items-center gap-3 ${aiHeader ? "" : t.headerTitle}`}
-              style={aiHeader ? { color: "#E3E3E3" } : undefined}
-            >
-              <img src="/assets/bhoomidwellers.png" alt="Bhoomi CRM" className="h-20 md:h-18 w-auto object-contain -ml-2" />
-            <span
-              className={`text-xs sm:text-sm font-normal ${aiHeader ? "" : t.textFaint}`}
-              style={aiHeader ? { color: "#C4C7C5" } : undefined}
-            >— {activeSection === "callers"
-              ? callerSubView === "control" ? "Caller Control Mode" : "Caller Panel"
-              : activeSection === "ai" ? "Bhoomi AI"
-                : activeSection === "notifications" ? "WhatsApp Alerts" : "Add Employee"}</span>
-            <span
-              className="text-xs font-semibold px-2.5 py-0.5 rounded-full"
-              style={callerSubView === "control"
-                ? { background: "rgba(249,115,22,0.12)", border: "1px solid rgba(249,115,22,0.3)", color: "#fb923c" }
-                : { background: "rgba(158,33,123,0.12)", border: "1px solid rgba(158,33,123,0.3)", color: "#d946a8" }
-              }
-            >
-              {callerSubView === "control" ? "Admin Acting as Caller" : "Admin Root"}
-            </span>
-          </h1>
-          </div>
-          <div className="flex items-center gap-3 relative z-[50]" ref={topbarRef}>
-            <HeaderClock isDark={isDark} />
-            {/* <LoginTimerWidget isDark={isDark} /> */}
-            {/* This page has no attendance view of its own, so unlike the other
-                panels it really does navigate — but through the router its own
-                rail uses, rather than the badge's default full page reload. Only
-                Admin reaches this page, and Admin can open /dashboard, so the
-                destination was already correct; only the round trip was not. */}
-            {/* Compact Login/Logout punch control. Clicking "Login" hits
-                POST /api/attendance/mark directly (no navigation); once
-                marked it shows the live elapsed timer and clicking it runs
-                the same logout flow as the profile menu. */}
-            <AttendanceBadge
-              timeIn={timeIn}
-              isMarkedPresent={isMarkedPresent}
-              onLogout={handleLogout} />
-            {/* The light/dark toggle is hidden inside Bhoomi AI. The workspace
-                is always the dark canvas regardless of the CRM preference, so
-                the control would sit there claiming to change something it no
-                longer affects. The preference itself is untouched — leaving this
-                tab restores whatever it was set to. */}
-            {!aiHeader && (
+          <div className="flex items-center gap-4 flex-shrink-0 relative z-[50]" ref={topbarRef}>
+            {/* Desktop-only controls: hidden on mobile */}
+            <div className="hidden md:flex items-center gap-3">
+              <HeaderClock isDark={isDark} />
               <button onClick={() => {
                 const next = !isDark;
                 setIsDark(next);
-                try {
-                  localStorage.setItem("crm_theme", next ? "dark" : "light");
-                } catch { }
+                try { localStorage.setItem("crm_theme", next ? "dark" : "light"); } catch { }
               }} aria-label="Toggle theme"
                 className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center cursor-pointer justify-center shadow-sm ${t.toggleBtn}`}>
                 {isDark ? <SunIcon /> : <MoonIcon />}
               </button>
-            )}
+            </div>
 
-            {/* The Settings gear that used to sit here has moved into the rail's
-                bottom block, below Bhoomi AI — the same position /dashboard and
-                the Settings panel already use. It was the only navigation
-                destination reachable from the header rather than the rail. */}
+            {/* Attendance: visible on all screen sizes */}
+            <AttendanceBadge
+              timeIn={timeIn}
+              isMarkedPresent={isMarkedPresent}
+              onLogout={handleLogout} />
 
             {/* CRM System Updates */}
-            <CrmUpdatesNotification user={user} theme={aiHeaderTheme} isDark={isDark || aiHeader} />
+            <CrmUpdatesNotification user={user} theme={t} isDark={isDark} />
 
             <div className="relative">
               <div className="relative cursor-pointer" onClick={() => { setIsNotifOpen(!isNotifOpen); setIsProfileOpen(false); setNotifCount(0); }}>
                 <FaBell
-                  className={`${aiHeader ? "" : t.textMuted} hover:text-[#9E217B] transition-colors w-5 h-5`}
-                  style={aiHeader ? { color: "#C4C7C5" } : undefined}
+                  className={`${t.textMuted} hover:text-[#9E217B] transition-colors w-5 h-5`}
                 />
                 {notifCount > 0 && (
                   <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-[#9E217B] rounded-full text-[9px] font-black text-white flex items-center justify-center">
@@ -1300,7 +1021,7 @@ export default function EmployeesPage() {
               </div>
 
               {isNotifOpen && (
-                <div className={`absolute top-12 right-0 w-[320px] border rounded-xl shadow-2xl flex flex-col z-50 animate-fadeIn ${t.dropdown}`}>
+                <div className={`fixed right-4 top-14 md:absolute md:top-12 md:right-0 w-[320px] max-w-[calc(100vw-2rem)] border rounded-xl shadow-2xl flex flex-col z-50 animate-fadeIn ${t.dropdown}`}>
                   <div className={`p-4 border-b flex justify-between items-center ${t.innerBorder}`}>
                     <h3 className={`font-bold text-sm flex items-center gap-2 ${t.text}`}>
                       <FaBell className="text-[#9E217B]" /> Recent Notifications
@@ -1338,7 +1059,7 @@ export default function EmployeesPage() {
               )}
             </div>
 
-            <div className="relative">
+            <div className="relative hidden md:block">
               <div
                 onClick={() => { setIsProfileOpen(!isProfileOpen); setIsNotifOpen(false); }}
                 className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm cursor-pointer shadow-sm hover:opacity-80 transition-opacity border ${isDark ? "border-[#9E217B]/40 text-[#d946a8] bg-[#9E217B]/15" : "border-[#9E217B]/40 text-[#9E217B] bg-[#9E217B]/10"
@@ -1460,6 +1181,16 @@ export default function EmployeesPage() {
               </AnimatePresence>
             </div>
 
+            {/* Hamburger — mobile only, last item to match Sales Manager layout */}
+            <button
+              type="button"
+              onClick={() => setIsMobileSidebarOpen(true)}
+              className={`md:hidden h-8 w-8 sm:h-9 sm:w-9 flex-shrink-0 rounded-full sm:rounded-lg border border-transparent sm:border flex items-center justify-center transition-colors duration-150 cursor-pointer ${isDark ? "bg-white/10 text-[#EBEBF5] sm:bg-[#1C1C2A] sm:border-[#2A2A38] sm:text-yellow-300 hover:bg-white/20" : "bg-black/5 text-[#3C3C43] sm:bg-[#F1F5F9] sm:border-[#9CA3AF] sm:text-[#1A1A1A] hover:bg-black/10"} sm:hover:bg-[inherit]`}
+              aria-label="Open navigation menu"
+            >
+              <Menu className="w-4 h-4 sm:w-5 sm:h-5" />
+            </button>
+
             {/* 👇 NOTIFICATION POPUP 👇 */}
             {activeNotif && (
               <div className="absolute top-[68px] right-4 z-[999] animate-fadeIn">
@@ -1489,7 +1220,7 @@ export default function EmployeesPage() {
             )}
           </div>
 
-        </header>
+        </AppHeader>
 
         {/* ── CONTENT ── */}
         {!isAuthorized ? (
@@ -1818,7 +1549,7 @@ export default function EmployeesPage() {
              history, abort, retry and error handling. */
           <div className="flex-1 min-h-0 bg-[#131314] text-[#E3E3E3]">
             <BhoomiAiPanel
-              isDark={true}
+              isDark={false}
               t={t}
               user={user}
             />
