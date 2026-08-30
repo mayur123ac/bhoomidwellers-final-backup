@@ -250,8 +250,7 @@ function ChannelPartnerListView({ user, isDark, t, permissions, title }: Props) 
   };
 
   const tabCls = (active: boolean) =>
-    `px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-      active ? t.btnPrimary : `${t.textMuted} ${isDark ? "hover:bg-[#222]" : "hover:bg-slate-100"}`
+    `px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${active ? t.btnPrimary : `${t.textMuted} ${isDark ? "hover:bg-[#222]" : "hover:bg-slate-100"}`
     }`;
 
   // Drill-down replaces the list entirely; onBack returns and refetches so a
@@ -289,7 +288,7 @@ function ChannelPartnerListView({ user, isDark, t, permissions, title }: Props) 
   const showActions = canEdit || canDelete;
 
   return (
-    <div className="flex flex-col h-full overflow-hidden p-1">
+    <div className="flex flex-col h-full overflow-hidden p-4">
       {/* ── Header ── */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4 px-2 pt-2">
         <div className="flex items-center gap-2">
@@ -305,13 +304,12 @@ function ChannelPartnerListView({ user, isDark, t, permissions, title }: Props) 
       </div>
 
       {notice && (
-        <div className={`mx-2 mb-3 rounded-lg px-3 py-2 text-[11px] ${
-          notice.tone === "error"
-            ? "bg-red-500/10 border border-red-500/30 text-red-500"
-            : notice.tone === "warn"
-              ? isDark ? "bg-amber-500/10 border border-amber-500/25 text-amber-400" : "bg-amber-50 border border-amber-200 text-amber-700"
-              : isDark ? "bg-emerald-500/10 border border-emerald-500/25 text-emerald-400" : "bg-emerald-50 border border-emerald-200 text-emerald-700"
-        }`}>
+        <div className={`mx-2 mb-3 rounded-lg px-3 py-2 text-[11px] ${notice.tone === "error"
+          ? "bg-red-500/10 border border-red-500/30 text-red-500"
+          : notice.tone === "warn"
+            ? isDark ? "bg-amber-500/10 border border-amber-500/25 text-amber-400" : "bg-amber-50 border border-amber-200 text-amber-700"
+            : isDark ? "bg-emerald-500/10 border border-emerald-500/25 text-emerald-400" : "bg-emerald-50 border border-emerald-200 text-emerald-700"
+          }`}>
           {notice.text}
         </div>
       )}
@@ -326,9 +324,8 @@ function ChannelPartnerListView({ user, isDark, t, permissions, title }: Props) 
                 <FaExclamationTriangle className="text-[10px]" />
                 Needs Rate
                 {needsRateCount > 0 && (
-                  <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] ${
-                    tab === "needs_rate" ? "bg-white/25" : "bg-amber-500/20 text-amber-500"
-                  }`}>
+                  <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] ${tab === "needs_rate" ? "bg-white/25" : "bg-amber-500/20 text-amber-500"
+                    }`}>
                     {needsRateCount}
                   </span>
                 )}
@@ -369,8 +366,7 @@ function ChannelPartnerListView({ user, isDark, t, permissions, title }: Props) 
 
       {/* Appears only with a selection, so the toolbar doesn't sit there empty. */}
       {canAssign && selectedIds.length > 0 && (
-        <div className={`mx-2 mb-3 rounded-lg px-3 py-2 flex flex-wrap items-center justify-between gap-3 ${
-          isDark ? "bg-[#9E217B]/10 border border-[#9E217B]/30" : "bg-[#9E217B]/5 border border-[#9E217B]/25"}`}>
+        <div className={`mx-2 mb-3 rounded-lg px-3 py-2 flex flex-wrap items-center justify-between gap-3 ${isDark ? "bg-[#9E217B]/10 border border-[#9E217B]/30" : "bg-[#9E217B]/5 border border-[#9E217B]/25"}`}>
           <p className={`text-[11px] font-bold ${t.accentText}`}>
             {selectedIds.length} partner{selectedIds.length === 1 ? "" : "s"} selected
           </p>
@@ -395,9 +391,8 @@ function ChannelPartnerListView({ user, isDark, t, permissions, title }: Props) 
         if (unassigned === 0) return null;
         const showingUnassignedOnly = assignedFilter === "unassigned";
         return (
-          <div className={`mx-2 mb-3 rounded-lg px-3 py-2 text-[11px] ${
-            isDark ? "bg-amber-500/10 border border-amber-500/25 text-amber-400"
-                   : "bg-amber-50 border border-amber-200 text-amber-700"}`}>
+          <div className={`mx-2 mb-3 rounded-lg px-3 py-2 text-[11px] ${isDark ? "bg-amber-500/10 border border-amber-500/25 text-amber-400"
+            : "bg-amber-50 border border-amber-200 text-amber-700"}`}>
             {unassigned} partner{unassigned === 1 ? " has" : "s have"} no Sourcing Manager — their leads
             won&apos;t appear on any Sourcing Manager&apos;s dashboard.{" "}
             {showingUnassignedOnly ? (
@@ -474,12 +469,12 @@ function ChannelPartnerListView({ user, isDark, t, permissions, title }: Props) 
                   <p className={`text-sm font-bold mb-1 ${t.text}`}>
                     {search ? "No partners match your search"
                       : tab === "needs_rate" ? "Every partner has a rate set"
-                      : "No channel partners yet"}
+                        : "No channel partners yet"}
                   </p>
                   <p className={`text-xs ${t.textMuted}`}>
                     {search ? "Try a different name, phone number or GST."
                       : tab === "needs_rate" ? "Nothing is blocking commission calculation."
-                      : "Partners are registered here, or created automatically from Channel Partner enquiries."}
+                        : "Partners are registered here, or created automatically from Channel Partner enquiries."}
                   </p>
                   {canCreate && !search && tab === "all" && (
                     <button onClick={openAdd} className={`mt-4 px-4 py-2 rounded-lg text-xs font-bold cursor-pointer ${t.btnPrimary}`}>
@@ -499,9 +494,8 @@ function ChannelPartnerListView({ user, isDark, t, permissions, title }: Props) 
                   // Row click drills into commission history — only meaningful for
                   // roles that can see it, so the row isn't clickable otherwise.
                   onClick={canSeeCommercials ? () => setSelectedPartner(p) : undefined}
-                  className={`text-xs ${canSeeCommercials ? "cursor-pointer" : ""} ${t.tableRow} ${isDark ? "border-b border-[#222]" : ""} ${
-                    selectedSet.has(p.id) ? (isDark ? "bg-[#9E217B]/10" : "bg-[#9E217B]/5") : ""
-                  }`}
+                  className={`text-xs ${canSeeCommercials ? "cursor-pointer" : ""} ${t.tableRow} ${isDark ? "border-b border-[#222]" : ""} ${selectedSet.has(p.id) ? (isDark ? "bg-[#9E217B]/10" : "bg-[#9E217B]/5") : ""
+                    }`}
                 >
                   {canAssign && (
                     <td className="px-4 py-3">
@@ -575,11 +569,10 @@ function ChannelPartnerListView({ user, isDark, t, permissions, title }: Props) 
                   </td>
 
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                      p.status === "active"
-                        ? "bg-emerald-500/15 text-emerald-500"
-                        : "bg-gray-500/15 text-gray-500"
-                    }`}>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${p.status === "active"
+                      ? "bg-emerald-500/15 text-emerald-500"
+                      : "bg-gray-500/15 text-gray-500"
+                      }`}>
                       {p.status === "active" ? "Active" : "Inactive"}
                     </span>
                   </td>
@@ -598,9 +591,8 @@ function ChannelPartnerListView({ user, isDark, t, permissions, title }: Props) 
                             // Row click drills into commissions; this button must not
                             // trigger that as well.
                             onClick={e => { e.stopPropagation(); openEdit(p); }}
-                            className={`px-3 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer whitespace-nowrap ${
-                              noRate && canSeeCommercials ? t.btnPrimary : `${t.textMuted} ${isDark ? "hover:bg-[#222]" : "hover:bg-slate-100"}`
-                            }`}
+                            className={`px-3 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer whitespace-nowrap ${noRate && canSeeCommercials ? t.btnPrimary : `${t.textMuted} ${isDark ? "hover:bg-[#222]" : "hover:bg-slate-100"}`
+                              }`}
                           >
                             {noRate && canSeeCommercials ? <>Set Rate</> : <><FaPen className="inline text-[9px] mr-1" /> Edit</>}
                           </button>

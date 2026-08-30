@@ -703,7 +703,7 @@ function CpChatPanel({
       <div className={`flex-col w-full lg:w-[320px] flex-shrink-0 border-r ${borderSubtle} ${bgApp} ${cpId ? 'hidden lg:flex' : 'flex'}`}>
         <div className="px-5 pt-6 pb-4">
           <div className="flex items-center justify-between mb-4">
-            <h2 className={`text-2xl font-semibold tracking-tight ${textPrimary}`}>
+            <h2 className={`text-xl font-semibold tracking-tight ${textPrimary}`}>
               Messages
             </h2>
           </div>

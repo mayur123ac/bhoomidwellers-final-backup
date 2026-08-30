@@ -8,7 +8,9 @@ export interface ShiftTiming {
   flexible: boolean;
 }
 
-export function useShiftTiming(pollingIntervalMs = 10000) {
+// Working hours are stable org config — they change at most once a day.
+// Default poll is 5 minutes, and the interval is skipped in background tabs.
+export function useShiftTiming(pollingIntervalMs = 300_000) {
   const [timing, setTiming] = useState<ShiftTiming>({
     loginTime: "11:00",
     logoutTime: "20:00",
@@ -39,12 +41,18 @@ export function useShiftTiming(pollingIntervalMs = 10000) {
   }, []);
 
   useEffect(() => {
-    // Initial fetch
     fetchTiming();
 
-    // Polling
-    const intervalId = setInterval(fetchTiming, pollingIntervalMs);
-    return () => clearInterval(intervalId);
+    const intervalId = setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      fetchTiming();
+    }, pollingIntervalMs);
+    const onVisible = () => { if (!document.hidden) fetchTiming(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [fetchTiming, pollingIntervalMs]);
 
   return { timing, loading, error, refresh: fetchTiming };

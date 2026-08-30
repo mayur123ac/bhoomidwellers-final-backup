@@ -361,8 +361,16 @@ export default function RevenueIntelligenceView({ isDark, theme, user }: Props) 
   }, [load]);
 
   useEffect(() => {
-    const timer = setInterval(() => load(true), REFRESH_MS);
-    return () => clearInterval(timer);
+    const timer = setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      load(true);
+    }, REFRESH_MS);
+    const onVisible = () => { if (!document.hidden) load(true); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [load]);
 
   /* ── derive ── */
@@ -523,43 +531,43 @@ export default function RevenueIntelligenceView({ isDark, theme, user }: Props) 
     <div className={`h-full overflow-y-auto custom-scrollbar ${theme.mainBg}`}>
       {/* ═══ command bar ═══ */}
       <div
-        className={`sticky top-0 z-20 px-4 md:px-6 py-3 border-b ${isDark ? "border-white/10 bg-black/40" : "border-slate-200 bg-white/75"
+        className={`sticky top-0 z-20 px-3 sm:px-4 md:px-6 py-2 sm:py-3 border-b ${isDark ? "border-white/10 bg-black/40" : "border-slate-200 bg-white/75"
           }`}
         style={{ backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)" }}
       >
-        <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3">
+        <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-2 sm:gap-3">
           <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h1 className={`text-lg font-black tracking-tight ${theme.accentText}`}>Revenue Intelligence</h1>
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <h1 className={`text-base sm:text-lg font-black tracking-tight ${theme.accentText}`}>Revenue Intelligence</h1>
               <button
                 onClick={() => setShowInfo(true)}
-                className={`w-6 h-6 rounded-full border inline-flex items-center justify-center transition-colors ${isDark
+                className={`w-5 h-5 sm:w-6 sm:h-6 rounded-full border inline-flex items-center justify-center transition-colors ${isDark
                   ? "border-white/15 text-gray-300 hover:bg-white/10"
                   : "border-slate-300 text-slate-500 hover:bg-slate-100"
                   }`}
                 aria-label="How this panel works"
                 title="How this panel works"
               >
-                <Info className="w-3.5 h-3.5" />
+                <Info className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
               </button>
               <span
-                className={`text-[9px] font-black px-2 py-0.5 rounded-full border inline-flex items-center gap-1.5 ${toneClasses(
+                className={`text-[8px] sm:text-[9px] font-black px-1.5 sm:px-2 py-0.5 rounded-full border inline-flex items-center gap-1 sm:gap-1.5 ${toneClasses(
                   "done",
                   isDark
                 )}`}
               >
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 LIVE
               </span>
             </div>
-            <p className={`text-[11px] mt-0.5 ${theme.textMuted}`}>
+            <p className={`text-[9px] sm:text-[11px] mt-0.5 ${theme.textMuted}`}>
               Cash basis — a receipt counts once it has a date · refreshed {relativeTime(updatedAt) || "now"}
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
             <div className="relative">
-              <Search className={`w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 ${theme.textMuted}`} />
+              <Search className={`w-3 h-3 sm:w-3.5 sm:h-3.5 absolute left-2 sm:left-3 top-1/2 -translate-y-1/2 ${theme.textMuted}`} />
               <input
                 value={search}
                 onChange={(e) => {
@@ -567,7 +575,7 @@ export default function RevenueIntelligenceView({ isDark, theme, user }: Props) 
                   setPage(1);
                 }}
                 placeholder="Customer, flat, banker…"
-                className={`${controlCls} pl-9 pr-3 w-full sm:w-60 font-normal`}
+                className={`${controlCls} pl-7 sm:pl-9 pr-2 sm:pr-3 py-1.5 sm:py-2 text-xs sm:text-sm w-full sm:w-60 font-normal`}
               />
             </div>
 
@@ -577,7 +585,7 @@ export default function RevenueIntelligenceView({ isDark, theme, user }: Props) 
                 setManager(e.target.value);
                 setPage(1);
               }}
-              className={controlCls}
+              className={`${controlCls} py-1.5 sm:py-2 text-[10px] sm:text-sm`}
               aria-label="Sales manager"
             >
               <option value="">All managers</option>
@@ -594,7 +602,7 @@ export default function RevenueIntelligenceView({ isDark, theme, user }: Props) 
                 setStatusFilter(e.target.value as any);
                 setPage(1);
               }}
-              className={controlCls}
+              className={`${controlCls} py-1.5 sm:py-2 text-[10px] sm:text-sm`}
               aria-label="Status"
             >
               <option value="">All statuses</option>
@@ -604,45 +612,39 @@ export default function RevenueIntelligenceView({ isDark, theme, user }: Props) 
               <option value="idle">Not started</option>
             </select>
 
-            <button onClick={exportCsv} className={ghostBtn} title="Download the rows currently shown">
-              <Download className="w-3.5 h-3.5" />
+            <button onClick={exportCsv} className={`${ghostBtn} py-1.5 sm:py-2 px-2 sm:px-3 text-[10px] sm:text-sm`} title="Download the rows currently shown">
+              <Download className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
               CSV
             </button>
 
             <button
               onClick={() => load(true)}
               disabled={isRefreshing}
-              className={`h-9 w-9 rounded-lg inline-flex items-center justify-center border ${isDark ? "border-white/10 hover:bg-white/[0.07]" : "border-slate-200 hover:bg-slate-50"
+              className={`h-8 w-8 sm:h-9 sm:w-9 rounded-md sm:rounded-lg flex-shrink-0 inline-flex items-center justify-center border ${isDark ? "border-white/10 hover:bg-white/[0.07]" : "border-slate-200 hover:bg-slate-50"
                 }`}
               aria-label="Refresh now"
               title="Refresh now"
             >
-              <RefreshCcw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
+              <RefreshCcw className={`w-3 h-3 sm:w-3.5 sm:h-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
             </button>
           </div>
         </div>
       </div>
 
-      <div className="p-4 md:p-6 space-y-4">
+      <div className="p-2 sm:p-4 md:p-6 space-y-3 sm:space-y-4">
         {showInfo && <HowItWorks onClose={() => setShowInfo(false)} theme={theme} isDark={isDark} />}
-        {/* <RevenueChatDock
-          rows={filtered}
-          filterLabel={[manager, statusFilter && `status: ${statusFilter}`, search && `“${search}”`].filter(Boolean).join(" · ")}
-          theme={theme}
-          isDark={isDark}
-        /> */}
         {error && (
-          <div className={`rounded-xl border p-4 ${toneClasses("idle", isDark)}`}>
-            <p className={`text-sm font-bold ${theme.text}`}>Revenue intelligence could not load</p>
-            <p className={`text-xs mt-0.5 ${theme.textMuted}`}>{error}</p>
-            <button onClick={() => load()} className={`${ghostBtn} mt-3`}>
+          <div className={`rounded-xl border p-3 sm:p-4 ${toneClasses("idle", isDark)}`}>
+            <p className={`text-xs sm:text-sm font-bold ${theme.text}`}>Revenue intelligence could not load</p>
+            <p className={`text-[10px] sm:text-xs mt-0.5 ${theme.textMuted}`}>{error}</p>
+            <button onClick={() => load()} className={`${ghostBtn} mt-2 sm:mt-3 text-[10px] sm:text-sm`}>
               Try again
             </button>
           </div>
         )}
 
         {/* ═══ money strip ═══ */}
-        <section className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        <section className="grid grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-3">
           {[
             {
               label: "Booking in hand",
@@ -662,25 +664,25 @@ export default function RevenueIntelligenceView({ isDark, theme, user }: Props) 
           ].map((tile) => (
             <div
               key={tile.label}
-              className={`rounded-xl border p-3.5 ${isDark ? "border-white/10 bg-white/[0.03]" : "border-slate-200 bg-white"
+              className={`rounded-lg sm:rounded-xl border p-2.5 sm:p-3.5 ${isDark ? "border-white/10 bg-white/[0.03]" : "border-slate-200 bg-white"
                 }`}
               style={theme.cardGlass || undefined}
             >
-              <div className="flex items-center gap-2">
-                <tile.icon className="w-3.5 h-3.5" style={{ color: ACCENT }} />
-                <p className={`text-[10px] font-black uppercase tracking-[0.07em] ${theme.textMuted}`}>{tile.label}</p>
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <tile.icon className="w-3 h-3 sm:w-3.5 sm:h-3.5 flex-shrink-0" style={{ color: ACCENT }} />
+                <p className={`text-[8px] sm:text-[10px] font-black uppercase tracking-[0.07em] truncate ${theme.textMuted}`}>{tile.label}</p>
               </div>
-              <p className={`text-xl font-black mt-1.5 tabular-nums ${theme.text}`}>{tile.value}</p>
-              <p className={`text-[10px] mt-0.5 ${theme.textMuted}`}>{tile.sub}</p>
+              <p className={`text-lg sm:text-xl font-black mt-1 sm:mt-1.5 tabular-nums ${theme.text}`}>{tile.value}</p>
+              <p className={`text-[8px] sm:text-[10px] mt-0.5 truncate ${theme.textMuted}`}>{tile.sub}</p>
             </div>
           ))}
         </section>
 
         {/* ═══ the table ═══ */}
-        <section className={`rounded-2xl border overflow-hidden ${theme.tableWrap}`} style={theme.tableGlass}>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className={`sticky top-0 z-10 ${theme.tableHead}`}>
+        <section className={`rounded-xl sm:rounded-2xl border overflow-hidden ${theme.tableWrap}`} style={theme.tableGlass}>
+          <div className="overflow-x-auto custom-scrollbar">
+            <table className="w-full text-[10px] sm:text-sm">
+              <thead className={`sticky top-0 z-10 text-[9px] sm:text-xs uppercase ${theme.tableHead}`}>
                 <tr>
                   {(
                     [
@@ -700,7 +702,7 @@ export default function RevenueIntelligenceView({ isDark, theme, user }: Props) 
                       ["sanctionedDate" as SortKey, "Sanction date", "left"],
                     ] as Array<[SortKey | null, string, "left" | "right"]>
                   ).map(([key, label, align]) => (
-                    <th key={label} className={`${thCls} ${align === "right" ? "text-right" : "text-left"}`}>
+                    <th key={label} className={`px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap ${thCls} ${align === "right" ? "text-right" : "text-left"}`}>
                       {key ? (
                         <button
                           onClick={() => toggleSort(key)}
@@ -710,9 +712,9 @@ export default function RevenueIntelligenceView({ isDark, theme, user }: Props) 
                           {label}
                           {sort.key === key &&
                             (sort.dir === "asc" ? (
-                              <ArrowUp className="w-3 h-3" style={{ color: ACCENT }} />
+                              <ArrowUp className="w-2.5 h-2.5 sm:w-3 sm:h-3 flex-shrink-0" style={{ color: ACCENT }} />
                             ) : (
-                              <ArrowDown className="w-3 h-3" style={{ color: ACCENT }} />
+                              <ArrowDown className="w-2.5 h-2.5 sm:w-3 sm:h-3 flex-shrink-0" style={{ color: ACCENT }} />
                             ))}
                         </button>
                       ) : (
@@ -720,7 +722,7 @@ export default function RevenueIntelligenceView({ isDark, theme, user }: Props) 
                       )}
                     </th>
                   ))}
-                  <th className={`${thCls} text-right`}>
+                  <th className={`px-2 sm:px-3 py-2 sm:py-3 ${thCls} text-right`}>
                     <span className="sr-only">Open</span>
                   </th>
                 </tr>
@@ -729,10 +731,10 @@ export default function RevenueIntelligenceView({ isDark, theme, user }: Props) 
               <tbody>
                 {paged.length === 0 ? (
                   <tr>
-                    <td colSpan={14} className="px-4 py-16 text-center">
-                      <Search className={`w-8 h-8 mx-auto mb-3 opacity-25 ${theme.textMuted}`} />
-                      <p className={`text-sm font-bold ${theme.text}`}>No bookings here</p>
-                      <p className={`text-xs mt-1 ${theme.textMuted}`}>
+                    <td colSpan={14} className="px-3 sm:px-4 py-10 sm:py-16 text-center">
+                      <Search className={`w-6 h-6 sm:w-8 sm:h-8 mx-auto mb-2 sm:mb-3 opacity-25 ${theme.textMuted}`} />
+                      <p className={`text-xs sm:text-sm font-bold ${theme.text}`}>No bookings here</p>
+                      <p className={`text-[10px] sm:text-xs mt-1 max-w-xs mx-auto whitespace-normal ${theme.textMuted}`}>
                         {search || manager || statusFilter
                           ? "Widen the filters to see more."
                           : "Confirmed bookings appear as soon as a lead is marked closing."}
@@ -761,26 +763,26 @@ export default function RevenueIntelligenceView({ isDark, theme, user }: Props) 
                         style={{ ["--tw-ring-color" as any]: `${ACCENT}66` }}
                         title="Open case and add a follow-up"
                       >
-                        <td className={`px-3 py-3 tabular-nums font-bold ${theme.textMuted}`}>{row.srNo}</td>
+                        <td className={`px-2 sm:px-3 py-2 sm:py-3 tabular-nums font-bold ${theme.textMuted}`}>{row.srNo}</td>
 
-                        <td className="px-3 py-3">
+                        <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap">
                           <p className={`font-bold leading-tight ${theme.text}`}>{row.customerName}</p>
                           {row.customerNote && (
-                            <p className={`text-[11px] mt-0.5 italic ${theme.textMuted}`}>{row.customerNote}</p>
+                            <p className={`text-[9px] sm:text-[11px] mt-0.5 italic ${theme.textMuted} truncate max-w-[120px] sm:max-w-xs`}>{row.customerNote}</p>
                           )}
                         </td>
 
-                        <td className={`px-3 py-3 text-right tabular-nums whitespace-nowrap ${theme.text}`}>
+                        <td className={`px-2 sm:px-3 py-2 sm:py-3 text-right tabular-nums whitespace-nowrap ${theme.text}`}>
                           {inr(row.agreementValue)}
                         </td>
 
                         {/* OCR — figure plus the receipt-entry affordance */}
-                        <td className="px-3 py-3 text-right whitespace-nowrap">
-                          <div className="inline-flex items-center gap-2">
+                        <td className="px-2 sm:px-3 py-2 sm:py-3 text-right whitespace-nowrap">
+                          <div className="inline-flex items-center justify-end gap-1.5 sm:gap-2">
                             <span className="text-right">
                               <span className="block tabular-nums font-bold text-cyan-500">{inr(row.ocrReceived)}</span>
                               {ocrPct !== null && (
-                                <span className={`block text-[9px] font-bold tabular-nums ${theme.textMuted}`}>
+                                <span className={`block text-[8px] sm:text-[9px] font-bold tabular-nums ${theme.textMuted}`}>
                                   {ocrPct}% of own share
                                 </span>
                               )}
@@ -791,34 +793,34 @@ export default function RevenueIntelligenceView({ isDark, theme, user }: Props) 
                                   e.stopPropagation();
                                   setOcrRow(row);
                                 }}
-                                className={`w-6 h-6 rounded-md border inline-flex items-center justify-center flex-shrink-0 transition-colors ${isDark
+                                className={`w-5 h-5 sm:w-6 sm:h-6 rounded-md border inline-flex items-center justify-center flex-shrink-0 transition-colors ${isDark
                                   ? "border-white/15 text-gray-300 hover:bg-white/10"
                                   : "border-slate-300 text-slate-500 hover:bg-slate-100"
                                   }`}
                                 aria-label={`Record an OCR receipt for ${row.customerName}`}
                                 title="Record an OCR receipt"
                               >
-                                <Plus className="w-3 h-3" />
+                                <Plus className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
                               </button>
                             )}
                           </div>
                         </td>
 
-                        <td className="px-3 py-3 text-right whitespace-nowrap">
+                        <td className="px-2 sm:px-3 py-2 sm:py-3 text-right whitespace-nowrap">
                           <p className="tabular-nums font-bold text-indigo-500">{inr(row.sanctionedAmount)}</p>
                           {row.sanctionedDate && (
-                            <p className={`text-[9px] mt-0.5 font-bold tabular-nums ${theme.textMuted}`}>
+                            <p className={`text-[8px] sm:text-[9px] mt-0.5 font-bold tabular-nums ${theme.textMuted}`}>
                               {shortDate(row.sanctionedDate)}
                             </p>
                           )}
                         </td>
 
-                        <td className="px-3 py-3 text-right whitespace-nowrap">
+                        <td className="px-2 sm:px-3 py-2 sm:py-3 text-right whitespace-nowrap">
                           <p className="tabular-nums font-bold text-emerald-500">{inr(row.disbursement)}</p>
                           {row.agreementValue > 0 && (
-                            <div className="mt-1 flex items-center justify-end gap-1.5">
+                            <div className="mt-1 flex items-center justify-end gap-1 sm:gap-1.5">
                               <span
-                                className={`h-1 w-14 rounded-full overflow-hidden ${isDark ? "bg-white/10" : "bg-slate-200"
+                                className={`h-1 w-10 sm:w-14 rounded-full overflow-hidden ${isDark ? "bg-white/10" : "bg-slate-200"
                                   }`}
                               >
                                 <span
@@ -826,33 +828,33 @@ export default function RevenueIntelligenceView({ isDark, theme, user }: Props) 
                                   style={{ width: `${pct}%`, background: pct >= 100 ? "#10b981" : ACCENT }}
                                 />
                               </span>
-                              <span className={`text-[9px] font-bold tabular-nums ${theme.textMuted}`}>{pct}%</span>
+                              <span className={`text-[8px] sm:text-[9px] font-bold tabular-nums ${theme.textMuted}`}>{pct}%</span>
                             </div>
                           )}
                         </td>
 
-                        <td className="px-3 py-3 text-right tabular-nums font-bold whitespace-nowrap text-violet-500">
+                        <td className="px-2 sm:px-3 py-2 sm:py-3 text-right tabular-nums font-bold whitespace-nowrap text-violet-500">
                           {inr(row.registrationAmount)}
                         </td>
 
-                        <td className="px-3 py-3 text-right tabular-nums font-bold text-amber-500 whitespace-nowrap">
+                        <td className="px-2 sm:px-3 py-2 sm:py-3 text-right tabular-nums font-bold text-amber-500 whitespace-nowrap">
                           {inr(row.balance)}
                         </td>
 
-                        <td className={`px-3 py-3 whitespace-nowrap ${theme.text}`}>{row.salesManager}</td>
-                        <td className={`px-3 py-3 font-semibold whitespace-nowrap ${theme.text}`}>{row.flatNo}</td>
-                        <td className={`px-3 py-3 text-xs max-w-[180px] truncate ${theme.textMuted}`} title={row.bankerDetails}>
+                        <td className={`px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap ${theme.text}`}>{row.salesManager}</td>
+                        <td className={`px-2 sm:px-3 py-2 sm:py-3 font-semibold whitespace-nowrap ${theme.text}`}>{row.flatNo}</td>
+                        <td className={`px-2 sm:px-3 py-2 sm:py-3 text-[9px] sm:text-xs max-w-[120px] sm:max-w-[180px] truncate ${theme.textMuted}`} title={row.bankerDetails}>
                           {row.bankerDetails}
                         </td>
-                        <td className="px-3 py-3">
+                        <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap">
                           <StatusChip row={row} isDark={isDark} />
                         </td>
-                        <td className={`px-3 py-3 whitespace-nowrap ${theme.textMuted}`}>
+                        <td className={`px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-[9px] sm:text-xs ${theme.textMuted}`}>
                           {shortDate(row.sanctionedDate)}
                         </td>
-                        <td className="px-3 py-3 text-right">
+                        <td className="px-2 sm:px-3 py-2 sm:py-3 text-right">
                           <ArrowUpRight
-                            className={`w-4 h-4 inline-block opacity-0 group-hover:opacity-100 transition-opacity ${theme.textMuted}`}
+                            className={`w-3 h-3 sm:w-4 sm:h-4 inline-block opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity ${theme.textMuted}`}
                           />
                         </td>
                       </tr>
@@ -866,16 +868,16 @@ export default function RevenueIntelligenceView({ isDark, theme, user }: Props) 
                   <tr className={isDark ? "bg-white/[0.03]" : "bg-slate-50/80"}>
                     <td
                       colSpan={2}
-                      className={`px-3 py-3 text-[10px] font-black uppercase tracking-[0.07em] ${theme.textMuted}`}
+                      className={`px-2 sm:px-3 py-2 sm:py-3 text-[9px] sm:text-[10px] font-black uppercase tracking-[0.07em] whitespace-nowrap ${theme.textMuted}`}
                     >
                       Total · {filtered.length} booking{filtered.length === 1 ? "" : "s"}
                     </td>
-                    <td className={`px-3 py-3 text-right tabular-nums font-black ${theme.text}`}>{inr(totals.av)}</td>
-                    <td className="px-3 py-3 text-right tabular-nums font-black text-cyan-500">{inr(totals.ocr)}</td>
-                    <td className="px-3 py-3 text-right tabular-nums font-black text-indigo-500">{inr(totals.sanctioned)}</td>
-                    <td className="px-3 py-3 text-right tabular-nums font-black text-emerald-500">{inr(totals.disb)}</td>
-                    <td className="px-3 py-3 text-right tabular-nums font-black text-violet-500">{inr(totals.registration)}</td>
-                    <td className="px-3 py-3 text-right tabular-nums font-black text-amber-500">{inr(totals.balance)}</td>
+                    <td className={`px-2 sm:px-3 py-2 sm:py-3 text-right tabular-nums font-black ${theme.text}`}>{inr(totals.av)}</td>
+                    <td className="px-2 sm:px-3 py-2 sm:py-3 text-right tabular-nums font-black text-cyan-500">{inr(totals.ocr)}</td>
+                    <td className="px-2 sm:px-3 py-2 sm:py-3 text-right tabular-nums font-black text-indigo-500">{inr(totals.sanctioned)}</td>
+                    <td className="px-2 sm:px-3 py-2 sm:py-3 text-right tabular-nums font-black text-emerald-500">{inr(totals.disb)}</td>
+                    <td className="px-2 sm:px-3 py-2 sm:py-3 text-right tabular-nums font-black text-violet-500">{inr(totals.registration)}</td>
+                    <td className="px-2 sm:px-3 py-2 sm:py-3 text-right tabular-nums font-black text-amber-500">{inr(totals.balance)}</td>
                     <td colSpan={6} />
                   </tr>
                 </tfoot>
@@ -884,28 +886,28 @@ export default function RevenueIntelligenceView({ isDark, theme, user }: Props) 
           </div>
 
           {sorted.length > PAGE_SIZE && (
-            <div className={`flex items-center justify-between gap-3 p-3.5 border-t ${theme.tableBorder}`}>
-              <p className={`text-[11px] font-semibold ${theme.textMuted}`}>
+            <div className={`flex items-center justify-between gap-2 sm:gap-3 p-2 sm:p-3.5 border-t ${theme.tableBorder}`}>
+              <p className={`text-[10px] sm:text-[11px] font-semibold ${theme.textMuted}`}>
                 Page {Math.min(page, totalPages)} of {totalPages}
               </p>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 sm:gap-2">
                 <button
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={page <= 1}
-                  className={`h-8 w-8 rounded-lg border inline-flex items-center justify-center disabled:opacity-30 ${isDark ? "border-white/10 hover:bg-white/[0.07]" : "border-slate-200 hover:bg-slate-50"
+                  className={`h-7 w-7 sm:h-8 sm:w-8 rounded-md sm:rounded-lg border inline-flex items-center justify-center disabled:opacity-30 ${isDark ? "border-white/10 hover:bg-white/[0.07]" : "border-slate-200 hover:bg-slate-50"
                     }`}
                   aria-label="Previous page"
                 >
-                  <ChevronLeft className="w-3.5 h-3.5" />
+                  <ChevronLeft className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                 </button>
                 <button
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={page >= totalPages}
-                  className={`h-8 w-8 rounded-lg border inline-flex items-center justify-center disabled:opacity-30 ${isDark ? "border-white/10 hover:bg-white/[0.07]" : "border-slate-200 hover:bg-slate-50"
+                  className={`h-7 w-7 sm:h-8 sm:w-8 rounded-md sm:rounded-lg border inline-flex items-center justify-center disabled:opacity-30 ${isDark ? "border-white/10 hover:bg-white/[0.07]" : "border-slate-200 hover:bg-slate-50"
                     }`}
                   aria-label="Next page"
                 >
-                  <ChevronRight className="w-3.5 h-3.5" />
+                  <ChevronRight className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                 </button>
               </div>
             </div>

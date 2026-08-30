@@ -46,6 +46,7 @@ function validate(val: string, fieldType: "email" | "tel" | "text"): string | nu
 }
 
 export default function InlineContactField({
+
   label,
   value,
   fieldType,
@@ -132,9 +133,8 @@ export default function InlineContactField({
           onClick={canEdit && !displayValue ? startEdit : undefined}
         >
           <p
-            className={`font-semibold transition-colors duration-200 ${mono ? "font-mono" : ""} ${
-              displayValue ? theme.text : `opacity-50 italic ${theme.text}`
-            }`}
+            className={`font-semibold transition-colors duration-200 ${mono ? "font-mono" : ""} ${displayValue ? theme.text : `opacity-50 italic ${theme.text}`
+              }`}
           >
             {displayValue ?? "Not Provided"}
           </p>
@@ -180,11 +180,9 @@ export default function InlineContactField({
             placeholder={
               fieldType === "email" ? "email@example.com" : fieldType === "tel" ? "Enter number" : `Enter ${label.toLowerCase()}`
             }
-            className={`flex-1 min-w-0 px-2.5 py-1.5 rounded-lg text-sm outline-none transition-all duration-150 ${
-              mono ? "font-mono" : ""
-            } ${theme.inputInner} ${theme.inputFocus} ${theme.text} ${
-              saving ? "opacity-50 cursor-not-allowed" : ""
-            } ${error ? "!border-red-500/70" : ""}`}
+            className={`flex-1 min-w-0 px-2.5 py-1.5 rounded-lg text-sm outline-none transition-all duration-150 ${mono ? "font-mono" : ""
+              } ${theme.inputInner} ${theme.inputFocus} ${theme.text} ${saving ? "opacity-50 cursor-not-allowed" : ""
+              } ${error ? "!border-red-500/70" : ""}`}
           />
 
           {/* Save button */}

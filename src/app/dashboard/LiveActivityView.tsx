@@ -326,107 +326,107 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
   const isFutureDate = selectedDate > todayStr;
 
   return (
-    <div className={`p-4 w-full h-full flex flex-col ${theme.mainBg} relative`}>
+    <div className={`p-4 sm:p-4 w-full h-full flex flex-col ${theme.mainBg} relative overflow-x-hidden`}>
 
       {/* SMART ALERTS PANEL (Floating Top Center) */}
       {smartAlerts.length > 0 && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 pointer-events-none w-[400px]">
+        <div className="fixed top-2 sm:top-4 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-1.5 sm:gap-2 pointer-events-none w-[90%] sm:w-[400px]">
           {smartAlerts.map(alert => (
-            <div key={alert.id} className="bg-red-600/90 backdrop-blur-md text-white p-3 rounded-lg shadow-[0_0_15px_rgba(220,38,38,0.5)] border border-red-400 animate-fade-in-down">
-              <div className="flex justify-between items-center mb-1">
-                <span className="font-black text-[10px] uppercase">{alert.type.replace(/_/g, ' ')}</span>
-                <span className="text-[10px] opacity-70">{alert.time}</span>
+            <div key={alert.id} className="bg-red-600/90 backdrop-blur-md text-white p-2.5 sm:p-3 rounded-lg shadow-[0_0_15px_rgba(220,38,38,0.5)] border border-red-400 animate-fade-in-down">
+              <div className="flex justify-between items-center mb-0.5 sm:mb-1">
+                <span className="font-black text-[9px] sm:text-[10px] uppercase">{alert.type.replace(/_/g, ' ')}</span>
+                <span className="text-[9px] sm:text-[10px] opacity-70">{alert.time}</span>
               </div>
-              <p className="text-xs font-medium">{alert.message}</p>
+              <p className="text-[11px] sm:text-xs font-medium">{alert.message}</p>
             </div>
           ))}
         </div>
       )}
 
       {/* FLOATING REALTIME EVENT FEED (Top Right) */}
-      <div className="fixed top-20 right-6 z-50 w-72 space-y-2 pointer-events-none">
+      <div className="fixed top-16 sm:top-20 right-2 sm:right-6 z-50 w-60 sm:w-72 space-y-1.5 sm:space-y-2 pointer-events-none">
         {liveEvents.map((evt) => (
-          <div key={evt.id} className="bg-[#9E217B]/90 backdrop-blur-md text-white p-3 rounded-lg shadow-xl shadow-[#9E217B]/20 border border-white/10 animate-fade-in-down pointer-events-auto">
-            <span className="text-[10px] text-white/70 font-bold">{evt.time}</span>
-            <span className="text-xs font-medium leading-snug block">{evt.message}</span>
+          <div key={evt.id} className="bg-[#9E217B]/90 backdrop-blur-md text-white p-2.5 sm:p-3 rounded-lg shadow-xl shadow-[#9E217B]/20 border border-white/10 animate-fade-in-down pointer-events-auto">
+            <span className="text-[9px] sm:text-[10px] text-white/70 font-bold">{evt.time}</span>
+            <span className="text-[11px] sm:text-xs font-medium leading-snug block">{evt.message}</span>
           </div>
         ))}
       </div>
 
       {/* TOP HEADER & TOGGLES */}
-      <div className="flex justify-between items-center mb-4">
-        <h2 className={`text-xl font-black ${theme.text}`}>Operations Command Center</h2>
-        <div className={`flex bg-black/5 dark:bg-white/5 p-1 rounded-lg border ${theme.tableBorder}`}>
+      {/* <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 sm:mb-4">
+        <h2 className={`text-base sm:text-xl font-black ${theme.text}`}>Operations Command Center</h2>
+        <div className={`flex bg-black/5 dark:bg-white/5 p-1 rounded-lg border ${theme.tableBorder} self-start sm:self-auto`}>
           <button
             onClick={() => setViewMode("live")}
-            className={`px-4 py-1.5 text-xs font-bold rounded-md transition-colors ${viewMode === "live" ? "bg-[#9E217B] text-white shadow-md" : `${theme.textMuted} hover:text-[#9E217B]`}`}
+            className={`px-3 sm:px-4 py-1.5 text-[10px] sm:text-xs font-bold rounded-md transition-colors ${viewMode === "live" ? "bg-[#9E217B] text-white shadow-md" : `${theme.textMuted} hover:text-[#9E217B]`}`}
           >
             Live Telemetry
           </button>
           <button
             onClick={() => setViewMode("analytics")}
-            className={`px-4 py-1.5 text-xs font-bold rounded-md transition-colors ${viewMode === "analytics" ? "bg-[#9E217B] text-white shadow-md" : `${theme.textMuted} hover:text-[#9E217B]`}`}
+            className={`px-3 sm:px-4 py-1.5 text-[10px] sm:text-xs font-bold rounded-md transition-colors ${viewMode === "analytics" ? "bg-[#9E217B] text-white shadow-md" : `${theme.textMuted} hover:text-[#9E217B]`}`}
           >
             Intelligence Hub
           </button>
         </div>
-      </div>
+      </div> */}
 
       {viewMode === "analytics" && globalAnalytics ? (
-        <div className="flex flex-col gap-4 overflow-y-auto pr-2 pb-10 custom-scrollbar h-[calc(100vh-140px)]">
+        <div className="flex flex-col gap-3 sm:gap-4 overflow-y-auto pr-1 sm:pr-2 pb-10 custom-scrollbar h-[calc(100vh-140px)]">
 
           {/* ANALYTICS KPI CARDS */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className={`p-4 rounded-xl border ${theme.card}`}>
-              <p className={`text-[10px] uppercase font-bold ${theme.textMuted}`}>Avg Active Time Today</p>
-              <h3 className={`text-2xl font-black mt-1 ${theme.text}`}>{formatDuration(globalAnalytics.kpis?.avgActiveTimeSeconds || 0)}</h3>
-              <p className={`text-xs mt-1 ${theme.textMuted}`}>Excludes idle duration</p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4">
+            <div className={`p-3 sm:p-4 rounded-xl border ${theme.card}`}>
+              <p className={`text-[9px] sm:text-[10px] uppercase font-bold ${theme.textMuted}`}>Avg Active Time Today</p>
+              <h3 className={`text-lg sm:text-2xl font-black mt-1 ${theme.text}`}>{formatDuration(globalAnalytics.kpis?.avgActiveTimeSeconds || 0)}</h3>
+              <p className={`text-[10px] sm:text-xs mt-0.5 sm:mt-1 ${theme.textMuted}`}>Excludes idle duration</p>
             </div>
-            <div className={`p-4 rounded-xl border ${theme.card}`}>
-              <p className={`text-[10px] uppercase font-bold ${theme.textMuted}`}>Most Active Employee</p>
-              <h3 className={`text-xl font-black mt-1 text-green-500`}>{globalAnalytics.kpis?.mostActiveEmployee?.name || 'N/A'}</h3>
-              <p className={`text-xs mt-1 ${theme.textMuted}`}>{formatDuration(globalAnalytics.kpis?.mostActiveEmployee?.time || 0)} active</p>
+            <div className={`p-3 sm:p-4 rounded-xl border ${theme.card}`}>
+              <p className={`text-[9px] sm:text-[10px] uppercase font-bold ${theme.textMuted}`}>Most Active Employee</p>
+              <h3 className={`text-base sm:text-xl font-black mt-1 text-green-500 truncate`}>{globalAnalytics.kpis?.mostActiveEmployee?.name || 'N/A'}</h3>
+              <p className={`text-[10px] sm:text-xs mt-0.5 sm:mt-1 ${theme.textMuted}`}>{formatDuration(globalAnalytics.kpis?.mostActiveEmployee?.time || 0)} active</p>
             </div>
-            <div className={`p-4 rounded-xl border ${theme.card}`}>
-              <p className={`text-[10px] uppercase font-bold ${theme.textMuted}`}>Highest Idle Time</p>
-              <h3 className={`text-xl font-black mt-1 text-yellow-500`}>{globalAnalytics.kpis?.highestIdleEmployee?.name || 'N/A'}</h3>
-              <p className={`text-xs mt-1 ${theme.textMuted}`}>{formatDuration(globalAnalytics.kpis?.highestIdleEmployee?.time || 0)} idle</p>
+            <div className={`p-3 sm:p-4 rounded-xl border ${theme.card}`}>
+              <p className={`text-[9px] sm:text-[10px] uppercase font-bold ${theme.textMuted}`}>Highest Idle Time</p>
+              <h3 className={`text-base sm:text-xl font-black mt-1 text-yellow-500 truncate`}>{globalAnalytics.kpis?.highestIdleEmployee?.name || 'N/A'}</h3>
+              <p className={`text-[10px] sm:text-xs mt-0.5 sm:mt-1 ${theme.textMuted}`}>{formatDuration(globalAnalytics.kpis?.highestIdleEmployee?.time || 0)} idle</p>
             </div>
-            <div className={`p-4 rounded-xl border ${theme.card}`}>
-              <p className={`text-[10px] uppercase font-bold ${theme.textMuted}`}>Total Leads Worked</p>
-              <h3 className={`text-2xl font-black mt-1 ${theme.text}`}>{sessions.filter(s => s.active_lead_id).length} Active Now</h3>
-              <p className={`text-xs mt-1 ${theme.textMuted}`}>Realtime lead engagement</p>
+            <div className={`p-3 sm:p-4 rounded-xl border ${theme.card}`}>
+              <p className={`text-[9px] sm:text-[10px] uppercase font-bold ${theme.textMuted}`}>Total Leads Worked</p>
+              <h3 className={`text-lg sm:text-2xl font-black mt-1 ${theme.text}`}>{sessions.filter(s => s.active_lead_id).length} Active Now</h3>
+              <p className={`text-[10px] sm:text-xs mt-0.5 sm:mt-1 ${theme.textMuted}`}>Realtime lead engagement</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
             {/* WEEKLY HEATMAP */}
-            <div className={`p-4 rounded-xl border ${theme.card}`}>
-              <h3 className={`text-sm font-black mb-4 ${theme.text}`}>Company Operational Rhythm (7 Days)</h3>
-              <div className="space-y-3">
+            <div className={`p-3 sm:p-4 rounded-xl border ${theme.card}`}>
+              <h3 className={`text-xs sm:text-sm font-black mb-3 sm:mb-4 ${theme.text}`}>Company Operational Rhythm (7 Days)</h3>
+              <div className="space-y-2 sm:space-y-3">
                 {globalAnalytics.weeklyHeatmap?.map((day: any) => (
                   <div key={day.date} className="flex items-center justify-between">
-                    <span className={`text-xs font-bold ${theme.text} w-24`}>{day.day}</span>
-                    <div className="flex-1 mx-4 bg-black/5 dark:bg-white/5 h-2 rounded-full overflow-hidden flex">
+                    <span className={`text-[11px] sm:text-xs font-bold ${theme.text} w-20 sm:w-24`}>{day.day}</span>
+                    <div className="flex-1 mx-2 sm:mx-4 bg-black/5 dark:bg-white/5 h-2 rounded-full overflow-hidden flex">
                       <div className="bg-[#9E217B] h-full" style={{ width: `${Math.min(100, (day.count / 200) * 100)}%` }} />
                     </div>
-                    <span className="text-[10px] font-bold w-20 text-right">{day.intensity} ({day.count})</span>
+                    <span className={`text-[9px] sm:text-[10px] font-bold w-16 sm:w-20 text-right ${theme.textMuted}`}>{day.intensity} ({day.count})</span>
                   </div>
                 ))}
               </div>
             </div>
 
             {/* MODULE USAGE */}
-            <div className={`p-4 rounded-xl border ${theme.card}`}>
-              <h3 className={`text-sm font-black mb-4 ${theme.text}`}>Global Module Usage</h3>
-              <div className="space-y-3">
+            <div className={`p-3 sm:p-4 rounded-xl border ${theme.card}`}>
+              <h3 className={`text-xs sm:text-sm font-black mb-3 sm:mb-4 ${theme.text}`}>Global Module Usage</h3>
+              <div className="space-y-2 sm:space-y-3">
                 {globalAnalytics.moduleUsage?.map((mod: any) => (
                   <div key={mod.module} className="flex items-center justify-between">
-                    <span className={`text-xs font-bold ${theme.text} w-32 truncate`}>{mod.module}</span>
-                    <div className="flex-1 mx-4 bg-black/5 dark:bg-white/5 h-2 rounded-full overflow-hidden flex">
+                    <span className={`text-[11px] sm:text-xs font-bold ${theme.text} w-28 sm:w-32 truncate`}>{mod.module}</span>
+                    <div className="flex-1 mx-2 sm:mx-4 bg-black/5 dark:bg-white/5 h-2 rounded-full overflow-hidden flex">
                       <div className="bg-blue-500 h-full" style={{ width: `${mod.percentage}%` }} />
                     </div>
-                    <span className="text-[10px] font-bold w-12 text-right">{mod.percentage}%</span>
+                    <span className={`text-[9px] sm:text-[10px] font-bold w-10 sm:w-12 text-right ${theme.textMuted}`}>{mod.percentage}%</span>
                   </div>
                 ))}
               </div>
@@ -435,102 +435,118 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
-            <div className={`px-4 py-3 rounded-xl border flex items-center justify-between ${theme.card}`}>
+          <span className={`text-lg sm:text-xl font-black mt-0.5 pb-3 mt-3 ${theme.text}`}>Live Activity / Attendance Tracker</span>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 mb-3 sm:mb-4">
+            <div className={`px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl border flex items-center justify-between ${theme.card}`}>
               <div>
-                <p className={`text-[10px] uppercase font-bold ${theme.textMuted}`}>Employees Online</p>
-                <h3 className={`text-xl font-black mt-0.5 ${theme.text}`}>{activeCount}</h3>
+                <p className={`text-[9px] sm:text-[10px] uppercase font-bold ${theme.textMuted}`}>Employees Online</p>
+                <h3 className={`text-lg sm:text-xl font-black mt-0.5 ${theme.text}`}>{activeCount}</h3>
               </div>
-              <FaCircle className="text-green-500 w-4 h-4 animate-pulse" />
+              <FaCircle className="text-green-500 w-3.5 h-3.5 sm:w-4 sm:h-4 animate-pulse flex-shrink-0" />
             </div>
-            <div className={`px-4 py-3 rounded-xl border flex items-center justify-between ${theme.card}`}>
+            <div className={`px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl border flex items-center justify-between ${theme.card}`}>
               <div>
-                <p className={`text-[10px] uppercase font-bold ${theme.textMuted}`}>Logged In Today</p>
-                <h3 className={`text-xl font-black mt-0.5 ${theme.text}`}>{sessions.length}</h3>
+                <p className={`text-[9px] sm:text-[10px] uppercase font-bold ${theme.textMuted}`}>Logged In Today</p>
+                <h3 className={`text-lg sm:text-xl font-black mt-0.5 ${theme.text}`}>{sessions.length}</h3>
               </div>
-              <FaUsers className="text-blue-500" />
+              <FaUsers className="text-blue-500 flex-shrink-0" />
             </div>
-            <div className={`px-4 py-3 rounded-xl border flex items-center justify-between ${theme.card}`}>
+            <div className={`px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl border flex items-center justify-between ${theme.card}`}>
               <div>
-                <p className={`text-[10px] uppercase font-bold ${theme.textMuted}`}>Idle Employees</p>
-                <h3 className={`text-xl font-black mt-0.5 ${theme.text}`}>{idleCount}</h3>
+                <p className={`text-[9px] sm:text-[10px] uppercase font-bold ${theme.textMuted}`}>Idle Employees</p>
+                <h3 className={`text-lg sm:text-xl font-black mt-0.5 ${theme.text}`}>{idleCount}</h3>
               </div>
-              <FaWalking className="text-yellow-500" />
+              <FaWalking className="text-yellow-500 flex-shrink-0" />
             </div>
-            <div className={`px-4 py-3 rounded-xl border flex items-center justify-between ${theme.card}`}>
+            <div className={`px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl border flex items-center justify-between ${theme.card}`}>
               <div>
-                <p className={`text-[10px] uppercase font-bold ${theme.textMuted}`}>Avg Productivity</p>
-                <h3 className={`text-xl font-black mt-0.5 ${theme.text}`}>
+                <p className={`text-[9px] sm:text-[10px] uppercase font-bold ${theme.textMuted}`}>Avg Productivity</p>
+                <h3 className={`text-lg sm:text-xl font-black mt-0.5 ${theme.text}`}>
                   {sessions.length > 0 ? Math.round(sessions.reduce((acc, s) => acc + (s.productivity_score || 0), 0) / sessions.length) : 0}
                 </h3>
               </div>
-              <FaChartLine className="text-[#9E217B]" />
+              <FaChartLine className="text-[#9E217B] flex-shrink-0" />
             </div>
           </div>
 
           {/* DATE PICKER & WORKING HOURS ROW */}
-          <div className="flex items-center justify-between mb-3 relative z-30">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 mb-3 relative z-30 overflow-visible">
+            {/* <div className="flex items-center gap-2">
               <input
                 type="date"
                 value={selectedDate}
                 onChange={e => setSelectedDate(e.target.value)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold focus:outline-none ${theme.card} ${theme.text} ${theme.tableBorder}`}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold focus:outline-none ${theme.card} ${theme.text} ${theme.tableBorder} w-full sm:w-auto`}
               />
-            </div>
+            </div> */}
 
-            <div className="flex items-center gap-3 relative">
-              {/* Replaces the old single-day "Export Excel". That one serialised
-                  only the rows already loaded on screen; this fetches a real date
-                  range from the database via /api/attendance/report. Same green
-                  styling and same slot in the toolbar. */}
-              <AttendanceReportButton theme={theme} isDark={isDark} />
+            {/* DATE PICKER & WORKING HOURS ROW */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 mb-3 relative z-30 overflow-visible">
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={e => setSelectedDate(e.target.value)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold focus:outline-none ${theme.card} ${theme.text} ${theme.tableBorder} w-full sm:w-auto`}
+                />
+              </div>
 
-              <button
-                onClick={() => setShowHoursConfig(!showHoursConfig)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors ${theme.card} ${theme.text} ${theme.tableBorder} hover:border-[#9E217B]/50 cursor-pointer`}
-              >
-                <FaClock className="text-[#9E217B]" /> Working Hours: {workingHours.flexible ? "Flexible" : `${workingHours.loginTime} - ${workingHours.logoutTime}`} <span className="text-[10px]">▼</span>
-              </button>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
+                {/* Added isolate and relative constraints to lock the dropdown inside bounds */}
+                <div className="relative isolate w-full sm:w-auto">
+                  <AttendanceReportButton theme={theme} isDark={isDark} />
+                </div>
 
-              {showHoursConfig && (
-                <div className={`absolute right-0 top-full mt-2 w-64 p-4 rounded-xl shadow-2xl border z-50 ${theme.card}`} style={{ boxShadow: "0 8px 32px rgba(0,0,0,0.4)" }}>
-                  <div className="flex justify-between items-center mb-3">
-                    <h3 className={`text-xs font-bold ${theme.text}`}>Configure Working Hours</h3>
-                    <button onClick={() => setShowHoursConfig(false)} className={`${theme.textMuted} hover:text-red-500 cursor-pointer`}><FaTimes className="w-3 h-3" /></button>
-                  </div>
-                  <div className="space-y-3">
-                    <div>
-                      <label className={`text-[10px] block mb-1 font-bold uppercase ${theme.textMuted}`}>Login Time</label>
-                      <input type="time" value={localTiming.loginTime} onChange={e => updateWorkingHours({ ...localTiming, loginTime: e.target.value })} className={`w-full px-2 py-1.5 rounded text-xs focus:outline-none ${theme.mainBg} border ${theme.tableBorder} ${theme.text}`} disabled={localTiming.flexible} />
+                <button
+                  onClick={() => setShowHoursConfig(!showHoursConfig)}
+                  className={`px-3 py-1.5 rounded-lg text-[10px] sm:text-xs font-bold flex items-center justify-between sm:justify-start gap-2 transition-colors ${theme.card} ${theme.text} ${theme.tableBorder} hover:border-[#9E217B]/50 cursor-pointer`}
+                >
+                  <span className="flex items-center gap-1.5 truncate">
+                    <FaClock className="text-[#9E217B] flex-shrink-0" /> Working Hours: {workingHours.flexible ? "Flexible" : `${workingHours.loginTime} - ${workingHours.logoutTime}`}
+                  </span>
+                  <span className="text-[10px]">▼</span>
+                </button>
+
+                {showHoursConfig && (
+                  <div className={`absolute right-0 top-full mt-2 w-64 p-4 rounded-xl shadow-2xl border z-50 ${theme.card}`} style={{ boxShadow: "0 8px 32px rgba(0,0,0,0.4)" }}>
+                    <div className="flex justify-between items-center mb-3">
+                      <h3 className={`text-xs font-bold ${theme.text}`}>Configure Working Hours</h3>
+                      <button onClick={() => setShowHoursConfig(false)} className={`${theme.textMuted} hover:text-red-500 cursor-pointer`}><FaTimes className="w-3 h-3" /></button>
                     </div>
-                    <div>
-                      <label className={`text-[10px] block mb-1 font-bold uppercase ${theme.textMuted}`}>Logout Time</label>
-                      <input type="time" value={localTiming.logoutTime} onChange={e => updateWorkingHours({ ...localTiming, logoutTime: e.target.value })} className={`w-full px-2 py-1.5 rounded text-xs focus:outline-none ${theme.mainBg} border ${theme.tableBorder} ${theme.text}`} disabled={localTiming.flexible} />
-                    </div>
-                    <div className="flex items-center justify-between pt-2 border-t border-gray-500/20">
-                      <label className={`text-[10px] font-bold uppercase ${theme.textMuted}`}>Flexible Mode</label>
+                    <div className="space-y-3">
+                      <div>
+                        <label className={`text-[10px] block mb-1 font-bold uppercase ${theme.textMuted}`}>Login Time</label>
+                        <input type="time" value={localTiming.loginTime} onChange={e => updateWorkingHours({ ...localTiming, loginTime: e.target.value })} className={`w-full px-2 py-1.5 rounded text-xs focus:outline-none ${theme.mainBg} border ${theme.tableBorder} ${theme.text}`} disabled={localTiming.flexible} />
+                      </div>
+                      <div>
+                        <label className={`text-[10px] block mb-1 font-bold uppercase ${theme.textMuted}`}>Logout Time</label>
+                        <input type="time" value={localTiming.logoutTime} onChange={e => updateWorkingHours({ ...localTiming, logoutTime: e.target.value })} className={`w-full px-2 py-1.5 rounded text-xs focus:outline-none ${theme.mainBg} border ${theme.tableBorder} ${theme.text}`} disabled={localTiming.flexible} />
+                      </div>
+                      <div className="flex items-center justify-between pt-2 border-t border-gray-500/20">
+                        <label className={`text-[10px] font-bold uppercase ${theme.textMuted}`}>Flexible Mode</label>
+                        <button
+                          onClick={() => updateWorkingHours({ ...localTiming, flexible: !localTiming.flexible })}
+                          className={`w-8 h-4 rounded-full relative transition-colors cursor-pointer ${localTiming.flexible ? "bg-green-500" : "bg-gray-500"}`}
+                        >
+                          <span className={`absolute top-[2px] w-3 h-3 bg-white rounded-full transition-all ${localTiming.flexible ? "left-[18px]" : "left-[2px]"}`} />
+                        </button>
+                      </div>
                       <button
-                        onClick={() => updateWorkingHours({ ...localTiming, flexible: !localTiming.flexible })}
-                        className={`w-8 h-4 rounded-full relative transition-colors cursor-pointer ${localTiming.flexible ? "bg-green-500" : "bg-gray-500"}`}
+                        onClick={saveWorkingHours}
+                        disabled={isSavingTiming}
+                        className="w-full mt-2 py-2 flex items-center justify-center gap-2 bg-[#9E217B] hover:bg-[#b8268f] text-white rounded-lg text-xs font-bold transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        <span className={`absolute top-[2px] w-3 h-3 bg-white rounded-full transition-all ${localTiming.flexible ? "left-[18px]" : "left-[2px]"}`} />
+                        <FaSave /> {isSavingTiming ? "Saving..." : "Save Settings"}
                       </button>
                     </div>
-                    <button
-                      onClick={saveWorkingHours}
-                      disabled={isSavingTiming}
-                      className="w-full mt-2 py-2 flex items-center justify-center gap-2 bg-[#9E217B] hover:bg-[#b8268f] text-white rounded-lg text-xs font-bold transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <FaSave /> {isSavingTiming ? "Saving..." : "Save Settings"}
-                    </button>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
-          <div className={`flex items-center gap-2 flex-wrap mb-3 px-3 py-2.5 rounded-xl border ${theme.tableWrap}`}>
-            <span className={`text-[10px] font-black uppercase tracking-wider mr-1 ${theme.textFaint}`}>Columns:</span>
+
+          {/* <div className={`flex items-center gap-1.5 sm:gap-2 flex-wrap mb-3 px-2.5 sm:px-3 py-2 sm:py-2.5 rounded-xl border ${theme.tableWrap} overflow-x-auto custom-scrollbar`}>
+            <span className={`text-[9px] sm:text-[10px] font-black uppercase tracking-wider mr-1 ${theme.textFaint}`}>Columns:</span>
             {([
               { key: "activeLead", label: "Active Lead" },
               { key: "loginDate", label: "Login Date" },
@@ -544,7 +560,7 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
               <button
                 key={col.key}
                 onClick={() => setVisibleColumns(prev => ({ ...prev, [col.key]: !prev[col.key] }))}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer ${visibleColumns[col.key]
+                className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 rounded-lg text-[9px] sm:text-[10px] font-bold border transition-all cursor-pointer whitespace-nowrap ${visibleColumns[col.key]
                   ? "bg-[#9E217B]/10 border-[#9E217B]/40 text-[#9E217B]"
                   : isDark
                     ? "bg-[#1a1a1a] border-[#333] text-gray-500"
@@ -555,97 +571,91 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
                 {col.label}
               </button>
             ))}
-          </div>
+          </div> */}
 
-          <div className="flex gap-4 h-[calc(100vh-200px)] overflow-hidden">
+          <div className="flex flex-col lg:flex-row gap-3 h-auto lg:h-[calc(100vh-220px)] overflow-hidden">
             {/* Left Pane - Dense Tracking Grid */}
-            <div className={`flex-1 rounded-xl border flex flex-col overflow-hidden ${theme.tableWrap}`}>
+            <div className={`flex-1 rounded-xl border flex flex-col overflow-hidden ${theme.tableWrap} min-h-[350px]`}>
               <div className={`overflow-auto flex-1 p-0 ${theme.scroll}`}>
-                <table className="w-full text-left border-collapse text-[11px] whitespace-nowrap">
+                <table className="w-full text-left border-collapse text-[10px] sm:text-[11px] whitespace-nowrap">
                   <thead className={`sticky top-0 z-10 ${theme.tableHead}`}>
                     <tr className={`${theme.textMuted} uppercase tracking-wider`}>
-                      <th className="px-3 py-2 font-bold">Status</th>
-                      <th className="px-3 py-2 font-bold">Employee</th>
+                      <th className="px-2.5 sm:px-3 py-2 font-bold">Status</th>
+                      <th className="px-2.5 sm:px-3 py-2 font-bold">Employee</th>
 
-                      {/* Replace each optional th like this: */}
-                      {visibleColumns.activeLead && <th className="px-3 py-2 font-bold">Active Lead</th>}
-                      {visibleColumns.loginDate && <th className="px-3 py-2 font-bold">Login Date</th>}
-                      {visibleColumns.loginTime && <th className="px-3 py-2 font-bold">Login Time</th>}
-                      {visibleColumns.punctuality && <th className="px-3 py-2 font-bold">Punctuality</th>}
-                      {visibleColumns.logoutTime && <th className="px-3 py-2 font-bold">Logout Time</th>}
-                      {visibleColumns.liveTimer && <th className="px-3 py-2 font-bold">Live Timer</th>}
-                      {visibleColumns.workingHours && <th className="px-3 py-2 font-bold">Working Hours</th>}
-                      {visibleColumns.risk && <th className="px-3 py-2 font-bold">Risk</th>}
-                      <th className="px-3 py-2 font-bold">Attendance</th>
+                      {visibleColumns.activeLead && <th className="px-2.5 sm:px-3 py-2 font-bold">Active Lead</th>}
+                      {visibleColumns.loginDate && <th className="px-2.5 sm:px-3 py-2 font-bold">Login Date</th>}
+                      {visibleColumns.loginTime && <th className="px-2.5 sm:px-3 py-2 font-bold">Login Time</th>}
+                      {visibleColumns.punctuality && <th className="px-2.5 sm:px-3 py-2 font-bold">Punctuality</th>}
+                      {visibleColumns.logoutTime && <th className="px-2.5 sm:px-3 py-2 font-bold">Logout Time</th>}
+                      {visibleColumns.liveTimer && <th className="px-2.5 sm:px-3 py-2 font-bold">Live Timer</th>}
+                      {visibleColumns.workingHours && <th className="px-2.5 sm:px-3 py-2 font-bold">Working Hours</th>}
+                      {visibleColumns.risk && <th className="px-2.5 sm:px-3 py-2 font-bold">Risk</th>}
+                      <th className="px-2.5 sm:px-3 py-2 font-bold">Attendance</th>
                     </tr>
 
                   </thead>
 
-                  {/* COLUMN TOGGLE CONTROLS */}
-
                   <tbody>
-                    <tr>
-
-                    </tr>
                     {isFutureDate ? (
                       <tr>
-                        <td colSpan={12} className="py-16 text-center">
+                        <td colSpan={12} className="py-12 sm:py-16 text-center">
                           <div className="flex flex-col items-center gap-2">
-                            <span className="text-4xl">📅</span>
-                            <p className={`text-sm font-bold ${theme.text}`}>No Data Available</p>
-                            <p className={`text-xs ${theme.textMuted}`}>
-                              Selected date ({new Date(selectedDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}) is in the future.
+                            <span className="text-3xl sm:text-4xl">📅</span>
+                            <p className={`text-xs sm:text-sm font-bold ${theme.text}`}>No Data Available</p>
+                            <p className={`text-[11px] sm:text-xs ${theme.textMuted}`}>
+                              Selected date ({new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}) is in the future.
                             </p>
                           </div>
                         </td>
                       </tr>
                     ) : isLoading ? (
-                      <tr><td colSpan={12} className="py-8 text-center text-sm">Loading telemetry...</td></tr>
+                      <tr><td colSpan={12} className="py-8 text-center text-xs sm:text-sm">Loading telemetry...</td></tr>
                     ) : sessions.length === 0 ? (
-                      <tr><td colSpan={12} className="py-8 text-center text-sm">No operational data.</td></tr>
+                      <tr><td colSpan={12} className="py-8 text-center text-xs sm:text-sm">No operational data.</td></tr>
                     ) : (
                       sessions.map((s, i) => (
                         <React.Fragment key={i}>
                           <tr className={`cursor-pointer transition-colors ${selectedUser?.user_id === s.user_id ? 'bg-[#9E217B]/10' : theme.tableRow}`} onClick={(e) => handleRowClick(e, s)}>
-                            <td className={`px-3 py-2.5 border-b ${theme.tableBorder} relative`}>
+                            <td className={`px-2.5 sm:px-3 py-2 sm:py-2.5 border-b ${theme.tableBorder} relative`}>
                               {/* Heat Indicator Border */}
                               {s.status === 'ACTIVE' && <div className="absolute left-0 top-0 bottom-0 w-1 bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" />}
                               {s.status === 'IDLE' && <div className="absolute left-0 top-0 bottom-0 w-1 bg-yellow-500" />}
                               {s.status === 'OFFLINE' && <div className="absolute left-0 top-0 bottom-0 w-1 bg-gray-500" />}
 
-                              {s.status === 'ACTIVE' && <span className="font-black text-green-500">🟢 ACTIVE</span>}
-                              {s.status === 'IDLE' && <span className="font-bold text-yellow-500">🟡 IDLE</span>}
-                              {s.status === 'OFFLINE' && <span className="font-bold text-gray-500">⚪ OFFLINE</span>}
+                              {s.status === 'ACTIVE' && <span className="font-black text-green-500 text-[10px] sm:text-[11px]">🟢 ACTIVE</span>}
+                              {s.status === 'IDLE' && <span className="font-bold text-yellow-500 text-[10px] sm:text-[11px]">🟡 IDLE</span>}
+                              {s.status === 'OFFLINE' && <span className="font-bold text-gray-500 text-[10px] sm:text-[11px]">⚪ OFFLINE</span>}
                             </td>
-                            <td className={`px-3 py-2.5 border-b font-bold ${theme.text} ${theme.tableBorder}`}>{s.name}</td>
+                            <td className={`px-2.5 sm:px-3 py-2 sm:py-2.5 border-b font-bold ${theme.text} ${theme.tableBorder}`}>{s.name}</td>
 
                             {visibleColumns.activeLead && (
-                              <td className={`px-3 py-2.5 border-b font-medium text-[#9E217B] ${theme.tableBorder}`}>
+                              <td className={`px-2.5 sm:px-3 py-2 sm:py-2.5 border-b font-medium text-[#9E217B] ${theme.tableBorder}`}>
                                 {s.active_lead_id ? `${s.active_lead_name || 'Lead'} (${s.active_lead_id})` : '-'}
                               </td>
                             )}
                             {visibleColumns.loginDate && (
-                              <td className={`px-3 py-2.5 border-b ${theme.textMuted} ${theme.tableBorder}`}>
+                              <td className={`px-2.5 sm:px-3 py-2 sm:py-2.5 border-b ${theme.textMuted} ${theme.tableBorder}`}>
                                 {s.session_start ? new Date(s.session_start).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata' }) : '-'}
                               </td>
                             )}
                             {visibleColumns.loginTime && (
-                              <td className={`px-3 py-2.5 border-b ${theme.textMuted} ${theme.tableBorder}`}>
+                              <td className={`px-2.5 sm:px-3 py-2 sm:py-2.5 border-b ${theme.textMuted} ${theme.tableBorder}`}>
                                 {s.session_start ? new Date(s.session_start).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Kolkata' }) : '-'}
                               </td>
                             )}
                             {visibleColumns.punctuality && (
-                              <td className={`px-3 py-2.5 border-b ${theme.tableBorder}`}>
+                              <td className={`px-2.5 sm:px-3 py-2 sm:py-2.5 border-b ${theme.tableBorder}`}>
                                 {s.session_start ? getPunctualityBadge(s.session_start) : <span className={theme.textFaint}>-</span>}
                               </td>
                             )}
                             {visibleColumns.logoutTime && (
-                              <td className={`px-3 py-2.5 border-b font-bold ${s.session_is_active ? 'text-green-500' : theme.textMuted} ${theme.tableBorder}`}>
+                              <td className={`px-2.5 sm:px-3 py-2 sm:py-2.5 border-b font-bold ${s.session_is_active ? 'text-green-500' : theme.textMuted} ${theme.tableBorder}`}>
                                 {s.session_start ? (s.session_is_active ? "User Active" : (s.session_end ? new Date(s.session_end).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Kolkata' }) : "N/A")) : "-"}
                               </td>
                             )}
                             {visibleColumns.liveTimer && (
-                              <td className={`px-3 py-2.5 border-b ${theme.tableBorder}`}>
+                              <td className={`px-2.5 sm:px-3 py-2 sm:py-2.5 border-b ${theme.tableBorder}`}>
                                 <button className="w-full text-left" onClick={(e) => toggleAccordion(e, s)} disabled={!s.session_start}>
                                   <div className={`flex items-center gap-1.5 font-bold ${s.session_start ? 'text-[#00AEEF]' : theme.textFaint}`}>
                                     {s.session_start ? (s.status === 'OFFLINE' ? "Frozen" : getLiveTimer(s.session_start, s.session_end, s.session_is_active)) : "-"}
@@ -655,18 +665,18 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
                               </td>
                             )}
                             {visibleColumns.workingHours && (
-                              <td className={`px-3 py-2.5 border-b font-mono font-bold ${theme.text} ${theme.tableBorder}`}>
+                              <td className={`px-2.5 sm:px-3 py-2 sm:py-2.5 border-b font-mono font-bold ${theme.text} ${theme.tableBorder}`}>
                                 {s.session_start ? getWorkingHours(s.session_start, s.session_end, s.session_is_active) : "-"}
                               </td>
                             )}
                             {visibleColumns.risk && (
-                              <td className={`px-3 py-2.5 border-b ${theme.tableBorder}`}>
+                              <td className={`px-2.5 sm:px-3 py-2 sm:py-2.5 border-b ${theme.tableBorder}`}>
                                 {s.idle_duration_seconds > 1800
-                                  ? <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-red-500/10 text-red-500 border border-red-500/20">⚠ Long Idle</span>
+                                  ? <span className="px-1.5 py-0.5 rounded text-[8px] sm:text-[9px] font-black bg-red-500/10 text-red-500 border border-red-500/20 whitespace-nowrap">⚠ Long Idle</span>
                                   : <span className={theme.textFaint}>-</span>}
                               </td>
                             )}
-                            <td className={`px-3 py-2.5 border-b ${theme.tableBorder}`}>
+                            <td className={`px-2.5 sm:px-3 py-2 sm:py-2.5 border-b ${theme.tableBorder}`}>
                               {s.attendance_status === 'Present' && <span className="text-green-500 font-bold whitespace-nowrap">Present ✅</span>}
                               {s.attendance_status === 'Absent' && <span className="text-red-500 font-bold whitespace-nowrap">Absent ❌</span>}
                               {s.attendance_status === 'Pending' && <span className="text-yellow-500 font-bold whitespace-nowrap">Pending ⏳</span>}
@@ -674,28 +684,28 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
                           </tr>
                           {expandedRows[s.user_id] && (
                             <tr>
-                              <td colSpan={3 + Object.values(visibleColumns).filter(Boolean).length} className={`p-4 border-b ${theme.tableBorder} bg-black/5 dark:bg-white/5`}>
+                              <td colSpan={3 + Object.values(visibleColumns).filter(Boolean).length} className={`p-3 sm:p-4 border-b ${theme.tableBorder} bg-black/5 dark:bg-white/5`}>
                                 <div className="mb-2 flex items-center gap-2">
-                                  <span className={`text-xs font-black uppercase ${theme.text}`}>▼ Login History — {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}</span>
+                                  <span className={`text-[11px] sm:text-xs font-black uppercase ${theme.text}`}>▼ Login History — {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}</span>
                                 </div>
                                 {historyCache[`${s.user_id}_${selectedDate}`] ? (
-                                  <div className="space-y-3 pl-4 border-l-2 border-[#9E217B]/20">
+                                  <div className="space-y-3 pl-2 sm:pl-4 border-l-2 border-[#9E217B]/20">
                                     {historyCache[`${s.user_id}_${selectedDate}`].map((h: any, hIdx: number) => (
-                                      <div key={hIdx} className="text-[11px]">
+                                      <div key={hIdx} className="text-[10px] sm:text-[11px]">
                                         <p className={`font-bold ${theme.text}`}>• {new Date(h.session_start).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
-                                        <div className="grid grid-cols-4 gap-4 mt-1 ml-3">
+                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4 mt-1 ml-2 sm:ml-3">
                                           <div><span className={theme.textMuted}>Login:</span> <span className={theme.text}>{new Date(h.session_start).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })}</span></div>
                                           <div><span className={theme.textMuted}>Logout:</span> <span className={`font-bold ${h.is_active ? 'text-green-500' : theme.text}`}>{h.is_active ? "User Active" : (h.session_end ? new Date(h.session_end).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' }) : "N/A")}</span></div>
                                           <div><span className={theme.textMuted}>Duration:</span> <span className={`font-mono ${theme.text}`}>{getWorkingHours(h.session_start, h.session_end, h.is_active)}</span></div>
                                           <div><span className={theme.textMuted}>Device:</span> <span className={theme.text}>{h.device_info || '-'}</span></div>
-                                          <div className="col-span-4"><span className={theme.textMuted}>IP:</span> <span className={theme.text}>{h.ip_address || '-'}</span></div>
+                                          <div className="col-span-2 sm:col-span-4"><span className={theme.textMuted}>IP:</span> <span className={theme.text}>{h.ip_address || '-'}</span></div>
                                         </div>
                                       </div>
                                     ))}
                                     {historyCache[`${s.user_id}_${selectedDate}`].length === 0 && <p className={theme.textMuted}>No sessions found for this date.</p>}
                                   </div>
                                 ) : (
-                                  <p className={`text-xs ${theme.textMuted}`}>Loading sessions...</p>
+                                  <p className={`text-[11px] sm:text-xs ${theme.textMuted}`}>Loading sessions...</p>
                                 )}
                               </td>
                             </tr>
@@ -710,15 +720,15 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
 
             {/* Right Pane - 4-Tab Inspector Drawer */}
             {selectedUser && (
-              <div className={`w-[360px] rounded-xl border flex flex-col overflow-hidden ${theme.card}`}>
+              <div className={`w-full lg:w-[360px] rounded-xl border flex flex-col overflow-hidden ${theme.card} mt-3 lg:mt-0`}>
                 <div className={`p-3 border-b flex items-center justify-between ${theme.tableBorder}`}>
                   <div className="flex items-center gap-2">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-white ${selectedUser.status === 'ACTIVE' ? 'bg-green-500' : 'bg-gray-500'}`}>
+                    <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center font-bold text-white text-xs sm:text-sm ${selectedUser.status === 'ACTIVE' ? 'bg-green-500' : 'bg-gray-500'}`}>
                       {selectedUser?.name?.charAt(0) || '?'}
                     </div>
                     <div>
-                      <h3 className={`font-black text-sm leading-none ${theme.text}`}>{selectedUser?.name || 'Unknown User'}</h3>
-                      <span className={`text-[10px] uppercase ${theme.textMuted}`}>{selectedUser?.role || 'Staff'}</span>
+                      <h3 className={`font-black text-xs sm:text-sm leading-none ${theme.text}`}>{selectedUser?.name || 'Unknown User'}</h3>
+                      <span className={`text-[9px] sm:text-[10px] uppercase ${theme.textMuted}`}>{selectedUser?.role || 'Staff'}</span>
                     </div>
                   </div>
                   <button onClick={() => setSelectedUser(null)} className={`${theme.textMuted} hover:text-red-500 p-1`}>
@@ -727,7 +737,7 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
                 </div>
 
                 {/* Inspector Tabs */}
-                <div className={`flex text-[10px] font-bold uppercase ${theme.tableBorder} border-b overflow-x-auto`}>
+                <div className={`flex text-[9px] sm:text-[10px] font-bold uppercase ${theme.tableBorder} border-b overflow-x-auto custom-scrollbar`}>
                   {[
                     { id: "activity", label: "Live", icon: FaChartLine },
                     { id: "lead", label: "Lead", icon: FaBriefcase },
@@ -739,114 +749,114 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
                     <button
                       key={t.id}
                       onClick={() => setInspectorTab(t.id as any)}
-                      className={`flex-1 py-2 px-2 flex justify-center items-center gap-1.5 transition-colors border-b-2 ${inspectorTab === t.id ? 'border-[#9E217B] text-[#9E217B] bg-[#9E217B]/5' : `border-transparent ${theme.textMuted} hover:bg-black/5 dark:hover:bg-white/5`}`}
+                      className={`flex-1 min-w-[50px] py-2 px-1.5 sm:px-2 flex justify-center items-center gap-1 transition-colors border-b-2 whitespace-nowrap ${inspectorTab === t.id ? 'border-[#9E217B] text-[#9E217B] bg-[#9E217B]/5' : `border-transparent ${theme.textMuted} hover:bg-black/5 dark:hover:bg-white/5`}`}
                     >
-                      <t.icon /> <span className="hidden sm:inline">{t.label}</span>
+                      <t.icon className="text-[10px]" /> <span className="hidden sm:inline">{t.label}</span>
                     </button>
                   ))}
                 </div>
 
-                <div className={`flex-1 p-4 overflow-y-auto ${theme.scroll}`}>
+                <div className={`flex-1 p-3 sm:p-4 overflow-y-auto ${theme.scroll}`}>
                   {inspectorTab === "activity" && (
-                    <div className="space-y-4 text-xs">
-                      <div className={`p-3 rounded-lg border ${theme.tableWrap}`}>
-                        <p className={`text-[10px] uppercase font-bold ${theme.textMuted} mb-1`}>Current Status</p>
+                    <div className="space-y-3 sm:space-y-4 text-[11px] sm:text-xs">
+                      <div className={`p-2.5 sm:p-3 rounded-lg border ${theme.tableWrap}`}>
+                        <p className={`text-[9px] sm:text-[10px] uppercase font-bold ${theme.textMuted} mb-1`}>Current Status</p>
                         <div className="flex items-center gap-2">
-                          {selectedUser.status === 'ACTIVE' && <><FaCircle className="text-green-500 w-3 h-3 animate-pulse" /> <span className={`font-bold ${theme.text}`}>ACTIVE NOW</span></>}
-                          {selectedUser.status === 'IDLE' && <><FaWalking className="text-yellow-500 w-3 h-3" /> <span className={`font-bold ${theme.text}`}>IDLE</span></>}
-                          {selectedUser.status === 'OFFLINE' && <><FaCircle className="text-gray-500 w-3 h-3" /> <span className={`font-bold ${theme.text}`}>OFFLINE</span></>}
+                          {selectedUser.status === 'ACTIVE' && <><FaCircle className="text-green-500 w-2.5 h-2.5 sm:w-3 sm:h-3 animate-pulse" /> <span className={`font-bold ${theme.text}`}>ACTIVE NOW</span></>}
+                          {selectedUser.status === 'IDLE' && <><FaWalking className="text-yellow-500 w-2.5 h-2.5 sm:w-3 sm:h-3" /> <span className={`font-bold ${theme.text}`}>IDLE</span></>}
+                          {selectedUser.status === 'OFFLINE' && <><FaCircle className="text-gray-500 w-2.5 h-2.5 sm:w-3 sm:h-3" /> <span className={`font-bold ${theme.text}`}>OFFLINE</span></>}
                         </div>
-                        <p className={`mt-2 ${theme.textMuted}`}>Route: <span className="font-mono text-[10px]">{selectedUser.current_route || 'Initializing...'}</span></p>
+                        <p className={`mt-2 ${theme.textMuted}`}>Route: <span className="font-mono text-[9px] sm:text-[10px]">{selectedUser.current_route || 'Initializing...'}</span></p>
                       </div>
 
-                      <div className={`p-3 rounded-lg border ${theme.tableWrap}`}>
-                        <p className={`text-[10px] uppercase font-bold ${theme.textMuted} mb-2`}>Session Details</p>
+                      <div className={`p-2.5 sm:p-3 rounded-lg border ${theme.tableWrap}`}>
+                        <p className={`text-[9px] sm:text-[10px] uppercase font-bold ${theme.textMuted} mb-2`}>Session Details</p>
                         <div className="grid grid-cols-2 gap-2">
                           <div>
-                            <p className={`text-[9px] ${theme.textFaint}`}>Email</p>
-                            <p className={`font-medium text-[10px] truncate ${theme.text}`}>{selectedUser.email}</p>
+                            <p className={`text-[8px] sm:text-[9px] ${theme.textFaint}`}>Email</p>
+                            <p className={`font-medium text-[9px] sm:text-[10px] truncate ${theme.text}`}>{selectedUser.email}</p>
                           </div>
                           <div>
-                            <p className={`text-[9px] ${theme.textFaint}`}>IP Address</p>
-                            <p className={`font-medium text-[10px] ${theme.text}`}>{selectedUser.ip_address || 'Unknown'}</p>
+                            <p className={`text-[8px] sm:text-[9px] ${theme.textFaint}`}>IP Address</p>
+                            <p className={`font-medium text-[9px] sm:text-[10px] ${theme.text}`}>{selectedUser.ip_address || 'Unknown'}</p>
                           </div>
                           <div className="col-span-2">
-                            <p className={`text-[9px] ${theme.textFaint}`}>Device / Browser</p>
-                            <p className={`font-medium text-[10px] ${theme.text}`}>{selectedUser.device_info || 'Unknown Device'}</p>
+                            <p className={`text-[8px] sm:text-[9px] ${theme.textFaint}`}>Device / Browser</p>
+                            <p className={`font-medium text-[9px] sm:text-[10px] ${theme.text}`}>{selectedUser.device_info || 'Unknown Device'}</p>
                           </div>
                         </div>
                       </div>
 
-                      <div className={`p-3 rounded-lg border ${theme.tableWrap}`}>
-                        <p className={`text-[10px] uppercase font-bold ${theme.textMuted} mb-1`}>Work Tracking</p>
+                      <div className={`p-2.5 sm:p-3 rounded-lg border ${theme.tableWrap}`}>
+                        <p className={`text-[9px] sm:text-[10px] uppercase font-bold ${theme.textMuted} mb-1`}>Work Tracking</p>
                         <p className={`font-medium ${theme.text}`}>Module: {selectedUser.current_module || '-'}</p>
                         <p className={`font-medium ${theme.text} mt-1`}>Action: {selectedUser.current_action || '-'}</p>
                       </div>
 
-                      <div className={`p-3 rounded-lg border ${theme.tableWrap}`}>
-                        <p className={`text-[10px] uppercase font-bold ${theme.textMuted} mb-1`}>Productivity Meter</p>
-                        <div className="w-full bg-gray-200 dark:bg-gray-800 rounded-full h-2 mt-2">
-                          <div className="bg-[#9E217B] h-2 rounded-full" style={{ width: `${Math.min(100, (selectedUser.productivity_score || 0) * 2)}%` }}></div>
+                      <div className={`p-2.5 sm:p-3 rounded-lg border ${theme.tableWrap}`}>
+                        <p className={`text-[9px] sm:text-[10px] uppercase font-bold ${theme.textMuted} mb-1`}>Productivity Meter</p>
+                        <div className="w-full bg-gray-200 dark:bg-gray-800 rounded-full h-1.5 sm:h-2 mt-2">
+                          <div className="bg-[#9E217B] h-1.5 sm:h-2 rounded-full" style={{ width: `${Math.min(100, (selectedUser.productivity_score || 0) * 2)}%` }}></div>
                         </div>
-                        <p className={`text-right text-[9px] mt-1 ${theme.textMuted}`}>Score: {selectedUser.productivity_score}</p>
+                        <p className={`text-right text-[8px] sm:text-[9px] mt-1 ${theme.textMuted}`}>Score: {selectedUser.productivity_score}</p>
                       </div>
                     </div>
                   )}
 
                   {inspectorTab === "lead" && (
-                    <div className="space-y-4 text-xs">
+                    <div className="space-y-3 sm:space-y-4 text-[11px] sm:text-xs">
                       <div className={`p-3 rounded-lg border ${selectedUser.active_lead_id ? 'bg-[#9E217B]/5 border-[#9E217B]/30' : theme.tableWrap}`}>
-                        <p className={`text-[10px] uppercase font-bold ${theme.textMuted} mb-1`}>Active Target</p>
+                        <p className={`text-[9px] sm:text-[10px] uppercase font-bold ${theme.textMuted} mb-1`}>Active Target</p>
                         {selectedUser.active_lead_id ? (
                           <>
-                            <p className={`font-bold text-sm ${theme.text}`}>{selectedUser.active_lead_name || 'Unknown Lead'}</p>
-                            <p className={`font-mono text-[10px] ${theme.textMuted} mt-0.5`}>ID: {selectedUser.active_lead_id}</p>
+                            <p className={`font-bold text-xs sm:text-sm ${theme.text}`}>{selectedUser.active_lead_name || 'Unknown Lead'}</p>
+                            <p className={`font-mono text-[9px] sm:text-[10px] ${theme.textMuted} mt-0.5`}>ID: {selectedUser.active_lead_id}</p>
                           </>
                         ) : (
-                          <p className={`italic ${theme.textFaint}`}>No Active Lead Selected</p>
+                          <p className={`italic text-xs ${theme.textFaint}`}>No Active Lead Selected</p>
                         )}
                       </div>
                     </div>
                   )}
 
                   {inspectorTab === "analytics" && (
-                    <div className="space-y-4 text-xs">
-                      <div className={`p-3 rounded-lg border ${theme.tableWrap}`}>
-                        <p className={`text-[10px] uppercase font-bold ${theme.textMuted} mb-2`}>Employee Efficiency</p>
-                        <div className="flex justify-between items-center">
+                    <div className="space-y-3 sm:space-y-4 text-[11px] sm:text-xs">
+                      <div className={`p-2.5 sm:p-3 rounded-lg border ${theme.tableWrap}`}>
+                        <p className={`text-[9px] sm:text-[10px] uppercase font-bold ${theme.textMuted} mb-2`}>Employee Efficiency</p>
+                        <div className="grid grid-cols-3 gap-1 text-center sm:text-left">
                           <div>
-                            <p className={`text-[9px] ${theme.textFaint}`}>Total Online Time</p>
-                            <p className={`font-medium ${theme.text}`}>{formatDuration(selectedUser.session_duration_seconds)}</p>
+                            <p className={`text-[8px] sm:text-[9px] ${theme.textFaint}`}>Total Online</p>
+                            <p className={`font-medium text-[10px] sm:text-xs ${theme.text}`}>{formatDuration(selectedUser.session_duration_seconds)}</p>
                           </div>
                           <div>
-                            <p className={`text-[9px] ${theme.textFaint}`}>Active Time</p>
-                            <p className={`font-medium text-green-500`}>{formatDuration(selectedUser.session_duration_seconds - (selectedUser.idle_duration_seconds || 0))}</p>
+                            <p className={`text-[8px] sm:text-[9px] ${theme.textFaint}`}>Active Time</p>
+                            <p className={`font-medium text-[10px] sm:text-xs text-green-500`}>{formatDuration(selectedUser.session_duration_seconds - (selectedUser.idle_duration_seconds || 0))}</p>
                           </div>
                           <div>
-                            <p className={`text-[9px] ${theme.textFaint}`}>Idle Time</p>
-                            <p className={`font-medium text-yellow-500`}>{formatDuration(selectedUser.idle_duration_seconds || 0)}</p>
+                            <p className={`text-[8px] sm:text-[9px] ${theme.textFaint}`}>Idle Time</p>
+                            <p className={`font-medium text-[10px] sm:text-xs text-yellow-500`}>{formatDuration(selectedUser.idle_duration_seconds || 0)}</p>
                           </div>
                         </div>
                       </div>
-                      <div className={`p-3 rounded-lg border ${theme.tableWrap} mt-4`}>
-                        <p className={`text-[10px] uppercase font-bold ${theme.textMuted} mb-2`}>Operational Output</p>
+                      <div className={`p-2.5 sm:p-3 rounded-lg border ${theme.tableWrap}`}>
+                        <p className={`text-[9px] sm:text-[10px] uppercase font-bold ${theme.textMuted} mb-2`}>Operational Output</p>
                         {analyticsData ? (
                           <div className="grid grid-cols-2 gap-2">
                             <div>
-                              <p className={`text-[9px] ${theme.textFaint}`}>Leads Opened</p>
-                              <p className={`font-medium ${theme.text}`}>{analyticsData.analytics.leadsOpened}</p>
+                              <p className={`text-[8px] sm:text-[9px] ${theme.textFaint}`}>Leads Opened</p>
+                              <p className={`font-medium text-[10px] sm:text-xs ${theme.text}`}>{analyticsData.analytics.leadsOpened}</p>
                             </div>
                             <div>
-                              <p className={`text-[9px] ${theme.textFaint}`}>Calls Initiated</p>
-                              <p className={`font-medium ${theme.text}`}>{analyticsData.analytics.callsInitiated}</p>
+                              <p className={`text-[8px] sm:text-[9px] ${theme.textFaint}`}>Calls Initiated</p>
+                              <p className={`font-medium text-[10px] sm:text-xs ${theme.text}`}>{analyticsData.analytics.callsInitiated}</p>
                             </div>
                             <div>
-                              <p className={`text-[9px] ${theme.textFaint}`}>Followups Added</p>
-                              <p className={`font-medium ${theme.text}`}>{analyticsData.analytics.followupsAdded}</p>
+                              <p className={`text-[8px] sm:text-[9px] ${theme.textFaint}`}>Followups Added</p>
+                              <p className={`font-medium text-[10px] sm:text-xs ${theme.text}`}>{analyticsData.analytics.followupsAdded}</p>
                             </div>
                             <div>
-                              <p className={`text-[9px] ${theme.textFaint}`}>Total Interactions</p>
-                              <p className={`font-medium ${theme.text}`}>{analyticsData.analytics.interactions}</p>
+                              <p className={`text-[8px] sm:text-[9px] ${theme.textFaint}`}>Total Interactions</p>
+                              <p className={`font-medium text-[10px] sm:text-xs ${theme.text}`}>{analyticsData.analytics.interactions}</p>
                             </div>
                           </div>
                         ) : (
@@ -857,100 +867,100 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
                   )}
 
                   {inspectorTab === "risk" && (
-                    <div className="space-y-3 text-xs">
+                    <div className="space-y-2.5 sm:space-y-3 text-[11px] sm:text-xs">
                       {selectedUser.idle_duration_seconds > 1800 && (
-                        <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 flex gap-3 items-start">
-                          <FaExclamationTriangle className="text-red-500 mt-0.5" />
+                        <div className="p-2.5 sm:p-3 rounded-lg bg-red-500/10 border border-red-500/30 flex gap-2.5 sm:gap-3 items-start">
+                          <FaExclamationTriangle className="text-red-500 mt-0.5 flex-shrink-0" />
                           <div>
-                            <p className="font-bold text-red-500">Severe Inactivity Detected</p>
-                            <p className="text-[10px] text-red-400 mt-0.5">User has been completely inactive for over 30 minutes while still logged in.</p>
+                            <p className="font-bold text-red-500 text-xs">Severe Inactivity Detected</p>
+                            <p className="text-[9px] sm:text-[10px] text-red-400 mt-0.5">User has been completely inactive for over 30 minutes while still logged in.</p>
                           </div>
                         </div>
                       )}
 
                       {analyticsData?.risks?.frequentLeadSwitching && (
-                        <div className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/30 flex gap-3 items-start">
-                          <FaExclamationTriangle className="text-orange-500 mt-0.5" />
+                        <div className="p-2.5 sm:p-3 rounded-lg bg-orange-500/10 border border-orange-500/30 flex gap-2.5 sm:gap-3 items-start">
+                          <FaExclamationTriangle className="text-orange-500 mt-0.5 flex-shrink-0" />
                           <div>
-                            <p className="font-bold text-orange-500">Frequent Lead Switching</p>
-                            <p className="text-[10px] text-orange-400 mt-0.5">User has rapidly opened {analyticsData.risks.uniqueRecentLeadsCount} distinct leads in the last 10 minutes.</p>
+                            <p className="font-bold text-orange-500 text-xs">Frequent Lead Switching</p>
+                            <p className="text-[9px] sm:text-[10px] text-orange-400 mt-0.5">User has rapidly opened {analyticsData.risks.uniqueRecentLeadsCount} distinct leads in the last 10 minutes.</p>
                           </div>
                         </div>
                       )}
 
                       {selectedUser.active_sessions_count > 1 && (
-                        <div className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/30 flex gap-3 items-start">
-                          <FaExclamationTriangle className="text-orange-500 mt-0.5" />
+                        <div className="p-2.5 sm:p-3 rounded-lg bg-orange-500/10 border border-orange-500/30 flex gap-2.5 sm:gap-3 items-start">
+                          <FaExclamationTriangle className="text-orange-500 mt-0.5 flex-shrink-0" />
                           <div>
-                            <p className="font-bold text-orange-500">Multiple Active Sessions</p>
-                            <p className="text-[10px] text-orange-400 mt-0.5">This user is currently logged into {selectedUser.active_sessions_count} devices/browsers simultaneously.</p>
+                            <p className="font-bold text-orange-500 text-xs">Multiple Active Sessions</p>
+                            <p className="text-[9px] sm:text-[10px] text-orange-400 mt-0.5">This user is currently logged into {selectedUser.active_sessions_count} devices/browsers simultaneously.</p>
                           </div>
                         </div>
                       )}
 
                       {selectedUser.status === 'OFFLINE' && (
-                        <div className="p-3 rounded-lg bg-gray-500/10 border border-gray-500/30 flex gap-3 items-start">
-                          <FaInfoCircle className="text-gray-400 mt-0.5" />
+                        <div className="p-2.5 sm:p-3 rounded-lg bg-gray-500/10 border border-gray-500/30 flex gap-2.5 sm:gap-3 items-start">
+                          <FaInfoCircle className="text-gray-400 mt-0.5 flex-shrink-0" />
                           <div>
-                            <p className="font-bold text-gray-400">Offline / Terminated</p>
-                            <p className="text-[10px] text-gray-400 mt-0.5">This session has been terminated either manually or automatically.</p>
+                            <p className="font-bold text-gray-400 text-xs">Offline / Terminated</p>
+                            <p className="text-[9px] sm:text-[10px] text-gray-400 mt-0.5">This session has been terminated either manually or automatically.</p>
                           </div>
                         </div>
                       )}
 
                       {(!selectedUser.idle_duration_seconds || selectedUser.idle_duration_seconds <= 1800) && selectedUser.active_sessions_count <= 1 && selectedUser.status !== 'OFFLINE' && (
-                        <p className={`text-center py-4 italic ${theme.textFaint}`}>No operational risks detected.</p>
+                        <p className={`text-center py-4 italic text-xs ${theme.textFaint}`}>No operational risks detected.</p>
                       )}
 
-                      <div className="mt-8 pt-4 border-t border-red-500/20">
-                        <p className={`text-[10px] uppercase font-bold text-red-500 mb-2`}>Admin Actions</p>
-                        <button onClick={() => handleForceLogout(selectedUser.user_id)} className="w-full py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-500 rounded-lg transition-colors font-bold flex justify-center items-center gap-2">
+                      <div className="mt-6 sm:mt-8 pt-3 sm:pt-4 border-t border-red-500/20">
+                        <p className={`text-[9px] sm:text-[10px] uppercase font-bold text-red-500 mb-2`}>Admin Actions</p>
+                        <button onClick={() => handleForceLogout(selectedUser.user_id)} className="w-full py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-500 rounded-lg transition-colors font-bold text-xs flex justify-center items-center gap-2">
                           <FaShieldAlt /> Force Logout User
                         </button>
-                        <p className={`text-[9px] text-center mt-2 ${theme.textFaint}`}>Instantly revokes access and redirects to login.</p>
+                        <p className={`text-[8px] sm:text-[9px] text-center mt-1.5 ${theme.textFaint}`}>Instantly revokes access and redirects to login.</p>
                       </div>
                     </div>
                   )}
 
                   {inspectorTab === "timeline" && (
-                    <div className="space-y-4 text-xs">
-                      <div className="relative border-l-2 border-[#9E217B]/30 ml-2 space-y-4">
+                    <div className="space-y-3 sm:space-y-4 text-[11px] sm:text-xs">
+                      <div className="relative border-l-2 border-[#9E217B]/30 ml-2 space-y-3 sm:space-y-4">
                         {analyticsData?.timeline ? analyticsData.timeline.map((log: any, idx: number) => (
                           <div key={idx} className="relative">
-                            <div className="absolute -left-[21px] top-0.5 w-6 h-6 rounded-full bg-[#9E217B]/20 flex items-center justify-center text-[#9E217B] text-[10px]"><FaCircle className="w-2 h-2" /></div>
-                            <div className="ml-5">
-                              <p className={`font-bold ${theme.text}`}>{log.action_type}: {log.action}</p>
-                              <p className={`text-[10px] ${theme.textMuted}`}>{new Date(log.created_at).toLocaleTimeString()} • {log.module}</p>
+                            <div className="absolute -left-[21px] top-0.5 w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#9E217B]/20 flex items-center justify-center text-[#9E217B] text-[9px] sm:text-[10px]"><FaCircle className="w-1.5 h-1.5 sm:w-2 sm:h-2" /></div>
+                            <div className="ml-4 sm:ml-5">
+                              <p className={`font-bold text-xs ${theme.text}`}>{log.action_type}: {log.action}</p>
+                              <p className={`text-[9px] sm:text-[10px] ${theme.textMuted}`}>{new Date(log.created_at).toLocaleTimeString()} • {log.module}</p>
                               {log.lead_id && (
-                                <p className={`text-[10px] mt-0.5 ${theme.accentText}`}>Lead: {log.lead_name} (#{log.lead_id})</p>
+                                <p className={`text-[9px] sm:text-[10px] mt-0.5 ${theme.accentText}`}>Lead: {log.lead_name} (#{log.lead_id})</p>
                               )}
                             </div>
                           </div>
                         )) : (
-                          <p className={`text-[10px] italic ${theme.textMuted} ml-4`}>Loading audit history...</p>
+                          <p className={`text-[9px] sm:text-[10px] italic ${theme.textMuted} ml-3 sm:ml-4`}>Loading audit history...</p>
                         )}
                         {analyticsData?.timeline?.length === 0 && (
-                          <p className={`text-[10px] italic ${theme.textMuted} ml-4`}>No meaningful events recorded yet today.</p>
+                          <p className={`text-[9px] sm:text-[10px] italic ${theme.textMuted} ml-3 sm:ml-4`}>No meaningful events recorded yet today.</p>
                         )}
                       </div>
                     </div>
                   )}
 
                   {inspectorTab === "history" && (
-                    <div className="space-y-4 text-xs">
+                    <div className="space-y-3 sm:space-y-4 text-[11px] sm:text-xs">
                       {sessionHistory.length > 0 ? (
-                        <div className="space-y-3">
+                        <div className="space-y-2.5 sm:space-y-3">
                           {sessionHistory.map((sLog: any, idx: number) => (
-                            <div key={idx} className={`p-3 rounded-lg border ${theme.tableWrap}`}>
-                              <div className="flex justify-between items-start mb-2">
+                            <div key={idx} className={`p-2.5 sm:p-3 rounded-lg border ${theme.tableWrap}`}>
+                              <div className="flex justify-between items-start mb-1.5 sm:mb-2">
                                 <div>
-                                  <p className={`font-bold ${theme.text}`}>{new Date(sLog.session_start).toLocaleDateString()}</p>
-                                  <p className={`text-[10px] ${theme.textMuted}`}>{new Date(sLog.session_start).toLocaleTimeString()} - {sLog.session_end ? new Date(sLog.session_end).toLocaleTimeString() : 'Ongoing'}</p>
+                                  <p className={`font-bold text-xs ${theme.text}`}>{new Date(sLog.session_start).toLocaleDateString()}</p>
+                                  <p className={`text-[9px] sm:text-[10px] ${theme.textMuted}`}>{new Date(sLog.session_start).toLocaleTimeString()} - {sLog.session_end ? new Date(sLog.session_end).toLocaleTimeString() : 'Ongoing'}</p>
                                 </div>
-                                <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${sLog.status === 'ACTIVE' ? 'bg-green-500/10 text-green-500' : sLog.status === 'IDLE' ? 'bg-yellow-500/10 text-yellow-500' : 'bg-gray-500/10 text-gray-500'}`}>{sLog.status}</span>
+                                <span className={`px-2 py-0.5 rounded text-[8px] sm:text-[9px] font-bold ${sLog.status === 'ACTIVE' ? 'bg-green-500/10 text-green-500' : sLog.status === 'IDLE' ? 'bg-yellow-500/10 text-yellow-500' : 'bg-gray-500/10 text-gray-500'}`}>{sLog.status}</span>
                               </div>
 
-                              <div className="grid grid-cols-2 gap-2 text-[9px] mt-2 border-t pt-2 border-gray-500/20">
+                              <div className="grid grid-cols-2 gap-2 text-[9px] sm:text-[10px] mt-2 border-t pt-2 border-gray-500/20">
                                 <div>
                                   <p className={theme.textFaint}>Duration</p>
                                   <p className={`font-medium ${theme.text}`}>{formatDuration(sLog.session_duration_seconds || 0)}</p>
@@ -970,7 +980,7 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
                           ))}
                         </div>
                       ) : (
-                        <p className={`text-[10px] italic ${theme.textMuted}`}>No session history found or loading...</p>
+                        <p className={`text-[9px] sm:text-[10px] italic ${theme.textMuted}`}>No session history found or loading...</p>
                       )}
                     </div>
                   )}

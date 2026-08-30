@@ -1194,7 +1194,7 @@ export default function EmployeesPage() {
             {/* 👇 NOTIFICATION POPUP 👇 */}
             {activeNotif && (
               <div className="absolute top-[68px] right-4 z-[999] animate-fadeIn">
-                <div className={`flex items-start gap-3 px-4 py-3 rounded-2xl shadow-2xl border min-w-[280px] max-w-[360px]
+                <div className={`relative overflow-hidden flex items-start gap-3 px-4 py-3 rounded-2xl shadow-2xl border min-w-[280px] max-w-[360px]
                   ${isDark ? "bg-[#1a1a1a] border-[#333]" : "bg-white border-[#E5E7EB]"}`}
                   style={{ boxShadow: "0 8px 32px rgba(0,0,0,0.18)" }}>
 
@@ -1215,6 +1215,10 @@ export default function EmployeesPage() {
                     <FaTimes className="text-[10px]" />
                   </button>
 
+                  <div
+                    className="animate-notif-progress absolute bottom-0 left-0 h-[3px]"
+                    style={{ background: activeNotif.type === "visit" ? "#f97316" : "#25D366" }}
+                  />
                 </div>
               </div>
             )}
@@ -1233,9 +1237,9 @@ export default function EmployeesPage() {
         ) : activeSection === "employees" ? (
 
           /* ════════════ EMPLOYEE SECTION ════════════ */
-          <main className={`flex-1 overflow-y-auto p-8 transition-colors duration-300 ${t.mainBg} ${t.scroll}`}>
+          <main className={`flex-1 overflow-y-auto p-4 transition-colors duration-300 ${t.mainBg} ${t.scroll}`}>
             <div className="max-w-7xl mx-auto">
-              <h1 className={`text-2xl font-bold mb-6 ${t.text}`}>Master Configurations</h1>
+              <h1 className={`text-xl font-bold mb-6 ${t.text}`}>Master Configurations</h1>
 
               {/* Tab pills */}
               <div className="flex flex-wrap gap-2 mb-8">
@@ -1417,8 +1421,15 @@ export default function EmployeesPage() {
               </div>
 
               {/* ── Employee Table ── */}
-              <div className={`rounded-2xl border overflow-hidden shadow-sm ${t.panel}`}>
-                <div className={`p-5 border-b flex items-center justify-between ${t.panelHead}`}>
+              <div className={`rounded-2xl border border-gray-600 overflow-hidden shadow-sm ${t.panel}`}
+                style={{
+                  border: isDark ? "1px solid rgba(158,33,123,0.12)" : "1px solid rgba(0,0,0,0.08)",
+                  background: isDark ? "rgba(17,17,24,0.8)" : "#ffffff",
+                  boxShadow: isDark
+                    ? "0 4px 24px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.03)"
+                    : "0 2px 16px rgba(0,0,0,0.06), 0 1px 4px rgba(0,0,0,0.04)",
+                }}>
+                <div className={`p-5 border-b border-gray-600 flex items-center justify-between ${t.panelHead}`}>
                   <h2 className={`text-base font-bold flex items-center gap-2 ${t.text}`}>
                     <FaUsers className="text-[#9E217B]" /> Registered Employees Database
                   </h2>
@@ -2257,6 +2268,8 @@ export default function EmployeesPage() {
         .animate-fadeIn{animation:fadeIn 0.25s cubic-bezier(0.4,0,0.2,1)}
         @keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
         .animate-slideUp{animation:slideUp 0.3s cubic-bezier(0.4,0,0.2,1)}
+        @keyframes notifProgress{from{width:100%}to{width:0%}}
+        .animate-notif-progress{animation:notifProgress 2s linear forwards}
         @keyframes sm-glow-pulse {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.55; }

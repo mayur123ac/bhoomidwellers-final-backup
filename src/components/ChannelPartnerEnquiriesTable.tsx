@@ -346,49 +346,49 @@ function ChannelPartnerEnquiriesTable({
   }, []);
 
   return (
-    <div className="flex flex-col h-full overflow-hidden p-1">
+    <div className="flex flex-col h-full overflow-hidden p-4">
       {/* ── Header ── */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-3 px-2 pt-2">
-        <div className="flex items-center gap-2">
-          <FaHandshake className={t.accentText} />
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 mb-3 px-2 pt-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+          <FaHandshake className={`hidden sm:inline-block ${t.accentText}`} />
           <div>
-            <h2 className={`text-base font-bold tracking-tight ${t.text}`}>{title || "Channel Partner Enquiries"}</h2>
-            {subtitle && <p className={`text-[11px] ${t.textFaint}`}>{subtitle}</p>}
+            <h2 className={`text-sm sm:text-base font-bold tracking-tight ${t.text}`}>{title || "Channel Partner Enquiries"}</h2>
+            {subtitle && <p className={`text-[10px] sm:text-[11px] ${t.textFaint}`}>{subtitle}</p>}
           </div>
           {/* Counts are meaningless until the rows are in. Showing "(0) · 0
-              Closing · 0 Active" and then correcting it a third of a second
-              later reads as data changing, so the chips hold their size and
-              wait instead. */}
+            Closing · 0 Active" and then correcting it a third of a second
+            later reads as data changing, so the chips hold their size and
+            wait instead. */}
           {loading ? (
             <CpHeaderSkeleton isDark={isDark} chips={3} />
           ) : (
             <>
-              <span className={`text-xs ${t.textFaint}`}>({rows.length})</span>
+              <span className={`text-[10px] sm:text-xs ${t.textFaint}`}>({rows.length})</span>
 
-              <span className={`px-2.5 py-1 rounded-full text-[10px] font-semibold tracking-wide ${isDark ? "bg-amber-500/20 text-amber-400" : "bg-amber-500/10 text-amber-700"}`}>
+              <span className={`px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full text-[9px] sm:text-[10px] font-semibold tracking-wide ${isDark ? "bg-amber-500/20 text-amber-400" : "bg-amber-500/10 text-amber-700"}`}>
                 {counts.closing} Closing
               </span>
 
-              <span className={`px-2.5 py-1 rounded-full text-[10px] font-semibold tracking-wide ${isDark ? "bg-emerald-500/20 text-emerald-400" : "bg-emerald-500/10 text-emerald-700"}`}>
+              <span className={`px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full text-[9px] sm:text-[10px] font-semibold tracking-wide ${isDark ? "bg-emerald-500/20 text-emerald-400" : "bg-emerald-500/10 text-emerald-700"}`}>
                 {counts.active} Active
               </span>
             </>
           )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
           {showFilter && (
             <select value={smFilter} onChange={e => setSmFilter(e.target.value)}
-              className={`${inputCls} cursor-pointer`}>
+              className={`${inputCls} cursor-pointer flex-1 sm:flex-none text-[10px] sm:text-xs py-1.5 sm:py-2`}>
               <option value="">All Sourcing Managers</option>
               <option value="unassigned">Unassigned</option>
               {managers.map(m => <option key={m.id} value={String(m.id)}>{m.name}</option>)}
             </select>
           )}
-          <div className="relative">
+          <div className="relative flex-1 sm:flex-none">
             <FaSearch className={`absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] ${t.textFaint}`} />
             <input type="text" value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Search CP, client, phone…" className={`${inputCls} pl-8 w-56`} />
+              placeholder="Search CP, client, phone…" className={`${inputCls} pl-8 w-full sm:w-56 text-[10px] sm:text-xs py-1.5 sm:py-2`} />
           </div>
         </div>
       </div>

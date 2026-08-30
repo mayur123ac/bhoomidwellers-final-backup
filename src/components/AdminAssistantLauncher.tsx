@@ -180,6 +180,7 @@ export default function AdminAssistantLauncher({
     reduceRef.current = !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     const saved = readSavedPosition(storageNamespace);
     if (saved) setPos(snapToEdge(saved.x, saved.y));
+    else setPos(defaultPosition());
 
     const handleResize = () => {
       setPos((prev) => {

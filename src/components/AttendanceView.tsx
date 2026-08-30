@@ -96,10 +96,18 @@ export default function AttendanceView({
     fetchSessions();
   }, [selectedDate, adminUser.name, adminUser.email]);
 
-  // Auto-refresh every 30s so live timer and status stay fresh
+  // Auto-refresh every 30s so live timer and status stay fresh; skip background tabs
   useEffect(() => {
-    const interval = setInterval(fetchSessions, 30000);
-    return () => clearInterval(interval);
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      fetchSessions();
+    }, 30000);
+    const onVisible = () => { if (!document.hidden) fetchSessions(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [selectedDate]);
 
   // ── Mark attendance (checkbox → submit) ────────────────────────────────────

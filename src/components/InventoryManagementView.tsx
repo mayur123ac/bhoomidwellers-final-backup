@@ -570,7 +570,7 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
 
   // Leaving the building must not stall the browser in a fullscreen view of a
   // screen that no longer exists.
-  useEffect(() => () => { if (document.fullscreenElement) void document.exitFullscreen?.().catch(() => {}); }, []);
+  useEffect(() => () => { if (document.fullscreenElement) void document.exitFullscreen?.().catch(() => { }); }, []);
 
   // ── Building list fetch ──
   // Two existing endpoints, no new one: the grouped mode of /api/inventory for
@@ -955,20 +955,20 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
     const deleteTargetBuilding = buildings.find(b => b.key === deleteBuildingKey && b.project_id != null) || null;
 
     return (
-      <div className="flex flex-col h-full overflow-hidden">
-        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 sm:gap-3 mb-3">
+      <div className="flex flex-col h-full overflow-hidden p-1">
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 sm:gap-3 mb-2 sm:mb-3">
           <div>
-            <h1 className={`text-lg font-bold ${t.text}`}>Inventory</h1>
-            <p className={`text-[11px] ${t.textMuted}`}>
+            <h1 className={`text-base sm:text-lg font-bold ${t.text}`}>Inventory</h1>
+            <p className={`text-[9px] sm:text-[11px] ${t.textMuted}`}>
               {bLoading ? "Loading…" : `${buildings.length} building${buildings.length === 1 ? "" : "s"}`}
             </p>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
             {/* Analytics is read-only, so it stays open to every role that can
                 see inventory — unlike Pricing and Offers, which change commercials. */}
             <button onClick={() => setShowAnalytics(true)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border ${t.tableBorder} ${t.text} hover:border-[#00AEEF]`}>
-              <FaChartBar className="text-[10px] text-[#00AEEF]" /> Analytics
+              className={`flex items-center justify-center flex-1 sm:flex-none gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 text-[10px] sm:text-xs font-semibold rounded-lg border ${t.tableBorder} ${t.text} hover:border-[#00AEEF]`}>
+              <FaChartBar className="text-[9px] sm:text-[10px] text-[#00AEEF]" /> Analytics
             </button>
             {canManage && (
               <>
@@ -980,7 +980,7 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
                   aria-label="Select building to delete"
                   value={deleteBuildingKey}
                   onChange={e => setDeleteBuildingKey(e.target.value)}
-                  className={`${selectCls} w-44`}
+                  className={`${selectCls} w-full sm:w-44 text-[10px] sm:text-sm py-1.5 sm:py-2`}
                 >
                   <option value="">Select Building…</option>
                   {buildings.filter(b => b.project_id != null).map(b => (
@@ -993,17 +993,16 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
                   title={deleteTargetBuilding
                     ? `Delete ${deleteTargetBuilding.project_name}`
                     : "Pick a building first"}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border ${t.tableBorder} ${
-                    deleteTargetBuilding
-                      ? "text-red-500 border-red-500/40 hover:bg-red-500/10"
-                      : `${t.textFaint} opacity-50 cursor-not-allowed`
-                  }`}
+                  className={`flex items-center justify-center flex-1 sm:flex-none gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 text-[10px] sm:text-xs font-semibold rounded-lg border ${t.tableBorder} ${deleteTargetBuilding
+                    ? "text-red-500 border-red-500/40 hover:bg-red-500/10"
+                    : `${t.textFaint} opacity-50 cursor-not-allowed`
+                    }`}
                 >
-                  <FaTrash className="text-[10px]" /> Delete Building
+                  <FaTrash className="text-[9px] sm:text-[10px]" /> Delete Building
                 </button>
                 <button onClick={() => setShowAddBuilding(true)}
-                  className="flex items-center gap-1.5 text-xs font-bold px-3.5 py-1.5 rounded-lg bg-[#00AEEF] text-white hover:bg-[#0095cc]">
-                  <FaPlus className="text-[10px]" /> Add Building
+                  className="flex items-center justify-center flex-1 sm:flex-none gap-1 sm:gap-1.5 text-[10px] sm:text-xs font-bold px-3 sm:px-3.5 py-1.5 rounded-lg bg-[#00AEEF] text-white hover:bg-[#0095cc]">
+                  <FaPlus className="text-[9px] sm:text-[10px]" /> Add Building
                 </button>
               </>
             )}
@@ -1013,8 +1012,8 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
         {/* Naming the armed target in full, outside the dropdown, so a mis-click
             in the list is visible before the modal rather than inside it. */}
         {canManage && deleteTargetBuilding && (
-          <div className={`flex items-center gap-2 mb-3 text-[11px] ${t.textMuted}`}>
-            <FaBuilding className="text-[10px] text-red-500" />
+          <div className={`flex items-center gap-1.5 sm:gap-2 mb-2 sm:mb-3 text-[9px] sm:text-[11px] ${t.textMuted}`}>
+            <FaBuilding className="text-[9px] sm:text-[10px] text-red-500" />
             <span>Selected for deletion: <b className={t.text}>{deleteTargetBuilding.project_name}</b>
               {" · "}{deleteTargetBuilding.total} unit{deleteTargetBuilding.total === 1 ? "" : "s"}</span>
             <button onClick={() => setDeleteBuildingKey("")}
@@ -1023,35 +1022,35 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
         )}
 
         {/* ── Building filters ── */}
-        <div className={`flex flex-col sm:flex-row sm:items-center gap-2 flex-wrap mb-3 p-2.5 rounded-xl border ${t.innerBlock}`}>
+        <div className={`flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2 flex-wrap mb-2 sm:mb-3 p-2 sm:p-2.5 rounded-xl border ${t.innerBlock}`}>
           <input value={bFilters.search} onChange={e => setBFilters(f => ({ ...f, search: e.target.value }))}
-            placeholder="Search buildings…" className={`${inputCls} w-full sm:w-56`} />
-          <div className="flex flex-wrap gap-2">
-            <select value={bFilters.project} onChange={e => setBFilters(f => ({ ...f, project: e.target.value }))} className={`${selectCls} flex-1 min-w-[120px] sm:w-40`}>
+            placeholder="Search buildings…" className={`${inputCls} w-full sm:w-56 text-[10px] sm:text-sm py-1.5 sm:py-2`} />
+          <div className="flex flex-wrap gap-1.5 sm:gap-2">
+            <select value={bFilters.project} onChange={e => setBFilters(f => ({ ...f, project: e.target.value }))} className={`${selectCls} flex-1 min-w-[110px] sm:min-w-[120px] sm:w-40 text-[10px] sm:text-sm py-1.5 sm:py-2`}>
               <option value="">All projects</option>
               {buildings.map(b => <option key={b.key} value={b.key}>{b.project_name}</option>)}
             </select>
-            <select value={bFilters.tower} onChange={e => setBFilters(f => ({ ...f, tower: e.target.value }))} className={`${selectCls} flex-1 min-w-[100px] sm:w-32`}>
+            <select value={bFilters.tower} onChange={e => setBFilters(f => ({ ...f, tower: e.target.value }))} className={`${selectCls} flex-1 min-w-[90px] sm:min-w-[100px] sm:w-32 text-[10px] sm:text-sm py-1.5 sm:py-2`}>
               <option value="">All towers</option>
               {towerNames.map(x => <option key={x} value={x}>{x}</option>)}
             </select>
-            <select value={bFilters.status} onChange={e => setBFilters(f => ({ ...f, status: e.target.value }))} className={`${selectCls} flex-1 min-w-[120px] sm:w-40`}>
+            <select value={bFilters.status} onChange={e => setBFilters(f => ({ ...f, status: e.target.value }))} className={`${selectCls} flex-1 min-w-[110px] sm:min-w-[120px] sm:w-40 text-[10px] sm:text-sm py-1.5 sm:py-2`}>
               <option value="">Any stock</option>
               {BUILDING_STATUS_FILTERS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
             </select>
           </div>
           {anyBFilter && (
             <button onClick={() => setBFilters({ search: "", project: "", tower: "", status: "" })}
-              className={`text-[11px] font-semibold px-2 py-1.5 rounded-lg ${t.textMuted} hover:text-red-500`}>Clear</button>
+              className={`text-[9px] sm:text-[11px] font-semibold px-1.5 sm:px-2 py-1 sm:py-1.5 rounded-lg ${t.textMuted} hover:text-red-500`}>Clear</button>
           )}
         </div>
 
         {/* ── Building cards ── */}
-        <div className="flex-1 overflow-auto p-1">
+        <div className="flex-1 overflow-auto p-0 sm:p-1">
           {bLoading && buildings.length === 0 ? (
-            <p className={`text-sm italic ${t.textFaint} p-4`}>Loading buildings…</p>
+            <p className={`text-xs sm:text-sm italic ${t.textFaint} p-3 sm:p-4`}>Loading buildings…</p>
           ) : visible.length === 0 ? (
-            <p className={`text-sm italic ${t.textFaint} p-4`}>
+            <p className={`text-xs sm:text-sm italic ${t.textFaint} p-3 sm:p-4`}>
               {buildings.length === 0
                 ? `No buildings yet. ${canManage ? "Use Add Building to create one, then generate its inventory." : ""}`
                 : "No buildings match these filters."}
@@ -1116,230 +1115,230 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
 
         {/* ── Pinned identity + primary actions ── */}
         <div className={`sticky top-0 z-30 -mx-1 px-1 py-2 mb-2 flex items-start justify-between gap-3 flex-wrap border-b ${t.tableBorder} ${stickySurface}`}>
-        <div className="min-w-0 flex items-start gap-2.5">
-          <button onClick={backToList} title="Back to Inventory"
-            className={`mt-1 flex items-center gap-1 text-[11px] font-semibold flex-shrink-0 ${t.textMuted} hover:text-[#00AEEF]`}>
-            <FaArrowLeft className="text-[10px]" /> Back
-          </button>
-          <div className="min-w-0">
-            <h1 className={`text-lg font-bold flex items-center gap-2 ${t.text}`}>
-              <FaBuilding className="text-[#00AEEF] text-sm" /> {building.project_name}
-            </h1>
-            <p className={`text-[11px] ${t.textMuted}`}>
-              {scopeLabel} · {n0(scope?.floors)} floor{n0(scope?.floors) === 1 ? "" : "s"} · {n0(scope?.total)} unit{n0(scope?.total) === 1 ? "" : "s"}
-              {total > units.length ? ` · showing ${units.length} of ${total} matching` : ""}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className={`flex items-center rounded-3xl border overflow-hidden ${t.tableBorder}`}>
-            <button onClick={() => setViewMode("grid")} className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold ${viewMode === "grid" ? "bg-[#00AEEF] text-white" : `${t.textMuted}`}`}><FaThLarge className="text-[10px]" /> Floors</button>
-            <button onClick={() => setViewMode("table")} className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold ${viewMode === "table" ? "bg-[#00AEEF] text-white" : `${t.textMuted}`}`}><FaTable className="text-[10px]" /> Table</button>
+          <div className="min-w-0 flex items-start gap-2.5">
+            <button onClick={backToList} title="Back to Inventory"
+              className={`mt-1 flex items-center gap-1 text-[11px] font-semibold flex-shrink-0 ${t.textMuted} hover:text-[#00AEEF]`}>
+              <FaArrowLeft className="text-[10px]" /> Back
+            </button>
+            <div className="min-w-0">
+              <h1 className={`text-lg font-bold flex items-center gap-2 ${t.text}`}>
+                <FaBuilding className="text-[#00AEEF] text-sm" /> {building.project_name}
+              </h1>
+              <p className={`text-[11px] ${t.textMuted}`}>
+                {scopeLabel} · {n0(scope?.floors)} floor{n0(scope?.floors) === 1 ? "" : "s"} · {n0(scope?.total)} unit{n0(scope?.total) === 1 ? "" : "s"}
+                {total > units.length ? ` · showing ${units.length} of ${total} matching` : ""}
+              </p>
+            </div>
           </div>
 
-          {/* Full screen — the availability wall, with nothing else on the glass. */}
-          <button onClick={toggleFullScreen}
-            title={fullScreen ? "Exit full screen (Esc)" : "Full screen availability"}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border ${fullScreen ? "bg-[#00AEEF] text-white border-[#00AEEF]" : `${t.tableBorder} ${t.text} hover:border-[#00AEEF]`}`}>
-            {fullScreen ? <FaCompress className="text-[10px]" /> : <FaExpand className="text-[10px]" />}
-            {fullScreen ? "Exit" : "Full screen"}
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className={`flex items-center rounded-3xl border overflow-hidden ${t.tableBorder}`}>
+              <button onClick={() => setViewMode("grid")} className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold ${viewMode === "grid" ? "bg-[#00AEEF] text-white" : `${t.textMuted}`}`}><FaThLarge className="text-[10px]" /> Floors</button>
+              <button onClick={() => setViewMode("table")} className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold ${viewMode === "table" ? "bg-[#00AEEF] text-white" : `${t.textMuted}`}`}><FaTable className="text-[10px]" /> Table</button>
+            </div>
 
-          {/* Add Unit menu (managers only) — scoped to THIS building. */}
-          {canManage && (
-            <div className="relative">
-              <button onClick={() => setAddMenu(v => !v)} className="flex items-center gap-1.5 text-xs font-bold px-3.5 py-1.5 rounded-lg bg-[#00AEEF] text-white hover:bg-[#0095cc]">
-                <FaPlus className="text-[10px]" /> Add Unit <FaChevronDown className="text-[8px]" />
+            {/* Full screen — the availability wall, with nothing else on the glass. */}
+            <button onClick={toggleFullScreen}
+              title={fullScreen ? "Exit full screen (Esc)" : "Full screen availability"}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border ${fullScreen ? "bg-[#00AEEF] text-white border-[#00AEEF]" : `${t.tableBorder} ${t.text} hover:border-[#00AEEF]`}`}>
+              {fullScreen ? <FaCompress className="text-[10px]" /> : <FaExpand className="text-[10px]" />}
+              {fullScreen ? "Exit" : "Full screen"}
+            </button>
+
+            {/* Add Unit menu (managers only) — scoped to THIS building. */}
+            {canManage && (
+              <div className="relative">
+                <button onClick={() => setAddMenu(v => !v)} className="flex items-center gap-1.5 text-xs font-bold px-3.5 py-1.5 rounded-lg bg-[#00AEEF] text-white hover:bg-[#0095cc]">
+                  <FaPlus className="text-[10px]" /> Add Unit <FaChevronDown className="text-[8px]" />
+                </button>
+                {addMenu && (
+                  <>
+                    <div className="fixed inset-0 z-[60]" onClick={() => setAddMenu(false)} />
+                    <div className={`absolute right-0 mt-1 w-56 rounded-xl border shadow-xl z-[61] overflow-hidden ${t.modalCard}`}>
+                      <button onClick={() => { setAddMenu(false); setShowAdd(true); }} className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs font-semibold text-left hover:bg-[#00AEEF]/10 ${t.text}`}><FaPen className="text-[10px] text-[#00AEEF]" /> Add single unit</button>
+                      <button onClick={() => { setAddMenu(false); setShowBulk(true); }} className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs font-semibold text-left hover:bg-[#00AEEF]/10 border-t ${t.tableBorder} ${t.text}`}><FaLayerGroup className="text-[10px] text-[#00AEEF]" /> Generate whole building</button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {canManage && (
+              <button onClick={() => setShowPricing(true)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border ${t.tableBorder} ${t.text} hover:border-[#00AEEF]`}>
+                <FaTags className="text-[10px] text-[#00AEEF]" /> Pricing
               </button>
-              {addMenu && (
+            )}
+            {canManage && (
+              <button onClick={() => setShowOffers(true)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border ${t.tableBorder} ${t.text} hover:border-[#00AEEF]`}>
+                <FaHandshake className="text-[10px] text-[#00AEEF]" /> Offers
+              </button>
+            )}
+            <button onClick={() => setShowAnalytics(true)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border ${t.tableBorder} ${t.text} hover:border-[#00AEEF]`}>
+              <FaChartBar className="text-[10px] text-[#00AEEF]" /> Analytics
+            </button>
+
+            {/* Building-scoped action menu. Whole-building delete lives in here —
+              never as a standing button on the list screen. */}
+            <div className="relative">
+              <button onClick={() => setBldMenu(v => !v)} title="Building actions"
+                className={`px-3 py-1.5 text-xs font-bold rounded-lg border ${t.tableBorder} ${t.text} hover:border-[#00AEEF]`}>⋯</button>
+              {bldMenu && (
                 <>
-                  <div className="fixed inset-0 z-[60]" onClick={() => setAddMenu(false)} />
+                  <div className="fixed inset-0 z-[60]" onClick={() => setBldMenu(false)} />
                   <div className={`absolute right-0 mt-1 w-56 rounded-xl border shadow-xl z-[61] overflow-hidden ${t.modalCard}`}>
-                    <button onClick={() => { setAddMenu(false); setShowAdd(true); }} className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs font-semibold text-left hover:bg-[#00AEEF]/10 ${t.text}`}><FaPen className="text-[10px] text-[#00AEEF]" /> Add single unit</button>
-                    <button onClick={() => { setAddMenu(false); setShowBulk(true); }} className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs font-semibold text-left hover:bg-[#00AEEF]/10 border-t ${t.tableBorder} ${t.text}`}><FaLayerGroup className="text-[10px] text-[#00AEEF]" /> Generate whole building</button>
+                    {canManage && (
+                      <button onClick={() => { setBldMenu(false); setShowBulk(true); }} className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs font-semibold text-left hover:bg-[#00AEEF]/10 ${t.text}`}><FaLayerGroup className="text-[10px] text-[#00AEEF]" /> Generate inventory</button>
+                    )}
+                    {canManage && (
+                      <button onClick={() => { setBldMenu(false); setShowPricing(true); }} className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs font-semibold text-left hover:bg-[#00AEEF]/10 border-t ${t.tableBorder} ${t.text}`}><FaTags className="text-[10px] text-[#00AEEF]" /> Pricing</button>
+                    )}
+                    {canManage && (
+                      <button onClick={() => { setBldMenu(false); setShowOffers(true); }} className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs font-semibold text-left hover:bg-[#00AEEF]/10 border-t ${t.tableBorder} ${t.text}`}><FaHandshake className="text-[10px] text-[#00AEEF]" /> Offers</button>
+                    )}
+                    <button onClick={() => { setBldMenu(false); setShowAnalytics(true); }} className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs font-semibold text-left hover:bg-[#00AEEF]/10 border-t ${t.tableBorder} ${t.text}`}><FaChartBar className="text-[10px] text-[#00AEEF]" /> Analytics</button>
+                    {/* Renames sit with the other manage actions — same gate as
+                      creating inventory. Delete stays admin-only below. */}
+                    {canManage && (
+                      <button onClick={() => { setBldMenu(false); setRenameTarget({ kind: "building" }); }} className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs font-semibold text-left hover:bg-[#00AEEF]/10 border-t ${t.tableBorder} ${t.text}`}><FaPen className="text-[10px] text-[#00AEEF]" /> Rename building</button>
+                    )}
+                    {canManage && activeTower && (
+                      <button onClick={() => { setBldMenu(false); setRenameTarget({ kind: "tower" }); }} className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs font-semibold text-left hover:bg-[#00AEEF]/10 border-t ${t.tableBorder} ${t.text}`}><FaPen className="text-[10px] text-[#00AEEF]" /> Rename tower “{activeTower}”</button>
+                    )}
+                    {canManage && activeTower && activeWing && (
+                      <button onClick={() => { setBldMenu(false); setRenameTarget({ kind: "wing" }); }} className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs font-semibold text-left hover:bg-[#00AEEF]/10 border-t ${t.tableBorder} ${t.text}`}><FaPen className="text-[10px] text-[#00AEEF]" /> Rename wing {activeWing === NO_WING ? "(no wing)" : `“${activeWing}”`}</button>
+                    )}
+                    {isAdminUser && (
+                      <button onClick={() => { setBldMenu(false); setBldDelOpen(true); }} className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs font-bold text-left text-red-500 hover:bg-red-500/10 border-t ${t.tableBorder}`}><FaTrash className="text-[10px]" /> Delete building</button>
+                    )}
                   </div>
                 </>
               )}
             </div>
-          )}
-
-          {canManage && (
-            <button onClick={() => setShowPricing(true)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border ${t.tableBorder} ${t.text} hover:border-[#00AEEF]`}>
-              <FaTags className="text-[10px] text-[#00AEEF]" /> Pricing
-            </button>
-          )}
-          {canManage && (
-            <button onClick={() => setShowOffers(true)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border ${t.tableBorder} ${t.text} hover:border-[#00AEEF]`}>
-              <FaHandshake className="text-[10px] text-[#00AEEF]" /> Offers
-            </button>
-          )}
-          <button onClick={() => setShowAnalytics(true)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border ${t.tableBorder} ${t.text} hover:border-[#00AEEF]`}>
-            <FaChartBar className="text-[10px] text-[#00AEEF]" /> Analytics
-          </button>
-
-          {/* Building-scoped action menu. Whole-building delete lives in here —
-              never as a standing button on the list screen. */}
-          <div className="relative">
-            <button onClick={() => setBldMenu(v => !v)} title="Building actions"
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg border ${t.tableBorder} ${t.text} hover:border-[#00AEEF]`}>⋯</button>
-            {bldMenu && (
-              <>
-                <div className="fixed inset-0 z-[60]" onClick={() => setBldMenu(false)} />
-                <div className={`absolute right-0 mt-1 w-56 rounded-xl border shadow-xl z-[61] overflow-hidden ${t.modalCard}`}>
-                  {canManage && (
-                    <button onClick={() => { setBldMenu(false); setShowBulk(true); }} className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs font-semibold text-left hover:bg-[#00AEEF]/10 ${t.text}`}><FaLayerGroup className="text-[10px] text-[#00AEEF]" /> Generate inventory</button>
-                  )}
-                  {canManage && (
-                    <button onClick={() => { setBldMenu(false); setShowPricing(true); }} className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs font-semibold text-left hover:bg-[#00AEEF]/10 border-t ${t.tableBorder} ${t.text}`}><FaTags className="text-[10px] text-[#00AEEF]" /> Pricing</button>
-                  )}
-                  {canManage && (
-                    <button onClick={() => { setBldMenu(false); setShowOffers(true); }} className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs font-semibold text-left hover:bg-[#00AEEF]/10 border-t ${t.tableBorder} ${t.text}`}><FaHandshake className="text-[10px] text-[#00AEEF]" /> Offers</button>
-                  )}
-                  <button onClick={() => { setBldMenu(false); setShowAnalytics(true); }} className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs font-semibold text-left hover:bg-[#00AEEF]/10 border-t ${t.tableBorder} ${t.text}`}><FaChartBar className="text-[10px] text-[#00AEEF]" /> Analytics</button>
-                  {/* Renames sit with the other manage actions — same gate as
-                      creating inventory. Delete stays admin-only below. */}
-                  {canManage && (
-                    <button onClick={() => { setBldMenu(false); setRenameTarget({ kind: "building" }); }} className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs font-semibold text-left hover:bg-[#00AEEF]/10 border-t ${t.tableBorder} ${t.text}`}><FaPen className="text-[10px] text-[#00AEEF]" /> Rename building</button>
-                  )}
-                  {canManage && activeTower && (
-                    <button onClick={() => { setBldMenu(false); setRenameTarget({ kind: "tower" }); }} className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs font-semibold text-left hover:bg-[#00AEEF]/10 border-t ${t.tableBorder} ${t.text}`}><FaPen className="text-[10px] text-[#00AEEF]" /> Rename tower “{activeTower}”</button>
-                  )}
-                  {canManage && activeTower && activeWing && (
-                    <button onClick={() => { setBldMenu(false); setRenameTarget({ kind: "wing" }); }} className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs font-semibold text-left hover:bg-[#00AEEF]/10 border-t ${t.tableBorder} ${t.text}`}><FaPen className="text-[10px] text-[#00AEEF]" /> Rename wing {activeWing === NO_WING ? "(no wing)" : `“${activeWing}”`}</button>
-                  )}
-                  {isAdminUser && (
-                    <button onClick={() => { setBldMenu(false); setBldDelOpen(true); }} className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs font-bold text-left text-red-500 hover:bg-red-500/10 border-t ${t.tableBorder}`}><FaTrash className="text-[10px]" /> Delete building</button>
-                  )}
-                </div>
-              </>
-            )}
           </div>
-        </div>
         </div>
         {/* ── end pinned strip ── */}
 
-      {/* ── Which building, tower and wing this screen is showing ── */}
-      {/* <BuildingContextTag
+        {/* ── Which building, tower and wing this screen is showing ── */}
+        {/* <BuildingContextTag
         ctx={{ project_name: building.project_name, tower: towerCtx, wing: wingCtx }}
         t={t}
         meta={`${n0(scope?.floors)} floor${n0(scope?.floors) === 1 ? "" : "s"}  •  ${n0(scope?.total)} unit${n0(scope?.total) === 1 ? "" : "s"}`}
         className="mb-3"
       /> */}
 
-      {/* ── Building statistics (from the aggregate, never the capped row list) ── */}
-      <div className={`flex items-center gap-2 flex-wrap rounded-xl border ${fullScreen ? "mb-1.5 p-2" : "mb-3 p-3"} ${t.innerBlock}`}>
-        <Stat label="Total Units" value={n0(scope?.total)} t={t} />
-        <Stat label="Available" value={n0(scope?.available)} t={t} hex={STATUS.available.hex} />
-        <Stat label="Booked" value={n0(scope?.booked)} t={t} hex={STATUS.booked.hex} />
-        <Stat label="On Hold" value={n0(scope?.on_hold)} t={t} hex={STATUS.on_hold.hex} />
-        <Stat label="Blocked" value={n0(scope?.blocked)} t={t} hex={STATUS.blocked.hex} />
-        {/* Type chips carry the same ink as the grid cells below, so a chip and
+        {/* ── Building statistics (from the aggregate, never the capped row list) ── */}
+        <div className={`flex items-center gap-2 flex-wrap rounded-xl border ${fullScreen ? "mb-1.5 p-2" : "mb-3 p-3"} ${t.innerBlock}`}>
+          <Stat label="Total Units" value={n0(scope?.total)} t={t} />
+          <Stat label="Available" value={n0(scope?.available)} t={t} hex={STATUS.available.hex} />
+          <Stat label="Booked" value={n0(scope?.booked)} t={t} hex={STATUS.booked.hex} />
+          <Stat label="On Hold" value={n0(scope?.on_hold)} t={t} hex={STATUS.on_hold.hex} />
+          <Stat label="Blocked" value={n0(scope?.blocked)} t={t} hex={STATUS.blocked.hex} />
+          {/* Type chips carry the same ink as the grid cells below, so a chip and
             the flats it counts are recognisably the same thing. */}
-        {typeChips.length > 0 && (
-          <div className={`flex items-center gap-1.5 flex-wrap pl-3 ml-1 border-l ${t.tableBorder}`}>
-            {typeChips.map(c => {
-              const col = getUnitTypeColor(c.unit_type, isDark);
+          {typeChips.length > 0 && (
+            <div className={`flex items-center gap-1.5 flex-wrap pl-3 ml-1 border-l ${t.tableBorder}`}>
+              {typeChips.map(c => {
+                const col = getUnitTypeColor(c.unit_type, isDark);
+                return (
+                  <span key={c.key} className="text-[10px] font-semibold px-2 py-1 rounded-full border"
+                    style={{ color: col.ink, backgroundColor: col.fill, borderColor: col.border }}>
+                    {col.label}: <b>{c.units}</b>
+                  </span>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* ── Tower tabs (only when the building actually has more than one) ── */}
+        {building.towers.length > 1 && (
+          <div className={`flex items-center gap-1.5 flex-wrap ${fullScreen ? "mb-1.5" : "mb-3"}`}>
+            <button onClick={() => setActiveTower("")}
+              className={`px-3 py-1.5 rounded-full text-[11px] font-bold border ${activeTower === "" ? "bg-[#00AEEF] text-white border-[#00AEEF]" : `${t.tableBorder} ${t.textMuted}`}`}>
+              All towers
+            </button>
+            {building.towers.map(x => (
+              <button key={x.tower} onClick={() => setActiveTower(x.tower)}
+                className={`px-3 py-1.5 rounded-full text-[11px] font-bold border ${activeTower === x.tower ? "bg-[#00AEEF] text-white border-[#00AEEF]" : `${t.tableBorder} ${t.textMuted}`}`}>
+                Tower {x.tower} <span className="opacity-70">({x.total})</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* ── Wing tabs — only when this tower's stock is actually split by wing.
+          A single un-winged tower gets no row at all, so towers that never used
+          wings look exactly as they did before. ── */}
+        {(wingsForTower.length > 1 || (wingsForTower.length === 1 && !!wingsForTower[0].wing)) && (
+          <div className={`flex items-center gap-1.5 flex-wrap ${fullScreen ? "mb-1.5" : "mb-3"}`}>
+            <button onClick={() => setActiveWing("")}
+              className={`px-3 py-1.5 rounded-full text-[11px] font-bold border ${activeWing === "" ? "bg-[#00AEEF] text-white border-[#00AEEF]" : `${t.tableBorder} ${t.textMuted}`}`}>
+              All wings
+            </button>
+            {wingsForTower.map(w => {
+              const val = w.wing || NO_WING;
               return (
-                <span key={c.key} className="text-[10px] font-semibold px-2 py-1 rounded-full border"
-                  style={{ color: col.ink, backgroundColor: col.fill, borderColor: col.border }}>
-                  {col.label}: <b>{c.units}</b>
-                </span>
+                <button key={val} onClick={() => setActiveWing(val)}
+                  className={`px-3 py-1.5 rounded-full text-[11px] font-bold border ${activeWing === val ? "bg-[#00AEEF] text-white border-[#00AEEF]" : `${t.tableBorder} ${t.textMuted}`}`}>
+                  {wingTabLabel(w.wing)} <span className="opacity-70">({w.total})</span>
+                </button>
               );
             })}
           </div>
         )}
-      </div>
 
-      {/* ── Tower tabs (only when the building actually has more than one) ── */}
-      {building.towers.length > 1 && (
-        <div className={`flex items-center gap-1.5 flex-wrap ${fullScreen ? "mb-1.5" : "mb-3"}`}>
-          <button onClick={() => setActiveTower("")}
-            className={`px-3 py-1.5 rounded-full text-[11px] font-bold border ${activeTower === "" ? "bg-[#00AEEF] text-white border-[#00AEEF]" : `${t.tableBorder} ${t.textMuted}`}`}>
-            All towers
-          </button>
-          {building.towers.map(x => (
-            <button key={x.tower} onClick={() => setActiveTower(x.tower)}
-              className={`px-3 py-1.5 rounded-full text-[11px] font-bold border ${activeTower === x.tower ? "bg-[#00AEEF] text-white border-[#00AEEF]" : `${t.tableBorder} ${t.textMuted}`}`}>
-              Tower {x.tower} <span className="opacity-70">({x.total})</span>
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* ── Wing tabs — only when this tower's stock is actually split by wing.
-          A single un-winged tower gets no row at all, so towers that never used
-          wings look exactly as they did before. ── */}
-      {(wingsForTower.length > 1 || (wingsForTower.length === 1 && !!wingsForTower[0].wing)) && (
-        <div className={`flex items-center gap-1.5 flex-wrap ${fullScreen ? "mb-1.5" : "mb-3"}`}>
-          <button onClick={() => setActiveWing("")}
-            className={`px-3 py-1.5 rounded-full text-[11px] font-bold border ${activeWing === "" ? "bg-[#00AEEF] text-white border-[#00AEEF]" : `${t.tableBorder} ${t.textMuted}`}`}>
-            All wings
-          </button>
-          {wingsForTower.map(w => {
-            const val = w.wing || NO_WING;
-            return (
-              <button key={val} onClick={() => setActiveWing(val)}
-                className={`px-3 py-1.5 rounded-full text-[11px] font-bold border ${activeWing === val ? "bg-[#00AEEF] text-white border-[#00AEEF]" : `${t.tableBorder} ${t.textMuted}`}`}>
-                {wingTabLabel(w.wing)} <span className="opacity-70">({w.total})</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {/* ── Filters — scoped to this building; no project/tower retyping ── */}
-      <div className={`flex items-center gap-2 flex-wrap rounded-xl border ${fullScreen ? "mb-1.5 p-1.5" : "mb-3 p-2.5"} ${t.innerBlock}`}>
-        <input value={filters.search} onChange={e => setFilter({ search: e.target.value })} placeholder="Search flat…" className={`${inputCls} w-48`} />
-        <select value={filters.floor} onChange={e => setFilter({ floor: e.target.value })} className={`${selectCls} w-32`}>
-          <option value="">All floors</option>
-          {floorOptions.map(f => <option key={f} value={String(f)}>{floorLabel(f)}</option>)}
-        </select>
-        {/* Wing is chosen from the tab row above — it is tower-scoped there, and a
+        {/* ── Filters — scoped to this building; no project/tower retyping ── */}
+        <div className={`flex items-center gap-2 flex-wrap rounded-xl border ${fullScreen ? "mb-1.5 p-1.5" : "mb-3 p-2.5"} ${t.innerBlock}`}>
+          <input value={filters.search} onChange={e => setFilter({ search: e.target.value })} placeholder="Search flat…" className={`${inputCls} w-48`} />
+          <select value={filters.floor} onChange={e => setFilter({ floor: e.target.value })} className={`${selectCls} w-32`}>
+            <option value="">All floors</option>
+            {floorOptions.map(f => <option key={f} value={String(f)}>{floorLabel(f)}</option>)}
+          </select>
+          {/* Wing is chosen from the tab row above — it is tower-scoped there, and a
             free-text box could ask for a wing this tower does not have. */}
-        <select value={filters.unit_type} onChange={e => setFilter({ unit_type: e.target.value })} className={`${selectCls} w-28`}>
-          <option value="">All types</option>{UNIT_TYPES.map(o => <option key={o} value={o}>{o}</option>)}
-        </select>
-        <select value={filters.status} onChange={e => setFilter({ status: e.target.value })} className={`${selectCls} w-32`}>
-          <option value="">All statuses</option>{STATUS_KEYS.map(s => <option key={s} value={s}>{STATUS[s].label}</option>)}
-        </select>
-        <input value={filters.min_area} onChange={e => setFilter({ min_area: e.target.value })} placeholder="Min sqft" type="number" className={`${inputCls} w-24`} />
-        <input value={filters.max_area} onChange={e => setFilter({ max_area: e.target.value })} placeholder="Max sqft" type="number" className={`${inputCls} w-24`} />
-        {Object.values(filters).some(Boolean) && (
-          <button onClick={() => setFilters({ ...blankFilters })} className={`text-[11px] font-semibold px-2 py-1.5 rounded-lg ${t.textMuted} hover:text-red-500`}>Clear</button>
-        )}
-      </div>
-
-      {/* Selection bar (bulk actions land in Phase 6) */}
-      {selected.size > 0 && (
-        <div className={`flex items-center gap-3 mb-2 px-3 py-2 rounded-lg border border-[#00AEEF]/30 bg-[#00AEEF]/5`}>
-          <span className={`text-xs font-bold ${t.text}`}>{selected.size} selected</span>
-          {isAdminUser && (
-            <button onClick={() => setBulkDelOpen(true)} className="flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-full bg-red-500/10 text-red-500 border border-red-500/30 hover:bg-red-500/20">
-              <FaTrash className="text-[9px]" /> Delete selected
-            </button>
+          <select value={filters.unit_type} onChange={e => setFilter({ unit_type: e.target.value })} className={`${selectCls} w-28`}>
+            <option value="">All types</option>{UNIT_TYPES.map(o => <option key={o} value={o}>{o}</option>)}
+          </select>
+          <select value={filters.status} onChange={e => setFilter({ status: e.target.value })} className={`${selectCls} w-32`}>
+            <option value="">All statuses</option>{STATUS_KEYS.map(s => <option key={s} value={s}>{STATUS[s].label}</option>)}
+          </select>
+          <input value={filters.min_area} onChange={e => setFilter({ min_area: e.target.value })} placeholder="Min sqft" type="number" className={`${inputCls} w-24`} />
+          <input value={filters.max_area} onChange={e => setFilter({ max_area: e.target.value })} placeholder="Max sqft" type="number" className={`${inputCls} w-24`} />
+          {Object.values(filters).some(Boolean) && (
+            <button onClick={() => setFilters({ ...blankFilters })} className={`text-[11px] font-semibold px-2 py-1.5 rounded-lg ${t.textMuted} hover:text-red-500`}>Clear</button>
           )}
-          <span className={`text-[11px] ${t.textMuted}`}>Other bulk actions in Phase 6</span>
-          <button onClick={() => setSelected(new Set())} className={`ml-auto text-[11px] font-semibold ${t.textMuted} hover:text-red-500`}>Clear selection</button>
         </div>
-      )}
 
-      {/* Duplicate flat numbers — surfaced as a count so the red cells below are
+        {/* Selection bar (bulk actions land in Phase 6) */}
+        {selected.size > 0 && (
+          <div className={`flex items-center gap-3 mb-2 px-3 py-2 rounded-lg border border-[#00AEEF]/30 bg-[#00AEEF]/5`}>
+            <span className={`text-xs font-bold ${t.text}`}>{selected.size} selected</span>
+            {isAdminUser && (
+              <button onClick={() => setBulkDelOpen(true)} className="flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-full bg-red-500/10 text-red-500 border border-red-500/30 hover:bg-red-500/20">
+                <FaTrash className="text-[9px]" /> Delete selected
+              </button>
+            )}
+            <span className={`text-[11px] ${t.textMuted}`}>Other bulk actions in Phase 6</span>
+            <button onClick={() => setSelected(new Set())} className={`ml-auto text-[11px] font-semibold ${t.textMuted} hover:text-red-500`}>Clear selection</button>
+          </div>
+        )}
+
+        {/* Duplicate flat numbers — surfaced as a count so the red cells below are
           explained rather than just alarming. */}
-      {duplicateCount > 0 && (
-        <div className="flex items-center gap-2 mb-2 px-3 py-2 rounded-lg border border-red-500/30 bg-red-500/5">
-          <FaExclamationTriangle className="text-red-500 text-[11px] flex-shrink-0" />
-          <span className={`text-[11px] ${t.text}`}>
-            <b>{duplicateCount}</b> unit{duplicateCount === 1 ? " uses a" : "s use"} duplicate flat number
-            {duplicateFlats.size === 1 ? "" : "s"} — highlighted in red below.
-          </span>
-        </div>
-      )}
+        {duplicateCount > 0 && (
+          <div className="flex items-center gap-2 mb-2 px-3 py-2 rounded-lg border border-red-500/30 bg-red-500/5">
+            <FaExclamationTriangle className="text-red-500 text-[11px] flex-shrink-0" />
+            <span className={`text-[11px] ${t.text}`}>
+              <b>{duplicateCount}</b> unit{duplicateCount === 1 ? " uses a" : "s use"} duplicate flat number
+              {duplicateFlats.size === 1 ? "" : "s"} — highlighted in red below.
+            </span>
+          </div>
+        )}
 
-      {/* ── Body ──
+        {/* ── Body ──
           No longer a scroll container of its own: it is a section of the one
           scroller above, so there is no scroll box nested inside a scrolling
           page. Padding is minimal — the matrix is the workspace, not a card.
@@ -1350,40 +1349,40 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
           full viewport tall — never the ~436px half-panel it used to get. The
           chrome above it is then guaranteed to be scrollable out of the way,
           whether the tower has 18 floors or three. */}
-      <div className="min-h-full pb-4">
-        {loading && units.length === 0 ? (
-          <p className={`text-sm italic ${t.textFaint} p-4`}>Loading inventory…</p>
-        ) : units.length === 0 ? (
-          <p className={`text-sm italic ${t.textFaint} p-4`}>
-            {n0(scope?.total) === 0
-              ? `This building has no units yet. ${canManage ? "Use Add Unit → Generate whole building." : ""}`
-              : "No units match these filters."}
-          </p>
-        ) : viewMode === "table" ? (
-          <TableView
-            columns={tableColumns} colW={colW} sort={sort} sorted={sorted} t={t}
-            allSelected={allSelected} selected={selected} toggleAll={toggleAll} toggleOne={toggleOne}
-            toggleSort={toggleSort} onResizeStart={onResizeStart} onRowClick={(id: number) => setDrawerId(id)} linkChip={linkChip}
-            canDelete={isAdminUser} onDeleteUnit={(u: InventoryUnit) => setDeleteTarget(u)}
-            isDuplicate={isDuplicate} isDark={isDark}
-          />
-        ) : (
-          /* In full screen the pinned strip already names the building, tower and
-             wing a few pixels above, so the context tag would be the same
-             sentence twice — and it costs a floor of tiles. */
-          <GridView floorsGrouped={floorsGrouped} t={t} onCellClick={(id) => setDrawerId(id)} isDuplicate={isDuplicate} isDark={isDark}
-            ctx={fullScreen ? undefined : { project_name: building.project_name, tower: towerCtx, wing: wingCtx }} />
-        )}
+        <div className="min-h-full pb-4">
+          {loading && units.length === 0 ? (
+            <p className={`text-sm italic ${t.textFaint} p-4`}>Loading inventory…</p>
+          ) : units.length === 0 ? (
+            <p className={`text-sm italic ${t.textFaint} p-4`}>
+              {n0(scope?.total) === 0
+                ? `This building has no units yet. ${canManage ? "Use Add Unit → Generate whole building." : ""}`
+                : "No units match these filters."}
+            </p>
+          ) : viewMode === "table" ? (
+            <TableView
+              columns={tableColumns} colW={colW} sort={sort} sorted={sorted} t={t}
+              allSelected={allSelected} selected={selected} toggleAll={toggleAll} toggleOne={toggleOne}
+              toggleSort={toggleSort} onResizeStart={onResizeStart} onRowClick={(id: number) => setDrawerId(id)} linkChip={linkChip}
+              canDelete={isAdminUser} onDeleteUnit={(u: InventoryUnit) => setDeleteTarget(u)}
+              isDuplicate={isDuplicate} isDark={isDark}
+            />
+          ) : (
+            /* In full screen the pinned strip already names the building, tower and
+               wing a few pixels above, so the context tag would be the same
+               sentence twice — and it costs a floor of tiles. */
+            <GridView floorsGrouped={floorsGrouped} t={t} onCellClick={(id) => setDrawerId(id)} isDuplicate={isDuplicate} isDark={isDark}
+              ctx={fullScreen ? undefined : { project_name: building.project_name, tower: towerCtx, wing: wingCtx }} />
+          )}
 
-        {units.length > 0 && total > units.length && (
-          <div className="flex justify-center mt-3">
-            <button onClick={loadMore} disabled={loadingMore}
-              className={`text-xs font-semibold px-4 py-2 rounded-lg border ${t.tableBorder} ${t.text} hover:border-[#00AEEF] disabled:opacity-50`}>
-              {loadingMore ? "Loading…" : `Load more (${total - units.length} left)`}
-            </button>
-          </div>
-        )}
-      </div>
+          {units.length > 0 && total > units.length && (
+            <div className="flex justify-center mt-3">
+              <button onClick={loadMore} disabled={loadingMore}
+                className={`text-xs font-semibold px-4 py-2 rounded-lg border ${t.tableBorder} ${t.text} hover:border-[#00AEEF] disabled:opacity-50`}>
+                {loadingMore ? "Loading…" : `Load more (${total - units.length} left)`}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
       {/* ── end scroll container ── */}
 
@@ -2212,7 +2211,7 @@ function BuildingPurgeModal({ building, isDark, t, onClose, onDeleted }: any) {
                   The building, its towers, its price rules and its unsold stock are removed permanently.
                   {!!deps?.history_preserved_units && (
                     <> Flats that a cancelled booking once occupied are <b className={t.text}>archived instead of erased</b>,
-                    so their booking history stays readable.</>
+                      so their booking history stays readable.</>
                   )}{" "}
                   Bookings, payments and customer records are never touched.
                 </p>
