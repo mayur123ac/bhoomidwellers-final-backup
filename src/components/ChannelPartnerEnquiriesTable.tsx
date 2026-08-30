@@ -346,7 +346,7 @@ function ChannelPartnerEnquiriesTable({
   }, []);
 
   return (
-    <div className="flex flex-col h-full overflow-hidden p-4">
+    <div className="flex flex-col h-full overflow-hidden p-2">
       {/* ── Header ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 mb-3 px-2 pt-2">
         <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">

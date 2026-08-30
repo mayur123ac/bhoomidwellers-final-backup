@@ -288,7 +288,7 @@ function ChannelPartnerListView({ user, isDark, t, permissions, title }: Props) 
   const showActions = canEdit || canDelete;
 
   return (
-    <div className="flex flex-col h-full overflow-hidden p-4">
+    <div className="flex flex-col h-full overflow-hidden p-2">
       {/* ── Header ── */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4 px-2 pt-2">
         <div className="flex items-center gap-2">

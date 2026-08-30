@@ -1255,7 +1255,7 @@ function AdminAtlasDashboardContent() {
             )
           )}
           {activeView === "inventory" && (
-            <div className="flex flex-col h-full overflow-hidden p-4">
+            <div className="flex flex-col h-full overflow-hidden p-2">
               <InventoryManagementView user={user} isDark={isDark} t={theme}
                 onOpenLead={(leadId: number) => { setInvOpenLeadId({ id: leadId, openBooking: true }); setActiveView("sales"); }}
                 onOpenBooking={openBookingFromInventory} />
