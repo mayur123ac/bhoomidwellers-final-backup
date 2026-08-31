@@ -4,9 +4,24 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { FaBuilding } from "react-icons/fa";
-import { MdPerson, MdLock, MdVisibility, MdVisibilityOff } from "react-icons/md";
+import { MdPerson, MdLock, MdVisibility, MdVisibilityOff, MdLocationOn } from "react-icons/md";
 import { adoptServerTheme } from "@/lib/theme";
 import { adoptServerAvatar } from "@/lib/userAvatar";
+
+/** Request the browser's current position with a timeout. */
+function getPosition(): Promise<GeolocationPosition> {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error("UNAVAILABLE"));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(resolve, reject, {
+      enableHighAccuracy: true,
+      timeout: 15_000,
+      maximumAge: 60_000,
+    });
+  });
+}
 
 export default function Login() {
   const router = useRouter();
@@ -16,17 +31,46 @@ export default function Login() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isDark, setIsDark] = useState(false);
+  const [locationStatus, setLocationStatus] = useState<"idle" | "requesting" | "denied" | "error">("idle");
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setIsLoading(true);
+    setLocationStatus("requesting");
 
+    // ── Step 1: Obtain location BEFORE authenticating ──────────────────
+    let latitude: number;
+    let longitude: number;
+
+    try {
+      const position = await getPosition();
+      latitude = position.coords.latitude;
+      longitude = position.coords.longitude;
+      setLocationStatus("idle");
+    } catch (geoError: any) {
+      setIsLoading(false);
+      if (geoError?.code === 1 || geoError?.message === "UNAVAILABLE") {
+        // PERMISSION_DENIED or geolocation not supported
+        setLocationStatus("denied");
+        setError("Location access is required to log in. Please enable location permission and try again.");
+      } else if (geoError?.code === 3) {
+        // TIMEOUT
+        setLocationStatus("error");
+        setError("Location request timed out. Please check your device's location services and try again.");
+      } else {
+        setLocationStatus("error");
+        setError("Could not determine your location. Please enable location services and try again.");
+      }
+      return;
+    }
+
+    // ── Step 2: Send credentials + location to backend ────────────────
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ identifier, password }),
+        body: JSON.stringify({ identifier, password, latitude, longitude }),
       });
 
       if (res.ok) {
@@ -305,6 +349,16 @@ export default function Login() {
             </div>
           )}
 
+          {/* Location notice */}
+          <div className={`flex items-center gap-1.5 text-xs ${isDark ? "text-[#777790]" : "text-[#8888A0]"} transition-colors duration-300`}>
+            <MdLocationOn className="text-sm flex-shrink-0" />
+            <span>
+              {locationStatus === "requesting"
+                ? "Obtaining your location…"
+                : "Location access will be requested on login."}
+            </span>
+          </div>
+
           {/* Submit */}
           <button
             type="submit"
@@ -330,7 +384,7 @@ export default function Login() {
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
                 </svg>
-                Authenticating…
+                {locationStatus === "requesting" ? "Getting location…" : "Authenticating…"}
               </span>
             ) : (
               <>

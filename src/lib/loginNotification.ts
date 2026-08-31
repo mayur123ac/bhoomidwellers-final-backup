@@ -29,6 +29,7 @@ import {
   resolveRecipients,
 } from "@/lib/emailRouting";
 import { EmailService } from "@/lib/email/EmailService";
+import { loginAlertTemplate, type LoginAlertInput } from "@/lib/email/templates";
 import { resolveApproximateLocation } from "@/lib/email/location";
 import { getOrganizationId } from "./tenantContext";
 import {
@@ -54,6 +55,9 @@ export interface LoginContext {
   status: "Successful" | "Failed";
   /** Absolute origin, needed for the "Was this you?" links. */
   origin: string;
+  /** GPS coordinates captured at login. Present for successful logins. */
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 /* ── Shared metadata ────────────────────────────────────────────────────── */
@@ -188,11 +192,19 @@ export async function notifyLogin(ctx: LoginContext): Promise<void> {
       }
     }
 
-    // The service picks the email type from `status` and `isNewDevice`, applies
-    // the notification preference, resolves the destinations and audits the
-    // outcome. This call site describes the event; it decides nothing about
-    // delivery.
-    await EmailService.sendLoginAlert(ctx.userId, {
+    // Build the GPS location string from coordinates when available.
+    const gpsLocation =
+      ctx.latitude != null && ctx.longitude != null
+        ? `${ctx.latitude.toFixed(6)}, ${ctx.longitude.toFixed(6)}`
+        : null;
+
+    // Combine IP-based and GPS location for display.
+    const ipLocation = resolveApproximateLocation(ctx.ip);
+    const displayLocation = gpsLocation
+      ? `GPS: ${gpsLocation} | IP: ${ipLocation}`
+      : ipLocation;
+
+    const alertInput = {
       name: ctx.name,
       employeeId: ctx.userId,
       role: ctx.role || "—",
@@ -205,14 +217,14 @@ export async function notifyLogin(ctx: LoginContext): Promise<void> {
       device: device.label,
       deviceType: deviceTypeOf(ctx.userAgent),
       ipAddress: (ctx.ip || "unknown").split(",")[0].trim(),
-      location: resolveApproximateLocation(ctx.ip),
+      location: displayLocation,
       status: ctx.status,
       sessionId: ctx.sessionId,
       // Password is the only sign-in method this CRM has. Reported literally
       // rather than as a placeholder for an SSO/2FA flow that does not exist.
       loginMethod: "Password",
       loginEmail: ctx.identifierUsed || ctx.accountEmail || "—",
-      loginEmailKind: isAlternative ? "Alternative Email" : "Primary Email",
+      loginEmailKind: (isAlternative ? "Alternative Email" : "Primary Email") as "Primary Email" | "Alternative Email",
       accountEmail: ctx.accountEmail ?? "—",
       alternativeEmail: prefs?.alternativeEmailVerified ? prefs.alternativeEmail : null,
       notificationRecipients: recipients,
@@ -220,7 +232,28 @@ export async function notifyLogin(ctx: LoginContext): Promise<void> {
       deviceFirstSeen: firstSeen,
       confirmUrl,
       secureUrl,
-    }, { userId: ctx.userId, actorName: ctx.name, ip: ctx.ip, userAgent: ctx.userAgent });
+      latitude: ctx.latitude ?? null,
+      longitude: ctx.longitude ?? null,
+    };
+
+    // The service picks the email type from `status` and `isNewDevice`, applies
+    // the notification preference, resolves the destinations and audits the
+    // outcome. This call site describes the event; it decides nothing about
+    // delivery.
+    await EmailService.sendLoginAlert(
+      ctx.userId,
+      alertInput,
+      { userId: ctx.userId, actorName: ctx.name, ip: ctx.ip, userAgent: ctx.userAgent },
+    );
+
+    // ── Admin login notification ─────────────────────────────────────────
+    // After notifying the user, send a separate notification to the org's
+    // admin(s). This is NOT email forwarding — it is a distinct send with
+    // the admin as recipient. Only fires for successful logins to avoid
+    // flooding admins with every typo.
+    if (ctx.status === "Successful") {
+      void sendAdminLoginNotification(ctx, alertInput);
+    }
   } catch (err) {
     console.error(
       "[loginNotification] could not send sign-in alert:",
@@ -245,6 +278,81 @@ async function deviceFirstSeen(userId: number, fingerprint: string): Promise<str
     return new Date(rows[0].first_seen_at).toISOString().replace("T", " ").slice(0, 19) + " UTC";
   } catch {
     return null;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Admin login notification
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Send a login notification to the organization's admin(s).
+ *
+ * This is a SEPARATE email — not forwarding the user's notification. The admin
+ * receives it at their own email address so they are aware of every sign-in.
+ *
+ * Uses `sendDirect` (via EmailService.sendAdminLoginNotification) to bypass
+ * the logged-in user's notification preferences, because the admin's awareness
+ * of their team's logins is not governed by the signing-in user's toggles.
+ *
+ * Wrapped so failures never surface. An admin whose mailbox bounces must not
+ * break their team's logins.
+ */
+async function sendAdminLoginNotification(
+  ctx: LoginContext,
+  alertInput: LoginAlertInput,
+): Promise<void> {
+  try {
+    // Find admins in the same organization. If the logging-in user IS an admin,
+    // they already received the user notification — skip the duplicate.
+    const admins = await query<{ id: number; email: string; name: string }>(
+      `SELECT id, email, name FROM users
+        WHERE role = 'Admin'
+          AND is_active = true
+          AND organization_id = (SELECT organization_id FROM users WHERE id = $1)
+          AND id != $1
+        ORDER BY id
+        LIMIT 5`,
+      [ctx.userId]
+    );
+
+    if (admins.length === 0) return;
+
+    const template = loginAlertTemplate({
+      ...alertInput,
+      // Override the greeting to address the admin and clarify this is about
+      // another user's login, not their own.
+      name: admins[0].name,
+    });
+
+    // Prefix subject to distinguish from the user's own login alert.
+    template.subject = `[Admin] Employee login: ${ctx.name} - Bhoomi CRM`;
+
+    for (const admin of admins) {
+      try {
+        await EmailService.sendAdminLoginNotification(
+          admin.email,
+          { ...template, subject: template.subject },
+          {
+            userId: ctx.userId,
+            actorName: ctx.name,
+            ip: ctx.ip,
+            userAgent: ctx.userAgent,
+          },
+          { adminId: admin.id, adminName: admin.name }
+        );
+      } catch (err) {
+        console.error(
+          `[loginNotification] admin notify to ${admin.email} failed:`,
+          err instanceof Error ? err.message : String(err)
+        );
+      }
+    }
+  } catch (err) {
+    console.error(
+      "[loginNotification] admin notification failed:",
+      err instanceof Error ? err.message : String(err)
+    );
   }
 }
 

@@ -10,11 +10,35 @@ import { avatarSrc } from "@/lib/settingsUser";
 
 export async function POST(req: Request) {
   try {
-    const { identifier, password } = await req.json();
+    const { identifier, password, latitude, longitude } = await req.json();
 
     if (!identifier || !password) {
       return NextResponse.json(
         { message: "Please provide both a username/email and password." },
+        { status: 400 },
+      );
+    }
+
+    // ── Location is mandatory ──────────────────────────────────────────────
+    // The frontend collects GPS coordinates before calling this route.
+    // A missing or invalid location is rejected BEFORE credentials are
+    // checked, so an unauthenticated caller learns nothing about which
+    // accounts exist. The validation is server-side — a frontend boolean
+    // like `locationEnabled: true` would be trivially spoofable.
+    if (
+      latitude == null ||
+      longitude == null ||
+      typeof latitude !== "number" ||
+      typeof longitude !== "number" ||
+      !Number.isFinite(latitude) ||
+      !Number.isFinite(longitude) ||
+      latitude < -90 ||
+      latitude > 90 ||
+      longitude < -180 ||
+      longitude > 180
+    ) {
+      return NextResponse.json(
+        { message: "Location access is required to log in. Please enable location permission and try again." },
         { status: 400 },
       );
     }
@@ -187,9 +211,9 @@ export async function POST(req: Request) {
     const sessionRes = await query(
       // Organization inherited from the user in SQL: this runs DURING login, so
       // the session cookie carrying the org claim does not exist yet.
-      `INSERT INTO employee_sessions (user_id, session_start, last_heartbeat, ip_address, device_info, is_active, organization_id)
-       SELECT $1, $2, $3, $4, $5, true, u.organization_id FROM users u WHERE u.id = $1 RETURNING id`,
-      [user.id, now, now, ip, device_info]
+      `INSERT INTO employee_sessions (user_id, session_start, last_heartbeat, ip_address, device_info, is_active, organization_id, login_latitude, login_longitude)
+       SELECT $1, $2, $3, $4, $5, true, u.organization_id, $6, $7 FROM users u WHERE u.id = $1 RETURNING id`,
+      [user.id, now, now, ip, device_info, latitude, longitude]
     );
     const loginSessionId = sessionRes[0].id;
 
@@ -218,6 +242,7 @@ export async function POST(req: Request) {
       action: "login",
       entityType: "user",
       entityId: user.id,
+      newValue: { latitude, longitude },
       ipAddress: ip,
       userAgent,
     });
@@ -241,6 +266,8 @@ export async function POST(req: Request) {
       sessionId: loginSessionId,
       status: "Successful",
       origin,
+      latitude,
+      longitude,
     });
 
     // Signed, not just encoded. Refuse to issue a session at all when no secret

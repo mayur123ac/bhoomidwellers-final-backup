@@ -264,6 +264,23 @@ export const EmailService = {
     );
   },
 
+  /**
+   * Notify an admin about another user's login.
+   *
+   * Direct, not routed: the admin's interest in team logins is not governed
+   * by the signing-in user's notification preferences. The template is
+   * pre-built by the caller (loginNotification.ts) so this method only
+   * dispatches and audits.
+   */
+  async sendAdminLoginNotification(
+    to: string,
+    template: Template,
+    context: AuditContext = {},
+    extra?: Record<string, unknown>
+  ): Promise<DirectSendResult> {
+    return sendDirect(to, template, "email.admin_login_alert_sent", context, extra);
+  },
+
   async sendFailedLoginBurst(
     userId: number,
     input: FailedLoginBurstInput,

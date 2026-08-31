@@ -126,6 +126,9 @@ export interface LoginAlertInput {
   deviceFirstSeen: string | null;
   confirmUrl?: string | null;
   secureUrl?: string | null;
+  /** GPS coordinates captured at login (mandatory for successful logins). */
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 export function loginAlertTemplate(d: LoginAlertInput): Template {
@@ -149,6 +152,9 @@ export function loginAlertTemplate(d: LoginAlertInput): Template {
     { label: "Device type", value: d.deviceType },
     { label: "IP address", value: d.ipAddress },
     { label: "Approximate location", value: d.location },
+    ...(d.latitude != null && d.longitude != null
+      ? [{ label: "GPS coordinates", value: `${d.latitude.toFixed(6)}, ${d.longitude.toFixed(6)}` }]
+      : []),
     { label: "Session ID", value: d.sessionId ?? "—" },
     { label: "Login method", value: d.loginMethod },
     { label: "Signed in using", value: `${d.loginEmail} (${d.loginEmailKind})` },
