@@ -194,18 +194,58 @@ export async function POST(req: Request) {
       );
     }
 
-    // Server-side duplicate prevention (idempotency check)
-    // Reject if the same phone number was submitted within the last 15 seconds
-    const duplicateCheck = await query(
-      `SELECT id FROM walkin_enquiries WHERE phone = $1 AND created_at >= NOW() - INTERVAL '15 seconds' AND organization_id = $2`,
-      [phone, await getOrganizationId()]
+    // Server-side duplicate & returning-lead detection.
+    //
+    // Three outcomes for the same normalized phone within this organization:
+    //   1. No prior lead         → UNIQUE (proceed normally)
+    //   2. Prior lead < 24h ago  → DUPLICATE (reject — idempotency / accidental resubmit)
+    //   3. Prior lead >= 24h ago → RETURNING_LEAD (proceed, but tag the new row)
+    //
+    // The 15-second window from the original check is widened to 24 hours for the
+    // reject gate: a genuinely new walk-in of someone who was here yesterday is a
+    // returning lead, not a duplicate. Within 24 hours it is almost certainly a
+    // double-click or a page reload.
+    const orgIdForCheck = await getOrganizationId();
+    const priorLeads = await query(
+      `SELECT id, name, assigned_to, created_at,
+              EXTRACT(EPOCH FROM (NOW() - created_at)) AS seconds_ago
+       FROM walkin_enquiries
+       WHERE RIGHT(regexp_replace(phone, '[^0-9]', '', 'g'), 10)
+           = RIGHT(regexp_replace($1, '[^0-9]', '', 'g'), 10)
+         AND organization_id = $2
+       ORDER BY created_at DESC
+       LIMIT 5`,
+      [phone, orgIdForCheck]
     );
 
-    if (duplicateCheck.length > 0) {
-      return NextResponse.json(
-        { success: false, message: "Enquiry has already been submitted." },
-        { status: 409 }
-      );
+    // Classify
+    let leadClassification: "UNIQUE" | "DUPLICATE" | "RETURNING_LEAD" = "UNIQUE";
+    let returningFromLeadId: number | null = null;
+    let returningFromLeadName: string | null = null;
+    let returningFromAssignedTo: string | null = null;
+
+    if (priorLeads.length > 0) {
+      const mostRecent = priorLeads[0];
+      const secondsAgo = Number(mostRecent.seconds_ago);
+      if (secondsAgo < 15) {
+        // Within 15 seconds — accidental double-click
+        return NextResponse.json(
+          { success: false, message: "Enquiry has already been submitted." },
+          { status: 409 }
+        );
+      } else if (secondsAgo < 86400) {
+        // Within 24 hours — duplicate, not a returning lead yet
+        return NextResponse.json(
+          { success: false, message: "A lead with this phone number was already created today." },
+          { status: 409 }
+        );
+      } else {
+        // More than 24 hours — returning lead
+        leadClassification = "RETURNING_LEAD";
+        returningFromLeadId = mostRecent.id;
+        returningFromLeadName = mostRecent.name;
+        returningFromAssignedTo = mostRecent.assigned_to;
+      }
     }
 
     // Effective source is resolved once so the CP gate and the stored value agree.
@@ -330,7 +370,8 @@ export async function POST(req: Request) {
           enquiry_date, auto_date_enabled, channel_partner_id,
           pin_code, city, preferred_location,
           sourcing_manager_id, sourcing_manager_assigned_at, sourcing_manager_assigned_by,
-          organization_id
+          organization_id,
+          lead_classification, returning_from_lead_id
         )
         VALUES (
           $1,  $2,  $3,  $4,  $5,  $6,
@@ -344,7 +385,8 @@ export async function POST(req: Request) {
           $29,
           CASE WHEN $29::int IS NULL THEN NULL ELSE now() END,
           CASE WHEN $29::int IS NULL THEN NULL ELSE $30 END,
-          $31
+          $31,
+          $32, $33
         )
         RETURNING id`,
         [
@@ -386,6 +428,8 @@ export async function POST(req: Request) {
           effectiveSourcingManagerId,          // $29
           actorName,                           // $30
           orgId,                               // $31
+          leadClassification,                  // $32
+          returningFromLeadId,                 // $33
         ]
       );
       
@@ -465,6 +509,12 @@ export async function POST(req: Request) {
         // the manager shown in the form, rather than discovering it later.
         routedByPartner: result.routedByPartner,
         routedTo: result.partnerOwner?.name ?? null,
+        // Returning-lead metadata — the receptionist gets a distinct toast, and
+        // the admin/sales dashboards can show a green highlight.
+        leadClassification,
+        returningFromLeadId,
+        returningFromLeadName,
+        returningFromAssignedTo,
       },
       { status: 201 }
     );

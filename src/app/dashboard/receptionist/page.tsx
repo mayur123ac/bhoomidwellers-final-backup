@@ -847,16 +847,8 @@ export default function ReceptionistDashboard() {
   // ── Notification Queue & History Handler ──
   // NOTE: The primary handler is below at the second useEffect (with [enquiries, user.name, siteHeads]).
   // This first block was removed to prevent duplicate notifications.
-
-  // Toast Display Logic (2 Seconds)
-  useEffect(() => {
-    if (activeNotif || notifQueue.length === 0) return;
-    const next = notifQueue[0];
-    setActiveNotif(next);
-    setNotifQueue(prev => prev.slice(1));
-    const timer = setTimeout(() => setActiveNotif(null), 2000);
-    return () => clearTimeout(timer);
-  }, [activeNotif, notifQueue]);
+  // The duplicate toast display useEffect that was here has been removed —
+  // it was identical to the one further down and caused double-firing.
   /* The `currentTime` 1-second interval was removed with the in-page Settings
      tab: its only readers were that tab's clock card, so it was re-rendering
      this whole component every second to update nothing. The header's live
@@ -1386,6 +1378,12 @@ export default function ReceptionistDashboard() {
   // ─────────────────────────────────────────────────────────────────────────
   const handleEnquirySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // The ref guard is synchronous and immune to React batching — it catches a
+    // second click that arrives before the state update from the first has
+    // re-rendered the component. The state guard alone was insufficient because
+    // setIsSubmitting(true) is asynchronous.
+    if (isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
     if (isSubmitting) return;
     setIsSubmitting(true);
 
@@ -1395,7 +1393,7 @@ export default function ReceptionistDashboard() {
     // Validate enquiry date when Auto Date is OFF
     if (!autoDate && !enquiryForm.enquiryDate) {
       alert("Please select an enquiry date.");
-      setIsSubmitting(false);
+      setIsSubmitting(false); isSubmittingRef.current = false;
       return;
     }
 
@@ -1404,14 +1402,14 @@ export default function ReceptionistDashboard() {
     // the user sees the problem on the field instead of as a failed request.
     if (enquiryForm.source === "Channel Partner" && !enquiryForm.cpDetails.phone.trim()) {
       setCpPhoneError("CP phone number is required for Channel Partner enquiries.");
-      setIsSubmitting(false);
+      setIsSubmitting(false); isSubmittingRef.current = false;
       return;
     }
     setCpPhoneError("");
 
     if (!enquiryForm.selfAssign && !enquiryForm.assignedTo) {
       setAssignedToError("Please select a Sales Manager before submitting.");
-      setIsSubmitting(false);
+      setIsSubmitting(false); isSubmittingRef.current = false;
       return;
     }
     setAssignedToError("");
@@ -1463,12 +1461,17 @@ export default function ReceptionistDashboard() {
       });
       if (res.ok) {
         const json = await res.json().catch(() => ({}));
-        // When the partner's registered owner overrode the form's pick, say where
-        // the lead went — otherwise the operator has no way to know it moved.
+        // Distinct toasts for returning leads vs new ones.
+        const isReturning = json?.leadClassification === "RETURNING_LEAD";
+        const routeMsg = json?.routedByPartner && json?.routedTo
+          ? ` — routed to ${json.routedTo}`
+          : "";
         showToast(
-          json?.routedByPartner && json?.routedTo
-            ? `Lead routed to ${json.routedTo} — the registered partner's Sourcing Manager.`
-            : isReceptionist ? `Lead self-assigned to you!` : `Lead assigned to ${assignTo}!`
+          isReturning
+            ? `Returning Lead! Previously assigned to ${json.returningFromAssignedTo || "unknown"}${routeMsg}`
+            : json?.routedByPartner && json?.routedTo
+              ? `Lead routed to ${json.routedTo} — the registered partner's Sourcing Manager.`
+              : isReceptionist ? `Lead self-assigned to you!` : `Lead assigned to ${assignTo}!`
         );
         setIsEnquiryModalOpen(false);
         setCpPhoneError("");
@@ -1477,7 +1480,7 @@ export default function ReceptionistDashboard() {
         refetchAll();
       } else { alert("Server Error. Please check DB schema."); }
     } catch { alert("Network Error while submitting."); }
-    finally { setIsSubmitting(false); }
+    finally { setIsSubmitting(false); isSubmittingRef.current = false; }
   };
 
   const existingCPs = useMemo(() => {
@@ -1732,6 +1735,7 @@ export default function ReceptionistDashboard() {
   const configYearlyBarData = useMemo(() => buildMonthStackedData(12), [mergedLeads]);
 
   const enquiriesToday = useMemo(() => mergedLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= todayStart).length, [mergedLeads]);
+  const returningLeadsCount = useMemo(() => mergedLeads.filter((e: any) => e.lead_classification === "RETURNING_LEAD").length, [mergedLeads]);
   const monthlyEnquiriesSelected = useMemo(() => mergedLeads.filter((e: any) => { if (!e.created_at) return false; const d = new Date(e.created_at); return d.getMonth() === selectedMonthCard && d.getFullYear() === dateNow.getFullYear(); }).length, [mergedLeads, selectedMonthCard]);
   const enquiries3Months = useMemo(() => mergedLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= threeMonthsAgo).length, [mergedLeads]);
   const enquiries6Months = useMemo(() => mergedLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= sixMonthsAgo).length, [mergedLeads]);
@@ -2488,6 +2492,15 @@ export default function ReceptionistDashboard() {
                       {card2Mode === "yearly" && `Enquiries in ${dateNow.getFullYear()}`}
                       {card2Mode === "alltime" && "Total enquiries captured"}
                     </p>
+                    {returningLeadsCount > 0 && (
+                      <div className={`mt-3 pt-3 border-t flex items-center gap-2 ${isDark ? "border-green-500/20" : "border-green-200"}`}>
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border border-green-500/40 text-green-400 bg-green-500/10">
+                          Returning
+                        </span>
+                        <span className={`text-sm font-bold ${isDark ? "text-green-400" : "text-green-600"}`}>{returningLeadsCount}</span>
+                        <span className={`text-[11px] ${t.textFaint}`}>returning leads</span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -2745,12 +2758,14 @@ export default function ReceptionistDashboard() {
                         const isClosing = lead.status === "Closing";
                         const isLost = !!lead.is_lost_lead;
                         const isNGD = lead.status === "NON GENUINE DEMAND (NGD)" || lead.leadStatus === "NON GENUINE DEMAND (NGD)" || lead.leadInterestStatus === "NON GENUINE DEMAND (NGD)";
+                        const isReturningCard = lead.lead_classification === "RETURNING_LEAD";
                         return (
                           <div key={lead.id} onClick={() => { setSelectedLead(lead); setAssignedSubView("detail"); setDetailTab("personal"); setShowSalesForm(false); setShowLoanForm(false); }}
                             className={`rounded-2xl md:rounded-3xl p-5 md:p-6 border shadow-sm cursor-pointer group flex flex-col justify-between transition-all duration-300 ${isLost ? t.cardLost :
                               isClosing ? `${isDark ? "bg-yellow-900/10 border-yellow-500/30" : "bg-amber-50 border-amber-200"} hover:-translate-y-1.5 hover:scale-[1.02] hover:border-yellow-400/60 hover:shadow-xl`
                                 : isNGD ? t.cardNGD
-                                  : t.card
+                                  : isReturningCard ? `${isDark ? "bg-green-900/10 border-green-500/30" : "bg-green-50 border-green-200"} hover:-translate-y-1.5 hover:scale-[1.02] hover:border-green-400/60 hover:shadow-xl`
+                                    : t.card
                               }`} style={t.cardGlass}>
                             <div>
                               <div className={`flex flex-col sm:flex-row justify-between sm:items-start gap-3 mb-5 pb-4 border-b ${t.tableBorder}`}>
@@ -2758,7 +2773,7 @@ export default function ReceptionistDashboard() {
                                   <span className={`mr-2 transition-colors ${isDark ? "text-[#d4006e]" : "text-[#00AEEF] group-hover:text-[#9E217B]"}`}>#{lead.sr_no || lead.id}</span>{lead.name}
                                 </h3>
                                 <span className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider border flex-shrink-0 shadow-sm w-fit ${isLost ? t.statusLost :
-                                  isNGD ? t.statusNGD : getStatusStyle(lead.status)}`}>{isLost ? "LOST LEAD" : isNGD ? "NON GENUINE DEMAND" : (lead.status || "Assigned")}</span>
+                                  isNGD ? t.statusNGD : isReturningCard ? "border-green-500/40 text-green-400 bg-green-500/10" : getStatusStyle(lead.status)}`}>{isLost ? "LOST LEAD" : isNGD ? "NON GENUINE DEMAND" : isReturningCard ? "RETURNING" : (lead.status || "Assigned")}</span>
                               </div>
 
                               {/* Lost lead banner — shown immediately after the header */}
@@ -3218,7 +3233,8 @@ export default function ReceptionistDashboard() {
                       ) : filteredRecepLeads.map((lead: any, rowIdx: number) => {
                         const isLost = !!lead.is_lost_lead;
                         const isNGD = lead.status === "NON GENUINE DEMAND (NGD)" || lead.leadStatus === "NON GENUINE DEMAND (NGD)" || lead.leadInterestStatus === "NON GENUINE DEMAND (NGD)";
-                        const rowBgClass = isLost ? (isDark ? "bg-[#1C1C1E] hover:bg-[#232325]" : "bg-slate-50 hover:bg-slate-100") : isNGD ? (isDark ? "bg-[#1a1410] hover:bg-[#211913]" : "bg-orange-50 hover:bg-orange-100") : (isDark ? "hover:bg-white/[0.04]" : "hover:bg-black/[0.02]");
+                        const isReturning = lead.lead_classification === "RETURNING_LEAD";
+                        const rowBgClass = isLost ? (isDark ? "bg-[#1C1C1E] hover:bg-[#232325]" : "bg-slate-50 hover:bg-slate-100") : isNGD ? (isDark ? "bg-[#1a1410] hover:bg-[#211913]" : "bg-orange-50 hover:bg-orange-100") : isReturning ? (isDark ? "bg-[#0d1a14] hover:bg-[#122319]" : "bg-green-50 hover:bg-green-100") : (isDark ? "hover:bg-white/[0.04]" : "hover:bg-black/[0.02]");
                         return (
                           <tr key={lead.id}
                             className={`group transition-colors duration-200 ${rowBgClass}`}>
@@ -3268,6 +3284,10 @@ export default function ReceptionistDashboard() {
                               ) : isNGD ? (
                                 <span className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${t.statusNGD}`}>
                                   NGD
+                                </span>
+                              ) : isReturning ? (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider border border-green-500/40 text-green-400 bg-green-500/10">
+                                  Returning
                                 </span>
                               ) : (
                                 <span className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${getStatusStyle(lead.status)}`}>{lead.status || "Assigned"}</span>
