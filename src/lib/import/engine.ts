@@ -8,6 +8,8 @@ import type { PoolClient } from "pg";
 import { query, transaction, recalculateSrNos } from "@/lib/db";
 import { parseLeadSheet } from "@/lib/ingestion/parseLeadSheet";
 import type { ParsedLead } from "@/lib/ingestion/parseLeadSheet";
+import type { BookingClaim } from "@/lib/ingestion/analyzeWorkbook";
+import { createImportBooking } from "./createImportBooking";
 import { isChannelPartnerSource, resolveChannelPartnerId } from "@/lib/cpCommissionEngine";
 import { runDedup, getMergeFields } from "./dedup";
 import type {
@@ -116,7 +118,7 @@ export async function stageImport(params: StageImportParams): Promise<StageResul
   // 3. Parse — if explicit mapping provided, use parseWithMapping; otherwise fall back
   let validRows: ParsedLead[];
   let errorRows: { rowNum: number; errors: string[]; raw: Record<string, any> }[];
-  let bookingClaims: { rowIndex: number; claimedBooked: boolean; bookingDate: string | null; bookingAmount: number | null; bookingAmountRaw: string | null; bookingReference: string | null }[] = [];
+  let bookingClaims: BookingClaim[] = [];
   let sheetName: string;
 
   if (params.mapping && params.sheetName) {
@@ -208,7 +210,9 @@ export async function stageImport(params: StageImportParams): Promise<StageResul
       const row = validRows[i];
       const rowNum = i + 1;
 
-      // Merge booking claim fields into normalized_data if present
+      // Merge booking claim fields into normalized_data if present.
+      // Keys prefixed with _ are internal — never written to walkin_enquiries.
+      // Phase 5 reads them to create a booking_applications record on commit.
       const normalizedData: Record<string, any> = { ...row };
       const bc = bookingByRow.get(rowNum);
       if (bc) {
@@ -217,6 +221,19 @@ export async function stageImport(params: StageImportParams): Promise<StageResul
         normalizedData._booking_amount = bc.bookingAmount ?? null;
         normalizedData._booking_amount_raw = bc.bookingAmountRaw ?? null;
         normalizedData._booking_reference = bc.bookingReference ?? null;
+        // Phase 2: OCR amount and flat number from the client Excel.
+        // ocrAmount is the On-Collection Receipt value → booking_financials.ocr_amount.
+        // flatNumber is the unit identifier → booking_applications.flat_number.
+        // Both are null when the column was absent or the cell was blank.
+        normalizedData._ocr_amount = bc.ocrAmount ?? null;
+        normalizedData._ocr_amount_raw = bc.ocrAmountRaw ?? null;
+        normalizedData._flat_number = bc.flatNumber ?? null;
+        // Phase 7: Property identity → syncBookingUnit.
+        // All four are null when the column was absent or the cell was blank.
+        normalizedData._project_name = bc.projectName ?? null;
+        normalizedData._tower = bc.tower ?? null;
+        normalizedData._wing = bc.wing ?? null;
+        normalizedData._floor_number = bc.floorNumber ?? null;
       }
 
       await client.query(
@@ -465,8 +482,18 @@ export async function commitImport(
     let updated = 0;
     let skipped = 0;
     let failed = 0;
+    let rowIdx = 0;
 
     for (const staged of stagedRows) {
+      // Each row runs under its own SAVEPOINT so a Postgres-level error
+      // (FK violation, constraint, type mismatch) rolls back only that row.
+      // Without a SAVEPOINT the first error puts the whole transaction into an
+      // aborted state; the catch block's UPDATE/INSERT then fail with
+      // "current transaction is aborted, commands ignored until end of
+      // transaction block" and every subsequent row is silently dropped.
+      rowIdx++;
+      const sp = `sp${rowIdx}`;
+      await client.query(`SAVEPOINT ${sp}`);
       try {
         // 3b. Determine effective action (user override takes precedence)
         const action = staged.user_override_action || staged.proposed_action || "create";
@@ -479,6 +506,7 @@ export async function commitImport(
               WHERE id = $1`,
             [staged.id]
           );
+          await client.query(`RELEASE SAVEPOINT ${sp}`);
           continue;
         }
 
@@ -540,30 +568,99 @@ export async function commitImport(
               [staged.matched_record_id, staged.id]
             );
 
-            // 3u6. Historical booking claims for updates too
+            // 3u6. Historical booking claims for updates + Phase 5 booking creation.
+            //
+            // Order of operations matters here:
+            //   a) Extract all booking fields from normalized_data.
+            //   b) If booking data is present, check whether the lead already has
+            //      a booking_applications row (the "conflict check"). We do this
+            //      BEFORE the historical_booking_claims INSERT so we can write
+            //      existing_booking_id in a single statement instead of an
+            //      insert-then-update.
+            //   c) Write historical_booking_claims with all Phase 2 fields
+            //      (ocr_amount, flat_number) and existing_booking_id when a
+            //      conflict is found. This row is the permanent audit trail —
+            //      it is written regardless of whether a new booking was created.
+            //   d) If no conflict, call createImportBooking() to create the
+            //      booking_applications + booking_financials rows. This runs
+            //      inside the same transaction so lead-update + booking-create
+            //      are atomic: either both commit or both roll back.
             const nd = staged.normalized_data as any;
             const bookingStatus = nd?._booking_status;
             const bookingDate = nd?._booking_date;
             const bookingAmount = nd?._booking_amount;
             const bookingAmountRaw = nd?._booking_amount_raw;
             const bookingRef = nd?._booking_reference;
+            const ocrAmount = typeof nd?._ocr_amount === "number" ? nd._ocr_amount : null;
+            const ocrAmountRaw = nd?._ocr_amount_raw || null;
+            const flatNumber = nd?._flat_number || null;
+            // Phase 7: property identity for syncBookingUnit.
+            const projectName = nd?._project_name || null;
+            const tower = nd?._tower || null;
+            const wing = nd?._wing || null;
+            const floorNumber = nd?._floor_number || null;
             const claimedBooked = bookingStatus === true ||
               (typeof bookingStatus === "string" && ["yes", "y", "booked", "true", "1"].includes(bookingStatus.toLowerCase()));
 
             if (claimedBooked || bookingDate || bookingAmount || bookingRef) {
+              // b) Conflict check — must precede the claim INSERT.
+              // Only meaningful for claimedBooked rows; partial-data rows
+              // (date/amount/ref but no explicit status) are not promoted to
+              // booking_applications and need no existence guard.
+              let existingBookingId: number | null = null;
+              if (claimedBooked) {
+                const existingBookingRes = await client.query(
+                  `SELECT id FROM booking_applications
+                     WHERE lead_id = $1 AND organization_id = $2
+                     LIMIT 1`,
+                  [staged.matched_record_id, orgId]
+                );
+                if (existingBookingRes.rows.length > 0) {
+                  existingBookingId = existingBookingRes.rows[0].id;
+                }
+              }
+
+              // c) Write the audit claim with all imported fields.
               await client.query(
                 `INSERT INTO historical_booking_claims (
                     organization_id, lead_id, import_job_id, import_row_id,
                     claimed_booked, booking_date, booking_amount, booking_amount_raw,
                     booking_reference, source_row_number, source_filename,
+                    ocr_amount, ocr_amount_raw, flat_number,
+                    existing_booking_id,
                     requires_reconciliation
-                  ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+                  ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
                 [
                   orgId, staged.matched_record_id, jobId, staged.id,
                   claimedBooked, bookingDate || null, bookingAmount || null, bookingAmountRaw || null,
-                  bookingRef || null, staged.source_row_number, job.filename, true
+                  bookingRef || null, staged.source_row_number, job.filename,
+                  ocrAmount, ocrAmountRaw, flatNumber,
+                  existingBookingId,   // non-null only when a conflict was found
+                  true
                 ]
               );
+
+              // d) Create booking_applications when no conflict exists.
+              if (claimedBooked && existingBookingId === null) {
+                await createImportBooking(client, {
+                  leadId: staged.matched_record_id,
+                  primaryName: existing.name,
+                  primaryMobile: existing.phone,
+                  orgId,
+                  importedByName: committedByName,
+                  bookingDate: bookingDate || null,
+                  bookingAmount: typeof bookingAmount === "number" ? bookingAmount : null,
+                  bookingAmountRaw: bookingAmountRaw || null,
+                  bookingReference: bookingRef || null,
+                  ocrAmount,
+                  ocrAmountRaw,
+                  flatNumber,
+                  projectName,
+                  tower,
+                  wing,
+                  floorNumber,
+                });
+              }
             }
 
             // 3u7. Follow-up for updates
@@ -576,6 +673,7 @@ export async function commitImport(
               );
             }
 
+            await client.query(`RELEASE SAVEPOINT ${sp}`);
             continue;
           }
         }
@@ -660,6 +758,7 @@ export async function commitImport(
               WHERE id = $1`,
             [staged.id]
           );
+          await client.query(`RELEASE SAVEPOINT ${sp}`);
           continue;
         }
 
@@ -673,13 +772,27 @@ export async function commitImport(
           [leadId, staged.id]
         );
 
-        // 3e2. Create historical_booking_claims if booking data present
+        // 3e2. Historical booking claims + Phase 5 booking creation (CREATE path).
+        //
+        // A freshly created lead cannot already have a booking_applications row,
+        // so no conflict check is needed here. The claim INSERT and the
+        // createImportBooking() call share the same transaction client:
+        // if either throws, both the lead INSERT and all booking writes are
+        // rolled back and the row is marked 'failed' by the catch block below.
         const nd = staged.normalized_data as any;
         const bookingStatus = nd?._booking_status;
         const bookingDate = nd?._booking_date;
         const bookingAmount = nd?._booking_amount;
         const bookingAmountRaw = nd?._booking_amount_raw;
         const bookingRef = nd?._booking_reference;
+        const ocrAmount = typeof nd?._ocr_amount === "number" ? nd._ocr_amount : null;
+        const ocrAmountRaw = nd?._ocr_amount_raw || null;
+        const flatNumber = nd?._flat_number || null;
+        // Phase 7: property identity for syncBookingUnit.
+        const projectName = nd?._project_name || null;
+        const tower = nd?._tower || null;
+        const wing = nd?._wing || null;
+        const floorNumber = nd?._floor_number || null;
 
         const claimedBooked = bookingStatus === true ||
           (typeof bookingStatus === 'string' && ['yes', 'y', 'booked', 'true', '1'].includes(bookingStatus.toLowerCase()));
@@ -690,15 +803,43 @@ export async function commitImport(
                 organization_id, lead_id, import_job_id, import_row_id,
                 claimed_booked, booking_date, booking_amount, booking_amount_raw,
                 booking_reference, source_row_number, source_filename,
+                ocr_amount, ocr_amount_raw, flat_number,
+                existing_booking_id,
                 requires_reconciliation
-              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
             [
               orgId, leadId, jobId, staged.id,
               claimedBooked, bookingDate || null, bookingAmount || null, bookingAmountRaw || null,
               bookingRef || null, staged.source_row_number, job.filename,
-              true  // always requires_reconciliation for imported claims
+              ocrAmount, ocrAmountRaw, flatNumber,
+              null,  // no conflict possible on a freshly created lead
+              true
             ]
           );
+        }
+
+        // 3e3. Phase 5 — create booking_applications for confirmed bookings.
+        // Partial-data rows (date/amount/ref but no explicit booking_status) are
+        // captured in historical_booking_claims only and left for manual review.
+        if (claimedBooked) {
+          await createImportBooking(client, {
+            leadId,
+            primaryName: data.name,
+            primaryMobile: data.phone,
+            orgId,
+            importedByName: committedByName,
+            bookingDate: bookingDate || null,
+            bookingAmount: typeof bookingAmount === "number" ? bookingAmount : null,
+            bookingAmountRaw: bookingAmountRaw || null,
+            bookingReference: bookingRef || null,
+            ocrAmount,
+            ocrAmountRaw,
+            flatNumber,
+            projectName,
+            tower,
+            wing,
+            floorNumber,
+          });
         }
 
         // 3g. If row has feedback, create follow_up
@@ -710,8 +851,11 @@ export async function commitImport(
             [leadId, feedback, clamp(committedByName, 150), data.enquiry_date, orgId]
           );
         }
+        await client.query(`RELEASE SAVEPOINT ${sp}`);
       } catch (err) {
-        // Per-row failure — log but keep going so one bad row doesn't abort the batch
+        // Roll back only this row — the outer transaction stays open so
+        // remaining rows can still be processed.
+        await client.query(`ROLLBACK TO SAVEPOINT ${sp}`);
         failed++;
         const errMsg = err instanceof Error ? err.message : String(err);
         await client.query(

@@ -42,11 +42,13 @@ export default function Login() {
     // ── Step 1: Obtain location BEFORE authenticating ──────────────────
     let latitude: number;
     let longitude: number;
+    let accuracy: number | undefined;
 
     try {
       const position = await getPosition();
       latitude = position.coords.latitude;
       longitude = position.coords.longitude;
+      accuracy = position.coords.accuracy;
       setLocationStatus("idle");
     } catch (geoError: any) {
       setIsLoading(false);
@@ -70,7 +72,7 @@ export default function Login() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ identifier, password, latitude, longitude }),
+        body: JSON.stringify({ identifier, password, latitude, longitude, accuracy }),
       });
 
       if (res.ok) {

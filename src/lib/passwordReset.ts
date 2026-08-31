@@ -255,6 +255,9 @@ export interface OtpRow {
   attempts: number;
   expires_at: string;
   consumed_at: string | null;
+  /** Present only when loaded by loadLiveOtpForPurpose — admin password-change
+   *  flows encode the target user id here rather than an email address. */
+  new_email?: string | null;
 }
 
 /**
@@ -292,6 +295,102 @@ export type OtpCheck =
  */
 export async function checkOtp(userId: number, submitted: string): Promise<OtpCheck> {
   const row = await loadLiveOtp(userId);
+  if (!row) return { ok: false, reason: "none", attemptsRemaining: 0 };
+
+  if (new Date(row.expires_at).getTime() <= Date.now()) {
+    return { ok: false, reason: "expired", attemptsRemaining: 0 };
+  }
+  if (row.attempts >= MAX_OTP_ATTEMPTS) {
+    return { ok: false, reason: "locked", attemptsRemaining: 0 };
+  }
+
+  if (hashOtp(submitted) !== row.otp_hash) {
+    const bumped = await query<{ attempts: number }>(
+      `UPDATE email_change_otps SET attempts = attempts + 1
+        WHERE id = $1 RETURNING attempts`,
+      [row.id]
+    );
+    const used = bumped[0]?.attempts ?? row.attempts + 1;
+    return { ok: false, reason: "mismatch", attemptsRemaining: Math.max(0, MAX_OTP_ATTEMPTS - used) };
+  }
+
+  return { ok: true, row };
+}
+
+// ── Purpose-agnostic helpers (admin password-change flow) ─────────────────────
+
+/** Purpose string for admin-initiated employee password changes. */
+export const ADMIN_PW_CHANGE_PURPOSE = "admin_password_change";
+
+/**
+ * Per-account rate limiting for any OTP purpose.
+ *
+ * Identical logic to checkResetRateLimit but accepts an arbitrary purpose so
+ * that each flow has its own independent throttle bucket.
+ */
+export async function checkRateLimitForPurpose(
+  userId: number,
+  purpose: string
+): Promise<RateVerdict> {
+  const recent = await query<{ created_at: string }>(
+    `SELECT created_at FROM email_change_otps
+      WHERE user_id = $1 AND purpose = $2
+      ORDER BY created_at DESC
+      LIMIT 1`,
+    [userId, purpose]
+  );
+  if (recent.length > 0) {
+    const elapsed = (Date.now() - new Date(recent[0].created_at).getTime()) / 1000;
+    if (elapsed < RESEND_COOLDOWN_SECONDS) {
+      return { ok: false, reason: "cooldown", retryAfterSeconds: Math.ceil(RESEND_COOLDOWN_SECONDS - elapsed) };
+    }
+  }
+
+  const hourly = await query<{ n: string }>(
+    `SELECT count(*) AS n FROM email_change_otps
+      WHERE user_id = $1 AND purpose = $2 AND created_at > now() - interval '1 hour'`,
+    [userId, purpose]
+  );
+  if (Number(hourly[0]?.n ?? 0) >= MAX_REQUESTS_PER_HOUR) {
+    return { ok: false, reason: "hourly", retryAfterSeconds: 3600 };
+  }
+
+  return { ok: true };
+}
+
+/**
+ * The newest live OTP row for an account under any given purpose, or null.
+ *
+ * Selects new_email so the admin password-change confirm route can verify the
+ * OTP was issued for the same target the request names.
+ */
+export async function loadLiveOtpForPurpose(
+  userId: number,
+  purpose: string
+): Promise<OtpRow | null> {
+  const rows = await query<OtpRow>(
+    `SELECT id, user_id, otp_hash, attempts, expires_at, consumed_at, new_email
+       FROM email_change_otps
+      WHERE user_id = $1
+        AND purpose = $2
+        AND consumed_at IS NULL
+      ORDER BY created_at DESC
+      LIMIT 1`,
+    [userId, purpose]
+  );
+  return rows[0] ?? null;
+}
+
+/**
+ * Checks a submitted code against the live row for the given purpose,
+ * counting failures. Does NOT consume the row on success.
+ */
+export async function checkOtpForPurpose(
+  userId: number,
+  submitted: string,
+  purpose: string
+): Promise<OtpCheck> {
+  const row = await loadLiveOtpForPurpose(userId, purpose);
   if (!row) return { ok: false, reason: "none", attemptsRemaining: 0 };
 
   if (new Date(row.expires_at).getTime() <= Date.now()) {

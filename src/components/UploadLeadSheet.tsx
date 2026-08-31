@@ -29,6 +29,12 @@ const CRM_FIELDS = [
   { value: "booking_date", label: "Booking Date" },
   { value: "booking_amount", label: "Booking Amount" },
   { value: "booking_reference", label: "Booking Reference" },
+  // ── Booking financial + unit fields (Phase 2) ────────────────────────────
+  // These are booking fields, not lead fields. They never land in walkin_enquiries.
+  // Missing = null (not an error). Phase 5 uses them to create a booking record
+  // and sets flat_allocation_status = PENDING when flat_number is absent.
+  { value: "ocr_amount", label: "OCR Amount" },
+  { value: "flat_number", label: "Flat Number" },
 ] as const;
 
 const REQUIRED_CRM_FIELDS = CRM_FIELDS.filter((f) => "required" in f && f.required).map((f) => f.value);
@@ -481,14 +487,19 @@ export default function UploadLeadSheet({
         };
         setCommitResult(result);
         setStep("committed");
+        const anyCreated = result.created > 0 || result.updated > 0;
         setToast({
-          type: "success",
-          msg: `Created ${result.created} lead(s).` +
-            (result.updated ? ` Updated ${result.updated}.` : "") +
-            (result.skipped ? ` Skipped ${result.skipped}.` : "") +
-            (result.failed ? ` ${result.failed} failed.` : ""),
+          type: anyCreated ? "success" : "error",
+          msg: anyCreated
+            ? `Created ${result.created} lead(s).` +
+              (result.updated ? ` Updated ${result.updated}.` : "") +
+              (result.skipped ? ` Skipped ${result.skipped}.` : "") +
+              (result.failed ? ` ${result.failed} failed.` : "")
+            : `Import completed but no leads were created.` +
+              (result.failed ? ` ${result.failed} row(s) failed — check the results below.` : "") +
+              (result.skipped ? ` ${result.skipped} skipped.` : ""),
         });
-        onImported?.();
+        if (anyCreated) onImported?.();
       }
     } catch (err: any) {
       setToast({ type: "error", msg: err.message || "Import failed." });

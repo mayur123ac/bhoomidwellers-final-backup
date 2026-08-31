@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getOrganizationId } from "@/lib/tenantContext";
 import { requireRole } from "@/lib/serverAuth";
+import { hashPassword } from "@/lib/passwords";
 
 // ── GET: Fetch all employees ──────────────────────────────────────────────────
 export async function GET() {
@@ -79,6 +80,12 @@ export async function POST(req: Request) {
     // organization B through this endpoint, whatever it sends.
     const orgId = await getOrganizationId();
 
+    // Hash the password with scrypt before storing. This replaces the plaintext
+    // storage that existed here and in every row created before this change.
+    // verifyPassword() in lib/passwords.ts accepts both formats, so existing
+    // plaintext rows continue to work until each user next changes their password.
+    const hashed = await hashPassword(password);
+
     const created = await query<{
       id: number;
       name: string;
@@ -89,28 +96,15 @@ export async function POST(req: Request) {
       `INSERT INTO users (name, username, email, password, role, is_active, organization_id)
        VALUES ($1, $2, $3, $4, $5, true, $6)
        RETURNING id, name, email, role, organization_id`,
-      [name, username?.trim(), email?.trim().toLowerCase(), password, role, orgId]
+      [name, username?.trim(), email?.trim().toLowerCase(), hashed, role, orgId]
     );
 
     const row = created[0];
 
-    // ── TEMPORARY, DELIBERATE EXCEPTION (MT-06 follow-up) ────────────────────
-    //
-    // This is the ONLY response in the application that returns a plaintext
-    // password, and it is a stopgap until password hashing lands. It is narrow
-    // on purpose:
-    //
-    //   * only on CREATION — never on read, list, detail, profile or login;
-    //   * only to the Admin who just supplied that very password, so it tells
-    //     the caller nothing they did not already type;
-    //   * echoed straight back from the request, never re-read from the database,
-    //     so this endpoint cannot become a way to recover an existing password.
-    //
-    // It is never logged. The catch below deliberately does not log the request
-    // body, and this route writes no audit entry, so the value reaches the
-    // response and nowhere else.
-    //
-    // When hashing lands, delete the `password` line and nothing else changes.
+    // The password is NOT echoed back. The admin supplied it a moment ago and
+    // does not need the response to confirm it. Sending it back would expose
+    // the credential in browser devtools, CDN access logs, and any monitoring
+    // tool that captures response bodies.
     return NextResponse.json(
       {
         message: "Employee added successfully.",
@@ -121,7 +115,6 @@ export async function POST(req: Request) {
           email: row.email,
           role: row.role,
           organization_id: row.organization_id,
-          password,
         },
       },
       { status: 201 }
@@ -153,7 +146,11 @@ export async function PUT(req: Request) {
 
     // ── FULL EDIT ──
     if (body.editData) {
-      const { name, username, email, password, role } = body.editData;
+      // `password` is intentionally not destructured here. Password changes go
+      // through the OTP-gated POST /api/admin/password-change/confirm endpoint,
+      // which hashes the value and revokes the target's sessions. Accepting a
+      // raw password field on this general-edit path would bypass both controls.
+      const { name, username, email, role } = body.editData;
 
       // Username conflict check (exclude self)
       if (username) {
@@ -184,7 +181,6 @@ export async function PUT(req: Request) {
       if (name) { setClauses.push(`name = $${p++}`); values.push(name); }
       if (username) { setClauses.push(`username = $${p++}`); values.push(username.trim()); }
       if (email) { setClauses.push(`email = $${p++}`); values.push(email.trim().toLowerCase()); }
-      if (password) { setClauses.push(`password = $${p++}`); values.push(password); }
       if (role) { setClauses.push(`role = $${p++}`); values.push(role); }
 
       if (setClauses.length === 0) {

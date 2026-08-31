@@ -61,6 +61,42 @@ export const FIELD_ALIASES: Record<string, string[]> = {
   booking_date: ["Booking Date", "Booking Dt"],
   booking_amount: ["Booking Amount", "Booking Value", "Booking Amt"],
   booking_reference: ["Booking No", "Booking Number", "Booking Ref", "Booking Reference"],
+  // ── Booking financial + unit fields ─────────────────────────────────────────
+  // These are BOOKING fields, not lead fields. They never land in walkin_enquiries.
+  // They are captured into BookingClaim during parsing and stored under
+  // normalized_data._ocr_amount / ._flat_number in the import staging tables,
+  // ready for Phase 5 to convert into a booking_applications record.
+  //
+  // OCR = On-Collection Receipt. Common spellings from client Excel sheets:
+  //   "OCR Amount", "OCR", "OCR Amt", "On Collection Receipt", "Receipt Amount"
+  // Levenshtein tolerance catches "OCR Amnt", "OCR Amout", "OCRAmt", etc.
+  ocr_amount: [
+    "OCR Amount", "OCR", "OCR Amt", "OCR Value",
+    "On Collection Receipt", "On-Collection Receipt",
+    "Receipt Amount", "Collection Receipt",
+  ],
+  // Flat Number. Common spellings:
+  //   "Flat Number", "Flat No", "Flat No.", "Unit No", "Unit Number", "Apartment No"
+  flat_number: [
+    "Flat Number", "Flat No", "Flat No.", "Flat Num",
+    "Unit Number", "Unit No", "Unit No.",
+    "Apartment No", "Apartment Number", "Flat",
+  ],
+  // ── Property identity fields (Phase 7) ───────────────────────────────────────
+  // Used by syncBookingUnit to locate the inventory_units row for the booked flat.
+  // Captured into BookingClaim when any booking data is present; never written
+  // to walkin_enquiries. All four are optional — syncBookingUnit skips silently
+  // when project/tower/flat cannot be resolved together.
+  project_name: [
+    "Project", "Project Name", "Property Name",
+    "Society", "Society Name", "Building Name",
+    "Project / Property",
+  ],
+  tower: ["Tower", "Block", "Building", "Tower / Block", "Tower/Block"],
+  wing: ["Wing", "Section", "Phase", "Wing / Section"],
+  floor_number: [
+    "Floor", "Floor No", "Floor Number", "Floor No.", "Floor Num",
+  ],
 };
 
 // Normalize a header for comparison: lowercase, strip whitespace & punctuation.

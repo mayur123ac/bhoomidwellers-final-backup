@@ -7,10 +7,19 @@ import { writeAuditLog } from "@/lib/auditLog";
 import { handleFailedLogin, notifyLogin } from "@/lib/loginNotification";
 import { clearFailedLogins } from "@/lib/loginSecurity";
 import { avatarSrc } from "@/lib/settingsUser";
+import { enrichSessionLocation } from "@/lib/reverseGeocode";
+import { describeDevice } from "@/lib/emailRouting";
 
 export async function POST(req: Request) {
   try {
-    const { identifier, password, latitude, longitude } = await req.json();
+    const { identifier, password, latitude, longitude, accuracy } = await req.json();
+
+    // Accuracy is optional enrichment — not validated as strictly as coordinates.
+    // A non-finite or negative value is silently discarded rather than blocking login.
+    const gpsAccuracy: number | null =
+      typeof accuracy === "number" && Number.isFinite(accuracy) && accuracy >= 0
+        ? accuracy
+        : null;
 
     if (!identifier || !password) {
       return NextResponse.json(
@@ -207,15 +216,25 @@ export async function POST(req: Request) {
     else if (userAgent.includes("Firefox")) device_info += " / Firefox";
     else if (userAgent.includes("Edge")) device_info += " / Edge";
 
+    // Parse the User-Agent into structured device fields. Reuses the same
+    // describeDevice() that populates the login security email, so the
+    // attendance tracker and the email always agree on what device was used.
+    const parsedDevice = describeDevice(userAgent);
+
     const now = new Date();
     const sessionRes = await query(
       // Organization inherited from the user in SQL: this runs DURING login, so
       // the session cookie carrying the org claim does not exist yet.
-      `INSERT INTO employee_sessions (user_id, session_start, last_heartbeat, ip_address, device_info, is_active, organization_id, login_latitude, login_longitude)
-       SELECT $1, $2, $3, $4, $5, true, u.organization_id, $6, $7 FROM users u WHERE u.id = $1 RETURNING id`,
-      [user.id, now, now, ip, device_info, latitude, longitude]
+      `INSERT INTO employee_sessions (user_id, session_start, last_heartbeat, ip_address, device_info, is_active, organization_id, login_latitude, login_longitude, login_location_accuracy, login_device_name, login_device_type, login_os, login_browser)
+       SELECT $1, $2, $3, $4, $5, true, u.organization_id, $6, $7, $8, $9, $10, $11, $12 FROM users u WHERE u.id = $1 RETURNING id`,
+      [user.id, now, now, ip, device_info, latitude, longitude, gpsAccuracy, parsedDevice.deviceName, parsedDevice.deviceType, parsedDevice.osWithVersion, parsedDevice.browser]
     );
     const loginSessionId = sessionRes[0].id;
+
+    // Reverse-geocode the GPS coordinates into a human-readable place name
+    // and store it on the session row. Fire-and-forget: a Nominatim outage
+    // must never block a sign-in.
+    void enrichSessionLocation(loginSessionId, latitude, longitude, gpsAccuracy);
 
     // Account & Security shows "Last login". employee_sessions already records
     // every login, but that table is heavily written by the heartbeat and the
@@ -268,6 +287,7 @@ export async function POST(req: Request) {
       origin,
       latitude,
       longitude,
+      accuracy: gpsAccuracy,
     });
 
     // Signed, not just encoded. Refuse to issue a session at all when no secret

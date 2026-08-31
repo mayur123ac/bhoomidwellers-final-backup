@@ -31,6 +31,7 @@ import {
 import { EmailService } from "@/lib/email/EmailService";
 import { loginAlertTemplate, type LoginAlertInput } from "@/lib/email/templates";
 import { resolveApproximateLocation } from "@/lib/email/location";
+import { reverseGeocode } from "@/lib/reverseGeocode";
 import { getOrganizationId } from "./tenantContext";
 import {
   describeLockStatus,
@@ -58,20 +59,11 @@ export interface LoginContext {
   /** GPS coordinates captured at login. Present for successful logins. */
   latitude?: number | null;
   longitude?: number | null;
+  /** Browser-reported GPS accuracy in meters. */
+  accuracy?: number | null;
 }
 
 /* ── Shared metadata ────────────────────────────────────────────────────── */
-
-/** Phone / Tablet / Desktop, from the user agent. Distinct from OS and browser. */
-function deviceTypeOf(userAgent: string): string {
-  const ua = userAgent || "";
-  // Tablet before phone: an iPad UA contains neither "Mobile" nor "iPhone" in
-  // desktop mode, but an Android tablet UA contains "Android" without "Mobile".
-  if (/ipad|tablet|playbook|silk/i.test(ua)) return "Tablet";
-  if (/android/i.test(ua) && !/mobile/i.test(ua)) return "Tablet";
-  if (/mobile|iphone|ipod|windows phone/i.test(ua)) return "Phone";
-  return "Desktop";
-}
 
 async function organizationName(): Promise<string> {
   try {
@@ -142,7 +134,7 @@ async function formatInUserTimezone(
 
 export async function notifyLogin(ctx: LoginContext): Promise<void> {
   try {
-    const { browser, os, label } = describeDevice(ctx.userAgent);
+    const { browser, os, label, deviceName, deviceType, osWithVersion } = describeDevice(ctx.userAgent);
 
     // Device recording only makes sense for a login that actually succeeded.
     // Marking a device "known" on a failed password attempt would let an
@@ -192,17 +184,16 @@ export async function notifyLogin(ctx: LoginContext): Promise<void> {
       }
     }
 
-    // Build the GPS location string from coordinates when available.
-    const gpsLocation =
-      ctx.latitude != null && ctx.longitude != null
-        ? `${ctx.latitude.toFixed(6)}, ${ctx.longitude.toFixed(6)}`
-        : null;
+    // Resolve the human-readable location from GPS for the email.
+    // This is an independent Nominatim call from the one in enrichSessionLocation;
+    // both run fire-and-forget so we cannot share the result without awaiting.
+    // Two calls per login is well within Nominatim's 1 req/s policy.
+    let resolvedLocation: string | null = null;
+    if (ctx.latitude != null && ctx.longitude != null) {
+      resolvedLocation = await reverseGeocode(ctx.latitude, ctx.longitude);
+    }
 
-    // Combine IP-based and GPS location for display.
     const ipLocation = resolveApproximateLocation(ctx.ip);
-    const displayLocation = gpsLocation
-      ? `GPS: ${gpsLocation} | IP: ${ipLocation}`
-      : ipLocation;
 
     const alertInput = {
       name: ctx.name,
@@ -213,11 +204,11 @@ export async function notifyLogin(ctx: LoginContext): Promise<void> {
       time,
       timezone,
       browser,
-      operatingSystem: os,
-      device: device.label,
-      deviceType: deviceTypeOf(ctx.userAgent),
+      operatingSystem: osWithVersion,
+      device: deviceName,
+      deviceType,
       ipAddress: (ctx.ip || "unknown").split(",")[0].trim(),
-      location: displayLocation,
+      location: resolvedLocation || ipLocation,
       status: ctx.status,
       sessionId: ctx.sessionId,
       // Password is the only sign-in method this CRM has. Reported literally
@@ -234,6 +225,8 @@ export async function notifyLogin(ctx: LoginContext): Promise<void> {
       secureUrl,
       latitude: ctx.latitude ?? null,
       longitude: ctx.longitude ?? null,
+      accuracy: ctx.accuracy ?? null,
+      ipLocation,
     };
 
     // The service picks the email type from `status` and `isNewDevice`, applies

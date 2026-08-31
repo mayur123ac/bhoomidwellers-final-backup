@@ -64,6 +64,25 @@ export interface BookingClaim {
   bookingAmount: number | null;
   bookingAmountRaw: string | null;
   bookingReference: string | null;
+  // ── Phase 2 additions ──────────────────────────────────────────────────────
+  // OCR amount from the client Excel ("OCR Amount" / "On-Collection Receipt").
+  // Distinct from bookingAmount: bookingAmount is the token / booking cheque;
+  // ocrAmount is the On-Collection Receipt payment that populates
+  // booking_financials.ocr_amount in the CRM.
+  ocrAmount: number | null;
+  ocrAmountRaw: string | null;
+  // Flat / unit identifier as a raw string. null when absent from the sheet.
+  // Stored as-is; Phase 5 will decide whether to pre-fill flat_number on the
+  // created booking_applications row or mark flatAllocationStatus = PENDING.
+  flatNumber: string | null;
+  // ── Phase 7 additions ──────────────────────────────────────────────────────
+  // Property identity fields used by syncBookingUnit to locate the inventory
+  // row for the booked unit. All four are nullable; syncBookingUnit skips
+  // gracefully when project_name / tower / flat_number cannot be resolved.
+  projectName: string | null;
+  tower: string | null;
+  wing: string | null;
+  floorNumber: string | null;
 }
 
 export interface ExtendedParseResult {
@@ -167,6 +186,8 @@ const BOOKING_FIELDS = [
   "booking_date",
   "booking_amount",
   "booking_reference",
+  "ocr_amount",
+  "flat_number",
 ] as const;
 
 function isBookingField(field: string): boolean {
@@ -416,6 +437,22 @@ export function parseWithMapping(
 
       const bookingReference = cellToString(mapped.booking_reference) || null;
 
+      // Phase 2: OCR amount — the On-Collection Receipt payment.
+      // Parsed from whatever the client labelled "OCR Amount", "OCR", etc.
+      const ocrRaw = cellToString(mapped.ocr_amount);
+      const ocrAmount = ocrRaw ? parseNumericAmount(ocrRaw) : null;
+
+      // Phase 2: Flat number — stored verbatim; never fabricated from other fields.
+      const flatNumber = cellToString(mapped.flat_number) || null;
+
+      // Phase 7: Property identity fields for syncBookingUnit.
+      // Extracted verbatim from whatever columns the client labelled as
+      // project/tower/wing/floor. All four are null when absent or blank.
+      const projectName = cellToString(mapped.project_name) || null;
+      const tower = cellToString(mapped.tower) || null;
+      const wing = cellToString(mapped.wing) || null;
+      const floorNumber = cellToString(mapped.floor_number) || null;
+
       bookingClaims.push({
         rowIndex: rowNum,
         claimedBooked,
@@ -423,6 +460,13 @@ export function parseWithMapping(
         bookingAmount,
         bookingAmountRaw: amountRaw || null,
         bookingReference,
+        ocrAmount,
+        ocrAmountRaw: ocrRaw || null,
+        flatNumber,
+        projectName,
+        tower,
+        wing,
+        floorNumber,
       });
     }
 

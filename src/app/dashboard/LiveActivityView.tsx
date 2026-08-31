@@ -22,6 +22,8 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
     activeLead: true,
     loginDate: true,
     loginTime: true,
+    location: true,
+    device: true,
     punctuality: true,
     logoutTime: true,
     liveTimer: true,
@@ -551,6 +553,8 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
               { key: "activeLead", label: "Active Lead" },
               { key: "loginDate", label: "Login Date" },
               { key: "loginTime", label: "Login Time" },
+              { key: "location", label: "Location" },
+              { key: "device", label: "Device" },
               { key: "punctuality", label: "Punctuality" },
               { key: "logoutTime", label: "Logout Time" },
               { key: "liveTimer", label: "Live Timer" },
@@ -586,6 +590,8 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
                       {visibleColumns.activeLead && <th className="px-2.5 sm:px-3 py-2 font-bold">Active Lead</th>}
                       {visibleColumns.loginDate && <th className="px-2.5 sm:px-3 py-2 font-bold">Login Date</th>}
                       {visibleColumns.loginTime && <th className="px-2.5 sm:px-3 py-2 font-bold">Login Time</th>}
+                      {visibleColumns.location && <th className="px-2.5 sm:px-3 py-2 font-bold">Location</th>}
+                      {visibleColumns.device && <th className="px-2.5 sm:px-3 py-2 font-bold">Device</th>}
                       {visibleColumns.punctuality && <th className="px-2.5 sm:px-3 py-2 font-bold">Punctuality</th>}
                       {visibleColumns.logoutTime && <th className="px-2.5 sm:px-3 py-2 font-bold">Logout Time</th>}
                       {visibleColumns.liveTimer && <th className="px-2.5 sm:px-3 py-2 font-bold">Live Timer</th>}
@@ -599,7 +605,7 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
                   <tbody>
                     {isFutureDate ? (
                       <tr>
-                        <td colSpan={12} className="py-12 sm:py-16 text-center">
+                        <td colSpan={13} className="py-12 sm:py-16 text-center">
                           <div className="flex flex-col items-center gap-2">
                             <span className="text-3xl sm:text-4xl">📅</span>
                             <p className={`text-xs sm:text-sm font-bold ${theme.text}`}>No Data Available</p>
@@ -610,9 +616,9 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
                         </td>
                       </tr>
                     ) : isLoading ? (
-                      <tr><td colSpan={12} className="py-8 text-center text-xs sm:text-sm">Loading telemetry...</td></tr>
+                      <tr><td colSpan={13} className="py-8 text-center text-xs sm:text-sm">Loading telemetry...</td></tr>
                     ) : sessions.length === 0 ? (
-                      <tr><td colSpan={12} className="py-8 text-center text-xs sm:text-sm">No operational data.</td></tr>
+                      <tr><td colSpan={13} className="py-8 text-center text-xs sm:text-sm">No operational data.</td></tr>
                     ) : (
                       sessions.map((s, i) => (
                         <React.Fragment key={i}>
@@ -642,6 +648,25 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
                             {visibleColumns.loginTime && (
                               <td className={`px-2.5 sm:px-3 py-2 sm:py-2.5 border-b ${theme.textMuted} ${theme.tableBorder}`}>
                                 {s.session_start ? new Date(s.session_start).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Kolkata' }) : '-'}
+                              </td>
+                            )}
+                            {visibleColumns.location && (
+                              <td className={`px-2.5 sm:px-3 py-2 sm:py-2.5 border-b ${theme.textMuted} ${theme.tableBorder}`}>
+                                {s.login_location_name
+                                  ? <span title={s.login_latitude != null ? `${Number(s.login_latitude).toFixed(6)}, ${Number(s.login_longitude).toFixed(6)}` : undefined}>{s.login_location_name}</span>
+                                  : s.login_latitude != null && s.login_longitude != null
+                                    ? <span className="font-mono">{`${Number(s.login_latitude).toFixed(4)}, ${Number(s.login_longitude).toFixed(4)}`}</span>
+                                    : <span className={theme.textFaint}>—</span>}
+                              </td>
+                            )}
+                            {visibleColumns.device && (
+                              <td className={`px-2.5 sm:px-3 py-2 sm:py-2.5 border-b ${theme.textMuted} ${theme.tableBorder}`}>
+                                {s.login_device_name ? (
+                                  <div className="leading-tight">
+                                    <span className={`font-medium ${theme.text}`}>{s.login_device_name}</span>
+                                    {s.login_os && <><br/><span className="text-[10px] sm:text-[11px]">{s.login_os}</span></>}
+                                  </div>
+                                ) : <span className={theme.textFaint}>—</span>}
                               </td>
                             )}
                             {visibleColumns.punctuality && (
@@ -697,8 +722,9 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
                                           <div><span className={theme.textMuted}>Login:</span> <span className={theme.text}>{new Date(h.session_start).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })}</span></div>
                                           <div><span className={theme.textMuted}>Logout:</span> <span className={`font-bold ${h.is_active ? 'text-green-500' : theme.text}`}>{h.is_active ? "User Active" : (h.session_end ? new Date(h.session_end).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' }) : "N/A")}</span></div>
                                           <div><span className={theme.textMuted}>Duration:</span> <span className={`font-mono ${theme.text}`}>{getWorkingHours(h.session_start, h.session_end, h.is_active)}</span></div>
-                                          <div><span className={theme.textMuted}>Device:</span> <span className={theme.text}>{h.device_info || '-'}</span></div>
-                                          <div className="col-span-2 sm:col-span-4"><span className={theme.textMuted}>IP:</span> <span className={theme.text}>{h.ip_address || '-'}</span></div>
+                                          <div><span className={theme.textMuted}>Device:</span> <span className={theme.text}>{h.login_device_name ? `${h.login_device_name}${h.login_os ? ` / ${h.login_os}` : ''}` : (h.device_info || '-')}</span></div>
+                                          <div><span className={theme.textMuted}>Location:</span> <span className={theme.text}>{h.login_location_name ? h.login_location_name : h.login_latitude != null && h.login_longitude != null ? <span className="font-mono">{`${Number(h.login_latitude).toFixed(4)}, ${Number(h.login_longitude).toFixed(4)}`}</span> : '—'}</span></div>
+                                          <div><span className={theme.textMuted}>IP:</span> <span className={theme.text}>{h.ip_address || '-'}</span></div>
                                         </div>
                                       </div>
                                     ))}
@@ -781,8 +807,47 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
                             <p className={`font-medium text-[9px] sm:text-[10px] ${theme.text}`}>{selectedUser.ip_address || 'Unknown'}</p>
                           </div>
                           <div className="col-span-2">
-                            <p className={`text-[8px] sm:text-[9px] ${theme.textFaint}`}>Device / Browser</p>
-                            <p className={`font-medium text-[9px] sm:text-[10px] ${theme.text}`}>{selectedUser.device_info || 'Unknown Device'}</p>
+                            <p className={`text-[8px] sm:text-[9px] ${theme.textFaint}`}>Login Location</p>
+                            {selectedUser.login_location_name || (selectedUser.login_latitude != null && selectedUser.login_longitude != null) ? (
+                              <div>
+                                {selectedUser.login_location_name && (
+                                  <p className={`font-medium text-[9px] sm:text-[10px] ${theme.text}`}>
+                                    {selectedUser.login_location_name}
+                                  </p>
+                                )}
+                                {selectedUser.login_latitude != null && selectedUser.login_longitude != null && (
+                                  <p className={`font-mono text-[8px] sm:text-[9px] ${selectedUser.login_location_name ? theme.textFaint : `font-medium ${theme.text}`}`}>
+                                    {Number(selectedUser.login_latitude).toFixed(6)}, {Number(selectedUser.login_longitude).toFixed(6)}
+                                    {selectedUser.login_location_accuracy != null && (
+                                      <span className={theme.textFaint}>{` (±${Math.round(Number(selectedUser.login_location_accuracy))}m)`}</span>
+                                    )}
+                                  </p>
+                                )}
+                                {selectedUser.session_start && (
+                                  <p className={`text-[8px] ${theme.textFaint}`}>
+                                    {new Date(selectedUser.session_start).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })} at {new Date(selectedUser.session_start).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Kolkata' })}
+                                  </p>
+                                )}
+                              </div>
+                            ) : (
+                              <p className={`font-medium text-[9px] sm:text-[10px] ${theme.textFaint}`}>—</p>
+                            )}
+                          </div>
+                          <div>
+                            <p className={`text-[8px] sm:text-[9px] ${theme.textFaint}`}>Device</p>
+                            <p className={`font-medium text-[9px] sm:text-[10px] ${theme.text}`}>{selectedUser.login_device_name || selectedUser.device_info || 'Unknown Device'}</p>
+                          </div>
+                          <div>
+                            <p className={`text-[8px] sm:text-[9px] ${theme.textFaint}`}>Device Type</p>
+                            <p className={`font-medium text-[9px] sm:text-[10px] ${theme.text}`}>{selectedUser.login_device_type || '—'}</p>
+                          </div>
+                          <div>
+                            <p className={`text-[8px] sm:text-[9px] ${theme.textFaint}`}>Operating System</p>
+                            <p className={`font-medium text-[9px] sm:text-[10px] ${theme.text}`}>{selectedUser.login_os || '—'}</p>
+                          </div>
+                          <div>
+                            <p className={`text-[8px] sm:text-[9px] ${theme.textFaint}`}>Browser</p>
+                            <p className={`font-medium text-[9px] sm:text-[10px] ${theme.text}`}>{selectedUser.login_browser || '—'}</p>
                           </div>
                         </div>
                       </div>

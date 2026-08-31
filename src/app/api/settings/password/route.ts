@@ -13,6 +13,7 @@ import { requestContext, writeAuditLog } from "@/lib/auditLog";
 import { checkPasswordRules, hashPassword, passwordMeetsRules, verifyPassword } from "@/lib/passwords";
 import { sessionRevocationNow } from "@/lib/passwordReset";
 import { EmailService } from "@/lib/email/EmailService";
+import { hasPermission } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,20 @@ export async function POST(req: NextRequest) {
   const orgId = await getOrganizationId();
   if (!gate.userId) {
     return NextResponse.json({ success: false, message: "Session carries no user id." }, { status: 400 });
+  }
+
+  // Permission check — admin can disable self-service password changes for any
+  // employee. This gates both password-change paths (current-password and OTP).
+  const canChange = await hasPermission(gate.userId, "can_change_password");
+  if (!canChange) {
+    return NextResponse.json(
+      {
+        success: false,
+        message:
+          "Password changes are disabled for your account. Contact your administrator.",
+      },
+      { status: 403 }
+    );
   }
 
   let body: Record<string, unknown>;

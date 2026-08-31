@@ -313,6 +313,15 @@ export default function EmployeesPage() {
   const [editForm, setEditForm] = useState<Partial<EmployeeType>>({});
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState("");
+
+  // ── Change Password (OTP-gated) ──
+  const [changePwEmp, setChangePwEmp] = useState<EmployeeType | null>(null);
+  const [cpStep, setCpStep] = useState<"request" | "confirm">("request");
+  const [cpOtp, setCpOtp] = useState("");
+  const [cpNewPwd, setCpNewPwd] = useState("");
+  const [cpConfPwd, setCpConfPwd] = useState("");
+  const [cpError, setCpError] = useState("");
+  const [cpLoading, setCpLoading] = useState(false);
   const [selectedManageUserId, setSelectedManageUserId] = useState("");
   const topbarRef = useRef<HTMLDivElement>(null);
   // 👇 1. CLEAN NOTIFICATION STATES 👇
@@ -666,19 +675,10 @@ export default function EmployeesPage() {
     else { const d = await r.json(); alert(`Error: ${d.message}`); }
   };
 
-  const handleEditStart = (emp: EmployeeType) => { setEditingId(emp._id); setEditError(""); setEditForm({ name: emp.name, email: emp.email, password: emp.password || "", role: emp.role }); };
+  const handleEditStart = (emp: EmployeeType) => { setEditingId(emp._id); setEditError(""); setEditForm({ name: emp.name, email: emp.email, role: emp.role }); };
   const handleEditCancel = () => { setEditingId(null); setEditForm({}); setEditError(""); };
   const handleEditSave = async (userId: string) => {
     setEditSaving(true); setEditError("");
-    if (editForm.password) {
-      const editRules = validatePassword(editForm.password);
-      const isValid = editRules.length && editRules.upper && editRules.lower && editRules.number && editRules.special;
-      if (!isValid) {
-        setEditError("Password does not meet security requirements");
-        setEditSaving(false);
-        return;
-      }
-    }
     try {
       const r = await fetch("/api/employees", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId, editData: editForm }) });
       const d = await r.json();
@@ -687,7 +687,56 @@ export default function EmployeesPage() {
     } catch { setEditError("Something went wrong."); }
     finally { setEditSaving(false); }
   };
-  const toggleRowPassword = (id: string) => setRevealedPasswords(p => ({ ...p, [id]: !p[id] }));
+
+  // ── Change Password handlers ──
+  const openChangePwModal = (emp: EmployeeType) => {
+    setChangePwEmp(emp);
+    setCpStep("request"); setCpOtp(""); setCpNewPwd(""); setCpConfPwd(""); setCpError("");
+  };
+  const closeChangePwModal = () => {
+    setChangePwEmp(null);
+    setCpStep("request"); setCpOtp(""); setCpNewPwd(""); setCpConfPwd(""); setCpError("");
+  };
+  const handleCpRequestOtp = async () => {
+    if (!changePwEmp) return;
+    setCpLoading(true); setCpError("");
+    try {
+      const r = await fetch("/api/admin/password-change/request-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetUserId: Number(changePwEmp._id) }),
+      });
+      const d = await r.json();
+      if (r.ok) setCpStep("confirm");
+      else setCpError(d.message || "Failed to send verification code.");
+    } catch { setCpError("Network error. Please try again."); }
+    finally { setCpLoading(false); }
+  };
+  const handleCpConfirm = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!changePwEmp) return;
+    const rules = validatePassword(cpNewPwd);
+    if (!(rules.length && rules.upper && rules.lower && rules.number && rules.special)) {
+      setCpError("Password does not meet requirements."); return;
+    }
+    if (cpNewPwd !== cpConfPwd) { setCpError("Passwords do not match."); return; }
+    setCpLoading(true); setCpError("");
+    try {
+      const r = await fetch("/api/admin/password-change/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetUserId: Number(changePwEmp._id), otp: cpOtp, newPassword: cpNewPwd }),
+      });
+      const d = await r.json();
+      if (r.ok) {
+        showToast(`Password changed for ${changePwEmp.name}`);
+        closeChangePwModal();
+      } else {
+        setCpError(d.message || "Failed to change password.");
+      }
+    } catch { setCpError("Network error. Please try again."); }
+    finally { setCpLoading(false); }
+  };
 
   // ── Transfer Leads handler ──
   const handleTransferLeads = async () => {
@@ -1439,8 +1488,8 @@ export default function EmployeesPage() {
                   <table className="w-full text-left text-sm">
                     <thead className={`text-xs uppercase ${t.tableHead} ${t.tableHeadBdr}`}>
                       <tr>
-                        {["Name", "Email", "Password", "Assigned Role", "Status", "Actions"].map(h => (
-                          <th key={h} className={`px-6 py-4 font-semibold ${t.tableHeadText} ${h === "Status" || h === "Actions" ? "text-center" : ""}`}>{h}</th>
+                        {["Name", "Email", "Change Pwd", "Assigned Role", "Status", "Actions"].map(h => (
+                          <th key={h} className={`px-6 py-4 font-semibold ${t.tableHeadText} ${h === "Status" || h === "Actions" || h === "Change Pwd" ? "text-center" : ""}`}>{h}</th>
                         ))}
                       </tr>
                     </thead>
@@ -1468,15 +1517,16 @@ export default function EmployeesPage() {
                                 : emp.email
                               }
                             </td>
-                            {/* Password */}
-                            <td className="px-5 py-3.5">
-                              {isEditing
-                                ? <input value={editForm.password || ""} onChange={e => setEditForm(p => ({ ...p, password: e.target.value }))} className={t.editInp} />
-                                : <div className="flex items-center gap-3">
-                                  <span className={`font-mono tracking-wider ${t.textLight}`}>{isRevealed ? (emp.password || "N/A") : "••••••••"}</span>
-                                  <button onClick={() => toggleRowPassword(emp._id)} className={`${t.textMuted} hover:text-[#9E217B] cursor-pointer`}><FaEyeSlash /></button>
-                                </div>
-                              }
+                            {/* Change Password */}
+                            <td className="px-5 py-3.5 text-center">
+                              {!isEditing && !isAdminUser && (
+                                <button
+                                  onClick={() => openChangePwModal(emp)}
+                                  title="Change password"
+                                  className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-colors cursor-pointer ${isDark ? "border-[#333] text-gray-400 hover:text-[#d946a8] hover:border-[#9E217B]/40 hover:bg-[#9E217B]/10" : "border-gray-200 text-gray-400 hover:text-[#9E217B] hover:border-[#9E217B]/30 hover:bg-[#9E217B]/5"}`}>
+                                  <FaLock className="text-[10px]" /> Change
+                                </button>
+                              )}
                             </td>
                             {/* Role */}
                             <td className="px-5 py-3.5">
@@ -2276,6 +2326,106 @@ export default function EmployeesPage() {
         }
       `}} />
       <AdminAssistantDock theme={t} isDark={isDark} />
+
+      {/* ── Change Password Modal (OTP-gated) ─────────────────────────────── */}
+      {changePwEmp && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className={`w-full max-w-sm mx-4 rounded-2xl shadow-2xl p-6 relative ${isDark ? "bg-[#1a1a1a] border border-[#333] text-gray-100" : "bg-white border border-gray-200 text-gray-800"}`}>
+            <button onClick={closeChangePwModal} className={`absolute top-4 right-4 transition-colors cursor-pointer ${isDark ? "text-gray-500 hover:text-gray-300" : "text-gray-400 hover:text-gray-600"}`}>
+              <FaTimes />
+            </button>
+            <div className="flex items-center gap-2 mb-1">
+              <FaLock className={`text-sm ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`} />
+              <h3 className="text-base font-bold">Change Password</h3>
+            </div>
+            <p className={`text-sm mb-4 ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+              Employee: <strong className={isDark ? "text-gray-200" : "text-gray-700"}>{changePwEmp.name}</strong>
+            </p>
+
+            {cpStep === "request" ? (
+              <div className="space-y-4">
+                <p className={`text-sm leading-relaxed ${isDark ? "text-gray-300" : "text-gray-600"}`}>
+                  A 6-digit verification code will be sent to your admin email to confirm this action.
+                </p>
+                {cpError && <p className="text-red-500 text-xs font-medium">{cpError}</p>}
+                <button
+                  onClick={handleCpRequestOtp}
+                  disabled={cpLoading}
+                  className="w-full bg-[#9E217B] hover:bg-[#b8268f] disabled:opacity-50 text-white text-sm font-bold py-2.5 rounded-xl transition-colors cursor-pointer">
+                  {cpLoading ? "Sending..." : "Send Verification Code"}
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleCpConfirm} className="space-y-3">
+                <div>
+                  <label className={`block text-xs mb-1 font-medium ${isDark ? "text-gray-400" : "text-gray-500"}`}>Verification Code</label>
+                  <input
+                    type="text"
+                    value={cpOtp}
+                    onChange={e => setCpOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    placeholder="6-digit code"
+                    maxLength={6}
+                    className={`w-full px-3 py-2 rounded-lg border text-sm font-mono tracking-widest text-center outline-none focus:ring-2 focus:ring-[#9E217B]/40 ${isDark ? "bg-[#111] border-[#333] text-white" : "bg-gray-50 border-gray-200 text-gray-800"}`}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className={`block text-xs mb-1 font-medium ${isDark ? "text-gray-400" : "text-gray-500"}`}>New Password</label>
+                  <input
+                    type="password"
+                    value={cpNewPwd}
+                    onChange={e => setCpNewPwd(e.target.value)}
+                    placeholder="New password"
+                    className={`w-full px-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#9E217B]/40 ${isDark ? "bg-[#111] border-[#333] text-white" : "bg-gray-50 border-gray-200 text-gray-800"}`}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className={`block text-xs mb-1 font-medium ${isDark ? "text-gray-400" : "text-gray-500"}`}>Confirm Password</label>
+                  <input
+                    type="password"
+                    value={cpConfPwd}
+                    onChange={e => setCpConfPwd(e.target.value)}
+                    placeholder="Confirm password"
+                    className={`w-full px-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#9E217B]/40 ${isDark ? "bg-[#111] border-[#333] text-white" : "bg-gray-50 border-gray-200 text-gray-800"}`}
+                    required
+                  />
+                </div>
+                {cpNewPwd.length > 0 && (() => {
+                  const r = validatePassword(cpNewPwd);
+                  return (
+                    <div className={`text-[10px] space-y-0.5 p-2 rounded-lg border ${isDark ? "bg-white/5 border-gray-800" : "bg-black/5 border-gray-200"}`}>
+                      {(["length","upper","lower","number","special"] as const).map(k => ({
+                        length: "Min 8 chars", upper: "1 uppercase",
+                        lower: "1 lowercase", number: "1 number", special: "1 symbol"
+                      })[k] && (
+                        <p key={k} className={r[k] ? "text-green-500 font-semibold" : "text-red-500"}>
+                          {r[k] ? "✅" : "❌"} {({ length: "Min 8 chars", upper: "1 uppercase", lower: "1 lowercase", number: "1 number", special: "1 symbol" })[k]}
+                        </p>
+                      ))}
+                    </div>
+                  );
+                })()}
+                {cpError && <p className="text-red-500 text-xs font-medium">{cpError}</p>}
+                <div className="flex gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => { setCpStep("request"); setCpOtp(""); setCpError(""); }}
+                    className={`flex-1 text-xs font-semibold py-2 rounded-xl border transition-colors cursor-pointer ${isDark ? "bg-[#222] border-[#333] text-gray-300 hover:bg-[#2a2a2a]" : "bg-gray-100 border-gray-200 text-gray-600 hover:bg-gray-200"}`}>
+                    Resend Code
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={cpLoading}
+                    className="flex-1 bg-[#9E217B] hover:bg-[#b8268f] disabled:opacity-50 text-white text-xs font-bold py-2 rounded-xl transition-colors cursor-pointer">
+                    {cpLoading ? "Saving..." : "Change Password"}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

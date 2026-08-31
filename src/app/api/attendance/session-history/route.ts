@@ -21,14 +21,22 @@ export async function GET(req: Request) {
     }
 
     let queryStr = `
-      SELECT 
-        id, 
-        session_start, 
-        session_end, 
+      SELECT
+        id,
+        session_start,
+        session_end,
         is_active,
-        ip_address, 
-        device_info, 
+        ip_address,
+        device_info,
         session_end_reason,
+        login_latitude,
+        login_longitude,
+        login_location_name,
+        login_location_accuracy,
+        login_device_name,
+        login_device_type,
+        login_os,
+        login_browser,
         EXTRACT(EPOCH FROM (COALESCE(session_end, NOW()) - session_start)) as session_duration_seconds
       FROM employee_sessions
       WHERE user_id = $1 AND organization_id = $2

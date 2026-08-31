@@ -129,6 +129,10 @@ export interface LoginAlertInput {
   /** GPS coordinates captured at login (mandatory for successful logins). */
   latitude?: number | null;
   longitude?: number | null;
+  /** Browser-reported GPS accuracy in meters. */
+  accuracy?: number | null;
+  /** IP-derived approximate location (kept separate from GPS location). */
+  ipLocation?: string | null;
 }
 
 export function loginAlertTemplate(d: LoginAlertInput): Template {
@@ -138,6 +142,23 @@ export function loginAlertTemplate(d: LoginAlertInput): Template {
       ? "Failed login attempt - Bhoomi CRM"
       : "New login detected - Bhoomi CRM";
 
+  const deviceRows: DetailRow[] = [
+    { label: "Device", value: d.device },
+    { label: "Device type", value: d.deviceType },
+    { label: "Operating system", value: d.operatingSystem },
+    { label: "Browser", value: d.browser },
+  ];
+
+  const locationRows: DetailRow[] = [
+    { label: "Login location", value: d.location },
+    ...(d.latitude != null && d.longitude != null
+      ? [{ label: "GPS coordinates", value: `${d.latitude.toFixed(6)}, ${d.longitude.toFixed(6)}` }]
+      : []),
+    ...(d.accuracy != null
+      ? [{ label: "GPS accuracy", value: `±${Math.round(d.accuracy)} meters` }]
+      : []),
+  ];
+
   const rows: DetailRow[] = [
     { label: "Status", value: d.status },
     { label: "Employee name", value: d.name },
@@ -146,15 +167,8 @@ export function loginAlertTemplate(d: LoginAlertInput): Template {
     { label: "Organization", value: d.organization },
     { label: "Date & time", value: `${d.date} at ${d.time}` },
     { label: "Timezone", value: d.timezone },
-    { label: "Browser", value: d.browser },
-    { label: "Operating system", value: d.operatingSystem },
-    { label: "Device", value: d.device },
-    { label: "Device type", value: d.deviceType },
     { label: "IP address", value: d.ipAddress },
-    { label: "Approximate location", value: d.location },
-    ...(d.latitude != null && d.longitude != null
-      ? [{ label: "GPS coordinates", value: `${d.latitude.toFixed(6)}, ${d.longitude.toFixed(6)}` }]
-      : []),
+    ...(d.ipLocation ? [{ label: "Approximate IP location", value: d.ipLocation }] : []),
     { label: "Session ID", value: d.sessionId ?? "—" },
     { label: "Login method", value: d.loginMethod },
     { label: "Signed in using", value: `${d.loginEmail} (${d.loginEmailKind})` },
@@ -209,6 +223,11 @@ ${button("Yes, this was me", d.confirmUrl)}
 ${warning}
 ${p(`Hi ${d.name},`)}
 ${p(`A sign-in to ${d.organization} on Bhoomi Dwellers CRM was recorded.`)}
+<p style="margin:22px 0 6px;font-size:13px;font-weight:700;color:#1A1A1A;">Login location</p>
+${detailTable(locationRows)}
+<p style="margin:22px 0 6px;font-size:13px;font-weight:700;color:#1A1A1A;">Login device</p>
+${detailTable(deviceRows)}
+<p style="margin:22px 0 6px;font-size:13px;font-weight:700;color:#1A1A1A;">Login information</p>
 ${detailTable(rows)}
 <p style="margin:22px 0 6px;font-size:13px;font-weight:700;color:#1A1A1A;">Account addresses on file</p>
 ${detailTable(addresses)}
@@ -219,6 +238,16 @@ ${delivered}
     bodyText: `${d.isNewDevice ? "** NEW DEVICE DETECTED **\n\n" : ""}Hi ${d.name},
 
 A sign-in to ${d.organization} on Bhoomi Dwellers CRM was recorded.
+
+LOGIN LOCATION
+
+${detailText(locationRows)}
+
+LOGIN DEVICE
+
+${detailText(deviceRows)}
+
+LOGIN INFORMATION
 
 ${detailText(rows)}
 

@@ -635,6 +635,12 @@ export interface DeviceDescription {
   browser: string;
   os: string;
   label: string;
+  /** Human-readable device name: "iPhone", "Samsung", "Windows PC", etc. */
+  deviceName: string;
+  /** "Mobile", "Tablet", or "Desktop". */
+  deviceType: "Mobile" | "Tablet" | "Desktop";
+  /** OS with version when detectable: "Android 15", "iOS 18.1", "macOS 14.0". */
+  osWithVersion: string;
 }
 
 /** Human-readable browser and OS, for the login email. */
@@ -660,7 +666,106 @@ export function describeDevice(userAgent: string): DeviceDescription {
   else if (/android/i.test(ua)) os = "Android";
   else if (/linux/i.test(ua)) os = "Linux";
 
-  return { browser, os, label: `${os} / ${browser}` };
+  return {
+    browser,
+    os,
+    label: `${os} / ${browser}`,
+    deviceName: extractDeviceName(ua),
+    deviceType: classifyDeviceType(ua),
+    osWithVersion: extractOsWithVersion(ua, os),
+  };
+}
+
+/* ── Device name ──────────────────────────────────────────────────────── */
+
+/**
+ * Extract a human-readable device name from a User-Agent string.
+ *
+ * For Android, the UA often contains a model identifier between
+ * "Android X.Y; " and " Build/" — e.g. "SM-S918B", "CPH2505", "Pixel 8".
+ * Known manufacturer prefixes are mapped to brand names; everything else
+ * falls back to "Android Device" rather than guessing.
+ */
+function extractDeviceName(ua: string): string {
+  if (/iphone/i.test(ua)) return "iPhone";
+  if (/ipad/i.test(ua)) return "iPad";
+  if (/ipod/i.test(ua)) return "iPod";
+
+  if (/android/i.test(ua)) {
+    const m = ua.match(/Android\s+[\d.]+;\s*([^;)]+?)(?:\s+Build\/|\))/i);
+    if (m) {
+      const raw = m[1].trim();
+      // Known manufacturer prefixes → brand. Only the brand is claimed; the
+      // model code (CPH2505, SM-S918B) stays as-is because mapping it to a
+      // marketing name ("Reno 12", "Galaxy S24") requires a lookup table we
+      // do not have, and guessing wrong is worse than not guessing.
+      if (/^SM-/i.test(raw)) return "Samsung";
+      if (/samsung/i.test(raw)) return "Samsung";
+      if (/^CPH/i.test(raw) || /oppo/i.test(raw)) return "OPPO";
+      if (/^RMX/i.test(raw) || /realme/i.test(raw)) return "realme";
+      if (/pixel/i.test(raw)) return `Google ${raw}`;
+      if (/redmi/i.test(raw)) return raw;
+      if (/poco/i.test(raw)) return raw;
+      if (/oneplus/i.test(raw)) return raw;
+      if (/vivo/i.test(raw)) return "vivo";
+      if (/huawei/i.test(raw)) return "Huawei";
+      if (/motorola|moto\s/i.test(raw)) return raw;
+      if (/nokia/i.test(raw)) return raw;
+      if (/xiaomi/i.test(raw)) return "Xiaomi";
+    }
+    return "Android Device";
+  }
+
+  if (/windows/i.test(ua)) return "Windows PC";
+  if (/macintosh|mac os/i.test(ua)) return "Mac";
+  if (/linux/i.test(ua)) return "Linux PC";
+  return "Unknown Device";
+}
+
+/* ── Device type ──────────────────────────────────────────────────────── */
+
+function classifyDeviceType(ua: string): "Mobile" | "Tablet" | "Desktop" {
+  // Tablet before phone: an iPad UA contains neither "Mobile" nor "iPhone" in
+  // desktop mode, but an Android tablet UA contains "Android" without "Mobile".
+  if (/ipad|tablet|playbook|silk/i.test(ua)) return "Tablet";
+  if (/android/i.test(ua) && !/mobile/i.test(ua)) return "Tablet";
+  if (/mobile|iphone|ipod|windows phone/i.test(ua)) return "Mobile";
+  return "Desktop";
+}
+
+/* ── OS with version ──────────────────────────────────────────────────── */
+
+function extractOsWithVersion(ua: string, osBase: string): string {
+  // Android: "Android 15" or "Android 14.0"
+  const androidVer = ua.match(/Android\s+([\d.]+)/i);
+  if (androidVer) return `Android ${androidVer[1]}`;
+
+  // iOS: "CPU iPhone OS 18_1_1 like Mac OS X" → "iOS 18.1"
+  const iosVer = ua.match(/(?:iPhone|CPU)\s+OS\s+([\d_]+)/i);
+  if (iosVer) {
+    const parts = iosVer[1].split("_");
+    return `iOS ${parts.slice(0, 2).join(".")}`;
+  }
+
+  // macOS: "Mac OS X 14_0" → "macOS 14.0"  or  "Mac OS X 10_15_7" → "macOS 10.15"
+  const macVer = ua.match(/Mac OS X\s+([\d_.]+)/i);
+  if (macVer) {
+    const parts = macVer[1].replace(/_/g, ".").split(".");
+    return `macOS ${parts.slice(0, 2).join(".")}`;
+  }
+
+  // Windows: NT version → marketing name
+  const winVer = ua.match(/Windows NT\s+([\d.]+)/i);
+  if (winVer) {
+    const nt = winVer[1];
+    if (nt === "10.0") return "Windows 10/11";
+    if (nt === "6.3") return "Windows 8.1";
+    if (nt === "6.2") return "Windows 8";
+    if (nt === "6.1") return "Windows 7";
+    return `Windows (NT ${nt})`;
+  }
+
+  return osBase;
 }
 
 export interface DeviceCheck {
