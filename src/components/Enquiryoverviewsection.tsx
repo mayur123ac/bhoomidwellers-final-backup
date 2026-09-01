@@ -1171,12 +1171,6 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
                                                     : "bg-gray-100/60"
                                                 : "";
 
-                                    const returnedBg = isReturned
-                                        ? isDark
-                                            ? "bg-emerald-500/[0.07]"
-                                            : "bg-emerald-50/80"
-                                        : "";
-
                                     return (
                                         <tr
                                             key={lead.id}
@@ -1186,21 +1180,24 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
                                             }
                                             className={`
                         group cursor-pointer transition-colors duration-200
-                        ${returnedBg || zebra}
+                        ${zebra}
                         ${isSelected
                                                     ? isDark
                                                         ? "bg-[#9E217B]/[0.14]"
                                                         : "bg-[#9E217B]/[0.06]"
                                                     : isReturned
-                                                        ? isDark
-                                                            ? "hover:bg-emerald-500/[0.12]"
-                                                            : "hover:bg-emerald-100/80"
+                                                        ? ""
                                                         : isDark
                                                             ? "hover:bg-white/[0.045]"
                                                             : "hover:bg-[#9E217B]/[0.035]"
                                                 }
                       `}
-                                            style={lead.is_lost_lead ? { opacity: 0.55 } : undefined}
+                                            style={{
+                                                ...(lead.is_lost_lead ? { opacity: 0.55 } : undefined),
+                                                ...(isReturned && !isSelected
+                                                    ? { backgroundColor: isDark ? "rgba(16, 185, 129, 0.07)" : "#ecfdf5" }
+                                                    : undefined),
+                                            }}
                                         >
                                             {selectMode && (
                                                 <td
