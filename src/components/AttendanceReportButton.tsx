@@ -184,7 +184,7 @@ export default function AttendanceReportButton({ theme, isDark }: Props) {
           role="menu"
           className={`absolute right-0 top-full mt-2 w-[280px] rounded-xl border shadow-2xl z-50 overflow-hidden ${panelBg}`}
         >
-          <p className={`px-4 pt-3 pb-2 text-[10px] font-bold uppercase tracking-wider ${theme.textMuted}`}>
+          <p className={`px-4 pt-3 pb-2 crm-eyebrow ${theme.textMuted}`}>
             Download Attendance
           </p>
 

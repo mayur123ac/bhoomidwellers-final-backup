@@ -421,7 +421,7 @@ export default function AttendanceView({
             style={t.cardGlass}
           >
             <div className={`absolute -right-4 -top-4 w-16 h-16 rounded-full blur-xl pointer-events-none ${card.glow}`} />
-            <p className={`text-[10px] font-bold uppercase tracking-wider mb-2 ${t.textFaint}`}>{card.label}</p>
+            <p className={`crm-eyebrow mb-2 ${t.textFaint}`}>{card.label}</p>
             <p className={`text-sm font-black ${card.color}`}>{card.value}</p>
           </div>
         ))}
@@ -476,7 +476,7 @@ export default function AttendanceView({
                 ].map((h) => (
                   <th
                     key={h}
-                    className={`px-4 py-3 font-bold uppercase tracking-wider border-b text-xs ${t.tableBorder}`}
+                    className={`px-4 py-3 crm-eyebrow border-b ${t.tableBorder}`}
                   >
                     {h}
                   </th>

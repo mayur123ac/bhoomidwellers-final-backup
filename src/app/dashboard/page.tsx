@@ -123,7 +123,7 @@ const LoanDealForm = dynamic(() => import("@/components/LoanDealForm"), { ssr: f
 
 // ─── SUN/MOON ICONS ───────────────────────────────────────────────────────────
 const SunIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="12" cy="12" r="5" />
     <line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" />
     <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
@@ -132,7 +132,7 @@ const SunIcon = () => (
   </svg>
 );
 const MoonIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
   </svg>
 );
@@ -1046,14 +1046,14 @@ function AdminAtlasDashboardContent() {
         >
           <div className="flex items-center gap-4 flex-shrink-0 relative z-[50]" ref={topbarRef}>
             {/* Desktop-only controls: hidden on mobile */}
-            <div className="hidden md:flex items-center gap-3">
+            <div className="hidden md:flex items-center gap-4">
               <HeaderClock isDark={isDark} />
-              <button onClick={toggleTheme}
-                aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
-                aria-pressed={isDark}
-                className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center cursor-pointer justify-center shadow-sm ${theme.toggleWrap}`}>
+              <div
+                className={`w-5 h-5 flex items-center justify-center cursor-pointer ${isDark ? "text-gray-400" : "text-[#6B7280]"} hover:text-[#9E217B] transition-colors`}
+                onClick={toggleTheme} role="button"
+                aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}>
                 {isDark ? <SunIcon /> : <MoonIcon />}
-              </button>
+              </div>
             </div>
 
             {/* Attendance: visible on all screen sizes */}
@@ -1992,7 +1992,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                 }`}
               style={theme.cardGlass}
             >
-              <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider flex items-center justify-between gap-1 ${theme.textFaint}`}>
+              <p className={`crm-eyebrow flex items-center justify-between gap-1 ${theme.textFaint}`}>
                 <span className="truncate">{STAT_LABELS[id]}</span>
                 {isActive && <FaTimes className="w-2.5 h-2.5 opacity-70 shrink-0" />}
               </p>
@@ -2193,15 +2193,15 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
           {/* Stat cards */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className={`${theme.innerBlock} rounded-xl p-4 sm:p-5`} style={theme.settingsBgGl}>
-              <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-1 ${theme.textMuted}`}>Total Assigned</p>
+              <p className={`crm-eyebrow mb-1 ${theme.textMuted}`}>Total Assigned</p>
               <p className={`text-xl sm:text-2xl font-black ${theme.text}`}>{activeSiteHeadLeads.length}</p>
             </div>
             <div className={`${theme.innerBlock} rounded-xl p-4 sm:p-5`} style={theme.settingsBgGl}>
-              <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-1 ${theme.textMuted}`}>Site Visits</p>
+              <p className={`crm-eyebrow mb-1 ${theme.textMuted}`}>Site Visits</p>
               <p className="text-xl sm:text-2xl font-black text-orange-500">{siteHeadVisitCount}</p>
             </div>
             <div className={`${theme.innerBlock} rounded-xl p-4 sm:p-5`} style={theme.settingsBgGl}>
-              <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-1 ${theme.textMuted}`}>Loans Active</p>
+              <p className={`crm-eyebrow mb-1 ${theme.textMuted}`}>Loans Active</p>
               <p className={`text-xl sm:text-2xl font-black ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>
                 {activeSiteHeadLeads.filter((l: any) => l.loanPlanned === "Yes").length}
               </p>
@@ -2369,19 +2369,19 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
           {/* Stat cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
             <div className={`${theme.innerBlock} rounded-xl p-4 sm:p-5`} style={theme.settingsBgGl}>
-              <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-1 ${theme.textMuted}`}>Total Leads</p>
+              <p className={`crm-eyebrow mb-1 ${theme.textMuted}`}>Total Leads</p>
               <p className={`text-xl sm:text-2xl font-black ${theme.text}`}>{recepAllLeads.length}</p>
             </div>
             <div className={`${theme.innerBlock} rounded-xl p-4 sm:p-5`} style={theme.settingsBgGl}>
-              <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-1 ${theme.textMuted}`}>Assigned To</p>
+              <p className={`crm-eyebrow mb-1 ${theme.textMuted}`}>Assigned To</p>
               <p className="text-xl sm:text-2xl font-black text-[#00AEEF]">{recepAssignedLeads.length}</p>
             </div>
             <div className={`${theme.innerBlock} rounded-xl p-4 sm:p-5`} style={theme.settingsBgGl}>
-              <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-1 ${theme.textMuted}`}>Self-Managed</p>
+              <p className={`crm-eyebrow mb-1 ${theme.textMuted}`}>Self-Managed</p>
               <p className="text-xl sm:text-2xl font-black text-orange-500">{recepSelfLeads.length}</p>
             </div>
             <div className={`${theme.innerBlock} rounded-xl p-4 sm:p-5`} style={theme.settingsBgGl}>
-              <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-1 ${theme.textMuted}`}>Closed</p>
+              <p className={`crm-eyebrow mb-1 ${theme.textMuted}`}>Closed</p>
               <p className={`text-xl sm:text-2xl font-black ${isDark ? "text-yellow-400" : "text-amber-500"}`}>{recepClosed}</p>
             </div>
           </div>
@@ -2539,15 +2539,15 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
           {/* Stat cards */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className={`${theme.innerBlock} rounded-xl p-4 sm:p-5`} style={theme.settingsBgGl}>
-              <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-1 ${theme.textMuted}`}>Total Assigned</p>
+              <p className={`crm-eyebrow mb-1 ${theme.textMuted}`}>Total Assigned</p>
               <p className={`text-xl sm:text-2xl font-black ${theme.text}`}>{activeManagerLeads.length}</p>
             </div>
             <div className={`${theme.innerBlock} rounded-xl p-4 sm:p-5`} style={theme.settingsBgGl}>
-              <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-1 ${theme.textMuted}`}>Site Visits</p>
+              <p className={`crm-eyebrow mb-1 ${theme.textMuted}`}>Site Visits</p>
               <p className="text-xl sm:text-2xl font-black text-orange-500">{visitCount}</p>
             </div>
             <div className={`${theme.innerBlock} rounded-xl p-4 sm:p-5`} style={theme.settingsBgGl}>
-              <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-1 ${theme.textMuted}`}>Loans Active</p>
+              <p className={`crm-eyebrow mb-1 ${theme.textMuted}`}>Loans Active</p>
               <p className={`text-xl sm:text-2xl font-black ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>
                 {activeManagerLeads.filter((l: any) => l.loanPlanned === "Yes").length}
               </p>
@@ -3768,19 +3768,19 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                                     <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Loan Required?</p><p className={`font-semibold ${theme.text}`}>{loanDealLatest?.loan_required || selectedLead.loanPlanned || "Pending"}</p></div>
                                     <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Status</p><span className={`text-sm font-bold ${selectedLead.status === "Closing" ? "text-amber-500" : selectedLead.status === "Visit Scheduled" ? "text-orange-400" : theme.accentText}`}>{selectedLead.status || "Assigned"}</span></div>
                                     <div className={`col-span-2 p-3 rounded-xl border ${theme.settingsBg}`} style={theme.settingsBgGl}>
-                                      <p className={`text-xs font-bold uppercase tracking-wider mb-0.5 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>📍 Site Visit Date</p>
+                                      <p className={`crm-eyebrow mb-0.5 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>📍 Site Visit Date</p>
                                       <p className={`text-base font-black ${theme.text}`}>{selectedLead.mongoVisitDate ? formatDate(selectedLead.mongoVisitDate) : "Not Scheduled"}</p>
                                     </div>
                                     {selectedLead.is_lost_lead && (
                                       <div className={`col-span-2 p-3 rounded-xl border ${theme.statusLost}`}>
-                                        <p className="text-xs font-bold uppercase tracking-wider mb-1">Lost Lead Record</p>
+                                        <p className="crm-eyebrow mb-1">Lost Lead Record</p>
                                         <p className={`text-sm leading-relaxed ${theme.textMuted}`}>{selectedLead.lost_lead_reason || "No reason recorded."}</p>
                                         <p className={`text-[10px] mt-2 ${theme.textFaint}`}>Marked by {selectedLead.lost_lead_marked_by || "Unknown"} on {selectedLead.lost_lead_marked_at ? formatDate(selectedLead.lost_lead_marked_at) : "-"}</p>
                                       </div>
                                     )}
                                   </div>
                                   <div className={`mt-3 border rounded-xl p-3 ${theme.settingsBg}`} style={theme.settingsBgGl}>
-                                    <h3 className={`text-xs font-bold uppercase tracking-wider mb-2 border-b pb-2 ${theme.sectionTitle} ${theme.sectionBorder}`}>
+                                    <h3 className={`crm-eyebrow mb-2 border-b pb-2 ${theme.sectionTitle} ${theme.sectionBorder}`}>
                                       {selectedLead.source && selectedLead.source !== "N/A" ? `${selectedLead.source} Data` : "Source Data"}
                                     </h3>
                                     <div className="grid grid-cols-2 gap-2">
@@ -4842,19 +4842,19 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                                     <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${theme.textFaint}`}>Loan Required?</p><p className={`font-semibold ${theme.text}`}>{loanDealLatest?.loan_required || selectedLead.loanPlanned || "Pending"}</p></div>
                                     <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${theme.textFaint}`}>Status</p><span className={`text-[10px] sm:text-sm font-bold ${selectedLead.status === "Closing" ? "text-amber-500" : selectedLead.status === "Visit Scheduled" ? "text-orange-400" : theme.accentText}`}>{selectedLead.status || "Assigned"}</span></div>
                                     <div className={`col-span-2 p-3 sm:p-5 rounded-xl border ${theme.settingsBg}`} style={theme.settingsBgGl}>
-                                      <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-0.5 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>📍 Site Visit Date</p>
+                                      <p className={`crm-eyebrow mb-0.5 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>📍 Site Visit Date</p>
                                       <p className={`text-sm sm:text-base font-black ${theme.text}`}>{selectedLead.mongoVisitDate ? formatDate(selectedLead.mongoVisitDate) : "Not Scheduled"}</p>
                                     </div>
                                     {selectedLead.is_lost_lead && (
                                       <div className={`col-span-2 p-3 sm:p-5 rounded-xl border ${theme.statusLost}`}>
-                                        <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-1">Lost Lead Record</p>
+                                        <p className="crm-eyebrow mb-1">Lost Lead Record</p>
                                         <p className={`text-xs sm:text-sm leading-relaxed ${theme.textMuted}`}>{selectedLead.lost_lead_reason || "No reason recorded."}</p>
                                         <p className={`text-[9px] sm:text-[10px] mt-2 ${theme.textFaint}`}>Marked by {selectedLead.lost_lead_marked_by || "Unknown"} on {selectedLead.lost_lead_marked_at ? formatDate(selectedLead.lost_lead_marked_at) : "-"}</p>
                                       </div>
                                     )}
                                   </div>
                                   <div className={`mt-3 border rounded-xl p-3 sm:p-5 ${theme.settingsBg}`} style={theme.settingsBgGl}>
-                                    <h3 className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-2 border-b pb-2 ${theme.sectionTitle} ${theme.sectionBorder}`}>
+                                    <h3 className={`crm-eyebrow mb-2 border-b pb-2 ${theme.sectionTitle} ${theme.sectionBorder}`}>
                                       {selectedLead.source && selectedLead.source !== "N/A" ? `${selectedLead.source} Data` : "Source Data"}
                                     </h3>
                                     <div className="grid grid-cols-2 gap-2">
@@ -5795,7 +5795,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                   <h1 className={`text-sm sm:text-lg font-bold flex items-center flex-wrap gap-2 sm:gap-3 ${theme.text}`}>
                     <span className={isDark ? "text-[#d946a8]" : "text-[#9E217B]"}>#{selectedLead.sr_no || selectedLead.id}</span>
                     <span>{selectedLead.name}</span>
-                    <span className={`px-2 py-0.5 sm:px-3 sm:py-1 rounded-full text-[9px] sm:text-[10px] font-bold uppercase tracking-wider border ${statusCls(selectedLead.status)}`}>
+                    <span className={`px-2 py-0.5 sm:px-3 sm:py-1 rounded-full text-[9px] sm:crm-eyebrow border ${statusCls(selectedLead.status)}`}>
                       {selectedLead.status || "Assigned"}
                     </span>
                   </h1>
@@ -6105,7 +6105,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                                     <div><p className={`text-[10px] sm:text-xs font-medium mb-0.5 sm:mb-1 ${theme.textMuted}`}>Loan Required?</p><p className={`font-semibold ${theme.text}`}>{loanDealLatest?.loan_required || selectedLead.loanPlanned || "Pending"}</p></div>
                                     <div><p className={`text-[10px] sm:text-xs font-medium mb-0.5 sm:mb-1 ${theme.textMuted}`}>Status</p><p className={`font-semibold ${theme.accentText}`}>{selectedLead.status || "Assigned"}</p></div>
                                     <div className={`col-span-2 p-3 sm:p-5 rounded-xl border ${isDark ? "border-[#9E217B]/20" : "border-[#9E217B]/20"} ${theme.settingsBg}`}>
-                                      <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-0.5 sm:mb-1 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>📍 Site Visit Date</p>
+                                      <p className={`crm-eyebrow mb-0.5 sm:mb-1 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>📍 Site Visit Date</p>
                                       <p className={`text-base sm:text-lg font-black ${theme.text}`}>{selectedLead.mongoVisitDate ? new Date(selectedLead.mongoVisitDate).toLocaleString("en-IN") : "Not Scheduled"}</p>
                                     </div>
                                     {selectedLead.closingDate && (
@@ -6116,7 +6116,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                                     )}
                                   </div>
                                   <div className={`mt-3 border rounded-xl p-3 sm:p-5 ${theme.settingsBg}`} style={theme.settingsBgGl}>
-                                    <h3 className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-2 border-b pb-2 ${theme.sectionTitle} ${theme.sectionBorder}`}>
+                                    <h3 className={`crm-eyebrow mb-2 border-b pb-2 ${theme.sectionTitle} ${theme.sectionBorder}`}>
                                       {selectedLead.source && selectedLead.source !== "N/A" ? `${selectedLead.source} Data` : "Source Data"}
                                     </h3>
                                     <div className="grid grid-cols-2 gap-2">
@@ -6572,7 +6572,7 @@ function SiteVisitCenter({
             {headers.map((h) => (
               <th
                 key={h}
-                className={`px-4 py-3 sm:py-4.5 font-bold uppercase tracking-wider border-b ${isDark ? "border-[#2a2a2a]" : "border-indigo-100"
+                className={`px-4 py-3 sm:py-4.5 crm-eyebrow border-b ${isDark ? "border-[#2a2a2a]" : "border-indigo-100"
                   }`}
               >
                 {h}
@@ -6827,7 +6827,7 @@ function SiteVisitCenter({
       <AccordionBody id="logs">
         {/* Filters */}
         <div className="flex items-center gap-2 flex-wrap mb-3 pt-1">
-          <span className={`text-[10px] font-bold uppercase tracking-wider ${theme.textFaint}`}>
+          <span className={`crm-eyebrow ${theme.textFaint}`}>
             Filter
           </span>
           <select
@@ -7168,7 +7168,7 @@ function DailyMonitoringPanel({
                   <div
                     className={`absolute -right-4 -top-4 w-20 h-20 rounded-full blur-2xl pointer-events-none ${card.glow}`}
                   />
-                  <p className={`text-xs font-bold uppercase tracking-wider mb-2 ${theme.textFaint}`}>
+                  <p className={`crm-eyebrow mb-2 ${theme.textFaint}`}>
                     {card.label}
                   </p>
                   <p className={`text-2xl font-black ${card.color}`}>{card.value}</p>
@@ -7287,7 +7287,7 @@ function DailyMonitoringPanel({
         {activeTab === "managers" && (
           <div className="space-y-5 animate-fadeIn">
             <div>
-              <h3 className={`text-sm font-bold uppercase tracking-wider mb-4 flex items-center gap-2 ${theme.text}`}>
+              <h3 className={`crm-eyebrow mb-4 flex items-center gap-2 ${theme.text}`}>
                 <span className={`w-2 h-2 rounded-full ${isDark ? "bg-[#d946a8]" : "bg-[#9E217B]"}`} />
                 Sales Managers — Daily Follow-up Status
               </h3>
@@ -7304,7 +7304,7 @@ function DailyMonitoringPanel({
 
             {siteHeadStats.length > 0 && (
               <div>
-                <h3 className={`text-sm font-bold uppercase tracking-wider mb-4 flex items-center gap-2 ${theme.text}`}>
+                <h3 className={`crm-eyebrow mb-4 flex items-center gap-2 ${theme.text}`}>
                   <span className="w-2 h-2 rounded-full bg-blue-500" />
                   Site Heads — Daily Follow-up Status
                 </h3>
@@ -7318,7 +7318,7 @@ function DailyMonitoringPanel({
 
             {receptionistStats.length > 0 && (
               <div>
-                <h3 className={`text-sm font-bold uppercase tracking-wider mb-4 flex items-center gap-2 ${theme.text}`}>
+                <h3 className={`crm-eyebrow mb-4 flex items-center gap-2 ${theme.text}`}>
                   <span className="w-2 h-2 rounded-full bg-purple-500" />
                   Receptionists — Daily Follow-up Status
                 </h3>
@@ -7348,7 +7348,7 @@ function DailyMonitoringPanel({
                   className={`rounded-xl p-5 border ${theme.card}`}
                   style={theme.cardGlass}
                 >
-                  <p className={`text-xs font-bold uppercase tracking-wider mb-2 ${theme.textFaint}`}>
+                  <p className={`crm-eyebrow mb-2 ${theme.textFaint}`}>
                     {c.label}
                   </p>
                   <p className={`text-2xl font-black ${c.color}`}>{c.value}</p>
@@ -7751,7 +7751,7 @@ function StaffCard({ s, isDark, theme, getRoleBadge, getBarColor }: any) {
 
       {s.noFupLeads.length > 0 && (
         <div className={`mt-3 pt-3 border-t ${isDark ? "border-[#333]" : "border-gray-200"}`}>
-          <p className={`text-[10px] font-bold uppercase tracking-wider mb-2 ${theme.textFaint}`}>
+          <p className={`crm-eyebrow mb-2 ${theme.textFaint}`}>
             Leads needing follow-up ({s.noFupLeads.length})
           </p>
           <div className="flex flex-col gap-1 max-h-24 overflow-y-auto">

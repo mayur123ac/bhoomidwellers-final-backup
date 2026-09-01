@@ -27,7 +27,7 @@ import {
 import { FiUser, FiHelpCircle, FiLogOut, FiChevronRight } from "react-icons/fi";
 import {
   FaThLarge, FaCog, FaFileInvoice,
-  FaChevronLeft, FaCheckCircle, FaPaperPlane, FaTimes, FaPhoneAlt,
+  FaChevronLeft, FaChevronDown, FaCheckCircle, FaPaperPlane, FaTimes, FaPhoneAlt,
   FaCalendarAlt, FaUserCircle, FaMicrophone, FaWhatsapp, FaRobot,
   FaEyeSlash, FaEye, FaSearch, FaUniversity, FaUsers, FaFileAlt, FaCheck,
   FaClock, FaBell, FaHandshake, FaClipboardList, FaBuilding, FaEdit
@@ -58,6 +58,8 @@ import { handleMarkLostLead as markLostLeadApi, restoreLostLead, updateLeadLostS
 import AttendanceTimerWidget from "@/components/AttendanceTimerWidget";
 import UserAvatar from "@/components/UserAvatar";
 import AppHeader from "@/components/AppHeader";
+import HeaderClock from "@/components/HeaderClock";
+import CrmUpdatesNotification from "@/components/CrmUpdatesNotification";
 // The notification queue. Built and organization-scoped on the server — see
 // lib/notifications/feed.ts for why it is no longer derived in this file.
 import {
@@ -106,7 +108,7 @@ const MONTH_NAMES = [
 
 // ─── SUN/MOON ICONS ───────────────────────────────────────────────────────────
 const SunIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="12" cy="12" r="5" />
     <line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" />
     <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
@@ -115,7 +117,7 @@ const SunIcon = () => (
   </svg>
 );
 const MoonIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
   </svg>
 );
@@ -148,7 +150,7 @@ function buildTheme(isDark: boolean) {
     tableHead: isDark ? "bg-[#222]" : "bg-[#F1F5F9] border border-indigo-300",
     tableRow: isDark ? "hover:bg-[#252525]" : "hover:bg-[#F8FAFC] border border-indigo-200",
     tableDivide: isDark ? "divide-[#2a2a2a]" : "divide-[#E5E7EB]",
-    tableBorder: isDark ? "border-[#2a2a2a]" : "border-[#D1D5DB]",
+    tableBorder: isDark ? "border-gray-400" : "border-gray-400",
 
     // ── Inputs ──
     inputBg: isDark ? "bg-[#1a1a1a] border-[#333]" : "bg-white border border-indigo-300",
@@ -174,7 +176,7 @@ function buildTheme(isDark: boolean) {
     // ── Typography ──
     text: isDark ? "text-white" : "text-[#1e1e1e]",
     textname: isDark ? "text-[#d946a8]" : "text-[#334155]",
-    textMuted: isDark ? "text-gray-400" : "text-[#334155]",
+    textMuted: isDark ? "text-gray-400" : "text-gray-400",
     textFaint: isDark ? "text-gray-500" : "text-[#475569]",
     textHeader: isDark ? "text-xs text-gray-500 uppercase" : "text-xs text-[#334155] font-bold uppercase",
 
@@ -205,7 +207,7 @@ function buildTheme(isDark: boolean) {
     statGlow5: isDark ? "bg-green-600/10" : "bg-emerald-400/10",
 
     // ── Brand accent ──
-    accentText: isDark ? "text-[#d946a8] text-[12px]" : "text-[#00AEEF]",
+    accentText: isDark ? "text-[#9E217B] text-[12px]" : "text-[#9E217B]",
     accentBg: isDark ? "bg-[#d946a8]/10 text-[#d946a8] border border-[#d946a8]/30" : "bg-[#00AEEF]/10 text-[#00AEEF] border border-[#00AEEF]/30",
     sectionTitle: isDark ? "text-[#d946a8]" : "text-[#9E217B]",
     sectionBorder: isDark ? "border-[#d946a8]/20" : "border-[#9E217B]/25",
@@ -480,7 +482,7 @@ export default function SalesDashboard() {
   /** Which tab the Notification Center opens on, set by the footer that sent us there. */
   const [notificationFilter, setNotificationFilter] =
     useState<"all" | "follow_up" | "site_visit" | "new_lead">("all");
-  const [activePopup, setActivePopup] = useState<"notifications" | "profile" | "visit" | null>(null);
+  const [activePopup, setActivePopup] = useState<"notifications" | "profile" | "visit" | "updates" | null>(null);
   const topbarRef = useRef<HTMLDivElement>(null);
   // ── Attendance: live clock tick ──
   //
@@ -617,8 +619,8 @@ export default function SalesDashboard() {
         ? "bg-[#9E217B]/20 border-[#9E217B]/50 text-[#d946a8]"
         : "bg-[#9E217B]/10 border-[#9E217B]/40 text-[#9E217B]",
       chipIdle: isDark
-        ? "border-[#2a2a2a] text-gray-400 hover:border-[#9E217B]/40"
-        : "border-[#D1D5DB] text-[#475569] hover:border-[#9E217B]/40",
+        ? "border-[#2a2a2a] text-[#6B7280] hover:border-[#9E217B]/40"
+        : "border-[#D1D5DB] text-[#6B7280] hover:border-[#9E217B]/40",
     }),
     [t, isDark]
   );
@@ -703,38 +705,37 @@ export default function SalesDashboard() {
           role={user?.role || "Sales Manager"}
           logoSrc="/assets/bhoomidwellers.png"
         >
-          <div className="flex items-center gap-1 sm:gap-2 relative" ref={topbarRef}>
-            {/* Attendance badge — hidden on very small screens, shown sm+ */}
-            <div className="hidden sm:block">
-              <AttendanceBadge
-                timeIn={timeIn}
-                isMarkedPresent={isMarkedPresent}
-                onLogout={handleLogout} />
+          <div className="flex items-center gap-4 flex-shrink-0 relative z-[50]" ref={topbarRef}>
+            {/* Desktop-only controls: hidden on mobile */}
+            <div className="hidden md:flex items-center gap-4">
+              <HeaderClock isDark={isDark} />
+              <div
+                className={`w-5 h-5 flex items-center justify-center cursor-pointer ${isDark ? "text-gray-400" : "text-[#6B7280]"} hover:text-[#9E217B] transition-colors`}
+                onClick={toggleTheme} role="button"
+                aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}>
+                {isDark ? <SunIcon /> : <MoonIcon />}
+              </div>
             </div>
 
-            {/* Theme Toggle — hidden on mobile, in hamburger menu */}
-            <button
-              onClick={toggleTheme}
-              aria-pressed={isDark}
-              aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
-              className={`hidden sm:flex h-9 w-9 flex-shrink-0 rounded-lg border items-center justify-center transition-colors duration-150 cursor-pointer ${t.toggleWrap}`}
-            >
-              {isDark ? <SunIcon /> : <MoonIcon />}
-            </button>
+            {/* Attendance: visible on all screen sizes */}
+            <AttendanceBadge
+              timeIn={timeIn}
+              isMarkedPresent={isMarkedPresent}
+              onLogout={handleLogout} />
+
+            {/* CRM System Updates */}
+            <CrmUpdatesNotification user={user} theme={t} isDark={isDark} isOpen={activePopup === "updates"} onToggle={() => setActivePopup(activePopup === "updates" ? null : "updates")} />
 
             {/* Site Visit Bell */}
             <div className="relative">
-              <button
-                onClick={() => { setActivePopup(activePopup === "visit" ? null : "visit"); }}
-                className={`relative h-8 w-8 sm:h-9 sm:w-9 flex-shrink-0 rounded-full sm:rounded-lg border border-transparent sm:border flex items-center justify-center transition-colors duration-150 cursor-pointer ${isDark ? "bg-white/10 text-[#EBEBF5] sm:bg-[#1C1C2A] sm:border-[#2A2A38] sm:text-yellow-300 hover:bg-white/20" : "bg-black/5 text-[#3C3C43] sm:bg-[#F1F5F9] sm:border-[#9CA3AF] sm:text-[#1A1A1A] hover:bg-black/10"} sm:hover:bg-[inherit] sm:hover:border-orange-500/50`}
-              >
-                <FaCalendarAlt className="text-sm" />
+              <div className="relative cursor-pointer" onClick={() => { setActivePopup(activePopup === "visit" ? null : "visit"); }}>
+                <FaCalendarAlt className={`${t.textMuted} hover:text-[#9E217B] transition-colors w-5 h-5`} />
                 {visitNotificationLeads.length > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 bg-orange-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center">
+                  <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-orange-500 rounded-full text-[9px] font-black text-white flex items-center justify-center">
                     {visitNotificationLeads.length > 9 ? "9+" : visitNotificationLeads.length}
                   </span>
                 )}
-              </button>
+              </div>
               <AnimatePresence>
                 {activePopup === "visit" && (
                   <motion.div
@@ -776,17 +777,14 @@ export default function SalesDashboard() {
 
             {/* Follow-up Bell */}
             <div className="relative">
-              <button
-                onClick={() => { setActivePopup(activePopup === "notifications" ? null : "notifications"); }}
-                className={`relative h-8 w-8 sm:h-9 sm:w-9 flex-shrink-0 rounded-full sm:rounded-lg border border-transparent sm:border flex items-center justify-center transition-colors duration-150 cursor-pointer ${isDark ? "bg-white/10 text-[#EBEBF5] sm:bg-[#1C1C2A] sm:border-[#2A2A38] sm:text-yellow-300 hover:bg-white/20" : "bg-black/5 text-[#3C3C43] sm:bg-[#F1F5F9] sm:border-[#9CA3AF] sm:text-[#1A1A1A] hover:bg-black/10"} sm:hover:bg-[inherit] sm:hover:border-purple-500/50`}
-              >
-                <FaBell className="text-sm" />
+              <div className="relative cursor-pointer" onClick={() => { setActivePopup(activePopup === "notifications" ? null : "notifications"); }}>
+                <FaBell className={`${t.textMuted} hover:text-[#9E217B] transition-colors w-5 h-5`} />
                 {followUpLeads.length > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 bg-red-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center">
+                  <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 rounded-full text-[9px] font-black text-white flex items-center justify-center">
                     {followUpLeads.length > 9 ? "9+" : followUpLeads.length}
                   </span>
                 )}
-              </button>
+              </div>
               <AnimatePresence>
                 {activePopup === "notifications" && (
                   <motion.div
@@ -837,14 +835,12 @@ export default function SalesDashboard() {
               </AnimatePresence>
             </div>
 
-            {/* Profile — hidden on mobile (accessible in hamburger) */}
-            <div className="relative hidden sm:block">
+            {/* Profile — desktop only */}
+            <div className="relative hidden md:block">
               <div
                 onClick={() => { setActivePopup(activePopup === "profile" ? null : "profile"); }}
-                className={`h-9 w-9 flex-shrink-0 rounded-full flex items-center justify-center overflow-hidden font-semibold text-[13px] cursor-pointer border transition-colors duration-150 ${isDark
-                  ? "border border-purple-500/40 text-purple-400 bg-purple-500/15"
-                  : "border border-[#00AEEF]/40 bg-[#9E217B]/20 text-[#d946a8]"
-                  }`}
+                className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm cursor-pointer shadow-sm hover:opacity-80 transition-opacity border
+                  ${isDark ? "border-[#9E217B]/40 text-[#d946a8] bg-[#9E217B]/15" : "border-[#9E217B]/40 text-[#9E217B] bg-[#9E217B]/10"}`}
               >
                 <UserAvatar name={user?.name} fallbackNode={<FaUserCircle className="text-lg" />} alt="" />
               </div>
@@ -1213,6 +1209,7 @@ function SalesManagerView({
   const [salesForm, setSalesForm] = useState({ propertyType: "", location: "", budget: "", useType: "", purchaseDate: "", loanPlanned: "", siteVisit: "", leadStatus: "" });
   const inputRef = useRef<HTMLInputElement>(null);
   const [showLoanForm, setShowLoanForm] = useState(false);
+  const [showMobileActions, setShowMobileActions] = useState(false);
   const [customNote, setCustomNote] = useState("");
   const [showLostModal, setShowLostModal] = useState(false);
   const [lostReason, setLostReason] = useState("");
@@ -1839,7 +1836,7 @@ function SalesManagerView({
                   <div className={`absolute -right-4 -top-4 sm:-right-6 sm:-top-6 w-16 h-16 sm:w-24 sm:h-24 rounded-full blur-xl sm:blur-2xl pointer-events-none ${stat.glow}`} />
 
                   <div className="flex items-start justify-between mb-1 sm:mb-2 gap-1">
-                    <p className={`text-[9px] sm:text-xs font-bold uppercase tracking-wider leading-tight ${t.textFaint}`}>
+                    <p className={`crm-eyebrow leading-tight ${t.textFaint}`}>
                       {stat.label}
                     </p>
                     {(stat as any).monthSelect && (
@@ -2209,7 +2206,7 @@ function SalesManagerView({
 
             <div className={`rounded-2xl border shadow-sm overflow-hidden flex flex-col ${t.tableWrap}`} style={t.tableGlass}>
               {/* ── Table Header Area ── */}
-              <div className={`px-4 sm:px-6 py-4 sm:py-5 border-b flex justify-between items-center ${t.tableHeader || t.tableHead} ${t.tableBorder}`}>
+              <div className={`px-4 sm:px-6 py-4 sm:py-5 border border-gray-400 flex justify-between items-center ${t.tableBorder}`}>
                 <h2 className={`text-base sm:text-lg font-semibold tracking-tight flex items-center gap-3 ${t.text}`}>
                   Closed Leads
                   <span className={`px-3 py-0.5 rounded-full text-xs font-bold border ${t.btnClosingBadge || (isDark ? "bg-white/10 border-white/5" : "bg-black/5 border-black/5")}`}>
@@ -2226,7 +2223,7 @@ function SalesManagerView({
                       {["Lead No.", "Client Name", "Budget", "Property", "Source", "Cp Name", "Cp Company", "Cp Number", "Status", "Site Visit", "Closing Date", "Actions"].map(h => (
                         <th
                           key={h}
-                          className={`px-4 sm:px-6 py-3 sm:py-4 font-semibold text-[11px] sm:text-xs uppercase tracking-wider border-b ${t.textHeader} ${t.tableBorder}`}
+                          className={`px-4 sm:px-6 py-3 sm:py-4 crm-eyebrow border-b ${t.textHeader} ${t.tableBorder}`}
                         >
                           {h}
                         </th>
@@ -2287,7 +2284,7 @@ function SalesManagerView({
                             {lead.cpPhone || "N/A"}
                           </td>
                           <td className="px-4 sm:px-6 py-3.5 sm:py-4">
-                            <span className={`px-2.5 py-1 rounded-md text-[10px] sm:text-[11px] font-bold uppercase tracking-wider border flex-shrink-0 ${t.statusClosing}`}>
+                            <span className={`px-2.5 py-1 rounded-md text-[10px] sm:crm-eyebrow border flex-shrink-0 ${t.statusClosing}`}>
                               {lead.status}
                             </span>
                           </td>
@@ -2351,58 +2348,56 @@ function SalesManagerView({
             </div>
           ) : (
             <div className="animate-fadeIn w-full flex flex-col gap-2 pb-1">
-              {/* Detail header — responsive: stacked on mobile */}
-              {/* Detail header — single row on desktop, stacked on mobile */}
-              <div className={`flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 rounded-[1.25rem] border p-3.5 sm:p-2.5 shadow-sm flex-shrink-0 transition-colors ${selectedLead.is_lost_lead ? t.cardLost : t.card}`} style={t.cardGlass}>
+              {/* Detail header — single row on desktop, collapsible actions on mobile */}
+              <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-xl border p-2.5 sm:p-2 shadow-sm flex-shrink-0 transition-colors ${selectedLead.is_lost_lead ? t.cardLost : t.card}`} style={t.cardGlass}>
 
-                {/* Back + Lead Name */}
-                {/* Back + Lead Name */}
-                <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 lg:flex-shrink-0">
-                  <button
-                    onClick={() => { setMainView("forms"); setSubView("cards"); }}
-                    className={`w-9 h-9 sm:w-10 sm:h-10 flex flex-shrink-0 items-center justify-center border rounded-full transition-all cursor-pointer active:scale-95 shadow-sm ${t.textMuted} ${t.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-gray-50"}`}
-                    aria-label="Back to leads"
-                  >
-                    <FaChevronLeft className="text-[13px] sm:text-sm" />
-                  </button>
+                {/* Back + Lead Name + Mobile Toggle */}
+                <div className="flex items-center justify-between w-full sm:w-auto gap-2">
+                  <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+                    <button
+                      onClick={() => { setMainView("forms"); setSubView("cards"); }}
+                      className={`w-8 h-8 sm:w-9 sm:h-9 flex flex-shrink-0 items-center justify-center border rounded-lg sm:rounded-xl transition-all cursor-pointer active:scale-95 shadow-sm ${t.textMuted} ${t.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-gray-50"}`}
+                      aria-label="Back to leads"
+                    >
+                      <FaChevronLeft className="text-[10px] sm:text-sm" />
+                    </button>
 
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-2.5 min-w-0 flex-1">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className={`text-base md:text-lg lg:text-xl font-bold tracking-tight truncat flex-shrink-0 ${t.textname}`}>
+                    <h1 className={`text-sm sm:text-base lg:text-lg font-bold flex flex-wrap items-center gap-1.5 sm:gap-2 min-w-0 ${t.text}`}>
+                      <span className={`flex-shrink-0 ${t.accentText}`}>
                         #{selectedLead.sr_no || selectedLead.id}
                       </span>
-                      <span
-                        className={`text-base md:text-lg lg:text-xl font-bold tracking-tight truncate ${t.text}`}
-                      >
-                        {selectedLead.name}
-                      </span>
-                    </div>
-
-                    {/* Badges row for mobile (wraps under name), inline for desktop */}
-                    <div className="flex items-center gap-1.5 mt-0.5 sm:mt-0">
+                      <span>{selectedLead.name}</span>
                       {selectedLead.status === "Closing" && (
-                        <span className={`text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-md border flex items-center gap-1.5 flex-shrink-0 tracking-wide uppercase ${t.statusClosing}`}>
-                          <FaHandshake className="text-[11px]" /> <span>Closing</span>
+                        <span className={`text-[9px] sm:text-[11px] font-bold px-2 py-0.5 rounded-md border flex items-center gap-1.5 flex-shrink-0 tracking-wide uppercase ${t.statusClosing}`}>
+                          <FaHandshake className="text-[10px] sm:text-[11px]" /> Closing
                         </span>
                       )}
                       {selectedLead.is_lost_lead && (
-                        <span className={`text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-md border flex items-center gap-1.5 flex-shrink-0 tracking-wide uppercase ${t.statusLost}`}>
-                          <Ghost className="w-3 h-3" /> <span>Lost</span>
+                        <span className={`text-[9px] sm:text-[11px] font-bold px-2 py-0.5 rounded-md border flex items-center gap-1.5 flex-shrink-0 tracking-wide uppercase ${t.statusLost}`}>
+                          <Ghost className="w-3 h-3" /> Lost
                         </span>
                       )}
-                    </div>
+                    </h1>
                   </div>
+
+                  {/* MOBILE TOGGLE BUTTON — collapsed by default on small screens */}
+                  <button
+                    onClick={() => setShowMobileActions(!showMobileActions)}
+                    className={`sm:hidden w-8 h-8 flex-shrink-0 flex items-center justify-center border rounded-lg transition-colors shadow-sm ${showMobileActions ? t.btnPrimary : `${t.textMuted} ${t.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}`}
+                  >
+                    <FaChevronDown className={`text-[10px] transition-transform duration-200 ${showMobileActions ? "rotate-180" : ""}`} />
+                  </button>
                 </div>
 
-                {/* Actions — wraps 2-per-row on mobile, single row beside the name on desktop */}
-                <div className="flex flex-wrap items-stretch lg:flex-nowrap lg:items-center gap-2 mt-1 lg:mt-0 [&>button]:flex-auto lg:[&>button]:flex-none [&>span]:flex-auto lg:[&>span]:flex-none">
+                {/* ACTION BUTTONS: Hidden on mobile unless toggled open. Always visible on sm+ */}
+                <div className={`gap-1.5 sm:gap-2 flex-wrap justify-start sm:justify-end mt-1 sm:mt-0 w-full sm:w-auto ${showMobileActions ? "flex animate-fadeIn" : "hidden sm:flex"}`}>
 
                   {/* Booking Action */}
                   <button
                     onClick={bookingData ? () => openBookingView(selectedLead.id) : undefined}
                     disabled={!bookingData}
                     title={!bookingData ? "Booking Form has not been submitted yet." : undefined}
-                    className={`font-semibold px-3 py-1.5 sm:px-3 sm:py-2 rounded-xl text-[8px] sm:text-[13px] flex items-center justify-center gap-1.5 transition-all shadow-sm min-h-[40px] sm:min-h-[38px] ${bookingData
+                    className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center gap-1 sm:gap-1.5 transition-all shadow-sm min-w-[80px] sm:min-w-[110px] min-h-[36px] sm:min-h-0 flex-1 sm:flex-none whitespace-nowrap ${bookingData
                       ? "cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white hover:shadow-md active:scale-[0.98]"
                       : "opacity-50 cursor-not-allowed bg-indigo-400 text-white"
                       }`}
@@ -2413,8 +2408,8 @@ function SalesManagerView({
                   {/* Lead Locked State (Read Only / Restore / Reopen) */}
                   {isLeadLocked ? (
                     <>
-                      <span className={`text-[11px] sm:text-[12px] font-semibold px-3 py-2 sm:py-2 rounded-xl border flex items-center justify-center gap-1.5 min-h-[44px] sm:min-h-[38px] ${selectedLead.is_lost_lead ? t.statusLost : t.statusClosing}`}>
-                        {selectedLead.is_lost_lead ? <Ghost className="w-3.5 h-3.5" /> : <FaCheckCircle className="text-[13px]" />}
+                      <span className={`text-[10px] sm:text-[11px] font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md border flex items-center justify-center gap-1 sm:gap-1.5 min-h-[36px] sm:min-h-0 flex-1 sm:flex-none whitespace-nowrap ${selectedLead.is_lost_lead ? t.statusLost : t.statusClosing}`}>
+                        {selectedLead.is_lost_lead ? <Ghost className="w-3.5 h-3.5" /> : <FaCheckCircle className="text-[10px] sm:text-xs" />}
                         Read Only
                       </span>
 
@@ -2422,17 +2417,17 @@ function SalesManagerView({
                         <button
                           onClick={handleRestoreLead}
                           disabled={isSavingLost}
-                          className={`font-semibold px-3 py-2 sm:py-2 rounded-xl text-[8px] sm:text-[13px] flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-[0.98] min-h-[44px] sm:min-h-[38px] ${t.btnPrimary} disabled:opacity-60 disabled:cursor-not-allowed`}
+                          className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center gap-1 sm:gap-1.5 transition-all shadow-sm active:scale-[0.98] min-h-[36px] sm:min-h-0 flex-1 sm:flex-none whitespace-nowrap ${t.btnPrimary} disabled:opacity-60 disabled:cursor-not-allowed`}
                         >
-                          <FaCheckCircle className="text-[13px]" /> Restore
+                          <FaCheckCircle className="text-[10px]" /> Restore
                         </button>
                       ) : (
                         <button
                           onClick={handleReopenLead}
                           disabled={isReopening}
-                          className={`font-semibold px-3 py-2 sm:py-2 rounded-xl text-[8px] sm:text-[13px] flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-[0.98] min-h-[44px] sm:min-h-[38px] ${t.btnPrimary} disabled:opacity-60 disabled:cursor-not-allowed`}
+                          className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center gap-1 sm:gap-1.5 transition-all shadow-sm active:scale-[0.98] min-h-[36px] sm:min-h-0 flex-1 sm:flex-none whitespace-nowrap ${t.btnPrimary} disabled:opacity-60 disabled:cursor-not-allowed`}
                         >
-                          <span className="text-[14px]">↩️</span> Reopen
+                          ↩️ Reopen
                         </button>
                       )}
                     </>
@@ -2445,9 +2440,9 @@ function SalesManagerView({
                             prefillSalesForm(); setShowSalesForm(true); setShowLoanForm(false);
                             emitActivity({ type: 'LEAD_INTERACTION', action: 'Editing Closing Form', leadId: selectedLead?.id, leadName: selectedLead?.name, module: 'Sales Form' });
                           }}
-                          className={`font-semibold px-3 py-2 sm:py-2 rounded-xl text-[10px] sm:text-[13px] flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] shadow-sm min-h-[44px] sm:min-h-[38px] ${t.btnPrimary} ${isDark ? "shadow-purple-900/20" : "shadow-[#00AEEF]/10"}`}
+                          className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center gap-1 sm:gap-1.5 transition-all active:scale-[0.98] shadow-sm min-w-[80px] sm:min-w-[110px] min-h-[36px] sm:min-h-0 flex-1 sm:flex-none whitespace-nowrap ${t.btnPrimary} ${isDark ? "shadow-purple-900/20" : "shadow-[#00AEEF]/10"}`}
                         >
-                          <FaFileInvoice className="text-[10px]" /> Sales
+                          <FaFileInvoice className="text-[10px]" /> Fill Salesform
                         </button>
 
                         <button
@@ -2455,23 +2450,23 @@ function SalesManagerView({
                             setShowLoanForm(true); setShowSalesForm(false);
                             emitActivity({ type: 'LEAD_INTERACTION', action: 'Editing Loan Form', leadId: selectedLead?.id, leadName: selectedLead?.name, module: 'Loan Form' });
                           }}
-                          className={`font-semibold px-3 py-2 sm:py-2 rounded-xl text-[10px] sm:text-[13px] flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] shadow-sm min-h-[44px] sm:min-h-[38px] ${t.btnSecondary} ${isDark ? "shadow-blue-900/20" : "shadow-[#00AEEF]/10"}`}
+                          className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center gap-1 sm:gap-1.5 transition-all active:scale-[0.98] shadow-sm min-w-[80px] sm:min-w-[110px] min-h-[36px] sm:min-h-0 flex-1 sm:flex-none whitespace-nowrap ${t.btnSecondary} ${isDark ? "shadow-blue-900/20" : "shadow-[#00AEEF]/10"}`}
                         >
-                          <FaUniversity className="text-[10px]" /> Loan
+                          <FaUniversity className="text-[10px]" /> Track Loan
                         </button>
 
                         <button
                           onClick={openLostLeadModal}
-                          className={`font-semibold px-3 py-2 sm:py-2 rounded-xl text-[10px] sm:text-[13px] flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] shadow-sm min-h-[44px] sm:min-h-[38px] ${t.btnDanger}`}
+                          className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center gap-1 sm:gap-1.5 transition-all active:scale-[0.98] shadow-sm min-w-[80px] sm:min-w-[110px] min-h-[36px] sm:min-h-0 flex-1 sm:flex-none whitespace-nowrap ${t.btnDanger}`}
                         >
-                          <AlertTriangle className="w-4 h-4" /> Lost
+                          <AlertTriangle className="w-3.5 h-3.5" /> Lost Lead
                         </button>
 
                         <button
                           onClick={() => setIsClosingModalOpen(true)}
-                          className={`font-semibold px-3 py-2 sm:py-2 rounded-xl text-[10px] sm:text-[13px] flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] shadow-sm min-h-[44px] sm:min-h-[38px] ${t.btnWarning} shadow-amber-600/10`}
+                          className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center gap-1 sm:gap-1.5 transition-all active:scale-[0.98] shadow-sm min-w-[80px] sm:min-w-[110px] min-h-[36px] sm:min-h-0 flex-1 sm:flex-none whitespace-nowrap ${t.btnWarning} shadow-amber-600/10`}
                         >
-                          <FaHandshake className="text-[10px]" /> Closing
+                          <FaHandshake className="text-[10px]" /> Mark Closing
                         </button>
                       </>
                     )
@@ -2482,12 +2477,12 @@ function SalesManagerView({
                     <button
                       type="button"
                       onClick={() => openPermanentDeleteDialog()}
-                      className={`font-semibold px-3 py-2 sm:py-2 rounded-xl text-[12px] sm:text-[13px] flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] shadow-sm min-h-[44px] sm:min-h-[38px] ${isDark
+                      className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center gap-1 sm:gap-1.5 transition-all active:scale-[0.98] shadow-sm min-w-[80px] sm:min-w-[110px] min-h-[36px] sm:min-h-0 flex-1 sm:flex-none whitespace-nowrap ${isDark
                         ? "bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500 hover:text-white"
                         : "bg-red-50 text-red-600 border border-red-100 hover:bg-red-600 hover:border-red-600 hover:text-white"
                         }`}
                     >
-                      <Trash2 className="w-4 h-4" /> Delete Lead
+                      <Trash2 className="w-3.5 h-3.5" /> Delete Lead
                     </button>
                   )}
                 </div>
@@ -2580,7 +2575,7 @@ function SalesManagerView({
                             </div>
                             {selectedLead.is_lost_lead && (
                               <div className={`mt-4 border rounded-xl p-3 sm:p-3 ${t.statusLost}`}>
-                                <h3 className="text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-2">
+                                <h3 className="crm-eyebrow mb-2 flex items-center gap-2">
                                   <Ghost className="w-3.5 h-3.5" /> Lost Lead Record
                                 </h3>
                                 <p className={`text-xs sm:text-sm leading-relaxed ${t.textMuted}`}>{selectedLead.lost_lead_reason || "No reason recorded."}</p>
@@ -2590,7 +2585,7 @@ function SalesManagerView({
                               </div>
                             )}
                             <div className={`mt-4 border rounded-xl p-3 sm:p-3 ${t.settingsBg}`} style={t.settingsBgGl}>
-                              <h3 className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-2 sm:mb-3 border-b pb-2 ${t.sectionTitle} ${t.sectionBorder}`}>
+                              <h3 className={`crm-eyebrow mb-2 sm:mb-3 border-b pb-2 ${t.sectionTitle} ${t.sectionBorder}`}>
                                 {selectedLead.source && selectedLead.source !== "N/A" ? `${selectedLead.source} Data` : "Source Data"}
                               </h3>
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -2693,7 +2688,7 @@ function SalesManagerView({
                 </div>
 
                 {/* RIGHT PANEL: FOLLOW-UPS */}
-                <div className={`flex flex-col rounded-xl overflow-hidden shadow-2xl border h-[560px] lg:h-[calc(100vh-170px)] lg:sticky lg:top-4 w-full lg:w-0 lg:flex-1 ${t.chatPanel}`} style={t.chatPanelGl}>
+                <div className={`flex flex-col rounded-xl overflow-hidden shadow-2xl border h-[560px] lg:h-[calc(100vh-150px)] lg:sticky lg:top-4 w-full lg:w-0 lg:flex-1 ${t.chatPanel}`} style={t.chatPanelGl}>
                   <div className={`flex-1 p-3 sm:p-6 overflow-y-auto custom-scrollbar flex flex-col gap-2 sm:gap-3 ${t.chatArea}`}>
                     {/* System message */}
                     <div className="flex justify-start">
@@ -3014,7 +3009,7 @@ function LeadAiAssistantPanel({
               <Bot className="text-white w-4 h-4" />
             </div>
             <span
-              className={`text-[11px] font-bold uppercase tracking-wider ${t.accentText}`}
+              className={`crm-eyebrow ${t.accentText}`}
               style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
             >
               AI Assistant

@@ -221,7 +221,7 @@ export default function InventoryAnalyticsModal({ isOpen, onClose, isDark, t }: 
 
   const Card = ({ title, subtitle, children }: any) => (
     <div className={`rounded-xl border p-3.5 ${t.innerBlock}`}>
-      <p className={`text-[10px] font-bold uppercase tracking-widest ${t.textMuted}`}>{title}</p>
+      <p className={`crm-eyebrow ${t.textMuted}`}>{title}</p>
       {subtitle && <p className={`text-[10px] mb-2 ${t.textFaint}`}>{subtitle}</p>}
       <div className={subtitle ? "" : "mt-2"}>{children}</div>
     </div>
@@ -299,7 +299,7 @@ export default function InventoryAnalyticsModal({ isOpen, onClose, isDark, t }: 
                   {/* ── Absorption: one ratio against a limit → a meter ── */}
                   <div className={`rounded-xl border p-3.5 mb-4 ${t.innerBlock}`}>
                     <div className="flex items-baseline justify-between mb-2">
-                      <p className={`text-[10px] font-bold uppercase tracking-widest ${t.textMuted}`}>Absorption</p>
+                      <p className={`crm-eyebrow ${t.textMuted}`}>Absorption</p>
                       <p className={`text-2xl font-bold ${t.text}`}>{totals.absorption_pct}%</p>
                     </div>
                     {/* Unfilled track is a lighter step of the fill's own ramp, so
@@ -324,14 +324,14 @@ export default function InventoryAnalyticsModal({ isOpen, onClose, isDark, t }: 
                         <thead>
                           <tr className={isDark ? "bg-[#121218]" : "bg-[#F8FAFC]"}>
                             {["Breakdown", "Available", "On hold", "Sold", "Total"].map(h => (
-                              <th key={h} className={`px-3 py-2 text-[10px] font-bold uppercase tracking-wider ${t.textMuted}`}>{h}</th>
+                              <th key={h} className={`px-3 py-2 crm-eyebrow ${t.textMuted}`}>{h}</th>
                             ))}
                           </tr>
                         </thead>
                         <tbody>
                           {[["Configuration", byType], ["Tower", byTower]].map(([groupLabel, rows]: any) => (
                             <React.Fragment key={groupLabel}>
-                              <tr><td colSpan={5} className={`px-3 pt-3 pb-1 text-[10px] font-bold uppercase tracking-widest ${t.textFaint}`}>{groupLabel}</td></tr>
+                              <tr><td colSpan={5} className={`px-3 pt-3 pb-1 crm-eyebrow ${t.textFaint}`}>{groupLabel}</td></tr>
                               {rows.map((r: any) => (
                                 <tr key={groupLabel + r.key} className={`border-t ${isDark ? "border-[#2A2A35]" : "border-[#E5E7EB]"}`}>
                                   <td className={`px-3 py-1.5 text-xs font-semibold ${t.text}`}>{r.label}</td>
@@ -343,7 +343,7 @@ export default function InventoryAnalyticsModal({ isOpen, onClose, isDark, t }: 
                               ))}
                             </React.Fragment>
                           ))}
-                          <tr><td colSpan={5} className={`px-3 pt-3 pb-1 text-[10px] font-bold uppercase tracking-widest ${t.textFaint}`}>Sales velocity</td></tr>
+                          <tr><td colSpan={5} className={`px-3 pt-3 pb-1 crm-eyebrow ${t.textFaint}`}>Sales velocity</td></tr>
                           {velocity.length === 0 ? (
                             <tr><td colSpan={5} className={`px-3 py-1.5 text-xs ${t.textFaint}`}>No sales in this window</td></tr>
                           ) : velocity.map((v: any) => (
@@ -353,7 +353,7 @@ export default function InventoryAnalyticsModal({ isOpen, onClose, isDark, t }: 
                               <td className={`px-3 py-1.5 text-xs font-bold ${t.text}`}>{nf(v.sold)}</td>
                             </tr>
                           ))}
-                          <tr><td colSpan={5} className={`px-3 pt-3 pb-1 text-[10px] font-bold uppercase tracking-widest ${t.textFaint}`}>Available stock ageing</td></tr>
+                          <tr><td colSpan={5} className={`px-3 pt-3 pb-1 crm-eyebrow ${t.textFaint}`}>Available stock ageing</td></tr>
                           {ageRows.map(r => (
                             <tr key={r.label} className={`border-t ${isDark ? "border-[#2A2A35]" : "border-[#E5E7EB]"}`}>
                               <td className={`px-3 py-1.5 text-xs font-semibold ${t.text}`}>{r.label}</td>
@@ -437,7 +437,7 @@ export default function InventoryAnalyticsModal({ isOpen, onClose, isDark, t }: 
                               <thead>
                                 <tr>
                                   {["Flat", "Held by", "For", "Expires"].map(h => (
-                                    <th key={h} className={`py-1 text-[10px] font-bold uppercase tracking-wider ${t.textMuted}`}>{h}</th>
+                                    <th key={h} className={`py-1 crm-eyebrow ${t.textMuted}`}>{h}</th>
                                   ))}
                                 </tr>
                               </thead>

@@ -1434,7 +1434,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
   const cardBg = isDark ? "bg-[#121218] border-[#2A2A35]" : "bg-[#F8FAFC] border-[#9CA3AF]";
   const inputCls = `w-full rounded-xl px-4 py-2.5 text-sm outline-none border transition-colors ${isDark ? "bg-[#14141B] border-[#2A2A35] text-white focus:border-[#9E217B]" : "bg-white border-[#9CA3AF] text-[#1A1A1A] focus:border-[#00AEEF]"}`;
   const labelCls = `block text-xs font-semibold mb-1 ${isDark ? "text-[#888899]" : "text-[#475569]"}`;
-  const sectionTitle = `text-sm font-bold uppercase tracking-wider mb-4 ${isDark ? "text-[#d4006e]" : "text-[#9E217B]"}`;
+  const sectionTitle = `crm-eyebrow mb-4 ${isDark ? "text-[#d4006e]" : "text-[#9E217B]"}`;
   const errCls = "text-red-400 text-xs mt-1";
   const accent = isDark ? "text-[#d4006e]" : "text-[#00AEEF]";
   const textMain = isDark ? "text-white" : "text-[#1A1A1A]";
@@ -1808,7 +1808,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                                 {selectedUnit ? (
                                   <div className="flex items-center justify-between gap-4 flex-wrap">
                                     <div className="min-w-0">
-                                      <p className={`text-[10px] font-bold uppercase tracking-wider ${textMuted}`}>Linked inventory unit</p>
+                                      <p className={`crm-eyebrow ${textMuted}`}>Linked inventory unit</p>
                                       <p className={`text-sm font-bold truncate ${textMain}`}>{unitLabel(selectedUnit)}</p>
                                       <p className={`text-[11px] truncate ${textMuted}`}>
                                         {selectedUnit.project_name}
@@ -2397,7 +2397,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                           {/* ── Section 4: Stamp Duty & Registration (split) ── */}
                           <div className={`border-t pt-6 ${divider}`}>
                             <p className={sectionTitle}>Stamp Duty &amp; Registration</p>
-                            <p className={`text-[11px] font-bold uppercase tracking-wider mb-2 ${accent}`}>Stamp Duty</p>
+                            <p className={`crm-eyebrow mb-2 ${accent}`}>Stamp Duty</p>
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                               <div>
                                 <label className={labelCls}>Amount <span className="font-normal opacity-70">(auto)</span></label>
@@ -2427,7 +2427,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                                 <input value={form.stamp_duty_receipt_no} onChange={e => set("stamp_duty_receipt_no", e.target.value)} placeholder="Receipt / reference" className={inputCls} />
                               </div>
                             </div>
-                            <p className={`text-[11px] font-bold uppercase tracking-wider mb-2 mt-5 ${accent}`}>Registration</p>
+                            <p className={`crm-eyebrow mb-2 mt-5 ${accent}`}>Registration</p>
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                               <div>
                                 <label className={labelCls}>Fee <span className="font-normal opacity-70">(auto)</span></label>
@@ -2467,7 +2467,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                             <button
                               type="button"
                               onClick={() => setShowAdditionalPayment(v => !v)}
-                              className={`flex items-center gap-2 text-sm font-bold uppercase tracking-wider ${isDark ? "text-[#d4006e]" : "text-[#9E217B]"}`}
+                              className={`flex items-center gap-2 crm-eyebrow ${isDark ? "text-[#d4006e]" : "text-[#9E217B]"}`}
                             >
                               <FaChevronRight className={`text-[10px] transition-transform ${showAdditionalPayment ? "rotate-90" : ""}`} />
                               Additional Direct Payment (Optional)
@@ -2569,7 +2569,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
 
                                 {/* Disbursement */}
                                 {/* <div className={`border-t pt-4 mt-2 ${divider}`}>
-                                  <p className={`text-xs font-bold uppercase tracking-wider mb-3 ${accent}`}>Disbursement</p>
+                                  <p className={`crm-eyebrow mb-3 ${accent}`}>Disbursement</p>
                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div>
                                       <label className={labelCls}>Expected Disbursement Date</label>
@@ -2606,7 +2606,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
 
                                 {/* EMI Details */}
                                 {/* <div className={`border-t pt-4 mt-2 ${divider}`}>
-                                  <p className={`text-xs font-bold uppercase tracking-wider mb-3 ${accent}`}>EMI Details</p>
+                                  <p className={`crm-eyebrow mb-3 ${accent}`}>EMI Details</p>
                                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                     <div>
                                       <label className={labelCls}>Interest Rate (%)</label>
@@ -2704,7 +2704,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                                 </div>
                               );
                               const Head = ({ children }: { children: React.ReactNode }) => (
-                                <p className={`px-4 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider ${accent}`}>{children}</p>
+                                <p className={`px-4 pt-3 pb-1 crm-eyebrow ${accent}`}>{children}</p>
                               );
                               return (
                                 <div className={`rounded-xl border overflow-hidden ${isDark ? "bg-[#121218] border-[#2A2A35]" : "bg-white border-[#E5E7EB]"}`}>
@@ -2751,7 +2751,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                             {/* Revenue recognition overrides — preserved so management can still
                                 mark which items count toward realized developer revenue downstream. */}
                             <details className={`mt-4 rounded-xl border ${isDark ? "border-[#2A2A35] bg-[#121218]" : "border-[#E5E7EB] bg-white"}`}>
-                              <summary className={`cursor-pointer px-4 py-2.5 text-xs font-bold uppercase tracking-wider ${textMuted}`}>
+                              <summary className={`cursor-pointer px-4 py-2.5 crm-eyebrow ${textMuted}`}>
                                 Revenue Recognition (advanced)
                               </summary>
                               <div className={`px-4 pb-3 pt-1 border-t ${divider}`}>
@@ -3170,7 +3170,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                             { title: "Unit Details", rows: [["Project Name", form.project_name], ["Tower", form.tower], ["Wing", form.wing], ["Type", form.property_type], ["Floor", form.floor_number], ["Flat No.", form.flat_number], ["Carpet Area", `${form.carpet_area} sq.ft.`], ["Consideration Value", form.consideration_value], ["Parking", form.parking_details], ["Witness", form.witness_name]] },
                           ].map(section => (
                             <div key={section.title} className={`rounded-xl border p-4 ${isDark ? "border-[#2A2A35] bg-[#121218]" : "border-[#E5E7EB] bg-white"}`}>
-                              <p className={`text-xs font-bold uppercase tracking-wider mb-3 ${accent}`}>{section.title}</p>
+                              <p className={`crm-eyebrow mb-3 ${accent}`}>{section.title}</p>
                               <div className="grid grid-cols-2 gap-2">
                                 {section.rows.filter(([, v]) => v).map(([k, v]) => (
                                   <div key={k}>
@@ -3196,7 +3196,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                             ];
                             return (
                               <div className={`rounded-xl border p-4 ${isDark ? "border-[#2A2A35] bg-[#121218]" : "border-[#E5E7EB] bg-white"}`}>
-                                <p className={`text-xs font-bold uppercase tracking-wider mb-3 ${accent}`}>Cost Breakdown</p>
+                                <p className={`crm-eyebrow mb-3 ${accent}`}>Cost Breakdown</p>
                                 {rows.filter(([, v]) => v > 0).map(([k, v]) => (
                                   <div key={k} className="flex items-center justify-between py-0.5">
                                     <span className={`text-xs ${textMuted}`}>{k}</span>
@@ -3214,7 +3214,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                           {/* Loan summary card */}
                           {form.loan_required && (
                             <div className={`rounded-xl border p-4 ${isDark ? "border-[#2A2A35] bg-[#121218]" : "border-[#E5E7EB] bg-white"}`}>
-                              <p className={`text-xs font-bold uppercase tracking-wider mb-3 ${accent}`}>Loan Summary</p>
+                              <p className={`crm-eyebrow mb-3 ${accent}`}>Loan Summary</p>
                               <div className="grid grid-cols-2 gap-2">
                                 {[
                                   ["Bank", form.bank_name],
@@ -3240,7 +3240,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                           {/* Possession card */}
                           {(form.expected_possession_date || form.possession_status !== "Pre-Construction" || form.oc_cc_status !== "Pending") && (
                             <div className={`rounded-xl border p-4 ${isDark ? "border-[#2A2A35] bg-[#121218]" : "border-[#E5E7EB] bg-white"}`}>
-                              <p className={`text-xs font-bold uppercase tracking-wider mb-3 ${accent}`}>Possession</p>
+                              <p className={`crm-eyebrow mb-3 ${accent}`}>Possession</p>
                               <div className="grid grid-cols-2 gap-2">
                                 {[
                                   ["Expected Possession", form.expected_possession_date],
@@ -3260,7 +3260,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                           {/* Payment table summary */}
                           {form.payment_details.some(r => r.amount) && (
                             <div className={`rounded-xl border p-4 ${isDark ? "border-[#2A2A35] bg-[#121218]" : "border-[#E5E7EB] bg-white"}`}>
-                              <p className={`text-xs font-bold uppercase tracking-wider mb-3 ${accent}`}>Payment Details</p>
+                              <p className={`crm-eyebrow mb-3 ${accent}`}>Payment Details</p>
                               <table className="w-full text-sm">
                                 <thead><tr className={isDark ? "text-[#888899]" : "text-[#6B7280]"}><th className="text-left text-xs py-1">Date</th><th className="text-left text-xs py-1">Transaction</th><th className="text-right text-xs py-1">Amount</th></tr></thead>
                                 <tbody>{form.payment_details.filter(r => r.amount).map((r, i) => (<tr key={i}><td className={`text-xs py-1 ${textMain}`}>{r.date}</td><td className={`text-xs py-1 ${textMain}`}>{r.transaction_type}</td><td className={`text-xs py-1 text-right font-bold ${textMain}`}>₹{r.amount}</td></tr>))}</tbody>
@@ -3270,7 +3270,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
 
                           {/* Declaration status */}
                           <div className={`rounded-xl border p-4 ${isDark ? "border-[#2A2A35] bg-[#121218]" : "border-[#E5E7EB] bg-white"}`}>
-                            <p className={`text-xs font-bold uppercase tracking-wider mb-3 ${accent}`}>Declarations</p>
+                            <p className={`crm-eyebrow mb-3 ${accent}`}>Declarations</p>
                             {[["Information accurate", form.declaration_accepted], ["Terms & Conditions accepted", form.terms_accepted], ["Irrevocable consent given", form.consent_accepted]].map(([label, val]) => (
                               <div key={label as string} className="flex items-center gap-2 mb-1.5">
                                 <div className={`w-4 h-4 rounded flex items-center justify-center text-[9px] ${val ? "bg-green-500 text-white" : "bg-red-500 text-white"}`}>{val ? "✓" : "✗"}</div>

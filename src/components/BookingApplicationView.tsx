@@ -32,7 +32,7 @@ export default function BookingApplicationView({
   const accent = isDark ? "text-[#d4006e]" : "text-[#9E217B]";
   const cardBg = isDark ? "bg-[#121218] border-[#2A2A35]" : "bg-white border-[#E5E7EB]";
   const divider = isDark ? "border-[#2A2A35]" : "border-[#F1F5F9]";
-  const sectionTitle = `text-xs font-bold uppercase tracking-wider mb-3 ${accent}`;
+  const sectionTitle = `crm-eyebrow mb-3 ${accent}`;
   const fieldLabel = `text-[10px] font-semibold mb-0.5 ${textMuted}`;
   const fieldVal = `text-sm font-semibold ${textMain}`;
 
@@ -188,7 +188,7 @@ export default function BookingApplicationView({
       {/* Cancellation edit */}
       {bookingStatus === "Cancelled" && (
         <div className={`rounded-2xl border p-5 ${isDark ? "bg-red-500/5 border-red-500/30" : "bg-red-50 border-red-200"}`}>
-          <p className="text-xs font-bold uppercase tracking-wider mb-3 text-red-500">
+          <p className="crm-eyebrow mb-3 text-red-500">
             <FaTimesCircle className="inline mr-1.5" /> Cancellation Details
           </p>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">

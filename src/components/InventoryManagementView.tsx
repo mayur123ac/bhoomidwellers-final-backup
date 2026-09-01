@@ -462,7 +462,7 @@ function BuildingCard({ b, t, onOpen }: { b: BuildingSummary; t: any; onOpen: ()
 function Stat({ label, value, t, hex }: { label: string; value: number; t: any; hex?: string }) {
   return (
     <div className="min-w-[86px]">
-      <p className={`text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 ${t.textMuted}`}>
+      <p className={`crm-eyebrow flex items-center gap-1.5 ${t.textMuted}`}>
         {hex && <span className="w-2 h-2 rounded-full" style={{ backgroundColor: hex }} />}{label}
       </p>
       <p className={`text-base font-bold ${t.text}`}>{value}</p>
@@ -1504,7 +1504,7 @@ function TableView({ columns, colW, sort, sorted, t, allSelected, selected, togg
               {columns.map((c: Column) => (
                 <th
                   key={c.key}
-                  className={`relative px-2 py-2 text-[10px] font-bold uppercase tracking-wider ${t.textMuted} select-none`}
+                  className={`relative px-2 py-2 crm-eyebrow ${t.textMuted} select-none`}
                 >
                   <button
                     type="button"
@@ -1521,7 +1521,7 @@ function TableView({ columns, colW, sort, sorted, t, allSelected, selected, togg
                 </th>
               ))}
               {canDelete && (
-                <th className={`px-2 py-2 text-[10px] font-bold uppercase tracking-wider text-right ${t.textMuted}`}>
+                <th className={`px-2 py-2 crm-eyebrow text-right ${t.textMuted}`}>
                   Actions
                 </th>
               )}
@@ -1853,7 +1853,7 @@ function BulkDeleteModal({ selectedUnits, user, isDark, t, onClose, onDeleted }:
             <p className={`text-sm mb-2 ${t.text}`}><b>{deletable.length}</b> deletable, <b>{skipped.length}</b> skipped (linked)</p>
             {skipped.length > 0 && (
               <div className={`rounded-lg border p-2.5 mb-2 max-h-40 overflow-y-auto ${t.innerBlock}`}>
-                <p className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${t.textMuted}`}>Skipped (linked / active)</p>
+                <p className={`crm-eyebrow mb-1 ${t.textMuted}`}>Skipped (linked / active)</p>
                 {skipped.map((u: InventoryUnit) => <p key={u.id} className={`text-[11px] ${t.textFaint}`}><b className={t.text}>{u.flat_no}</b> — linked to {linkLabel(u)}</p>)}
               </div>
             )}
@@ -2657,7 +2657,7 @@ function UnitDrawer({ unitId, onClose, user, canManage, isAdminUser, isDark, t, 
                   {unit.status === "on_hold" ? (
                     <div className={`rounded-xl border p-3 mb-3 ${isDark ? "border-amber-500/40 bg-amber-500/5" : "border-amber-500/40 bg-amber-50"}`}>
                       <div className="flex items-center justify-between gap-3 mb-1">
-                        <p className="text-[11px] font-bold uppercase tracking-wider text-amber-500">On Hold</p>
+                        <p className="crm-eyebrow text-amber-500">On Hold</p>
                         {canManage && (
                           <button onClick={doRelease} disabled={holdBusy}
                             className="text-[11px] font-semibold text-red-500 hover:underline disabled:opacity-50">
@@ -2675,7 +2675,7 @@ function UnitDrawer({ unitId, onClose, user, canManage, isAdminUser, isDark, t, 
                     <div className="mb-3">
                       {holdOpen ? (
                         <div className={`rounded-xl border p-3 ${t.innerBlock}`}>
-                          <p className={`text-[11px] font-bold uppercase tracking-wider mb-2 ${t.textMuted}`}>Place a hold</p>
+                          <p className={`crm-eyebrow mb-2 ${t.textMuted}`}>Place a hold</p>
                           <div className="flex gap-2 mb-2">
                             <div className="flex-1">
                               <label className={`text-[10px] block mb-1 ${t.textMuted}`}>Hours</label>
@@ -2737,7 +2737,7 @@ function UnitDrawer({ unitId, onClose, user, canManage, isAdminUser, isDark, t, 
                   {canManage && (
                     <div className={`rounded-xl border p-3 mb-3 ${t.innerBlock}`}>
                       <div className="flex items-center justify-between mb-2">
-                        <p className={`text-[10px] font-bold uppercase tracking-widest ${t.textMuted}`}>Cost Sheet</p>
+                        <p className={`crm-eyebrow ${t.textMuted}`}>Cost Sheet</p>
                         <button
                           onClick={() => { const next = !sheetOpen; setSheetOpen(next); if (next) loadIssued(); }}
                           className="text-[11px] font-semibold text-[#00AEEF] hover:underline"
@@ -2820,7 +2820,7 @@ function UnitDrawer({ unitId, onClose, user, canManage, isAdminUser, isDark, t, 
 
                           {issued.length > 0 && (
                             <div className={`mt-3 pt-2 border-t ${isDark ? "border-[#2A2A35]" : "border-[#E5E7EB]"}`}>
-                              <p className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${t.textMuted}`}>Issued</p>
+                              <p className={`crm-eyebrow mb-1 ${t.textMuted}`}>Issued</p>
                               {issued.map((s: any) => (
                                 <div key={s.id} className="flex justify-between gap-3 py-1">
                                   <span className={`text-[11px] ${t.textMuted}`}>
@@ -2839,7 +2839,7 @@ function UnitDrawer({ unitId, onClose, user, canManage, isAdminUser, isDark, t, 
 
                   {(unit.booking_id || unit.lead_id) && (
                     <div className={`rounded-xl border p-3 mb-3 ${t.innerBlock}`}>
-                      <p className={`text-[10px] font-bold uppercase tracking-widest mb-2 ${t.textMuted}`}>Linked</p>
+                      <p className={`crm-eyebrow mb-2 ${t.textMuted}`}>Linked</p>
                       {fullLinkedDetails ? (
                         <>
                           {(unit.lead_name || unit.lead_id) && (
@@ -2881,7 +2881,7 @@ function UnitDrawer({ unitId, onClose, user, canManage, isAdminUser, isDark, t, 
                   )}
 
                   {/* History */}
-                  <p className={`text-[10px] font-bold uppercase tracking-widest mb-2 flex items-center gap-1.5 ${t.textMuted}`}><FaHistory className="text-[9px]" /> History ({history.length})</p>
+                  <p className={`crm-eyebrow mb-2 flex items-center gap-1.5 ${t.textMuted}`}><FaHistory className="text-[9px]" /> History ({history.length})</p>
                   <div className="space-y-2">
                     {history.length === 0 && <p className={`text-[11px] italic ${t.textFaint}`}>No history yet.</p>}
                     {history.map(h => (

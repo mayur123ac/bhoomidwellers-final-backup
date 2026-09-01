@@ -184,15 +184,13 @@ body {
 }
 
 /* ──────────────────────────────────────────────────────────────────────
-   TYPE RAMP
-   Apple's hierarchy is built from size + weight + tracking + leading, not
-   from making everything bold. Optical tracking tightens as size grows,
-   which is the single change that makes headings stop looking like
-   blown-up body text.
+   TYPE RAMP — Receptionist aliases
+   These map the panel-scoped .rp-* names to the global crm-* definitions.
+   Kept for backward compatibility — new code should use crm-* directly.
    ────────────────────────────────────────────────────────────────────── */
 
 .recep-panel .rp-title-lg {
-  font-size: 28px;
+  font-size: 24px;
   line-height: 34px;
   font-weight: 700;
   letter-spacing: -0.022em;
@@ -200,7 +198,8 @@ body {
 
 @media (max-width: 480px) {
   .rp-title-lg {
-    font-size: 22px;
+    font-size: 16px;
+    line-height: 24px;
   }
 }
 
@@ -218,8 +217,6 @@ body {
   letter-spacing: -0.01em;
 }
 
-/* Metadata, subtitles, "last synced" — one step down in size AND weight, so
-   it recedes without needing a lighter colour (colours are locked). */
 .recep-panel .rp-secondary {
   font-size: 13px;
   line-height: 18px;
@@ -227,10 +224,6 @@ body {
   letter-spacing: -0.003em;
 }
 
-/* Uppercase section heading inside a card or form block ("Personal
-   Information", "Requirement & Budget"). Carries its own weight rather than
-   being composed as `<ramp class> font-bold` — see the CASCADE note at the top
-   of this block for why a weight utility next to a ramp class loses. */
 .recep-panel .rp-eyebrow {
   font-size: 12px;
   line-height: 16px;
@@ -239,7 +232,6 @@ body {
   text-transform: uppercase;
 }
 
-/* Text inside a button or toolbar control. */
 .recep-panel .rp-control-label {
   font-size: 13px;
   line-height: 18px;
@@ -247,8 +239,6 @@ body {
   letter-spacing: -0.003em;
 }
 
-/* KPIs read as numbers, not as shouting: tabular figures so digits line up
-   between cards, tight tracking, and 600 rather than 800/900. */
 .recep-panel .rp-kpi {
   font-size: 26px;
   line-height: 30px;
@@ -491,4 +481,129 @@ input:-webkit-autofill:focus,
 select:-webkit-autofill {
   border-radius: inherit;
   outline: none;
+}
+
+/* ==========================================================================
+   CRM TYPOGRAPHY SYSTEM — Global, panel-agnostic type ramp.
+   ==========================================================================
+
+   Every text element in the CRM should use one of these classes instead of
+   bare `text-[Xpx]` utilities. The ramp is built from Apple's typographic
+   hierarchy: size + weight + tracking + leading, with optical tracking that
+   tightens as size grows.
+
+   These classes are NOT scoped to any panel — they work everywhere. The
+   Receptionist panel's `.rp-*` classes are kept as scoped aliases that
+   reference the same values.
+
+   USAGE RULES:
+   • Use the class that matches the *semantic role*, not the pixel size.
+   • Never pair a `crm-*` class with a competing `font-bold` / `text-[Xpx]`
+     utility — each class carries its own final weight and size.
+   • Colours are NOT set here — use theme tokens from lib/crmTheme.ts.
+   ========================================================================== */
+
+/* ── Font stack ─────────────────────────────────────────────────────────── */
+:root {
+  --crm-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+    "Segoe UI Variable Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* ── Type ramp ──────────────────────────────────────────────────────────── */
+
+/* Page titles — "Receptionist Leads", "Admin Dashboard" */
+.crm-title-lg {
+  font-size: 28px;
+  line-height: 34px;
+  font-weight: 700;
+  letter-spacing: -0.022em;
+}
+
+@media (max-width: 480px) {
+  .crm-title-lg {
+    font-size: 22px;
+  }
+}
+
+/* Section titles — card headers, detail panel names */
+.crm-title {
+  font-size: 20px;
+  line-height: 25px;
+  font-weight: 700;
+  letter-spacing: -0.017em;
+}
+
+/* Sub-section headings — "Personal Information", table group labels */
+.crm-section {
+  font-size: 15px;
+  line-height: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* Body text — form values, descriptions, detail content */
+.crm-body {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 400;
+  letter-spacing: -0.003em;
+}
+
+/* Control labels — button text, toolbar controls */
+.crm-label {
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 600;
+  letter-spacing: -0.003em;
+}
+
+/* Metadata, subtitles — "last synced", secondary info */
+.crm-secondary {
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 400;
+  letter-spacing: -0.003em;
+}
+
+/* Uppercase section eyebrows — "REQUIREMENT & BUDGET" */
+.crm-eyebrow {
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Status chips, badges, tags */
+.crm-caption {
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+/* Small labels — table column metadata, filter pills, dense UI */
+.crm-small {
+  font-size: 10px;
+  line-height: 14px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+/* Timestamps, watermarks, footnotes — smallest legible size */
+.crm-micro {
+  font-size: 9px;
+  line-height: 12px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+/* KPI numbers — large, tabular-aligned figures */
+.crm-kpi {
+  font-size: 26px;
+  line-height: 30px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
 }

@@ -424,9 +424,9 @@ export default function BulkGenerateUnitsModal({ isOpen, onClose, onCreated, use
         <table className="border-collapse text-left">
           <thead>
             <tr>
-              <th className={`px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider ${t.textMuted}`}>Floor</th>
+              <th className={`px-2 py-1.5 crm-eyebrow ${t.textMuted}`}>Floor</th>
               {positions.map(p => (
-                <th key={p.key} className={`px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-center ${t.textMuted}`}>
+                <th key={p.key} className={`px-2 py-1.5 crm-eyebrow text-center ${t.textMuted}`}>
                   Pos {pad2(p.position)}
                 </th>
               ))}
@@ -520,7 +520,7 @@ export default function BulkGenerateUnitsModal({ isOpen, onClose, onCreated, use
                   </div>
 
                   <div className={`mt-4 pt-4 border-t ${t.tableBorder}`}>
-                    <p className={`text-[10px] font-bold uppercase tracking-widest mb-3 ${t.textMuted}`}>Layout</p>
+                    <p className={`crm-eyebrow mb-3 ${t.textMuted}`}>Layout</p>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                       <div><label className={labelCls}>No. of Floors *</label><input type="number" min="1" value={config.num_floors} onChange={e => setC({ num_floors: e.target.value })} className={inputCls} placeholder="e.g. 12" /></div>
                       <div><label className={labelCls}>Starting Floor *<span className="opacity-60"> (0 = Ground)</span></label><input type="number" value={config.start_floor} onChange={e => setC({ start_floor: e.target.value })} className={inputCls} placeholder="1" /></div>
@@ -538,7 +538,7 @@ export default function BulkGenerateUnitsModal({ isOpen, onClose, onCreated, use
                   {/* ── FLAT POSITION PATTERN (§1, §4) ── */}
                   <div className={`mt-4 pt-4 border-t ${t.tableBorder}`}>
                     <div className="flex items-center justify-between gap-3 mb-1 flex-wrap">
-                      <p className={`text-[10px] font-bold uppercase tracking-widest ${t.textMuted}`}>Flat Position Pattern</p>
+                      <p className={`crm-eyebrow ${t.textMuted}`}>Flat Position Pattern</p>
                       <button type="button" onClick={addPosition}
                         className="flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1.5 rounded-lg bg-[#00AEEF] text-white hover:bg-[#0095cc]">
                         <FaPlus className="text-[9px]" /> Add Position
@@ -633,7 +633,7 @@ export default function BulkGenerateUnitsModal({ isOpen, onClose, onCreated, use
 
                   {/* ── Numbering ── */}
                   <div className={`mt-4 pt-4 border-t ${t.tableBorder}`}>
-                    <p className={`text-[10px] font-bold uppercase tracking-widest mb-3 ${t.textMuted}`}>Numbering</p>
+                    <p className={`crm-eyebrow mb-3 ${t.textMuted}`}>Numbering</p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className={labelCls}>Numbering Pattern</label>
@@ -660,7 +660,7 @@ export default function BulkGenerateUnitsModal({ isOpen, onClose, onCreated, use
 
                   {/* ── Pattern summary (§10) ── */}
                   <div className={`mt-4 pt-4 border-t ${t.tableBorder}`}>
-                    <p className={`text-[10px] font-bold uppercase tracking-widest mb-3 ${t.textMuted}`}>Pattern Summary</p>
+                    <p className={`crm-eyebrow mb-3 ${t.textMuted}`}>Pattern Summary</p>
                     <div className="flex items-start gap-6 flex-wrap">
                       <div>
                         <p className={`text-lg font-bold ${t.text}`}>{numFloors}</p>
@@ -690,7 +690,7 @@ export default function BulkGenerateUnitsModal({ isOpen, onClose, onCreated, use
                   {/* ── Live matrix (§5, §14) — the pattern made visible before saving ── */}
                   {livePreview.length > 0 && (
                     <div className={`mt-4 pt-4 border-t ${t.tableBorder}`}>
-                      <p className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${t.textMuted}`}>Generated Pattern</p>
+                      <p className={`crm-eyebrow mb-1 ${t.textMuted}`}>Generated Pattern</p>
                       <p className={`text-[11px] mb-3 ${t.textFaint}`}>↓ the positions above, repeated on every floor ↓</p>
                       {/* Which building these flats land in — the matrix shows the
                           same numbers for every wing, so the tag is what tells
@@ -792,7 +792,7 @@ export default function BulkGenerateUnitsModal({ isOpen, onClose, onCreated, use
                   </p>
                   {summary.skipped_details.length > 0 && (
                     <div className={`w-full max-w-md rounded-xl border p-3 text-left ${t.innerBlock}`}>
-                      <p className={`text-[10px] font-bold uppercase tracking-widest mb-2 ${t.textMuted}`}>Skipped</p>
+                      <p className={`crm-eyebrow mb-2 ${t.textMuted}`}>Skipped</p>
                       <div className="max-h-40 overflow-y-auto space-y-1">
                         {summary.skipped_details.map((s, i) => (
                           <p key={i} className={`text-[11px] ${t.textFaint}`}><b className={t.text}>{s.flat_no}</b> — {s.reason}</p>

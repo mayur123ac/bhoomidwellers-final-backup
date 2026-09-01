@@ -11,7 +11,7 @@ import Image from "next/image";
  * Apple standard navigation bar heights adjusted for safe touch areas.
  * Increased base mobile height to 56px to comfortably house 44px touch targets.
  */
-export const APP_HEADER_HEIGHT = "min-h-[calc(56px+env(safe-area-inset-top))] sm:min-h-[calc(64px+env(safe-area-inset-top))]";
+export const APP_HEADER_HEIGHT = "min-h-[calc(56px+env(safe-area-inset-top))] sm:min-h-[calc(64px+env(safe-area-inset-top))}]";
 export const APP_HEADER_PADDING = "px-4 sm:px-6"; // Standard 16px padding on mobile
 
 const appleFontStack = `-apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif`;
@@ -164,10 +164,10 @@ export default function AppHeader({
               className="font-bold truncate min-w-0"
               style={{
                 // Drops to 14px on tiny screens, scales to 17px on desktop
-                fontSize: "clamp(14px, 4vw, 17px)",
+                fontSize: "clamp(14px, 4vw, 14px)",
                 letterSpacing: "-0.41px",
                 lineHeight: "22px",
-                color: isDark ? "#FFFFFF" : "#000000ff"
+                color: isDark ? "#FFFFFF" : "#374151"
               }}
             >
               {context}
@@ -190,7 +190,7 @@ export default function AppHeader({
       </div>
 
       {/* ── Right: controls ── */}
-      <div className="flex items-center gap-4 sm:gap-1.5 flex-shrink-0">
+      <div className="flex items-center gap-4 flex-shrink-0">
         {leading}
         {children}
       </div>

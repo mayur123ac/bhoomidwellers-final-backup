@@ -200,7 +200,7 @@ function AssignedChannelPartnersView({
         }`}
       style={highlight ? {} : t.modalBlockGl}
     >
-      <p className={`text-xs font-bold uppercase tracking-wider mb-3 ${highlight ? t.accentText : t.sectionTitle}`}>
+      <p className={`crm-eyebrow mb-3 ${highlight ? t.accentText : t.sectionTitle}`}>
         {heading}
       </p>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
@@ -288,7 +288,7 @@ function AssignedChannelPartnersView({
                 ? "bg-[#1C1C1E] border border-white/5 shadow-black/50"
                 : "bg-white border border-black/5 shadow-gray-200/50"
                 }`}>
-              <p className={`text-[10px] font-bold uppercase tracking-wider ${t.textMuted}`}>{card.label}</p>
+              <p className={`crm-eyebrow ${t.textMuted}`}>{card.label}</p>
               <p className={`text-xl font-black leading-tight ${t.text}`}>{card.value}</p>
               <p className={`text-[10px] truncate ${t.textFaint}`} title={String(card.hint)}>{card.hint}</p>
             </div>

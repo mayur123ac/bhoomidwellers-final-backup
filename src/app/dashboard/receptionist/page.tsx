@@ -21,10 +21,11 @@ import {
   FaPhoneAlt, FaUserCircle, FaBriefcase, FaSearch, FaDownload,
   FaFileInvoice, FaHandshake, FaUniversity, FaUsers, FaFileAlt,
   FaClock, FaMicrophone, FaWhatsapp, FaCheckCircle,
-  FaExchangeAlt, FaUserTie, FaChartPie, FaInfoCircle, FaSyncAlt
+  FaExchangeAlt, FaUserTie, FaChartPie, FaInfoCircle, FaSyncAlt,
+  FaChevronDown
 } from "react-icons/fa";
 import { FiUser, FiHelpCircle, FiLogOut, FiChevronRight } from "react-icons/fi";
-import { Ghost, AlertTriangle } from "lucide-react";
+import { Ghost, AlertTriangle, Menu } from "lucide-react";
 import LoginTimerWidget from "@/components/LoginTimerWidget";
 import AttendanceBadge from "@/components/AttendanceBadge";
 import { useAttendance } from "@/components/AttendanceContext";
@@ -58,8 +59,10 @@ import BolnaCallWidget from "@/components/BolnaCallWidget";
 import CallingButtons from "@/components/CallingButtons";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import UserAvatar from "@/components/UserAvatar";
-import AppHeader, { HeaderControl } from "@/components/AppHeader";
+import AppHeader from "@/components/AppHeader";
+import HeaderClock from "@/components/HeaderClock";
 import ReceptionistSidebar, { RECEPTIONIST_NAV } from "@/components/receptionist/ReceptionistSidebar";
+import ReceptionistMobileDrawer from "@/components/receptionist/ReceptionistMobileDrawer";
 import BhoomiAiPanel from "@/components/bhoomi-ai/BhoomiAiPanel";
 import AdminAssistantDock from "@/components/AdminAssistantDock";
 import dynamic from "next/dynamic";
@@ -237,7 +240,7 @@ const CONFIG_KEYS: string[] = [...CONFIG_OPTIONS];
 // icon grew by 2px when you switched to dark mode and shrank on the way back,
 // in the same button.
 const SunIcon = () => (
-  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="12" cy="12" r="5" />
     <line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" />
     <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
@@ -246,7 +249,7 @@ const SunIcon = () => (
   </svg>
 );
 const MoonIcon = () => (
-  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
   </svg>
 );
@@ -436,7 +439,7 @@ function RpPageHeader({
       <div className="flex items-center gap-3 min-w-0">
         {leading}
         <div className="rp-page-header-titles">
-          <h1 className={`rp-title-lg flex items-center flex-wrap gap-2.5${titleClass}`}>
+          <h1 className={`rp-title-lg flex items-center flex-wrap gap-2 ${titleClass}`}>
             {title}
             {badge}
           </h1>
@@ -530,6 +533,7 @@ export default function ReceptionistDashboard() {
   const [activeTab, setActiveTab] = useState("overview");
   const [showPassword, setShowPassword] = useState(false);
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   // Restore the tab a rail click asked for before it navigated here — the same
   // `return_tab` convention the Admin and Sales dashboards use, written by
@@ -566,7 +570,7 @@ export default function ReceptionistDashboard() {
   const [bookingDetailTab, setBookingDetailTab] = useState<"personal" | "loan" | "booking">("personal");
   const [toastMsg, setToastMsg] = useState<{ title: string; color: string } | null>(null);
 
-  const [activePopup, setActivePopup] = useState<"notifications" | "profile" | null>(null);
+  const [activePopup, setActivePopup] = useState<"notifications" | "profile" | "updates" | null>(null);
   const topbarRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -696,15 +700,28 @@ export default function ReceptionistDashboard() {
   const [card4Mode, setCard4Mode] = useState<"today" | "monthly" | "3months" | "6months" | "yearly" | "inception">("monthly");
   const [card4Month, setCard4Month] = useState(new Date().getMonth());
 
-  // ── Assigned tab (full Sales-Manager panel) ──
+  // ── Lead detail view ──
   const [assignedSubView, setAssignedSubView] = useState<"cards" | "detail">("cards");
+  // Tracks which tab the back button should return to from the detail view.
+  const [detailReturnTab, setDetailReturnTab] = useState<string>("recep-leads");
   const [selectedLead, setSelectedLead] = useState<any>(null);
+
+  // If the "assigned" tab is showing but there's no detail to display (e.g. the
+  // cards sub-view), redirect to the return tab. Assigned Forms cards have been
+  // removed from the Receptionist panel.
+  useEffect(() => {
+    if (activeTab === "assigned" && (assignedSubView !== "detail" || !selectedLead)) {
+      setActiveTab(detailReturnTab);
+    }
+  }, [activeTab, assignedSubView, selectedLead, detailReturnTab]);
+
   const [isWaModalOpen, setIsWaModalOpen] = useState(false);
   const [waMessage, setWaMessage] = useState("");
   const [isSendingWa, setIsSendingWa] = useState(false);
   const [detailTab, setDetailTab] = useState<"personal" | "loan">("personal");
   const [showSalesForm, setShowSalesForm] = useState(false);
   const [showLoanForm, setShowLoanForm] = useState(false);
+  const [showMobileActions, setShowMobileActions] = useState(false);
   const [salesForm, setSalesForm] = useState({ propertyType: "", location: "", budget: "", useType: "", purchaseDate: "", loanPlanned: "", siteVisit: "", leadStatus: "" });
   // Loan & Deal Tracking panel — independent of bookingData/fetchBookingForLead above,
   // which (when wired up) swaps the whole detail view to ClosedLeadBookingView.
@@ -1228,6 +1245,7 @@ export default function ReceptionistDashboard() {
     setDetailTab("personal");
     setShowSalesForm(false);
     setShowLoanForm(false);
+    setDetailReturnTab("recep-leads");
     setActiveTab("assigned");
   }, [directAssignedLeads, enquiries]);
 
@@ -1638,6 +1656,7 @@ export default function ReceptionistDashboard() {
       setTransferTarget("");
       showToast(`✅ Lead #${selectedLead.sr_no || selectedLead.id} transferred to ${transferTarget}!`);
       setAssignedSubView("cards");
+      setActiveTab(detailReturnTab);
       refetchAll();
     } catch (e: any) {
       alert(e.message ?? "Transfer failed. Try again.");
@@ -1838,6 +1857,26 @@ export default function ReceptionistDashboard() {
         onExpandedChange={setSidebarExpanded}
       />
 
+      {/* Mobile drawer — slides from right, matches Admin MobileDrawer */}
+      <ReceptionistMobileDrawer
+        open={isMobileSidebarOpen}
+        onClose={() => setIsMobileSidebarOpen(false)}
+        activeId={activeTab === "detail" ? "overview" : activeTab}
+        onSelect={(item) => {
+          if (item.id === "settings") router.push("/dashboard/settings/profile");
+          else setActiveTab(item.id);
+          setIsMobileSidebarOpen(false);
+        }}
+        isDark={isDark}
+        userName={user?.name}
+        userRole={user?.role}
+        onToggleTheme={toggleTheme}
+        isMarkedPresent={isMarkedPresent}
+        timeIn={timeIn}
+        onLogout={handleLogout}
+        menuItems={RECEPTIONIST_NAV}
+      />
+
       {/* ════════════════════════════════════════════════════
           MAIN CONTENT
       ════════════════════════════════════════════════════ */}
@@ -1854,59 +1893,38 @@ export default function ReceptionistDashboard() {
           isDark={isDark}
           context={RECEPTIONIST_CONTEXT[activeTab]}
           role={user?.role}
-          // Structure comes from AppHeader; colour stays on this panel's own
-          // locked tokens. `border-b ${t.header}` and `t.headerGlass` are the
-          // exact class and style this header carried before the migration, so
-          // the bar's background, border colour and light-mode shadow are
-          // unchanged — only its metrics and controls moved.
-          surfaceClassName={`border-b ${t.header}`}
-          surfaceStyle={t.headerGlass}
         >
-          <div className="flex items-center gap-2 relative" ref={topbarRef}>
-            {/* HeaderClock is rendered by AppHeader itself — the copy that used
-                to be here is gone, not moved, or the bar would show two clocks. */}
-            {/* Compact Login/Logout punch control. Clicking "Login" hits
-                POST /api/attendance/mark directly (no navigation); once
-                marked it shows the live elapsed timer and clicking it runs
-                the same logout flow as the profile menu. */}
+          <div className="flex items-center gap-4 flex-shrink-0 relative z-[50]" ref={topbarRef}>
+            {/* Desktop-only controls: hidden on mobile */}
+            <div className="hidden md:flex items-center gap-4">
+              <HeaderClock isDark={isDark} />
+              <div
+                className={`w-5 h-5 flex items-center justify-center cursor-pointer ${isDark ? "text-gray-400" : "text-[#6B7280]"} hover:text-[#9E217B] transition-colors`}
+                onClick={toggleTheme} role="button"
+                aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}>
+                {isDark ? <SunIcon /> : <MoonIcon />}
+              </div>
+            </div>
+
+            {/* Attendance: visible on all screen sizes */}
             <AttendanceBadge
               timeIn={timeIn}
               isMarkedPresent={isMarkedPresent}
               onLogout={handleLogout} />
-            {/* HeaderControl is the Settings bar's control: 36px square, one
-                border, one radius, colour transitions only. Using the component
-                rather than restating its classes is what makes "the same size as
-                Settings" true by construction instead of by inspection. */}
-            <HeaderControl
-              isDark={isDark}
-              size="sm"
-              onClick={toggleTheme}
-              aria-pressed={isDark}
-              label={isDark ? "Switch to light mode" : "Switch to dark mode"}
-            >
-              {isDark ? <SunIcon /> : <MoonIcon />}
-            </HeaderControl>
-            {/* ── NOTIFICATION BELL & DROPDOWN ── */}
+
+            {/* CRM System Updates */}
+            <CrmUpdatesNotification user={user} theme={t} isDark={isDark} isOpen={activePopup === "updates"} onToggle={() => setActivePopup(activePopup === "updates" ? null : "updates")} />
+
+            {/* Notification Bell */}
             <div className="relative">
-              {/* Same HeaderControl as the theme button, so the bell is no longer
-                  the one control in this bar with its own size and no chrome.
-                  `relative` is passed explicitly: HeaderControl does not set it,
-                  and the unread badge is absolutely positioned against this
-                  button rather than against the wrapper. */}
-              <HeaderControl
-                isDark={isDark}
-                size="sm"
-                label="Notifications"
-                className="relative"
-                onClick={() => { setActivePopup(activePopup === "notifications" ? null : "notifications"); setNotifCount(0); }}
-              >
-                <FaBell className="w-3 h-3" />
+              <div className="relative cursor-pointer" onClick={() => { setActivePopup(activePopup === "notifications" ? null : "notifications"); setNotifCount(0); }}>
+                <FaBell className={`${t.textMuted} hover:text-[#9E217B] transition-colors w-5 h-5`} />
                 {notifCount > 0 && (
                   <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-[#9E217B] rounded-full text-[9px] font-black text-white flex items-center justify-center">
                     {notifCount > 9 ? "9+" : notifCount}
                   </span>
                 )}
-              </HeaderControl>
+              </div>
 
               <AnimatePresence>
                 {activePopup === "notifications" && (
@@ -1949,131 +1967,93 @@ export default function ReceptionistDashboard() {
                 )}
               </div>
             )} */}
-            {/* Was a click-handling <div>: not reachable by keyboard, and not
-                sized by the touch-target rule, so it would have sat 8px shorter
-                than the two buttons beside it. Same colours, same avatar.
-                overflow-hidden matches the Settings avatar button so an uploaded
-                picture is clipped to the circle by the button, not only by the
-                <img>'s own rounding. */}
+            {/* Profile — desktop only */}
+            <div className="relative hidden md:block">
+              <div
+                onClick={() => setActivePopup(activePopup === "profile" ? null : "profile")}
+                className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm cursor-pointer shadow-sm hover:opacity-80 transition-opacity border
+                  ${isDark ? "border-[#9E217B]/40 text-[#d946a8] bg-[#9E217B]/15" : "border-[#9E217B]/40 text-[#9E217B] bg-[#9E217B]/10"}`}
+              >
+                <UserAvatar name={user?.name} fallback="U" alt="" />
+              </div>
+              <AnimatePresence>
+                {activePopup === "profile" && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 8, scale: 0.98 }}
+                    transition={{ duration: 0.18, ease: "easeOut" }}
+                    className={`absolute top-12 right-0 w-[250px] rounded-[20px] p-4 z-[200] border shadow-2xl ${isDark ? "bg-[#1C1C1E]/95 border-white/10" : "bg-white/95 border-black/5"}`}
+                    style={{ backdropFilter: "blur(24px) saturate(180%)" }}
+                  >
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center text-[17px] font-semibold flex-shrink-0 ${isDark ? "bg-[#9E217B]/20 text-[#d946a8]" : "bg-purple-100 text-purple-900"}`}>
+                        {(user?.name || "User").charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex flex-col overflow-hidden">
+                        <p className={`font-semibold text-[14px] tracking-tight truncate leading-tight ${t.text}`}>
+                          {user?.name || "User"}
+                        </p>
+                        <p className={`text-[12px] truncate mt-[1px] ${t.textMuted}`}>
+                          {user?.email || "No email"}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 mb-4">
+                      <span className={`px-2 py-0.5 rounded text-[11px] font-medium border capitalize ${isDark ? "bg-[#9E217B]/10 text-[#d946a8] border-[#9E217B]/30" : "bg-purple-50 text-purple-800 border-purple-200"}`}>
+                        {user?.role || "Receptionist"}
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"></span>
+                        <span className={`text-[12px] font-medium ${t.textMuted}`}>Active</span>
+                      </div>
+                    </div>
+                    <hr className={`-mx-4 border-0 border-t ${isDark ? "border-white/10" : "border-black/5"}`} />
+                    <div className="flex flex-col py-1.5">
+                      <button
+                        onClick={() => { setActivePopup(null); router.push("/dashboard/settings/profile"); }}
+                        className={`w-full flex items-center justify-between py-2.5 px-2 -mx-2 rounded-xl transition-colors cursor-pointer group ${isDark ? "hover:bg-white/5" : "hover:bg-black/[0.04]"}`}
+                      >
+                        <div className={`flex items-center gap-2.5 ${t.text}`}>
+                          <FiUser className={`w-4 h-4 ${t.textMuted}`} />
+                          <span className="text-[13px] font-medium">Account Settings</span>
+                        </div>
+                        <FiChevronRight className={`w-3.5 h-3.5 ${t.textMuted}`} />
+                      </button>
+                      <hr className={`border-0 border-t my-0.5 ${isDark ? "border-white/10" : "border-black/5"}`} />
+                      <button
+                        onClick={() => { setActivePopup(null); }}
+                        className={`w-full flex items-center justify-between py-2.5 px-2 -mx-2 rounded-xl transition-colors cursor-pointer group ${isDark ? "hover:bg-white/5" : "hover:bg-black/[0.04]"}`}
+                      >
+                        <div className={`flex items-center gap-2.5 ${t.text}`}>
+                          <FiHelpCircle className={`w-4 h-4 ${t.textMuted}`} />
+                          <span className="text-[13px] font-medium">Help & Support</span>
+                        </div>
+                        <span className={`px-2 py-0.5 rounded-md text-[8px] font-small border ${isDark ? "bg-white/10 text-white/60 border-white/10" : "bg-gray-100 text-gray-600 border-gray-200"}`}>Coming Soon</span>
+                      </button>
+                    </div>
+                    <hr className={`-mx-4 border-0 border-t mb-2.5 mt-1 ${isDark ? "border-white/10" : "border-black/5"}`} />
+                    <button
+                      onClick={handleLogout}
+                      className={`w-full flex items-center gap-2.5 py-2.5 px-3 rounded-[12px] font-semibold text-[13px] transition-colors cursor-pointer ${isDark ? "text-red-400 bg-red-500/10 hover:bg-red-500/20" : "text-red-600 bg-red-50 hover:bg-red-100"}`}
+                    >
+                      <FiLogOut className="w-4 h-4" />
+                      Log Out
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Hamburger — mobile only */}
             <button
               type="button"
-              aria-label="Account menu"
-              aria-expanded={activePopup === "profile"}
-              onClick={() => setActivePopup(activePopup === "profile" ? null : "profile")}
-              className={`w-8 h-8 flex-shrink-0 rounded-full overflow-hidden flex items-center justify-center font-semibold text-[13px] cursor-pointer transition-colors duration-150 ${isDark ? "border border-[#9E217B]/40 text-[#d4006e] bg-[#9E217B]/15" : "border border-[#00AEEF]/40 text-[#00AEEF] bg-[#00AEEF]/10"}`}>
-              <UserAvatar name={user?.name} fallback="U" alt="" />
+              onClick={() => setIsMobileSidebarOpen(true)}
+              className={`md:hidden h-8 w-8 sm:h-9 sm:w-9 flex-shrink-0 rounded-full sm:rounded-lg border border-transparent sm:border flex items-center justify-center transition-colors duration-150 cursor-pointer ${isDark ? "bg-white/10 text-[#EBEBF5] sm:bg-[#1C1C2A] sm:border-[#2A2A38] sm:text-yellow-300 hover:bg-white/20" : "bg-black/5 text-[#3C3C43] sm:bg-[#F1F5F9] sm:border-[#9CA3AF] sm:text-[#1A1A1A] hover:bg-black/10"} sm:hover:bg-[inherit]`}
+              aria-label="Open navigation menu"
+            >
+              <Menu className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
-            <AnimatePresence>
-              {activePopup === "profile" && (
-                <motion.div
-                  initial={{ opacity: 0, y: 8, scale: 0.98 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 8, scale: 0.98 }}
-                  transition={{ duration: 0.18, ease: "easeOut" }}
-                  className={`absolute top-12 right-0 w-[250px] rounded-[20px] p-4 z-[200] border shadow-2xl ${isDark ? "bg-[#1C1C1E]/95 border-white/10" : "bg-white/95 border-black/5"
-                    }`}
-                  style={{ backdropFilter: "blur(24px) saturate(180%)" }}
-                >
-                  {/* ── HEADER: Avatar & Info ── */}
-                  <div className="flex items-center gap-3 mb-3">
-                    {/* Scaled-down 40px Apple-style Circular Avatar */}
-                    <div
-                      className={`w-10 h-10 rounded-full flex items-center justify-center text-[17px] font-semibold flex-shrink-0 ${isDark ? "bg-[#9E217B]/20 text-[#d946a8]" : "bg-purple-100 text-purple-900"
-                        }`}
-                    >
-                      {(user?.name || "User").charAt(0).toUpperCase()}
-                    </div>
-
-                    <div className="flex flex-col overflow-hidden">
-                      {/* 14px is the Apple standard for Callout/Menu Primary text */}
-                      <p className={`font-semibold text-[14px] tracking-tight truncate leading-tight ${t.text}`}>
-                        {user?.name || "User"}
-                      </p>
-                      {/* 12px for Subhead/Caption text */}
-                      <p className={`text-[12px] truncate mt-[1px] ${t.textMuted}`}>
-                        {user?.email || "No email"}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* ── STATUS ROW ── */}
-                  <div className="flex items-center gap-3 mb-4">
-                    <span
-                      className={`px-2 py-0.5 rounded text-[11px] font-medium border capitalize ${isDark
-                        ? "bg-[#9E217B]/10 text-[#d946a8] border-[#9E217B]/30"
-                        : "bg-purple-50 text-purple-800 border-purple-200"
-                        }`}
-                    >
-                      {user?.role || "Receptionist"}
-                    </span>
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"></span>
-                      <span className={`text-[12px] font-medium ${t.textMuted}`}>
-                        Active
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Negative margins align the divider to the container edges exactly */}
-                  <hr className={`-mx-4 border-0 border-t ${isDark ? "border-white/10" : "border-black/5"}`} />
-
-                  {/* ── MENU ITEMS ── */}
-                  <div className="flex flex-col py-1.5">
-                    <button
-                      onClick={() => {
-                        setActivePopup(null);
-                        router.push("/dashboard/settings/profile");
-                      }}
-                      className={`w-full flex items-center justify-between py-2.5 px-2 -mx-2 rounded-xl transition-colors cursor-pointer group ${isDark ? "hover:bg-white/5" : "hover:bg-black/[0.04]"
-                        }`}
-                    >
-                      <div className={`flex items-center gap-1 ${t.text}`}>
-                        <FiUser className={`w-4 h-4 ${t.textMuted} group-hover:${t.text}`} />
-                        {/* 13px is the strict macOS context menu font size */}
-                        <span className="text-[13px] font-medium">Account Settings</span>
-                      </div>
-                      <FiChevronRight className={`w-3.5 h-3.5 ${t.textMuted}`} />
-                    </button>
-
-                    <hr className={`border-0 border-t my-0.5 ${isDark ? "border-white/10" : "border-black/5"}`} />
-
-                    {/* Disabled "Help & Support" with Coming Soon Badge */}
-                    <div
-                      className={`w-full flex items-center justify-between py-2.5 px-2 -mx-2 rounded-xl transition-colors cursor-default ${isDark ? "opacity-70" : "opacity-80"
-                        }`}
-                    >
-                      <div className={`flex items-center gap-2.5 ${t.text}`}>
-                        <FiHelpCircle className={`w-4 h-4 ${t.textMuted}`} />
-                        <span className="text-[13px] font-medium">Help & Support</span>
-                      </div>
-
-                      <span
-                        className={`px-2 py-0.5 rounded-md text-[10px] font-medium border tracking-wide ${isDark
-                          ? "bg-white/5 text-white/50 border-white/10"
-                          : "bg-black/5 text-black/50 border-black/10"
-                          }`}
-                      >
-                        Coming Soon
-                      </span>
-                    </div>
-                  </div>
-
-                  <hr className={`-mx-4 border-0 border-t mb-2.5 mt-1 ${isDark ? "border-white/10" : "border-black/5"}`} />
-
-                  {/* ── FOOTER: LOG OUT ── */}
-                  <button
-                    onClick={handleLogout}
-                    className={`w-full flex items-center gap-2.5 py-2.5 px-3 rounded-[12px] font-semibold text-[13px] transition-colors cursor-pointer ${isDark
-                      ? "text-red-400 bg-red-500/10 hover:bg-red-500/20"
-                      : "text-red-600 bg-red-50 hover:bg-red-100"
-                      }`}
-                  >
-                    <FiLogOut className="w-4 h-4" />
-                    Log Out
-                  </button>
-                </motion.div>
-              )}
-            </AnimatePresence>
             {/* ── TOAST NOTIFICATION POPUP ── */}
             {/* 👇 TOAST POPUP 👇 */}
             {activeNotif && (
@@ -2100,7 +2080,7 @@ export default function ReceptionistDashboard() {
         {/* Content inset comes off the spacing scale (20 → 32) instead of the
             old 16/24, which matches the 20px the table toolbars already use and
             stops the page edge from shifting between tabs. */}
-        <main className={`flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 custom-scrollbar relative ${t.mainBg}`}>
+        <main className={`flex-1 overflow-y-auto p-3 sm:p-4 md:p-2 custom-scrollbar relative ${t.mainBg}`}>
 
           {/* ────────────────────────────────────────────────────────────
               AI ASSISTANT
@@ -2465,7 +2445,7 @@ export default function ReceptionistDashboard() {
                   </div>
                   <div className={`rounded-2xl p-5 border flex-1 flex flex-col ${isDark ? "bg-[#9E217B]/5 border-[#9E217B]/20" : "bg-[#9E217B]/5 border-[#9E217B]/20"}`}>
                     <div className="flex items-center justify-between mb-4">
-                      <p className={`text-xs md:text-[10px] font-bold uppercase tracking-wider ${t.textFaint}`}>
+                      <p className={`crm-eyebrow ${t.textFaint}`}>
                         {card2Mode === "today" && "Today"}{card2Mode === "monthly" && "Monthly"}{card2Mode === "3months" && "Last 3 Months"}
                         {card2Mode === "6months" && "Last 6 Months"}{card2Mode === "yearly" && "Yearly"}{card2Mode === "alltime" && "All Time"}
                       </p>
@@ -2529,8 +2509,8 @@ export default function ReceptionistDashboard() {
                   <div className="flex-1 overflow-y-auto custom-scrollbar max-h-[250px] pr-2">
                     <table className="w-full text-sm">
                       <thead><tr className={`border-b ${t.tableBorder}`}>
-                        <th className={`text-left py-2 px-1 text-[11px] md:text-xs font-bold uppercase tracking-wider ${t.textFaint}`}>Sales Manager</th>
-                        <th className={`text-right py-2 px-1 text-[11px] md:text-xs font-bold uppercase tracking-wider ${t.textFaint}`}>Enquiries</th>
+                        <th className={`text-left py-2 px-1 crm-eyebrow ${t.textFaint}`}>Sales Manager</th>
+                        <th className={`text-right py-2 px-1 crm-eyebrow ${t.textFaint}`}>Enquiries</th>
                       </tr></thead>
                       <tbody className={`divide-y ${t.tableDivide}`}>
                         {isFetchingEnquiries ? (
@@ -2617,7 +2597,7 @@ export default function ReceptionistDashboard() {
                           {/* ── Assignment Details — CP enquiries only, read-only. ── */}
                           {(selectedLead.source === "Channel Partner" || selectedLead.source === "CP") && (
                             <div className={`mt-4 sm:mt-6 rounded-xl sm:rounded-2xl md:rounded-3xl p-3 sm:p-5 border ${isDark ? "bg-[#9E217B]/10 border-[#9E217B]/30" : "bg-[#9E217B]/5 border-[#9E217B]/25"}`}>
-                              <p className={`text-[10px] sm:text-[11px] md:text-xs font-bold uppercase tracking-wider mb-2 sm:mb-4 ${t.accentText}`}>
+                              <p className={`crm-eyebrow mb-2 sm:mb-4 ${t.accentText}`}>
                                 Assignment Details
                               </p>
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-4 md:gap-5">
@@ -2718,117 +2698,14 @@ export default function ReceptionistDashboard() {
           )}
 
           {/* ════════════════════════════════════════════════════
-              ASSIGNED FORMS TAB — Full Sales Manager Panel
+              LEAD DETAIL VIEW — opened from Receptionist Leads or notifications.
+              The "assigned" tab is used only for its detail sub-view; the cards
+              list (Assigned Forms) has been removed from the Receptionist panel.
           ════════════════════════════════════════════════════ */}
           {activeTab === "assigned" && (
             <div className="animate-fadeIn">
-              {assignedSubView === "cards" && (
-                <div className="pb-10">
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-5 mb-8">
-                    <div>
-                      <h1 className={`text-2xl md:text-3xl font-bold flex flex-wrap items-center gap-3 ${t.text}`}>
-                        Assigned Forms
-                        <span className={`text-[11px] md:text-xs font-bold px-3 py-1.5 rounded-full border shadow-sm ${isDark ? "text-[#d4006e] border-[#9E217B]/30 bg-[#9E217B]/10" : "text-[#9E217B] bg-[#9E217B]/10 border-[#9E217B]/20"}`}>My Leads</span>
-                      </h1>
-                      <p className={`text-[13px] md:text-sm mt-2 ${t.textFaint}`}>{paginatedAssigned.length} shown · {filteredAssigned.length} total{hasMoreAssigned && <span className={`font-medium ${t.accentText}`}> · scroll for more</span>}</p>
-                    </div>
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto mt-2 md:mt-0">
-                      <div className="relative w-full sm:w-auto">
-                        <FaSearch className={`absolute left-3.5 top-1/2 -translate-y-1/2 text-sm ${t.textFaint}`} />
-                        <input type="text" placeholder="Search..." value={searchAssigned} onChange={e => { setSearchAssigned(e.target.value); setAssignedCardsPage(1); }}
-                          className={`w-full sm:w-64 rounded-xl pl-10 pr-4 py-3 sm:py-2.5 text-sm outline-none transition-colors border shadow-sm ${t.inputBg} ${t.text} ${t.inputFocus}`} />
-                      </div>
-                      <button onClick={refetchAll} className={`text-[13px] md:text-sm font-bold flex items-center justify-center gap-2 px-5 py-3 sm:py-2.5 rounded-xl shadow-sm transition-all ${t.btnPrimary}`}>
-                        <FaSyncAlt /> Refresh
-                      </button>
-                    </div>
-                  </div>
 
-                  {isFetchingEnquiries ? (
-                    <div className={`text-center py-20 ${t.textMuted}`}>Fetching your leads...</div>
-                  ) : myAssignedLeads.length === 0 ? (
-                    <div className={`text-center py-20 ${t.textMuted}`}>
-                      <FaUserTie className={`text-6xl mx-auto mb-5 ${t.textFaint}`} />
-                      <p className="text-xl font-bold">No leads assigned to you yet.</p>
-                      <p className={`text-[13px] mt-3 max-w-sm mx-auto ${t.textFaint}`}>Create a new lead and self-assign it from the Forms tab.</p>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6">
-                      {paginatedAssigned.map((lead: any) => {
-                        const isClosing = lead.status === "Closing";
-                        const isLost = !!lead.is_lost_lead;
-                        const isNGD = lead.status === "NON GENUINE DEMAND (NGD)" || lead.leadStatus === "NON GENUINE DEMAND (NGD)" || lead.leadInterestStatus === "NON GENUINE DEMAND (NGD)";
-                        const isReturningCard = lead.lead_classification === "RETURNING_LEAD";
-                        return (
-                          <div key={lead.id} onClick={() => { setSelectedLead(lead); setAssignedSubView("detail"); setDetailTab("personal"); setShowSalesForm(false); setShowLoanForm(false); }}
-                            className={`rounded-2xl md:rounded-3xl p-5 md:p-6 border shadow-sm cursor-pointer group flex flex-col justify-between transition-all duration-300 ${isLost ? t.cardLost :
-                              isClosing ? `${isDark ? "bg-yellow-900/10 border-yellow-500/30" : "bg-amber-50 border-amber-200"} hover:-translate-y-1.5 hover:scale-[1.02] hover:border-yellow-400/60 hover:shadow-xl`
-                                : isNGD ? t.cardNGD
-                                  : isReturningCard ? `${isDark ? "bg-green-900/10 border-green-500/30" : "bg-green-50 border-green-200"} hover:-translate-y-1.5 hover:scale-[1.02] hover:border-green-400/60 hover:shadow-xl`
-                                    : t.card
-                              }`} style={t.cardGlass}>
-                            <div>
-                              <div className={`flex flex-col sm:flex-row justify-between sm:items-start gap-3 mb-5 pb-4 border-b ${t.tableBorder}`}>
-                                <h3 className={`text-lg md:text-xl font-bold transition-colors line-clamp-1 pr-2 w-full ${t.text} ${isDark ? "group-hover:text-[#d4006e]" : "group-hover:text-[#9E217B]"}`}>
-                                  <span className={`mr-2 transition-colors ${isDark ? "text-[#d4006e]" : "text-[#00AEEF] group-hover:text-[#9E217B]"}`}>#{lead.sr_no || lead.id}</span>{lead.name}
-                                </h3>
-                                <span className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider border flex-shrink-0 shadow-sm w-fit ${isLost ? t.statusLost :
-                                  isNGD ? t.statusNGD : isReturningCard ? "border-green-500/40 text-green-400 bg-green-500/10" : getStatusStyle(lead.status)}`}>{isLost ? "LOST LEAD" : isNGD ? "NON GENUINE DEMAND" : isReturningCard ? "RETURNING" : (lead.status || "Assigned")}</span>
-                              </div>
-
-                              {/* Lost lead banner — shown immediately after the header */}
-                              {isLost && (
-                                <div className={`mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-xl px-4 py-3 border ${t.statusLost}`}>
-                                  <span className="text-[11px] font-black uppercase tracking-wider flex items-center gap-2">
-                                    <Ghost className="w-4 h-4" /> Lost Lead
-                                  </span>
-                                  <span className="text-xs font-semibold normal-case truncate max-w-full sm:max-w-[150px]">
-                                    {lead.lost_lead_reason || "Unresponsive"}
-                                  </span>
-                                </div>
-                              )}
-                              <div className="space-y-4 mb-6">
-                                <div className="flex justify-between items-center bg-black/5 dark:bg-white/5 p-3 rounded-xl">
-                                  <div><p className={`text-[11px] font-medium uppercase tracking-wide opacity-70 mb-1 ${t.textFaint}`}>Budget</p><p className={`text-[15px] md:text-sm font-bold tracking-tight ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget || lead.budget}</p></div>
-                                  {lead.loanStatus && lead.loanStatus !== "N/A" && <LoanStatusBadge status={lead.loanStatus} />}
-                                </div>
-                                {lead.propType && lead.propType !== "Pending" && (
-                                  <div className="px-1"><p className={`text-[11px] font-medium uppercase tracking-wide opacity-70 mb-1 ${t.textFaint}`}>Property</p><p className={`text-[13px] md:text-sm font-semibold ${t.text}`}>{lead.propType}</p></div>
-                                )}
-                                <div className={`p-3.5 md:p-3 rounded-xl md:rounded-lg border flex flex-col gap-2 md:gap-1.5 ${t.settingsBg}`} style={t.settingsBgGl}>
-                                  <p className={`text-xs flex items-center gap-2 ${t.textMuted}`}><FaPhoneAlt className="w-3.5 h-3.5 md:w-3 md:h-3 text-[#00AEEF]" /><span className="opacity-70">Ph No.</span><span className={`font-mono font-medium tracking-wide ${t.text}`}>{maskPhone(lead.phone)}</span></p>
-                                </div>
-                                {(lead.mongoVisitDate || lead.leadInterestStatus !== "Pending") && (
-                                  <div className="flex flex-wrap items-center justify-between gap-3 px-1 mt-2">
-                                    {lead.mongoVisitDate && <div className="flex items-center gap-1.5 text-[11px] md:text-xs font-bold text-orange-500 bg-orange-500/10 px-2.5 py-1 rounded-md border border-orange-500/20 shadow-sm"><FaCalendarAlt className="text-[10px]" />{formatDate(lead.mongoVisitDate).split(",")[0]}</div>}
-                                    {lead.leadInterestStatus && lead.leadInterestStatus !== "Pending" && <InterestBadge status={lead.leadInterestStatus} size="sm" />}
-                                  </div>
-                                )}
-                                {isClosing && (
-                                  <div className={`mt-2 flex items-center gap-2 text-[11px] md:text-[10px] font-bold px-4 py-2.5 md:px-3 md:py-1.5 rounded-xl md:rounded-lg shadow-sm ${isDark ? "text-yellow-400 bg-yellow-500/10 border border-yellow-500/20" : "text-amber-600 bg-amber-50 border border-amber-200"}`}>
-                                    <FaHandshake className="text-sm md:text-xs" /> Deal in Closing Stage
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                            <div className={`pt-4 border-t mt-auto flex justify-between items-center ${t.tableBorder}`}>
-                              <p className={`text-[11px] md:text-[10px] font-medium flex-shrink-0 whitespace-normal min-w-[120px] ${t.textFaint}`}>{formatDate(lead.created_at)}</p>
-                              <span className={`text-[11px] md:text-[10px] font-bold uppercase tracking-widest transition-colors ${isDark ? "text-gray-500 group-hover:text-[#d4006e]" : "text-[#00AEEF] group-hover:text-[#9E217B]"}`}>Details →</span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                      {hasMoreAssigned && <CardsLoader />}
-                      {!hasMoreAssigned && myAssignedLeads.length > 0 && (
-                        <div className="col-span-full"><p className={`text-center text-[13px] py-6 font-medium ${t.textFaint}`}>All {filteredAssigned.length} leads loaded</p></div>
-                      )}
-                    </div>
-                  )}
-                  <div ref={assignedSentinelRef} className="h-px w-full mt-4 pointer-events-none" aria-hidden="true" />
-                </div>
-              )}
-
-              {/* ── DETAIL VIEW (Assigned Forms) ── */}
+              {/* ── DETAIL VIEW ── */}
               {assignedSubView === "detail" && selectedLead && (
                 bookingData ? (
                   <div className="animate-fadeIn w-full mx-auto flex flex-col min-h-screen lg:min-h-0 lg:h-[calc(100vh-130px)] pb-10 lg:pb-0">
@@ -2842,60 +2719,76 @@ export default function ReceptionistDashboard() {
                 ) : (
                   <div className="animate-fadeIn w-full mx-auto flex flex-col min-h-screen lg:min-h-0 lg:h-[calc(100vh-130px)] pb-10 lg:pb-0">
                     {/* Detail header */}
-                    <div className={`flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-4 rounded-2xl md:rounded-3xl border p-4 md:p-5 shadow-sm flex-shrink-0 ${t.card}`} style={t.cardGlass}>
-                      <div className="flex items-center gap-4">
-                        <button onClick={() => { setAssignedSubView("cards"); }} className={`w-11 h-11 md:w-10 md:h-10 flex-shrink-0 flex items-center justify-center border rounded-xl transition-colors cursor-pointer shadow-sm ${t.textMuted} ${t.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}><FaChevronLeft className="text-sm" /></button>
-                        <h1 className={`text-xl md:text-2xl font-bold flex flex-wrap items-center gap-2 sm:gap-3 ${t.text}`}>
-                          <span className={t.accentText}>#{selectedLead.sr_no || selectedLead.id}</span>
-                          <span className="truncate max-w-[150px] sm:max-w-none">{selectedLead.name}</span>
-                          {selectedLead.status === "Closing" && (
-                            <span className={`text-[10px] md:text-[11px] font-bold px-3 py-1 rounded-full border flex items-center gap-1.5 shadow-sm ${t.statusClosing}`}><FaHandshake className="text-xs" /> Closing</span>
-                          )}
-                        </h1>
+                    <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 rounded-xl border border-gray-200 p-2.5 sm:p-2 shadow-sm flex-shrink-0 ${t.card}`} style={t.cardGlass}>
+                      {/* Back + Lead Name + Mobile Toggle */}
+                      <div className="flex items-center justify-between w-full sm:w-auto gap-2">
+                        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                          <button onClick={() => { setAssignedSubView("cards"); setActiveTab(detailReturnTab); }} className={`w-8 h-8 sm:w-9 sm:h-9 flex-shrink-0 flex items-center justify-center border border-gray-200 rounded-lg sm:rounded-xl transition-colors cursor-pointer shadow-lg ${t.textMuted} ${t.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}><FaChevronLeft className="text-[10px] sm:text-xs" /></button>
+                          <h1 className={`text-sm sm:text-base lg:text-lg font-bold flex flex-wrap items-center gap-1.5 sm:gap-2 min-w-0 ${t.text}`}>
+                            <span className={t.accentText}>#{selectedLead.sr_no || selectedLead.id}</span>
+                            <span>{selectedLead.name}</span>
+                            {selectedLead.status === "Closing" && (
+                              <span className={`text-[9px] sm:text-[11px] font-bold px-2 py-0.5 sm:px-3 sm:py-1 rounded-full border flex items-center gap-1 sm:gap-1.5 shadow-sm ${t.statusClosing}`}><FaHandshake className="text-[10px] sm:text-xs" /> Closing</span>
+                            )}
+                          </h1>
+                        </div>
+
+                        {/* MOBILE TOGGLE BUTTON — collapsed by default on small screens */}
+                        <button
+                          onClick={() => setShowMobileActions(!showMobileActions)}
+                          className={`sm:hidden w-8 h-8 flex-shrink-0 flex items-center justify-center border rounded-lg transition-colors shadow-sm ${showMobileActions ? t.btnPrimary : `${t.textMuted} ${t.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}`}
+                        >
+                          <FaChevronDown className={`text-[10px] transition-transform duration-200 ${showMobileActions ? "rotate-180" : ""}`} />
+                        </button>
                       </div>
 
-                      {/* Responsive Actions Row */}
-                      <div className="flex gap-2.5 flex-wrap lg:justify-end w-full lg:w-auto">
+                      {/* ACTION BUTTONS: Hidden on mobile unless toggled open. Always visible on sm+ */}
+                      <div className={`gap-1.5 sm:gap-2 flex-wrap justify-start sm:justify-end mt-1 sm:mt-0 w-full sm:w-auto ${showMobileActions ? "flex animate-fadeIn" : "hidden sm:flex"}`}>
                         {isLeadLocked ? (
-                          <div className="flex items-center gap-2.5 flex-wrap w-full lg:w-auto">
-                            <span className={`text-xs font-bold px-4 py-3 lg:py-2 rounded-xl lg:rounded-full border flex-1 lg:flex-none text-center justify-center flex items-center gap-2 shadow-sm ${selectedLead.is_lost_lead ? "bg-red-500/10 border-red-500/40 text-red-500" : "bg-yellow-500/10 border-yellow-500/40 text-yellow-500"}`}>
+                          <>
+                            <span className={`text-[11px] sm:text-xs font-bold px-3 py-2 sm:py-1.5 rounded-xl sm:rounded-full border flex-1 sm:flex-none text-center justify-center flex items-center gap-2 shadow-sm min-h-[44px] sm:min-h-0 ${selectedLead.is_lost_lead ? "bg-red-500/10 border-red-500/40 text-red-500" : "bg-yellow-500/10 border-yellow-500/40 text-yellow-500"}`}>
                               {selectedLead.is_lost_lead ? "❌ Lost Lead • Read Only" : "✅ Lead Closed • Read Only"}
                             </span>
                             {selectedLead.is_lost_lead ? (
                               <button onClick={handleRestoreLead} disabled={isSavingLost}
-                                className={`font-bold px-4 py-3 lg:py-2 rounded-xl text-sm flex-1 lg:flex-none flex justify-center items-center gap-2 transition-colors cursor-pointer disabled:opacity-60 shadow-sm ${t.btnPrimary}`}>
-                                {isSavingLost ? "Restoring…" : <><FaCheckCircle /> ↩️ Restore Lead</>}
+                                className={`font-bold px-3 py-2 sm:py-1.5 rounded-xl text-[13px] sm:text-sm flex-1 sm:flex-none flex justify-center items-center gap-2 transition-colors cursor-pointer disabled:opacity-60 shadow-lg min-h-[44px] sm:min-h-0 ${t.btnPrimary}`}>
+                                {isSavingLost ? "Restoring…" : <><FaCheckCircle /> Restore Lead</>}
                               </button>
                             ) : (
                               <button onClick={handleReopenLead} disabled={isReopening}
-                                className={`font-bold px-4 py-3 lg:py-2 rounded-xl text-sm flex-1 lg:flex-none flex justify-center items-center gap-2 transition-colors cursor-pointer disabled:opacity-60 shadow-sm ${isDark ? "bg-blue-600 hover:bg-blue-700 text-white" : "bg-blue-500 hover:bg-blue-600 text-white"}`}>
+                                className={`font-bold px-3 py-2 sm:py-1.5 rounded-xl text-[13px] sm:text-sm flex-1 sm:flex-none flex justify-center items-center gap-2 transition-colors cursor-pointer disabled:opacity-60 shadow-sm min-h-[44px] sm:min-h-0 ${isDark ? "bg-blue-600 hover:bg-blue-700 text-white" : "bg-blue-500 hover:bg-blue-600 text-white"}`}>
                                 {isReopening ? "Reopening…" : "↩️ Reopen Lead"}
                               </button>
                             )}
-                          </div>
+                          </>
                         ) : (
                           !showSalesForm && !showLoanForm && (
-                            <div className="grid grid-cols-2 lg:flex gap-2.5 w-full lg:w-auto">
+                            <>
                               <button onClick={() => { prefillSalesForm(); setShowSalesForm(true); setShowLoanForm(false); }}
-                                className={`font-bold px-4 py-3 lg:py-2 rounded-xl text-[13px] md:text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-sm ${t.btnPrimary}`}>
-                                <FaFileInvoice className="text-base" /> Fill Salesform
+                                className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center gap-1 sm:gap-1.5 flex-1 sm:flex-none min-w-[80px] sm:min-w-[110px] min-h-[36px] sm:min-h-0 transition-colors cursor-pointer shadow-lg whitespace-nowrap ${t.btnPrimary}`}>
+                                <FaFileInvoice className="text-[10px]" /> Salesform
                               </button>
                               <button onClick={() => { setShowLoanForm(true); setShowSalesForm(false); }}
-                                className={`font-bold px-4 py-3 lg:py-2 rounded-xl text-[13px] md:text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-sm ${t.btnSecondary}`}>
-                                <FaUniversity className="text-base" /> Track Loan
+                                className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center gap-1 sm:gap-1.5 flex-1 sm:flex-none min-w-[80px] sm:min-w-[110px] min-h-[36px] sm:min-h-0 transition-colors cursor-pointer shadow-sm whitespace-nowrap ${t.btnSecondary}`}>
+                                <FaUniversity className="text-[10px]" /> Track Loan
                               </button>
-                              {selectedLead.mongoVisitDate && selectedLead.status !== "Closing" && !selectedLead.is_lost_lead && (
-                                <button onClick={() => setIsClosingModalOpen(true)} className={`font-bold px-4 py-3 lg:py-2 rounded-xl text-[13px] md:text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-sm ${t.btnWarning}`}>
-                                  <FaHandshake className="text-base" /> Mark Closing
+                              {selectedLead.status !== "Closing" && !selectedLead.is_lost_lead && (
+                                <button onClick={() => setIsClosingModalOpen(true)}
+                                  className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center gap-1 sm:gap-1.5 flex-1 sm:flex-none min-w-[80px] sm:min-w-[110px] min-h-[36px] sm:min-h-0 transition-colors cursor-pointer shadow-sm whitespace-nowrap ${t.btnWarning}`}>
+                                  <FaHandshake className="text-[10px]" /> Mark Closing
                                 </button>
                               )}
                               {!selectedLead.is_lost_lead && (
                                 <button onClick={openLostLeadModal}
-                                  className={`font-bold px-4 py-3 lg:py-2 rounded-xl text-[13px] md:text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-sm ${t.btnDanger}`}>
-                                  <AlertTriangle className="w-4 h-4" /> Mark Lost
+                                  className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center gap-1 sm:gap-1.5 flex-1 sm:flex-none min-w-[80px] sm:min-w-[110px] min-h-[36px] sm:min-h-0 transition-colors cursor-pointer shadow-sm whitespace-nowrap ${t.btnDanger}`}>
+                                  <AlertTriangle className="w-3.5 h-3.5" /> Mark Lost
                                 </button>
                               )}
-                            </div>
+                              <button onClick={() => { setTransferTarget(""); setTransferNote(""); setIsTransferModalOpen(true); }}
+                                className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center gap-1 sm:gap-1.5 flex-1 sm:flex-none min-w-[80px] sm:min-w-[110px] min-h-[36px] sm:min-h-0 transition-colors cursor-pointer shadow-sm whitespace-nowrap ${isDark ? "bg-purple-600 hover:bg-purple-500 text-white" : "bg-purple-600 hover:bg-purple-700 text-white"}`}>
+                                <FaExchangeAlt className="text-[10px]" /> Transfer
+                              </button>
+                            </>
                           )
                         )}
                       </div>
@@ -2903,7 +2796,7 @@ export default function ReceptionistDashboard() {
 
                     {/* AI voice calling. Self-gating: renders nothing at all when
                         Bolna is unconfigured, so it needs no capability guard here. */}
-                    <div className="mb-3 flex-shrink-0">
+                    {/* <div className="mb-3 flex-shrink-0">
                       <BolnaCallWidget
                         leadId={Number(selectedLead.id)}
                         leadName={selectedLead.name}
@@ -2911,41 +2804,41 @@ export default function ReceptionistDashboard() {
                         userData={{ project: selectedLead.propType || selectedLead.configuration }}
                         compact
                       />
-                    </div>
+                    </div> */}
 
-                    <div className="flex flex-col lg:flex-row gap-5 flex-1 lg:min-h-0 pb-2">
+                    <div className="flex flex-col lg:flex-row gap-3 lg:gap-4 flex-1 lg:min-h-[calc(100vh-120px)] pb-2">
                       {/* LEFT PANEL */}
-                      <div className="w-full lg:w-[50%] flex flex-col gap-4 min-h-[500px] lg:h-full pb-2">
+                      <div className="w-full lg:w-[50%] flex flex-col gap-2 sm:gap-3 min-h-[500px] lg:h-full pb-2">
                         {showSalesForm ? (
-                          <div className={`rounded-2xl md:rounded-3xl border p-5 md:p-6 shadow-xl flex-1 overflow-y-auto custom-scrollbar flex flex-col ${t.modalCard}`} style={t.modalGlass}>
-                            <div className={`flex justify-between items-center mb-5 border-b pb-4 ${t.tableBorder}`}>
+                          <div className={`rounded-xl sm:rounded-2xl border p-4 sm:p-5 shadow-lg flex-1 overflow-y-auto custom-scrollbar flex flex-col ${t.modalCard}`} style={t.modalGlass}>
+                            <div className={`flex justify-between items-center mb-4 border-b pb-3 ${t.tableBorder}`}>
                               <div>
-                                <h3 className={`text-lg md:text-xl font-bold ${t.text}`}>Sales Data Form</h3>
-                                <p className={`text-[11px] md:text-xs mt-1 font-medium ${t.accentText}`}>For Lead #{selectedLead.sr_no || selectedLead.id}</p>
+                                <h3 className={`text-base sm:text-lg font-bold ${t.text}`}>Sales Data Form</h3>
+                                <p className={`text-[10px] sm:text-[11px] mt-0.5 font-medium ${t.accentText}`}>For Lead #{selectedLead.sr_no || selectedLead.id}</p>
                               </div>
-                              <button type="button" onClick={() => setShowSalesForm(false)} className={`p-2 rounded-xl bg-black/5 dark:bg-white/5 transition-colors ${t.textMuted} hover:text-red-500`}><FaTimes /></button>
+                              <button type="button" onClick={() => setShowSalesForm(false)} className={`p-1.5 sm:p-2 rounded-lg bg-black/5 dark:bg-white/5 transition-colors ${t.textMuted} hover:text-red-500`}><FaTimes className="text-sm" /></button>
                             </div>
-                            <form onSubmit={handleSalesFormSubmit} className="flex flex-col gap-5 flex-1">
-                              <div><label className={`text-[11px] font-bold uppercase tracking-wider mb-2 block ${t.textMuted}`}>Property Type?</label><input type="text" placeholder="e.g. 1BHK, 2BHK" value={salesForm.propertyType} onChange={e => setSalesForm({ ...salesForm, propertyType: e.target.value })} className={formInput} /></div>
-                              <div><label className={`text-[11px] font-bold uppercase tracking-wider mb-2 block ${t.textMuted}`}>Preferred Location?</label><input type="text" placeholder="e.g. Dombivali, Kalyan" value={salesForm.location} onChange={e => setSalesForm({ ...salesForm, location: e.target.value })} className={formInput} /></div>
-                              <div><label className={`text-[11px] font-bold uppercase tracking-wider mb-2 block ${t.textMuted}`}>Approximate Budget?</label><input type="text" placeholder="e.g. 5 cr" value={salesForm.budget} onChange={e => setSalesForm({ ...salesForm, budget: e.target.value })} className={formInput} /></div>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div><label className={`text-[11px] font-bold uppercase tracking-wider mb-2 block ${t.textMuted}`}>Self-use or Investment?</label><select value={salesForm.useType} onChange={e => setSalesForm({ ...salesForm, useType: e.target.value })} className={formSelect}><option value="">Select</option><option>Self Use</option><option>Investment</option></select></div>
-                                <div><label className={`text-[11px] font-bold uppercase tracking-wider mb-2 block ${t.textMuted}`}>Planning to Purchase?</label><select value={salesForm.purchaseDate} onChange={e => setSalesForm({ ...salesForm, purchaseDate: e.target.value })} className={formSelect}><option value="">Select</option><option>Immediate</option><option>Next 3 Months</option></select></div>
+                            <form onSubmit={handleSalesFormSubmit} className="flex flex-col gap-3 sm:gap-4 flex-1">
+                              <div><label className={`crm-eyebrow mb-1.5 block ${t.textMuted}`}>Property Type?</label><input type="text" placeholder="e.g. 1BHK, 2BHK" value={salesForm.propertyType} onChange={e => setSalesForm({ ...salesForm, propertyType: e.target.value })} className={formInput} /></div>
+                              <div><label className={`crm-eyebrow mb-1.5 block ${t.textMuted}`}>Preferred Location?</label><input type="text" placeholder="e.g. Dombivali, Kalyan" value={salesForm.location} onChange={e => setSalesForm({ ...salesForm, location: e.target.value })} className={formInput} /></div>
+                              <div><label className={`crm-eyebrow mb-1.5 block ${t.textMuted}`}>Approximate Budget?</label><input type="text" placeholder="e.g. 5 cr" value={salesForm.budget} onChange={e => setSalesForm({ ...salesForm, budget: e.target.value })} className={formInput} /></div>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                                <div><label className={`crm-eyebrow mb-1.5 block ${t.textMuted}`}>Self-use or Investment?</label><select value={salesForm.useType} onChange={e => setSalesForm({ ...salesForm, useType: e.target.value })} className={formSelect}><option value="">Select</option><option>Self Use</option><option>Investment</option></select></div>
+                                <div><label className={`crm-eyebrow mb-1.5 block ${t.textMuted}`}>Planning to Purchase?</label><select value={salesForm.purchaseDate} onChange={e => setSalesForm({ ...salesForm, purchaseDate: e.target.value })} className={formSelect}><option value="">Select</option><option>Immediate</option><option>Next 3 Months</option></select></div>
                               </div>
-                              <div className={`border-t pt-5 mt-2 ${t.tableBorder}`}>
-                                <label className={`block text-[11px] font-bold uppercase tracking-wider mb-2.5 ${t.accentText}`}>Lead Interest Status *</label>
+                              <div className={`border-t pt-3 sm:pt-4 mt-1 ${t.tableBorder}`}>
+                                <label className={`block crm-eyebrow mb-2 ${t.accentText}`}>Lead Interest Status *</label>
                                 <select required value={salesForm.leadStatus} onChange={e => setSalesForm({ ...salesForm, leadStatus: e.target.value })} className={formSelect}><option value="" disabled>Select Status</option><option>Interested</option><option>Not Interested</option><option>NON GENUINE DEMAND (NGD)</option></select>
                               </div>
-                              <div className={`border-t pt-5 mt-2 ${t.tableBorder}`}>
-                                <label className={`block text-[11px] font-bold uppercase tracking-wider mb-2.5 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}>Loan Planned?</label>
+                              <div className={`border-t pt-3 sm:pt-4 mt-1 ${t.tableBorder}`}>
+                                <label className={`block crm-eyebrow mb-2 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}>Loan Planned?</label>
                                 <select required value={salesForm.loanPlanned} onChange={e => setSalesForm({ ...salesForm, loanPlanned: e.target.value })} className={formSelect}><option value="" disabled>Select Option</option><option>Yes</option><option>No</option><option>Not Sure</option></select>
                               </div>
-                              <div className={`mt-2 border-t pt-5 ${t.tableBorder}`}>
-                                <label className="text-[11px] text-orange-400 font-bold uppercase tracking-wider mb-2.5 block">Schedule a Site Visit?</label>
+                              <div className={`border-t pt-3 sm:pt-4 mt-1 ${t.tableBorder}`}>
+                                <label className="crm-eyebrow text-orange-400 mb-2 block">Schedule a Site Visit?</label>
                                 <input ref={inputRef} type="datetime-local" value={salesForm.siteVisit} onChange={e => setSalesForm({ ...salesForm, siteVisit: e.target.value })} onClick={() => inputRef.current?.showPicker()} className={`${formInput} focus:border-orange-500`} />
                               </div>
-                              <button type="submit" className={`mt-6 md:mt-auto w-full font-bold py-4 rounded-xl shadow-lg transition-colors flex-shrink-0 text-[15px] ${t.btnPrimary}`}>Submit Salesform</button>
+                              <button type="submit" className={`mt-4 md:mt-auto w-full font-bold py-2.5 sm:py-3 rounded-xl shadow-md transition-colors flex-shrink-0 text-[13px] sm:text-[14px] ${t.btnPrimary}`}>Submit Salesform</button>
                             </form>
                           </div>
                         ) : showLoanForm ? (
@@ -2967,17 +2860,17 @@ export default function ReceptionistDashboard() {
                         ) : (
                           <div className="flex flex-col h-full animate-fadeIn">
                             {/* Tab switcher */}
-                            <div className={`flex flex-wrap sm:flex-nowrap items-center gap-2 mb-3 border p-1.5 md:p-2 rounded-2xl flex-shrink-0 shadow-sm ${t.tableWrap}`}>
-                              <button onClick={() => setDetailTab("personal")} className={`flex-1 min-w-[45%] py-2.5 text-[13px] md:text-sm font-bold rounded-xl transition-colors cursor-pointer ${detailTab === "personal" ? t.btnPrimary : `${t.textMuted} ${isDark ? "hover:text-white hover:bg-[#222]" : "hover:text-[#1A1A1A] hover:bg-[#F1F5F9]"}`}`}>Personal Info</button>
-                              <button onClick={() => setDetailTab("loan")} className={`flex-1 min-w-[45%] py-2.5 text-[13px] md:text-sm font-bold rounded-xl transition-colors cursor-pointer ${detailTab === "loan" ? t.btnSecondary : `${t.textMuted} ${isDark ? "hover:text-white hover:bg-[#222]" : "hover:text-[#1A1A1A] hover:bg-[#F1F5F9]"}`}`}>Loan Tracking</button>
+                            <div className={`flex flex-wrap sm:flex-nowrap items-center gap-1.5 mb-2.5 border border-gray-200 p-1 sm:p-1.5 rounded-xl flex-shrink-0 shadow-sm ${t.tableWrap}`}>
+                              <button onClick={() => setDetailTab("personal")} className={`flex-1 min-w-[45%] py-2 sm:py-2.5 text-[11px] sm:text-[12px] font-bold rounded-lg transition-colors cursor-pointer ${detailTab === "personal" ? t.btnPrimary : `${t.textMuted} ${isDark ? "hover:text-white hover:bg-[#222]" : "hover:text-[#1A1A1A] hover:bg-[#F1F5F9]"}`}`}>Personal Info</button>
+                              <button onClick={() => setDetailTab("loan")} className={`flex-1 min-w-[45%] py-2 sm:py-2.5 text-[11px] sm:text-[12px] font-bold rounded-lg transition-colors cursor-pointer ${detailTab === "loan" ? t.btnSecondary : `${t.textMuted} ${isDark ? "hover:text-white hover:bg-[#222]" : "hover:text-[#1A1A1A] hover:bg-[#F1F5F9]"}`}`}>Loan Tracking</button>
                               {bookingData && (
-                                <button onClick={() => { setDetailTab("loan" as any); setBookingDetailTab("booking"); }} className={`w-full sm:w-auto sm:flex-1 py-2.5 text-[13px] md:text-sm font-bold rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${bookingDetailTab === "booking" && detailTab === "loan" ? (isDark ? "bg-yellow-600 text-white shadow-md" : "bg-amber-500 text-white shadow-md") : `${t.textMuted} ${isDark ? "hover:text-white hover:bg-[#222]" : "hover:text-[#1A1A1A] hover:bg-[#F1F5F9]"}`}`}>
+                                <button onClick={() => { setDetailTab("loan" as any); setBookingDetailTab("booking"); }} className={`w-full sm:w-auto sm:flex-1 py-2 sm:py-2.5 text-[11px] sm:text-[12px] font-bold rounded-lg transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${bookingDetailTab === "booking" && detailTab === "loan" ? (isDark ? "bg-yellow-600 text-white shadow-md" : "bg-amber-500 text-white shadow-md") : `${t.textMuted} ${isDark ? "hover:text-white hover:bg-[#222]" : "hover:text-[#1A1A1A] hover:bg-[#F1F5F9]"}`}`}>
                                   📋 Booking App
                                 </button>
                               )}
                             </div>
 
-                            <div className={`flex-1 overflow-y-auto custom-scrollbar rounded-2xl md:rounded-3xl p-5 md:p-7 shadow-lg border ${t.chatPanel}`} style={t.chatPanelGl}>
+                            <div className={`flex-1 overflow-y-auto custom-scrollbar rounded-xl sm:rounded-2xl p-4 sm:p-5 shadow-lg border h-[calc(100vh-110px)] ${t.chatPanel}`} style={t.chatPanelGl}>
                               {bookingData && bookingDetailTab === "booking" ? (
                                 <BookingApplicationView
                                   booking={bookingData}
@@ -2989,53 +2882,53 @@ export default function ReceptionistDashboard() {
                                 />
                               ) : detailTab === "personal" ? (
                                 <div>
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-5 gap-x-5 text-[13px] md:text-sm">
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-4 text-[12px] sm:text-[13px]">
                                     <InlineContactField label="Email" value={selectedLead.email} fieldType="email" isDark={isDark} theme={t} canEdit={user?.role === "Admin" || user?.role === "Receptionist"} onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "email", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, email: val || "N/A" })); showToast("Contact details updated successfully."); }} />
                                     <InlineContactField label="Phone" value={selectedLead.phone} fieldType="tel" isDark={isDark} theme={t} canEdit={user?.role === "Admin" || user?.role === "Receptionist"} mono onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "phone", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, phone: val })); showToast("Contact details updated successfully."); }} />
                                     <InlineContactField label="Alt Phone" value={selectedLead.altPhone ?? selectedLead.alt_phone} fieldType="tel" isDark={isDark} theme={t} canEdit={user?.role === "Admin" || user?.role === "Receptionist"} mono onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "alt_phone", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, altPhone: val, alt_phone: val })); showToast("Contact details updated successfully."); }} />
-                                    <div><p className={`text-[11px] font-bold uppercase tracking-wider mb-1.5 opacity-70 ${t.textFaint}`}>Lead Interest</p>{selectedLead.leadInterestStatus && selectedLead.leadInterestStatus !== "Pending" ? <InterestBadge status={selectedLead.leadInterestStatus} /> : <p className={`font-semibold ${t.text}`}>Pending</p>}</div>
-                                    <div><p className={`text-[11px] font-bold uppercase tracking-wider mb-1.5 opacity-70 ${t.textFaint}`}>Loan Status</p>{selectedLead.loanStatus && selectedLead.loanStatus !== "N/A" ? <div className="w-fit"><LoanStatusBadge status={selectedLead.loanStatus} /></div> : <p className={`font-semibold ${t.text}`}>N/A</p>}</div>
-                                    <div><p className={`text-[11px] font-bold uppercase tracking-wider mb-1.5 opacity-70 ${t.textFaint}`}>Backdated Entry</p><p className={`font-semibold ${t.text}`}>{selectedLead.auto_date_enabled === false && selectedLead.enquiry_date ? formatDate(selectedLead.enquiry_date).split(",")[0] : "Null"}</p></div>
-                                    <div className="col-span-1 sm:col-span-2"><p className={`text-[11px] font-bold uppercase tracking-wider mb-1.5 opacity-70 ${t.textFaint}`}>Residential Address</p><p className={`font-medium leading-relaxed ${t.text}`}>{selectedLead.address && selectedLead.address !== "N/A" ? selectedLead.address : "Not Provided"}</p></div>
-                                    <div><p className={`text-[11px] font-bold uppercase tracking-wider mb-1.5 opacity-70 ${t.textFaint}`}>Pin Code</p><p className={`font-semibold ${t.text}`}>{selectedLead.pinCode || selectedLead.pin_code || "N/A"}</p></div>
-                                    <div><p className={`text-[11px] font-bold uppercase tracking-wider mb-1.5 opacity-70 ${t.textFaint}`}>City</p><p className={`font-semibold ${t.text}`}>{selectedLead.city || "N/A"}</p></div>
+                                    <div><p className={`crm-eyebrow mb-1 opacity-70 ${t.textFaint}`}>Lead Interest</p>{selectedLead.leadInterestStatus && selectedLead.leadInterestStatus !== "Pending" ? <InterestBadge status={selectedLead.leadInterestStatus} /> : <p className={`font-semibold ${t.text}`}>Pending</p>}</div>
+                                    <div><p className={`crm-eyebrow mb-1 opacity-70 ${t.textFaint}`}>Loan Status</p>{selectedLead.loanStatus && selectedLead.loanStatus !== "N/A" ? <div className="w-fit"><LoanStatusBadge status={selectedLead.loanStatus} /></div> : <p className={`font-semibold ${t.text}`}>N/A</p>}</div>
+                                    <div><p className={`crm-eyebrow mb-1 opacity-70 ${t.textFaint}`}>Backdated Entry</p><p className={`font-semibold ${t.text}`}>{selectedLead.auto_date_enabled === false && selectedLead.enquiry_date ? formatDate(selectedLead.enquiry_date).split(",")[0] : "Null"}</p></div>
+                                    <div className="col-span-1 sm:col-span-2"><p className={`crm-eyebrow mb-1 opacity-70 ${t.textFaint}`}>Residential Address</p><p className={`font-medium leading-relaxed ${t.text}`}>{selectedLead.address && selectedLead.address !== "N/A" ? selectedLead.address : "Not Provided"}</p></div>
+                                    <div><p className={`crm-eyebrow mb-1 opacity-70 ${t.textFaint}`}>Pin Code</p><p className={`font-semibold ${t.text}`}>{selectedLead.pinCode || selectedLead.pin_code || "N/A"}</p></div>
+                                    <div><p className={`crm-eyebrow mb-1 opacity-70 ${t.textFaint}`}>City</p><p className={`font-semibold ${t.text}`}>{selectedLead.city || "N/A"}</p></div>
                                     <div className="col-span-1 sm:col-span-2"><InlineContactField label="Location" value={selectedLead.location} fieldType="text" isDark={isDark} theme={t} canEdit={user?.role === "Admin" || user?.role === "Receptionist"} onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "location", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, location: val || "N/A" })); showToast("Contact details updated successfully."); }} /></div>
-                                    <div><p className={`text-[11px] font-bold uppercase tracking-wider mb-1.5 opacity-70 ${t.textFaint}`}>Budget</p><p className={`font-bold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{selectedLead.salesBudget !== "Pending" ? selectedLead.salesBudget : selectedLead.budget}</p></div>
-                                    <div><p className={`text-[11px] font-bold uppercase tracking-wider mb-1.5 opacity-70 ${t.textFaint}`}>Property Type</p><p className={`font-semibold ${t.text}`}>{selectedLead.propType || "Pending"}</p></div>
-                                    <div><p className={`text-[11px] font-bold uppercase tracking-wider mb-1.5 opacity-70 ${t.textFaint}`}>Type of Use</p><p className={`font-semibold ${t.text}`}>{selectedLead.useType !== "Pending" ? selectedLead.useType : (selectedLead.purpose || "N/A")}</p></div>
-                                    <div><p className={`text-[11px] font-bold uppercase tracking-wider mb-1.5 opacity-70 ${t.textFaint}`}>Planning to Buy?</p><p className={`font-semibold ${t.text}`}>{selectedLead.planningPurchase || "Pending"}</p></div>
-                                    <div><p className={`text-[11px] font-bold uppercase tracking-wider mb-1.5 opacity-70 ${t.textFaint}`}>Loan Required?</p><p className={`font-semibold ${t.text}`}>{loanDealLatest?.loan_required || selectedLead.loanPlanned || "Pending"}</p></div>
-                                    <div><p className={`text-[11px] font-bold uppercase tracking-wider mb-1.5 opacity-70 ${t.textFaint}`}>Status</p><span className={`text-sm font-bold ${selectedLead.status === "Closing" ? "text-amber-500" : selectedLead.status === "Visit Scheduled" ? "text-orange-400" : t.accentText}`}>{selectedLead.status || "Assigned"}</span></div>
+                                    <div><p className={`crm-eyebrow mb-1 opacity-70 ${t.textFaint}`}>Budget</p><p className={`font-bold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{selectedLead.salesBudget !== "Pending" ? selectedLead.salesBudget : selectedLead.budget}</p></div>
+                                    <div><p className={`crm-eyebrow mb-1 opacity-70 ${t.textFaint}`}>Property Type</p><p className={`font-semibold ${t.text}`}>{selectedLead.propType || "Pending"}</p></div>
+                                    <div><p className={`crm-eyebrow mb-1 opacity-70 ${t.textFaint}`}>Type of Use</p><p className={`font-semibold ${t.text}`}>{selectedLead.useType !== "Pending" ? selectedLead.useType : (selectedLead.purpose || "N/A")}</p></div>
+                                    <div><p className={`crm-eyebrow mb-1 opacity-70 ${t.textFaint}`}>Planning to Buy?</p><p className={`font-semibold ${t.text}`}>{selectedLead.planningPurchase || "Pending"}</p></div>
+                                    <div><p className={`crm-eyebrow mb-1 opacity-70 ${t.textFaint}`}>Loan Required?</p><p className={`font-semibold ${t.text}`}>{loanDealLatest?.loan_required || selectedLead.loanPlanned || "Pending"}</p></div>
+                                    <div><p className={`crm-eyebrow mb-1 opacity-70 ${t.textFaint}`}>Status</p><span className={`text-[12px] sm:text-[13px] font-bold ${selectedLead.status === "Closing" ? "text-amber-500" : selectedLead.status === "Visit Scheduled" ? "text-orange-400" : t.accentText}`}>{selectedLead.status || "Assigned"}</span></div>
 
-                                    <div className={`col-span-1 sm:col-span-2 p-4 rounded-2xl border ${t.settingsBg}`} style={t.settingsBgGl}>
-                                      <p className={`text-[11px] font-bold uppercase tracking-wider mb-2 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}>📍 Site Visit Date</p>
-                                      <p className={`text-lg md:text-xl font-black ${t.text}`}>{selectedLead.mongoVisitDate ? formatDate(selectedLead.mongoVisitDate) : "Not Scheduled"}</p>
+                                    <div className={`col-span-1 sm:col-span-2 p-3 sm:p-4 rounded-xl border border-gray-400 shadow-sm ${t.settingsBg}`} style={t.settingsBgGl}>
+                                      <p className={`crm-eyebrow mb-1.5 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}>📍 Site Visit Date</p>
+                                      <p className={`text-base sm:text-lg font-black ${t.text}`}>{selectedLead.mongoVisitDate ? formatDate(selectedLead.mongoVisitDate) : "Not Scheduled"}</p>
                                     </div>
 
                                     {/* ── Lost Lead Record ── */}
                                     {selectedLead.is_lost_lead && (
-                                      <div className="col-span-1 sm:col-span-2 mt-2 border-2 rounded-2xl p-4 md:p-5 text-red-300 border-red-500/30 bg-red-950/30 shadow-sm">
-                                        <h3 className="text-sm font-bold uppercase tracking-wider mb-3 flex items-center gap-2">
-                                          <Ghost className="w-4 h-4" /> Lost Lead Record
+                                      <div className="col-span-1 sm:col-span-2 mt-2 border-2 rounded-xl p-3 sm:p-4 text-red-300 border-red-500/30 bg-red-950/30 shadow-sm">
+                                        <h3 className="crm-eyebrow mb-2 sm:mb-3 flex items-center gap-2">
+                                          <Ghost className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> Lost Lead Record
                                         </h3>
-                                        <p className="text-[13px] md:text-sm leading-relaxed">{selectedLead.lost_lead_reason || "No reason recorded."}</p>
-                                        <p className="text-[11px] mt-4 opacity-70 text-red-200/70 font-medium">
+                                        <p className="text-[12px] sm:text-[13px] leading-relaxed">{selectedLead.lost_lead_reason || "No reason recorded."}</p>
+                                        <p className="text-[10px] sm:text-[11px] mt-2 sm:mt-3 opacity-70 text-red-200/70 font-medium">
                                           Marked by {selectedLead.lost_lead_marked_by || "Unknown"} on {selectedLead.lost_lead_marked_at ? formatDate(selectedLead.lost_lead_marked_at) : "-"}
                                         </p>
                                       </div>
                                     )}
                                   </div>
 
-                                  <div className={`mt-6 border rounded-2xl p-5 ${t.settingsBg}`} style={t.settingsBgGl}>
-                                    <h3 className={`text-[11px] md:text-xs font-bold uppercase tracking-widest mb-4 border-b pb-3 ${t.sectionTitle} ${t.sectionBorder}`}>Channel Partner Data</h3>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                      <div><p className={`text-[11px] font-medium uppercase tracking-wide mb-1.5 opacity-70 ${t.textFaint}`}>Primary Source</p><p className={`font-semibold text-[13px] ${t.text}`}>{selectedLead.source || "N/A"}</p></div>
-                                      {selectedLead.source === "Others" && (<div><p className={`text-[11px] font-medium uppercase tracking-wide mb-1.5 opacity-70 ${t.textFaint}`}>Specified Name</p><p className={`font-semibold text-[13px] ${t.text}`}>{selectedLead.sourceOther}</p></div>)}
+                                  <div className={`mt-4 border rounded-xl p-3 sm:p-4 ${t.settingsBg}`} style={t.settingsBgGl}>
+                                    <h3 className={`text-[10px] sm:text-[11px] font-bold uppercase tracking-widest mb-3 border-b pb-2 ${t.sectionTitle} ${t.sectionBorder}`}>Channel Partner Data</h3>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                                      <div><p className={`text-[10px] sm:text-[11px] font-medium uppercase tracking-wide mb-1 opacity-70 ${t.textFaint}`}>Primary Source</p><p className={`font-semibold text-[12px] sm:text-[13px] ${t.text}`}>{selectedLead.source || "N/A"}</p></div>
+                                      {selectedLead.source === "Others" && (<div><p className={`text-[10px] sm:text-[11px] font-medium uppercase tracking-wide mb-1 opacity-70 ${t.textFaint}`}>Specified Name</p><p className={`font-semibold text-[12px] sm:text-[13px] ${t.text}`}>{selectedLead.sourceOther}</p></div>)}
                                     </div>
                                     {selectedLead.source === "Channel Partner" && (
-                                      <div className={`mt-4 pt-4 border-t grid grid-cols-1 sm:grid-cols-2 gap-4 ${t.tableBorder}`}>
+                                      <div className={`mt-3 pt-3 border-t grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 ${t.tableBorder}`}>
                                         {[{ label: "CP Company", val: selectedLead.cp_company || selectedLead.cpCompany }, { label: "CP Phone", val: selectedLead.cp_phone || selectedLead.cpPhone }].map(({ label, val }) => (
-                                          <div key={label}><p className={`text-[11px] font-medium uppercase tracking-wide mb-1.5 opacity-70 ${t.textFaint}`}>{label}</p><p className={`font-semibold text-[13px] ${t.text}`}>{val || "N/A"}</p></div>
+                                          <div key={label}><p className={`text-[10px] sm:text-[11px] font-medium uppercase tracking-wide mb-1 opacity-70 ${t.textFaint}`}>{label}</p><p className={`font-semibold text-[12px] sm:text-[13px] ${t.text}`}>{val || "N/A"}</p></div>
                                         ))}
                                       </div>
                                     )}
@@ -3046,34 +2939,41 @@ export default function ReceptionistDashboard() {
                               )}
                             </div>
 
-                            <div className="grid grid-cols-2 gap-3 mt-4 flex-shrink-0">
-                              <button className={`border flex flex-col items-center justify-center py-3.5 rounded-2xl shadow-sm transition-all cursor-pointer gap-2 ${isDark ? "bg-[#00AEEF]/10 border-[#00AEEF]/30 hover:bg-[#00AEEF] text-[#00AEEF] hover:text-white" : "bg-[#00AEEF]/10 border-[#00AEEF]/30 hover:bg-[#00AEEF] text-[#00AEEF] hover:text-white"}`}>
-                                <FaMicrophone className="text-xl" />
-                                <span className="font-bold text-[11px] uppercase tracking-wider">Browser Call</span>
+                            <div className="grid grid-cols-2 gap-2 mt-3 sm:mt-4 flex-shrink-0">
+                              <button className={`border flex flex-col items-center justify-center py-2 sm:py-2.5 rounded-xl shadow-sm transition-all cursor-pointer gap-1 sm:gap-1.5 ${isDark ? "bg-[#00AEEF]/10 border-[#00AEEF]/30 hover:bg-[#00AEEF] text-[#00AEEF] hover:text-white" : "bg-[#00AEEF]/10 border-[#00AEEF]/30 hover:bg-[#00AEEF] text-[#00AEEF] hover:text-white"}`}>
+                                <FaMicrophone className="text-base sm:text-lg" />
+                                <span className="font-bold text-[9px] sm:text-[10px] uppercase tracking-wider">Browser Call</span>
                               </button>
-                              <button onClick={() => setIsWaModalOpen(true)} className="bg-green-600/10 border border-green-500/30 hover:bg-green-600 text-green-400 hover:text-white shadow-sm flex flex-col items-center justify-center py-3.5 rounded-2xl transition-all cursor-pointer gap-2">
-                                <FaWhatsapp className="text-2xl" />
-                                <span className="font-bold text-[11px] uppercase tracking-wider">WhatsApp</span>
+
+                              <button onClick={() => setIsWaModalOpen(true)} className="bg-green-600/10 border border-green-500/30 hover:bg-green-600 text-green-400 hover:text-white shadow-sm flex flex-col items-center justify-center py-2 sm:py-2.5 rounded-xl transition-all cursor-pointer gap-1 sm:gap-1.5">
+                                <FaWhatsapp className="text-lg sm:text-xl" />
+                                <span className="font-bold text-[9px] sm:text-[10px] uppercase tracking-wider">WhatsApp</span>
                               </button>
-                              <div className="col-span-2">
-                                <CallingButtons leadId={selectedLead?.id ?? null} phone={selectedLead?.phone} leadName={selectedLead?.name} isDark={isDark} iconClass="text-xl" paddingClass="py-3.5" />
-                              </div>
+
+                              <CallingButtons
+                                leadId={selectedLead?.id ?? null}
+                                phone={selectedLead?.phone}
+                                leadName={selectedLead?.name}
+                                isDark={isDark}
+                                iconClass="text-base sm:text-lg"
+                                paddingClass="py-2 sm:py-2.5 h-full rounded-xl"
+                              />
                             </div>
                           </div>
                         )}
                       </div>
 
                       {/* RIGHT PANEL: FOLLOW-UPS */}
-                      <div className={`w-full lg:w-[50%] flex flex-col rounded-2xl md:rounded-3xl overflow-hidden shadow-xl min-h-[500px] h-[600px] lg:h-full border ${t.chatPanel}`} style={t.chatPanelGl}>
-                        <div className={`flex-1 p-4 md:p-6 overflow-y-auto custom-scrollbar flex flex-col gap-4 ${t.chatArea}`}>
+                      <div className={`w-full lg:w-[50%] flex flex-col rounded-xl sm:rounded-2xl overflow-hidden shadow-lg min-h-[500px] h-[600px] lg:h-full border ${t.chatPanel}`} style={t.chatPanelGl}>
+                        <div className={`flex-1 p-3 sm:p-4 overflow-y-auto custom-scrollbar flex flex-col gap-3 sm:gap-4 ${t.chatArea}`}>
                           {/* System message */}
                           <div className="flex justify-start">
-                            <div className={`rounded-2xl rounded-tl-none p-4 md:p-5 max-w-[95%] md:max-w-[90%] shadow-md ${t.fupSalesform}`}>
-                              <div className={`flex flex-wrap justify-between items-center mb-3 gap-x-6 gap-y-1`}>
-                                <span className={`font-bold text-[13px] md:text-sm ${t.accentText}`}>System (Front Desk)</span>
-                                <span className={`text-[10px] font-medium ${t.textFaint}`}>{formatDate(selectedLead.created_at)}</span>
+                            <div className={`rounded-xl rounded-tl-none p-3 sm:p-4 max-w-[90%] sm:max-w-[85%] shadow-sm ${t.fupSalesform}`}>
+                              <div className={`flex flex-wrap justify-between items-center mb-2 gap-x-4 gap-y-0.5`}>
+                                <span className={`font-bold text-[12px] sm:text-[13px] ${t.accentText}`}>System (Front Desk)</span>
+                                <span className={`text-[9px] sm:text-[10px] font-medium ${t.textFaint}`}>{formatDate(selectedLead.created_at)}</span>
                               </div>
-                              <p className={`text-[13px] md:text-sm leading-relaxed ${t.textMuted}`}>Lead assigned to {selectedLead.assigned_to}. Action required.</p>
+                              <p className={`text-[12px] sm:text-[13px] leading-relaxed ${t.textMuted}`}>Lead assigned to {selectedLead.assigned_to}. Action required.</p>
                             </div>
                           </div>
                           {currentLeadFollowUps.map((msg: any, idx: number) => {
@@ -3083,12 +2983,12 @@ export default function ReceptionistDashboard() {
                             const bubbleCls = isLoan ? t.fupLoan : isSF ? t.fupSalesform : isClosing ? t.fupClosing : t.fupDefault;
                             return (
                               <div key={idx} className="flex justify-start">
-                                <div className={`rounded-2xl rounded-tl-none p-4 md:p-5 max-w-[95%] md:max-w-[90%] shadow-lg ${bubbleCls}`}>
-                                  <div className="flex flex-wrap justify-between items-center mb-3 gap-x-6 gap-y-1">
-                                    <span className={`font-bold text-[13px] md:text-sm ${t.text}`}>{msg.createdBy === "admin" ? `${msg.salesManagerName || "Admin"} (Admin)` : msg.salesManagerName}</span>
-                                    <span className={`text-[10px] font-medium ${t.textFaint}`}>{formatDate(msg.createdAt)}</span>
+                                <div className={`rounded-xl rounded-tl-none p-3 sm:p-4 max-w-[90%] sm:max-w-[85%] shadow-sm ${bubbleCls}`}>
+                                  <div className="flex flex-wrap justify-between items-center mb-2 gap-x-4 gap-y-0.5">
+                                    <span className={`font-bold text-[12px] sm:text-[13px] ${t.text}`}>{msg.createdBy === "admin" ? `${msg.salesManagerName || "Admin"} (Admin)` : msg.salesManagerName}</span>
+                                    <span className={`text-[9px] sm:text-[10px] font-medium ${t.textFaint}`}>{formatDate(msg.createdAt)}</span>
                                   </div>
-                                  <p className={`text-[13px] md:text-sm whitespace-pre-wrap leading-relaxed ${t.textMuted}`}>{msg.message}</p>
+                                  <p className={`text-[12px] sm:text-[13px] whitespace-pre-wrap leading-relaxed ${t.textMuted}`}>{msg.message}</p>
                                 </div>
                               </div>
                             );
@@ -3096,14 +2996,14 @@ export default function ReceptionistDashboard() {
                           <div ref={followUpEndRef} />
                         </div>
 
-                        <form onSubmit={handleSendCustomNote} className={`p-4 md:p-5 border-t flex gap-3 items-center flex-shrink-0 ${t.header} ${t.tableBorder}`} style={t.headerGlass}>
+                        <form onSubmit={handleSendCustomNote} className={`p-3 sm:p-4 border-t flex gap-2 sm:gap-3 items-center flex-shrink-0 ${t.header} ${t.tableBorder}`} style={t.headerGlass}>
                           <input
                             type="text" value={customNote} onChange={e => setCustomNote(e.target.value)}
                             placeholder="Add follow-up note..."
-                            className={`flex-1 rounded-xl md:rounded-2xl px-4 py-3.5 text-[13px] md:text-sm outline-none transition-colors border shadow-inner ${t.inputBg} ${t.text} ${t.inputFocus}`}
+                            className={`flex-1 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-[12px] sm:text-[13px] outline-none transition-colors border shadow-inner ${t.inputBg} ${t.text} ${t.inputFocus}`}
                           />
-                          <button type="submit" className={`w-12 h-12 md:w-14 md:h-14 text-white rounded-xl md:rounded-2xl flex items-center justify-center cursor-pointer transition-colors shadow-lg flex-shrink-0 ${isDark ? "bg-purple-600 hover:bg-purple-500" : "bg-[#00AEEF] hover:bg-[#0099d4]"}`}>
-                            <FaPaperPlane className="text-base md:text-lg ml-[-2px]" />
+                          <button type="submit" className={`w-10 h-10 sm:w-11 sm:h-11 text-white rounded-xl flex items-center justify-center cursor-pointer transition-colors shadow-sm flex-shrink-0 ${isDark ? "bg-purple-600 hover:bg-purple-500" : "bg-[#00AEEF] hover:bg-[#0099d4]"}`}>
+                            <FaPaperPlane className="text-sm sm:text-base ml-[-2px]" />
                           </button>
                         </form>
                       </div>
@@ -3160,146 +3060,183 @@ export default function ReceptionistDashboard() {
                 </div>
               </RpPageHeader>
 
-              <div className={`rounded-2xl md:rounded-3xl border border-gray-300 overflow-hidden shadow-[0_8px_30px_rgb(0,0,0,0.04)] ${t.tableWrap}`} style={t.tableGlass}>
-                <div className={`px-4 md:px-6 pt-4 pb-3 flex flex-col sm:flex-row items-start sm:items-center gap-4 ${t.tableHead}`}>
-                  <div className="flex items-center gap-3 shrink-0">
-                    <div className={`p-1.5 md:p-2 rounded-xl ${isDark ? "bg-[#0A84FF]/10" : "bg-[#007AFF]/10"}`}>
-                      <FaUserTie className={`text-[15px] md:text-lg ${isDark ? "text-[#0A84FF]" : "text-[#00AEEF]"}`} />
+              <div className={`rounded-2xl sm:rounded-3xl border overflow-hidden shadow-sm flex flex-col ${t.tableWrap}`} style={t.tableGlass}>
+
+                {/* ── Header Area ── */}
+                <div className={`px-4 sm:px-6 py-3.5 sm:py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 border-b ${t.tableHead} ${isDark ? "border-white/[0.06]" : "border-indigo-300"}`}>
+                  <div className="flex items-center gap-2.5 sm:gap-3 shrink-0 w-full sm:w-auto">
+                    <div className={`p-1.5 sm:p-2 rounded-xl ${isDark ? "bg-[#0A84FF]/10" : "bg-[#007AFF]/10"}`}>
+                      <FaUserTie className={`text-[14px] sm:text-lg ${isDark ? "text-[#0A84FF]" : "text-[#00AEEF]"}`} />
                     </div>
-                    <h3 className={`text-base md:text-lg font-semibold tracking-tight ${t.text}`}>Your Leads</h3>
-                    <span className={`text-[10px] md:text-[11px] font-medium px-2.5 py-0.5 rounded-full tabular-nums tracking-wide ${t.btnClosingBadge}`}>
+                    <h3 className={`text-[15px] sm:text-lg font-bold tracking-tight ${t.text}`}>Your Leads</h3>
+                    <span className={`text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-md tabular-nums tracking-wide ${t.btnClosingBadge}`}>
                       {filteredRecepLeads.length.toLocaleString("en-IN")}
                     </span>
                   </div>
-                  <div className="flex-1 w-full sm:max-w-xs">
+
+                  <div className="w-full sm:max-w-xs sm:ml-auto">
                     <SearchBar value={searchRecepLeads} onChange={setSearchRecepLeads} isDark={isDark} placeholder="Search leads..." />
                   </div>
                 </div>
 
-                <div className={`px-4 md:px-6 pb-4 pt-2 flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-x-5 gap-y-3 border-b ${t.tableHead} ${isDark ? "border-gray-300" : "border-gray-300"}`}>
-                  <span className="text-[10px] font-bold uppercase tracking-wider opacity-40">Filters</span>
-                  <div className="flex items-center gap-4 flex-wrap">
-                    <ToggleSwitch
-                      checked={showLostLeads}
-                      onChange={setShowLostLeads}
-                      label="Show lost"
-                      accent="#ef4444"
-                      disabled={leadStatusFilter !== "all"}
-                      title={leadStatusFilter !== "all" ? "Controlled by the status filter" : "Include lost leads in the table"}
-                      isDark={isDark}
-                    />
-                    <ToggleSwitch
-                      checked={showNGDLeads}
-                      onChange={setShowNGDLeads}
-                      label="Show NGD"
-                      accent="#F97316"
-                      disabled={leadStatusFilter !== "all"}
-                      title={leadStatusFilter !== "all" ? "Controlled by the status filter" : "Include non-genuine-demand leads"}
-                      isDark={isDark}
-                    />
+                {/* ── Filters Area ── */}
+                <div className={`px-4 sm:px-6 pb-3 pt-3 flex flex-col sm:flex-row flex-wrap items-start sm:items-center justify-between gap-y-3 gap-x-5 border-b ${t.tableHead} ${isDark ? "border-white/[0.06]" : "border-gray-200"}`}>
+                  <div className="flex items-center gap-3 sm:gap-4 flex-wrap w-full sm:w-auto">
+                    <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider opacity-40">Filters</span>
+                    <div className="flex items-center gap-3 sm:gap-4">
+                      <ToggleSwitch
+                        checked={showLostLeads}
+                        onChange={setShowLostLeads}
+                        label="Show lost"
+                        accent="#ef4444"
+                        disabled={leadStatusFilter !== "all"}
+                        title={leadStatusFilter !== "all" ? "Controlled by the status filter" : "Include lost leads in the table"}
+                        isDark={isDark}
+                      />
+                      <ToggleSwitch
+                        checked={showNGDLeads}
+                        onChange={setShowNGDLeads}
+                        label="Show NGD"
+                        accent="#F97316"
+                        disabled={leadStatusFilter !== "all"}
+                        title={leadStatusFilter !== "all" ? "Controlled by the status filter" : "Include non-genuine-demand leads"}
+                        isDark={isDark}
+                      />
+                    </div>
                   </div>
-                  <span className={`mt-1 sm:mt-0 sm:ml-auto text-[11px] font-semibold opacity-50`}>Leads assigned to or handled by you</span>
+                  <span className="text-[10px] sm:text-[11px] font-semibold opacity-50 w-full sm:w-auto text-left sm:text-right">
+                    Leads assigned to or handled by you
+                  </span>
+                </div>
+
+                {/* ── UX Helper Bar ── */}
+                <div className={`px-4 sm:px-6 py-2 border-b text-[9px] sm:text-[10px] font-bold uppercase tracking-widest ${isDark ? "bg-white/[0.015] border-white/[0.04] text-gray-500" : "bg-gray-50/80 border-gray-100 text-gray-500"}`}>
+                  Click any row to open full lead details
                 </div>
 
                 <DraggableTableContainer isDark={isDark}>
                   <table className="w-full text-left border-collapse whitespace-nowrap">
                     <thead>
-                      <tr className={isDark ? "bg-[#2C2C2E]/50" : "bg-gray-50/50"}>
-                        {["Lead No.", "Client Name", "CP Details", "Budget", "Phone", "Alt. Phone", "Date Created", "Assigned to", "Site Visits", "Status", "Actions"].map(h => (
-                          <th key={h} className={`px-4 py-3.5 text-[11px] font-medium uppercase tracking-wider border-b ${isDark ? "text-gray-400 border-white/10" : "text-gray-500 border-gray-200/60"} ${h === "Lead No." ? `md:sticky md:left-0 md:z-20 ${isDark ? "md:bg-[#252528]" : "md:bg-[#F9FAFB]"}` :
-                            h === "Client Name" ? `md:sticky md:left-[96px] md:z-20 ${isDark ? "md:bg-[#252528] md:shadow-[-1px_0_0_rgba(255,255,255,0.08)_inset]" : "md:bg-[#F9FAFB] md:shadow-[-1px_0_0_rgba(0,0,0,0.06)_inset]"}` : ""
-                            } ${h === "Status" || h === "Actions" ? "text-center" : ""}`}
+                      <tr className={isDark ? "bg-[#2C2C2E]/30" : "bg-gray-50/50"}>
+                        {/* Removed "Actions" from the headers array */}
+                        {["Lead No.", "Client Name", "CP Details", "Budget", "Phone", "Alt. Phone", "Date Created", "Assigned to", "Site Visits", "Status"].map(h => (
+                          <th
+                            key={h}
+                            className={`px-3 sm:px-4 py-3 sm:py-3.5 crm-eyebrow border-b ${isDark ? "text-gray-400 border-white/10" : "text-gray-500 border-gray-200/60"} ${h === "Lead No." ? `md:sticky md:left-0 md:z-20 ${isDark ? "md:bg-[#252528]" : "md:bg-[#F9FAFB]"}` :
+                              h === "Client Name" ? `md:sticky md:left-[80px] md:min-w-[172px] md:z-20 ${isDark ? "md:bg-[#252528] md:shadow-[-1px_0_0_rgba(255,255,255,0.08)_inset]" : "md:bg-[#F9FAFB] md:shadow-[-1px_0_0_rgba(0,0,0,0.06)_inset]"}` : ""
+                              } ${h === "Status" ? "text-center" : ""}`}
                             style={
-                              h === "Lead No." ? { minWidth: '96px', maxWidth: '96px' } :
-                                h === "Client Name" ? { minWidth: '172px', maxWidth: '172px' } : {}
-                            }>
+                              h === "Lead No." ? { minWidth: '80px', maxWidth: '80px' } :
+                                h === "Client Name" ? { minWidth: '140px', maxWidth: '140px' } : {}
+                            }
+                          >
                             {h}
                           </th>
                         ))}
-                      </tr></thead>
+                      </tr>
+                    </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-white/[0.06]">
                       {isFetchingDirectLeads ? (
-                        <SkeletonRows rows={8} cols={11} isDark={isDark} />
+                        /* colSpan changed from 11 to 10 */
+                        <SkeletonRows rows={8} cols={10} isDark={isDark} />
                       ) : filteredRecepLeads.length === 0 ? (
-                        <tr><td colSpan={11}>
-                          <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
-                            <div className={`w-16 h-16 rounded-2xl grid place-items-center mb-4 ${isDark ? "bg-white/[0.04] border border-white/10" : "bg-gray-50 border border-gray-200"}`}>
-                              <FaUserTie className="text-2xl opacity-25" />
+                        <tr>
+                          {/* colSpan changed from 11 to 10 */}
+                          <td colSpan={10}>
+                            <div className="flex flex-col items-center justify-center py-12 sm:py-16 px-4 sm:px-6 text-center">
+                              <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl grid place-items-center mb-3 sm:mb-4 ${isDark ? "bg-white/[0.04] border border-white/10" : "bg-gray-50 border border-gray-200"}`}>
+                                <FaUserTie className="text-xl sm:text-2xl opacity-25" />
+                              </div>
+                              <p className="text-[14px] sm:text-[15px] font-bold mb-1 tracking-tight">No leads found</p>
+                              <p className="text-[12px] sm:text-[13px] opacity-50 mb-2 max-w-[250px] sm:max-w-[300px] leading-relaxed">Self-assign leads when creating new entries and they will appear here.</p>
                             </div>
-                            <p className="text-sm font-bold mb-1">No leads found</p>
-                            <p className="text-[13px] opacity-50 mb-5 max-w-[300px]">Self-assign leads when creating new entries and they will appear here.</p>
-                          </div>
-                        </td></tr>
-                      ) : filteredRecepLeads.map((lead: any, rowIdx: number) => {
+                          </td>
+                        </tr>
+                      ) : filteredRecepLeads.map((lead: any) => {
                         const isLost = !!lead.is_lost_lead;
                         const isNGD = lead.status === "NON GENUINE DEMAND (NGD)" || lead.leadStatus === "NON GENUINE DEMAND (NGD)" || lead.leadInterestStatus === "NON GENUINE DEMAND (NGD)";
                         const isReturning = lead.lead_classification === "RETURNING_LEAD";
                         const rowBgClass = isLost ? (isDark ? "bg-[#1C1C1E] hover:bg-[#232325]" : "bg-slate-50 hover:bg-slate-100") : isNGD ? (isDark ? "bg-[#1a1410] hover:bg-[#211913]" : "bg-orange-50 hover:bg-orange-100") : isReturning ? (isDark ? "bg-[#0d1a14] hover:bg-[#122319]" : "bg-green-50 hover:bg-green-100") : (isDark ? "hover:bg-white/[0.04]" : "hover:bg-black/[0.02]");
+
                         return (
-                          <tr key={lead.id}
-                            className={`group transition-colors duration-200 ${rowBgClass}`}>
+                          <tr
+                            key={lead.id}
+                            /* MOVED LOGIC: onClick shifted from action button to the row */
+                            onClick={() => { setSelectedLead(lead); setAssignedSubView("detail"); setDetailTab("personal"); setShowSalesForm(false); setShowLoanForm(false); setDetailReturnTab("recep-leads"); setActiveTab("assigned"); }}
+                            className={`group cursor-pointer transition-colors duration-200 ${rowBgClass}`}
+                          >
+                            <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-[11px] sm:text-[12px] font-bold tracking-tight md:sticky md:left-0 md:z-10 transition-colors duration-200 ${isLost || isNGD ? "bg-inherit" : (isDark ? "text-gray-400 md:bg-[#1C1C1E] md:group-hover:bg-[#232325]" : "text-gray-500 md:bg-white md:group-hover:bg-[#FDFDFD]")}`} style={{ minWidth: '80px', maxWidth: '80px' }}>
+                              #{lead.sr_no || lead.id}
+                            </td>
 
-                            <td className={`px-4 py-4 text-[12px] font-medium tracking-wide md:sticky md:left-0 md:z-10 transition-colors duration-200 ${isLost || isNGD ? "bg-inherit" : (isDark ? "text-gray-400 md:bg-[#1C1C1E] md:group-hover:bg-[#232325]" : "text-gray-500 md:bg-white md:group-hover:bg-[#FDFDFD]")}`} style={{ minWidth: '96px', maxWidth: '96px' }}>#{lead.sr_no || lead.id}</td>
-
-                            <td className={`px-4 py-4 text-[13px] font-medium md:sticky md:left-[96px] md:z-10 transition-colors duration-200 ${isLost || isNGD ? "bg-inherit md:shadow-[-1px_0_0_rgba(255,255,255,0.04)_inset]" : (isDark ? "text-gray-100 md:bg-[#1C1C1E] md:group-hover:bg-[#232325] md:shadow-[-1px_0_0_rgba(255,255,255,0.08)_inset]" : "text-gray-900 md:bg-white md:group-hover:bg-[#FDFDFD] md:shadow-[-1px_0_0_rgba(0,0,0,0.06)_inset]")}`} style={{ minWidth: '172px', maxWidth: '172px' }}>
+                            <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-[13px] sm:text-[14px] font-semibold tracking-tight md:sticky md:left-[80px] md:min-w-[172px] md:z-10 transition-colors duration-200 ${isLost || isNGD ? "bg-inherit md:shadow-[-1px_0_0_rgba(255,255,255,0.04)_inset]" : (isDark ? "text-gray-100 md:bg-[#1C1C1E] md:group-hover:bg-[#232325] md:shadow-[-1px_0_0_rgba(255,255,255,0.08)_inset]" : "text-gray-900 md:bg-white md:group-hover:bg-[#FDFDFD] md:shadow-[-1px_0_0_rgba(0,0,0,0.06)_inset]")}`} style={{ minWidth: '140px', maxWidth: '140px' }}>
                               <div className="truncate">{lead.name}</div>
                             </td>
 
-                            <td className={`px-4 py-4 text-[13px] ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                            <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-[12px] sm:text-[13px] ${isDark ? "text-gray-400" : "text-gray-600"}`}>
                               {(lead.cp_company || lead.cpCompany) ? (
-                                <div className="flex flex-col gap-[3px]">
-                                  <span className={`font-semibold text-[13px] ${t.text}`}>{lead.cp_company || lead.cpCompany}</span>
+                                <div className="flex flex-col gap-0.5">
+                                  <span className={`font-semibold tracking-tight ${t.text}`}>{lead.cp_company || lead.cpCompany}</span>
                                   {(lead.cp_phone || lead.cpPhone) && (
-                                    <span className="font-mono text-[11px] text-orange-400">{lead.cp_phone || lead.cpPhone}</span>
+                                    <span className="font-mono text-[10px] sm:text-[11px] text-orange-400">{lead.cp_phone || lead.cpPhone}</span>
                                   )}
                                 </div>
                               ) : <span className="text-[11px] opacity-40">—</span>}
                             </td>
 
-                            <td className={`px-4 py-4 text-[13px] font-medium tabular-nums tracking-tight ${isDark ? "text-[#32D74B]" : "text-[#28CD41]"}`}>{lead.salesBudget || lead.budget}</td>
-
-                            <td className={`px-4 py-4 text-[13px] font-mono tracking-tight ${isDark ? "text-gray-300" : "text-gray-700"}`}>{maskPhone(lead.phone)}</td>
-
-                            <td className={`px-4 py-4 text-[13px] font-mono tracking-tight ${isDark ? "text-gray-500" : "text-gray-400"}`}>{maskPhone(lead.altPhone)}</td>
-
-                            <td className={`px-4 py-4 text-[12px] min-w-[120px] ${isDark ? "text-gray-500" : "text-gray-400"}`}>{lead.date}</td>
-
-                            <td className="px-4 py-4">
-                              <span className={`inline-flex items-center px-2 py-1.5 rounded-md text-[11px] font-medium ${isDark ? "bg-purple-500/10 text-purple-400 border border-purple-500/30" : "bg-[#9E217B]/10 text-[#9E217B] border border-[#9E217B]/30"}`}>{lead.assignedReceptionist || user.name}</span>
+                            <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-[12px] sm:text-[13px] font-bold tabular-nums tracking-tight ${isDark ? "text-[#32D74B]" : "text-[#28CD41]"}`}>
+                              {lead.salesBudget || lead.budget}
                             </td>
 
-                            <td className="px-4 py-4">
+                            <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-[12px] sm:text-[13px] font-mono tracking-tight ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+                              {maskPhone(lead.phone)}
+                            </td>
+
+                            <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-[12px] sm:text-[13px] font-mono tracking-tight ${isDark ? "text-gray-500" : "text-gray-400"}`}>
+                              {maskPhone(lead.altPhone)}
+                            </td>
+
+                            <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-[11px] sm:text-[12px] font-medium min-w-[110px] sm:min-w-[120px] ${isDark ? "text-gray-500" : "text-gray-400"}`}>
+                              {lead.date}
+                            </td>
+
+                            <td className="px-3 sm:px-4 py-3.5 sm:py-4">
+                              <span className={`inline-flex items-center px-2 py-1 sm:py-1.5 rounded-md text-[10px] sm:text-[11px] font-bold tracking-wide ${isDark ? "bg-purple-500/10 text-purple-400 border border-purple-500/30" : "bg-[#9E217B]/10 text-[#9E217B] border border-[#9E217B]/30"}`}>
+                                {lead.assignedReceptionist || user.name}
+                              </span>
+                            </td>
+
+                            <td className="px-3 sm:px-4 py-3.5 sm:py-4">
                               {lead.mongoVisitDate ? (
-                                <span className="text-orange-500 font-semibold text-[12px] whitespace-nowrap">{formatDate(lead.mongoVisitDate).split(",")[0]}</span>
+                                <span className="text-orange-500 font-semibold text-[11px] sm:text-[12px] whitespace-nowrap">
+                                  {formatDate(lead.mongoVisitDate).split(",")[0]}
+                                </span>
                               ) : (
-                                <span className="text-[11px] opacity-40">Pending</span>
+                                <span className="text-[10px] sm:text-[11px] opacity-40 font-medium">Pending</span>
                               )}
                             </td>
 
-                            <td className={`px-4 py-4 text-center`}>
+                            <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-center`}>
                               {lead.is_lost_lead ? (
-                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${t.statusLost}`}>
-                                  <Ghost className="w-3.5 h-3.5" /> Lost
+                                <span className={`inline-flex items-center gap-1.5 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-md text-[9px] sm:text-[10px] font-bold uppercase tracking-wider border ${t.statusLost}`}>
+                                  <Ghost className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> Lost
                                 </span>
                               ) : isNGD ? (
-                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${t.statusNGD}`}>
+                                <span className={`inline-flex items-center gap-1.5 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-md text-[9px] sm:text-[10px] font-bold uppercase tracking-wider border ${t.statusNGD}`}>
                                   NGD
                                 </span>
                               ) : isReturning ? (
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider border border-green-500/40 text-green-400 bg-green-500/10">
+                                <span className="inline-flex items-center gap-1.5 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-md text-[9px] sm:text-[10px] font-bold uppercase tracking-wider border border-green-500/40 text-green-400 bg-green-500/10">
                                   Returning
                                 </span>
                               ) : (
-                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${getStatusStyle(lead.status)}`}>{lead.status || "Assigned"}</span>
+                                <span className={`inline-flex items-center gap-1.5 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-md text-[9px] sm:text-[10px] font-bold uppercase tracking-wider border ${getStatusStyle(lead.status)}`}>
+                                  {lead.status || "Assigned"}
+                                </span>
                               )}
                             </td>
 
-                            <td className={`px-4 py-4 text-center`}>
-                              <button onClick={() => { setSelectedLead(lead); setAssignedSubView("detail"); setDetailTab("personal"); setShowSalesForm(false); setShowLoanForm(false); setActiveTab("assigned"); }}
-                                className={`inline-flex items-center justify-center gap-1.5 px-4 py-3 sm:px-3 sm:py-2 rounded-xl sm:rounded-lg text-[13px] sm:text-[11px] font-bold whitespace-nowrap transition-all duration-200 hover:-translate-y-[1px] cursor-pointer shadow-sm ${t.btnPrimary}`}>
-                                <FaEye className="text-[11px]" /> <span className="sm:hidden">View</span><span className="hidden sm:inline">Open</span>
-                              </button>
-                            </td>
+                            {/* Removed the Actions <td> entirely */}
                           </tr>
                         )
                       })}
@@ -3345,88 +3282,110 @@ export default function ReceptionistDashboard() {
                     </div>
                   </RpPageHeader>
 
-                  <div className={`rounded-2xl md:rounded-3xl border overflow-hidden shadow-[0_8px_30px_rgb(0,0,0,0.04)] ${t.tableWrap}`} style={t.tableGlass}>
-                    <div className={`px-4 md:px-6 pt-4 pb-4 flex flex-col sm:flex-row items-start sm:items-center gap-4 border-b ${t.tableHead} ${isDark ? "border-white/[0.06]" : "border-indigo-300"}`}>
-                      <div className="flex items-center gap-3 shrink-0">
-                        <div className={`p-1.5 md:p-2 rounded-xl ${isDark ? "bg-[#0A84FF]/10" : "bg-[#007AFF]/10"}`}>
-                          <FaHandshake className={`text-[15px] md:text-lg ${isDark ? "text-[#0A84FF]" : "text-[#00AEEF]"}`} />
+                  <div className={`rounded-2xl sm:rounded-3xl border overflow-hidden shadow-sm flex flex-col ${t.tableWrap}`} style={t.tableGlass}>
+
+                    {/* ── Header Area ── */}
+                    <div className={`px-4 sm:px-6 py-3.5 sm:py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 border-b ${t.tableHead} ${isDark ? "border-white/[0.06]" : "border-indigo-300"}`}>
+                      <div className="flex items-center gap-2.5 sm:gap-3 shrink-0 w-full sm:w-auto">
+                        <div className={`p-1.5 sm:p-2 rounded-xl ${isDark ? "bg-[#0A84FF]/10" : "bg-[#007AFF]/10"}`}>
+                          <FaHandshake className={`text-[14px] sm:text-lg ${isDark ? "text-[#0A84FF]" : "text-[#00AEEF]"}`} />
                         </div>
-                        <h3 className={`text-base md:text-lg font-semibold tracking-tight ${t.text}`}>Closed Leads</h3>
-                        <span className={`text-[10px] md:text-[11px] font-medium px-2.5 py-0.5 rounded-full tabular-nums tracking-wide ${t.btnClosingBadge}`}>
+                        <h3 className={`text-[15px] sm:text-lg font-bold tracking-tight ${t.text}`}>Closed Leads</h3>
+                        <span className={`text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-md tabular-nums tracking-wide ${t.btnClosingBadge}`}>
                           {filteredClosedLeads.length.toLocaleString("en-IN")}
                         </span>
                       </div>
 
-                      <div className="flex-1 w-full sm:max-w-xs order-3 sm:order-2">
+                      <div className="w-full sm:max-w-xs sm:ml-auto">
                         <SearchBar value={searchClosedLeads} onChange={setSearchClosedLeads} isDark={isDark} placeholder="Search leads..." />
                       </div>
+                    </div>
 
-                      <span className="w-full sm:w-auto mt-1 sm:mt-0 ml-auto text-[11px] font-medium opacity-60 order-2 sm:order-3">Click any row to view full history</span>
+                    {/* ── UX Helper Bar (Explains the new click-to-view interaction) ── */}
+                    <div className={`px-4 sm:px-6 py-2 border-b text-[9px] sm:text-[10px] font-bold uppercase tracking-widest ${isDark ? "bg-white/[0.015] border-white/[0.04] text-gray-500" : "bg-gray-50/80 border-gray-100 text-gray-500"}`}>
+                      Click any row to view full history
                     </div>
 
                     <DraggableTableContainer isDark={isDark}>
                       <table className="w-full text-left border-collapse whitespace-nowrap">
                         <thead>
-                          <tr className={isDark ? "bg-[#2C2C2E]/50" : "bg-gray-50/50"}>
-                            {["Lead No.", "Client Name", "Budget", "Property", "Status", "Assigned To", "Site Visit", "Closing Date", "Actions"].map(h => (
-                              <th key={h} className={`px-4 py-3.5 text-[11px] font-medium uppercase tracking-wider border-b ${isDark ? "text-gray-400 border-white/10" : "text-gray-500 border-gray-200/60"} ${h === "Lead No." ? `md:sticky md:left-0 md:z-20 ${isDark ? "md:bg-[#252528]" : "md:bg-[#F9FAFB]"}` :
-                                h === "Client Name" ? `md:sticky md:left-[96px] md:z-20 ${isDark ? "md:bg-[#252528] md:shadow-[-1px_0_0_rgba(255,255,255,0.08)_inset]" : "md:bg-[#F9FAFB] md:shadow-[-1px_0_0_rgba(0,0,0,0.06)_inset]"}` : ""
-                                } ${h === "Status" || h === "Actions" ? "text-center" : ""}`}
+                          <tr className={isDark ? "bg-[#2C2C2E]/30" : "bg-gray-50/50"}>
+                            {/* Removed "Actions" from array */}
+                            {["Lead No.", "Client Name", "Budget", "Property", "Status", "Assigned To", "Site Visit", "Closing Date"].map(h => (
+                              <th
+                                key={h}
+                                className={`px-3 sm:px-4 py-3 sm:py-3.5 crm-eyebrow border-b ${isDark ? "text-gray-400 border-white/10" : "text-gray-500 border-gray-200/60"} ${h === "Lead No." ? `md:sticky md:left-0 md:z-20 ${isDark ? "md:bg-[#252528]" : "md:bg-[#F9FAFB]"}` :
+                                  h === "Client Name" ? `md:sticky md:left-[80px] sm:md:left-[96px] md:z-20 ${isDark ? "md:bg-[#252528] md:shadow-[-1px_0_0_rgba(255,255,255,0.08)_inset]" : "md:bg-[#F9FAFB] md:shadow-[-1px_0_0_rgba(0,0,0,0.06)_inset]"}` : ""
+                                  } ${h === "Status" ? "text-center" : ""}`}
                                 style={
-                                  h === "Lead No." ? { minWidth: '96px', maxWidth: '96px' } :
-                                    h === "Client Name" ? { minWidth: '172px', maxWidth: '172px' } : {}
-                                }>{h}</th>
+                                  h === "Lead No." ? { minWidth: '80px', maxWidth: '80px' } :
+                                    h === "Client Name" ? { minWidth: '150px', maxWidth: '150px' } : {}
+                                }
+                              >
+                                {h}
+                              </th>
                             ))}
-                          </tr></thead>
+                          </tr>
+                        </thead>
                         <tbody className="divide-y divide-gray-100 dark:divide-white/[0.06]">
                           {isFetchingEnquiries ? (
-                            <SkeletonRows rows={8} cols={9} isDark={isDark} />
+                            /* colSpan changed from 9 to 8 */
+                            <SkeletonRows rows={8} cols={8} isDark={isDark} />
                           ) : filteredClosedLeads.length === 0 ? (
-                            <tr><td colSpan={9}>
-                              <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
-                                <div className={`w-16 h-16 rounded-2xl grid place-items-center mb-4 ${isDark ? "bg-white/[0.04] border border-white/10" : "bg-gray-50 border border-gray-200"}`}>
-                                  <FaHandshake className="text-2xl opacity-25" />
+                            <tr>
+                              {/* colSpan changed from 9 to 8 */}
+                              <td colSpan={8}>
+                                <div className="flex flex-col items-center justify-center py-12 sm:py-16 px-4 sm:px-6 text-center">
+                                  <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl grid place-items-center mb-3 sm:mb-4 ${isDark ? "bg-white/[0.04] border border-white/10" : "bg-gray-50 border border-gray-200"}`}>
+                                    <FaHandshake className="text-xl sm:text-2xl opacity-25" />
+                                  </div>
+                                  <p className="text-[14px] sm:text-[15px] font-bold mb-1 tracking-tight">No closed leads yet</p>
+                                  <p className="text-[12px] sm:text-[13px] opacity-50 mb-2 max-w-[250px] sm:max-w-[300px] leading-relaxed">Leads marked as Closing will appear here.</p>
                                 </div>
-                                <p className="text-[15px] font-bold mb-1">No closed leads yet</p>
-                                <p className="text-[13px] opacity-50 mb-5 max-w-[300px]">Leads marked as Closing will appear here.</p>
-                              </div>
-                            </td></tr>
-                          ) : filteredClosedLeads.map((lead: any, rowIdx: number) => {
+                              </td>
+                            </tr>
+                          ) : filteredClosedLeads.map((lead: any) => {
                             return (
-                              <tr key={lead.id} className={`group cursor-pointer transition-colors duration-200 ${isDark ? "hover:bg-white/[0.04]" : "hover:bg-black/[0.02]"}`}
-                                onClick={() => { setSelectedClosedLead(lead); setClosedLeadView("detail"); }}>
+                              <tr
+                                key={lead.id}
+                                className={`group cursor-pointer transition-colors duration-200 ${isDark ? "hover:bg-white/[0.04]" : "hover:bg-black/[0.02]"}`}
+                                onClick={() => { setSelectedClosedLead(lead); setClosedLeadView("detail"); }}
+                              >
+                                <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-[11px] sm:text-[12px] font-bold tracking-tight md:sticky md:left-0 md:z-10 transition-colors duration-200 ${isDark ? "text-gray-400 md:bg-[#1C1C1E] md:group-hover:bg-[#232325]" : "text-gray-500 md:bg-white md:group-hover:bg-[#FDFDFD]"}`} style={{ minWidth: '80px', maxWidth: '80px' }}>
+                                  #{lead.sr_no || lead.id}
+                                </td>
 
-                                <td className={`px-4 py-4 text-[12px] font-medium tracking-wide md:sticky md:left-0 md:z-10 transition-colors duration-200 ${isDark ? "text-gray-400 md:bg-[#1C1C1E] md:group-hover:bg-[#232325]" : "text-gray-500 md:bg-white md:group-hover:bg-[#FDFDFD]"}`} style={{ minWidth: '96px', maxWidth: '96px' }}>#{lead.sr_no || lead.id}</td>
-
-                                <td className={`px-4 py-4 text-[13px] font-medium md:sticky md:left-[96px] md:z-10 transition-colors duration-200 ${isDark ? "text-gray-100 md:bg-[#1C1C1E] md:group-hover:bg-[#232325] md:shadow-[-1px_0_0_rgba(255,255,255,0.08)_inset]" : "text-gray-900 md:bg-white md:group-hover:bg-[#FDFDFD] md:shadow-[-1px_0_0_rgba(0,0,0,0.06)_inset]"}`} style={{ minWidth: '172px', maxWidth: '172px' }}>
+                                <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-[13px] sm:text-[14px] font-semibold tracking-tight md:sticky md:left-[80px] sm:md:left-[96px] md:z-10 transition-colors duration-200 ${isDark ? "text-gray-100 md:bg-[#1C1C1E] md:group-hover:bg-[#232325] md:shadow-[-1px_0_0_rgba(255,255,255,0.08)_inset]" : "text-gray-900 md:bg-white md:group-hover:bg-[#FDFDFD] md:shadow-[-1px_0_0_rgba(0,0,0,0.06)_inset]"}`} style={{ minWidth: '150px', maxWidth: '150px' }}>
                                   <div className="truncate">{lead.name}</div>
                                 </td>
 
-                                <td className={`px-4 py-4 text-[13px] font-medium tabular-nums tracking-tight ${isDark ? "text-[#32D74B]" : "text-[#28CD41]"}`}>{lead.salesBudget || lead.budget}</td>
+                                <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-[12px] sm:text-[13px] font-bold tabular-nums tracking-tight ${isDark ? "text-[#32D74B]" : "text-[#28CD41]"}`}>
+                                  {lead.salesBudget || lead.budget}
+                                </td>
 
-                                <td className={`px-4 py-4 text-[13px] ${isDark ? "text-gray-300" : "text-gray-700"}`}>{(lead.propType && lead.propType !== "Pending" && lead.propType !== "N/A" ? lead.propType : lead.configuration && lead.configuration !== "Pending" && lead.configuration !== "N/A" ? lead.configuration : "N/A")}</td>
+                                <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-[11px] sm:text-[12px] font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+                                  {(lead.propType && lead.propType !== "Pending" && lead.propType !== "N/A" ? lead.propType : lead.configuration && lead.configuration !== "Pending" && lead.configuration !== "N/A" ? lead.configuration : "N/A")}
+                                </td>
 
-                                <td className={`px-4 py-4 text-center`}>
-                                  <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider border shadow-sm ${t.statusClosing}`}>
+                                <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-center`}>
+                                  <span className={`inline-flex items-center px-2 py-1 rounded-md text-[9px] sm:text-[10px] font-bold uppercase tracking-wider border shadow-sm ${t.statusClosing}`}>
                                     {lead.status}
                                   </span>
                                 </td>
 
-                                <td className={`px-4 py-4 text-[13px] ${isDark ? "text-gray-400" : "text-gray-600"}`}>{lead.assignedTo || "Unassigned"}</td>
+                                <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-[11px] sm:text-[12px] font-medium ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                                  {lead.assignedTo || "Unassigned"}
+                                </td>
 
-                                <td className={`px-4 py-4 text-[12px] ${lead.mongoVisitDate ? "text-orange-500 font-semibold" : t.textFaint}`}>
+                                <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-[11px] sm:text-[12px] font-medium ${lead.mongoVisitDate ? "text-orange-500 font-semibold" : t.textFaint}`}>
                                   {lead.mongoVisitDate ? formatDate(lead.mongoVisitDate).split(",")[0] : <span className="opacity-40">—</span>}
                                 </td>
 
-                                <td className={`px-4 py-4 text-[12px] ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                                <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-[11px] sm:text-[12px] font-medium ${isDark ? "text-gray-400" : "text-gray-500"}`}>
                                   {lead.closingDate ? formatDate(lead.closingDate).split(",")[0] : <span className="opacity-40">—</span>}
                                 </td>
 
-                                <td className={`px-4 py-4 text-center`}>
-                                  <button className={`inline-flex items-center justify-center gap-1.5 px-4 py-3 sm:px-3 sm:py-2 rounded-xl sm:rounded-lg text-[13px] sm:text-[11px] font-bold whitespace-nowrap transition-all duration-200 hover:-translate-y-[1px] cursor-pointer shadow-sm ${t.btnWarning}`}>
-                                    <FaEye className="text-[11px]" /> <span className="sm:hidden">History</span><span className="hidden sm:inline">View History</span>
-                                  </button>
-                                </td>
+                                {/* Removed the 'Actions' Button <td> entirely */}
                               </tr>
                             )
                           })}
@@ -3512,7 +3471,7 @@ export default function ReceptionistDashboard() {
                         <div className={`p-5 md:p-6 border-b flex items-center gap-3 ${t.modalHeader} ${t.tableBorder}`}>
                           <FaFileAlt className={`text-lg ${t.accentText}`} />
                           <h3 className={`font-bold text-base md:text-lg ${t.text}`}>Full Lead History</h3>
-                          <span className={`text-[10px] md:text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-full ${t.accentBg}`}>{leadFollowUps.length} entries</span>
+                          <span className={`crm-eyebrow px-3 py-1.5 rounded-full ${t.accentBg}`}>{leadFollowUps.length} entries</span>
                         </div>
                         <div className={`flex-1 overflow-y-auto custom-scrollbar p-4 md:p-6 flex flex-col gap-5 ${t.chatArea}`}>
                           {/* System entry */}
@@ -3589,31 +3548,8 @@ export default function ReceptionistDashboard() {
       {/* ════════════════════════════════════════════════════
           BOTTOM NAV (MOBILE)
       ════════════════════════════════════════════════════ */}
-      <nav className={`md:hidden flex w-full h-16 border-t items-center justify-around flex-shrink-0 z-40 ${t.sidebar}`}>
-        {/* Same list as the desktop rail — Settings is filtered out because it
-            is rendered separately below as a route rather than a tab. */}
-        {RECEPTIONIST_NAV.filter(i => i.id !== "settings").map(({ id, icon: Icon, label }) => {
-          const active = activeTab === id || (id === "overview" && activeTab === "detail");
-          return (
-            <div key={id} onClick={() => setActiveTab(id)} className="relative flex justify-center items-center h-full flex-1 cursor-pointer" title={label}>
-              {active && <div className={`absolute top-0 left-1/2 -translate-x-1/2 h-1 w-8 rounded-b ${t.navIndicator}`} />}
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${active ? t.navActive : t.navInactive}`}><Icon className="w-5 h-5" /></div>
-            </div>
-          );
-        })}
-        {/* Navigates rather than switching tab — same destination as the desktop
-            rail's Settings item, so both entry points land on the same screen. It
-            never shows an active state because leaving this route unmounts the
-            bar; Settings has its own rail and marks itself active there. */}
-        <button
-          type="button"
-          aria-label="Settings"
-          onClick={() => router.push("/dashboard/settings/profile")}
-          className="relative flex justify-center items-center h-full flex-1 cursor-pointer"
-        >
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${t.navInactive}`}><FaCog className="w-5 h-5" /></div>
-        </button>
-      </nav>
+      {/* Bottom nav removed on mobile — replaced by hamburger drawer.
+          The drawer provides access to all tabs including Settings. */}
 
       {/* ════════════════════════════════════════════════════
           ENQUIRY MODAL (with Self-Assign toggle)
@@ -3659,7 +3595,7 @@ export default function ReceptionistDashboard() {
             tell where one group ends and the next begins. */}
               <form id="enquiryForm" onSubmit={handleEnquirySubmit} className="space-y-9">
                 <div>
-                  <h3 className={`text-[12px] font-semibold uppercase tracking-wider mb-3 px-1 ${t.textMuted}`}>
+                  <h3 className={`crm-eyebrow mb-3 px-1 ${t.textMuted}`}>
                     Personal Information
                   </h3>
                   <div
@@ -3863,7 +3799,7 @@ export default function ReceptionistDashboard() {
                 </div>
 
                 <div>
-                  <h3 className={`text-[12px] font-semibold uppercase tracking-wider mb-3 px-1 ${t.textMuted}`}>
+                  <h3 className={`crm-eyebrow mb-3 px-1 ${t.textMuted}`}>
                     Requirement &amp; Budget
                   </h3>
                   <div
@@ -3922,7 +3858,7 @@ export default function ReceptionistDashboard() {
                 </div>
 
                 <div>
-                  <h3 className={`text-[12px] font-semibold uppercase tracking-wider mb-3 px-1 ${t.textMuted}`}>
+                  <h3 className={`crm-eyebrow mb-3 px-1 ${t.textMuted}`}>
                     Routing &amp; Source
                   </h3>
                   <div
@@ -4086,7 +4022,7 @@ export default function ReceptionistDashboard() {
                         className={`sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3.5 p-4 rounded-xl border ${isDark ? "bg-white/[0.04] border-white/10" : "bg-black/[0.02] border-black/[0.06]"
                           }`}
                       >
-                        <h4 className={`sm:col-span-2 text-[12px] font-semibold uppercase tracking-wider mb-0.5 ${t.textMuted}`}>
+                        <h4 className={`sm:col-span-2 crm-eyebrow mb-0.5 ${t.textMuted}`}>
                           Channel Partner Details
                         </h4>
 

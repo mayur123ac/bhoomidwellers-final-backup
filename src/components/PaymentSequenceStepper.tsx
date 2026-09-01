@@ -80,7 +80,7 @@ export default function PaymentSequenceStepper({ booking, isDark = false }: Paym
 
   return (
     <div className={`rounded-2xl border p-5 ${cardBg}`}>
-      <p className={`text-xs font-bold uppercase tracking-wider mb-4 ${accent}`}>Payment Sequence</p>
+      <p className={`crm-eyebrow mb-4 ${accent}`}>Payment Sequence</p>
 
       <div className="overflow-x-auto pb-1">
         <div className="flex items-start min-w-max">

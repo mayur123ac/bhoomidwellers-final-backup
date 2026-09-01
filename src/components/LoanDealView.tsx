@@ -225,7 +225,7 @@ function SectionHeading({
 }) {
   return (
     <h4
-      className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-3 sm:mb-4 flex items-center justify-between ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"
+      className={`crm-eyebrow mb-3 sm:mb-4 flex items-center justify-between ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"
         }`}
     >
       <span className="flex items-center gap-1.5">
@@ -271,14 +271,14 @@ function TrancheHistory({ tranches, isDark, t }: { tranches: Tranche[]; isDark: 
       <button
         type="button"
         onClick={() => setExpanded(e => !e)}
-        className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider ${t.textMuted} hover:text-[#00AEEF] transition-colors`}
+        className={`flex items-center gap-1.5 crm-eyebrow ${t.textMuted} hover:text-[#00AEEF] transition-colors`}
       >
         <span className="transition-transform" style={{ display: "inline-block", transform: expanded ? "rotate(90deg)" : "rotate(0deg)" }}>▶</span>
         {expanded ? "Hide" : "View"} Tranche History ({tranches.length})
       </button>
       {expanded && (
         <div className={`mt-2 rounded-lg border overflow-hidden`}>
-          <div className={`grid grid-cols-[36px_1fr_80px_80px_120px] text-[10px] font-bold uppercase tracking-wider px-3 py-2 border-b ${t.textMuted} ${isDark ? "bg-gray-800/50" : "bg-gray-50"}`}>
+          <div className={`grid grid-cols-[36px_1fr_80px_80px_120px] crm-eyebrow px-3 py-2 border-b ${t.textMuted} ${isDark ? "bg-gray-800/50" : "bg-gray-50"}`}>
             <span>#</span><span>Amount</span><span>Status</span><span>Bank Ref</span><span>Date & Time</span>
           </div>
           {tranches.map((tr, idx) => (
@@ -504,7 +504,7 @@ export default function LoanDealView({ lead, booking, loanUpdate, isDark = false
 
           {lu.notes && (
             <div className={`mb-6 rounded-lg border p-3 ${t.innerBlock}`}>
-              <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-widest mb-1.5 ${t.textMuted}`}>
+              <p className={`crm-eyebrow mb-1.5 ${t.textMuted}`}>
                 Notes / Remarks
               </p>
               <p className={`text-xs sm:text-sm whitespace-pre-wrap ${t.text}`}>{lu.notes}</p>
@@ -528,7 +528,7 @@ export default function LoanDealView({ lead, booking, loanUpdate, isDark = false
             including rejections, so the full trail is visible (not just the winner). */}
         {applications.length > 0 && (
           <div className="mb-5">
-            <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-widest mb-2 ${t.textMuted}`}>
+            <p className={`crm-eyebrow mb-2 ${t.textMuted}`}>
               Lender Applications ({applications.length})
             </p>
             <div className="space-y-2">
@@ -584,7 +584,7 @@ export default function LoanDealView({ lead, booking, loanUpdate, isDark = false
                 milestone, and reads Requested vs Sanctioned side by side to
                 avoid the "two amounts, unclear which is which" confusion. */}
             <div className={`rounded-lg border p-3 sm:p-3.5 mb-5 ${t.innerBlock}`}>
-              <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-widest mb-3 ${t.textMuted}`}>
+              <p className={`crm-eyebrow mb-3 ${t.textMuted}`}>
                 Sanction
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-y-3 gap-x-3 text-xs sm:text-sm">
@@ -598,7 +598,7 @@ export default function LoanDealView({ lead, booking, loanUpdate, isDark = false
             {/* Disbursement */}
             <div className={`rounded-lg border p-3 sm:p-3.5 ${t.innerBlock}`}>
               <div className="flex items-center justify-between mb-3">
-                <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-widest ${t.textMuted}`}>
+                <p className={`crm-eyebrow ${t.textMuted}`}>
                   Disbursement
                 </p>
                 {sanctionAmountNum > 0 && (
@@ -687,7 +687,7 @@ export default function LoanDealView({ lead, booking, loanUpdate, isDark = false
                 const done = pdd.filter((p: any) => p.submitted).length;
                 return (
                   <div className={`mt-4 rounded-lg border p-3 ${t.innerBlock}`}>
-                    <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-widest mb-2 ${t.textMuted}`}>
+                    <p className={`crm-eyebrow mb-2 ${t.textMuted}`}>
                       Post-Disbursement Documents ({done}/{pdd.length})
                     </p>
                     <div className="space-y-1.5">
@@ -732,7 +732,7 @@ export default function LoanDealView({ lead, booking, loanUpdate, isDark = false
           <div className="space-y-3">
             {/* Token */}
             <div className={`rounded-lg border p-3 sm:p-3.5 ${t.innerBlock}`}>
-              <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-widest mb-3 ${t.textMuted}`}>
+              <p className={`crm-eyebrow mb-3 ${t.textMuted}`}>
                 Token
               </p>
               <Field label="Token Amount" val={formatCurrencyDisplay(src.token_amount)} t={t} emphasize="green" />
@@ -740,7 +740,7 @@ export default function LoanDealView({ lead, booking, loanUpdate, isDark = false
 
             {/* Stamp Duty & Registration — prefers the split fields, falls back to legacy sdr_* */}
             <div className={`rounded-lg border p-3 sm:p-3.5 ${t.innerBlock}`}>
-              <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-widest mb-3 ${t.textMuted}`}>
+              <p className={`crm-eyebrow mb-3 ${t.textMuted}`}>
                 Stamp Duty &amp; Registration
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-y-3 gap-x-3 text-xs sm:text-sm">
@@ -754,7 +754,7 @@ export default function LoanDealView({ lead, booking, loanUpdate, isDark = false
 
             {/* GST & Other Charges */}
             <div className={`rounded-lg border p-3 sm:p-3.5 ${t.innerBlock}`}>
-              <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-widest mb-3 ${t.textMuted}`}>
+              <p className={`crm-eyebrow mb-3 ${t.textMuted}`}>
                 GST &amp; Other Charges
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-y-3 gap-x-3 text-xs sm:text-sm">
@@ -766,7 +766,7 @@ export default function LoanDealView({ lead, booking, loanUpdate, isDark = false
 
             {/* Cash component */}
             <div className={`rounded-lg border p-3 sm:p-3.5 ${t.innerBlock}`}>
-              <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-widest mb-3 ${t.textMuted}`}>
+              <p className={`crm-eyebrow mb-3 ${t.textMuted}`}>
                 Cash Component
               </p>
               <div className="grid grid-cols-2 gap-y-3 gap-x-3 text-xs sm:text-sm">
@@ -782,7 +782,7 @@ export default function LoanDealView({ lead, booking, loanUpdate, isDark = false
 
             {charges.length > 0 && (
               <div className={`rounded-lg border p-3 sm:p-3.5 ${t.innerBlock}`}>
-                <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-widest mb-2.5 ${t.textMuted}`}>
+                <p className={`crm-eyebrow mb-2.5 ${t.textMuted}`}>
                   Custom Charges
                 </p>
                 <div className="space-y-1.5">

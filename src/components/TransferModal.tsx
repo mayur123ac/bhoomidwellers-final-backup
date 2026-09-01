@@ -168,7 +168,7 @@ export default function TransferModal({
               {String(currentManager).charAt(0).toUpperCase()}
             </div>
             <div>
-              <p className={`text-[10px] font-bold uppercase tracking-wider ${t.textFaint}`}>Currently Assigned To</p>
+              <p className={`crm-eyebrow ${t.textFaint}`}>Currently Assigned To</p>
               <p className={`text-sm font-bold ${t.text}`}>{currentManager}</p>
             </div>
             <div className="ml-auto">

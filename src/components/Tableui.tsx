@@ -639,7 +639,7 @@ export function ColumnSelector({
           `}
                 >
                     <div className="flex items-center justify-between px-2 pb-2 mb-1 border-b border-current/10">
-                        <span className="text-[10px] font-bold uppercase tracking-wider opacity-50">
+                        <span className="crm-eyebrow opacity-50">
                             Visible columns
                         </span>
                         <button

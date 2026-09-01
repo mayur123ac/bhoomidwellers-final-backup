@@ -941,7 +941,7 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
                     className={`px-3 sm:px-5 pb-2.5 sm:pb-3.5 pt-2.5 sm:pt-3.5 flex flex-wrap items-center gap-x-2.5 sm:gap-x-5 gap-y-2 border-b mobile-compact-filters ${isDark ? "border-white/[0.06]" : "border-indigo-300"
                         }`}
                 >
-                    <span className="hidden sm:inline text-[10px] font-bold uppercase tracking-wider opacity-40">
+                    <span className="hidden sm:inline crm-eyebrow opacity-40">
                         Filters
                     </span>
 

@@ -191,7 +191,7 @@ function TicketPopup({ lead, onClose, onSave, alreadySaved, isLocked, lockedBy, 
 
         <div className="flex items-start justify-between mb-5">
           <div>
-            <p className="text-[10px] text-purple-400 font-bold uppercase tracking-wider mb-1">Lead Ticket</p>
+            <p className="crm-eyebrow text-purple-400 mb-1">Lead Ticket</p>
             <h2 className="text-xl font-bold text-white">{lead.name}</h2>
             {lead.dbId && <p className="text-[10px] text-gray-600 mt-0.5 flex items-center gap-1"><FaDatabase className="text-[8px] text-green-500" />DB #{lead.dbId}</p>}
           </div>
@@ -456,7 +456,7 @@ function DashboardSection({ rawLeads, savedLeads, callerName }: { rawLeads: RawL
         <div className="w-12 h-12 bg-purple-600/20 border border-purple-500/30 rounded-xl flex items-center justify-center text-purple-400 text-xl font-bold">{callerName.charAt(0).toUpperCase()}</div>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        {stats.map(s => <div key={s.label} className={`rounded-2xl p-5 border ${s.bg}`}><p className="text-gray-500 text-xs font-bold uppercase tracking-wider mb-2">{s.label}</p><p className={`text-3xl font-black ${s.color}`}>{s.value}</p></div>)}
+        {stats.map(s => <div key={s.label} className={`rounded-2xl p-5 border ${s.bg}`}><p className="text-gray-500 crm-eyebrow mb-2">{s.label}</p><p className={`text-3xl font-black ${s.color}`}>{s.value}</p></div>)}
       </div>
       {Object.keys(sourceMap).length > 0 && (
         <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-2xl p-6">

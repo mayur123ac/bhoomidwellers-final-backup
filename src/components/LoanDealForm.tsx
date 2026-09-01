@@ -81,7 +81,7 @@ const LOAN_TYPE_OPTS = ["Home Loan", "Top-Up Loan", "Balance Transfer", "Other"]
 function SectionHeader({ icon, title, subtitle, t }: { icon: string; title: string; subtitle: string; t: any }) {
   return (
     <div className="mb-3">
-      <h4 className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-1 flex items-center gap-2 text-[#00AEEF]`}>
+      <h4 className={`crm-eyebrow mb-1 flex items-center gap-2 text-[#00AEEF]`}>
         <span className="text-sm">{icon}</span> {title}
       </h4>
       <p className={`text-[10px] normal-case font-normal ${t.textFaint}`}>{subtitle}</p>
@@ -159,7 +159,7 @@ function DisbursementProgressBar({ totalDisbursed, sanctionAmount, percent, isDa
   return (
     <div className={`rounded-xl border p-4 mb-4 ${t.innerBlock}`}>
       <div className="flex items-center justify-between mb-3">
-        <span className={`text-[10px] font-bold uppercase tracking-widest ${t.textMuted}`}>
+        <span className={`crm-eyebrow ${t.textMuted}`}>
           Disbursement Progress
         </span>
         <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${isComplete
@@ -179,15 +179,15 @@ function DisbursementProgressBar({ totalDisbursed, sanctionAmount, percent, isDa
 
       <div className="grid grid-cols-3 divide-x divide-gray-500/10">
         <div className="text-center px-2">
-          <p className={`text-[9px] font-semibold uppercase tracking-wider mb-1 ${t.textFaint}`}>Sanctioned</p>
+          <p className={`crm-eyebrow mb-1 ${t.textFaint}`}>Sanctioned</p>
           <p className={`text-sm font-bold ${t.text}`}>₹{sanctionAmount.toLocaleString("en-IN")}</p>
         </div>
         <div className="text-center px-2">
-          <p className={`text-[9px] font-semibold uppercase tracking-wider mb-1 ${t.textFaint}`}>Disbursed</p>
+          <p className={`crm-eyebrow mb-1 ${t.textFaint}`}>Disbursed</p>
           <p className="text-sm font-bold text-[#00AEEF]">₹{totalDisbursed.toLocaleString("en-IN")}</p>
         </div>
         <div className="text-center px-2">
-          <p className={`text-[9px] font-semibold uppercase tracking-wider mb-1 ${t.textFaint}`}>Remaining</p>
+          <p className={`crm-eyebrow mb-1 ${t.textFaint}`}>Remaining</p>
           <p className={`text-sm font-bold ${isComplete ? "text-emerald-500" : "text-orange-500"}`}>
             ₹{remaining.toLocaleString("en-IN")}
           </p>
@@ -237,7 +237,7 @@ function StampDutyBlock({
   return (
     <div className={`rounded-xl border p-3 mt-3 ${t.innerBlock}`}>
       <div className="flex items-center justify-between mb-2">
-        <p className={`text-[10px] font-bold uppercase tracking-widest ${t.textMuted}`}>{title}</p>
+        <p className={`crm-eyebrow ${t.textMuted}`}>{title}</p>
         {/* Auto / Manual segmented toggle */}
         <div className={`flex items-center rounded-full border overflow-hidden text-[10px] font-bold ${t.tableBorder}`}>
           <button type="button" onClick={() => onMode("auto")} className={`px-2.5 py-1 transition-colors ${isAuto ? "bg-[#00AEEF] text-white" : `${t.textMuted}`}`}>Auto-Calculate</button>
@@ -1024,7 +1024,7 @@ export default function LoanDealForm({ lead, booking, loanUpdate, user, isDark =
                   above the progress/tranches. Distinct from the actual-disbursement summary. */}
               {sanctionAmountNum > 0 && (
                 <div className={`rounded-xl border p-3 mb-3 ${t.innerBlock}`}>
-                  <p className={`text-[10px] font-bold uppercase tracking-widest mb-2 ${t.textMuted}`}>Planning (Expected)</p>
+                  <p className={`crm-eyebrow mb-2 ${t.textMuted}`}>Planning (Expected)</p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className={labelCls}>Expected Disbursement Date</label>
@@ -1063,7 +1063,7 @@ export default function LoanDealForm({ lead, booking, loanUpdate, user, isDark =
                   {/* ── Tranche history — card rows, not a cramped grid ── */}
                   {sanctionAmountNum > 0 && tranches.length > 0 && (
                     <div className="mb-3">
-                      <p className={`text-[10px] font-bold uppercase tracking-widest mb-2 ${t.textMuted}`}>
+                      <p className={`crm-eyebrow mb-2 ${t.textMuted}`}>
                         Tranche History ({tranches.length})
                       </p>
                       <div className="space-y-2">
@@ -1134,7 +1134,7 @@ export default function LoanDealForm({ lead, booking, loanUpdate, user, isDark =
                   {showAddTranche && (
                     <div className={`rounded-xl border-2 border-[#00AEEF]/30 p-4 mb-3 ${t.innerBlock}`}>
                       <div className="flex items-center justify-between mb-3">
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-[#00AEEF]">
+                        <p className="crm-eyebrow text-[#00AEEF]">
                           New Tranche #{tranches.length + 1}
                         </p>
                         <button
@@ -1347,7 +1347,7 @@ export default function LoanDealForm({ lead, booking, loanUpdate, user, isDark =
                 <button
                   type="button"
                   onClick={() => setShowAdditionalPayment(v => !v)}
-                  className={`flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest ${t.textMuted}`}
+                  className={`flex items-center gap-2 crm-eyebrow ${t.textMuted}`}
                 >
                   <FaChevronRight className={`text-[9px] transition-transform ${showAdditionalPayment ? "rotate-90" : ""}`} />
                   Additional Direct Payment (Optional)
@@ -1366,7 +1366,7 @@ export default function LoanDealForm({ lead, booking, loanUpdate, user, isDark =
 
               {/* Custom Charges */}
               <div className="flex items-center justify-between mt-3 mb-2">
-                <p className={`text-[10px] font-bold uppercase tracking-widest ${t.textMuted}`}>Custom Charges</p>
+                <p className={`crm-eyebrow ${t.textMuted}`}>Custom Charges</p>
                 <button type="button" onClick={addCharge} className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded ${t.btnSecondary}`}>
                   <FaPlus className="text-[9px]" /> Add Charge
                 </button>

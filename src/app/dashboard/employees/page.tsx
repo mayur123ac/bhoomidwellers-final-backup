@@ -66,7 +66,7 @@ type CreatedEmployee = {
 
 // ─── Sun / Moon Icons ─────────────────────────────────────────────────────────
 const SunIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="12" cy="12" r="5" />
     <line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" />
     <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
@@ -75,7 +75,7 @@ const SunIcon = () => (
   </svg>
 );
 const MoonIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
   </svg>
 );
@@ -1036,16 +1036,17 @@ export default function EmployeesPage() {
         >
           <div className="flex items-center gap-4 flex-shrink-0 relative z-[50]" ref={topbarRef}>
             {/* Desktop-only controls: hidden on mobile */}
-            <div className="hidden md:flex items-center gap-3">
+            <div className="hidden md:flex items-center gap-4">
               <HeaderClock isDark={isDark} />
-              <button onClick={() => {
-                const next = !isDark;
-                setIsDark(next);
-                try { localStorage.setItem("crm_theme", next ? "dark" : "light"); } catch { }
-              }} aria-label="Toggle theme"
-                className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center cursor-pointer justify-center shadow-sm ${t.toggleBtn}`}>
+              <div
+                className={`w-5 h-5 flex items-center justify-center cursor-pointer ${isDark ? "text-gray-400" : "text-[#6B7280]"} hover:text-[#9E217B] transition-colors`}
+                onClick={() => {
+                  const next = !isDark;
+                  setIsDark(next);
+                  try { localStorage.setItem("crm_theme", next ? "dark" : "light"); } catch { }
+                }} role="button" aria-label="Toggle theme">
                 {isDark ? <SunIcon /> : <MoonIcon />}
-              </button>
+              </div>
             </div>
 
             {/* Attendance: visible on all screen sizes */}
@@ -1635,7 +1636,7 @@ export default function EmployeesPage() {
             <div className={`w-72 flex flex-col h-full flex-shrink-0 shadow-xl transition-colors duration-300 ${t.callerSidebar}`}>
               <div className={`p-4 border-b space-y-3 ${t.innerBorder}`}>
                 <div>
-                  <label className={`text-[10px] font-bold uppercase tracking-wider mb-1 block ${t.batchLabel}`}>Assign Upload To</label>
+                  <label className={`crm-eyebrow mb-1 block ${t.batchLabel}`}>Assign Upload To</label>
                   <select value={assignUploadTo} onChange={e => setAssignUploadTo(e.target.value)} className={t.smallSel}>
                     <option value="">Admin (unassigned)</option>
                     {callers.map((c: any) => <option key={c._id || c.name} value={c.name}>{c.name}</option>)}
@@ -1725,7 +1726,7 @@ export default function EmployeesPage() {
 
               {batchList.length > 0 && (
                 <div className={`p-3 max-h-52 overflow-y-auto ${t.batchTop} ${t.scroll}`}>
-                  <p className={`text-[10px] font-bold uppercase tracking-wider mb-2 px-1 ${t.batchLabel}`}>Uploaded Excel Files</p>
+                  <p className={`crm-eyebrow mb-2 px-1 ${t.batchLabel}`}>Uploaded Excel Files</p>
                   {batchList.map((b: any) => (
                     <div key={b.id}
                       className={`flex items-center justify-between p-2 rounded-lg mb-1 cursor-pointer transition-colors ${selectedBatch === String(b.id) ? t.batchItemSel : t.batchItemDef}`}
@@ -1795,7 +1796,7 @@ export default function EmployeesPage() {
                   </div>
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <div className={`border rounded-2xl p-6 ${t.detailCard}`}>
-                      <h3 className={`text-xs font-bold uppercase tracking-wider mb-4 pb-2 ${t.accentText} ${t.detailSection}`}>Lead Information</h3>
+                      <h3 className={`crm-eyebrow mb-4 pb-2 ${t.accentText} ${t.detailSection}`}>Lead Information</h3>
                       <div className="space-y-3 text-sm">
                         <div className="flex justify-between items-start">
                           <div className="w-full">
@@ -1853,7 +1854,7 @@ export default function EmployeesPage() {
                     </div>
                     <div className={`border rounded-2xl overflow-hidden flex flex-col ${t.detailCard}`} style={{ minHeight: "400px" }}>
                       <div className={`p-4 border-b ${t.panelHead}`}>
-                        <h3 className={`text-xs font-bold uppercase tracking-wider flex items-center gap-2 ${t.text}`}><FaComments className={t.accentText} /> Follow-up Timeline</h3>
+                        <h3 className={`crm-eyebrow flex items-center gap-2 ${t.text}`}><FaComments className={t.accentText} /> Follow-up Timeline</h3>
                       </div>
                       <div className={`flex-1 overflow-y-auto p-5 flex flex-col gap-4 ${t.followBg} ${t.scroll}`}>
                         <div className="flex justify-start">
@@ -1898,7 +1899,7 @@ export default function EmployeesPage() {
                           { label: "Pending Review", value: callerSavedFormLeads.filter((l: any) => !l.interest_status && l.status === "saved").length, color: "text-yellow-400", bg: "bg-yellow-500/10 border-yellow-500/20" },
                         ].map(s => (
                           <div key={s.label} className={`rounded-2xl p-4 border ${s.bg}`}>
-                            <p className={`text-[10px] font-bold uppercase tracking-wider mb-1 ${t.textFaint}`}>{s.label}</p>
+                            <p className={`crm-eyebrow mb-1 ${t.textFaint}`}>{s.label}</p>
                             <p className={`text-3xl font-black ${s.color}`}>{s.value}</p>
                           </div>
                         ))}
@@ -2570,7 +2571,7 @@ function CallerControlMode({ leads, savedLeads, setSavedLeads, adminName, onExit
           <div className="relative bg-[#1a1a1a] border border-[#2a2a2a] rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6 animate-fadeIn" onClick={e => e.stopPropagation()}>
             <div className="flex items-start justify-between mb-5">
               <div>
-                <p className="text-[10px] text-orange-400 font-bold uppercase tracking-wider mb-1">Admin Control — Lead Ticket</p>
+                <p className="crm-eyebrow text-orange-400 mb-1">Admin Control — Lead Ticket</p>
                 <h2 className="text-xl font-bold text-white">{ticketLead.name}</h2>
               </div>
               <button onClick={() => setTicketLead(null)} className="text-gray-500 hover:text-white p-1 cursor-pointer"><FaTimes /></button>
@@ -2644,7 +2645,7 @@ function CallerControlMode({ leads, savedLeads, setSavedLeads, adminName, onExit
                   { label: "Not Interested", value: notIntLeads.length, color: "text-red-400", bg: "bg-red-500/10 border-red-500/20" },
                 ].map(s => (
                   <div key={s.label} className={`rounded-2xl p-5 border ${s.bg}`}>
-                    <p className="text-gray-500 text-xs font-bold uppercase tracking-wider mb-2">{s.label}</p>
+                    <p className="text-gray-500 crm-eyebrow mb-2">{s.label}</p>
                     <p className={`text-3xl font-black ${s.color}`}>{s.value}</p>
                   </div>
                 ))}

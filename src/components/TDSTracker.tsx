@@ -58,7 +58,7 @@ export default function TDSTracker({ bookingId, agreementValue, initialRecords, 
   const textMuted = isDark ? "text-[#888899]" : "text-[#6B7280]";
   const accent = isDark ? "text-[#d4006e]" : "text-[#9E217B]";
   const cardBg = isDark ? "bg-[#121218] border-[#2A2A35]" : "bg-white border-[#E5E7EB]";
-  const sectionTitle = `text-xs font-bold uppercase tracking-wider ${accent}`;
+  const sectionTitle = `crm-eyebrow ${accent}`;
   const inputCls = `w-full rounded-lg px-3 py-2 text-sm outline-none border transition-colors ${isDark ? "bg-[#14141B] border-[#2A2A35] text-white focus:border-[#9E217B]" : "bg-white border-[#9CA3AF] text-[#1A1A1A] focus:border-[#00AEEF]"}`;
   const labelCls = `block text-[10px] font-semibold mb-1 uppercase ${textMuted}`;
   const btnPrimary = isDark ? "bg-[#9E217B] hover:bg-[#7a1960] text-white" : "bg-[#00AEEF] hover:bg-[#0088bb] text-white";

@@ -76,21 +76,14 @@ export default function SalesSettingsBells({
     <>
       {/* Site Visit Bell */}
       <div className="relative">
-        <button
-          onClick={() => setActivePopup(activePopup === "visit" ? null : "visit")}
-          className={`relative h-8 w-8 sm:h-9 sm:w-9 flex-shrink-0 rounded-full sm:rounded-lg border border-transparent sm:border flex items-center justify-center transition-colors duration-150 cursor-pointer ${
-            isDark
-              ? "bg-white/10 text-[#EBEBF5] sm:bg-[#1C1C2A] sm:border-[#2A2A38] sm:text-yellow-300 hover:bg-white/20"
-              : "bg-black/5 text-[#3C3C43] sm:bg-[#F1F5F9] sm:border-[#9CA3AF] sm:text-[#1A1A1A] hover:bg-black/10"
-          } sm:hover:bg-[inherit] sm:hover:border-orange-500/50`}
-        >
-          <FaCalendarAlt className="text-sm" />
+        <div className="relative cursor-pointer" onClick={() => setActivePopup(activePopup === "visit" ? null : "visit")}>
+          <FaCalendarAlt className={`${isDark ? "text-gray-400" : "text-[#6B7280]"} hover:text-[#9E217B] transition-colors w-5 h-5`} />
           {visitNotificationLeads.length > 0 && (
-            <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 bg-orange-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center">
+            <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-orange-500 rounded-full text-[9px] font-black text-white flex items-center justify-center">
               {visitNotificationLeads.length > 9 ? "9+" : visitNotificationLeads.length}
             </span>
           )}
-        </button>
+        </div>
         <AnimatePresence>
           {activePopup === "visit" && (
             <motion.div
@@ -135,21 +128,14 @@ export default function SalesSettingsBells({
 
       {/* Follow-up Bell */}
       <div className="relative">
-        <button
-          onClick={() => setActivePopup(activePopup === "notifications" ? null : "notifications")}
-          className={`relative h-8 w-8 sm:h-9 sm:w-9 flex-shrink-0 rounded-full sm:rounded-lg border border-transparent sm:border flex items-center justify-center transition-colors duration-150 cursor-pointer ${
-            isDark
-              ? "bg-white/10 text-[#EBEBF5] sm:bg-[#1C1C2A] sm:border-[#2A2A38] sm:text-yellow-300 hover:bg-white/20"
-              : "bg-black/5 text-[#3C3C43] sm:bg-[#F1F5F9] sm:border-[#9CA3AF] sm:text-[#1A1A1A] hover:bg-black/10"
-          } sm:hover:bg-[inherit] sm:hover:border-purple-500/50`}
-        >
-          <FaBell className="text-sm" />
+        <div className="relative cursor-pointer" onClick={() => setActivePopup(activePopup === "notifications" ? null : "notifications")}>
+          <FaBell className={`${isDark ? "text-gray-400" : "text-[#6B7280]"} hover:text-[#9E217B] transition-colors w-5 h-5`} />
           {followUpLeads.length > 0 && (
-            <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 bg-red-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center">
+            <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 rounded-full text-[9px] font-black text-white flex items-center justify-center">
               {followUpLeads.length > 9 ? "9+" : followUpLeads.length}
             </span>
           )}
-        </button>
+        </div>
         <AnimatePresence>
           {activePopup === "notifications" && (
             <motion.div

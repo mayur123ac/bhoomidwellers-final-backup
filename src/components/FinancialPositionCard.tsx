@@ -244,14 +244,14 @@ export default function FinancialPositionCard({ bookingId, isDark = false, t }: 
     <>
       <div className={`rounded-xl border p-4 mb-5 ${isDark ? "bg-[#121218] border-[#2A2A35]" : "bg-white border-[#E5E7EB]"}`}>
         <div className="flex items-start justify-between gap-3 mb-4">
-          <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-widest ${t.textMuted}`}>Financial Position</p>
+          <p className={`crm-eyebrow ${t.textMuted}`}>Financial Position</p>
           <span className={`text-[9px] font-bold px-2 py-1 rounded-full border text-right ${badge.cls}`}>{badge.label}</span>
         </div>
 
         {/* ── Agreement funding ── */}
         <div className="mb-4">
           <div className="flex items-center justify-between mb-1.5">
-            <span className={`text-[10px] font-bold uppercase tracking-wider ${t.textMuted}`}>Agreement Funding</span>
+            <span className={`crm-eyebrow ${t.textMuted}`}>Agreement Funding</span>
             <ChargeBadge status={obligation.agreementFundingStatus} />
           </div>
           <div className="flex items-baseline gap-2 mb-2">
@@ -270,7 +270,7 @@ export default function FinancialPositionCard({ bookingId, isDark = false, t }: 
 
         {/* ── Additional charges — never gated by agreement funding ── */}
         <div className={`border-t pt-3 mb-4 ${t.tableBorder}`}>
-          <p className={`text-[10px] font-bold uppercase tracking-wider mb-2 ${t.textMuted}`}>
+          <p className={`crm-eyebrow mb-2 ${t.textMuted}`}>
             Additional Charges <span className="font-normal normal-case opacity-70">(separate from agreement)</span>
           </p>
           {/* Per-charge amounts come from the snapshot the endpoint echoes back —

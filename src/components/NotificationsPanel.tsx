@@ -42,14 +42,14 @@ const STATUS_META: Record<
   StatusKey,
   { label: string; icon: any; color: string; bg: string; border: string; hint: string }
 > = {
-  pending:   { label: "Queued",    icon: FaClock,               color: "#a1a1aa", bg: "rgba(161,161,170,0.12)", border: "rgba(161,161,170,0.30)", hint: "Waiting for its first attempt." },
-  sending:   { label: "Sending",   icon: FaSyncAlt,             color: "#38bdf8", bg: "rgba(56,189,248,0.12)",  border: "rgba(56,189,248,0.30)",  hint: "Claimed by a worker right now." },
-  sent:      { label: "Sent",      icon: FaCheck,               color: "#38bdf8", bg: "rgba(56,189,248,0.12)",  border: "rgba(56,189,248,0.30)",  hint: "Meta accepted it. Awaiting a delivery receipt." },
-  delivered: { label: "Delivered", icon: FaCheckDouble,         color: "#34d399", bg: "rgba(52,211,153,0.12)",  border: "rgba(52,211,153,0.30)",  hint: "It reached the recipient's phone." },
-  read:      { label: "Read",      icon: FaCheckDouble,         color: "#22c55e", bg: "rgba(34,197,94,0.15)",   border: "rgba(34,197,94,0.35)",   hint: "The recipient opened it." },
-  failed:    { label: "Retrying",  icon: FaExclamationTriangle, color: "#fb923c", bg: "rgba(251,146,60,0.12)",  border: "rgba(251,146,60,0.30)",  hint: "An attempt failed. Another is scheduled." },
-  dead:      { label: "Failed",    icon: FaTimes,               color: "#f87171", bg: "rgba(248,113,113,0.12)", border: "rgba(248,113,113,0.30)", hint: "Gave up. No further attempts will be made." },
-  skipped:   { label: "Not sent",  icon: FaBan,                 color: "#a78bfa", bg: "rgba(167,139,250,0.12)", border: "rgba(167,139,250,0.30)", hint: "Never attempted — see the reason." },
+  pending: { label: "Queued", icon: FaClock, color: "#a1a1aa", bg: "rgba(161,161,170,0.12)", border: "rgba(161,161,170,0.30)", hint: "Waiting for its first attempt." },
+  sending: { label: "Sending", icon: FaSyncAlt, color: "#38bdf8", bg: "rgba(56,189,248,0.12)", border: "rgba(56,189,248,0.30)", hint: "Claimed by a worker right now." },
+  sent: { label: "Sent", icon: FaCheck, color: "#38bdf8", bg: "rgba(56,189,248,0.12)", border: "rgba(56,189,248,0.30)", hint: "Meta accepted it. Awaiting a delivery receipt." },
+  delivered: { label: "Delivered", icon: FaCheckDouble, color: "#34d399", bg: "rgba(52,211,153,0.12)", border: "rgba(52,211,153,0.30)", hint: "It reached the recipient's phone." },
+  read: { label: "Read", icon: FaCheckDouble, color: "#22c55e", bg: "rgba(34,197,94,0.15)", border: "rgba(34,197,94,0.35)", hint: "The recipient opened it." },
+  failed: { label: "Retrying", icon: FaExclamationTriangle, color: "#fb923c", bg: "rgba(251,146,60,0.12)", border: "rgba(251,146,60,0.30)", hint: "An attempt failed. Another is scheduled." },
+  dead: { label: "Failed", icon: FaTimes, color: "#f87171", bg: "rgba(248,113,113,0.12)", border: "rgba(248,113,113,0.30)", hint: "Gave up. No further attempts will be made." },
+  skipped: { label: "Not sent", icon: FaBan, color: "#a78bfa", bg: "rgba(167,139,250,0.12)", border: "rgba(167,139,250,0.30)", hint: "Never attempted — see the reason." },
 };
 
 /** Turns the machine code into something an operator can act on. */
@@ -182,7 +182,7 @@ export default function NotificationsPanel({ isDark, t }: Props) {
         {/* ── Header ─────────────────────────────────────────────────── */}
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <h2 className={`text-2xl font-black tracking-tight flex items-center gap-2.5 ${isDark ? "text-white" : "text-gray-900"}`}>
+            <h2 className={`text-xl font-black tracking-tight flex items-center gap-2.5 ${isDark ? "text-white" : "text-gray-900"}`}>
               <FaWhatsapp className="text-[#25D366]" /> WhatsApp Notifications
             </h2>
             <p className={`text-xs mt-1 ${t.textFaint}`}>
@@ -194,11 +194,10 @@ export default function NotificationsPanel({ isDark, t }: Props) {
               onClick={runSweep}
               disabled={sweeping || !cfg?.configured}
               title={!cfg?.configured ? "Configure WhatsApp first" : "Retry everything that is due now"}
-              className={`px-3.5 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors ${
-                sweeping || !cfg?.configured
+              className={`px-3.5 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors ${sweeping || !cfg?.configured
                   ? "opacity-40 cursor-not-allowed bg-gray-500 text-white"
                   : isDark ? "bg-[#9E217B] hover:bg-[#b8268f] text-white" : "bg-[#00AEEF] hover:bg-[#0099d4] text-white"
-              }`}
+                }`}
             >
               <FaRedo className={sweeping ? "animate-spin" : ""} /> {sweeping ? "Running…" : "Run retries"}
             </button>
@@ -312,16 +311,14 @@ export default function NotificationsPanel({ isDark, t }: Props) {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search recipient, number or subject…"
-            className={`flex-1 min-w-[220px] rounded-lg px-3 py-2 text-xs outline-none border ${
-              isDark ? "bg-[#14141B] border-[#2A2A35] text-white" : "bg-white border-gray-300 text-gray-900"
-            }`}
+            className={`flex-1 min-w-[220px] rounded-lg px-3 py-2 text-xs outline-none border ${isDark ? "bg-[#14141B] border-[#2A2A35] text-white" : "bg-white border-gray-300 text-gray-900"
+              }`}
           />
           <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
-            className={`rounded-lg px-3 py-2 text-xs outline-none border ${
-              isDark ? "bg-[#14141B] border-[#2A2A35] text-white" : "bg-white border-gray-300 text-gray-900"
-            }`}
+            className={`rounded-lg px-3 py-2 text-xs outline-none border ${isDark ? "bg-[#14141B] border-[#2A2A35] text-white" : "bg-white border-gray-300 text-gray-900"
+              }`}
           >
             <option value="">All events</option>
             <option value="cp_registration">Partner registered</option>

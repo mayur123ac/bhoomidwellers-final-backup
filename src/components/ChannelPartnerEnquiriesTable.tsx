@@ -603,7 +603,7 @@ function ChannelPartnerEnquiriesTable({
                     : isDark ? "bg-white/5 border border-white/5" : "bg-black/5 border border-transparent"
                     }`}
                 >
-                  <p className={`text-[11px] font-bold uppercase tracking-wider mb-3 ${section.highlight ? t.accentText : t.textMuted}`}>
+                  <p className={`crm-eyebrow mb-3 ${section.highlight ? t.accentText : t.textMuted}`}>
                     {section.heading}
                   </p>
                   {/* Read-only throughout — no role edits an enquiry from this drawer. */}

@@ -7,9 +7,61 @@ import { FaBuilding } from "react-icons/fa";
 import { MdPerson, MdLock, MdVisibility, MdVisibilityOff, MdLocationOn } from "react-icons/md";
 import { adoptServerTheme } from "@/lib/theme";
 import { adoptServerAvatar } from "@/lib/userAvatar";
+import { Capacitor } from "@capacitor/core";
+import { Geolocation } from "@capacitor/geolocation";
+
+/** Minimal shim so the outer timeout can produce the same shape as native errors. */
+class GeolocationPositionError_compat {
+  readonly code: number;
+  readonly message: string;
+  readonly PERMISSION_DENIED = 1;
+  readonly POSITION_UNAVAILABLE = 2;
+  readonly TIMEOUT = 3;
+  constructor(code: number, message: string) {
+    this.code = code;
+    this.message = message;
+  }
+}
 
 /**
- * Request the browser's current position with a timeout.
+ * Capacitor native geolocation path.
+ *
+ * Uses @capacitor/geolocation which triggers Android's runtime permission
+ * dialog natively. After the user toggles location on, a retry calls
+ * requestPermissions() again — no app restart needed.
+ */
+async function getNativePosition(): Promise<GeolocationPosition> {
+  let perm = await Geolocation.checkPermissions();
+
+  if (perm.location === "denied") {
+    perm = await Geolocation.requestPermissions({ permissions: ["location"] });
+  }
+
+  if (perm.location === "denied") {
+    throw new GeolocationPositionError_compat(1, "PERMISSION_DENIED");
+  }
+
+  try {
+    const pos = await Geolocation.getCurrentPosition({
+      enableHighAccuracy: true,
+      timeout: 15_000,
+      maximumAge: 0,
+    });
+    return pos as unknown as GeolocationPosition;
+  } catch (err: any) {
+    const msg = (err?.message ?? "").toLowerCase();
+    if (msg.includes("denied") || msg.includes("permission")) {
+      throw new GeolocationPositionError_compat(1, "PERMISSION_DENIED");
+    }
+    if (msg.includes("timeout")) {
+      throw new GeolocationPositionError_compat(3, "TIMEOUT");
+    }
+    throw new GeolocationPositionError_compat(2, "UNAVAILABLE");
+  }
+}
+
+/**
+ * Browser geolocation path (unchanged from the original).
  *
  * Every call creates a completely fresh geolocation request:
  *   • maximumAge: 0 — never reuse a cached (possibly failed) position
@@ -17,7 +69,7 @@ import { adoptServerAvatar } from "@/lib/userAvatar";
  *     settle even on browsers that silently swallow getCurrentPosition after a
  *     permission state change (e.g. device location toggled between attempts).
  */
-function getPosition(): Promise<GeolocationPosition> {
+function getBrowserPosition(): Promise<GeolocationPosition> {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) {
       reject(new GeolocationPositionError_compat(2, "UNAVAILABLE"));
@@ -32,10 +84,6 @@ function getPosition(): Promise<GeolocationPosition> {
       fn(v);
     };
 
-    // Outer failsafe: if the browser neither resolves nor rejects within 20s
-    // (native timeout is 15s), we reject with a clear TIMEOUT error rather
-    // than hanging forever. This covers the documented edge case where
-    // getCurrentPosition silently stops responding after a permission change.
     const outerTimer = setTimeout(() => {
       settle(reject, new GeolocationPositionError_compat(3, "TIMEOUT"));
     }, 20_000);
@@ -46,26 +94,18 @@ function getPosition(): Promise<GeolocationPosition> {
       {
         enableHighAccuracy: true,
         timeout: 15_000,
-        // CRITICAL: must be 0. A non-zero value lets the browser reuse a
-        // cached result from a previous (possibly failed) attempt. After the
-        // user toggles device location on, we need a genuinely fresh fix.
         maximumAge: 0,
       }
     );
   });
 }
 
-/** Minimal shim so the outer timeout can produce the same shape as native errors. */
-class GeolocationPositionError_compat {
-  readonly code: number;
-  readonly message: string;
-  readonly PERMISSION_DENIED = 1;
-  readonly POSITION_UNAVAILABLE = 2;
-  readonly TIMEOUT = 3;
-  constructor(code: number, message: string) {
-    this.code = code;
-    this.message = message;
+/** Route to native or browser geolocation based on runtime platform. */
+function getPosition(): Promise<GeolocationPosition> {
+  if (Capacitor.isNativePlatform()) {
+    return getNativePosition();
   }
+  return getBrowserPosition();
 }
 
 export default function Login() {
@@ -110,10 +150,15 @@ export default function Login() {
 
       // Distinguish the three geolocation failure modes explicitly.
       const code = geoError?.code;
+      const isApp = Capacitor.isNativePlatform();
       if (code === 1) {
-        // PERMISSION_DENIED — browser-level denial
+        // PERMISSION_DENIED
         setLocationStatus("denied");
-        setError("Location permission denied. Please allow location access in your browser settings and try again.");
+        setError(
+          isApp
+            ? "Location permission denied. Please allow location access in App Settings and try again."
+            : "Location permission denied. Please allow location access in your browser settings and try again.",
+        );
       } else if (code === 2 || geoError?.message === "UNAVAILABLE") {
         // POSITION_UNAVAILABLE — device GPS/location services off
         setLocationStatus("denied");

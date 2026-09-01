@@ -898,7 +898,7 @@ export default function SiteVisitOverview({
                     {/* Day headers */}
                     <div className="grid grid-cols-7 gap-px" style={{ background: gridLineColor, borderBottom: `1px solid ${gridLineColor}` }}>
                       {DAYS.map(d => (
-                        <div key={d} className="py-2.5 md:py-3 text-center text-[9px] md:text-[11px] font-bold uppercase tracking-wider"
+                        <div key={d} className="py-2.5 md:py-3 text-center crm-eyebrow"
                           style={{ color: gridHeaderText, background: gridHeaderBg }}>
                           {d}
                         </div>
@@ -959,7 +959,7 @@ export default function SiteVisitOverview({
                         const isToday = new Date(date).setHours(0, 0, 0, 0) === new Date().setHours(0, 0, 0, 0);
                         return (
                           <div key={date.toISOString()} className="py-2.5 px-1 md:px-2 text-center" style={{ background: gridHeaderBg }}>
-                            <p className="text-[9px] md:text-[10px] font-bold uppercase tracking-wider" style={{ color: gridHeaderText }}>
+                            <p className="crm-eyebrow" style={{ color: gridHeaderText }}>
                               {DAYS[date.getDay()]}
                             </p>
                             <p className={`text-base md:text-lg font-black mt-0.5 w-7 h-7 md:w-9 md:h-9 mx-auto flex items-center justify-center rounded-full ${isToday ? "text-white" : ""}`}
