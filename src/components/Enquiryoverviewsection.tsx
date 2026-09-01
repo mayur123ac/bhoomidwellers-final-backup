@@ -1158,12 +1158,24 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
                                         ? `Duplicate phone — also on Lead ${dupOthers.join(", ")}`
                                         : undefined;
 
+                                    const isReturned =
+                                        String(lead.status || "").toUpperCase() === "RETURNED" ||
+                                        lead.lead_classification === "RETURNING_LEAD";
+
                                     const zebra =
-                                        rowIdx % 2 === 1
-                                            ? isDark
-                                                ? "bg-white/[0.015]"
-                                                : "bg-gray-100/60"
-                                            : "";
+                                        isReturned
+                                            ? ""
+                                            : rowIdx % 2 === 1
+                                                ? isDark
+                                                    ? "bg-white/[0.015]"
+                                                    : "bg-gray-100/60"
+                                                : "";
+
+                                    const returnedBg = isReturned
+                                        ? isDark
+                                            ? "bg-emerald-500/[0.07]"
+                                            : "bg-emerald-50/80"
+                                        : "";
 
                                     return (
                                         <tr
@@ -1174,14 +1186,18 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
                                             }
                                             className={`
                         group cursor-pointer transition-colors duration-200
-                        ${zebra}
+                        ${returnedBg || zebra}
                         ${isSelected
                                                     ? isDark
                                                         ? "bg-[#9E217B]/[0.14]"
                                                         : "bg-[#9E217B]/[0.06]"
-                                                    : isDark
-                                                        ? "hover:bg-white/[0.045]"
-                                                        : "hover:bg-[#9E217B]/[0.035]"
+                                                    : isReturned
+                                                        ? isDark
+                                                            ? "hover:bg-emerald-500/[0.12]"
+                                                            : "hover:bg-emerald-100/80"
+                                                        : isDark
+                                                            ? "hover:bg-white/[0.045]"
+                                                            : "hover:bg-[#9E217B]/[0.035]"
                                                 }
                       `}
                                             style={lead.is_lost_lead ? { opacity: 0.55 } : undefined}

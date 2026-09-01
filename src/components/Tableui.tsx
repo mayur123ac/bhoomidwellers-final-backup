@@ -220,6 +220,8 @@ function chipConfig(raw: string): { tone: ChipTone; Icon: any; text: string } {
         return { tone: "red", Icon: FaTimesCircle, text: "Lost" };
     if (s === "active")
         return { tone: "green", Icon: FaCircle, text: "Active" };
+    if (s === "returned")
+        return { tone: "green", Icon: FaCircle, text: "Returned" };
     if (s === "pending")
         return { tone: "orange", Icon: FaClock, text: "Pending" };
     return { tone: "gray", Icon: FaCircle, text: raw || "—" };
