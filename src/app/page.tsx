@@ -8,19 +8,64 @@ import { MdPerson, MdLock, MdVisibility, MdVisibilityOff, MdLocationOn } from "r
 import { adoptServerTheme } from "@/lib/theme";
 import { adoptServerAvatar } from "@/lib/userAvatar";
 
-/** Request the browser's current position with a timeout. */
+/**
+ * Request the browser's current position with a timeout.
+ *
+ * Every call creates a completely fresh geolocation request:
+ *   • maximumAge: 0 — never reuse a cached (possibly failed) position
+ *   • An outer timeout races the native one, so the Promise is guaranteed to
+ *     settle even on browsers that silently swallow getCurrentPosition after a
+ *     permission state change (e.g. device location toggled between attempts).
+ */
 function getPosition(): Promise<GeolocationPosition> {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) {
-      reject(new Error("UNAVAILABLE"));
+      reject(new GeolocationPositionError_compat(2, "UNAVAILABLE"));
       return;
     }
-    navigator.geolocation.getCurrentPosition(resolve, reject, {
-      enableHighAccuracy: true,
-      timeout: 15_000,
-      maximumAge: 60_000,
-    });
+
+    let settled = false;
+    const settle = <T,>(fn: (v: T) => void, v: T) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(outerTimer);
+      fn(v);
+    };
+
+    // Outer failsafe: if the browser neither resolves nor rejects within 20s
+    // (native timeout is 15s), we reject with a clear TIMEOUT error rather
+    // than hanging forever. This covers the documented edge case where
+    // getCurrentPosition silently stops responding after a permission change.
+    const outerTimer = setTimeout(() => {
+      settle(reject, new GeolocationPositionError_compat(3, "TIMEOUT"));
+    }, 20_000);
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => settle(resolve, pos),
+      (err) => settle(reject, err),
+      {
+        enableHighAccuracy: true,
+        timeout: 15_000,
+        // CRITICAL: must be 0. A non-zero value lets the browser reuse a
+        // cached result from a previous (possibly failed) attempt. After the
+        // user toggles device location on, we need a genuinely fresh fix.
+        maximumAge: 0,
+      }
+    );
   });
+}
+
+/** Minimal shim so the outer timeout can produce the same shape as native errors. */
+class GeolocationPositionError_compat {
+  readonly code: number;
+  readonly message: string;
+  readonly PERMISSION_DENIED = 1;
+  readonly POSITION_UNAVAILABLE = 2;
+  readonly TIMEOUT = 3;
+  constructor(code: number, message: string) {
+    this.code = code;
+    this.message = message;
+  }
 }
 
 export default function Login() {
@@ -35,8 +80,18 @@ export default function Login() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // ── Full state reset — every attempt starts clean ──────────────────
+    // Without this, stale error/location state from a prior failure can
+    // bleed into the retry and block or confuse the flow.
     setError("");
+    setLocationStatus("idle");
     setIsLoading(true);
+
+    // Small yield so React flushes the reset before the (potentially
+    // blocking) geolocation call. Without this, the user sees the old
+    // error message persist while "Getting location…" never appears.
+    await new Promise((r) => setTimeout(r, 0));
     setLocationStatus("requesting");
 
     // ── Step 1: Obtain location BEFORE authenticating ──────────────────
@@ -52,14 +107,21 @@ export default function Login() {
       setLocationStatus("idle");
     } catch (geoError: any) {
       setIsLoading(false);
-      if (geoError?.code === 1 || geoError?.message === "UNAVAILABLE") {
-        // PERMISSION_DENIED or geolocation not supported
+
+      // Distinguish the three geolocation failure modes explicitly.
+      const code = geoError?.code;
+      if (code === 1) {
+        // PERMISSION_DENIED — browser-level denial
         setLocationStatus("denied");
-        setError("Location access is required to log in. Please enable location permission and try again.");
-      } else if (geoError?.code === 3) {
-        // TIMEOUT
+        setError("Location permission denied. Please allow location access in your browser settings and try again.");
+      } else if (code === 2 || geoError?.message === "UNAVAILABLE") {
+        // POSITION_UNAVAILABLE — device GPS/location services off
+        setLocationStatus("denied");
+        setError("Location unavailable. Please turn on your device's location services and try again.");
+      } else if (code === 3) {
+        // TIMEOUT — device couldn't get a fix in time
         setLocationStatus("error");
-        setError("Location request timed out. Please check your device's location services and try again.");
+        setError("Location request timed out. Please ensure location services are enabled and you have a clear GPS signal, then try again.");
       } else {
         setLocationStatus("error");
         setError("Could not determine your location. Please enable location services and try again.");
