@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getOrganizationId } from "@/lib/tenantContext";
 import { requireSession } from "@/lib/serverAuth";
+import { broadcastFollowUp } from "@/lib/followUpEvents";
 
 export const dynamic = "force-dynamic";
 
@@ -27,12 +28,13 @@ export async function PATCH(req: NextRequest) {
     if (!leadId) {
       return NextResponse.json({ success: false, message: "leadId is required" }, { status: 400 });
     }
-    // No resolvable numeric id means nothing could have been addressed to this
-    // session in the first place — nothing to mark, and not an error.
     if (!gate.userId) {
       return NextResponse.json({ success: true, marked: 0 }, { status: 200 });
     }
 
+    const orgId = await getOrganizationId();
+
+    // Idempotent: read_at IS NULL means already-read messages are skipped.
     const rows = await query<{ id: number }>(
       `UPDATE follow_ups
           SET read_at = NOW()
@@ -42,8 +44,19 @@ export async function PATCH(req: NextRequest) {
           AND read_at IS NULL
           AND organization_id = $3
         RETURNING id`,
-      [leadId, gate.userId, await getOrganizationId()]
+      [leadId, gate.userId, orgId]
     );
+
+    // Broadcast read receipt so the sender sees the ticks update in real time.
+    if (rows.length > 0) {
+      broadcastFollowUp(orgId, {
+        type: "followup:read",
+        ids: rows.map(r => r.id),
+        leadId,
+        readAt: new Date().toISOString(),
+        readBy: gate.session.name || gate.session.email || "unknown",
+      });
+    }
 
     return NextResponse.json({ success: true, marked: rows.length, ids: rows.map(r => r.id) }, { status: 200 });
   } catch (err: any) {

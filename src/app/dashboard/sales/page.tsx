@@ -54,6 +54,7 @@ import BolnaCallWidget from "@/components/BolnaCallWidget";
 import CallingButtons from "@/components/CallingButtons";
 // import ActivityTimeline from "@/components/ActivityTimeline";
 import { handleMarkLostLead as markLostLeadApi, restoreLostLead, updateLeadLostState, useLostLeadEvents } from "@/lib/lostLeadSync";
+import { useFollowUpEvents, type FollowUpSSEPayload, type FollowUpReadSSEPayload } from "@/lib/followUpSync";
 
 import AttendanceTimerWidget from "@/components/AttendanceTimerWidget";
 import UserAvatar from "@/components/UserAvatar";
@@ -276,8 +277,9 @@ const SALESFORM_FIELD_RE = new Map<string, RegExp>(
 
 const EMPTY_FUPS: any[] = [];
 
-/** Poll interval, matching the admin dashboard. Was 5 s here — see useAdminData. */
-const SALES_POLL_MS = 30_000;
+/** Recovery-only fallback. Follow-ups now arrive via SSE in real time;
+ *  lead data still polls because lead mutations are spread across many routes. */
+const SALES_POLL_MS = 120_000;
 
 // ============================================================================
 // SHARED REAL-TIME DATA HOOK
@@ -438,7 +440,44 @@ function useAdminData() {
     setFollowUps(prev => (prev.some(f => String(f._id) === String(row._id)) ? prev : [...prev, row]));
   }, []);
 
-  return { managers, receptionists, allLeads, followUps, isLoading, refetch: fetchAdminData, appendFollowUp };
+  // ── Follow-up SSE: real-time follow-up delivery ──────────────────────────
+  const handleSSEFollowUp = useCallback((fu: FollowUpSSEPayload) => {
+    if (fu.clientMessageId) {
+      setFollowUps(prev => {
+        const hasOptimistic = prev.some(f => f._clientMessageId === fu.clientMessageId);
+        if (hasOptimistic) {
+          return prev.map(f => f._clientMessageId === fu.clientMessageId ? { ...fu, _status: "sent" } : f);
+        }
+        if (prev.some(f => String(f._id) === String(fu._id))) return prev;
+        return [...prev, fu];
+      });
+    } else {
+      appendFollowUp(fu);
+    }
+  }, [appendFollowUp]);
+
+  const handleSSEReadReceipt = useCallback((payload: FollowUpReadSSEPayload) => {
+    const idSet = new Set(payload.ids.map(String));
+    setFollowUps(prev => prev.map(f =>
+      idSet.has(String(f._id)) ? { ...f, readAt: payload.readAt } : f
+    ));
+  }, []);
+
+  useFollowUpEvents(handleSSEFollowUp, handleSSEReadReceipt, fetchAdminData);
+
+  const reconcileFollowUp = useCallback((clientMessageId: string, serverData: any | null) => {
+    setFollowUps(prev => prev.map(f =>
+      f._clientMessageId === clientMessageId
+        ? (serverData ? { ...serverData, _status: "sent" } : { ...f, _status: "failed" })
+        : f
+    ));
+  }, []);
+
+  const removeFollowUp = useCallback((clientMessageId: string) => {
+    setFollowUps(prev => prev.filter(f => f._clientMessageId !== clientMessageId));
+  }, []);
+
+  return { managers, receptionists, allLeads, followUps, isLoading, refetch: fetchAdminData, appendFollowUp, reconcileFollowUp, removeFollowUp };
 }
 
 // ============================================================================
@@ -510,7 +549,7 @@ export default function SalesDashboard() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const { managers, receptionists, allLeads, followUps, isLoading, refetch, appendFollowUp } = useAdminData();
+  const { managers, receptionists, allLeads, followUps, isLoading, refetch, appendFollowUp, reconcileFollowUp, removeFollowUp } = useAdminData();
 
   // Settings → Additional Features. Read once here and passed down, rather than
   // called again inside SalesManagerView, so the two never disagree mid-render.
@@ -937,7 +976,7 @@ export default function SalesDashboard() {
           {(activeView === "sales" || activeView === "overview" || activeView === "forms" || activeView === "detail" || activeView === "closed-leads") ? (
             <SalesManagerView
               managers={managers} allLeads={allLeads} followUps={followUps}
-              isLoading={isLoading} adminUser={user} refetch={refetch} appendFollowUp={appendFollowUp}
+              isLoading={isLoading} adminUser={user} refetch={refetch} appendFollowUp={appendFollowUp} reconcileFollowUp={reconcileFollowUp} removeFollowUp={removeFollowUp}
               initialView={activeView} setMainView={setActiveView}
               isDark={isDark} t={t}
               featurePrefs={featurePrefs}
@@ -1131,7 +1170,7 @@ function LoanStatusBadge({ status }: { status: string }) {
 // SALES MANAGER MODULE
 // ============================================================================
 function SalesManagerView({
-  managers, allLeads, followUps, isLoading, adminUser, refetch, appendFollowUp,
+  managers, allLeads, followUps, isLoading, adminUser, refetch, appendFollowUp, reconcileFollowUp, removeFollowUp,
   initialView, setMainView, isDark, t, featurePrefs,
   pendingLeadOpen, onPendingLeadOpenHandled,        // ← NEW
 }: any) {
@@ -1246,6 +1285,15 @@ function SalesManagerView({
     // (tranches, lender applications, PDD, financial status) fire on every lead
     // open — four extra requests per lead that nobody asked for.
     setDetailTab("personal");
+  }, [selectedLead?.id]);
+  // Mark internal messages as read when the conversation is opened.
+  useEffect(() => {
+    if (!selectedLead?.id) return;
+    fetch("/api/followups/read", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ leadId: selectedLead.id }),
+    }).catch(() => {});
   }, [selectedLead?.id]);
   // Booking and loan both come from fetchLoanDealData now. The second effect that
   // used to live here fetched /api/booking-applications?lead_id= a SECOND time,
@@ -1679,19 +1727,44 @@ function SalesManagerView({
   const handleSendCustomNote = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!customNote.trim() || !selectedLead) return;
-    const nm = { leadId: String(selectedLead.id), salesManagerName: adminUser.name, createdBy: adminUser.role === "admin" ? "admin" : "sales", message: customNote, siteVisitDate: null, createdAt: new Date().toISOString() };
+    const clientMessageId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const optimistic: any = {
+      _id: clientMessageId,
+      leadId: String(selectedLead.id),
+      salesManagerName: adminUser.name,
+      createdBy: adminUser.role === "admin" ? "admin" : "sales",
+      message: customNote,
+      siteVisitDate: null,
+      createdAt: new Date().toISOString(),
+      followUpType: "note",
+      createdByRole: null,
+      sentToRole: null,
+      sentToUserId: null,
+      parentFollowUpId: null,
+      readAt: null,
+      _status: "sending",
+      _clientMessageId: clientMessageId,
+    };
     setCustomNote("");
+    appendFollowUp(optimistic);
     try {
-      const res = await fetch("/api/followups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(nm) });
+      const res = await fetch("/api/followups", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          leadId: String(selectedLead.id),
+          salesManagerName: adminUser.name,
+          createdBy: adminUser.role === "admin" ? "admin" : "sales",
+          message: optimistic.message,
+          siteVisitDate: null,
+          clientMessageId,
+        }),
+      });
       const json = await res.json().catch(() => null);
-      if (json?.success && json.data) {
-        appendFollowUp(json.data);
-      } else {
-        // Could not read the row back — fall back to the full resync rather than
-        // leaving the timeline showing something the server may not have stored.
-        refetch();
-      }
-    } catch (e) { console.log(e); }
+      reconcileFollowUp(clientMessageId, json?.success && json.data ? json.data : null);
+    } catch {
+      reconcileFollowUp(clientMessageId, null);
+    }
   };
   const handleSalesFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -2004,7 +2077,7 @@ function SalesManagerView({
         {/* ── CARDS ── */}
         {subView === "cards" && (
           <div className="animate-fadeIn">
-            {/* ── Admin-style Enquiry Toolbar ── */}
+
             <div className={`rounded-xl border p-3 mb-6 ${t.tableWrap}`} style={t.tableGlass}>
               <div className="flex flex-col gap-3">
                 <div className="flex items-center justify-between flex-wrap gap-2">
@@ -2016,10 +2089,7 @@ function SalesManagerView({
                   </span>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  {/* Lead Status Filter */}
 
-
-                  {/* Show Lost Checkbox */}
                   <label className={`flex items-center gap-1.5 text-xs font-semibold cursor-pointer select-none border rounded-xl px-3 py-2 ${t.selectSmall}`}>
                     <input
                       type="checkbox"
@@ -2031,7 +2101,7 @@ function SalesManagerView({
                     Show Lost
                   </label>
 
-                  {/* Column Filter */}
+
                   <select
                     value={columnFilter}
                     onChange={e => setColumnFilter(e.target.value)}
@@ -2046,7 +2116,7 @@ function SalesManagerView({
                     <option value="status">Status</option>
                   </select>
 
-                  {/* Search Bar */}
+
                   <div className="relative flex-1 min-w-[180px]">
                     <FaSearch className={`absolute left-3 top-1/2 -translate-y-1/2 text-xs ${t.textFaint}`} />
                     <input
@@ -2066,7 +2136,7 @@ function SalesManagerView({
                     )}
                   </div>
 
-                  {/* Bulk Excel import — Site Head assigns to any manager; Sales Manager self-uploads (if admin-enabled) */}
+
                   {(() => {
                     const roleLc = (adminUser?.role || "").toLowerCase().replace(/_/g, " ");
                     if (roleLc === "site head" || roleLc === "admin") {
@@ -2355,9 +2425,9 @@ function SalesManagerView({
                 <div className="flex items-center justify-between w-full sm:w-auto gap-2">
                   <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
                     <button
-                      onClick={() => { setMainView("forms"); setSubView("cards"); }}
+                      onClick={() => { setMainView("overview"); }}
                       className={`w-8 h-8 sm:w-9 sm:h-9 flex flex-shrink-0 items-center justify-center border rounded-lg sm:rounded-xl transition-all cursor-pointer active:scale-95 shadow-sm ${t.textMuted} ${t.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-gray-50"}`}
-                      aria-label="Back to leads"
+                      aria-label="Back to dashboard"
                     >
                       <FaChevronLeft className="text-[10px] sm:text-sm" />
                     </button>
@@ -2397,7 +2467,7 @@ function SalesManagerView({
                     onClick={bookingData ? () => openBookingView(selectedLead.id) : undefined}
                     disabled={!bookingData}
                     title={!bookingData ? "Booking Form has not been submitted yet." : undefined}
-                    className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center gap-1 sm:gap-1.5 transition-all shadow-sm min-w-[80px] sm:min-w-[110px] min-h-[36px] sm:min-h-0 flex-1 sm:flex-none whitespace-nowrap ${bookingData
+                    className={`font-bold px-2 py-1.5 sm:px-3 sm:py-0.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center gap-1 sm:gap-1.5 transition-all shadow-sm min-w-[80px] sm:min-w-[110px] min-h-[36px] sm:min-h-0 flex-1 sm:flex-none whitespace-nowrap ${bookingData
                       ? "cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white hover:shadow-md active:scale-[0.98]"
                       : "opacity-50 cursor-not-allowed bg-indigo-400 text-white"
                       }`}
@@ -2711,9 +2781,36 @@ function SalesManagerView({
                           <div className={`rounded-xl rounded-tl-none p-3 sm:p-3 max-w-[90%] sm:max-w-[85%] shadow-lg ${bubbleCls}`}>
                             <div className="flex justify-between items-start sm:items-center mb-2 sm:mb-3 gap-2 sm:gap-3 flex-col sm:flex-row">
                               <span className={`font-bold text-xs sm:text-sm ${t.text}`}>{msg.createdBy === "admin" ? `${msg.salesManagerName || "Admin"} (Admin)` : msg.salesManagerName}</span>
-                              <span className={`text-[9px] sm:text-[10px] ${t.textFaint}`}>{formatDate(msg.createdAt)}</span>
+                              <span className={`text-[9px] sm:text-[10px] ${t.textFaint} flex items-center gap-1`}>
+                                {formatDate(msg.createdAt)}
+                                {(msg.followUpType === "internal_message" || msg.followUpType === "sm_reply") && msg._status !== "sending" && msg._status !== "failed" && (
+                                  msg.readAt
+                                    ? <span className="text-blue-500 font-bold ml-0.5" title="Read">&#10003;&#10003;</span>
+                                    : <span className="opacity-60 ml-0.5" title="Sent">&#10003;</span>
+                                )}
+                              </span>
                             </div>
                             <p className={`text-xs sm:text-sm whitespace-pre-wrap leading-relaxed break-words ${t.textMuted}`}>{msg.message}</p>
+
+                            {/* Optimistic UI status indicators */}
+                            {msg._status === "sending" && (
+                              <span className="text-[9px] text-yellow-500 mt-1 block">Sending...</span>
+                            )}
+                            {msg._status === "failed" && (
+                              <span className="text-[9px] text-red-500 mt-1 flex items-center gap-1">
+                                Failed to send
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setCustomNote(msg.message);
+                                    removeFollowUp(msg._clientMessageId);
+                                  }}
+                                  className="underline hover:text-red-400"
+                                >
+                                  Retry
+                                </button>
+                              </span>
+                            )}
 
                             {/* Log Reply button — only on WhatsApp messages */}
                             {isWA && (

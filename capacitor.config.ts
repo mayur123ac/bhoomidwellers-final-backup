@@ -17,6 +17,12 @@ const config: CapacitorConfig = {
   android: {
     allowMixedContent: false,
   },
+
+  ios: {
+    // Match the Android scheme so cookies / CORS / service-workers behave
+    // identically on both platforms when loading the remote URL.
+    scheme: 'https',
+  },
 };
 
 export default config;

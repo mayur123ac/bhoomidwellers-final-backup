@@ -89,9 +89,20 @@ export function useCallerSync(options: UseCallerSyncOptions) {
     };
 
     connect();
+
+    // Capacitor / mobile: reconnect when app returns to foreground.
+    const onVisibility = () => {
+      if (document.visibilityState !== "visible" || cancelled) return;
+      esRef.current?.close();
+      retryDelay.current = 1_000;
+      connect();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
     return () => {
       cancelled = true;
       esRef.current?.close();
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, []);
 }

@@ -118,10 +118,38 @@ export function useLostLeadEvents(onLeadUpdate: (lead: LeadRecord) => void, onFa
       onFallbackSync?.();
     }
 
+    // Capacitor / mobile: reconnect SSE when app comes back to foreground.
+    const onVisibility = () => {
+      if (document.visibilityState !== "visible" || closed) return;
+      source?.close();
+      backoffMs = FALLBACK_MIN_MS;
+      if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = null; }
+      try {
+        source = new EventSource("/api/leads/lost/events");
+        source.onopen = () => {
+          backoffMs = FALLBACK_MIN_MS;
+          if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = null; }
+        };
+        source.onmessage = (event) => {
+          try {
+            const payload = JSON.parse(event.data) as LostLeadUpdate;
+            if (payload.type === "lead:lost-updated" && payload.lead) onLeadUpdate(payload.lead);
+          } catch {}
+        };
+        source.onerror = () => {
+          if (source?.readyState === EventSource.CONNECTING) return;
+          scheduleFallback();
+        };
+      } catch { /* ignore */ }
+      onFallbackSync?.();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
     return () => {
       closed = true;
       if (fallbackTimer) clearTimeout(fallbackTimer);
       source?.close();
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [onLeadUpdate, onFallbackSync]);
 }

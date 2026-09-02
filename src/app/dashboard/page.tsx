@@ -47,6 +47,7 @@ import {
   updateLeadRestoreState,
   useLostLeadEvents,
 } from "@/lib/lostLeadSync";
+import { useFollowUpEvents, type FollowUpSSEPayload, type FollowUpReadSSEPayload } from "@/lib/followUpSync";
 import dynamic from "next/dynamic";
 import AttendanceView from "@/components/AttendanceView";
 import AdminAssistantDock from "@/components/AdminAssistantDock";
@@ -283,17 +284,12 @@ function indexFollowUpsByLead(followUps: any[] | null | undefined): Map<string, 
 }
 
 /**
- * How often the admin dashboard re-polls everything.
- *
- * This was 5000 ms. A full refresh re-reads every lead AND every follow-up in the
- * database, so at 100,000 leads that was ~120 MB of JSON and ~1.8 s of database
- * time every five seconds, per open tab, forever — and the merge itself took
- * longer than the interval, so polls overlapped and the tab never caught up.
- *
- * 30 s plus the existing SSE channel (useLostLeadEvents) and the optimistic
- * applyLeadUpdate path keeps the screen current without the treadmill.
+ * Recovery-only fallback interval. Follow-ups now arrive via SSE in real time;
+ * this fires only if the SSE stream drops and reconnection is still pending.
+ * Lead data still polls because lead mutations happen across many routes and
+ * are not yet fully covered by SSE.
  */
-const ADMIN_POLL_MS = 30_000;
+const ADMIN_POLL_MS = 120_000;
 
 function useAdminData() {
   const [managers, setManagers] = useState<any[]>([]);
@@ -457,6 +453,49 @@ function useAdminData() {
     setAllLeads(prev => updateLeadLostState(prev, updatedLead));
   }, []);
 
+  /** Push one newly-created follow-up into local state so a plain note does not
+   *  trigger a full org resync. Mirrors the sales page's appendFollowUp. */
+  const appendFollowUp = useCallback((row: any) => {
+    if (!row) return;
+    setFollowUps(prev => (prev.some(f => String(f._id) === String(row._id)) ? prev : [...prev, row]));
+    setFupsByLead(prev => {
+      const key = String(row.leadId);
+      const next = new Map(prev);
+      const bucket = next.get(key) ?? [];
+      next.set(key, [...bucket, row]);
+      return next;
+    });
+  }, []);
+
+  /** Replace an optimistic follow-up with server data, or mark it failed. */
+  const reconcileFollowUp = useCallback((clientMessageId: string, serverData: any | null) => {
+    const mapper = (f: any) =>
+      f._clientMessageId === clientMessageId
+        ? (serverData ? { ...serverData, _status: "sent" } : { ...f, _status: "failed" })
+        : f;
+    setFollowUps(prev => prev.map(mapper));
+    setFupsByLead(prev => {
+      const next = new Map(prev);
+      next.forEach((bucket, key) => {
+        if (bucket.some((f: any) => f._clientMessageId === clientMessageId)) {
+          next.set(key, bucket.map(mapper));
+        }
+      });
+      return next;
+    });
+  }, []);
+
+  /** Remove a failed optimistic follow-up from local state (for retry). */
+  const removeFollowUp = useCallback((clientMessageId: string, leadId: string) => {
+    setFollowUps(prev => prev.filter(f => f._clientMessageId !== clientMessageId));
+    setFupsByLead(prev => {
+      const next = new Map(prev);
+      const bucket = next.get(leadId);
+      if (bucket) next.set(leadId, bucket.filter((f: any) => f._clientMessageId !== clientMessageId));
+      return next;
+    });
+  }, []);
+
   useEffect(() => {
     fetchAdminData();
     // Background tabs are skipped outright. A dashboard left open on a second
@@ -479,7 +518,47 @@ function useAdminData() {
 
   useLostLeadEvents(applyLeadUpdate, fetchAdminData);
 
-  return { managers, receptionists, siteHeads, allLeads, followUps, fupsByLead, isLoading, refetch: fetchAdminData };
+  // ── Follow-up SSE: real-time follow-up delivery ──────────────────────────
+  // When the SSE event arrives, check if this message was already added
+  // optimistically (via _clientMessageId). If so, reconcile the optimistic
+  // entry with the real server data. Otherwise, append it as new.
+  const handleSSEFollowUp = useCallback((fu: FollowUpSSEPayload) => {
+    if (fu.clientMessageId) {
+      setFollowUps(prev => {
+        const hasOptimistic = prev.some(f => f._clientMessageId === fu.clientMessageId);
+        if (hasOptimistic) {
+          return prev.map(f => f._clientMessageId === fu.clientMessageId ? { ...fu, _status: "sent" } : f);
+        }
+        if (prev.some(f => String(f._id) === String(fu._id))) return prev;
+        return [...prev, fu];
+      });
+      setFupsByLead(prev => {
+        const key = String(fu.leadId);
+        const next = new Map(prev);
+        const bucket = next.get(key) ?? [];
+        const hasOpt = bucket.some((f: any) => f._clientMessageId === fu.clientMessageId);
+        if (hasOpt) {
+          next.set(key, bucket.map((f: any) => f._clientMessageId === fu.clientMessageId ? { ...fu, _status: "sent" } : f));
+        } else if (!bucket.some((f: any) => String(f._id) === String(fu._id))) {
+          next.set(key, [...bucket, fu]);
+        }
+        return next;
+      });
+    } else {
+      appendFollowUp(fu);
+    }
+  }, [appendFollowUp]);
+
+  const handleSSEReadReceipt = useCallback((payload: FollowUpReadSSEPayload) => {
+    const idSet = new Set(payload.ids.map(String));
+    setFollowUps(prev => prev.map(f =>
+      idSet.has(String(f._id)) ? { ...f, readAt: payload.readAt } : f
+    ));
+  }, []);
+
+  useFollowUpEvents(handleSSEFollowUp, handleSSEReadReceipt, fetchAdminData);
+
+  return { managers, receptionists, siteHeads, allLeads, followUps, fupsByLead, isLoading, refetch: fetchAdminData, appendFollowUp, reconcileFollowUp, removeFollowUp };
 }
 
 // ============================================================================
@@ -671,7 +750,7 @@ function AdminAtlasDashboardContent() {
   const [activeNotif, setActiveNotif] = useState<CrmNotif | null>(null);
   const [notifCount, setNotifCount] = useState(0);
   const theme = useMemo(() => buildTheme(isDark), [isDark]);
-  const { managers, receptionists, siteHeads, allLeads, followUps, isLoading, refetch } = useAdminData();
+  const { managers, receptionists, siteHeads, allLeads, followUps, isLoading, refetch, appendFollowUp, reconcileFollowUp, removeFollowUp } = useAdminData();
 
   // ── Helper to get accurate Creator Name & Role ──
   const getCreatorInfo = (lead: any) => {
@@ -1304,8 +1383,8 @@ function AdminAtlasDashboardContent() {
               </div>
             )
           )}
-          {activeView === "sales" && <AdminSalesView managers={managers} allLeads={allLeads} followUps={followUps} isLoading={isLoading} adminUser={user} refetch={refetch} theme={theme} isDark={isDark} openLeadId={invOpenLeadId} onOpenLeadHandled={() => setInvOpenLeadId(null)} />}
-          {activeView === "site_head" && <AdminSiteHeadView siteHeads={siteHeads} allLeads={allLeads} followUps={followUps} isLoading={isLoading} adminUser={user} refetch={refetch} theme={theme} isDark={isDark} />}
+          {activeView === "sales" && <AdminSalesView managers={managers} allLeads={allLeads} followUps={followUps} isLoading={isLoading} adminUser={user} refetch={refetch} appendFollowUp={appendFollowUp} reconcileFollowUp={reconcileFollowUp} removeFollowUp={removeFollowUp} theme={theme} isDark={isDark} openLeadId={invOpenLeadId} onOpenLeadHandled={() => setInvOpenLeadId(null)} />}
+          {activeView === "site_head" && <AdminSiteHeadView siteHeads={siteHeads} allLeads={allLeads} followUps={followUps} isLoading={isLoading} adminUser={user} refetch={refetch} appendFollowUp={appendFollowUp} reconcileFollowUp={reconcileFollowUp} removeFollowUp={removeFollowUp} theme={theme} isDark={isDark} />}
           {activeView === "site_visit_overview" && <SiteVisitOverview managers={managers} receptionists={receptionists} allLeads={allLeads} siteHeads={siteHeads} adminUser={user} theme={theme} isDark={isDark} />}
           {activeView === "receptionist" && (
             <ReceptionistView
@@ -1314,6 +1393,9 @@ function AdminAtlasDashboardContent() {
               followUps={followUps}
               isLoading={isLoading}
               refetch={refetch}
+              appendFollowUp={appendFollowUp}
+              reconcileFollowUp={reconcileFollowUp}
+              removeFollowUp={removeFollowUp}
               adminUser={user}
               theme={theme}
               isDark={isDark}
@@ -2855,7 +2937,7 @@ function useInventoryDeepLink({ openLeadId, allLeads, onOpenLeadHandled, open }:
   }, [openLeadId, allLeads]);
 }
 
-function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, refetch, theme, isDark, openLeadId, onOpenLeadHandled }: any) {
+function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, refetch, appendFollowUp, reconcileFollowUp, removeFollowUp, theme, isDark, openLeadId, onOpenLeadHandled }: any) {
   // Deep-link from the Inventory drawer: open the requested lead's booking view.
   // (Effect body resolves the handlers below at run-time, after render.)
   // Deep-link handler — await the fetch, only flip showBookingView once data is confirmed
@@ -3081,9 +3163,22 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
   const handleSendCustomNote = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!customNote.trim() || !selectedLead) return;
-    const nm = { leadId: String(selectedLead.id), salesManagerName: adminUser.name, createdBy: "admin", message: customNote, siteVisitDate: null, createdAt: new Date().toISOString() };
+    const clientMessageId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const optimistic: any = {
+      _id: clientMessageId, leadId: String(selectedLead.id), salesManagerName: adminUser.name, createdBy: "admin",
+      message: customNote, siteVisitDate: null, createdAt: new Date().toISOString(),
+      followUpType: "note", createdByRole: null, sentToRole: null, sentToUserId: null,
+      parentFollowUpId: null, readAt: null, _status: "sending", _clientMessageId: clientMessageId,
+    };
     setCustomNote("");
-    try { await fetch("/api/followups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(nm) }); refetch(); } catch { }
+    appendFollowUp(optimistic);
+    try {
+      const res = await fetch("/api/followups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ leadId: String(selectedLead.id), salesManagerName: adminUser.name, createdBy: "admin", message: optimistic.message, siteVisitDate: null, clientMessageId }) });
+      const json = await res.json().catch(() => null);
+      reconcileFollowUp(clientMessageId, json?.success && json.data ? json.data : null);
+    } catch {
+      reconcileFollowUp(clientMessageId, null);
+    }
   };
 
   // handleSendWhatsApp was removed with the wa.me workflow. It logged that a
@@ -3192,6 +3287,11 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
       setShowBookingView(false);
     }
   }, [selectedLead?.id, fetchLoanDealData]);
+  // Mark internal messages as read when the conversation is opened.
+  useEffect(() => {
+    if (!selectedLead?.id) return;
+    fetch("/api/followups/read", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ leadId: selectedLead.id }) }).catch(() => {});
+  }, [selectedLead?.id]);
 
   const handleReopenLead = async () => {
     if (!selectedLead || selectedLead.status !== "Closing") return;
@@ -3851,9 +3951,22 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                                     <span className={`font-bold text-sm ${theme.text}`}>
                                       {msg.createdBy === "admin" ? `${msg.salesManagerName || "Admin"} (Admin)` : msg.salesManagerName}
                                     </span>
-                                    <span className={`text-[10px] flex-shrink-0 ${theme.textFaint}`}>{formatDate(msg.createdAt)}</span>
+                                    <span className={`text-[10px] flex-shrink-0 flex items-center gap-1 ${theme.textFaint}`}>
+                                      {formatDate(msg.createdAt)}
+                                      {(msg.followUpType === "internal_message" || msg.followUpType === "sm_reply") && msg._status !== "sending" && msg._status !== "failed" && (
+                                        msg.readAt
+                                          ? <span className="text-blue-500 font-bold ml-0.5" title="Read">&#10003;&#10003;</span>
+                                          : <span className="opacity-60 ml-0.5" title="Sent">&#10003;</span>
+                                      )}
+                                    </span>
                                   </div>
                                   <p className={`text-sm whitespace-pre-wrap leading-relaxed ${theme.textMuted}`}>{msg.message}</p>
+                                  {msg._status === "sending" && <span className="text-[9px] text-yellow-500 mt-1 block">Sending...</span>}
+                                  {msg._status === "failed" && (
+                                    <span className="text-[9px] text-red-500 mt-1 flex items-center gap-1">Failed to send
+                                      <button type="button" onClick={() => { setCustomNote(msg.message); removeFollowUp(msg._clientMessageId, String(msg.leadId)); }} className="underline hover:text-red-400">Retry</button>
+                                    </span>
+                                  )}
                                 </div>
                               </div>
                             );
@@ -3959,7 +4072,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
 // ============================================================================
 // ADMIN SITE HEAD VIEW
 // ============================================================================
-function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUser, refetch, theme, isDark }: any) {
+function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUser, refetch, appendFollowUp, reconcileFollowUp, removeFollowUp, theme, isDark }: any) {
   const [selectedSiteHead, setSelectedSiteHead] = useState<any>(null);
   const [searchSiteHead, setSearchSiteHead] = useState("");
   const [activeSection, setActiveSection] = useState<"assignedTable" | "closed">("assignedTable");
@@ -4065,6 +4178,10 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
       setShowBookingView(false);
     }
   }, [selectedLead?.id, fetchLoanDealData]);
+  useEffect(() => {
+    if (!selectedLead?.id) return;
+    fetch("/api/followups/read", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ leadId: selectedLead.id }) }).catch(() => {});
+  }, [selectedLead?.id]);
 
   // Transfer States
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
@@ -4255,9 +4372,22 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
   const handleSendCustomNote = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!customNote.trim() || !selectedLead) return;
-    const nm = { leadId: String(selectedLead.id), salesManagerName: adminUser.name, createdBy: "admin", message: customNote, siteVisitDate: null, createdAt: new Date().toISOString() };
+    const clientMessageId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const optimistic: any = {
+      _id: clientMessageId, leadId: String(selectedLead.id), salesManagerName: adminUser.name, createdBy: "admin",
+      message: customNote, siteVisitDate: null, createdAt: new Date().toISOString(),
+      followUpType: "note", createdByRole: null, sentToRole: null, sentToUserId: null,
+      parentFollowUpId: null, readAt: null, _status: "sending", _clientMessageId: clientMessageId,
+    };
     setCustomNote("");
-    try { await fetch("/api/followups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(nm) }); refetch(); } catch { }
+    appendFollowUp(optimistic);
+    try {
+      const res = await fetch("/api/followups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ leadId: String(selectedLead.id), salesManagerName: adminUser.name, createdBy: "admin", message: optimistic.message, siteVisitDate: null, clientMessageId }) });
+      const json = await res.json().catch(() => null);
+      reconcileFollowUp(clientMessageId, json?.success && json.data ? json.data : null);
+    } catch {
+      reconcileFollowUp(clientMessageId, null);
+    }
   };
 
   // handleSendWhatsApp was removed with the wa.me workflow. It logged that a
@@ -4926,9 +5056,22 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                                     <span className={`font-bold text-xs sm:text-sm ${theme.text}`}>
                                       {msg.createdBy === "admin" ? `${msg.salesManagerName || "Admin"} (Admin)` : msg.salesManagerName}
                                     </span>
-                                    <span className={`text-[9px] sm:text-[10px] flex-shrink-0 ${theme.textFaint}`}>{formatDate(msg.createdAt)}</span>
+                                    <span className={`text-[9px] sm:text-[10px] flex-shrink-0 flex items-center gap-1 ${theme.textFaint}`}>
+                                      {formatDate(msg.createdAt)}
+                                      {(msg.followUpType === "internal_message" || msg.followUpType === "sm_reply") && msg._status !== "sending" && msg._status !== "failed" && (
+                                        msg.readAt
+                                          ? <span className="text-blue-500 font-bold ml-0.5" title="Read">&#10003;&#10003;</span>
+                                          : <span className="opacity-60 ml-0.5" title="Sent">&#10003;</span>
+                                      )}
+                                    </span>
                                   </div>
                                   <p className={`text-xs sm:text-sm whitespace-pre-wrap leading-relaxed ${theme.textMuted}`}>{msg.message}</p>
+                                  {msg._status === "sending" && <span className="text-[9px] text-yellow-500 mt-1 block">Sending...</span>}
+                                  {msg._status === "failed" && (
+                                    <span className="text-[9px] text-red-500 mt-1 flex items-center gap-1">Failed to send
+                                      <button type="button" onClick={() => { setCustomNote(msg.message); removeFollowUp(msg._clientMessageId, String(msg.leadId)); }} className="underline hover:text-red-400">Retry</button>
+                                    </span>
+                                  )}
                                 </div>
                               </div>
                             );
@@ -5008,7 +5151,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
 // ============================================================================
 // RECEPTIONIST VIEW
 // ============================================================================
-function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refetch, theme, isDark, adminUser }: any) {
+function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refetch, appendFollowUp, reconcileFollowUp, removeFollowUp, theme, isDark, adminUser }: any) {
   const [assignedTableFilter, setAssignedTableFilter] = useState<"working" | "all">("working");
   const [selectedReceptionist, setSelectedReceptionist] = useState<any>(null);
   const [searchRecep, setSearchRecep] = useState("");
@@ -5125,6 +5268,10 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
       setShowBookingView(false);
     }
   }, [selectedLead?.id, fetchLoanDealData]);
+  useEffect(() => {
+    if (!selectedLead?.id) return;
+    fetch("/api/followups/read", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ leadId: selectedLead.id }) }).catch(() => {});
+  }, [selectedLead?.id]);
 
   // ── Auto-drill into a lead when navigated from Enquiry Overview ──
   useEffect(() => {
@@ -5269,9 +5416,22 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
   const handleSendCustomNote = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customNote.trim() || !selectedLead) return;
-    const nm = { leadId: String(selectedLead.id), salesManagerName: actorName, createdBy: "admin", message: customNote, siteVisitDate: null, createdAt: new Date().toISOString() };
+    const clientMessageId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const optimistic: any = {
+      _id: clientMessageId, leadId: String(selectedLead.id), salesManagerName: actorName, createdBy: "admin",
+      message: customNote, siteVisitDate: null, createdAt: new Date().toISOString(),
+      followUpType: "note", createdByRole: null, sentToRole: null, sentToUserId: null,
+      parentFollowUpId: null, readAt: null, _status: "sending", _clientMessageId: clientMessageId,
+    };
     setCustomNote("");
-    try { await fetch("/api/followups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(nm) }); refetch(); } catch { }
+    appendFollowUp(optimistic);
+    try {
+      const res = await fetch("/api/followups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ leadId: String(selectedLead.id), salesManagerName: actorName, createdBy: "admin", message: optimistic.message, siteVisitDate: null, clientMessageId }) });
+      const json = await res.json().catch(() => null);
+      reconcileFollowUp(clientMessageId, json?.success && json.data ? json.data : null);
+    } catch {
+      reconcileFollowUp(clientMessageId, null);
+    }
   };
 
   // handleSendWhatsApp was removed with the wa.me workflow. It logged that a
@@ -6191,9 +6351,22 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                                   <div className={`rounded-xl rounded-tl-none p-3 sm:p-5 max-w-[95%] sm:max-w-[85%] shadow-lg ${bubble}`}>
                                     <div className="flex justify-between items-center mb-1 sm:mb-3 gap-2 sm:gap-3">
                                       <span className={`font-bold text-xs sm:text-sm ${theme.text}`}>{msg.createdBy === "admin" ? `${msg.salesManagerName || "Admin"} (Admin)` : msg.createdBy === "receptionist" ? `${msg.salesManagerName} (Receptionist)` : msg.salesManagerName}</span>
-                                      <span className={`text-[9px] sm:text-[10px] ${theme.textFaint}`}>{formatDate(msg.createdAt)}</span>
+                                      <span className={`text-[9px] sm:text-[10px] flex items-center gap-1 ${theme.textFaint}`}>
+                                        {formatDate(msg.createdAt)}
+                                        {(msg.followUpType === "internal_message" || msg.followUpType === "sm_reply") && msg._status !== "sending" && msg._status !== "failed" && (
+                                          msg.readAt
+                                            ? <span className="text-blue-500 font-bold ml-0.5" title="Read">&#10003;&#10003;</span>
+                                            : <span className="opacity-60 ml-0.5" title="Sent">&#10003;</span>
+                                        )}
+                                      </span>
                                     </div>
                                     <p className={`text-xs sm:text-sm whitespace-pre-wrap leading-relaxed ${theme.text}`}>{msg.message}</p>
+                                    {msg._status === "sending" && <span className="text-[9px] text-yellow-500 mt-1 block">Sending...</span>}
+                                    {msg._status === "failed" && (
+                                      <span className="text-[9px] text-red-500 mt-1 flex items-center gap-1">Failed to send
+                                        <button type="button" onClick={() => { setCustomNote(msg.message); removeFollowUp(msg._clientMessageId, String(msg.leadId)); }} className="underline hover:text-red-400">Retry</button>
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
                               );

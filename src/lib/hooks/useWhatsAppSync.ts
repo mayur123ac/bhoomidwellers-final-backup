@@ -122,10 +122,22 @@ export function useWhatsAppSync(options: Options) {
 
     connect();
 
+    // Capacitor / mobile: reconnect when app returns to foreground.
+    const onVisibility = () => {
+      if (document.visibilityState !== "visible" || cancelled) return;
+      if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+      es?.close();
+      es = null;
+      delay = 1_000;
+      connect();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
     return () => {
       cancelled = true;
       if (retryTimer) clearTimeout(retryTimer);
       es?.close();
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [enabled]);
 }

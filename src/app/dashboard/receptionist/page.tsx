@@ -33,6 +33,7 @@ import CrmUpdatesNotification from "@/components/CrmUpdatesNotification";
 import WhatsAppConversationPanel from "@/components/whatsapp/WhatsAppConversationPanel";
 import LostLeadModal from "@/components/LostLeadModal";
 import { updateLeadLostState, useLostLeadEvents } from "@/lib/lostLeadSync";
+import { useFollowUpEvents, type FollowUpSSEPayload, type FollowUpReadSSEPayload } from "@/lib/followUpSync";
 // The notification queue. Built and organization-scoped on the server — see
 // lib/notifications/feed.ts for why it is no longer derived in this file.
 import { useNotificationFeed, openNotificationLead, type CrmNotification } from "@/lib/hooks/useNotificationFeed";
@@ -946,6 +947,10 @@ export default function ReceptionistDashboard() {
       setBookingData(null);
     }
   }, [selectedLead?.id, fetchLoanDealData]);
+  useEffect(() => {
+    if (!selectedLead?.id) return;
+    fetch("/api/followups/read", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ leadId: selectedLead.id }) }).catch(() => {});
+  }, [selectedLead?.id]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // DATA FETCHING
@@ -1204,6 +1209,27 @@ export default function ReceptionistDashboard() {
   refetchAllRef.current = refetchAll;
   const resyncAfterLostLeadDrop = useCallback(() => { refetchAllRef.current(); }, []);
   useLostLeadEvents(applyLostLeadUpdate, resyncAfterLostLeadDrop);
+
+  // ── Follow-up SSE: real-time follow-up delivery ──────────────────────────
+  const handleSSEFollowUp = useCallback((fu: FollowUpSSEPayload) => {
+    setFollowUps(prev => {
+      if (fu.clientMessageId) {
+        const hasOptimistic = prev.some(f => f._clientMessageId === fu.clientMessageId);
+        if (hasOptimistic) {
+          return prev.map(f => f._clientMessageId === fu.clientMessageId ? { ...fu, _status: "sent" } : f);
+        }
+      }
+      if (prev.some(f => String(f._id) === String(fu._id))) return prev;
+      return [...prev, fu];
+    });
+  }, []);
+  const handleSSEReadReceipt = useCallback((payload: FollowUpReadSSEPayload) => {
+    const idSet = new Set(payload.ids.map(String));
+    setFollowUps(prev => prev.map(f =>
+      idSet.has(String(f._id)) ? { ...f, readAt: payload.readAt } : f
+    ));
+  }, []);
+  useFollowUpEvents(handleSSEFollowUp, handleSSEReadReceipt, resyncAfterLostLeadDrop);
 
   // ── The notification queue ─────────────────────────────────────────────────
   //
@@ -1528,9 +1554,26 @@ export default function ReceptionistDashboard() {
   const handleSendCustomNote = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customNote.trim() || !selectedLead) return;
-    const nm = { leadId: String(selectedLead.id), salesManagerName: user.name, createdBy: "receptionist", message: customNote, siteVisitDate: null, createdAt: new Date().toISOString() };
+    const clientMessageId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const optimistic: any = {
+      _id: clientMessageId, leadId: String(selectedLead.id), salesManagerName: user.name, createdBy: "receptionist",
+      message: customNote, siteVisitDate: null, createdAt: new Date().toISOString(),
+      followUpType: "note", createdByRole: null, sentToRole: null, sentToUserId: null,
+      parentFollowUpId: null, readAt: null, _status: "sending", _clientMessageId: clientMessageId,
+    };
     setCustomNote("");
-    try { await fetch("/api/followups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(nm) }); fetchFollowUps(); } catch (e) { console.error(e); }
+    setFollowUps(prev => prev.some(f => String(f._id) === clientMessageId) ? prev : [...prev, optimistic]);
+    try {
+      const res = await fetch("/api/followups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ leadId: String(selectedLead.id), salesManagerName: user.name, createdBy: "receptionist", message: optimistic.message, siteVisitDate: null, clientMessageId }) });
+      const json = await res.json().catch(() => null);
+      if (json?.success && json.data) {
+        setFollowUps(prev => prev.map(f => f._clientMessageId === clientMessageId ? { ...json.data, _status: "sent" } : f));
+      } else {
+        setFollowUps(prev => prev.map(f => f._clientMessageId === clientMessageId ? { ...f, _status: "failed" } : f));
+      }
+    } catch {
+      setFollowUps(prev => prev.map(f => f._clientMessageId === clientMessageId ? { ...f, _status: "failed" } : f));
+    }
   };
 
   const handleSalesFormSubmit = async (e: React.FormEvent) => {
@@ -2738,7 +2781,7 @@ export default function ReceptionistDashboard() {
                           onClick={() => setShowMobileActions(!showMobileActions)}
                           className={`sm:hidden w-8 h-8 flex-shrink-0 flex items-center justify-center border rounded-lg transition-colors shadow-sm ${showMobileActions ? t.btnPrimary : `${t.textMuted} ${t.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}`}
                         >
-                          <FaChevronDown className={`text-[10px] transition-transform duration-200 ${showMobileActions ? "rotate-180" : ""}`} />
+                          <FaChevronDown className={`text-[10px] transition-transform duration-200 ${showMobileActions ? "rotate-180" : "text-[#fff]"}`} />
                         </button>
                       </div>
 
@@ -2986,9 +3029,22 @@ export default function ReceptionistDashboard() {
                                 <div className={`rounded-xl rounded-tl-none p-3 sm:p-4 max-w-[90%] sm:max-w-[85%] shadow-sm ${bubbleCls}`}>
                                   <div className="flex flex-wrap justify-between items-center mb-2 gap-x-4 gap-y-0.5">
                                     <span className={`font-bold text-[12px] sm:text-[13px] ${t.text}`}>{msg.createdBy === "admin" ? `${msg.salesManagerName || "Admin"} (Admin)` : msg.salesManagerName}</span>
-                                    <span className={`text-[9px] sm:text-[10px] font-medium ${t.textFaint}`}>{formatDate(msg.createdAt)}</span>
+                                    <span className={`text-[9px] sm:text-[10px] font-medium flex items-center gap-1 ${t.textFaint}`}>
+                                      {formatDate(msg.createdAt)}
+                                      {(msg.followUpType === "internal_message" || msg.followUpType === "sm_reply") && msg._status !== "sending" && msg._status !== "failed" && (
+                                        msg.readAt
+                                          ? <span className="text-blue-500 font-bold ml-0.5" title="Read">&#10003;&#10003;</span>
+                                          : <span className="opacity-60 ml-0.5" title="Sent">&#10003;</span>
+                                      )}
+                                    </span>
                                   </div>
                                   <p className={`text-[12px] sm:text-[13px] whitespace-pre-wrap leading-relaxed ${t.textMuted}`}>{msg.message}</p>
+                                  {msg._status === "sending" && <span className="text-[9px] text-yellow-500 mt-1 block">Sending...</span>}
+                                  {msg._status === "failed" && (
+                                    <span className="text-[9px] text-red-500 mt-1 flex items-center gap-1">Failed to send
+                                      <button type="button" onClick={() => { setCustomNote(msg.message); setFollowUps(prev => prev.filter(f => f._clientMessageId !== msg._clientMessageId)); }} className="underline hover:text-red-400">Retry</button>
+                                    </span>
+                                  )}
                                 </div>
                               </div>
                             );
@@ -3499,7 +3555,14 @@ export default function ReceptionistDashboard() {
                                       ? `${msg.salesManagerName || "Receptionist"} (Receptionist)`
                                       : msg.salesManagerName}
                                   </span>
-                                  <span className={`text-[10px] font-medium flex-shrink-0 ${t.textFaint}`}>{formatDate(msg.createdAt)}</span>
+                                  <span className={`text-[10px] font-medium flex-shrink-0 flex items-center gap-1 ${t.textFaint}`}>
+                                    {formatDate(msg.createdAt)}
+                                    {(msg.followUpType === "internal_message" || msg.followUpType === "sm_reply") && (
+                                      msg.readAt
+                                        ? <span className="text-blue-500 font-bold ml-0.5" title="Read">&#10003;&#10003;</span>
+                                        : <span className="opacity-60 ml-0.5" title="Sent">&#10003;</span>
+                                    )}
+                                  </span>
                                 </div>
                                 <p className={`text-[13px] md:text-sm whitespace-pre-wrap leading-relaxed ${t.textMuted}`}>{msg.message}</p>
                               </div>

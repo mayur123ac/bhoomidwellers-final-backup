@@ -140,7 +140,9 @@ async function commitBookingDocuments(opts: {
   for (const doc of staged) {
     const key = `bookings/${bookingNumber}/${doc.pathSegment}`;
     try {
+      const _docT0 = Date.now();
       await uploadBufferToR2(key, doc.bytes, doc.mimeType);
+      console.log(`[BOOKING R2] file=${doc.fileName} size=${doc.bytes.length} type=${doc.docType} duration=${Date.now() - _docT0}ms`);
     } catch (e: any) {
       failed.push({ docType: doc.docType, applicantType: doc.applicantType, reason: e?.message || "upload failed" });
       continue; // No row is written for a document that is not in storage.
@@ -498,7 +500,9 @@ export async function POST(req: NextRequest) {
     // transaction meant the database connection sat idle during it. The R2
     // uploads themselves happen AFTER commit — see the post-commit block below
     // for the ordering and why it is the safe one.
+    const _t0 = Date.now();
     const stagedDocs = await stageBookingDocuments(getStr, getFile, joint_applicants);
+    const _tStaged = Date.now();
 
     // We will do everything inside a transaction
     const result = await transaction(async (client) => {
@@ -624,12 +628,20 @@ export async function POST(req: NextRequest) {
           stampDutyRate, stampDutyAmount, stamp_duty_paid_date || null, stamp_duty_status || 'Pending', stamp_duty_payment_mode, stamp_duty_receipt_no,
           registrationFeeRate, registrationFeeAmount, registration_fee_paid_date || null, registration_fee_status || 'Pending', registration_fee_payment_mode, orgId]);
 
-      // 1e. Insert Custom Charges
-      for (const charge of custom_charges) {
+      // 1e. Insert Custom Charges (batched into one multi-row INSERT)
+      if (custom_charges.length > 0) {
+        const ccValues: any[] = [];
+        const ccPlaceholders: string[] = [];
+        let ccIdx = 1;
+        for (const charge of custom_charges) {
+          ccPlaceholders.push(`($${ccIdx}, $${ccIdx + 1}, $${ccIdx + 2}, $${ccIdx + 3}, $${ccIdx + 4})`);
+          ccValues.push(newId, charge.charge_name, charge.amount || 0, charge.remarks, orgId);
+          ccIdx += 5;
+        }
         await client.query(`
           INSERT INTO booking_custom_charges (booking_id, charge_name, amount, remarks, organization_id)
-          VALUES ($1, $2, $3, $4, $5)
-        `, [newId, charge.charge_name, charge.amount || 0, charge.remarks, orgId]);
+          VALUES ${ccPlaceholders.join(', ')}
+        `, ccValues);
       }
 
       // 1f. Insert into Revenue Pipeline
@@ -642,27 +654,31 @@ export async function POST(req: NextRequest) {
       const accInsert = await client.query(`INSERT INTO financial_accounts (booking_id, organization_id) VALUES ($1, $2) RETURNING id`, [newId, orgId]);
       const account_id = accInsert.rows[0].id;
 
-      const upsertLedger = async (type: string, direction: string, amount: number, date: any, affectsRevenue: string, receivedFrom: string, bankName: string | null = null, paymentMode: string | null = null, remarks: string | null = null) => {
-        if (amount > 0) {
-          await client.query(`
-            INSERT INTO financial_ledger (account_id, transaction_type, transaction_direction, amount, transaction_date, status, affects_revenue, received_from, transaction_source, bank_name, payment_mode, notes, created_by, organization_id)
-            VALUES ($1, $2, $3, $4, $5, 'Received', $6, $7, 'UI_Update', $8, $9, $10, $11, $12)
-            ON CONFLICT (account_id, transaction_type, transaction_source) DO UPDATE 
-            SET amount = EXCLUDED.amount, transaction_date = EXCLUDED.transaction_date, bank_name = EXCLUDED.bank_name, payment_mode = EXCLUDED.payment_mode, notes = EXCLUDED.notes
-          `, [account_id, type, direction, amount, date || new Date(), affectsRevenue, receivedFrom, bankName, paymentMode, remarks, created_by || 'System', orgId]);
-        }
-      };
+      // 1f-2b. Batch financial ledger upserts (was 5 individual round trips)
+      const ledgerRows: Array<{type: string; direction: string; amount: number; date: any; affectsRevenue: string; receivedFrom: string; bankName: string | null; paymentMode: string | null; remarks: string | null}> = [
+        { type: 'token', direction: 'CREDIT', amount: cleanNum(token_amount), date: booking_date, affectsRevenue: 'NO', receivedFrom: 'Customer', bankName: null, paymentMode: null, remarks: null },
+        { type: 'booking_amount', direction: 'CREDIT', amount: cleanNum(booking_amount), date: booking_date, affectsRevenue: 'NO', receivedFrom: 'Customer', bankName: null, paymentMode: null, remarks: booking_remarks },
+        { type: 'ocr', direction: 'CREDIT', amount: cleanNum(ocr_amount), date: ocr_received_date, affectsRevenue: 'YES', receivedFrom: 'Customer', bankName: null, paymentMode: ocr_payment_mode, remarks: ocr_remarks },
+        { type: 'cash_component', direction: 'CREDIT', amount: cleanNum(cash_component), date: cash_component_date, affectsRevenue: 'YES', receivedFrom: 'Customer', bankName: null, paymentMode: null, remarks: cash_component_remarks },
+        { type: 'loan_disbursement', direction: 'CREDIT', amount: cleanNum(disbursement_amount), date: actual_disbursement_date, affectsRevenue: 'YES', receivedFrom: 'Bank', bankName: bank_name, paymentMode: null, remarks: null },
+      ].filter(r => r.amount > 0);
 
-      await upsertLedger('token', 'CREDIT', cleanNum(token_amount), booking_date, 'NO', 'Customer', null, null, null);
-      await upsertLedger('booking_amount', 'CREDIT', cleanNum(booking_amount), booking_date, 'NO', 'Customer', null, null, booking_remarks);
-      await upsertLedger('ocr', 'CREDIT', cleanNum(ocr_amount), ocr_received_date, 'YES', 'Customer', null, ocr_payment_mode, ocr_remarks);
-      // DEPRECATED (Phase 6): the single 'sdr' government-charge ledger line is retired.
-      // Recording stamp_duty / registration_fee as pass-through ledger entries (so
-      // customer_ledger_view.government_charges reflects the split) is part of the
-      // deferred revenue-pipeline pass — the split amounts persist on
-      // booking_registration_details and surface via booking_total_cost_view today.
-      await upsertLedger('cash_component', 'CREDIT', cleanNum(cash_component), cash_component_date, 'YES', 'Customer', null, null, cash_component_remarks);
-      await upsertLedger('loan_disbursement', 'CREDIT', cleanNum(disbursement_amount), actual_disbursement_date, 'YES', 'Bank', bank_name, null, null);
+      if (ledgerRows.length > 0) {
+        const lValues: any[] = [];
+        const lPlaceholders: string[] = [];
+        let lIdx = 1;
+        for (const r of ledgerRows) {
+          lPlaceholders.push(`($${lIdx}, $${lIdx+1}, $${lIdx+2}, $${lIdx+3}, $${lIdx+4}, 'Received', $${lIdx+5}, $${lIdx+6}, 'UI_Update', $${lIdx+7}, $${lIdx+8}, $${lIdx+9}, $${lIdx+10}, $${lIdx+11})`);
+          lValues.push(account_id, r.type, r.direction, r.amount, r.date || new Date(), r.affectsRevenue, r.receivedFrom, r.bankName, r.paymentMode, r.remarks, created_by || 'System', orgId);
+          lIdx += 12;
+        }
+        await client.query(`
+          INSERT INTO financial_ledger (account_id, transaction_type, transaction_direction, amount, transaction_date, status, affects_revenue, received_from, transaction_source, bank_name, payment_mode, notes, created_by, organization_id)
+          VALUES ${lPlaceholders.join(', ')}
+          ON CONFLICT (account_id, transaction_type, transaction_source) DO UPDATE
+          SET amount = EXCLUDED.amount, transaction_date = EXCLUDED.transaction_date, bank_name = EXCLUDED.bank_name, payment_mode = EXCLUDED.payment_mode, notes = EXCLUDED.notes
+        `, lValues);
+      }
 
       // 1f-3. Default Payment Milestones (standard under-construction demand schedule)
       // Token is chronologically first (Booking milestone); the larger Booking Amount
@@ -678,14 +694,21 @@ export async function POST(req: NextRequest) {
         { name: 'Finishing', order: 8, percentage: 10, paid: 0, paidDate: null },
         { name: 'Possession', order: 9, percentage: 10, paid: 0, paidDate: null },
       ];
+      // Batch all 9 milestone INSERTs into one multi-row statement (was 9 round trips)
+      const msValues: any[] = [];
+      const msPlaceholders: string[] = [];
+      let msIdx = 1;
       for (const ms of defaultMilestones) {
         const demandAmount = agreementVal * ms.percentage / 100;
         const status = ms.paid <= 0 ? 'Upcoming' : ms.paid >= demandAmount ? 'Paid' : 'Partially Paid';
-        await client.query(`
-          INSERT INTO booking_payment_milestones (booking_id, milestone_name, milestone_order, percentage, demand_amount, paid_amount, paid_date, status, organization_id)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        `, [newId, ms.name, ms.order, ms.percentage, demandAmount, ms.paid, ms.paidDate || null, status, orgId]);
+        msPlaceholders.push(`($${msIdx}, $${msIdx+1}, $${msIdx+2}, $${msIdx+3}, $${msIdx+4}, $${msIdx+5}, $${msIdx+6}, $${msIdx+7}, $${msIdx+8})`);
+        msValues.push(newId, ms.name, ms.order, ms.percentage, demandAmount, ms.paid, ms.paidDate || null, status, orgId);
+        msIdx += 9;
       }
+      await client.query(`
+        INSERT INTO booking_payment_milestones (booking_id, milestone_name, milestone_order, percentage, demand_amount, paid_amount, paid_date, status, organization_id)
+        VALUES ${msPlaceholders.join(', ')}
+      `, msValues);
 
       // 1g. Insert initial stage history
       await client.query(`
@@ -800,6 +823,7 @@ export async function POST(req: NextRequest) {
       // from fetchBookingById() below anyway. One wasted round trip per booking.
       return { id: newId as number, booking_number: bookingNumber };
     });
+    const _tTxn = Date.now();
 
     // ── Post-commit ──────────────────────────────────────────────────────────
     // Status flip and lead closure folded into ONE statement. They were two
@@ -818,6 +842,7 @@ export async function POST(req: NextRequest) {
     // Documents: uploaded to R2 and recorded now, outside any transaction. A
     // document that fails to upload is reported, not silently dropped, and never
     // gets a booking_documents row. See commitBookingDocuments().
+    const _tStatus = Date.now();
     const { failed: failedDocuments } = await commitBookingDocuments({
       staged: stagedDocs,
       bookingId: result.id,
@@ -827,6 +852,7 @@ export async function POST(req: NextRequest) {
       organizationId: orgId,
       jointApplicants: joint_applicants,
     });
+    const _tDocs = Date.now();
 
     // Return the SAME shape GET returns, not the bare booking_applications row.
     // The caller feeds this straight into the booking view (sales/page.tsx does
@@ -837,6 +863,9 @@ export async function POST(req: NextRequest) {
     // This is the ONE read the response needs, and it now reuses the already
     // resolved organization instead of asking for it again.
     const enriched = await fetchBookingById(result.id, orgId);
+    const _tEnrich = Date.now();
+
+    console.log(`[BOOKING TIMING] id=${result.id} staging=${_tStaged - _t0}ms transaction=${_tTxn - _tStaged}ms statusCTE=${_tStatus - _tTxn}ms r2Docs=${_tDocs - _tStatus}ms fetchById=${_tEnrich - _tDocs}ms total=${_tEnrich - _t0}ms staged=${stagedDocs.length}docs`);
 
     return NextResponse.json(
       {

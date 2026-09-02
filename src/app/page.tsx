@@ -33,7 +33,11 @@ class GeolocationPositionError_compat {
 async function getNativePosition(): Promise<GeolocationPosition> {
   let perm = await Geolocation.checkPermissions();
 
-  if (perm.location === "denied") {
+  // "prompt" = not yet asked (iOS initial state)
+  // "denied" on Android = not yet asked OR permanently denied
+  // Request in both cases; on iOS after permanent denial this is a no-op
+  // (the plugin resolves immediately with "denied" again).
+  if (perm.location !== "granted") {
     perm = await Geolocation.requestPermissions({ permissions: ["location"] });
   }
 
@@ -151,18 +155,25 @@ export default function Login() {
       // Distinguish the three geolocation failure modes explicitly.
       const code = geoError?.code;
       const isApp = Capacitor.isNativePlatform();
+      const isIOS = isApp && Capacitor.getPlatform() === "ios";
       if (code === 1) {
         // PERMISSION_DENIED
         setLocationStatus("denied");
         setError(
-          isApp
-            ? "Location permission denied. Please allow location access in App Settings and try again."
-            : "Location permission denied. Please allow location access in your browser settings and try again.",
+          isIOS
+            ? "Location permission denied. Please open Settings \u2192 Privacy & Security \u2192 Location Services \u2192 Bhoomi Dwellers and select \u201cWhile Using the App\u201d, then try again."
+            : isApp
+              ? "Location permission denied. Please allow location access in App Settings and try again."
+              : "Location permission denied. Please allow location access in your browser settings and try again.",
         );
       } else if (code === 2 || geoError?.message === "UNAVAILABLE") {
         // POSITION_UNAVAILABLE — device GPS/location services off
         setLocationStatus("denied");
-        setError("Location unavailable. Please turn on your device's location services and try again.");
+        setError(
+          isIOS
+            ? "Location unavailable. Please open Settings \u2192 Privacy & Security \u2192 Location Services and turn it on, then try again."
+            : "Location unavailable. Please turn on your device's location services and try again.",
+        );
       } else if (code === 3) {
         // TIMEOUT — device couldn't get a fix in time
         setLocationStatus("error");

@@ -4,6 +4,7 @@ import { query, transaction } from "@/lib/db";
 import { getOrganizationId } from "@/lib/tenantContext";
 import { jsonCompressed } from "@/lib/apiResponse";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
+import { broadcastFollowUp, type FollowUpPayload } from "@/lib/followUpEvents";
 
 /**
  * GET follow-ups.
@@ -156,6 +157,7 @@ async function handleInternalMessage(
     }
     const sm = smRows[0];
 
+    const imOrgId = await getOrganizationId();
     const rows = await query<any>(
       `INSERT INTO follow_ups
          (lead_id, message, created_by_name, created_by_role,
@@ -163,8 +165,27 @@ async function handleInternalMessage(
           organization_id)
        VALUES ($1, $2, $3, 'receptionist', 'internal_message', 'sales_manager', $4, NULL, $5)
        RETURNING id, created_at`,
-      [leadId, text, actorName, sm.id, await getOrganizationId()]
+      [leadId, text, actorName, sm.id, imOrgId]
     );
+
+    broadcastFollowUp(imOrgId, {
+      type: "followup:created",
+      followUp: {
+        _id: String(rows[0].id),
+        leadId: String(leadId),
+        salesManagerName: actorName,
+        createdBy: actorName,
+        message: text,
+        siteVisitDate: null,
+        createdAt: rows[0].created_at,
+        followUpType: "internal_message",
+        createdByRole: "receptionist",
+        sentToRole: "sales_manager",
+        sentToUserId: sm.id,
+        parentFollowUpId: null,
+        readAt: null,
+      },
+    });
 
     return NextResponse.json(
       {
@@ -220,9 +241,8 @@ async function handleInternalMessage(
     );
   }
 
+  const smReplyOrgId = await getOrganizationId();
   const inserted = await transaction(async (client) => {
-    // MT-05: resolved once per transaction, on this client.
-    const orgId = await getOrganizationId(client);
     const r = await client.query(
       `INSERT INTO follow_ups
          (lead_id, message, created_by_name, created_by_role,
@@ -230,14 +250,33 @@ async function handleInternalMessage(
           organization_id)
        VALUES ($1, $2, $3, 'sales_manager', 'sm_reply', $4, $5)
        RETURNING id, created_at`,
-      [leadId, text, actorName, parentId, orgId]
+      [leadId, text, actorName, parentId, smReplyOrgId]
     );
     // Replying is reading — the badge must not keep claiming it is unread.
     await client.query(
       `UPDATE follow_ups SET read_at = NOW() WHERE id = $1 AND read_at IS NULL AND organization_id = $2`,
-      [parentId, orgId]
+      [parentId, smReplyOrgId]
     );
     return r.rows[0];
+  });
+
+  broadcastFollowUp(smReplyOrgId, {
+    type: "followup:created",
+    followUp: {
+      _id: String(inserted.id),
+      leadId: String(leadId),
+      salesManagerName: actorName,
+      createdBy: actorName,
+      message: text,
+      siteVisitDate: null,
+      createdAt: inserted.created_at,
+      followUpType: "sm_reply",
+      createdByRole: "sales_manager",
+      sentToRole: null,
+      sentToUserId: null,
+      parentFollowUpId: parentId,
+      readAt: null,
+    },
   });
 
   return NextResponse.json(
@@ -329,33 +368,55 @@ export async function POST(req: Request) {
       );
     }
 
+    const orgId = await getOrganizationId();
+    const clientMsgId = body.clientMessageId ? String(body.clientMessageId) : null;
+
+    // ON CONFLICT on the partial unique index (organization_id, client_message_id)
+    // WHERE client_message_id IS NOT NULL. A retry with the same clientMessageId
+    // returns the existing row instead of creating a duplicate.
     const rows = await query(
-      `INSERT INTO follow_ups (lead_id, message, created_by_name, site_visit_date, organization_id)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO follow_ups (lead_id, message, created_by_name, site_visit_date, organization_id, client_message_id)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (organization_id, client_message_id) WHERE client_message_id IS NOT NULL
+       DO UPDATE SET lead_id = follow_ups.lead_id  -- no-op, returns the existing row
        RETURNING *`,
       [
         String(leadId),
         message,
         salesManagerName || createdBy || "sales",
         siteVisitDate || null,
-        await getOrganizationId(),
+        orgId,
+        clientMsgId,
       ]
     );
 
     const m = rows[0];
 
+    const followUpData: FollowUpPayload = {
+      _id: String(m.id),
+      leadId: String(m.lead_id),
+      salesManagerName: m.created_by_name || "",
+      createdBy: m.created_by_name || "sales",
+      message: m.message,
+      siteVisitDate: m.site_visit_date || null,
+      createdAt: m.created_at,
+      followUpType: m.follow_up_type || "note",
+      createdByRole: m.created_by_role || null,
+      sentToRole: m.sent_to_role || null,
+      sentToUserId: m.sent_to_user_id || null,
+      parentFollowUpId: m.parent_follow_up_id || null,
+      readAt: m.read_at || null,
+      clientMessageId: body.clientMessageId || undefined,
+    };
+
+    // Broadcast to all connected clients in this organization.
+    // Fire-and-forget — never delays the HTTP response.
+    broadcastFollowUp(orgId, { type: "followup:created", followUp: followUpData });
+
     // Return same shape as old MongoDB response
     return NextResponse.json({
       success: true,
-      data: {
-        _id: String(m.id),
-        leadId: String(m.lead_id),
-        salesManagerName: m.created_by_name || "",
-        createdBy: m.created_by_name || "sales",
-        message: m.message,
-        siteVisitDate: m.site_visit_date || null,
-        createdAt: m.created_at,
-      },
+      data: followUpData,
     }, { status: 201 });
 
   } catch (error) {

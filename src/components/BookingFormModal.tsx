@@ -1,6 +1,6 @@
 "use client";
 // BookingFormModal.tsx — Multi-step Booking Application Form
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import IndianCurrencyInput from "@/components/IndianCurrencyInput";
 import { cleanCurrencyValue, formatIndianNumber } from "@/lib/currency";
@@ -26,6 +26,7 @@ import TrancheOverrideModal from "@/components/TrancheOverrideModal";
 // 0-100 and at most 2dp, matching NUMERIC(5,2).
 import { validateRate } from "./ChannelPartnerFormModal";
 import UnitPicker, { type PickableUnit, unitLabel } from "./UnitPicker";
+import { useOrgName } from "@/lib/hooks/useOrgName";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface PaymentRow { date: string; transaction_type: string; amount: string; }
@@ -158,8 +159,7 @@ const STEPS = [
   { id: 6, label: "Review", icon: <FaCheckCircle /> },
 ];
 
-const TERMS = [
-  "All Cheques to be made in Favor of PARWATI CONSTRUCTION COLOSSAL MAS COLL ESCROW ACCT.",
+const STATIC_TERMS = [
   "Purchaser / Customer must provide all the required documents, processing fees and self-availability for home loan process failing to do so may/will result in interest/ Penalty/ Admin charges.",
   "Booking Amount is non-returnable after 7 days of confirmation.",
   "Agreement to be made within 15 days of booking.",
@@ -167,6 +167,14 @@ const TERMS = [
   "Late payment interest plus additional handling charges applicable in case of late payment.",
   "If any tax imposed by Government at any time the same will be borne by the purchaser. (e.g., GST, Stamp duty)",
 ];
+
+function buildTerms(orgName: string | null): string[] {
+  const label = orgName ? orgName.toUpperCase() : "THE COMPANY";
+  return [
+    `All Cheques to be made in Favor of ${label} CONSTRUCTION ESCROW ACCT.`,
+    ...STATIC_TERMS,
+  ];
+}
 
 
 function toNumber(val: string): number {
@@ -506,6 +514,9 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
 
   // The booking actually being edited, and whether we are editing at all.
   // Everything below reads these — never the raw props.
+  const { name: orgName } = useOrgName();
+  const terms = useMemo(() => buildTerms(orgName), [orgName]);
+
   const effBooking = existingBooking?.id ? existingBooking : resolvedBooking;
   const effEdit = !!effBooking?.id || !!isEditMode;
 
@@ -3050,7 +3061,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                               }}
                               className={`h-40 overflow-y-auto rounded-xl border p-4 text-xs space-y-2 custom-scrollbar ${isDark ? "bg-[#14141B] border-[#2A2A35]" : "bg-[#F8FAFC] border-[#E5E7EB]"}`}
                             >
-                              {TERMS.map((t, i) => (
+                              {terms.map((t, i) => (
                                 <p key={i} className={textMuted}><span className="font-bold">{i + 1}.</span> {t}</p>
                               ))}
                             </div>
