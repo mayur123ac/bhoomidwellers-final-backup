@@ -181,13 +181,14 @@ export async function POST(req: Request) {
 
     // 3. Inject into follow_ups table (PostgreSQL) instead of MongoDB FollowupMessage
     await query(
-      `INSERT INTO follow_ups (lead_id, message, created_by_name, created_at, organization_id)
-       VALUES ($1, $2, $3, NOW(), $4)`,
+      `INSERT INTO follow_ups (lead_id, message, created_by_name, created_by_id, created_at, organization_id)
+       VALUES ($1, $2, $3, $5, NOW(), $4)`,
       [
         String(body.leadId),
         summaryMessage,
         body.salesManagerName || body.createdBy || "sales",
         orgId,
+        gate.userId,
       ]
     );
 

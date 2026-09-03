@@ -195,6 +195,10 @@ export async function PUT(
         fields.push("first_contact_at = COALESCE(first_contact_at, NOW())");
       }
 
+      if (body.status === "Closing") {
+        fields.push("closing_date = COALESCE(closing_date, NOW())");
+      }
+
       if (!("last_activity_at" in body)) {
         fields.push("last_activity_at = NOW()");
       }

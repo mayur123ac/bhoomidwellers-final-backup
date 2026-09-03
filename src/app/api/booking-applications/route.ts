@@ -527,7 +527,8 @@ export async function POST(req: NextRequest) {
           apartment_name, project_name, tower, wing,
           revenue_include_ocr, revenue_include_sdr, revenue_include_cash, revenue_include_sanction, revenue_include_disbursement,
           sourced_by_channel_partner_id,
-          organization_id
+          organization_id,
+          created_by_id
         ) VALUES (
           $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,'Pending',
           $37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,
@@ -538,7 +539,8 @@ export async function POST(req: NextRequest) {
           -- would have attributed THEIR channel partner to this booking — and
           -- commission is accrued against whatever this resolves to.
           (SELECT channel_partner_id FROM walkin_enquiries WHERE id = $1 AND organization_id = $51),
-          $51
+          $51,
+          $52
         ) RETURNING id`,
         [
           lead_id, primary_name, primary_email, primary_mobile, primary_pan, primary_aadhaar,
@@ -554,7 +556,8 @@ export async function POST(req: NextRequest) {
           booking_date || null, cleanNum(agreement_value), cleanNum(booking_amount), booking_remarks, internal_notes,
           apartment_name, project_name, tower, wing,
           revenue_include_ocr, revenue_include_sdr, revenue_include_cash, revenue_include_sanction, revenue_include_disbursement,
-          orgId
+          orgId,
+          gate.userId
         ]
       );
       const newId = insertRes.rows[0].id;

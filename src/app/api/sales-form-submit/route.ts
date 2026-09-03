@@ -101,10 +101,10 @@ export async function POST(req: Request) {
 
       // 1️⃣ One follow-up row = the human timeline entry.
       const followUpRes = await client.query(
-        `INSERT INTO follow_ups (lead_id, message, created_by_name, site_visit_date, organization_id)
-         VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO follow_ups (lead_id, message, created_by_name, created_by_id, site_visit_date, organization_id)
+         VALUES ($1, $2, $3, $6, $4, $5)
          RETURNING *`,
-        [String(leadId), message, authorName, visitDate, orgId]
+        [String(leadId), message, authorName, visitDate, orgId, gate.userId]
       );
 
       // 2️⃣ Normalized columns + status, in the same UPDATE.
@@ -139,9 +139,9 @@ export async function POST(req: Request) {
       // the row above already records it.
       if (visitDate) {
         await client.query(
-          `INSERT INTO site_visits (lead_id, visit_date, created_by, role, status, notes, organization_id)
-           VALUES ($1, $2, $3, $4, 'scheduled', $5, $6)`,
-          [leadId, visitDate, authorName, "Sales Manager", "Scheduled via Salesform", orgId]
+          `INSERT INTO site_visits (lead_id, visit_date, created_by, created_by_id, role, status, notes, organization_id)
+           VALUES ($1, $2, $3, $7, $4, 'scheduled', $5, $6)`,
+          [leadId, visitDate, authorName, "Sales Manager", "Scheduled via Salesform", orgId, gate.userId]
         );
       }
 

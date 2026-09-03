@@ -75,10 +75,10 @@ export async function POST(req: Request) {
     let followUpRow: any = null;
     try {
       const followUpRows = await query(
-        `INSERT INTO follow_ups (lead_id, message, created_by_name, site_visit_date, organization_id)
-         VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO follow_ups (lead_id, message, created_by_name, created_by_id, site_visit_date, organization_id)
+         VALUES ($1, $2, $3, $6, $4, $5)
          RETURNING *`,
-        [String(lead_id), transferMessage, transferred_by, null, orgId]
+        [String(lead_id), transferMessage, transferred_by, null, orgId, gate.userId]
       );
       followUpRow = followUpRows[0];
     } catch (fuErr: any) {

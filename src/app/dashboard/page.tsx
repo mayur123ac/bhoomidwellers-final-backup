@@ -11,7 +11,8 @@ import {
   FaThLarge, FaClipboardList, FaUsers, FaIdCard,
   FaSearch, FaBell, FaChevronLeft, FaPhoneAlt, FaComments,
   FaCheckCircle, FaCalendarAlt, FaTimes, FaArrowLeft, FaChevronDown,
-  FaFileInvoice, FaFileInvoiceDollar, FaPaperPlane, FaMicrophone, FaWhatsapp, FaTable, FaChartPie, FaEyeSlash, FaUniversity, FaHandshake, FaExchangeAlt, FaBriefcase, FaDownload, FaCog, FaMapMarkerAlt, FaSignal, FaUserClock, FaTrashAlt, FaBoxes, FaUserTie
+  FaFileInvoice, FaFileInvoiceDollar, FaPaperPlane, FaMicrophone, FaWhatsapp, FaTable, FaChartPie, FaEyeSlash, FaUniversity, FaHandshake, FaExchangeAlt, FaBriefcase, FaDownload, FaCog, FaMapMarkerAlt, FaSignal, FaUserClock, FaTrashAlt, FaBoxes, FaUserTie,
+  FaClock
 } from "react-icons/fa";
 import { BhoomiAiGlyph } from "@/components/bhoomi-ai/BhoomiAiIcon";
 import { downloadCSV } from "@/lib/downloadCsv";
@@ -24,6 +25,9 @@ import BookingFormModal from "@/components/BookingFormModal";
 import BookingApplicationView from "@/components/BookingApplicationView";
 import ClosedLeadBookingView from "@/components/ClosedLeadBookingView";
 import LostLeadModal from "@/components/LostLeadModal";
+import ReminderModal from "@/components/ReminderModal";
+import ReminderDuePopup from "@/components/ReminderDuePopup";
+import { useOverdueReminders } from "@/hooks/useOverdueReminders";
 import CrmUpdatesNotification from "@/components/CrmUpdatesNotification";
 import PermanentLeadDeleteDialog from "@/components/PermanentLeadDeleteDialog";
 import BulkDeleteLeadsDialog from "@/components/BulkDeleteLeadsDialog";
@@ -37,6 +41,7 @@ import EnquiryOverviewSection from "@/components/Enquiryoverviewsection";
 import InlineContactField from "@/components/InlineContactField";
 import BolnaCallWidget from "@/components/BolnaCallWidget";
 import CallingButtons from "@/components/CallingButtons";
+import EmployeePerformancePanel from "@/components/EmployeePerformancePanel";
 import { contactFieldSave } from "@/lib/contactFieldSave";
 // import ActivityTimeline from "@/components/ActivityTimeline";
 
@@ -291,7 +296,9 @@ function indexFollowUpsByLead(followUps: any[] | null | undefined): Map<string, 
  */
 const ADMIN_POLL_MS = 120_000;
 
-function useAdminData() {
+function useAdminData(onReminderDue?: (r: import("@/lib/followUpSync").ReminderSSEPayload) => void) {
+  const onReminderDueRef = useRef(onReminderDue);
+  onReminderDueRef.current = onReminderDue;
   const [managers, setManagers] = useState<any[]>([]);
   const [siteHeads, setSiteHeads] = useState<any[]>([]);
   const [receptionists, setReceptionists] = useState<any[]>([]);
@@ -556,7 +563,11 @@ function useAdminData() {
     ));
   }, []);
 
-  useFollowUpEvents(handleSSEFollowUp, handleSSEReadReceipt, fetchAdminData);
+  const handleSSEReminderDue = useCallback((r: import("@/lib/followUpSync").ReminderSSEPayload) => {
+    onReminderDueRef.current?.(r);
+  }, []);
+
+  useFollowUpEvents(handleSSEFollowUp, handleSSEReadReceipt, fetchAdminData, handleSSEReminderDue);
 
   return { managers, receptionists, siteHeads, allLeads, followUps, fupsByLead, isLoading, refetch: fetchAdminData, appendFollowUp, reconcileFollowUp, removeFollowUp };
 }
@@ -750,7 +761,8 @@ function AdminAtlasDashboardContent() {
   const [activeNotif, setActiveNotif] = useState<CrmNotif | null>(null);
   const [notifCount, setNotifCount] = useState(0);
   const theme = useMemo(() => buildTheme(isDark), [isDark]);
-  const { managers, receptionists, siteHeads, allLeads, followUps, isLoading, refetch, appendFollowUp, reconcileFollowUp, removeFollowUp } = useAdminData();
+  const { overdueReminders, visible: showOverduePopup, dismissAll: dismissOverduePopup, markComplete: markReminderComplete, pushReminder } = useOverdueReminders();
+  const { managers, receptionists, siteHeads, allLeads, followUps, isLoading, refetch, appendFollowUp, reconcileFollowUp, removeFollowUp } = useAdminData(pushReminder);
 
   // ── Helper to get accurate Creator Name & Role ──
   const getCreatorInfo = (lead: any) => {
@@ -967,7 +979,7 @@ function AdminAtlasDashboardContent() {
     { id: "live_activity", icon: FaSignal, label: "Attendance Tracker" },
     { id: "site_visit_overview", icon: FaCalendarAlt, label: "Site Visit Overview" },
     { id: "attendance", icon: FaUserClock, label: "My Attendance" },
-    { id: "monitoring", icon: FaChartPie, label: "Daily Monitor" },
+    { id: "monitoring", icon: FaChartPie, label: "Employee Performance" },
     { id: "geo", icon: FaMapMarkerAlt, label: "Geo Analytics" },
     { id: "caller", icon: FaPhoneAlt, label: "Caller Panel" },
     { id: "employees", icon: FaIdCard, label: "Add Employee" },
@@ -1077,6 +1089,16 @@ function AdminAtlasDashboardContent() {
       className={`flex h-screen font-sans overflow-hidden relative transition-colors duration-300 ${theme.pageWrap}`}
       style={isDark ? {} : { background: "linear-gradient(135deg, #fdf0f8 0%, #f8fafc 30%, #faf0fb 62%, #f8fafc 78%, #fce8f6 100%)" }}
     >
+      {/* ── Reminder Due Full-Screen Popup ── */}
+      {showOverduePopup && (
+        <ReminderDuePopup
+          reminders={overdueReminders}
+          isDark={isDark}
+          onMarkComplete={markReminderComplete}
+          onDismiss={dismissOverduePopup}
+        />
+      )}
+
       {/* ── SIDEBAR ──
           Shared with /dashboard/employees and the Settings panel so the rail
           cannot drift between the three routes. */}
@@ -1446,11 +1468,9 @@ function AdminAtlasDashboardContent() {
           )}
           {activeView === "monitoring" && (
             <div className="flex-1 overflow-hidden h-full">
-              <DailyMonitoringPanel
+              <EmployeePerformancePanel
                 theme={theme}
                 isDark={isDark}
-                allLeads={allLeads}
-                adminUser={user}
               />
             </div>
           )}
@@ -2987,6 +3007,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
   const [isSavingLost, setIsSavingLost] = useState(false);
   const [optimisticLeadOverrides, setOptimisticLeadOverrides] = useState<Record<string, any>>({});
   const [isReopening, setIsReopening] = useState(false);
+  const [showReminderModal, setShowReminderModal] = useState(false);
 
   // Transfer States
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
@@ -3179,6 +3200,18 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
     } catch {
       reconcileFollowUp(clientMessageId, null);
     }
+  };
+
+  const handleCreateReminder = async (remindAt: string, note: string) => {
+    if (!selectedLead) return;
+    const res = await fetch("/api/reminders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ leadId: selectedLead.id, remindAt, note: note || null }),
+    });
+    const json = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(json?.message || "Failed to create reminder.");
+    showToast(`Reminder set for ${selectedLead.name || "lead"}`);
   };
 
   // handleSendWhatsApp was removed with the wa.me workflow. It logged that a
@@ -3976,6 +4009,9 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                         <form onSubmit={handleSendCustomNote} className={`p-3 border-t flex gap-2 items-center flex-shrink-0 ${theme.header} ${theme.tableBorder}`} style={theme.headerGlass}>
                           <input type="text" value={customNote} onChange={e => setCustomNote(e.target.value)} placeholder="Add admin note..."
                             className={`flex-1 rounded-xl px-3 py-2 sm:py-2.5 text-sm outline-none transition-colors border ${theme.inputInner} ${theme.text} ${theme.inputFocus}`} />
+                          <button type="button" title="Set follow-up reminder" onClick={() => setShowReminderModal(true)} className={`w-9 h-9 flex-shrink-0 rounded-xl flex items-center justify-center cursor-pointer transition-colors ${isDark ? "text-gray-400 hover:text-purple-400 hover:bg-white/5" : "text-gray-400 hover:text-purple-600 hover:bg-purple-50"}`}>
+                            <FaClock className="text-xs" />
+                          </button>
                           <button type="submit" className={`w-9 h-9 flex-shrink-0 text-white rounded-xl flex items-center justify-center cursor-pointer transition-colors shadow-lg ${isDark ? "bg-[#9E217B] hover:bg-[#b8268f]" : "bg-[#9E217B] hover:bg-[#8a1d6b]"}`}>
                             <FaPaperPlane className="text-xs ml-[-1px]" />
                           </button>
@@ -4007,6 +4043,16 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                 onReasonChange={(value) => { setLostReason(value); if (lostError) setLostError(""); }}
                 onClose={() => setShowLostModal(false)}
                 onSubmit={handleMarkLostLead}
+              />
+            )}
+
+            {showReminderModal && selectedLead && (
+              <ReminderModal
+                lead={selectedLead}
+                isDark={isDark}
+                theme={theme}
+                onClose={() => setShowReminderModal(false)}
+                onSubmit={handleCreateReminder}
               />
             )}
 
@@ -4101,6 +4147,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
   const [isSavingLost, setIsSavingLost] = useState(false);
   const [optimisticLeadOverrides, setOptimisticLeadOverrides] = useState<Record<string, any>>({});
   const [isReopening, setIsReopening] = useState(false);
+  const [showReminderModal, setShowReminderModal] = useState(false);
 
   const [bookingData, setBookingData] = useState<any>(null);
   const [showBookingView, setShowBookingView] = useState(false);
@@ -4390,11 +4437,18 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
     }
   };
 
-  // handleSendWhatsApp was removed with the wa.me workflow. It logged that a
-  // message had been composed and then handed off to another app, so the CRM
-  // never learned whether it was delivered or what the customer replied.
-  // Sending now goes through WhatsAppConversationPanel →
-  // POST /api/whatsapp/conversations/:id/messages.
+  const handleCreateReminder = async (remindAt: string, note: string) => {
+    if (!selectedLead) return;
+    const res = await fetch("/api/reminders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ leadId: selectedLead.id, remindAt, note: note || null }),
+    });
+    const json = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(json?.message || "Failed to create reminder.");
+    showToast(`Reminder set for ${selectedLead.name || "lead"}`);
+  };
+
   const handleSalesFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!selectedLead) return;
@@ -4640,6 +4694,16 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
           onReasonChange={(value) => { setLostReason(value); if (lostError) setLostError(""); }}
           onClose={() => setShowLostModal(false)}
           onSubmit={handleMarkLostLead}
+        />
+      )}
+
+      {showReminderModal && selectedLead && (
+        <ReminderModal
+          lead={selectedLead}
+          isDark={isDark}
+          theme={theme}
+          onClose={() => setShowReminderModal(false)}
+          onSubmit={handleCreateReminder}
         />
       )}
 
@@ -5081,6 +5145,9 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                         <form onSubmit={handleSendCustomNote} className={`p-3 sm:p-5 border-t flex gap-2 sm:gap-3 items-center flex-shrink-0 ${theme.header} ${theme.tableBorder}`} style={theme.headerGlass}>
                           <input type="text" value={customNote} onChange={e => setCustomNote(e.target.value)} placeholder="Add admin note..."
                             className={`flex-1 rounded-xl px-3 py-2.5 sm:px-4 sm:py-3 text-[10px] sm:text-sm outline-none transition-colors border ${theme.inputInner} ${theme.text} ${theme.inputFocus}`} />
+                          <button type="button" title="Set follow-up reminder" onClick={() => setShowReminderModal(true)} className={`w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0 rounded-xl flex items-center justify-center cursor-pointer transition-colors ${isDark ? "text-gray-400 hover:text-purple-400 hover:bg-white/5" : "text-gray-400 hover:text-purple-600 hover:bg-purple-50"}`}>
+                            <FaClock className="text-[10px] sm:text-sm" />
+                          </button>
                           <button type="submit" className={`w-10 h-10 sm:w-12 sm:h-12 text-white rounded-xl flex items-center justify-center cursor-pointer transition-colors shadow-lg ${isDark ? "bg-[#9E217B] hover:bg-[#b8268f]" : "bg-[#9E217B] hover:bg-[#8a1d6b]"}`}>
                             <FaPaperPlane className="text-[10px] sm:text-sm ml-[-1px] sm:ml-[-2px]" />
                           </button>
@@ -5190,6 +5257,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
   const [lostError, setLostError] = useState("");
   const [isSavingLost, setIsSavingLost] = useState(false);
   const [optimisticLeadOverrides, setOptimisticLeadOverrides] = useState<Record<string, any>>({});
+  const [showReminderModal, setShowReminderModal] = useState(false);
 
   const [bookingData, setBookingData] = useState<any>(null);
   const [showBookingView, setShowBookingView] = useState(false);
@@ -5434,11 +5502,18 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
     }
   };
 
-  // handleSendWhatsApp was removed with the wa.me workflow. It logged that a
-  // message had been composed and then handed off to another app, so the CRM
-  // never learned whether it was delivered or what the customer replied.
-  // Sending now goes through WhatsAppConversationPanel →
-  // POST /api/whatsapp/conversations/:id/messages.
+  const handleCreateReminder = async (remindAt: string, note: string) => {
+    if (!selectedLead) return;
+    const res = await fetch("/api/reminders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ leadId: selectedLead.id, remindAt, note: note || null }),
+    });
+    const json = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(json?.message || "Failed to create reminder.");
+    showToast(`Reminder set for ${selectedLead.name || "lead"}`);
+  };
+
   const handleSalesFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedLead) return;
@@ -5834,6 +5909,16 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
           onReasonChange={(value) => { setLostReason(value); if (lostError) setLostError(""); }}
           onClose={() => setShowLostModal(false)}
           onSubmit={handleMarkLostLead}
+        />
+      )}
+
+      {showReminderModal && selectedLead && (
+        <ReminderModal
+          lead={selectedLead}
+          isDark={isDark}
+          theme={theme}
+          onClose={() => setShowReminderModal(false)}
+          onSubmit={handleCreateReminder}
         />
       )}
 
@@ -6376,6 +6461,9 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                         <form onSubmit={handleSendCustomNote} className={`p-3 sm:p-5 border-t flex gap-2 sm:gap-3 items-center flex-shrink-0 ${theme.chatInputInner}`}>
                           <input type="text" value={customNote} onChange={e => setCustomNote(e.target.value)} placeholder="Add admin note..."
                             className={`flex-1 border rounded-xl px-3 py-2.5 sm:px-4 sm:py-4 text-[10px] sm:text-sm outline-none transition-colors shadow-inner ${theme.inputInner} ${theme.text} ${theme.inputFocus}`} />
+                          <button type="button" title="Set follow-up reminder" onClick={() => setShowReminderModal(true)} className={`w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0 rounded-xl flex items-center justify-center cursor-pointer transition-colors ${isDark ? "text-gray-400 hover:text-purple-400 hover:bg-white/5" : "text-gray-400 hover:text-purple-600 hover:bg-purple-50"}`}>
+                            <FaClock className="text-[10px] sm:text-sm" />
+                          </button>
                           <button type="submit" className={`w-10 h-10 sm:w-12 sm:h-12 text-white rounded-xl flex items-center justify-center cursor-pointer transition-colors shadow-lg ${isDark ? "bg-[#9E217B] hover:bg-[#b8268f]" : "bg-[#9E217B] hover:bg-[#8a1d6b]"}`}>
                             <FaPaperPlane className="text-[10px] sm:text-sm ml-[-1px] sm:ml-[-2px]" />
                           </button>

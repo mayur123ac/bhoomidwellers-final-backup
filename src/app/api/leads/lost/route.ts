@@ -105,9 +105,9 @@ export async function PATCH(req: Request) {
 
     try {
       await query(
-        `INSERT INTO follow_ups (lead_id, message, created_by_name, site_visit_date, organization_id)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [String(leadId), logMessage, actor, null, organizationId]
+        `INSERT INTO follow_ups (lead_id, message, created_by_name, created_by_id, site_visit_date, organization_id)
+         VALUES ($1, $2, $3, $6, $4, $5)`,
+        [String(leadId), logMessage, actor, null, organizationId, gate.userId]
       );
     } catch (fuErr: unknown) {
       console.warn("[PATCH /api/leads/lost] follow_ups insert failed:", getErrorMessage(fuErr, "Unknown error"));

@@ -19,7 +19,7 @@
 // request would let anyone read anyone else's queue.
 
 import { NextRequest, NextResponse } from "next/server";
-import { requireSession } from "@/lib/serverAuth";
+import { requireSession, getSessionUserId } from "@/lib/serverAuth";
 import { getOrganizationId } from "@/lib/tenantContext";
 import { buildNotificationFeed, resolveNotificationLead } from "@/lib/notifications/feed";
 
@@ -38,6 +38,7 @@ export async function GET(req: NextRequest) {
       organizationId,
       viewerName: gate.session.name ?? "",
       viewerRole: gate.session.role ?? "",
+      userId: getSessionUserId(gate.session),
       // Settings → Additional Features. Passed through so a disabled reminder
       // empties the queue server-side rather than being hidden in the browser.
       followUpRemindersEnabled: sp.get("followUpReminders") !== "off",
@@ -52,6 +53,7 @@ export async function GET(req: NextRequest) {
           newLeads: feed.newLeads,
           siteVisits: feed.siteVisits,
           followUps: feed.followUps,
+          reminders: feed.reminders,
           all: feed.all,
         },
         counts: feed.counts,

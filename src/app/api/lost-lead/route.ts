@@ -78,9 +78,9 @@ export async function POST(req: Request) {
 
     try {
       await query(
-        `INSERT INTO follow_ups (lead_id, message, created_by_name, site_visit_date, organization_id)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [String(lead_id), logMessage, marked_by, null, await getOrganizationId()]
+        `INSERT INTO follow_ups (lead_id, message, created_by_name, created_by_id, site_visit_date, organization_id)
+         VALUES ($1, $2, $3, $6, $4, $5)`,
+        [String(lead_id), logMessage, marked_by, null, await getOrganizationId(), gate.userId]
       );
     } catch (fuErr: any) {
       console.warn("[lost-lead] follow_ups insert failed:", fuErr.message);
@@ -163,9 +163,9 @@ export async function PUT(req: Request) {
 
     try {
       await query(
-        `INSERT INTO follow_ups (lead_id, message, created_by_name, site_visit_date, organization_id)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [String(lead_id), logMessage, restored_by, null, await getOrganizationId()]
+        `INSERT INTO follow_ups (lead_id, message, created_by_name, created_by_id, site_visit_date, organization_id)
+         VALUES ($1, $2, $3, $6, $4, $5)`,
+        [String(lead_id), logMessage, restored_by, null, await getOrganizationId(), gate.userId]
       );
     } catch (fuErr: any) {
       console.warn("[lost-lead] follow_ups insert failed:", fuErr.message);

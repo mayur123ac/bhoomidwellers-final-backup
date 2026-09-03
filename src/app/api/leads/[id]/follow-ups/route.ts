@@ -60,8 +60,8 @@ export async function POST(req: Request) {
     }
 
     const rows = await query(
-      `INSERT INTO follow_ups (lead_id, message, created_by_name, site_visit_date, organization_id)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO follow_ups (lead_id, message, created_by_name, created_by_id, site_visit_date, organization_id)
+       VALUES ($1, $2, $3, $6, $4, $5)
        RETURNING *`,
       [
         String(leadId),
@@ -69,6 +69,7 @@ export async function POST(req: Request) {
         salesManagerName || createdBy || "sales",
         siteVisitDate    || null,
         await getOrganizationId(),
+        gate.userId,
       ]
     );
 

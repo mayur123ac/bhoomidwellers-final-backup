@@ -160,12 +160,12 @@ async function handleInternalMessage(
     const imOrgId = await getOrganizationId();
     const rows = await query<any>(
       `INSERT INTO follow_ups
-         (lead_id, message, created_by_name, created_by_role,
+         (lead_id, message, created_by_name, created_by_id, created_by_role,
           follow_up_type, sent_to_role, sent_to_user_id, read_at,
           organization_id)
-       VALUES ($1, $2, $3, 'receptionist', 'internal_message', 'sales_manager', $4, NULL, $5)
+       VALUES ($1, $2, $3, $6, 'receptionist', 'internal_message', 'sales_manager', $4, NULL, $5)
        RETURNING id, created_at`,
-      [leadId, text, actorName, sm.id, imOrgId]
+      [leadId, text, actorName, sm.id, imOrgId, gate.userId]
     );
 
     broadcastFollowUp(imOrgId, {
@@ -245,12 +245,12 @@ async function handleInternalMessage(
   const inserted = await transaction(async (client) => {
     const r = await client.query(
       `INSERT INTO follow_ups
-         (lead_id, message, created_by_name, created_by_role,
+         (lead_id, message, created_by_name, created_by_id, created_by_role,
           follow_up_type, parent_follow_up_id,
           organization_id)
-       VALUES ($1, $2, $3, 'sales_manager', 'sm_reply', $4, $5)
+       VALUES ($1, $2, $3, $6, 'sales_manager', 'sm_reply', $4, $5)
        RETURNING id, created_at`,
-      [leadId, text, actorName, parentId, smReplyOrgId]
+      [leadId, text, actorName, parentId, smReplyOrgId, gate.userId]
     );
     // Replying is reading — the badge must not keep claiming it is unread.
     await client.query(
@@ -375,8 +375,8 @@ export async function POST(req: Request) {
     // WHERE client_message_id IS NOT NULL. A retry with the same clientMessageId
     // returns the existing row instead of creating a duplicate.
     const rows = await query(
-      `INSERT INTO follow_ups (lead_id, message, created_by_name, site_visit_date, organization_id, client_message_id)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO follow_ups (lead_id, message, created_by_name, created_by_id, site_visit_date, organization_id, client_message_id)
+       VALUES ($1, $2, $3, $7, $4, $5, $6)
        ON CONFLICT (organization_id, client_message_id) WHERE client_message_id IS NOT NULL
        DO UPDATE SET lead_id = follow_ups.lead_id  -- no-op, returns the existing row
        RETURNING *`,
@@ -387,6 +387,7 @@ export async function POST(req: Request) {
         siteVisitDate || null,
         orgId,
         clientMsgId,
+        gate.userId,
       ]
     );
 

@@ -40,7 +40,7 @@ import { query } from "@/lib/db";
 /** Popover cap. Three, with a footer link to the full Notification Center. */
 export const NOTIFICATION_POPOVER_LIMIT = 3;
 
-export type NotificationKind = "new_lead" | "site_visit" | "follow_up";
+export type NotificationKind = "new_lead" | "site_visit" | "follow_up" | "reminder";
 
 export interface CrmNotification {
   /** Stable across refreshes, so dismissals survive a poll. */
@@ -81,9 +81,10 @@ export interface NotificationFeed {
   newLeads: CrmNotification[];
   siteVisits: CrmNotification[];
   followUps: CrmNotification[];
+  reminders: CrmNotification[];
   /** Everything, newest-first. What the Notification Center renders. */
   all: CrmNotification[];
-  counts: { newLeads: number; siteVisits: number; followUps: number; total: number };
+  counts: { newLeads: number; siteVisits: number; followUps: number; reminders: number; total: number };
 }
 
 interface FeedRow {
@@ -251,6 +252,8 @@ export interface BuildFeedOptions {
   organizationId: string;
   viewerName: string;
   viewerRole: string;
+  /** Numeric users.id from getSessionUserId(). Needed for reminder queries. */
+  userId?: number | null;
   /** Injectable for tests; defaults to now. */
   now?: Date;
   /** Settings → Additional Features toggles. */
@@ -265,6 +268,7 @@ export async function buildNotificationFeed(
     organizationId,
     viewerName,
     viewerRole,
+    userId = null,
     now = new Date(),
     followUpRemindersEnabled = true,
     siteVisitAlertsEnabled = true,
@@ -378,15 +382,76 @@ export async function buildNotificationFeed(
     }
   }
 
+  // ── Reminders: due or notified, assigned to this viewer ───────────────
+  //
+  // Unlike the three categories above (which are derived from walkin_enquiries
+  // + follow_ups), reminders live in their own table. A separate query is
+  // cleaner than shoehorning them into the FEED_SQL LATERAL joins.
+  const reminders: CrmNotification[] = [];
+
+  if (userId) {
+    const reminderRows = await query<{
+      id: number;
+      lead_id: number;
+      remind_at: string;
+      note: string | null;
+      reminder_type: string;
+      status: string;
+      lead_name: string;
+      lead_sr_no: number | null;
+      organization_id: string;
+    }>(
+      `SELECT r.id, r.lead_id, r.remind_at, r.note, r.reminder_type, r.status,
+              w.name AS lead_name, w.sr_no AS lead_sr_no, r.organization_id
+         FROM lead_reminders r
+         JOIN walkin_enquiries w ON w.id = r.lead_id
+        WHERE r.organization_id = $1
+          AND r.assigned_user_id = $2
+          AND r.status IN ('pending', 'notified')
+          AND r.remind_at <= $3
+        ORDER BY r.remind_at ASC
+        LIMIT 50`,
+      [organizationId, userId, new Date(now.getTime() + 2 * DAY_MS).toISOString()],
+    );
+
+    for (const rr of reminderRows) {
+      if (rr.organization_id !== organizationId) continue;
+      const remindDate = parseDate(rr.remind_at);
+      const isDue = remindDate && remindDate.getTime() <= now.getTime();
+      const label = rr.reminder_type === "callback" ? "Callback" : "Follow-up";
+      const noteSnippet = rr.note ? ` — ${rr.note.slice(0, 60)}` : "";
+      reminders.push({
+        id: `reminder_${rr.id}`,
+        kind: "reminder",
+        leadId: rr.lead_id,
+        organizationId,
+        leadName: rr.lead_name,
+        srNo: rr.lead_sr_no,
+        title: isDue
+          ? `${label} Reminder Due${noteSnippet}`
+          : `${label} Reminder${noteSnippet}`,
+        subtitle: `${rr.lead_name} · ${remindDate ? remindDate.toLocaleString("en-IN", {
+          day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: true,
+        }) : ""}`,
+        at: rr.remind_at,
+        status: isDue ? "due" : rr.status,
+        interestStatus: "Pending",
+        ownerName: viewerName,
+        ownerRole: viewerRole,
+      });
+    }
+  }
+
   // Sort orders are part of the contract, not incidental:
   //   follow-ups  — highest daysSince first (most neglected at the top)
   //   site visits — closest visitDiff first (today before tomorrow)
   //   new leads   — newest first
+  //   reminders   — soonest first (already sorted by remind_at ASC)
   newLeads.sort((a, b) => new Date(b.at ?? 0).getTime() - new Date(a.at ?? 0).getTime());
   siteVisits.sort((a, b) => (a.visitDiff ?? 0) - (b.visitDiff ?? 0));
   followUps.sort((a, b) => (b.daysSince ?? 0) - (a.daysSince ?? 0));
 
-  const all = [...newLeads, ...siteVisits, ...followUps].sort(
+  const all = [...reminders, ...newLeads, ...siteVisits, ...followUps].sort(
     (a, b) => new Date(b.at ?? 0).getTime() - new Date(a.at ?? 0).getTime()
   );
 
@@ -395,11 +460,13 @@ export async function buildNotificationFeed(
     newLeads,
     siteVisits,
     followUps,
+    reminders,
     all,
     counts: {
       newLeads: newLeads.length,
       siteVisits: siteVisits.length,
       followUps: followUps.length,
+      reminders: reminders.length,
       total: all.length,
     },
   };

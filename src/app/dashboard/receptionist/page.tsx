@@ -32,6 +32,9 @@ import { useAttendance } from "@/components/AttendanceContext";
 import CrmUpdatesNotification from "@/components/CrmUpdatesNotification";
 import WhatsAppConversationPanel from "@/components/whatsapp/WhatsAppConversationPanel";
 import LostLeadModal from "@/components/LostLeadModal";
+import ReminderModal from "@/components/ReminderModal";
+import ReminderDuePopup from "@/components/ReminderDuePopup";
+import { useOverdueReminders } from "@/hooks/useOverdueReminders";
 import { updateLeadLostState, useLostLeadEvents } from "@/lib/lostLeadSync";
 import { useFollowUpEvents, type FollowUpSSEPayload, type FollowUpReadSSEPayload } from "@/lib/followUpSync";
 // The notification queue. Built and organization-scoped on the server — see
@@ -674,6 +677,7 @@ export default function ReceptionistDashboard() {
   const [lostError, setLostError] = useState("");
   const [isSavingLost, setIsSavingLost] = useState(false);
   const [isReopening, setIsReopening] = useState(false);
+  const [showReminderModal, setShowReminderModal] = useState(false);
   // ── Data ──
   const [salesManagers, setSalesManagers] = useState<any[]>([]);
 
@@ -1229,7 +1233,12 @@ export default function ReceptionistDashboard() {
       idSet.has(String(f._id)) ? { ...f, readAt: payload.readAt } : f
     ));
   }, []);
-  useFollowUpEvents(handleSSEFollowUp, handleSSEReadReceipt, resyncAfterLostLeadDrop);
+  const { overdueReminders, visible: showOverduePopup, dismissAll: dismissOverduePopup, markComplete: markReminderComplete, pushReminder } = useOverdueReminders();
+  const handleSSEReminderDue = useCallback((r: import("@/lib/followUpSync").ReminderSSEPayload) => {
+    pushReminder(r as any);
+  }, [pushReminder]);
+
+  useFollowUpEvents(handleSSEFollowUp, handleSSEReadReceipt, resyncAfterLostLeadDrop, handleSSEReminderDue);
 
   // ── The notification queue ─────────────────────────────────────────────────
   //
@@ -1576,6 +1585,18 @@ export default function ReceptionistDashboard() {
     }
   };
 
+  const handleCreateReminder = async (remindAt: string, note: string) => {
+    if (!selectedLead) return;
+    const res = await fetch("/api/reminders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ leadId: selectedLead.id, remindAt, note: note || null }),
+    });
+    const json = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(json?.message || "Failed to create reminder.");
+    showToast(`Reminder set for ${selectedLead.name || "lead"}`);
+  };
+
   const handleSalesFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedLead) return;
@@ -1875,6 +1896,16 @@ export default function ReceptionistDashboard() {
       className={`recep-panel flex flex-col md:flex-row h-screen overflow-hidden ${t.pageWrap}`}
       style={isDark ? {} : { background: "linear-gradient(135deg, #e8f6fd 0%, #f8fafc 30%, #faf0fb 62%, #f8fafc 78%, #e6fafe 100%)" }}
     >
+      {/* ── Reminder Due Full-Screen Popup ── */}
+      {showOverduePopup && (
+        <ReminderDuePopup
+          reminders={overdueReminders}
+          isDark={isDark}
+          onMarkComplete={markReminderComplete}
+          onDismiss={dismissOverduePopup}
+        />
+      )}
+
       {/* ── TOAST ── */}
       {toastMsg && (
         <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[200] px-6 py-3 rounded-xl shadow-lg flex items-center gap-4 animate-fadeIn border ${toastMsg.color === "green" ? "bg-green-600 border-green-400 text-white" : "bg-blue-600 border-blue-400 text-white"
@@ -3058,6 +3089,9 @@ export default function ReceptionistDashboard() {
                             placeholder="Add follow-up note..."
                             className={`flex-1 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-[12px] sm:text-[13px] outline-none transition-colors border shadow-inner ${t.inputBg} ${t.text} ${t.inputFocus}`}
                           />
+                          <button type="button" title="Set follow-up reminder" onClick={() => setShowReminderModal(true)} className={`w-10 h-10 sm:w-11 sm:h-11 flex-shrink-0 rounded-xl flex items-center justify-center cursor-pointer transition-colors ${isDark ? "text-gray-400 hover:text-purple-400 hover:bg-white/5" : "text-gray-400 hover:text-[#00AEEF] hover:bg-blue-50"}`}>
+                            <FaClock className="text-sm sm:text-base" />
+                          </button>
                           <button type="submit" className={`w-10 h-10 sm:w-11 sm:h-11 text-white rounded-xl flex items-center justify-center cursor-pointer transition-colors shadow-sm flex-shrink-0 ${isDark ? "bg-purple-600 hover:bg-purple-500" : "bg-[#00AEEF] hover:bg-[#0099d4]"}`}>
                             <FaPaperPlane className="text-sm sm:text-base ml-[-2px]" />
                           </button>
@@ -3081,6 +3115,16 @@ export default function ReceptionistDashboard() {
               onReasonChange={(v) => { setLostReason(v); if (lostError) setLostError(""); }}
               onClose={() => setShowLostModal(false)}
               onSubmit={handleMarkLostLead}
+            />
+          )}
+
+          {showReminderModal && selectedLead && (
+            <ReminderModal
+              lead={selectedLead}
+              isDark={isDark}
+              theme={t}
+              onClose={() => setShowReminderModal(false)}
+              onSubmit={handleCreateReminder}
             />
           )}
 

@@ -22,13 +22,14 @@ export async function POST(req: Request) {
 
     // Also log in follow_ups timeline
     await query(
-      `INSERT INTO public.follow_ups (lead_id, message, created_by_name, site_visit_date, organization_id)
-       VALUES ($1, $2, $3, NULL, $4)`,
+      `INSERT INTO public.follow_ups (lead_id, message, created_by_name, created_by_id, site_visit_date, organization_id)
+       VALUES ($1, $2, $3, $5, NULL, $4)`,
       [
         lead_id,
         `📱 WhatsApp sent by ${sender_name}: "${message_preview}"`,
         sender_name,
-        orgId
+        orgId,
+        gate.userId
       ]
     );
 

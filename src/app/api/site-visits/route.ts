@@ -103,18 +103,18 @@ export async function POST(req: Request) {
     }
 
     const result = await query(
-      `INSERT INTO public.site_visits (lead_id, visit_date, created_by, role, status, notes, organization_id)
-       VALUES ($1, $2, $3, $4, 'scheduled', $5, $6)
+      `INSERT INTO public.site_visits (lead_id, visit_date, created_by, created_by_id, role, status, notes, organization_id)
+       VALUES ($1, $2, $3, $7, $4, 'scheduled', $5, $6)
        RETURNING *`,
-      [lead_id, visit_date, created_by, role || "Sales Manager", notes || "", await getOrganizationId()]
+      [lead_id, visit_date, created_by, role || "Sales Manager", notes || "", await getOrganizationId(), gate.userId]
     );
 
     const newVisit = result[0];
 
     // Log the scheduling as a follow-up
     await query(
-      `INSERT INTO follow_ups (lead_id, message, created_by_name, organization_id) VALUES ($1, $2, $3, $4)`,
-      [lead_id, `Site Visit Scheduled for ${new Date(visit_date).toLocaleString("en-IN")}`, created_by, await getOrganizationId()]
+      `INSERT INTO follow_ups (lead_id, message, created_by_name, created_by_id, organization_id) VALUES ($1, $2, $3, $5, $4)`,
+      [lead_id, `Site Visit Scheduled for ${new Date(visit_date).toLocaleString("en-IN")}`, created_by, await getOrganizationId(), gate.userId]
     );
 
     return NextResponse.json({ success: true, data: newVisit });
@@ -195,14 +195,18 @@ export async function PATCH(req: Request) {
     if (status && ["completed", "cancelled", "rescheduled"].includes(status)) {
       const message = `Site Visit marked as ${status.charAt(0).toUpperCase() + status.slice(1)}`;
       await query(
-        `INSERT INTO follow_ups (lead_id, message, created_by_name, organization_id) VALUES ($1, $2, $3, $4)`,
-        [updatedVisit.lead_id, message, "Admin", await getOrganizationId()]
+        `INSERT INTO follow_ups (lead_id, message, created_by_name, created_by_id, organization_id) VALUES ($1, $2, $3, $5, $4)`,
+        [updatedVisit.lead_id, message, "Admin", await getOrganizationId(), gate.userId]
       );
       
       if (status === "completed") {
         await query(
           `UPDATE public.walkin_enquiries SET status = 'Site Visit Done' WHERE id = $1 AND status != 'Closing' AND is_lost_lead = false AND organization_id = $2`,
           [updatedVisit.lead_id, await getOrganizationId()]
+        );
+        await query(
+          `UPDATE public.site_visits SET completed_at = NOW() WHERE id = $1 AND completed_at IS NULL`,
+          [id]
         );
       }
     }

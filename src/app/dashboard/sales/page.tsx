@@ -47,6 +47,9 @@ import SMAssistantDock from "@/components/SMAssistantDock";
 import BookingApplicationView from "@/components/BookingApplicationView";
 import ClosedLeadBookingView from "@/components/ClosedLeadBookingView";
 import LostLeadModal from "@/components/LostLeadModal";
+import ReminderModal from "@/components/ReminderModal";
+import ReminderDuePopup from "@/components/ReminderDuePopup";
+import { useOverdueReminders } from "@/hooks/useOverdueReminders";
 import PermanentLeadDeleteDialog from "@/components/PermanentLeadDeleteDialog";
 import LoanDealForm from "@/components/LoanDealForm";
 import LoanDealView from "@/components/LoanDealView";
@@ -284,7 +287,9 @@ const SALES_POLL_MS = 120_000;
 // ============================================================================
 // SHARED REAL-TIME DATA HOOK
 // ============================================================================
-function useAdminData() {
+function useAdminData(onReminderDue?: (r: import("@/lib/followUpSync").ReminderSSEPayload) => void) {
+  const onReminderDueRef = useRef(onReminderDue);
+  onReminderDueRef.current = onReminderDue;
   const [managers, setManagers] = useState<any[]>([]);
   const [receptionists] = useState<any[]>([]);
   const [allLeads, setAllLeads] = useState<any[]>([]);
@@ -463,7 +468,11 @@ function useAdminData() {
     ));
   }, []);
 
-  useFollowUpEvents(handleSSEFollowUp, handleSSEReadReceipt, fetchAdminData);
+  const handleSSEReminderDue = useCallback((r: import("@/lib/followUpSync").ReminderSSEPayload) => {
+    onReminderDueRef.current?.(r);
+  }, []);
+
+  useFollowUpEvents(handleSSEFollowUp, handleSSEReadReceipt, fetchAdminData, handleSSEReminderDue);
 
   const reconcileFollowUp = useCallback((clientMessageId: string, serverData: any | null) => {
     setFollowUps(prev => prev.map(f =>
@@ -549,7 +558,8 @@ export default function SalesDashboard() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const { managers, receptionists, allLeads, followUps, isLoading, refetch, appendFollowUp, reconcileFollowUp, removeFollowUp } = useAdminData();
+  const { overdueReminders, visible: showOverduePopup, dismissAll: dismissOverduePopup, markComplete: markReminderComplete, pushReminder } = useOverdueReminders();
+  const { managers, receptionists, allLeads, followUps, isLoading, refetch, appendFollowUp, reconcileFollowUp, removeFollowUp } = useAdminData(pushReminder);
 
   // Settings → Additional Features. Read once here and passed down, rather than
   // called again inside SalesManagerView, so the two never disagree mid-render.
@@ -718,6 +728,16 @@ export default function SalesDashboard() {
         background: "linear-gradient(135deg, #e8f6fd 0%, #f8fafc 30%, #faf0fb 62%, #f8fafc 78%, #e6fafe 100%)",
       }}
     >
+      {/* ── Reminder Due Full-Screen Popup ── */}
+      {showOverduePopup && (
+        <ReminderDuePopup
+          reminders={overdueReminders}
+          isDark={isDark}
+          onMarkComplete={markReminderComplete}
+          onDismiss={dismissOverduePopup}
+        />
+      )}
+
       {/* ── SIDEBAR ──
           The markup now lives in components/sales/SalesSidebar.tsx so the
           Settings panel can mount the SAME rail instead of falling back to the
@@ -1255,6 +1275,7 @@ function SalesManagerView({
   const [lostError, setLostError] = useState("");
   const [isSavingLost, setIsSavingLost] = useState(false);
   const [isReopening, setIsReopening] = useState(false);
+  const [showReminderModal, setShowReminderModal] = useState(false);
 
   // ── WhatsApp States ──
   const [isWaModalOpen, setIsWaModalOpen] = useState(false);
@@ -1766,6 +1787,20 @@ function SalesManagerView({
       reconcileFollowUp(clientMessageId, null);
     }
   };
+
+  const handleCreateReminder = async (remindAt: string, note: string) => {
+    if (!selectedLead) return;
+    const res = await fetch("/api/reminders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ leadId: selectedLead.id, remindAt, note: note || null }),
+    });
+    const json = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(json?.message || "Failed to create reminder.");
+    setToastMsg({ title: `Reminder set for ${selectedLead.name || "lead"}`, icon: <FaCheckCircle />, color: "green" });
+    setTimeout(() => setToastMsg(null), 3000);
+  };
+
   const handleSalesFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!selectedLead || isSubmittingSalesForm) return;
@@ -2840,6 +2875,9 @@ function SalesManagerView({
                       placeholder="Add follow-up note..."
                       className={`flex-1 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm outline-none transition-colors border ${t.inputBg} ${t.text} ${t.inputFocus}`}
                     />
+                    <button type="button" title="Set follow-up reminder" onClick={() => setShowReminderModal(true)} className={`w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0 rounded-xl flex items-center justify-center cursor-pointer transition-colors ${isDark ? "text-gray-400 hover:text-purple-400 hover:bg-white/5" : "text-gray-400 hover:text-[#00AEEF] hover:bg-blue-50"}`}>
+                      <FaClock className="text-sm" />
+                    </button>
                     <button type="submit" className={`w-10 h-10 sm:w-12 sm:h-12 text-white rounded-xl flex items-center justify-center cursor-pointer transition-colors shadow-lg flex-shrink-0 ${isDark ? "bg-purple-600 hover:bg-purple-500" : "bg-[#00AEEF] hover:bg-[#0099d4]"}`}><FaPaperPlane className="text-sm ml-[-2px]" /></button>
                   </form>
                 </div>
@@ -2884,6 +2922,16 @@ function SalesManagerView({
             onReasonChange={(value) => { setLostReason(value); if (lostError) setLostError(""); }}
             onClose={() => setShowLostModal(false)}
             onSubmit={handleMarkLostLead}
+          />
+        )}
+
+        {showReminderModal && selectedLead && (
+          <ReminderModal
+            lead={selectedLead}
+            isDark={isDark}
+            theme={t}
+            onClose={() => setShowReminderModal(false)}
+            onSubmit={handleCreateReminder}
           />
         )}
 

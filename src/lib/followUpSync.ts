@@ -26,6 +26,24 @@ export type FollowUpReadSSEPayload = {
   readBy: string;
 };
 
+export type ReminderSSEPayload = {
+  id: number;
+  leadId: number;
+  leadName?: string;
+  leadPhone?: string;
+  assignedUserId: number;
+  assignedUserName?: string;
+  createdByName: string;
+  reminderType: string;
+  note: string | null;
+  remindAt: string;
+  status: string;
+  notifiedAt: string | null;
+  completedAt: string | null;
+  cancelledAt: string | null;
+  createdAt: string;
+};
+
 const FALLBACK_MIN_MS = 5_000;
 const FALLBACK_MAX_MS = 120_000;
 
@@ -38,6 +56,7 @@ export function useFollowUpEvents(
   onNewFollowUp: (followUp: FollowUpSSEPayload) => void,
   onReadReceipt?: (payload: FollowUpReadSSEPayload) => void,
   onFallbackSync?: () => void,
+  onReminderDue?: (reminder: ReminderSSEPayload) => void,
 ) {
   // Stable refs so the EventSource callbacks always see the latest handler
   // without re-creating the stream on every render.
@@ -47,6 +66,8 @@ export function useFollowUpEvents(
   onReadRef.current = onReadReceipt;
   const onFallbackRef = useRef(onFallbackSync);
   onFallbackRef.current = onFallbackSync;
+  const onReminderDueRef = useRef(onReminderDue);
+  onReminderDueRef.current = onReminderDue;
 
   useEffect(() => {
     let source: EventSource | null = null;
@@ -80,6 +101,8 @@ export function useFollowUpEvents(
             onNewRef.current(payload.followUp);
           } else if (payload.type === "followup:read" && payload.ids) {
             onReadRef.current?.(payload);
+          } else if (payload.type === "reminder:due" && payload.reminder) {
+            onReminderDueRef.current?.(payload.reminder);
           }
         } catch { /* malformed event, ignore */ }
       };
@@ -110,6 +133,7 @@ export function useFollowUpEvents(
             const payload = JSON.parse(event.data);
             if (payload.type === "followup:created" && payload.followUp) onNewRef.current(payload.followUp);
             else if (payload.type === "followup:read" && payload.ids) onReadRef.current?.(payload);
+            else if (payload.type === "reminder:due" && payload.reminder) onReminderDueRef.current?.(payload.reminder);
           } catch { /* ignore */ }
         };
         source.onerror = () => {
