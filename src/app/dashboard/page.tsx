@@ -1422,7 +1422,8 @@ function AdminAtlasDashboardContent() {
                 t={theme}
                 title="CP Enquiry"
                 subtitle="Standalone Channel Partner records — CPs registered via the CP Enquiry form"
-                apiView="cp_primary"
+                apiView="cp_standalone"
+                standalone
               />
             </div>
           )}

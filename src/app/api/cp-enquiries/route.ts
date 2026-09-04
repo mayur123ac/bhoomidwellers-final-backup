@@ -153,6 +153,44 @@ const SELECT_SQL_CP_PRIMARY = `
    AND slm.organization_id = cp.organization_id
 `;
 
+// ── CP-standalone query (Admin / Site Head / Receptionist "CP Enquiry" tab) ──
+// Pure channel_partners — NO walkin_enquiries join. One row per CP record.
+// This is the correct data source for "CP Enquiry" = standalone CP records.
+const SELECT_SQL_CP_STANDALONE = `
+  SELECT
+    cp.id   AS channel_partner_id,
+    cp.name                 AS partner_name,
+    cp.company_name         AS partner_company,
+    cp.phone                AS partner_phone,
+    cp.office_address, cp.owner_contact_person, cp.gst_number,
+    cp.rera_registration_no,
+    cp.city AS partner_city, cp.pin_code AS partner_pin_code,
+    cp.status AS cp_status,
+    cp.created_at,
+    cp.created_by,
+    cp.assigned_sourcing_manager_id AS effective_sourcing_manager_id,
+    cp.assigned_sourcing_manager_at AS partner_assigned_at,
+    cp.assigned_sourcing_manager_by AS partner_assigned_by,
+    sm.name     AS sourcing_manager_name,
+    sm.username AS sourcing_manager_username,
+    sm.email    AS sourcing_manager_email,
+    sm.whatsapp_number AS sourcing_manager_phone,
+    cp.assigned_sales_manager_id,
+    cp.assigned_sales_manager_at,
+    cp.assigned_sales_manager_by,
+    slm.name     AS sales_manager_name,
+    slm.username AS sales_manager_username,
+    slm.email    AS sales_manager_email,
+    slm.whatsapp_number AS sales_manager_phone
+  FROM channel_partners cp
+  LEFT JOIN users sm
+    ON sm.id = cp.assigned_sourcing_manager_id
+   AND sm.organization_id = cp.organization_id
+  LEFT JOIN users slm
+    ON slm.id = cp.assigned_sales_manager_id
+   AND slm.organization_id = cp.organization_id
+`;
+
 export async function GET(req: NextRequest) {
   const session = await getServerSession();
   if (!session?.role) {
@@ -171,26 +209,37 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const orgId = await getOrganizationId();
 
-    // ── CP-primary query ─────────────────────────────────────────────────────
-    // Starts from channel_partners so CPs with zero enquiries are visible.
-    //
-    // Sales Manager: forced to their own assigned partners.
-    // Admin / Site Head with ?view=cp_primary: org-wide, all partners.
-    const wantsCpPrimary =
-      role === "sales manager" ||
-      (["admin", "site head", "receptionist"].includes(role) && searchParams.get("view") === "cp_primary");
+    const viewParam = searchParams.get("view");
 
-    if (wantsCpPrimary) {
+    // ── CP-standalone query ──────────────────────────────────────────────────
+    // Pure channel_partners, no walkin_enquiries join. One row per CP.
+    // Used by the "CP Enquiry" tab in Admin, Site Head, Receptionist.
+    if (viewParam === "cp_standalone" && ["admin", "site head", "receptionist"].includes(role)) {
+      const rows = await query(
+        `${SELECT_SQL_CP_STANDALONE} WHERE cp.organization_id = $1 ORDER BY cp.created_at DESC`,
+        [orgId]
+      );
+
+      return jsonCompressed(
+        req,
+        { success: true, data: rows, count: rows.length },
+        { status: 200 }
+      );
+    }
+
+    // ── CP-primary query (Sales Manager) ─────────────────────────────────────
+    // Starts from channel_partners, LEFT JOINs walkin_enquiries.
+    // One row per lead (a CP with N leads = N rows). Sales Manager only.
+    if (role === "sales manager") {
       const params: any[] = [
         CP_SOURCE_VALUES as unknown as string[],  // $1 — JOIN condition
         orgId,                                     // $2 — tenant
+        Number(session._id),                       // $3 — forced scope
       ];
-      const where = [`cp.organization_id = $2`];
-
-      if (role === "sales manager") {
-        params.push(Number(session._id));            // $3 — forced scope
-        where.push(`cp.assigned_sales_manager_id = $${params.length}`);
-      }
+      const where = [
+        `cp.organization_id = $2`,
+        `cp.assigned_sales_manager_id = $3`,
+      ];
 
       const rows = await query(
         `${SELECT_SQL_CP_PRIMARY} WHERE ${where.join(" AND ")} ORDER BY COALESCE(w.created_at, cp.created_at) DESC`,
@@ -199,7 +248,7 @@ export async function GET(req: NextRequest) {
 
       return jsonCompressed(
         req,
-        { success: true, data: rows, count: rows.length, scopedToSelf: role === "sales manager" },
+        { success: true, data: rows, count: rows.length, scopedToSelf: true },
         { status: 200 }
       );
     }

@@ -2130,7 +2130,8 @@ export default function ReceptionistDashboard() {
                 t={t}
                 title="CP Enquiry"
                 subtitle="Channel Partner records registered via the CP Enquiry form"
-                apiView="cp_primary"
+                apiView="cp_standalone"
+                standalone
               />
             </div>
           )}

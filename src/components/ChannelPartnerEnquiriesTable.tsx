@@ -39,8 +39,11 @@ interface Props {
    */
   showSerial?: boolean;
   /** When set, appended as `?view=…` to the /api/cp-enquiries request.
-   *  Use `"cp_primary"` to fetch the CP-primary query (channel_partners first). */
+   *  Use `"cp_standalone"` for pure CP records (no lead join). */
   apiView?: string;
+  /** When true, hide lead-specific columns (Lead No., Client Name, etc.)
+   *  and show only Channel Partner record fields. */
+  standalone?: boolean;
 }
 
 const dash = (t: any) => <span className={t.textFaint}>—</span>;
@@ -106,7 +109,7 @@ const requirementOf = (r: EnquiryRowData) => {
  * from the fetched array, so they only change when the data actually does.
  */
 const EnquiryRow = React.memo(function EnquiryRow({
-  row: r, serial, isDark, t, canReassign, onOpen, onReassign,
+  row: r, serial, isDark, t, canReassign, standalone, onOpen, onReassign,
 }: {
   row: EnquiryRowData;
   /** Position on screen, or null when the Sr. No. column is off. */
@@ -114,6 +117,8 @@ const EnquiryRow = React.memo(function EnquiryRow({
   isDark: boolean;
   t: ThemeTokens;
   canReassign: boolean;
+  /** When true, hide lead-specific cells. */
+  standalone: boolean;
   onOpen: (row: EnquiryRowData) => void;
   onReassign: (row: EnquiryRowData) => void;
 }) {
@@ -126,11 +131,11 @@ const EnquiryRow = React.memo(function EnquiryRow({
       {serial !== null && (
         <td className={`px-3 py-3 whitespace-nowrap ${t.textMuted}`}>{serial}</td>
       )}
-      <td className={`px-3 py-3 font-semibold whitespace-nowrap ${t.text}`}>
-        {/* CP-only rows (from the CP-primary query) have no walkin_enquiry id/sr_no.
-            Show the lead number when one exists, dash when the CP has no linked lead. */}
-        {r.sr_no || r.id ? `#${String(r.sr_no || r.id).padStart(3, "0")}` : dash(t)}
-      </td>
+      {!standalone && (
+        <td className={`px-3 py-3 font-semibold whitespace-nowrap ${t.text}`}>
+          {r.sr_no || r.id ? `#${String(r.sr_no || r.id).padStart(3, "0")}` : dash(t)}
+        </td>
+      )}
       <td className={cell}>{fmtDate(r.created_at) || dash(t)}</td>
       <td className={`px-3 py-3 font-medium whitespace-nowrap ${t.text}`}>
         {cpField(r, "partner_name", "cp_name") || dash(t)}
@@ -147,24 +152,20 @@ const EnquiryRow = React.memo(function EnquiryRow({
       <td className={cell}>{r.rera_registration_no || dash(t)}</td>
       <td className={cell}>{r.partner_city || dash(t)}</td>
       <td className={cell}>{r.partner_pin_code || dash(t)}</td>
-      <td className={`px-3 py-3 font-medium whitespace-nowrap ${t.text}`}>{r.client_name || dash(t)}</td>
-      <td className={cell}>{r.client_phone || dash(t)}</td>
-      <td className={cell}>{r.alt_phone || dash(t)}</td>
-      <td className={cell}>{r.email && r.email !== "N/A" ? r.email : dash(t)}</td>
-      <td className={cell}>{r.preferred_location || dash(t)}</td>
-      <td className={cell}>{r.budget && r.budget !== "Pending" ? r.budget : dash(t)}</td>
-      <td className={cell}>{requirementOf(r) || dash(t)}</td>
+      {!standalone && (
+        <>
+          <td className={`px-3 py-3 font-medium whitespace-nowrap ${t.text}`}>{r.client_name || dash(t)}</td>
+          <td className={cell}>{r.client_phone || dash(t)}</td>
+          <td className={cell}>{r.alt_phone || dash(t)}</td>
+          <td className={cell}>{r.email && r.email !== "N/A" ? r.email : dash(t)}</td>
+          <td className={cell}>{r.preferred_location || dash(t)}</td>
+          <td className={cell}>{r.budget && r.budget !== "Pending" ? r.budget : dash(t)}</td>
+          <td className={cell}>{requirementOf(r) || dash(t)}</td>
+        </>
+      )}
       <td className="px-3 py-3 whitespace-nowrap">
         {r.sourcing_manager_name ? (
-          <>
-            <span className={`font-medium ${t.text}`}>{r.sourcing_manager_name}</span>
-            {/* Inherited from the partner rather than set on this enquiry.
-                Worth marking: it means reassigning the partner moves this
-                lead too, which a per-enquiry assignment would not. */}
-            {r.sourcing_manager_inherited && (
-              <span className={`block text-[9px] mt-0.5 ${t.textFaint}`}>via partner</span>
-            )}
-          </>
+          <span className={`font-medium ${t.text}`}>{r.sourcing_manager_name}</span>
         ) : (
           <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-500">
             Unassigned
@@ -180,10 +181,10 @@ const EnquiryRow = React.memo(function EnquiryRow({
       </td>
       <td className="px-3 py-3 whitespace-nowrap">
         <span className={`px-2.5 py-1 rounded-full text-[10px] font-semibold border ${t.statusAssigned}`}>
-          {r.status || "Assigned"}
+          {r.cp_status || r.status || "Active"}
         </span>
       </td>
-      {canReassign && (
+      {canReassign && !standalone && (
         <td className="px-3 py-3 text-right whitespace-nowrap">
           {/* CP-only rows (no walkin_enquiry id) have no enquiry to reassign. */}
           {r.id ? (
@@ -207,7 +208,7 @@ const EnquiryRow = React.memo(function EnquiryRow({
 });
 
 function ChannelPartnerEnquiriesTable({
-  user, isDark, t, title, subtitle, showSerial = false, apiView,
+  user, isDark, t, title, subtitle, showSerial = false, apiView, standalone = false,
 }: Props) {
   const role = normalizeRole(user?.role);
   const isAdmin = role === "admin";
@@ -330,14 +331,22 @@ function ChannelPartnerEnquiriesTable({
     }
   };
 
-  const columns = useMemo(() => [
-    ...(showSerial ? ["Sr. No."] : []),
-    "Lead No.", "Created", "CP Name", "CP Company", "CP Phone",
-    "Office Address", "Owner / Contact", "GST", "RERA", "CP City", "CP Pin",
-    "Client Name", "Client Phone", "Alt Phone", "Client Email",
-    "Preferred Location", "Budget", "Requirement", "Sourcing Manager", "Sales Manager", "Status",
-    ...(canReassign ? [""] : []),
-  ], [showSerial, canReassign]);
+  const columns = useMemo(() => standalone
+    ? [
+        ...(showSerial ? ["Sr. No."] : []),
+        "Created", "CP Name", "CP Company", "CP Phone",
+        "Office Address", "Owner / Contact", "GST", "RERA", "CP City", "CP Pin",
+        "Sourcing Manager", "Sales Manager", "Status",
+      ]
+    : [
+        ...(showSerial ? ["Sr. No."] : []),
+        "Lead No.", "Created", "CP Name", "CP Company", "CP Phone",
+        "Office Address", "Owner / Contact", "GST", "RERA", "CP City", "CP Pin",
+        "Client Name", "Client Phone", "Alt Phone", "Client Email",
+        "Preferred Location", "Budget", "Requirement", "Sourcing Manager", "Sales Manager", "Status",
+        ...(canReassign ? [""] : []),
+      ],
+  [showSerial, canReassign, standalone]);
 
   const skeletonWidths = useMemo(
     () => columns.map(c => COLUMN_BAR_WIDTHS[c] ?? 64),
@@ -499,12 +508,13 @@ function ChannelPartnerEnquiriesTable({
 
             {!loading && visible.map((r, i) => (
               <EnquiryRow
-                key={r.id ?? `cp-${r.channel_partner_id}-${i}`}
+                key={standalone ? `cp-${r.channel_partner_id}` : (r.id ?? `cp-${r.channel_partner_id}-${i}`)}
                 row={r}
                 serial={showSerial ? i + 1 : null}
                 isDark={isDark}
                 t={t}
                 canReassign={canReassign}
+                standalone={standalone}
                 onOpen={openDetail}
                 onReassign={openReassign}
               />
@@ -530,14 +540,18 @@ function ChannelPartnerEnquiriesTable({
               <div className="flex items-start justify-between mb-5">
                 <div>
                   <h2 className={`text-lg font-bold tracking-tight ${t.text}`}>
-                    {detail.sr_no || detail.id
-                      ? `Enquiry #${String(detail.sr_no || detail.id).padStart(3, "0")} — ${detail.client_name || "No client yet"}`
-                      : cpField(detail, "partner_name", "cp_name") || "Channel Partner"}
+                    {standalone
+                      ? cpField(detail, "partner_name", "cp_name") || "Channel Partner"
+                      : detail.sr_no || detail.id
+                        ? `Enquiry #${String(detail.sr_no || detail.id).padStart(3, "0")} — ${detail.client_name || "No client yet"}`
+                        : cpField(detail, "partner_name", "cp_name") || "Channel Partner"}
                   </h2>
                   <p className={`text-[11px] mt-0.5 ${t.textMuted}`}>
-                    {detail.sr_no || detail.id
-                      ? `Channel Partner enquiry · created ${fmtDate(detail.created_at, true) || "—"}`
-                      : `CP registered · ${fmtDate(detail.created_at, true) || "—"} · no client lead yet`}
+                    {standalone
+                      ? `CP registered · ${fmtDate(detail.created_at, true) || "—"}`
+                      : detail.sr_no || detail.id
+                        ? `Channel Partner enquiry · created ${fmtDate(detail.created_at, true) || "—"}`
+                        : `CP registered · ${fmtDate(detail.created_at, true) || "—"} · no client lead yet`}
                   </p>
                 </div>
                 <button onClick={() => setDetail(null)} className={`p-1.5 rounded-full cursor-pointer transition-colors ${isDark ? "hover:bg-white/10" : "hover:bg-black/5"} ${t.textMuted}`}>
@@ -605,6 +619,7 @@ function ChannelPartnerEnquiriesTable({
                     ["Office Address", detail.office_address],
                     ["CP City", detail.partner_city],
                     ["CP Pin Code", detail.partner_pin_code],
+                    ...(standalone ? [["Status", detail.cp_status]] : []),
                   ],
                 },
                 {
@@ -634,7 +649,7 @@ function ChannelPartnerEnquiriesTable({
                     ["Logged By", detail.assigned_receptionist],
                   ],
                 },
-              ].map(section => (
+              ].filter(section => !standalone || !["Client Information", "Property Requirement"].includes(section.heading)).map(section => (
                 <div
                   key={section.heading}
                   className={`mb-5 rounded-2xl p-4 transition-colors ${section.highlight
