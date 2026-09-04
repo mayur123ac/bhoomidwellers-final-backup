@@ -975,10 +975,10 @@ function AdminAtlasDashboardContent() {
     { id: "dashboard", icon: FaThLarge, label: "Overview" },
     { id: "revenue_intelligence", icon: FaFileInvoiceDollar, label: "Revenue Intelligence" },
     { id: "inventory", icon: FaBoxes, label: "Inventory" },
+    { id: "cp_enquiry", icon: FaHandshake, label: "CP Enquiry" },
+    { id: "cp_linked_leads", icon: FaHandshake, label: "CP Linked with Leads" },
     { id: "channel_partners", icon: FaUserTie, label: "Channel Partners" },
     { id: "cp_management", icon: FaHandshake, label: "CP Management" },
-    { id: "cp_linked_leads", icon: FaHandshake, label: "CP Linked with Leads" },
-    { id: "cp_enquiry", icon: FaHandshake, label: "CP Enquiry" },
     { id: "banking_info", icon: FaUniversity, label: "Banking Info" },
     { id: "cp_chat", icon: FaComments, label: "CP Chat" },
     { id: "receptionist", icon: FaClipboardList, label: "Receptionist" },
@@ -1012,11 +1012,10 @@ function AdminAtlasDashboardContent() {
       return false;
     }
 
-    // Channel Partners holds both business-profile data and commission rates.
-    // Read access extends to Site Head; the rate column and the commission
-    // drill-down stay behind canSeePartnerCommercials inside the view, and the
-    // API strips the rate from the payload for roles that lack it.
-    if (item.id === "channel_partners" && !canViewPartners(userRole)) {
+    // Channel Partners is the full management/registry view with commission
+    // rates, lead counts, and CRUD. Admin-only — Site Head uses CP Enquiry
+    // (standalone table) instead.
+    if (item.id === "channel_partners" && !isAdmin) {
       return false;
     }
 
@@ -1061,8 +1060,9 @@ function AdminAtlasDashboardContent() {
   // The two pinned entries (Bhoomi AI, Settings) sit in the bottom block and
   // carry no heading.
   const menuGroups: Record<string, string> = {
-    dashboard: "Workspace", revenue_intelligence: "Workspace", inventory: "Workspace", channel_partners: "Workspace",
-    cp_management: "Workspace", cp_linked_leads: "Workspace", cp_enquiry: "Workspace", cp_chat: "Workspace",
+    dashboard: "Workspace", revenue_intelligence: "Workspace", inventory: "Workspace",
+    cp_enquiry: "Workspace", cp_linked_leads: "Workspace", channel_partners: "Workspace",
+    cp_management: "Workspace", banking_info: "Workspace", cp_chat: "Workspace",
     receptionist: "Team", sales: "Team", site_head: "Team", live_activity: "Insights",
     site_visit_overview: "Insights", attendance: "Insights", monitoring: "Insights", geo: "Insights",
     caller: "Admin", employees: "Admin", notifications: "Admin"
@@ -1097,6 +1097,7 @@ function AdminAtlasDashboardContent() {
     }
   };
 
+  const [isFocusMode, setIsFocusMode] = useState(false);
   return (
     <div
       className={`flex h-screen font-sans overflow-hidden relative transition-colors duration-300 ${theme.pageWrap}`}
@@ -1112,19 +1113,19 @@ function AdminAtlasDashboardContent() {
         />
       )}
 
-      {/* ── SIDEBAR ──
-          Shared with /dashboard/employees and the Settings panel so the rail
-          cannot drift between the three routes. */}
-      {/* Desktop rail only — mobile drawer is handled by AdminMobileDrawer below */}
-      <AdminSidebar
-        items={menuItems}
-        activeId={activeView}
-        groups={menuGroups}
-        isHovered={isSidebarHovered}
-        onHoverChange={setIsSidebarHovered}
-        onSelect={(item) => { handleMenuClick(item.id); }}
-        orgName={sidebarOrgName}
-      />
+      {/* ── SIDEBAR ── 
+          Hidden entirely when isFocusMode is true to maximize workspace */}
+      {!isFocusMode && (
+        <AdminSidebar
+          items={menuItems}
+          activeId={activeView}
+          groups={menuGroups}
+          isHovered={isSidebarHovered}
+          onHoverChange={setIsSidebarHovered}
+          onSelect={(item) => { handleMenuClick(item.id); }}
+          orgName={sidebarOrgName}
+        />
+      )}
 
       {/* Mobile drawer — slides from right, matches Sales Manager MobileNavDrawer */}
       <AdminMobileDrawer
@@ -1152,204 +1153,199 @@ function AdminAtlasDashboardContent() {
         .sidebar-scroll::-webkit-scrollbar-thumb:hover{background:rgba(217,70,168,0.5)}
       `}} />
 
-      <div className={`flex-1 flex flex-col pl-0 md:pl-[72px] h-screen overflow-hidden ${theme.mainBg}`}>
-        <AppHeader
-          isDark={isDark}
-          context={activeView.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
-          role={user?.role || "Admin"}
-        >
-          <div className="flex items-center gap-4 flex-shrink-0 relative z-[50]" ref={topbarRef}>
-            {/* Desktop-only controls: hidden on mobile */}
-            <div className="hidden md:flex items-center gap-4">
-              <HeaderClock isDark={isDark} />
-              <div
-                className={`w-5 h-5 flex items-center justify-center cursor-pointer ${isDark ? "text-gray-400" : "text-[#6B7280]"} hover:text-[#9E217B] transition-colors`}
-                onClick={toggleTheme} role="button"
-                aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}>
-                {isDark ? <SunIcon /> : <MoonIcon />}
-              </div>
-            </div>
+      {/* Dynamic padding: Removes the md:pl-[72px] margin when in focus mode */}
+      <div className={`flex-1 flex flex-col pl-0 ${!isFocusMode ? "md:pl-[72px]" : ""} h-screen overflow-hidden ${theme.mainBg}`}>
 
-            {/* Attendance: visible on all screen sizes */}
-            <AttendanceBadge
-              timeIn={timeIn}
-              isMarkedPresent={isMarkedPresent}
-              onLogout={handleLogout} />
-
-            {/* CRM System Updates */}
-            <CrmUpdatesNotification user={user} theme={theme} isDark={isDark} isOpen={activePopup === "updates"} onToggle={() => setActivePopup(activePopup === "updates" ? null : "updates")} />
-
-            <div className="relative">
-              <div className="relative cursor-pointer" onClick={() => { setActivePopup(activePopup === "notifications" ? null : "notifications"); setNotifCount(0); }}>
-                <FaBell className={`${theme.textMuted} hover:text-[#9E217B] transition-colors w-5 h-5`} />
-                {notifCount > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-[#9E217B] rounded-full text-[9px] font-black text-white flex items-center justify-center">
-                    {notifCount > 9 ? "9+" : notifCount}
-                  </span>
-                )}
-              </div>
-
-              <AnimatePresence>
-                {activePopup === "notifications" && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -8, scale: 0.98 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: -6, scale: 0.98 }}
-                    transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-                    className={`fixed right-4 top-14 md:absolute md:top-12 md:right-0 w-[320px] max-w-[calc(100vw-2rem)] border rounded-xl shadow-2xl flex flex-col z-50 overflow-hidden ${theme.dropdown}`} style={theme.dropdownGlass}
-                  >
-                    {/* Three at most, newest first, and no internal scrollbar.
-                        Clicking a row opens that lead's detail panel; the footer
-                        opens the Notification Center with the whole queue. */}
-                    <NotificationPopover
-                      title="Recent Notifications"
-                      caption="New leads and upcoming site visits"
-                      items={notificationHistory}
-                      footerNoun="notifications"
-                      accent="green"
-                      theme={notifPopoverTheme}
-                      onOpenLead={(n) => openLeadFromNotification(n.leadId)}
-                      onDismiss={(n) => notifications.dismiss(n.id)}
-                      onSeeAll={() => {
-                        setActivePopup(null);
-                        setNotificationFilter("all");
-                        setActiveView("notification_center");
-                      }}
-                    />
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-
-            {/* Profile icon — desktop only */}
-            <div className="relative hidden md:block">
-              <div onClick={() => setActivePopup(activePopup === "profile" ? null : "profile")}
-                className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm cursor-pointer shadow-sm hover:opacity-80 transition-opacity border
-                  ${isDark ? "border-[#9E217B]/40 text-[#d946a8] bg-[#9E217B]/15" : "border-[#9E217B]/40 text-[#9E217B] bg-[#9E217B]/10"}`}>
-                <UserAvatar name={user?.name} fallback="A" alt="" />
-              </div>
-              <AnimatePresence>
-                {activePopup === "profile" && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 8, scale: 0.98 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 8, scale: 0.98 }}
-                    transition={{ duration: 0.18, ease: "easeOut" }}
-                    className={`absolute top-12 right-0 w-[250px] rounded-[20px] p-4 z-[200] border shadow-2xl ${isDark ? "bg-[#1C1C1E]/95 border-white/10" : "bg-white/95 border-black/5"}`}
-                    style={{ backdropFilter: "blur(24px) saturate(180%)" }}
-                  >
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center text-[17px] font-semibold flex-shrink-0 ${isDark ? "bg-[#9E217B]/20 text-[#d946a8]" : "bg-purple-100 text-purple-900"}`}>
-                        {(user?.name || "Admin").charAt(0).toUpperCase()}
-                      </div>
-                      <div className="flex flex-col overflow-hidden">
-                        <p className={`font-semibold text-[14px] tracking-tight truncate leading-tight ${theme.text}`}>{user?.name || "Admin"}</p>
-                        <p className={`text-[12px] truncate mt-[1px] ${theme.textMuted}`}>{user?.email || "admin@bhoomi.com"}</p>
-                        <p className={`text-[12px] truncate ${theme.textMuted}`}>{orgName || "Bhoomi Dwellers"}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3 mb-4">
-                      <span className={`px-2 py-0.5 rounded text-[11px] font-medium border ${isDark ? "bg-[#9E217B]/10 text-[#d946a8] border-[#9E217B]/30" : "bg-purple-50 text-purple-800 border-purple-200"}`}>
-                        {user?.role || "Admin"}
-                      </span>
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"></span>
-                        <span className={`text-[12px] font-medium ${theme.textMuted}`}>Active</span>
-                      </div>
-                    </div>
-                    <hr className={`-mx-4 border-0 border-t ${isDark ? "border-white/10" : "border-black/5"}`} />
-                    <div className="flex flex-col py-1.5">
-                      <button
-                        onClick={() => { setActivePopup(null); router.push("/dashboard/settings/profile"); }}
-                        className={`w-full flex items-center justify-between py-2.5 px-2 -mx-2 rounded-xl transition-colors cursor-pointer group ${isDark ? "hover:bg-white/5" : "hover:bg-black/[0.04]"}`}
-                      >
-                        <div className={`flex items-center gap-2.5 ${theme.text}`}>
-                          <FiUser className={`w-4 h-4 ${theme.textMuted}`} />
-                          <span className="text-[13px] font-medium">Account Settings</span>
-                        </div>
-                        <FiChevronRight className={`w-3.5 h-3.5 ${theme.textMuted}`} />
-                      </button>
-                      <hr className={`border-0 border-t my-0.5 ${isDark ? "border-white/10" : "border-black/5"}`} />
-                      <button
-                        onClick={() => { setActivePopup(null); }}
-                        className={`w-full flex items-center justify-between py-2.5 px-2 -mx-2 rounded-xl transition-colors cursor-pointer group ${isDark ? "hover:bg-white/5" : "hover:bg-black/[0.04]"}`}
-                      >
-                        <div className={`flex items-center gap-2.5 ${theme.text}`}>
-                          <FiHelpCircle className={`w-4 h-4 ${theme.textMuted}`} />
-                          <span className="text-[13px] font-medium">Help & Support</span>
-                        </div>
-                        <span className={`px-2 py-0.5 rounded-md text-[8px] font-small border ${isDark ? "bg-white/10 text-white/60 border-white/10" : "bg-gray-100 text-gray-600 border-gray-200"}`}>Coming Soon</span>
-                      </button>
-                    </div>
-                    <hr className={`-mx-4 border-0 border-t mb-2.5 mt-1 ${isDark ? "border-white/10" : "border-black/5"}`} />
-                    <button
-                      onClick={handleLogout}
-                      className={`w-full flex items-center gap-2.5 py-2.5 px-3 rounded-[12px] font-semibold text-[13px] transition-colors cursor-pointer ${isDark ? "text-red-400 bg-red-500/10 hover:bg-red-500/20" : "text-red-600 bg-red-50 hover:bg-red-100"}`}
-                    >
-                      <FiLogOut className="w-4 h-4" />
-                      Log Out
-                    </button>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-
-            {/* Hamburger — mobile only, last item to match Sales Manager layout */}
-            <button
-              type="button"
-              onClick={() => setIsMobileSidebarOpen(true)}
-              className={`md:hidden h-8 w-8 sm:h-9 sm:w-9 flex-shrink-0 rounded-full sm:rounded-lg border border-transparent sm:border flex items-center justify-center transition-colors duration-150 cursor-pointer ${isDark ? "bg-white/10 text-[#EBEBF5] sm:bg-[#1C1C2A] sm:border-[#2A2A38] sm:text-yellow-300 hover:bg-white/20" : "bg-black/5 text-[#3C3C43] sm:bg-[#F1F5F9] sm:border-[#9CA3AF] sm:text-[#1A1A1A] hover:bg-black/10"} sm:hover:bg-[inherit]`}
-              aria-label="Open navigation menu"
-            >
-              <Menu className="w-4 h-4 sm:w-5 sm:h-5" />
-            </button>
-
-            {/* 👇 NEW: UPDATED POPUP TOAST WITH DYNAMIC ICONS 👇 */}
-            {activeNotif && (
-              <div className="absolute top-[68px] right-4 z-[999] animate-fadeIn">
+        {/* Hide AppHeader globally in focus mode to give 100% height to the detail panel, 
+            OR leave it visible if you want the global top bar to remain. */}
+        {!isFocusMode && (
+          <AppHeader
+            isDark={isDark}
+            context={activeView.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
+            role={user?.role || "Admin"}
+          >
+            <div className="flex items-center gap-4 flex-shrink-0 relative z-[50]" ref={topbarRef}>
+              {/* Desktop-only controls: hidden on mobile */}
+              <div className="hidden md:flex items-center gap-4">
+                <HeaderClock isDark={isDark} />
                 <div
-                  role={activeNotif.leadId ? "button" : undefined}
-                  tabIndex={activeNotif.leadId ? 0 : undefined}
-                  // The toast opens the same Lead Detail panel as its dropdown
-                  // row. It carries the lead id from the server feed, so this is
-                  // the same authorized open — not a guess from the text.
-                  onClick={activeNotif.leadId ? () => openLeadFromNotification(activeNotif.leadId) : undefined}
-                  onKeyDown={activeNotif.leadId ? (e) => {
-                    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openLeadFromNotification(activeNotif.leadId); }
-                  } : undefined}
-                  className={`flex items-start gap-3 px-4 py-3 sm:py-4 rounded-xl shadow-2xl border min-w-[280px] max-w-[360px] ${activeNotif.leadId ? "cursor-pointer" : ""}
-                  ${isDark ? "bg-[#1a1a1a] border-[#333]" : "bg-white border-[#E5E7EB]"}`}
-                  style={{ boxShadow: "0 8px 32px rgba(0,0,0,0.18)" }}>
-
-                  {/* Dynamic Icon Box */}
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5 ${activeNotif.type === "visit" ? "bg-orange-500" : "bg-[#25D366]"}`}>
-                    {activeNotif.type === "visit" ? (
-                      <FaCalendarAlt className="text-white text-lg" />
-                    ) : (
-                      <FaBriefcase className="text-white text-lg" />
-                    )}
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-xs font-bold truncate ${isDark ? "text-white" : "text-[#1A1A1A]"}`}>{activeNotif.line1}</p>
-                    <p className={`text-[11px] mt-0.5 truncate ${isDark ? "text-gray-400" : "text-[#6B7280]"}`}>{activeNotif.line2}</p>
-                  </div>
-                  <button onClick={(e) => { e.stopPropagation(); setActiveNotif(null); }} className={`flex-shrink-0 mt-0.5 p-0.5 rounded cursor-pointer transition-colors ${isDark ? "text-gray-500 hover:text-gray-300" : "text-gray-400 hover:text-gray-600"}`}>
-                    <FaTimes className="text-[10px]" />
-                  </button>
+                  className={`w-5 h-5 flex items-center justify-center cursor-pointer ${isDark ? "text-gray-400" : "text-[#6B7280]"} hover:text-[#9E217B] transition-colors`}
+                  onClick={toggleTheme} role="button"
+                  aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}>
+                  {isDark ? <SunIcon /> : <MoonIcon />}
                 </div>
               </div>
-            )}
-          </div>
-        </AppHeader>
+
+              {/* Attendance: visible on all screen sizes */}
+              <AttendanceBadge
+                timeIn={timeIn}
+                isMarkedPresent={isMarkedPresent}
+                onLogout={handleLogout} />
+
+              {/* CRM System Updates */}
+              <CrmUpdatesNotification user={user} theme={theme} isDark={isDark} isOpen={activePopup === "updates"} onToggle={() => setActivePopup(activePopup === "updates" ? null : "updates")} />
+
+              <div className="relative">
+                <div className="relative cursor-pointer" onClick={() => { setActivePopup(activePopup === "notifications" ? null : "notifications"); setNotifCount(0); }}>
+                  <FaBell className={`${theme.textMuted} hover:text-[#9E217B] transition-colors w-5 h-5`} />
+                  {notifCount > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-[#9E217B] rounded-full text-[9px] font-black text-white flex items-center justify-center">
+                      {notifCount > 9 ? "9+" : notifCount}
+                    </span>
+                  )}
+                </div>
+
+                <AnimatePresence>
+                  {activePopup === "notifications" && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -8, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                      transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                      className={`fixed right-4 top-14 md:absolute md:top-12 md:right-0 w-[320px] max-w-[calc(100vw-2rem)] border rounded-xl shadow-2xl flex flex-col z-50 overflow-hidden ${theme.dropdown}`} style={theme.dropdownGlass}
+                    >
+                      <NotificationPopover
+                        title="Recent Notifications"
+                        caption="New leads and upcoming site visits"
+                        items={notificationHistory}
+                        footerNoun="notifications"
+                        accent="green"
+                        theme={notifPopoverTheme}
+                        onOpenLead={(n) => openLeadFromNotification(n.leadId)}
+                        onDismiss={(n) => notifications.dismiss(n.id)}
+                        onSeeAll={() => {
+                          setActivePopup(null);
+                          setNotificationFilter("all");
+                          setActiveView("notification_center");
+                        }}
+                      />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              {/* Profile icon — desktop only */}
+              <div className="relative hidden md:block">
+                <div onClick={() => setActivePopup(activePopup === "profile" ? null : "profile")}
+                  className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm cursor-pointer shadow-sm hover:opacity-80 transition-opacity border
+                    ${isDark ? "border-[#9E217B]/40 text-[#d946a8] bg-[#9E217B]/15" : "border-[#9E217B]/40 text-[#9E217B] bg-[#9E217B]/10"}`}>
+                  <UserAvatar name={user?.name} fallback="A" alt="" />
+                </div>
+                <AnimatePresence>
+                  {activePopup === "profile" && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 8, scale: 0.98 }}
+                      transition={{ duration: 0.18, ease: "easeOut" }}
+                      className={`absolute top-12 right-0 w-[250px] rounded-[20px] p-4 z-[200] border shadow-2xl ${isDark ? "bg-[#1C1C1E]/95 border-white/10" : "bg-white/95 border-black/5"}`}
+                      style={{ backdropFilter: "blur(24px) saturate(180%)" }}
+                    >
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-[17px] font-semibold flex-shrink-0 ${isDark ? "bg-[#9E217B]/20 text-[#d946a8]" : "bg-purple-100 text-purple-900"}`}>
+                          {(user?.name || "Admin").charAt(0).toUpperCase()}
+                        </div>
+                        <div className="flex flex-col overflow-hidden">
+                          <p className={`font-semibold text-[14px] tracking-tight truncate leading-tight ${theme.text}`}>{user?.name || "Admin"}</p>
+                          <p className={`text-[12px] truncate mt-[1px] ${theme.textMuted}`}>{user?.email || "admin@bhoomi.com"}</p>
+                          <p className={`text-[12px] truncate ${theme.textMuted}`}>{orgName || "Bhoomi Dwellers"}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 mb-4">
+                        <span className={`px-2 py-0.5 rounded text-[11px] font-medium border ${isDark ? "bg-[#9E217B]/10 text-[#d946a8] border-[#9E217B]/30" : "bg-purple-50 text-purple-800 border-purple-200"}`}>
+                          {user?.role || "Admin"}
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"></span>
+                          <span className={`text-[12px] font-medium ${theme.textMuted}`}>Active</span>
+                        </div>
+                      </div>
+                      <hr className={`-mx-4 border-0 border-t ${isDark ? "border-white/10" : "border-black/5"}`} />
+                      <div className="flex flex-col py-1.5">
+                        <button
+                          onClick={() => { setActivePopup(null); router.push("/dashboard/settings/profile"); }}
+                          className={`w-full flex items-center justify-between py-2.5 px-2 -mx-2 rounded-xl transition-colors cursor-pointer group ${isDark ? "hover:bg-white/5" : "hover:bg-black/[0.04]"}`}
+                        >
+                          <div className={`flex items-center gap-2.5 ${theme.text}`}>
+                            <FiUser className={`w-4 h-4 ${theme.textMuted}`} />
+                            <span className="text-[13px] font-medium">Account Settings</span>
+                          </div>
+                          <FiChevronRight className={`w-3.5 h-3.5 ${theme.textMuted}`} />
+                        </button>
+                        <hr className={`border-0 border-t my-0.5 ${isDark ? "border-white/10" : "border-black/5"}`} />
+                        <button
+                          onClick={() => { setActivePopup(null); }}
+                          className={`w-full flex items-center justify-between py-2.5 px-2 -mx-2 rounded-xl transition-colors cursor-pointer group ${isDark ? "hover:bg-white/5" : "hover:bg-black/[0.04]"}`}
+                        >
+                          <div className={`flex items-center gap-2.5 ${theme.text}`}>
+                            <FiHelpCircle className={`w-4 h-4 ${theme.textMuted}`} />
+                            <span className="text-[13px] font-medium">Help & Support</span>
+                          </div>
+                          <span className={`px-2 py-0.5 rounded-md text-[8px] font-small border ${isDark ? "bg-white/10 text-white/60 border-white/10" : "bg-gray-100 text-gray-600 border-gray-200"}`}>Coming Soon</span>
+                        </button>
+                      </div>
+                      <hr className={`-mx-4 border-0 border-t mb-2.5 mt-1 ${isDark ? "border-white/10" : "border-black/5"}`} />
+                      <button
+                        onClick={handleLogout}
+                        className={`w-full flex items-center gap-2.5 py-2.5 px-3 rounded-[12px] font-semibold text-[13px] transition-colors cursor-pointer ${isDark ? "text-red-400 bg-red-500/10 hover:bg-red-500/20" : "text-red-600 bg-red-50 hover:bg-red-100"}`}
+                      >
+                        <FiLogOut className="w-4 h-4" />
+                        Log Out
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              {/* Hamburger — mobile only, last item to match Sales Manager layout */}
+              <button
+                type="button"
+                onClick={() => setIsMobileSidebarOpen(true)}
+                className={`md:hidden h-8 w-8 sm:h-9 sm:w-9 flex-shrink-0 rounded-full sm:rounded-lg border border-transparent sm:border flex items-center justify-center transition-colors duration-150 cursor-pointer ${isDark ? "bg-white/10 text-[#EBEBF5] sm:bg-[#1C1C2A] sm:border-[#2A2A38] sm:text-yellow-300 hover:bg-white/20" : "bg-black/5 text-[#3C3C43] sm:bg-[#F1F5F9] sm:border-[#9CA3AF] sm:text-[#1A1A1A] hover:bg-black/10"} sm:hover:bg-[inherit]`}
+                aria-label="Open navigation menu"
+              >
+                <Menu className="w-4 h-4 sm:w-5 sm:h-5" />
+              </button>
+
+              {/* Popup Toast */}
+              {activeNotif && (
+                <div className="absolute top-[68px] right-4 z-[999] animate-fadeIn">
+                  <div
+                    role={activeNotif.leadId ? "button" : undefined}
+                    tabIndex={activeNotif.leadId ? 0 : undefined}
+                    onClick={activeNotif.leadId ? () => openLeadFromNotification(activeNotif.leadId) : undefined}
+                    onKeyDown={activeNotif.leadId ? (e) => {
+                      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openLeadFromNotification(activeNotif.leadId); }
+                    } : undefined}
+                    className={`flex items-start gap-3 px-4 py-3 sm:py-4 rounded-xl shadow-2xl border min-w-[280px] max-w-[360px] ${activeNotif.leadId ? "cursor-pointer" : ""}
+                    ${isDark ? "bg-[#1a1a1a] border-[#333]" : "bg-white border-[#E5E7EB]"}`}
+                    style={{ boxShadow: "0 8px 32px rgba(0,0,0,0.18)" }}>
+
+                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5 ${activeNotif.type === "visit" ? "bg-orange-500" : "bg-[#25D366]"}`}>
+                      {activeNotif.type === "visit" ? (
+                        <FaCalendarAlt className="text-white text-lg" />
+                      ) : (
+                        <FaBriefcase className="text-white text-lg" />
+                      )}
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-xs font-bold truncate ${isDark ? "text-white" : "text-[#1A1A1A]"}`}>{activeNotif.line1}</p>
+                      <p className={`text-[11px] mt-0.5 truncate ${isDark ? "text-gray-400" : "text-[#6B7280]"}`}>{activeNotif.line2}</p>
+                    </div>
+                    <button onClick={(e) => { e.stopPropagation(); setActiveNotif(null); }} className={`flex-shrink-0 mt-0.5 p-0.5 rounded cursor-pointer transition-colors ${isDark ? "text-gray-500 hover:text-gray-300" : "text-gray-400 hover:text-gray-600"}`}>
+                      <FaTimes className="text-[10px]" />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </AppHeader>
+        )}
 
         <main className={`flex-1 overflow-hidden transition-colors duration-300 ${theme.mainBg}`}>
-          {/* Bhoomi AI owns its own dark canvas and expects to fill the height it
-              is given — `main` is already flex-1/overflow-hidden, so it needs no
-              wrapper. The panel handles its own RBAC state: /api/admin/ai/chat
-              answers a role it does not serve with a readable message, which the
-              panel shows in place of the composer. */}
           {activeView === "ai" && <BhoomiAiPanel isDark={isDark} t={theme} user={user} />}
+
           {activeView === "dashboard" && <DashboardOverview refetch={refetch} managers={managers} siteHeads={siteHeads} allLeads={allLeads} isLoading={isLoading} user={user} theme={theme} isDark={isDark} receptionists={receptionists} followUps={followUps} onNavigateToSales={(lead: any) => {
             const isSiteHead = siteHeads.some((sh: any) => sh.name === lead.assigned_to);
             const isReceptionist = receptionists.some((r: any) => r.name === lead.assigned_receptionist);
@@ -1357,6 +1353,7 @@ function AdminAtlasDashboardContent() {
             localStorage.setItem("crm_drill_lead", JSON.stringify({ ...lead, _drillTab: targetTab }));
             setActiveView(targetTab);
           }} />}
+
           {activeView === "revenue_intelligence" && (
             isAdmin ? (
               <RevenueIntelligenceView isDark={isDark} theme={theme} />
@@ -1368,6 +1365,7 @@ function AdminAtlasDashboardContent() {
               </div>
             )
           )}
+
           {activeView === "inventory" && (
             <div className="flex flex-col h-full overflow-hidden p-2">
               <InventoryManagementView user={user} isDark={isDark} t={theme}
@@ -1375,10 +1373,7 @@ function AdminAtlasDashboardContent() {
                 onOpenBooking={openBookingFromInventory} />
             </div>
           )}
-          {/* The Channel Partner conversation, rendered from the same component
-              the Sourcing Manager panel uses and fed by the same organization-
-              scoped endpoints — Admin reads the identical thread: visit cards,
-              messages, customer updates and booking updates. */}
+
           {activeView === "cp_chat" && (
             canViewPartners(userRole) ? (
               <div className="h-full">
@@ -1392,58 +1387,33 @@ function AdminAtlasDashboardContent() {
               </div>
             )
           )}
+
           {activeView === "cp_management" && (
             <div className="h-full">
-              <ChannelPartnerEnquiriesTable
-                user={user}
-                isDark={isDark}
-                t={theme}
-                title="Channel Partner Management"
-                subtitle="All CP-linked leads — filter by Sourcing Manager and reassign"
-              />
+              <ChannelPartnerEnquiriesTable user={user} isDark={isDark} t={theme} title="Channel Partner Management" subtitle="All CP-linked leads — filter by Sourcing Manager and reassign" />
             </div>
           )}
+
           {activeView === "cp_linked_leads" && (
             <div className="h-full">
-              <ChannelPartnerEnquiriesTable
-                user={user}
-                isDark={isDark}
-                t={theme}
-                title="CP Linked with Leads"
-                subtitle="Customer leads sourced through a Channel Partner"
-              />
+              <ChannelPartnerEnquiriesTable user={user} isDark={isDark} t={theme} title="CP Linked with Leads" subtitle="Customer leads sourced through a Channel Partner" />
             </div>
           )}
+
           {activeView === "cp_enquiry" && (
             <div className="h-full">
-              <ChannelPartnerEnquiriesTable
-                user={user}
-                isDark={isDark}
-                t={theme}
-                title="CP Enquiry"
-                subtitle="Standalone Channel Partner records — CPs registered via the CP Enquiry form"
-                apiView="cp_standalone"
-                standalone
-              />
+              <ChannelPartnerEnquiriesTable user={user} isDark={isDark} t={theme} title="CP Enquiry" subtitle="Standalone Channel Partner records — CPs registered via the CP Enquiry form" apiView="cp_standalone" standalone />
             </div>
           )}
+
           {activeView === "banking_info" && (
             <div className="h-full">
-              <BankerVisitsTable
-                user={user}
-                isDark={isDark}
-                t={theme}
-                title="Banking Info"
-                subtitle="All banker visits — see which Sales Manager each visit is assigned to"
-              />
+              <BankerVisitsTable user={user} isDark={isDark} t={theme} title="Banking Info" subtitle="All banker visits — see which Sales Manager each visit is assigned to" />
             </div>
           )}
+
           {activeView === "channel_partners" && (
             canViewPartners(userRole) ? (
-              // Permissions come from the role, not from this panel: Admin gets
-              // edit + delete, Sales Manager keeps edit (and the commission
-              // columns / rate queue), Site Head is read-only with no commercial
-              // figures. The API applies the same gates independently.
               <ChannelPartnerListView user={user} isDark={isDark} t={theme} />
             ) : (
               <div className="flex items-center justify-center h-full flex-col gap-2">
@@ -1453,24 +1423,33 @@ function AdminAtlasDashboardContent() {
               </div>
             )
           )}
+
           {activeView === "sales" && <AdminSalesView managers={managers} allLeads={allLeads} followUps={followUps} isLoading={isLoading} adminUser={user} refetch={refetch} appendFollowUp={appendFollowUp} reconcileFollowUp={reconcileFollowUp} removeFollowUp={removeFollowUp} theme={theme} isDark={isDark} openLeadId={invOpenLeadId} onOpenLeadHandled={() => setInvOpenLeadId(null)} />}
-          {activeView === "site_head" && <AdminSiteHeadView siteHeads={siteHeads} allLeads={allLeads} followUps={followUps} isLoading={isLoading} adminUser={user} refetch={refetch} appendFollowUp={appendFollowUp} reconcileFollowUp={reconcileFollowUp} removeFollowUp={removeFollowUp} theme={theme} isDark={isDark} />}
-          {activeView === "site_visit_overview" && <SiteVisitOverview managers={managers} receptionists={receptionists} allLeads={allLeads} siteHeads={siteHeads} adminUser={user} theme={theme} isDark={isDark} />}
-          {activeView === "receptionist" && (
-            <ReceptionistView
-              receptionists={receptionists}
+
+          {/* 👇 NEW: Passing onFocusModeChange to allow the internal component to trigger Fullscreen Focus Mode 👇 */}
+          {activeView === "site_head" && (
+            <AdminSiteHeadView
+              siteHeads={siteHeads}
               allLeads={allLeads}
               followUps={followUps}
               isLoading={isLoading}
+              adminUser={user}
               refetch={refetch}
               appendFollowUp={appendFollowUp}
               reconcileFollowUp={reconcileFollowUp}
               removeFollowUp={removeFollowUp}
-              adminUser={user}
               theme={theme}
               isDark={isDark}
+              onFocusModeChange={setIsFocusMode}
             />
           )}
+
+          {activeView === "site_visit_overview" && <SiteVisitOverview managers={managers} receptionists={receptionists} allLeads={allLeads} siteHeads={siteHeads} adminUser={user} theme={theme} isDark={isDark} />}
+
+          {activeView === "receptionist" && (
+            <ReceptionistView receptionists={receptionists} allLeads={allLeads} followUps={followUps} isLoading={isLoading} refetch={refetch} appendFollowUp={appendFollowUp} reconcileFollowUp={reconcileFollowUp} removeFollowUp={removeFollowUp} adminUser={user} theme={theme} isDark={isDark} />
+          )}
+
           {activeView === "attendance" && (
             <div className="flex flex-col h-full overflow-hidden">
               <div className="p-4 md:p-8 overflow-y-auto">
@@ -1478,29 +1457,15 @@ function AdminAtlasDashboardContent() {
               </div>
             </div>
           )}
-          {/* The Notification Center: the COMPLETE queue the bell caps at three.
-              The view id is "notification_center", not "notifications" — on this
-              page "notifications" is already the rail's WhatsApp Alerts button,
-              which navigates to /dashboard/employees?tab=notifications. Reusing
-              it here would make the footer navigate away instead of opening the
-              queue. (/dashboard/sales has no such clash and uses
-              activeView = "notifications" as specified.) */}
+
           {activeView === "notification_center" && (
             <div className="flex flex-col h-full overflow-hidden">
               <div className="p-4 md:p-8 overflow-y-auto">
-                <NotificationCenterView
-                  newLeads={notifications.newLeads}
-                  siteVisits={notifications.siteVisits}
-                  followUps={notifications.followUps}
-                  isLoading={notifications.isLoading}
-                  theme={notifCenterTheme}
-                  initialFilter={notificationFilter}
-                  onOpenLead={(n) => openLeadFromNotification(n.leadId)}
-                  onDismiss={(n) => notifications.dismiss(n.id)}
-                />
+                <NotificationCenterView newLeads={notifications.newLeads} siteVisits={notifications.siteVisits} followUps={notifications.followUps} isLoading={notifications.isLoading} theme={notifCenterTheme} initialFilter={notificationFilter} onOpenLead={(n) => openLeadFromNotification(n.leadId)} onDismiss={(n) => notifications.dismiss(n.id)} />
               </div>
             </div>
           )}
+
           {activeView === "live_activity" && (
             <div className="flex flex-col h-full overflow-hidden">
               {(isAdmin || isSiteHead) ? (
@@ -1514,25 +1479,24 @@ function AdminAtlasDashboardContent() {
               )}
             </div>
           )}
+
           {activeView === "monitoring" && (
             <div className="flex-1 overflow-hidden h-full">
-              <EmployeePerformancePanel
-                theme={theme}
-                isDark={isDark}
-              />
+              <EmployeePerformancePanel theme={theme} isDark={isDark} />
             </div>
           )}
+
           {activeView === "geo" && isAdmin && (
             <div className="flex flex-col h-full overflow-hidden">
               <GeoAnalyticsView allLeads={allLeads} theme={theme} isDark={isDark} />
             </div>
           )}
+
+          {/* Assistant Dock remains visible unless specifically configured otherwise */}
           {(isAdmin || isSiteHead) && <AdminAssistantDock theme={theme} isDark={isDark} />}
         </main>
       </div>
 
-      {/* Inventory deep-link failure — a dead chip click is the exact bug this wiring fixes,
-          so surface the reason instead of silently doing nothing. */}
       {invLinkError && (
         <div className="fixed top-6 left-1/2 transform -translate-x-1/2 z-[100] px-3 py-3 rounded-xl shadow-lg flex items-center gap-2 animate-fadeIn bg-red-600 border border-red-500 text-white">
           <div className="text-lg"><FaTimes /></div>
@@ -3519,6 +3483,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
               <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Budget</th>
               <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Phone</th>
               <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Source</th>
+
               <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Status</th>
               <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Interest</th>
               <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Site Visit</th>
@@ -4650,7 +4615,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
   // Reusable Table Component
   const renderTable = (leads: any[]) => (
     <div className={`rounded-xl overflow-hidden border ${theme.tableWrap}`} style={theme.tableGlass}>
-      <div className="overflow-x-auto custom-scrollbar">
+      <div className="overflow-x-auto custom-scrollbar w-100vh">
         <div ref={loadLessRef} style={{ height: "1px", width: "100%" }} />
 
         <table className="w-full text-left border-collapse whitespace-nowrap">
@@ -4661,6 +4626,9 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
               <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Budget</th>
               <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Phone</th>
               <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Source</th>
+              <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Cp Company</th>
+              <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Cp Name</th>
+              <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Cp Phone Number</th>
               <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Status</th>
               <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Interest</th>
               <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Site Visit</th>
@@ -4682,11 +4650,15 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                   <td className={`px-2 py-1.5 sm:px-4 sm:py-2.5 font-semibold text-xs sm:text-sm ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget || lead.budget || "N/A"}</td>
                   <td className={`px-2 py-1.5 sm:px-4 sm:py-2.5 font-mono text-[10px] sm:text-xs ${theme.textMuted}`}>{maskPhone(lead.phone, adminUser?.role, lead.assigned_to === adminUser?.name)}</td>
                   <td className={`px-2 py-1.5 sm:px-4 sm:py-2.5 text-[10px] sm:text-xs ${theme.textMuted}`}>{lead.source || "—"}</td>
+                  <td className={`px-2 py-1.5 sm:px-4 sm:py-2.5 text-[10px] sm:text-xs ${theme.textMuted}`}>{lead.cp_company || lead.cpCompany || "—"}</td>
+                  <td className={`px-2 py-1.5 sm:px-4 sm:py-2.5 text-[10px] sm:text-xs ${theme.textMuted}`}>{lead.cpName || lead.cp_name || "—"}</td>
+                  <td className={`px-2 py-1.5 sm:px-4 sm:py-2.5 font-mono text-[10px] sm:text-xs ${theme.textMuted}`}>{lead.cpPhone || lead.cp_phone || "—"}</td>
                   <td className="px-2 py-1.5 sm:px-4 sm:py-2.5">
                     <span className={`px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-full text-[9px] sm:text-[10px] font-bold uppercase border flex-shrink-0 ${isLost ? theme.statusLost : isNGD ? theme.statusNGD : statusCls(lead.status)}`}>
                       {isLost ? "Lost" : isNGD ? "NGD" : (lead.status || "Assigned")}
                     </span>
                   </td>
+
                   <td className="px-2 py-1.5 sm:px-4 sm:py-2.5">
                     {lead.leadInterestStatus && lead.leadInterestStatus !== "Pending" ? (
                       <InterestBadge status={lead.leadInterestStatus} size="sm" isDark={isDark} />
@@ -4766,7 +4738,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
 
       {/* Sidebar for Site Heads */}
       {/* MOBILE: 100% width, hidden if a Site Head is selected. DESKTOP: Always visible, fixed 62 width */}
-      <div className={`border-r flex-col h-full flex-shrink-0 z-20 shadow-xl ${theme.innerBlock} w-full md:w-62 ${selectedSiteHead ? 'hidden md:flex' : 'flex'}`}>
+      <div className={`border-r flex-col h-full flex-shrink-0 z-20 shadow-xl ${theme.innerBlock} w-full md:w-62 ${selectedSiteHead ? 'hidden' : 'flex'}`}>
         <div className={`p-5 border-b ${theme.tableBorder}`}>
           <div className="relative">
             <FaSearch className={`absolute left-3 top-1/2 -translate-y-1/2 text-xs ${theme.textFaint}`} />
@@ -4826,8 +4798,15 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
         ) : (
           <div className="flex-1 flex flex-col h-full overflow-hidden">
             {/* Sub-header */}
+            {/* Sub-header */}
             <div className={`p-2 border-b flex justify-between items-center shadow-sm z-10 flex-shrink-0 gap-2 ${theme.header}`} style={theme.headerGlass}>
-              <div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => { setSelectedSiteHead(null); setSubView("list"); setSelectedLead(null); }}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-bold transition-colors cursor-pointer flex-shrink-0 ${theme.textMuted} ${theme.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}
+                >
+                  <FaChevronLeft className="text-[10px]" /> Back
+                </button>
                 <h2 className={`text-md font-bold flex items-center gap-2 ${theme.text}`}>
                   <FaUniversity className={isDark ? "text-[#d946a8]" : "text-[#9E217B]"} /> {selectedSiteHead.name}'s Division
                 </h2>
@@ -4839,7 +4818,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
 
             {/* ── LIST VIEW (Stats + Tables) ── */}
             {subView === "list" && (
-              <div className={`flex-1 overflow-y-auto custom-scrollbar p-2 sm:p-6 ${theme.scroll}`}>
+              <div className={`flex-1 overflow-y-auto custom-scrollbar p-2 sm:p-4 ${theme.scroll}`}>
                 <div className="animate-fadeIn space-y-3 sm:space-y-4 max-w-7xl mx-auto">
 
                   {/* Tabs / Stats Row */}
