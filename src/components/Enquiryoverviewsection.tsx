@@ -337,6 +337,26 @@ const COLUMNS: Column[] = [
         ),
     },
     {
+        key: "alt_phone",
+        label: "Alt. Phone",
+        minWidth: "min-w-[95px] sm:min-w-[115px]",
+        defaultHidden: true,
+        sortValue: (l) => String(l.alt_phone || ""),
+        render: (l, { theme }) => {
+            const v = l.alt_phone;
+            if (isBlank(v)) return <span className="text-[11px] sm:text-xs italic opacity-35">—</span>;
+            return (
+                <a
+                    href={`tel:${String(v).replace(/[^0-9+]/g, "")}`}
+                    onClick={(e) => e.stopPropagation()}
+                    className={`font-mono text-[11px] sm:text-xs hover:underline ${theme.textMuted}`}
+                >
+                    {v}
+                </a>
+            );
+        },
+    },
+    {
         key: "prop_type",
         label: "Property Type",
         minWidth: "min-w-[90px] sm:min-w-[110px]",
