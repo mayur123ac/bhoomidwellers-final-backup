@@ -1032,10 +1032,8 @@ function AdminAtlasDashboardContent() {
       return false;
     }
 
-    // Site Head: CP Enquiry tab is controlled by admin toggle
-    if (item.id === "cp_enquiry" && isSiteHead && !cpEnquiryVisible) {
-      return false;
-    }
+    // CP Enquiry (standalone CP records) is always visible for Site Head —
+    // it replaces Channel Partners as the primary CP view for non-admin roles.
 
     if (isSiteHead && (item.id === "live_activity" || item.id === "settings" || item.id === "ai")) {
       return true;
