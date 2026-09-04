@@ -333,20 +333,20 @@ function ChannelPartnerEnquiriesTable({
 
   const columns = useMemo(() => standalone
     ? [
-        ...(showSerial ? ["Sr. No."] : []),
-        "Created", "CP Name", "CP Company", "CP Phone",
-        "Office Address", "Owner / Contact", "GST", "RERA", "CP City", "CP Pin",
-        "Sourcing Manager", "Sales Manager", "Status",
-      ]
+      ...(showSerial ? ["Sr. No."] : []),
+      "Created", "CP Name", "CP Company", "CP Phone",
+      "Office Address", "Owner / Contact", "GST", "RERA", "CP City", "CP Pin",
+      "Sourcing Manager", "Sales Manager", "Status",
+    ]
     : [
-        ...(showSerial ? ["Sr. No."] : []),
-        "Lead No.", "Created", "CP Name", "CP Company", "CP Phone",
-        "Office Address", "Owner / Contact", "GST", "RERA", "CP City", "CP Pin",
-        "Client Name", "Client Phone", "Alt Phone", "Client Email",
-        "Preferred Location", "Budget", "Requirement", "Sourcing Manager", "Sales Manager", "Status",
-        ...(canReassign ? [""] : []),
-      ],
-  [showSerial, canReassign, standalone]);
+      ...(showSerial ? ["Sr. No."] : []),
+      "Lead No.", "Created", "CP Name", "CP Company", "CP Phone",
+      "Office Address", "Owner / Contact", "GST", "RERA", "CP City", "CP Pin",
+      "Client Name", "Client Phone", "Alt Phone", "Client Email",
+      "Preferred Location", "Budget", "Requirement", "Sourcing Manager", "Sales Manager", "Status",
+      ...(canReassign ? [""] : []),
+    ],
+    [showSerial, canReassign, standalone]);
 
   const skeletonWidths = useMemo(
     () => columns.map(c => COLUMN_BAR_WIDTHS[c] ?? 64),
@@ -442,10 +442,10 @@ function ChannelPartnerEnquiriesTable({
       <div className={`flex-1 overflow-auto mx-2 rounded-3xl ${t.card}`}>
         <table className="w-full text-left border-collapse">
           {/* APPLE UI: Frosted glass sticky header */}
-          <thead className={`sticky top-0 z-10 backdrop-blur-xl ${isDark ? "bg-[#000000]/70 border-b border-white/10" : "bg-white/70 border-b border-black/5"}`}>
+          <thead className={`sticky top-0 z-10 backdrop-blur-xl${isDark ? "bg-[#000000]/70 border-b border-white/10" : "bg-white/70 border-b border-black/5"}`}>
             <tr className={`text-[10px] uppercase tracking-wider ${t.textMuted}`}>
               {columns.map((h, i) => (
-                <th key={`${h}-${i}`} className="px-3 py-3 whitespace-nowrap font-semibold">{h}</th>
+                <th key={`${h}-${i}`} className="px-3 py-3 whitespace-nowrap font-semibold bg-white border-b shadow-sm border-gray-300">{h}</th>
               ))}
             </tr>
           </thead>

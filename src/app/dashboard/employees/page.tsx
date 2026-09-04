@@ -960,7 +960,9 @@ export default function EmployeesPage() {
 
   const menuGroups: Record<string, string> = {
     dashboard: "Workspace", revenue_intelligence: "Workspace", inventory: "Workspace",
-    channel_partners: "Workspace", cp_management: "Workspace",
+    // channel_partners: "Workspace",
+    //  cp_management: "Workspace",
+
     receptionist: "Team", sales: "Team", site_head: "Team", live_activity: "Team",
     site_visit_overview: "Insights", attendance: "Insights", monitoring: "Insights", geo: "Insights",
     callers: "Admin", employees: "Admin", notifications: "Admin",
@@ -2396,14 +2398,14 @@ export default function EmployeesPage() {
                   const r = validatePassword(cpNewPwd);
                   return (
                     <div className={`text-[10px] space-y-0.5 p-2 rounded-lg border ${isDark ? "bg-white/5 border-gray-800" : "bg-black/5 border-gray-200"}`}>
-                      {(["length","upper","lower","number","special"] as const).map(k => ({
+                      {(["length", "upper", "lower", "number", "special"] as const).map(k => ({
                         length: "Min 8 chars", upper: "1 uppercase",
                         lower: "1 lowercase", number: "1 number", special: "1 symbol"
                       })[k] && (
-                        <p key={k} className={r[k] ? "text-green-500 font-semibold" : "text-red-500"}>
-                          {r[k] ? "✅" : "❌"} {({ length: "Min 8 chars", upper: "1 uppercase", lower: "1 lowercase", number: "1 number", special: "1 symbol" })[k]}
-                        </p>
-                      ))}
+                          <p key={k} className={r[k] ? "text-green-500 font-semibold" : "text-red-500"}>
+                            {r[k] ? "✅" : "❌"} {({ length: "Min 8 chars", upper: "1 uppercase", lower: "1 lowercase", number: "1 number", special: "1 symbol" })[k]}
+                          </p>
+                        ))}
                     </div>
                   );
                 })()}

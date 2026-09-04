@@ -978,10 +978,11 @@ function AdminAtlasDashboardContent() {
     { id: "inventory", icon: FaBoxes, label: "Inventory" },
     { id: "cp_enquiry", icon: FaHandshake, label: "CP Enquiry" },
     { id: "cp_linked_leads", icon: FaHandshake, label: "CP Linked with Leads" },
-    { id: "channel_partners", icon: FaUserTie, label: "Channel Partners" },
-    { id: "cp_management", icon: FaHandshake, label: "CP Management" },
-    { id: "banking_info", icon: FaUniversity, label: "Banking Info" },
+    // { id: "channel_partners", icon: FaUserTie, label: "Channel Partners" },
+    // { id: "cp_management", icon: FaHandshake, label: "CP Management" },
     { id: "cp_chat", icon: FaComments, label: "CP Chat" },
+    { id: "banking_info", icon: FaUniversity, label: "Banking Info" },
+
     { id: "receptionist", icon: FaClipboardList, label: "Receptionist" },
     { id: "sales", icon: FaUsers, label: "Sales Managers" },
     { id: "site_head", icon: FaUniversity, label: "Site Heads" },
@@ -1060,8 +1061,10 @@ function AdminAtlasDashboardContent() {
   // carry no heading.
   const menuGroups: Record<string, string> = {
     dashboard: "Workspace", revenue_intelligence: "Workspace", inventory: "Workspace",
-    cp_enquiry: "Workspace", cp_linked_leads: "Workspace", channel_partners: "Workspace",
-    cp_management: "Workspace", banking_info: "Workspace", cp_chat: "Workspace",
+    cp_enquiry: "Workspace", cp_linked_leads: "Workspace",
+    // channel_partners: "Workspace",
+    // cp_management: "Workspace", 
+    banking_info: "Workspace", cp_chat: "Workspace",
     receptionist: "Team", sales: "Team", site_head: "Team", live_activity: "Insights",
     site_visit_overview: "Insights", attendance: "Insights", monitoring: "Insights", geo: "Insights",
     caller: "Admin", employees: "Admin", notifications: "Admin"
@@ -1387,11 +1390,11 @@ function AdminAtlasDashboardContent() {
             )
           )}
 
-          {activeView === "cp_management" && (
+          {/* {activeView === "cp_management" && (
             <div className="h-full">
               <ChannelPartnerEnquiriesTable user={user} isDark={isDark} t={theme} title="Channel Partner Management" subtitle="All CP-linked leads — filter by Sourcing Manager and reassign" />
             </div>
-          )}
+          )} */}
 
           {activeView === "cp_linked_leads" && (
             <div className="h-full">
@@ -1411,7 +1414,7 @@ function AdminAtlasDashboardContent() {
             </div>
           )}
 
-          {activeView === "channel_partners" && (
+          {/* {activeView === "channel_partners" && (
             canViewPartners(userRole) ? (
               <ChannelPartnerListView user={user} isDark={isDark} t={theme} />
             ) : (
@@ -1421,7 +1424,7 @@ function AdminAtlasDashboardContent() {
                 <p className={theme.textMuted}>You do not have permission to access this module.</p>
               </div>
             )
-          )}
+          )} */}
 
           {activeView === "sales" && <AdminSalesView managers={managers} allLeads={allLeads} followUps={followUps} isLoading={isLoading} adminUser={user} refetch={refetch} appendFollowUp={appendFollowUp} reconcileFollowUp={reconcileFollowUp} removeFollowUp={removeFollowUp} theme={theme} isDark={isDark} openLeadId={invOpenLeadId} onOpenLeadHandled={() => setInvOpenLeadId(null)} />}
 
@@ -3488,7 +3491,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
     {
       key: "prop_type", label: "Property Type", minWidth: "min-w-[90px] sm:min-w-[110px]", defaultHidden: true,
       sortValue: (l) => String(l.propType || l.configuration || "").toLowerCase(),
-      render: (l, { theme: t }) => <span className={`text-[11px] sm:text-xs ${t.textMuted}`}>{l.propType || l.configuration || "\u2014"}</span>,
+      render: (l, { theme: t }) => <span className={`text-[11px] sm:text-xs ${t.textMuted}`}>{l.propType || l.configuration || "—"}</span>,
     },
     {
       key: "budget", label: "Budget", minWidth: "min-w-[80px] sm:min-w-[100px]",
@@ -3498,24 +3501,24 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
     {
       key: "source", label: "Source", minWidth: "min-w-[90px] sm:min-w-[110px]",
       sortValue: (l) => String(l.source || "").toLowerCase(),
-      render: (l, { theme: t }) => <span className={`text-[11px] sm:text-xs ${t.textMuted}`}>{l.source || "\u2014"}</span>,
+      render: (l, { theme: t }) => <span className={`text-[11px] sm:text-xs ${t.textMuted}`}>{l.source || "—"}</span>,
     },
     {
       key: "cp_name", label: "CP Name", minWidth: "min-w-[100px] sm:min-w-[130px]", defaultHidden: true,
       sortValue: (l) => String(l.cpName || l.cp_name || "").toLowerCase(),
-      render: (l, { theme: t }) => <span className={`text-[11px] sm:text-xs ${t.textMuted}`}>{l.cpName || l.cp_name || "\u2014"}</span>,
+      render: (l, { theme: t }) => <span className={`text-[11px] sm:text-xs ${t.textMuted}`}>{l.cpName || l.cp_name || "—"}</span>,
     },
     {
       key: "cp_company", label: "CP Company", minWidth: "min-w-[100px] sm:min-w-[120px]", defaultHidden: true,
       sortValue: (l) => String(l.cpCompany || l.cp_company || "").toLowerCase(),
-      render: (l, { theme: t }) => <span className={`text-[11px] sm:text-xs ${t.textMuted}`}>{l.cpCompany || l.cp_company || "\u2014"}</span>,
+      render: (l, { theme: t }) => <span className={`text-[11px] sm:text-xs ${t.textMuted}`}>{l.cpCompany || l.cp_company || "—"}</span>,
     },
     {
       key: "cp_phone", label: "CP Phone", minWidth: "min-w-[95px] sm:min-w-[115px]", defaultHidden: true,
       sortValue: (l) => String(l.cpPhone || l.cp_phone || ""),
       render: (l, { theme: t }) => {
         const v = l.cpPhone || l.cp_phone;
-        if (!v) return <span className="text-[11px] sm:text-xs italic opacity-35">\u2014</span>;
+        if (!v) return <span className="text-[11px] sm:text-xs italic opacity-35">—</span>;
         return <a href={`tel:${String(v).replace(/[^0-9+]/g, "")}`} onClick={(e) => e.stopPropagation()} className={`font-mono text-[11px] sm:text-xs hover:underline ${t.textMuted}`}>{v}</a>;
       },
     },
@@ -3547,7 +3550,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
       render: (l, { isDark: dk }) =>
         l.leadInterestStatus && l.leadInterestStatus !== "Pending"
           ? <InterestBadge status={l.leadInterestStatus} size="sm" isDark={dk} />
-          : <span className={`text-[10px] sm:text-xs italic ${theme.textFaint}`}>\u2014</span>,
+          : <span className={`text-[10px] sm:text-xs italic ${theme.textFaint}`}>—</span>,
     },
     {
       key: "site_visit", label: "Site Visit", minWidth: "min-w-[85px] sm:min-w-[105px]",
@@ -3555,13 +3558,13 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
       render: (l, { formatDate: fd }) =>
         l.mongoVisitDate
           ? <span className="text-orange-500 font-semibold text-[11px] sm:text-xs">{fd(l.mongoVisitDate).split(",")[0]}</span>
-          : <span className="text-[11px] sm:text-xs italic opacity-35">\u2014</span>,
+          : <span className="text-[11px] sm:text-xs italic opacity-35">Pending</span>,
     },
     {
       key: "created_at", label: "Created On", minWidth: "min-w-[95px] sm:min-w-[115px]",
       sortValue: (l) => (l.created_at ? new Date(l.created_at).getTime() : 0),
       render: (l, { theme: t, formatDate: fd }) =>
-        l.created_at ? <span className={`text-[11px] sm:text-xs ${t.textFaint}`}>{fd(l.created_at)}</span> : <span className="text-[11px] sm:text-xs italic opacity-35">\u2014</span>,
+        l.created_at ? <span className={`text-[11px] sm:text-xs ${t.textFaint}`}>{fd(l.created_at)}</span> : <span className="text-[11px] sm:text-xs italic opacity-35">—</span>,
     },
     {
       key: "backdated", label: "Backdated Entry", minWidth: "min-w-[100px] sm:min-w-[120px]", defaultHidden: true,
@@ -3569,7 +3572,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
       render: (l, { isDark: dk, formatDate: fd }) =>
         l.auto_date_enabled === false && l.enquiry_date
           ? <span className={`inline-flex items-center px-2 py-[3px] rounded-md text-[9px] sm:text-[10px] font-bold border whitespace-nowrap ${dk ? "bg-amber-500/10 text-amber-300 border-amber-500/25" : "bg-amber-50 text-amber-700 border-amber-200"}`}>{fd(l.enquiry_date).split(",")[0]}</span>
-          : <span className="text-[11px] sm:text-xs italic opacity-30">\u2014</span>,
+          : <span className="text-[11px] sm:text-xs italic opacity-30">—</span>,
     },
   ];
   const [showMobileActions, setShowMobileActions] = useState(false);
@@ -4679,7 +4682,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
     {
       key: "prop_type", label: "Property Type", minWidth: "min-w-[90px] sm:min-w-[110px]", defaultHidden: true,
       sortValue: (l) => String(l.propType || l.configuration || "").toLowerCase(),
-      render: (l, { theme: t }) => <span className={`text-[11px] sm:text-xs ${t.textMuted}`}>{l.propType || l.configuration || "\u2014"}</span>,
+      render: (l, { theme: t }) => <span className={`text-[11px] sm:text-xs ${t.textMuted}`}>{l.propType || l.configuration || "—"}</span>,
     },
     {
       key: "budget", label: "Budget", minWidth: "min-w-[80px] sm:min-w-[100px]",
@@ -4689,24 +4692,24 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
     {
       key: "source", label: "Source", minWidth: "min-w-[90px] sm:min-w-[110px]",
       sortValue: (l) => String(l.source || "").toLowerCase(),
-      render: (l, { theme: t }) => <span className={`text-[11px] sm:text-xs ${t.textMuted}`}>{l.source || "\u2014"}</span>,
+      render: (l, { theme: t }) => <span className={`text-[11px] sm:text-xs ${t.textMuted}`}>{l.source || "—"}</span>,
     },
     {
       key: "cp_name", label: "CP Name", minWidth: "min-w-[100px] sm:min-w-[130px]",
       sortValue: (l) => String(l.cpName || l.cp_name || "").toLowerCase(),
-      render: (l, { theme: t }) => <span className={`text-[11px] sm:text-xs ${t.textMuted}`}>{l.cpName || l.cp_name || "\u2014"}</span>,
+      render: (l, { theme: t }) => <span className={`text-[11px] sm:text-xs ${t.textMuted}`}>{l.cpName || l.cp_name || "—"}</span>,
     },
     {
       key: "cp_company", label: "CP Company", minWidth: "min-w-[100px] sm:min-w-[120px]",
       sortValue: (l) => String(l.cpCompany || l.cp_company || "").toLowerCase(),
-      render: (l, { theme: t }) => <span className={`text-[11px] sm:text-xs ${t.textMuted}`}>{l.cpCompany || l.cp_company || "\u2014"}</span>,
+      render: (l, { theme: t }) => <span className={`text-[11px] sm:text-xs ${t.textMuted}`}>{l.cpCompany || l.cp_company || "—"}</span>,
     },
     {
       key: "cp_phone", label: "CP Phone", minWidth: "min-w-[95px] sm:min-w-[115px]",
       sortValue: (l) => String(l.cpPhone || l.cp_phone || ""),
       render: (l, { theme: t }) => {
         const v = l.cpPhone || l.cp_phone;
-        if (!v) return <span className="text-[11px] sm:text-xs italic opacity-35">\u2014</span>;
+        if (!v) return <span className="text-[11px] sm:text-xs italic opacity-35">—</span>;
         return <a href={`tel:${String(v).replace(/[^0-9+]/g, "")}`} onClick={(e) => e.stopPropagation()} className={`font-mono text-[11px] sm:text-xs hover:underline ${t.textMuted}`}>{v}</a>;
       },
     },
@@ -4738,7 +4741,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
       render: (l, { isDark: dk }) =>
         l.leadInterestStatus && l.leadInterestStatus !== "Pending"
           ? <InterestBadge status={l.leadInterestStatus} size="sm" isDark={dk} />
-          : <span className={`text-[10px] sm:text-xs italic ${theme.textFaint}`}>\u2014</span>,
+          : <span className={`text-[10px] sm:text-xs italic ${theme.textFaint}`}>—</span>,
     },
     {
       key: "site_visit", label: "Site Visit", minWidth: "min-w-[85px] sm:min-w-[105px]",
@@ -4746,13 +4749,13 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
       render: (l, { formatDate: fd }) =>
         l.mongoVisitDate
           ? <span className="text-orange-500 font-semibold text-[11px] sm:text-xs">{fd(l.mongoVisitDate).split(",")[0]}</span>
-          : <span className="text-[11px] sm:text-xs italic opacity-35">\u2014</span>,
+          : <span className="text-[11px] sm:text-xs italic opacity-35">Pending</span>,
     },
     {
       key: "created_at", label: "Created On", minWidth: "min-w-[95px] sm:min-w-[115px]",
       sortValue: (l) => (l.created_at ? new Date(l.created_at).getTime() : 0),
       render: (l, { theme: t, formatDate: fd }) =>
-        l.created_at ? <span className={`text-[11px] sm:text-xs ${t.textFaint}`}>{fd(l.created_at)}</span> : <span className="text-[11px] sm:text-xs italic opacity-35">\u2014</span>,
+        l.created_at ? <span className={`text-[11px] sm:text-xs ${t.textFaint}`}>{fd(l.created_at)}</span> : <span className="text-[11px] sm:text-xs italic opacity-35">—</span>,
     },
     {
       key: "backdated", label: "Backdated Entry", minWidth: "min-w-[100px] sm:min-w-[120px]", defaultHidden: true,
@@ -4760,7 +4763,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
       render: (l, { isDark: dk, formatDate: fd }) =>
         l.auto_date_enabled === false && l.enquiry_date
           ? <span className={`inline-flex items-center px-2 py-[3px] rounded-md text-[9px] sm:text-[10px] font-bold border whitespace-nowrap ${dk ? "bg-amber-500/10 text-amber-300 border-amber-500/25" : "bg-amber-50 text-amber-700 border-amber-200"}`}>{fd(l.enquiry_date).split(",")[0]}</span>
-          : <span className="text-[11px] sm:text-xs italic opacity-30">\u2014</span>,
+          : <span className="text-[11px] sm:text-xs italic opacity-30">—</span>,
     },
   ];
 
@@ -5868,7 +5871,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
       sortValue: (l) => String(l.altPhone || l.alt_phone || ""),
       render: (l, { theme: t }) => {
         const v = l.altPhone || l.alt_phone;
-        if (!v) return <span className="text-[11px] sm:text-xs italic opacity-35">\u2014</span>;
+        if (!v) return <span className="text-[11px] sm:text-xs italic opacity-35">—</span>;
         return <a href={`tel:${String(v).replace(/[^0-9+]/g, "")}`} onClick={(e) => e.stopPropagation()} className={`font-mono text-[11px] sm:text-xs hover:underline ${t.textMuted}`}>{v}</a>;
       },
     },
@@ -5880,24 +5883,24 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
     {
       key: "source", label: "Source", minWidth: "min-w-[90px] sm:min-w-[110px]",
       sortValue: (l) => String(l.source || "").toLowerCase(),
-      render: (l, { theme: t }) => <span className={`text-[11px] sm:text-xs ${t.textMuted}`}>{l.source || "\u2014"}</span>,
+      render: (l, { theme: t }) => <span className={`text-[11px] sm:text-xs ${t.textMuted}`}>{l.source || "—"}</span>,
     },
     {
-      key: "cp_name", label: "CP Name", minWidth: "min-w-[100px] sm:min-w-[130px]", defaultHidden: true,
+      key: "cp_name", label: "CP Name", minWidth: "min-w-[100px] sm:min-w-[130px]",
       sortValue: (l) => String(l.cpName || l.cp_name || "").toLowerCase(),
-      render: (l, { theme: t }) => <span className={`text-[11px] sm:text-xs ${t.textMuted}`}>{l.cpName || l.cp_name || "\u2014"}</span>,
+      render: (l, { theme: t }) => <span className={`text-[11px] sm:text-xs ${t.textMuted}`}>{l.cpName || l.cp_name || "—"}</span>,
     },
     {
-      key: "cp_company", label: "CP Company", minWidth: "min-w-[100px] sm:min-w-[120px]", defaultHidden: true,
+      key: "cp_company", label: "CP Company", minWidth: "min-w-[100px] sm:min-w-[120px]",
       sortValue: (l) => String(l.cpCompany || l.cp_company || "").toLowerCase(),
-      render: (l, { theme: t }) => <span className={`text-[11px] sm:text-xs ${t.textMuted}`}>{l.cpCompany || l.cp_company || "\u2014"}</span>,
+      render: (l, { theme: t }) => <span className={`text-[11px] sm:text-xs ${t.textMuted}`}>{l.cpCompany || l.cp_company || "—"}</span>,
     },
     {
-      key: "cp_phone", label: "CP Phone", minWidth: "min-w-[95px] sm:min-w-[115px]", defaultHidden: true,
+      key: "cp_phone", label: "CP Phone", minWidth: "min-w-[95px] sm:min-w-[115px]",
       sortValue: (l) => String(l.cpPhone || l.cp_phone || ""),
       render: (l, { theme: t }) => {
         const v = l.cpPhone || l.cp_phone;
-        if (!v) return <span className="text-[11px] sm:text-xs italic opacity-35">\u2014</span>;
+        if (!v) return <span className="text-[11px] sm:text-xs italic opacity-35">—</span>;
         return <a href={`tel:${String(v).replace(/[^0-9+]/g, "")}`} onClick={(e) => e.stopPropagation()} className={`font-mono text-[11px] sm:text-xs hover:underline ${t.textMuted}`}>{v}</a>;
       },
     },
@@ -5925,7 +5928,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
       render: (l, { isDark: dk }) =>
         l.leadInterestStatus && l.leadInterestStatus !== "Pending"
           ? <span className={`text-[9px] sm:text-[10px] px-1.5 py-0.5 sm:px-2 sm:py-0.5 rounded-full font-bold border whitespace-nowrap ${l.leadInterestStatus === "Interested" ? (dk ? "text-green-400 border-green-500/30 bg-green-500/10" : "text-green-700 border-green-200 bg-green-50") : l.leadInterestStatus === "Not Interested" ? (dk ? "text-red-400 border-red-500/30 bg-red-500/10" : "text-red-700 border-red-200 bg-red-50") : (dk ? "text-yellow-400 border-yellow-500/30 bg-yellow-500/10" : "text-yellow-700 border-yellow-200 bg-yellow-50")}`}>{l.leadInterestStatus}</span>
-          : <span className={`text-[10px] sm:text-xs italic ${theme.textFaint}`}>\u2014</span>,
+          : <span className={`text-[10px] sm:text-xs italic ${theme.textFaint}`}>—</span>,
     },
     {
       key: "site_visit", label: "Site Visit", minWidth: "min-w-[85px] sm:min-w-[105px]",
@@ -5933,13 +5936,13 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
       render: (l, { formatDate: fd }) =>
         l.mongoVisitDate
           ? <span className="text-orange-500 font-semibold text-[11px] sm:text-xs">{fd(l.mongoVisitDate).split(",")[0]}</span>
-          : <span className="text-[11px] sm:text-xs italic opacity-35">\u2014</span>,
+          : <span className="text-[11px] sm:text-xs italic opacity-35">Pending</span>,
     },
     {
       key: "created_at", label: "Created On", minWidth: "min-w-[95px] sm:min-w-[115px]",
       sortValue: (l) => (l.created_at ? new Date(l.created_at).getTime() : 0),
       render: (l, { theme: t, formatDate: fd }) =>
-        l.created_at ? <span className={`text-[11px] sm:text-xs ${t.textFaint}`}>{fd(l.created_at)}</span> : <span className="text-[11px] sm:text-xs italic opacity-35">\u2014</span>,
+        l.created_at ? <span className={`text-[11px] sm:text-xs ${t.textFaint}`}>{fd(l.created_at)}</span> : <span className="text-[11px] sm:text-xs italic opacity-35">—</span>,
     },
     {
       key: "backdated", label: "Backdated Entry", minWidth: "min-w-[100px] sm:min-w-[120px]", defaultHidden: true,
@@ -5947,7 +5950,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
       render: (l, { isDark: dk, formatDate: fd }) =>
         l.auto_date_enabled === false && l.enquiry_date
           ? <span className={`inline-flex items-center px-2 py-[3px] rounded-md text-[9px] sm:text-[10px] font-bold border whitespace-nowrap ${dk ? "bg-amber-500/10 text-amber-300 border-amber-500/25" : "bg-amber-50 text-amber-700 border-amber-200"}`}>{fd(l.enquiry_date).split(",")[0]}</span>
-          : <span className="text-[11px] sm:text-xs italic opacity-30">\u2014</span>,
+          : <span className="text-[11px] sm:text-xs italic opacity-30">—</span>,
     },
   ];
 
@@ -7402,7 +7405,7 @@ function DailyMonitoringPanel({
     const interval = setInterval(() => {
       if (typeof document !== "undefined" && document.hidden) return;
       fetchStats();
-    }, 30000);
+    }, 120000);
     const onVisible = () => { if (!document.hidden) fetchStats(); };
     document.addEventListener("visibilitychange", onVisible);
     return () => {

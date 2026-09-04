@@ -112,17 +112,16 @@ export default function SalesSidebar({
           />
         )}
         <div
-          className={`flex items-center gap-3 rounded-xl transition-all duration-200 relative overflow-hidden ${
-            pinned ? "px-3 py-2.5" : "px-3.5 py-3"
-          } ${isActive ? "text-[#d946a8]" : "text-gray-500 hover:text-gray-200"}`}
+          className={`flex items-center gap-3 rounded-xl transition-all duration-200 relative overflow-hidden ${pinned ? "px-3 py-2.5" : "px-3.5 py-3"
+            } ${isActive ? "text-[#d946a8]" : "text-gray-500 hover:text-gray-200"}`}
           style={
             isActive
               ? {
-                  background:
-                    "linear-gradient(135deg, rgba(158,33,123,0.22) 0%, rgba(217,70,168,0.07) 100%)",
-                  boxShadow:
-                    "inset 0 0 0 1px rgba(217,70,168,0.28), 0 2px 16px rgba(158,33,123,0.12)",
-                }
+                background:
+                  "linear-gradient(135deg, rgba(158,33,123,0.22) 0%, rgba(217,70,168,0.07) 100%)",
+                boxShadow:
+                  "inset 0 0 0 1px rgba(217,70,168,0.28), 0 2px 16px rgba(158,33,123,0.12)",
+              }
               : {}
           }
         >
@@ -136,17 +135,15 @@ export default function SalesSidebar({
             <div className="absolute inset-0 rounded-xl bg-white/0 group-hover:bg-white/[0.04] transition-colors duration-200" />
           )}
           <div
-            className={`flex-shrink-0 transition-all duration-200 ${
-              isActive ? "text-[#d946a8]" : "text-gray-600 group-hover:text-gray-300"
-            }`}
+            className={`flex-shrink-0 transition-all duration-200 ${isActive ? "text-[#d946a8]" : "text-gray-600 group-hover:text-gray-300"
+              }`}
             style={isActive ? { filter: "drop-shadow(0 0 5px rgba(217,70,168,0.65))" } : {}}
           >
             <Icon className={pinned ? "w-[20px] h-[20px] flex-shrink-0" : "w-[18px] h-[18px] flex-shrink-0"} />
           </div>
           <span
-            className={`text-[12.5px] font-semibold whitespace-nowrap overflow-hidden transition-all duration-300 ${
-              isActive ? "text-[#d946a8]" : "text-gray-400 group-hover:text-gray-100"
-            }`}
+            className={`text-[12.5px] font-semibold whitespace-nowrap overflow-hidden transition-all duration-300 ${isActive ? "text-[#d946a8]" : "text-gray-400 group-hover:text-gray-100"
+              }`}
             style={{
               maxWidth: expanded ? "140px" : "0px",
               opacity: expanded ? 1 : 0,

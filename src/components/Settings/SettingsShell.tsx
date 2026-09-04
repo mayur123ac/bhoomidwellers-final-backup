@@ -139,8 +139,6 @@ const RAIL: RailItem[] = [
   { id: "dashboard", icon: FaThLarge, label: "Overview", link: "/dashboard" },
   { id: "revenue_intelligence", icon: FaFileInvoiceDollar, label: "Revenue Intelligence", link: "/dashboard?tab=revenue_intelligence" },
   { id: "inventory", icon: FaBoxes, label: "Inventory", link: "/dashboard?tab=inventory" },
-  { id: "channel_partners", icon: FaUserTie, label: "Channel Partners", link: "/dashboard?tab=channel_partners" },
-  { id: "cp_management", icon: FaHandshake, label: "CP Management", link: "/dashboard?tab=cp_management" },
   { id: "cp_chat", icon: FaComments, label: "CP Chat", link: "/dashboard?tab=cp_chat" },
   { id: "receptionist", icon: FaClipboardList, label: "Receptionist", link: "/dashboard?tab=receptionist" },
   { id: "sales", icon: FaUsers, label: "Sales Managers", link: "/dashboard?tab=sales" },
@@ -185,9 +183,8 @@ function railForRole(role: unknown): RailItem[] {
     // Channel Partners / CP Chat follow the same canViewPartners() gate the
     // dashboard uses — Site Head is in VIEW_ROLES today, but this stays in
     // sync automatically if that ever changes instead of hardcoding "yes".
-    const blocked = new Set(["callers", "employees", "notifications", "ai", "revenue_intelligence", "cp_management"]);
+    const blocked = new Set(["callers", "employees", "notifications", "ai", "revenue_intelligence"]);
     if (!canViewPartners(role)) {
-      blocked.add("channel_partners");
       blocked.add("cp_chat");
     }
     return RAIL.filter((i) => !blocked.has(i.id));
@@ -214,8 +211,6 @@ const RAIL_GROUPS: Record<string, string> = {
   dashboard: "Workspace",
   revenue_intelligence: "Workspace",
   inventory: "Workspace",
-  channel_partners: "Workspace",
-  cp_management: "Workspace",
   cp_chat: "Workspace",
   receptionist: "Team",
   sales: "Team",
