@@ -3542,7 +3542,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
   const [showMobileActions, setShowMobileActions] = useState(false);
   const formInput = `w-full rounded-lg px-4 py-2 text-sm outline-none transition-colors border ${theme.inputInner} ${theme.text} ${theme.inputFocus}`;
   const formSelect = `w-full rounded-lg px-4 py-2.5 text-sm outline-none cursor-pointer border ${theme.inputInner} ${theme.text} ${theme.inputFocus}`;
-
+  const [isFocusMode, setIsFocusMode] = useState(false);
   return (
     <div className="flex relative h-full w-full overflow-hidden">
       {toastMsg && (
@@ -3641,7 +3641,13 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
           <div className="flex-1 flex flex-col h-full min-h-0 overflow-hidden">
             {/* Sub-header */}
             <div className={`p-3 border-b border-gray-300 flex justify-between items-center shadow-sm z-10 flex-shrink-0 gap-1 ${theme.header}`} style={theme.headerGlass}>
-              <div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => { setSelectedManager(null); setSubView("list"); setSelectedLead(null); }}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-bold transition-colors cursor-pointer flex-shrink-0 ${theme.textMuted} ${theme.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}
+                >
+                  <FaChevronLeft className="text-[10px]" /> Back
+                </button>
                 <h2 className={`text-md font-bold flex items-center gap-2 ${theme.text}`}>
                   <FaUsers className={isDark ? "text-[#d946a8]" : "text-[#9E217B]"} /> {selectedManager.name}'s Division
                 </h2>
@@ -3654,7 +3660,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
             {/* ── LIST VIEW (Stats + Tables) ── */}
             {subView === "list" && (
               <div className={`flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-4 ${theme.scroll}`}>
-                <div className="animate-fadeIn space-y-3 sm:space-y-4 max-w-7xl mx-auto">
+                <div className="animate-fadeIn space-y-3 sm:space-y-4 max-w-10xl mx-auto">
 
                   {/* Tabs / Stats Row */}
                   <div className="grid grid-cols-2 gap-2 sm:gap-3">
@@ -4817,7 +4823,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
             {/* ── LIST VIEW (Stats + Tables) ── */}
             {subView === "list" && (
               <div className={`flex-1 overflow-y-auto custom-scrollbar p-2 sm:p-4 ${theme.scroll}`}>
-                <div className="animate-fadeIn space-y-3 sm:space-y-4 max-w-7xl mx-auto">
+                <div className="animate-fadeIn space-y-3 sm:space-y-4 max-w-10xl mx-auto">
 
                   {/* Tabs / Stats Row */}
                   <div className="grid grid-cols-2 gap-2 sm:gap-3">
