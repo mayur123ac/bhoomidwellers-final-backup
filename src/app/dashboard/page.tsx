@@ -40,6 +40,7 @@ import BankerVisitsTable from "@/components/BankerVisitsTable";
 import { canViewPartners } from "@/lib/cpRbac";
 import UploadLeadSheet from "@/components/UploadLeadSheet";
 import EnquiryOverviewSection from "@/components/Enquiryoverviewsection";
+import AdminLeadTable, { type ALTColumn } from "@/components/AdminLeadTable";
 import InlineContactField from "@/components/InlineContactField";
 import BolnaCallWidget from "@/components/BolnaCallWidget";
 import CallingButtons from "@/components/CallingButtons";
@@ -3467,78 +3468,110 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
     { key: "closed", label: "Closed Leads", icon: "✅", count: closedLeads.length, desc: `Deals successfully closed by ${managerName}` }
   ] as const;
 
-  // Reusable Table Component
-  const renderTable = (leads: any[]) => (
-    <div className={`rounded-xl overflow-hidden border ${theme.tableWrap}`} style={theme.tableGlass}>
-      <div className="overflow-x-auto custom-scrollbar">
-        <div ref={loadLessRef} style={{ height: "1px", width: "100%" }} />
-
-        <table className="w-full text-left border-collapse whitespace-nowrap">
-          <thead className={`text-[10px] sm:text-xs uppercase ${theme.tableHead} ${theme.textHeader}`}>
-            <tr>
-              <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Lead ID</th>
-              <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Client</th>
-              <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Budget</th>
-              <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Phone</th>
-              <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Source</th>
-
-              <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Status</th>
-              <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Interest</th>
-              <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Site Visit</th>
-              <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Date</th>
-            </tr>
-          </thead>
-          <tbody className={`divide-y ${theme.tableDivide}`}>
-            {isLoading ? (
-              <tr><td colSpan={9} className={`text-center py-6 sm:py-8 text-xs sm:text-sm ${theme.textMuted}`}>Syncing…</td></tr>
-            ) : leads.length === 0 ? (
-              <tr><td colSpan={9} className={`text-center py-8 sm:py-12 text-xs sm:text-sm ${theme.textMuted}`}>No leads found.</td></tr>
-            ) : leads.map((lead: any) => {
-              const isLost = !!lead.is_lost_lead;
-              const isNGD = lead.status === "NON GENUINE DEMAND (NGD)" || lead.leadStatus === "NON GENUINE DEMAND (NGD)" || lead.leadInterestStatus === "NON GENUINE DEMAND (NGD)";
-              return (
-                <tr key={lead.id} className={`transition-colors cursor-pointer ${isLost ? theme.rowLost : isNGD ? theme.rowNGD : theme.tableRow}`} onClick={() => { setSelectedLead(lead); setSubView("detail"); prefillSalesForm(lead); setShowSalesForm(false); setShowLoanForm(false); }}>
-                  <td className={`px-2 py-1.5 sm:px-4 sm:py-2.5 font-black text-xs sm:text-sm ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>#{lead.sr_no || lead.id}</td>
-                  <td className={`px-2 py-1.5 sm:px-4 sm:py-2.5 font-semibold text-xs sm:text-sm ${theme.text}`}>{lead.name}</td>
-                  <td className={`px-2 py-1.5 sm:px-4 sm:py-2.5 font-semibold text-xs sm:text-sm ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget || lead.budget || "N/A"}</td>
-                  <td className={`px-2 py-1.5 sm:px-4 sm:py-2.5 font-mono text-[10px] sm:text-xs ${theme.textMuted}`}>{maskPhone(lead.phone, adminUser?.role, lead.assigned_to === adminUser?.name)}</td>
-                  <td className={`px-2 py-1.5 sm:px-4 sm:py-2.5 text-[10px] sm:text-xs ${theme.textMuted}`}>{lead.source || "—"}</td>
-                  <td className="px-2 py-1.5 sm:px-4 sm:py-2.5">
-                    <span className={`px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-full text-[9px] sm:text-[10px] font-bold uppercase border flex-shrink-0 ${isLost ? theme.statusLost : isNGD ? theme.statusNGD : statusCls(lead.status)}`}>
-                      {isLost ? "Lost" : isNGD ? "NGD" : (lead.status || "Assigned")}
-                    </span>
-                  </td>
-                  <td className="px-2 py-1.5 sm:px-4 sm:py-2.5">
-                    {lead.leadInterestStatus && lead.leadInterestStatus !== "Pending" ? (
-                      <InterestBadge status={lead.leadInterestStatus} size="sm" isDark={isDark} />
-                    ) : <span className={`text-[10px] sm:text-xs italic ${theme.textFaint}`}>—</span>}
-                  </td>
-                  <td className={`px-2 py-1.5 sm:px-4 sm:py-2.5 text-[10px] sm:text-xs ${lead.mongoVisitDate ? "text-orange-500 font-semibold" : theme.textFaint}`}>
-                    {lead.mongoVisitDate ? formatDate(lead.mongoVisitDate).split(",")[0] : "—"}
-                  </td>
-                  <td className={`px-2 py-1.5 sm:px-4 sm:py-2.5 text-[10px] sm:text-xs whitespace-normal min-w-[100px] sm:min-w-[120px] ${theme.textFaint}`}>
-                    {formatDate(lead.created_at)}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-        {/* ── BOTTOM SENTINEL — triggers load more ── */}
-        {visibleCount < leads.length && (
-          <div ref={loadMoreRef} className={`flex items-center justify-center gap-3 py-6 ${theme.textMuted}`}>
-            <div className="w-4 h-4 rounded-full border-2 border-[#9E217B] border-t-transparent animate-spin" />
-            <span className="text-xs font-medium">Loading more… ({visibleCount} of {leads.length})</span>
-          </div>
-        )}
-        {visibleCount >= leads.length && leads.length > 20 && (
-          <div className={`text-center py-2.5 text-xs font-medium ${theme.textFaint}`}>
-            ✓ All {leads.length} leads loaded
-          </div>
-        )}
-      </div>
-    </div>
-  );
+  // ── Column definitions for AdminLeadTable ──
+  const smColumns: ALTColumn[] = [
+    {
+      key: "lead_no", label: "Lead No.", minWidth: "min-w-[60px] sm:min-w-[76px]", locked: true,
+      sortValue: (l) => Number(l.sr_no || l.id) || 0,
+      render: (l, { isDark: dk }) => <span className={`font-bold text-[11px] sm:text-[13px] ${dk ? "text-[#d946a8]" : "text-[#9E217B]"}`}>#{l.sr_no || l.id}</span>,
+    },
+    {
+      key: "name", label: "Name", minWidth: "min-w-[110px] sm:min-w-[190px]", locked: true,
+      sortValue: (l) => String(l.name || "").toLowerCase(),
+      render: (l, { theme: t }) => <span className={`font-bold text-[12px] sm:text-[13px] ${t.text}`}>{l.name}</span>,
+    },
+    {
+      key: "contact", label: "Contact", minWidth: "min-w-[95px] sm:min-w-[115px]",
+      sortValue: (l) => String(l.phone || ""),
+      render: (l, { theme: t }) => <span className={`font-mono text-[11px] sm:text-xs ${t.textMuted}`}>{maskPhone(l.phone, adminUser?.role, l.assigned_to === adminUser?.name)}</span>,
+    },
+    {
+      key: "prop_type", label: "Property Type", minWidth: "min-w-[90px] sm:min-w-[110px]", defaultHidden: true,
+      sortValue: (l) => String(l.propType || l.configuration || "").toLowerCase(),
+      render: (l, { theme: t }) => <span className={`text-[11px] sm:text-xs ${t.textMuted}`}>{l.propType || l.configuration || "\u2014"}</span>,
+    },
+    {
+      key: "budget", label: "Budget", minWidth: "min-w-[80px] sm:min-w-[100px]",
+      sortValue: (l) => String(l.salesBudget || l.budget || ""),
+      render: (l, { isDark: dk }) => <span className={`font-semibold text-[11px] sm:text-[13px] ${dk ? "text-emerald-400" : "text-emerald-600"}`}>{l.salesBudget || l.budget || "N/A"}</span>,
+    },
+    {
+      key: "source", label: "Source", minWidth: "min-w-[90px] sm:min-w-[110px]",
+      sortValue: (l) => String(l.source || "").toLowerCase(),
+      render: (l, { theme: t }) => <span className={`text-[11px] sm:text-xs ${t.textMuted}`}>{l.source || "\u2014"}</span>,
+    },
+    {
+      key: "cp_name", label: "CP Name", minWidth: "min-w-[100px] sm:min-w-[130px]", defaultHidden: true,
+      sortValue: (l) => String(l.cpName || l.cp_name || "").toLowerCase(),
+      render: (l, { theme: t }) => <span className={`text-[11px] sm:text-xs ${t.textMuted}`}>{l.cpName || l.cp_name || "\u2014"}</span>,
+    },
+    {
+      key: "cp_company", label: "CP Company", minWidth: "min-w-[100px] sm:min-w-[120px]", defaultHidden: true,
+      sortValue: (l) => String(l.cpCompany || l.cp_company || "").toLowerCase(),
+      render: (l, { theme: t }) => <span className={`text-[11px] sm:text-xs ${t.textMuted}`}>{l.cpCompany || l.cp_company || "\u2014"}</span>,
+    },
+    {
+      key: "cp_phone", label: "CP Phone", minWidth: "min-w-[95px] sm:min-w-[115px]", defaultHidden: true,
+      sortValue: (l) => String(l.cpPhone || l.cp_phone || ""),
+      render: (l, { theme: t }) => {
+        const v = l.cpPhone || l.cp_phone;
+        if (!v) return <span className="text-[11px] sm:text-xs italic opacity-35">\u2014</span>;
+        return <a href={`tel:${String(v).replace(/[^0-9+]/g, "")}`} onClick={(e) => e.stopPropagation()} className={`font-mono text-[11px] sm:text-xs hover:underline ${t.textMuted}`}>{v}</a>;
+      },
+    },
+    {
+      key: "status", label: "Status", align: "center", minWidth: "min-w-[100px] sm:min-w-[130px]",
+      sortValue: (l) => String(l.status || "Assigned").toLowerCase(),
+      render: (l) => {
+        const isLost = !!l.is_lost_lead;
+        const isNGD = l.status === "NON GENUINE DEMAND (NGD)" || l.leadStatus === "NON GENUINE DEMAND (NGD)" || l.leadInterestStatus === "NON GENUINE DEMAND (NGD)";
+        return (
+          <span className={`px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-full text-[9px] sm:text-[10px] font-bold uppercase border flex-shrink-0 ${isLost ? theme.statusLost : isNGD ? theme.statusNGD : statusCls(l.status)}`}>
+            {isLost ? "Lost" : isNGD ? "NGD" : (l.status || "Assigned")}
+          </span>
+        );
+      },
+    },
+    {
+      key: "lost_status", label: "Lost Status", align: "center", minWidth: "min-w-[90px] sm:min-w-[110px]", defaultHidden: true,
+      sortValue: (l) => (l.is_lost_lead ? 1 : 0),
+      render: (l, { isDark: dk }) => (
+        <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase border ${l.is_lost_lead ? (dk ? "text-red-400 border-red-500/30 bg-red-500/10" : "text-red-700 border-red-300 bg-red-50") : (dk ? "text-green-400 border-green-500/30 bg-green-500/10" : "text-green-700 border-green-300 bg-green-50")}`}>
+          {l.is_lost_lead ? "Lost Lead" : "Active"}
+        </span>
+      ),
+    },
+    {
+      key: "interest", label: "Interest", align: "center", minWidth: "min-w-[95px] sm:min-w-[115px]",
+      sortValue: (l) => String(l.leadInterestStatus || "").toLowerCase(),
+      render: (l, { isDark: dk }) =>
+        l.leadInterestStatus && l.leadInterestStatus !== "Pending"
+          ? <InterestBadge status={l.leadInterestStatus} size="sm" isDark={dk} />
+          : <span className={`text-[10px] sm:text-xs italic ${theme.textFaint}`}>\u2014</span>,
+    },
+    {
+      key: "site_visit", label: "Site Visit", minWidth: "min-w-[85px] sm:min-w-[105px]",
+      sortValue: (l) => (l.mongoVisitDate ? new Date(l.mongoVisitDate).getTime() : 0),
+      render: (l, { formatDate: fd }) =>
+        l.mongoVisitDate
+          ? <span className="text-orange-500 font-semibold text-[11px] sm:text-xs">{fd(l.mongoVisitDate).split(",")[0]}</span>
+          : <span className="text-[11px] sm:text-xs italic opacity-35">\u2014</span>,
+    },
+    {
+      key: "created_at", label: "Created On", minWidth: "min-w-[95px] sm:min-w-[115px]",
+      sortValue: (l) => (l.created_at ? new Date(l.created_at).getTime() : 0),
+      render: (l, { theme: t, formatDate: fd }) =>
+        l.created_at ? <span className={`text-[11px] sm:text-xs ${t.textFaint}`}>{fd(l.created_at)}</span> : <span className="text-[11px] sm:text-xs italic opacity-35">\u2014</span>,
+    },
+    {
+      key: "backdated", label: "Backdated Entry", minWidth: "min-w-[100px] sm:min-w-[120px]", defaultHidden: true,
+      sortValue: (l) => l.auto_date_enabled === false && l.enquiry_date ? new Date(l.enquiry_date).getTime() : 0,
+      render: (l, { isDark: dk, formatDate: fd }) =>
+        l.auto_date_enabled === false && l.enquiry_date
+          ? <span className={`inline-flex items-center px-2 py-[3px] rounded-md text-[9px] sm:text-[10px] font-bold border whitespace-nowrap ${dk ? "bg-amber-500/10 text-amber-300 border-amber-500/25" : "bg-amber-50 text-amber-700 border-amber-200"}`}>{fd(l.enquiry_date).split(",")[0]}</span>
+          : <span className="text-[11px] sm:text-xs italic opacity-30">\u2014</span>,
+    },
+  ];
   const [showMobileActions, setShowMobileActions] = useState(false);
   const formInput = `w-full rounded-lg px-4 py-2 text-sm outline-none transition-colors border ${theme.inputInner} ${theme.text} ${theme.inputFocus}`;
   const formSelect = `w-full rounded-lg px-4 py-2.5 text-sm outline-none cursor-pointer border ${theme.inputInner} ${theme.text} ${theme.inputFocus}`;
@@ -3555,7 +3588,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
       {/* 1. Sidebar for Managers */}
       {/* MOBILE: 100% width, hidden if a manager is selected. DESKTOP: Always visible, fixed 62 width (approx 250px) */}
       <div
-        className={`border-r flex-col h-full flex-shrink-0 z-20 shadow-xl ${theme.innerBlock} w-full md:w-62 ${selectedManager ? 'hidden md:flex' : 'flex'}`}
+        className={`border-r flex-col h-full flex-shrink-0 z-20 shadow-xl ${theme.innerBlock} w-full ${selectedManager ? 'hidden' : 'flex'}`}
       >
         <div className={`p-5 border-b ${theme.tableBorder}`}>
           <div className="relative">
@@ -3615,8 +3648,9 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
 
       {/* 2. COMBINED MAIN CONTENT AREA (Leads/Details View) */}
       {/* MOBILE: 100% width, only visible if manager is selected. DESKTOP: Always visible, takes remaining space */}
+      {/* Now hidden on ALL screens when NO manager is selected, allowing the list to take 100% width */}
       <div
-        className={`flex-1 flex flex-col h-full min-w-0 overflow-hidden ${theme.mainBg} ${selectedManager ? 'flex' : 'hidden md:flex'}`}
+        className={`flex-1 flex flex-col h-full min-w-0 overflow-hidden ${theme.mainBg} ${selectedManager ? 'flex' : 'hidden'}`}
       >
         {/* MOBILE BACK BUTTON: Only shows on small screens when a manager is selected */}
         {/* {selectedManager && (
@@ -3708,7 +3742,16 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                       </button>
                     </div>
                   </div>
-                  {renderTable(activeSection === "assignedTable" ? assignedLeads : closedLeads)}
+                  <AdminLeadTable
+                    leads={activeSection === "assignedTable" ? assignedLeads : closedLeads}
+                    columns={smColumns}
+                    storageKey="bd:admin-sm:hiddenCols"
+                    theme={theme}
+                    isDark={isDark}
+                    isLoading={isLoading}
+                    formatDate={formatDate}
+                    onRowClick={(lead) => { setSelectedLead(lead); setSubView("detail"); prefillSalesForm(lead); setShowSalesForm(false); setShowLoanForm(false); }}
+                  />
 
                 </div>
               </div>
@@ -3835,7 +3878,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                       />
                     </div>
 
-                    <div className="flex flex-col lg:flex-row gap-2 flex-1 min-h-0 pb-2">
+                    <div className="flex flex-col lg:flex-row gap-2 flex-1 min-h-[100vh] pb-2">
                       <div className="w-full lg:w-[45%] xl:w-[45%] flex flex-col gap-3 h-full pb-2">
                         {showSalesForm ? (
                           <div className={`rounded-xl border p-3 shadow-xl flex-1 overflow-y-auto custom-scrollbar flex flex-col ${theme.modalCard}`} style={theme.modalGlass}>
@@ -4616,84 +4659,110 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
     { key: "closed", label: "Closed Leads", icon: "✅", count: closedLeads.length, desc: `Deals successfully closed by ${siteHeadName}` }
   ] as const;
 
-  // Reusable Table Component
-  const renderTable = (leads: any[]) => (
-    <div className={`rounded-xl overflow-hidden border ${theme.tableWrap}`} style={theme.tableGlass}>
-      <div className="overflow-x-auto custom-scrollbar w-100vh">
-        <div ref={loadLessRef} style={{ height: "1px", width: "100%" }} />
-
-        <table className="w-full text-left border-collapse whitespace-nowrap">
-          <thead className={`text-[10px] sm:text-xs uppercase ${theme.tableHead} ${theme.textHeader}`}>
-            <tr>
-              <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Lead ID</th>
-              <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Client</th>
-              <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Budget</th>
-              <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Phone</th>
-              <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Source</th>
-              <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Cp Company</th>
-              <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Cp Name</th>
-              <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Cp Phone Number</th>
-              <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Status</th>
-              <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Interest</th>
-              <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Site Visit</th>
-              <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Date</th>
-            </tr>
-          </thead>
-          <tbody className={`divide-y ${theme.tableDivide}`}>
-            {isLoading ? (
-              <tr><td colSpan={9} className={`text-center py-6 sm:py-8 text-xs sm:text-sm ${theme.textMuted}`}>Syncing…</td></tr>
-            ) : leads.length === 0 ? (
-              <tr><td colSpan={9} className={`text-center py-8 sm:py-12 text-xs sm:text-sm ${theme.textMuted}`}>No leads found.</td></tr>
-            ) : leads.map((lead: any) => {
-              const isLost = !!lead.is_lost_lead;
-              const isNGD = lead.status === "NON GENUINE DEMAND (NGD)" || lead.leadStatus === "NON GENUINE DEMAND (NGD)" || lead.leadInterestStatus === "NON GENUINE DEMAND (NGD)";
-              return (
-                <tr key={lead.id} className={`transition-colors cursor-pointer ${isLost ? theme.rowLost : isNGD ? theme.rowNGD : theme.tableRow}`} onClick={() => { setSelectedLead(lead); setSubView("detail"); prefillSalesForm(lead); setShowSalesForm(false); setShowLoanForm(false); }}>
-                  <td className={`px-2 py-1.5 sm:px-4 sm:py-2.5 font-black text-xs sm:text-sm ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>#{lead.sr_no || lead.id}</td>
-                  <td className={`px-2 py-1.5 sm:px-4 sm:py-2.5 font-semibold text-xs sm:text-sm ${theme.text}`}>{lead.name}</td>
-                  <td className={`px-2 py-1.5 sm:px-4 sm:py-2.5 font-semibold text-xs sm:text-sm ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget || lead.budget || "N/A"}</td>
-                  <td className={`px-2 py-1.5 sm:px-4 sm:py-2.5 font-mono text-[10px] sm:text-xs ${theme.textMuted}`}>{maskPhone(lead.phone, adminUser?.role, lead.assigned_to === adminUser?.name)}</td>
-                  <td className={`px-2 py-1.5 sm:px-4 sm:py-2.5 text-[10px] sm:text-xs ${theme.textMuted}`}>{lead.source || "—"}</td>
-                  <td className={`px-2 py-1.5 sm:px-4 sm:py-2.5 text-[10px] sm:text-xs ${theme.textMuted}`}>{lead.cp_company || lead.cpCompany || "—"}</td>
-                  <td className={`px-2 py-1.5 sm:px-4 sm:py-2.5 text-[10px] sm:text-xs ${theme.textMuted}`}>{lead.cpName || lead.cp_name || "—"}</td>
-                  <td className={`px-2 py-1.5 sm:px-4 sm:py-2.5 font-mono text-[10px] sm:text-xs ${theme.textMuted}`}>{lead.cpPhone || lead.cp_phone || "—"}</td>
-                  <td className="px-2 py-1.5 sm:px-4 sm:py-2.5">
-                    <span className={`px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-full text-[9px] sm:text-[10px] font-bold uppercase border flex-shrink-0 ${isLost ? theme.statusLost : isNGD ? theme.statusNGD : statusCls(lead.status)}`}>
-                      {isLost ? "Lost" : isNGD ? "NGD" : (lead.status || "Assigned")}
-                    </span>
-                  </td>
-
-                  <td className="px-2 py-1.5 sm:px-4 sm:py-2.5">
-                    {lead.leadInterestStatus && lead.leadInterestStatus !== "Pending" ? (
-                      <InterestBadge status={lead.leadInterestStatus} size="sm" isDark={isDark} />
-                    ) : <span className={`text-[10px] sm:text-xs italic ${theme.textFaint}`}>—</span>}
-                  </td>
-                  <td className={`px-2 py-1.5 sm:px-4 sm:py-2.5 text-[10px] sm:text-xs ${lead.mongoVisitDate ? "text-orange-500 font-semibold" : theme.textFaint}`}>
-                    {lead.mongoVisitDate ? formatDate(lead.mongoVisitDate).split(",")[0] : "—"}
-                  </td>
-                  <td className={`px-2 py-1.5 sm:px-4 sm:py-2.5 text-[10px] sm:text-xs whitespace-normal min-w-[100px] sm:min-w-[120px] ${theme.textFaint}`}>
-                    {formatDate(lead.created_at)}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-        {/* ── BOTTOM SENTINEL — triggers load more ── */}
-        {visibleCount < leads.length && (
-          <div ref={loadMoreRef} className={`flex items-center justify-center gap-3 py-6 ${theme.textMuted}`}>
-            <div className="w-4 h-4 rounded-full border-2 border-[#9E217B] border-t-transparent animate-spin" />
-            <span className="text-xs font-medium">Loading more… ({visibleCount} of {leads.length})</span>
-          </div>
-        )}
-        {visibleCount >= leads.length && leads.length > 20 && (
-          <div className={`text-center py-2.5 text-xs font-medium ${theme.textFaint}`}>
-            ✓ All {leads.length} leads loaded
-          </div>
-        )}
-      </div>
-    </div>
-  );
+  // ── Column definitions for AdminLeadTable ──
+  const shColumns: ALTColumn[] = [
+    {
+      key: "lead_no", label: "Lead No.", minWidth: "min-w-[60px] sm:min-w-[76px]", locked: true,
+      sortValue: (l) => Number(l.sr_no || l.id) || 0,
+      render: (l, { isDark: dk }) => <span className={`font-bold text-[11px] sm:text-[13px] ${dk ? "text-[#d946a8]" : "text-[#9E217B]"}`}>#{l.sr_no || l.id}</span>,
+    },
+    {
+      key: "name", label: "Name", minWidth: "min-w-[110px] sm:min-w-[190px]", locked: true,
+      sortValue: (l) => String(l.name || "").toLowerCase(),
+      render: (l, { theme: t }) => <span className={`font-bold text-[12px] sm:text-[13px] ${t.text}`}>{l.name}</span>,
+    },
+    {
+      key: "contact", label: "Contact", minWidth: "min-w-[95px] sm:min-w-[115px]",
+      sortValue: (l) => String(l.phone || ""),
+      render: (l, { theme: t }) => <span className={`font-mono text-[11px] sm:text-xs ${t.textMuted}`}>{maskPhone(l.phone, adminUser?.role, l.assigned_to === adminUser?.name)}</span>,
+    },
+    {
+      key: "prop_type", label: "Property Type", minWidth: "min-w-[90px] sm:min-w-[110px]", defaultHidden: true,
+      sortValue: (l) => String(l.propType || l.configuration || "").toLowerCase(),
+      render: (l, { theme: t }) => <span className={`text-[11px] sm:text-xs ${t.textMuted}`}>{l.propType || l.configuration || "\u2014"}</span>,
+    },
+    {
+      key: "budget", label: "Budget", minWidth: "min-w-[80px] sm:min-w-[100px]",
+      sortValue: (l) => String(l.salesBudget || l.budget || ""),
+      render: (l, { isDark: dk }) => <span className={`font-semibold text-[11px] sm:text-[13px] ${dk ? "text-emerald-400" : "text-emerald-600"}`}>{l.salesBudget || l.budget || "N/A"}</span>,
+    },
+    {
+      key: "source", label: "Source", minWidth: "min-w-[90px] sm:min-w-[110px]",
+      sortValue: (l) => String(l.source || "").toLowerCase(),
+      render: (l, { theme: t }) => <span className={`text-[11px] sm:text-xs ${t.textMuted}`}>{l.source || "\u2014"}</span>,
+    },
+    {
+      key: "cp_name", label: "CP Name", minWidth: "min-w-[100px] sm:min-w-[130px]",
+      sortValue: (l) => String(l.cpName || l.cp_name || "").toLowerCase(),
+      render: (l, { theme: t }) => <span className={`text-[11px] sm:text-xs ${t.textMuted}`}>{l.cpName || l.cp_name || "\u2014"}</span>,
+    },
+    {
+      key: "cp_company", label: "CP Company", minWidth: "min-w-[100px] sm:min-w-[120px]",
+      sortValue: (l) => String(l.cpCompany || l.cp_company || "").toLowerCase(),
+      render: (l, { theme: t }) => <span className={`text-[11px] sm:text-xs ${t.textMuted}`}>{l.cpCompany || l.cp_company || "\u2014"}</span>,
+    },
+    {
+      key: "cp_phone", label: "CP Phone", minWidth: "min-w-[95px] sm:min-w-[115px]",
+      sortValue: (l) => String(l.cpPhone || l.cp_phone || ""),
+      render: (l, { theme: t }) => {
+        const v = l.cpPhone || l.cp_phone;
+        if (!v) return <span className="text-[11px] sm:text-xs italic opacity-35">\u2014</span>;
+        return <a href={`tel:${String(v).replace(/[^0-9+]/g, "")}`} onClick={(e) => e.stopPropagation()} className={`font-mono text-[11px] sm:text-xs hover:underline ${t.textMuted}`}>{v}</a>;
+      },
+    },
+    {
+      key: "status", label: "Status", align: "center", minWidth: "min-w-[100px] sm:min-w-[130px]",
+      sortValue: (l) => String(l.status || "Assigned").toLowerCase(),
+      render: (l) => {
+        const isLost = !!l.is_lost_lead;
+        const isNGD = l.status === "NON GENUINE DEMAND (NGD)" || l.leadStatus === "NON GENUINE DEMAND (NGD)" || l.leadInterestStatus === "NON GENUINE DEMAND (NGD)";
+        return (
+          <span className={`px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-full text-[9px] sm:text-[10px] font-bold uppercase border flex-shrink-0 ${isLost ? theme.statusLost : isNGD ? theme.statusNGD : statusCls(l.status)}`}>
+            {isLost ? "Lost" : isNGD ? "NGD" : (l.status || "Assigned")}
+          </span>
+        );
+      },
+    },
+    {
+      key: "lost_status", label: "Lost Status", align: "center", minWidth: "min-w-[90px] sm:min-w-[110px]", defaultHidden: true,
+      sortValue: (l) => (l.is_lost_lead ? 1 : 0),
+      render: (l, { isDark: dk }) => (
+        <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase border ${l.is_lost_lead ? (dk ? "text-red-400 border-red-500/30 bg-red-500/10" : "text-red-700 border-red-300 bg-red-50") : (dk ? "text-green-400 border-green-500/30 bg-green-500/10" : "text-green-700 border-green-300 bg-green-50")}`}>
+          {l.is_lost_lead ? "Lost Lead" : "Active"}
+        </span>
+      ),
+    },
+    {
+      key: "interest", label: "Interest", align: "center", minWidth: "min-w-[95px] sm:min-w-[115px]",
+      sortValue: (l) => String(l.leadInterestStatus || "").toLowerCase(),
+      render: (l, { isDark: dk }) =>
+        l.leadInterestStatus && l.leadInterestStatus !== "Pending"
+          ? <InterestBadge status={l.leadInterestStatus} size="sm" isDark={dk} />
+          : <span className={`text-[10px] sm:text-xs italic ${theme.textFaint}`}>\u2014</span>,
+    },
+    {
+      key: "site_visit", label: "Site Visit", minWidth: "min-w-[85px] sm:min-w-[105px]",
+      sortValue: (l) => (l.mongoVisitDate ? new Date(l.mongoVisitDate).getTime() : 0),
+      render: (l, { formatDate: fd }) =>
+        l.mongoVisitDate
+          ? <span className="text-orange-500 font-semibold text-[11px] sm:text-xs">{fd(l.mongoVisitDate).split(",")[0]}</span>
+          : <span className="text-[11px] sm:text-xs italic opacity-35">\u2014</span>,
+    },
+    {
+      key: "created_at", label: "Created On", minWidth: "min-w-[95px] sm:min-w-[115px]",
+      sortValue: (l) => (l.created_at ? new Date(l.created_at).getTime() : 0),
+      render: (l, { theme: t, formatDate: fd }) =>
+        l.created_at ? <span className={`text-[11px] sm:text-xs ${t.textFaint}`}>{fd(l.created_at)}</span> : <span className="text-[11px] sm:text-xs italic opacity-35">\u2014</span>,
+    },
+    {
+      key: "backdated", label: "Backdated Entry", minWidth: "min-w-[100px] sm:min-w-[120px]", defaultHidden: true,
+      sortValue: (l) => l.auto_date_enabled === false && l.enquiry_date ? new Date(l.enquiry_date).getTime() : 0,
+      render: (l, { isDark: dk, formatDate: fd }) =>
+        l.auto_date_enabled === false && l.enquiry_date
+          ? <span className={`inline-flex items-center px-2 py-[3px] rounded-md text-[9px] sm:text-[10px] font-bold border whitespace-nowrap ${dk ? "bg-amber-500/10 text-amber-300 border-amber-500/25" : "bg-amber-50 text-amber-700 border-amber-200"}`}>{fd(l.enquiry_date).split(",")[0]}</span>
+          : <span className="text-[11px] sm:text-xs italic opacity-30">\u2014</span>,
+    },
+  ];
 
   const formInput = `w-full rounded-lg px-4 py-2 text-sm outline-none transition-colors border ${theme.inputInner} ${theme.text} ${theme.inputFocus}`;
   const formSelect = `w-full rounded-lg px-4 py-2.5 text-sm outline-none cursor-pointer border ${theme.inputInner} ${theme.text} ${theme.inputFocus}`;
@@ -4742,7 +4811,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
 
       {/* Sidebar for Site Heads */}
       {/* MOBILE: 100% width, hidden if a Site Head is selected. DESKTOP: Always visible, fixed 62 width */}
-      <div className={`border-r flex-col h-full flex-shrink-0 z-20 shadow-xl ${theme.innerBlock} w-full md:w-62 ${selectedSiteHead ? 'hidden' : 'flex'}`}>
+      <div className={`border-r flex-col h-full flex-shrink-0 z-20 shadow-xl ${theme.innerBlock} w-full ${selectedSiteHead ? 'hidden' : 'flex'}`}>
         <div className={`p-5 border-b ${theme.tableBorder}`}>
           <div className="relative">
             <FaSearch className={`absolute left-3 top-1/2 -translate-y-1/2 text-xs ${theme.textFaint}`} />
@@ -4871,7 +4940,16 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                       </button>
                     </div>
                   </div>
-                  {renderTable(activeSection === "assignedTable" ? assignedLeads : closedLeads)}
+                  <AdminLeadTable
+                    leads={activeSection === "assignedTable" ? assignedLeads : closedLeads}
+                    columns={shColumns}
+                    storageKey="bd:admin-sh:hiddenCols"
+                    theme={theme}
+                    isDark={isDark}
+                    isLoading={isLoading}
+                    formatDate={formatDate}
+                    onRowClick={(lead) => { setSelectedLead(lead); setSubView("detail"); prefillSalesForm(lead); setShowSalesForm(false); setShowLoanForm(false); }}
+                  />
 
                 </div>
               </div>
@@ -4976,7 +5054,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                     </div>
 
                     {/* AI voice calling */}
-                    <div className="mb-2 mt-2 flex-shrink-0">
+                    {/* <div className="mb-2 mt-2 flex-shrink-0">
                       <BolnaCallWidget
                         leadId={Number(selectedLead.id)}
                         leadName={selectedLead.name}
@@ -4984,9 +5062,9 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                         userData={{ project: selectedLead.propType || selectedLead.configuration }}
                         compact
                       />
-                    </div>
+                    </div> */}
 
-                    <div className="flex flex-col lg:flex-row gap-2 flex-1 min-h-0 pb-2">
+                    <div className="flex flex-col lg:flex-row gap-2 flex-1 min-h-[80vh] pb-2 mt-2">
                       {/* LEFT PANEL */}
                       <div className="w-full lg:w-[45%] flex flex-col gap-3 h-full pb-2">
                         {showSalesForm ? (
@@ -5250,7 +5328,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
 // RECEPTIONIST VIEW
 // ============================================================================
 function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refetch, appendFollowUp, reconcileFollowUp, removeFollowUp, theme, isDark, adminUser }: any) {
-  const [assignedTableFilter, setAssignedTableFilter] = useState<"working" | "all">("working");
+  const [assignedTableFilter, setAssignedTableFilter] = useState<"working" | "completed" | "all">("working");
   const [selectedReceptionist, setSelectedReceptionist] = useState<any>(null);
   const [searchRecep, setSearchRecep] = useState("");
   const [activeSection, setActiveSection] = useState<"enquiries" | "assignedTable" | "closed">("enquiries");
@@ -5768,157 +5846,193 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
     { key: "closed", label: "Closed Leads", icon: "✅", count: closedLeads.length, desc: "Leads closed by this receptionist" },
   ] as const;
 
-  // ── Reusable table renderer ───────────────────────────────────────────────────
-  const renderTable = (leads: any[], showAssignedInfo = false, isEnquiryTable = false) => (
-    <div className={`rounded-xl overflow-hidden border ${theme.tableWrap}`} style={theme.tableGlass}>
-      <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse whitespace-nowrap">
-          <thead className={`text-[10px] sm:text-xs uppercase ${theme.tableHead} ${theme.textHeader}`}>
-            <tr>
-              <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Lead ID</th>
-              <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Client</th>
-              <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Budget</th>
-              <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Phone</th>
-              <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Source</th>
-              <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Status</th>
-              <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Interest</th>
-              {showAssignedInfo && <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Assigned To</th>}
-              <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Site Visit</th>
-              <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Date</th>
-              <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Action</th>
-              {isEnquiryTable && <th className="px-2 py-1.5 sm:px-4 sm:py-2.5">Reassign</th>}
-            </tr>
-          </thead>
-          <tbody className={`divide-y ${theme.tableDivide}`}>
-            {isLoading ? (
-              <tr><td colSpan={12} className={`text-center py-6 sm:py-8 text-xs sm:text-sm ${theme.textMuted}`}>Syncing…</td></tr>
-            ) : leads.length === 0 ? (
-              <tr><td colSpan={12} className={`text-center py-8 sm:py-12 text-xs sm:text-sm ${theme.textMuted}`}>
-                <FaClipboardList className="text-xl sm:text-2xl mx-auto mb-2 sm:mb-3 opacity-20" />
-                <p className="text-xs sm:text-sm">No leads found.</p>
-              </td></tr>
-            ) : leads.slice(0, visibleCount).map((lead: any) => (
-              <tr
-                key={lead.id}
-                className={`transition-colors ${theme.tableRow} ${!isEnquiryTable ? "cursor-pointer" : ""}`}
-                onClick={!isEnquiryTable ? () => { setIsEnquiryView(false); setSelectedLead(lead); setSubView("detail"); prefillSalesForm(lead); setShowSalesForm(false); setShowLoanForm(false); } : undefined}
-              >
-                <td className={`px-2 py-1.5 sm:px-4 sm:py-2.5 font-black text-xs sm:text-sm ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>#{lead.sr_no || lead.id}</td>
+  // ── Column definitions for AdminLeadTable ──
+  const recBaseColumns: ALTColumn[] = [
+    {
+      key: "lead_no", label: "Lead No.", minWidth: "min-w-[60px] sm:min-w-[76px]", locked: true,
+      sortValue: (l) => Number(l.sr_no || l.id) || 0,
+      render: (l, { isDark: dk }) => <span className={`font-bold text-[11px] sm:text-[13px] ${dk ? "text-[#d946a8]" : "text-[#9E217B]"}`}>#{l.sr_no || l.id}</span>,
+    },
+    {
+      key: "name", label: "Name", minWidth: "min-w-[110px] sm:min-w-[190px]", locked: true,
+      sortValue: (l) => String(l.name || "").toLowerCase(),
+      render: (l, { theme: t }) => <span className={`font-bold text-[12px] sm:text-[13px] ${t.text}`}>{l.name}</span>,
+    },
+    {
+      key: "contact", label: "Contact", minWidth: "min-w-[95px] sm:min-w-[115px]",
+      sortValue: (l) => String(l.phone || ""),
+      render: (l, { theme: t }) => <span className={`font-mono text-[11px] sm:text-xs ${t.textMuted}`}>{maskPhone(l.phone, adminUser?.role, l.assigned_to === adminUser?.name)}</span>,
+    },
+    {
+      key: "alt_phone", label: "Alt. Phone", minWidth: "min-w-[95px] sm:min-w-[115px]", defaultHidden: true,
+      sortValue: (l) => String(l.altPhone || l.alt_phone || ""),
+      render: (l, { theme: t }) => {
+        const v = l.altPhone || l.alt_phone;
+        if (!v) return <span className="text-[11px] sm:text-xs italic opacity-35">\u2014</span>;
+        return <a href={`tel:${String(v).replace(/[^0-9+]/g, "")}`} onClick={(e) => e.stopPropagation()} className={`font-mono text-[11px] sm:text-xs hover:underline ${t.textMuted}`}>{v}</a>;
+      },
+    },
+    {
+      key: "budget", label: "Budget", minWidth: "min-w-[80px] sm:min-w-[100px]",
+      sortValue: (l) => String(l.salesBudget || l.budget || ""),
+      render: (l, { isDark: dk }) => <span className={`font-semibold text-[11px] sm:text-[13px] ${dk ? "text-emerald-400" : "text-emerald-600"}`}>{l.salesBudget || l.budget || "N/A"}</span>,
+    },
+    {
+      key: "source", label: "Source", minWidth: "min-w-[90px] sm:min-w-[110px]",
+      sortValue: (l) => String(l.source || "").toLowerCase(),
+      render: (l, { theme: t }) => <span className={`text-[11px] sm:text-xs ${t.textMuted}`}>{l.source || "\u2014"}</span>,
+    },
+    {
+      key: "cp_name", label: "CP Name", minWidth: "min-w-[100px] sm:min-w-[130px]", defaultHidden: true,
+      sortValue: (l) => String(l.cpName || l.cp_name || "").toLowerCase(),
+      render: (l, { theme: t }) => <span className={`text-[11px] sm:text-xs ${t.textMuted}`}>{l.cpName || l.cp_name || "\u2014"}</span>,
+    },
+    {
+      key: "cp_company", label: "CP Company", minWidth: "min-w-[100px] sm:min-w-[120px]", defaultHidden: true,
+      sortValue: (l) => String(l.cpCompany || l.cp_company || "").toLowerCase(),
+      render: (l, { theme: t }) => <span className={`text-[11px] sm:text-xs ${t.textMuted}`}>{l.cpCompany || l.cp_company || "\u2014"}</span>,
+    },
+    {
+      key: "cp_phone", label: "CP Phone", minWidth: "min-w-[95px] sm:min-w-[115px]", defaultHidden: true,
+      sortValue: (l) => String(l.cpPhone || l.cp_phone || ""),
+      render: (l, { theme: t }) => {
+        const v = l.cpPhone || l.cp_phone;
+        if (!v) return <span className="text-[11px] sm:text-xs italic opacity-35">\u2014</span>;
+        return <a href={`tel:${String(v).replace(/[^0-9+]/g, "")}`} onClick={(e) => e.stopPropagation()} className={`font-mono text-[11px] sm:text-xs hover:underline ${t.textMuted}`}>{v}</a>;
+      },
+    },
+    {
+      key: "status", label: "Status", align: "center", minWidth: "min-w-[100px] sm:min-w-[130px]",
+      sortValue: (l) => String(l.status || "Assigned").toLowerCase(),
+      render: (l) => (
+        <span className={`px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-full text-[9px] sm:text-[10px] font-bold uppercase border flex-shrink-0 whitespace-nowrap ${statusCls(l.status)}`}>
+          {l.status || "Assigned"}
+        </span>
+      ),
+    },
+    {
+      key: "lost_status", label: "Lost Status", align: "center", minWidth: "min-w-[90px] sm:min-w-[110px]", defaultHidden: true,
+      sortValue: (l) => (l.is_lost_lead ? 1 : 0),
+      render: (l, { isDark: dk }) => (
+        <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase border ${l.is_lost_lead ? (dk ? "text-red-400 border-red-500/30 bg-red-500/10" : "text-red-700 border-red-300 bg-red-50") : (dk ? "text-green-400 border-green-500/30 bg-green-500/10" : "text-green-700 border-green-300 bg-green-50")}`}>
+          {l.is_lost_lead ? "Lost Lead" : "Active"}
+        </span>
+      ),
+    },
+    {
+      key: "interest", label: "Interest", align: "center", minWidth: "min-w-[95px] sm:min-w-[115px]",
+      sortValue: (l) => String(l.leadInterestStatus || "").toLowerCase(),
+      render: (l, { isDark: dk }) =>
+        l.leadInterestStatus && l.leadInterestStatus !== "Pending"
+          ? <span className={`text-[9px] sm:text-[10px] px-1.5 py-0.5 sm:px-2 sm:py-0.5 rounded-full font-bold border whitespace-nowrap ${l.leadInterestStatus === "Interested" ? (dk ? "text-green-400 border-green-500/30 bg-green-500/10" : "text-green-700 border-green-200 bg-green-50") : l.leadInterestStatus === "Not Interested" ? (dk ? "text-red-400 border-red-500/30 bg-red-500/10" : "text-red-700 border-red-200 bg-red-50") : (dk ? "text-yellow-400 border-yellow-500/30 bg-yellow-500/10" : "text-yellow-700 border-yellow-200 bg-yellow-50")}`}>{l.leadInterestStatus}</span>
+          : <span className={`text-[10px] sm:text-xs italic ${theme.textFaint}`}>\u2014</span>,
+    },
+    {
+      key: "site_visit", label: "Site Visit", minWidth: "min-w-[85px] sm:min-w-[105px]",
+      sortValue: (l) => (l.mongoVisitDate ? new Date(l.mongoVisitDate).getTime() : 0),
+      render: (l, { formatDate: fd }) =>
+        l.mongoVisitDate
+          ? <span className="text-orange-500 font-semibold text-[11px] sm:text-xs">{fd(l.mongoVisitDate).split(",")[0]}</span>
+          : <span className="text-[11px] sm:text-xs italic opacity-35">\u2014</span>,
+    },
+    {
+      key: "created_at", label: "Created On", minWidth: "min-w-[95px] sm:min-w-[115px]",
+      sortValue: (l) => (l.created_at ? new Date(l.created_at).getTime() : 0),
+      render: (l, { theme: t, formatDate: fd }) =>
+        l.created_at ? <span className={`text-[11px] sm:text-xs ${t.textFaint}`}>{fd(l.created_at)}</span> : <span className="text-[11px] sm:text-xs italic opacity-35">\u2014</span>,
+    },
+    {
+      key: "backdated", label: "Backdated Entry", minWidth: "min-w-[100px] sm:min-w-[120px]", defaultHidden: true,
+      sortValue: (l) => l.auto_date_enabled === false && l.enquiry_date ? new Date(l.enquiry_date).getTime() : 0,
+      render: (l, { isDark: dk, formatDate: fd }) =>
+        l.auto_date_enabled === false && l.enquiry_date
+          ? <span className={`inline-flex items-center px-2 py-[3px] rounded-md text-[9px] sm:text-[10px] font-bold border whitespace-nowrap ${dk ? "bg-amber-500/10 text-amber-300 border-amber-500/25" : "bg-amber-50 text-amber-700 border-amber-200"}`}>{fd(l.enquiry_date).split(",")[0]}</span>
+          : <span className="text-[11px] sm:text-xs italic opacity-30">\u2014</span>,
+    },
+  ];
 
-                {/* CLIENT NAME */}
-                <td className={`px-2 py-1.5 sm:px-4 sm:py-2.5 font-semibold text-xs sm:text-sm whitespace-nowrap ${theme.text}`}>
-                  {isEnquiryTable ? (
-                    <span
-                      className={`cursor-pointer hover:underline ${isDark ? "hover:text-[#d946a8]" : "hover:text-[#9E217B]"} transition-colors`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setIsEnquiryView(true);
-                        setSelectedLead(lead);
-                        setSubView("detail");
-                        prefillSalesForm(lead);
-                        setShowSalesForm(true);
-                        setShowLoanForm(false);
-                      }}
-                    >
-                      {lead.name}
-                    </span>
-                  ) : (
-                    lead.name
-                  )}
-                </td>
-
-                <td className={`px-2 py-1.5 sm:px-4 sm:py-2.5 font-semibold text-xs sm:text-sm ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget || lead.budget || "N/A"}</td>
-                <td className={`px-2 py-1.5 sm:px-4 sm:py-2.5 font-mono text-[10px] sm:text-xs ${theme.textMuted}`}>{maskPhone(lead.phone, adminUser?.role, lead.assigned_to === adminUser?.name)}</td>
-                <td className={`px-2 py-1.5 sm:px-4 sm:py-2.5 text-[10px] sm:text-xs ${theme.textMuted}`}>{lead.source || "—"}</td>
-                <td className="px-2 py-1.5 sm:px-4 sm:py-2.5">
-                  <span className={`px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-full text-[9px] sm:text-[10px] font-bold uppercase border flex-shrink-0 whitespace-nowrap ${statusCls(lead.status)}`}>
-                    {lead.status || "Assigned"}
-                  </span>
-                </td>
-                <td className="px-2 py-1.5 sm:px-4 sm:py-2.5">
-                  {lead.leadInterestStatus && lead.leadInterestStatus !== "Pending" ? (
-                    <span className={`text-[9px] sm:text-[10px] px-1.5 py-0.5 sm:px-2 sm:py-0.5 rounded-full font-bold border whitespace-nowrap ${lead.leadInterestStatus === "Interested" ? (isDark ? "text-green-400 border-green-500/30 bg-green-500/10" : "text-green-700 border-green-200 bg-green-50") :
-                      lead.leadInterestStatus === "Not Interested" ? (isDark ? "text-red-400 border-red-500/30 bg-red-500/10" : "text-red-700 border-red-200 bg-red-50") :
-                        (isDark ? "text-yellow-400 border-yellow-500/30 bg-yellow-500/10" : "text-yellow-700 border-yellow-200 bg-yellow-50")
-                      }`}>{lead.leadInterestStatus}</span>
-                  ) : <span className={`text-[10px] sm:text-xs italic ${theme.textFaint}`}>—</span>}
-                </td>
-                {showAssignedInfo && (
-                  <td className="px-2 py-1.5 sm:px-4 sm:py-2.5">
-                    <div className="flex flex-col gap-0.5 sm:gap-1">
-                      <span className={`text-[10px] sm:text-xs font-bold whitespace-nowrap ${theme.text}`}>
-                        {lead.assigned_to || lead.assignedTo || "Unassigned"}
-                      </span>
-                      {(lead.assigned_to || lead.assignedTo) && (
-                        <span className={`text-[8px] sm:text-[9px] px-1.5 py-0.5 rounded border w-max font-bold uppercase tracking-wider ${siteHeads?.some((sh: any) => sh.name === (lead.assigned_to || lead.assignedTo)) ? (isDark ? "bg-indigo-900/30 text-indigo-300 border-indigo-700/50" : "bg-indigo-50 text-indigo-700 border-indigo-200") : (isDark ? "bg-teal-900/30 text-teal-300 border-teal-700/50" : "bg-teal-50 text-teal-700 border-teal-200")}`}>
-                          {siteHeads?.some((sh: any) => sh.name === (lead.assigned_to || lead.assignedTo)) ? "Site Head" : "Sales Manager"}
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                )}
-                <td className={`px-2 py-1.5 sm:px-4 sm:py-2.5 text-[10px] sm:text-xs whitespace-nowrap ${lead.mongoVisitDate ? "text-orange-500 font-semibold" : theme.textFaint}`}>
-                  {lead.mongoVisitDate ? formatDate(lead.mongoVisitDate).split(",")[0] : "—"}
-                </td>
-                <td className={`px-2 py-1.5 sm:px-4 sm:py-2.5 text-[10px] sm:text-xs whitespace-normal min-w-[100px] sm:min-w-[120px] ${theme.textFaint}`}>
-                  {formatDate(lead.created_at)}
-                </td>
-                <td className="px-2 py-1.5 sm:px-4 sm:py-2.5">
-                  <button
-                    className={`text-[10px] sm:text-xs font-bold px-2 py-1 sm:px-3 sm:py-1.5 rounded-md sm:rounded-lg cursor-pointer transition-colors ${isDark ? "bg-[#9E217B] text-white hover:bg-[#b8268f]" : "bg-[#9E217B]/10 text-[#9E217B] hover:bg-[#9E217B] hover:text-white"}`}
-                    onClick={e => {
-                      e.stopPropagation();
-                      setIsEnquiryView(isEnquiryTable);
-                      setSelectedLead(lead);
-                      setSubView("detail");
-                    }}
-                  >
-                    View
-                  </button>
-                </td>
-                {isEnquiryTable && (
-                  <td className="px-2 py-1.5 sm:px-4 sm:py-2.5">
-                    {lead.status === "Closed" || lead.status === "Closing" || !!lead.closingDate ? (
-                      <span className={`text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-full uppercase border whitespace-nowrap ${isDark ? "text-gray-400 border-gray-600 bg-gray-800/50" : "text-gray-500 border-gray-300 bg-gray-100"}`}>
-                        Marked closed
-                      </span>
-                    ) : (
-                      <button
-                        className={`text-[10px] sm:text-xs font-bold px-2 py-1 sm:px-3 sm:py-1.5 rounded-md sm:rounded-lg cursor-pointer flex items-center gap-1 sm:gap-1.5 transition-colors whitespace-nowrap ${isDark ? "bg-orange-600 hover:bg-orange-500 text-white" : "bg-orange-100 hover:bg-orange-200 text-orange-700"}`}
-                        onClick={e => {
-                          e.stopPropagation();
-                          setSelectedLead(lead);
-                          setReassignTarget("");
-                          setReassignNote("");
-                          setIsReassignModalOpen(true);
-                        }}
-                      >
-                        <FaExchangeAlt className="text-[9px] sm:text-[10px]" /> Reassign
-                      </button>
-                    )}
-                  </td>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
-        {/* ── BOTTOM SENTINEL — triggers load more ── */}
-        {visibleCount < leads.length && (
-          <div ref={loadMoreRef} className={`flex items-center justify-center gap-3 py-6 ${theme.textMuted}`}>
-            <div className="w-4 h-4 rounded-full border-2 border-[#9E217B] border-t-transparent animate-spin" />
-            <span className="text-xs font-medium">Loading more… ({visibleCount} of {leads.length})</span>
+  // Enquiry table: adds Assigned To, View (opens enquiry form), Reassign
+  const recEnquiryColumns: ALTColumn[] = [
+    ...recBaseColumns.slice(0, 1), // lead_no
+    {
+      key: "name", label: "Name", minWidth: "min-w-[110px] sm:min-w-[190px]", locked: true,
+      sortValue: (l) => String(l.name || "").toLowerCase(),
+      render: (l, { isDark: dk, theme: t }) => (
+        <span
+          className={`font-bold text-[12px] sm:text-[13px] cursor-pointer hover:underline ${dk ? "hover:text-[#d946a8]" : "hover:text-[#9E217B]"} transition-colors ${t.text}`}
+          onClick={(e) => { e.stopPropagation(); setIsEnquiryView(true); setSelectedLead(l); setSubView("detail"); prefillSalesForm(l); setShowSalesForm(true); setShowLoanForm(false); }}
+        >
+          {l.name}
+        </span>
+      ),
+    },
+    ...recBaseColumns.slice(2, -1), // contact through created_at (skip backdated, re-add below)
+    // Assigned To (visible by default for enquiry table)
+    {
+      key: "assigned_to", label: "Assigned To", minWidth: "min-w-[110px] sm:min-w-[150px]",
+      sortValue: (l) => String(l.assigned_to || l.assignedTo || "").toLowerCase(),
+      render: (l, { theme: t, isDark: dk }) => {
+        const name = l.assigned_to || l.assignedTo || "Unassigned";
+        const isSH = siteHeads?.some((sh: any) => sh.name === name);
+        return (
+          <div className="flex flex-col gap-0.5 sm:gap-1">
+            <span className={`text-[10px] sm:text-xs font-bold whitespace-nowrap ${t.text}`}>{name}</span>
+            {name !== "Unassigned" && (
+              <span className={`text-[8px] sm:text-[9px] px-1.5 py-0.5 rounded border w-max font-bold uppercase tracking-wider ${isSH ? (dk ? "bg-indigo-900/30 text-indigo-300 border-indigo-700/50" : "bg-indigo-50 text-indigo-700 border-indigo-200") : (dk ? "bg-teal-900/30 text-teal-300 border-teal-700/50" : "bg-teal-50 text-teal-700 border-teal-200")}`}>
+                {isSH ? "Site Head" : "Sales Manager"}
+              </span>
+            )}
           </div>
-        )}
-        {visibleCount >= leads.length && leads.length > 20 && (
-          <div className={`text-center py-2.5 text-xs font-medium ${theme.textFaint}`}>
-            ✓ All {leads.length} leads loaded
-          </div>
-        )}
+        );
+      },
+    },
+    recBaseColumns[recBaseColumns.length - 1], // backdated
+    // View button
+    {
+      key: "action", label: "Action", align: "center", minWidth: "min-w-[70px] sm:min-w-[80px]",
+      render: (l, { isDark: dk }) => (
+        <button
+          className={`text-[10px] sm:text-xs font-bold px-2 py-1 sm:px-3 sm:py-1.5 rounded-md sm:rounded-lg cursor-pointer transition-colors ${dk ? "bg-[#9E217B] text-white hover:bg-[#b8268f]" : "bg-[#9E217B]/10 text-[#9E217B] hover:bg-[#9E217B] hover:text-white"}`}
+          onClick={(e) => { e.stopPropagation(); setIsEnquiryView(true); setSelectedLead(l); setSubView("detail"); }}
+        >
+          View
+        </button>
+      ),
+    },
+    // Reassign button
+    {
+      key: "reassign", label: "Reassign", align: "center", minWidth: "min-w-[100px] sm:min-w-[115px]",
+      render: (l, { isDark: dk }) =>
+        l.status === "Closed" || l.status === "Closing" || !!l.closingDate ? (
+          <span className={`text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-full uppercase border whitespace-nowrap ${dk ? "text-gray-400 border-gray-600 bg-gray-800/50" : "text-gray-500 border-gray-300 bg-gray-100"}`}>
+            Marked closed
+          </span>
+        ) : (
+          <button
+            className={`text-[10px] sm:text-xs font-bold px-2 py-1 sm:px-3 sm:py-1.5 rounded-md sm:rounded-lg cursor-pointer flex items-center gap-1 sm:gap-1.5 transition-colors whitespace-nowrap ${dk ? "bg-orange-600 hover:bg-orange-500 text-white" : "bg-orange-100 hover:bg-orange-200 text-orange-700"}`}
+            onClick={(e) => { e.stopPropagation(); setSelectedLead(l); setReassignTarget(""); setReassignNote(""); setIsReassignModalOpen(true); }}
+          >
+            <FaExchangeAlt className="text-[9px] sm:text-[10px]" /> Reassign
+          </button>
+        ),
+    },
+  ];
 
-      </div>
-    </div>
-  );
+  // Lead tables (assigned / closed): no Assigned To, no Reassign, has View + row click
+  const recLeadColumns: ALTColumn[] = [
+    ...recBaseColumns,
+    {
+      key: "action", label: "Action", align: "center", minWidth: "min-w-[70px] sm:min-w-[80px]",
+      render: (l, { isDark: dk }) => (
+        <button
+          className={`text-[10px] sm:text-xs font-bold px-2 py-1 sm:px-3 sm:py-1.5 rounded-md sm:rounded-lg cursor-pointer transition-colors ${dk ? "bg-[#9E217B] text-white hover:bg-[#b8268f]" : "bg-[#9E217B]/10 text-[#9E217B] hover:bg-[#9E217B] hover:text-white"}`}
+          onClick={(e) => { e.stopPropagation(); setIsEnquiryView(false); setSelectedLead(l); setSubView("detail"); }}
+        >
+          View
+        </button>
+      ),
+    },
+  ];
   const [showMobileActions, setShowMobileActions] = useState(false);
   return (
     <div className="flex h-full relative overflow-hidden">
@@ -5964,7 +6078,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
 
       {/* Sidebar for Receptionists */}
       {/* MOBILE: 100% width, hidden if a Receptionist is selected. DESKTOP: Always visible, fixed 62 width */}
-      <div className={`border-r flex-col h-full flex-shrink-0 z-20 shadow-xl ${theme.innerBlock} w-full md:w-62 ${selectedReceptionist ? 'hidden md:flex' : 'flex'}`}>
+      <div className={`border-r flex-col h-full flex-shrink-0 z-20 shadow-xl ${theme.innerBlock} w-full ${selectedReceptionist ? 'hidden' : 'flex'}`}>
         <div className={`p-5 border-b ${theme.tableBorder}`}>
           <div className="relative">
             <FaSearch className={`absolute left-3 top-1/2 -translate-y-1/2 text-xs ${theme.textFaint}`} />
@@ -6019,7 +6133,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
 
       {/* ── COMBINED RIGHT CONTENT PANEL ── */}
       {/* MOBILE: 100% width, only visible if Receptionist is selected. DESKTOP: Always visible, takes remaining space */}
-      <div className={`flex-1 flex flex-col h-full min-w-0 overflow-hidden ${theme.mainBg} ${selectedReceptionist ? 'flex' : 'hidden md:flex'}`}>
+      <div className={`flex-1 flex flex-col h-full min-w-0 overflow-hidden ${theme.mainBg} ${selectedReceptionist ? 'flex' : 'hidden'}`}>
 
         {/* MOBILE BACK BUTTON */}
         {/* {selectedReceptionist && (
@@ -6555,7 +6669,15 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                           </div>
                           <button onClick={() => downloadCSV(allEnquiries.map(formatLeadForExport), "All_Enquiries.csv")} className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-[10px] sm:text-xs font-bold border rounded-lg hover:opacity-80 transition-colors ${isDark ? 'bg-[#222] border-[#333] text-white' : 'bg-white border-indigo-200 text-[#9E217B]'}`}><FaDownload /> Export</button>
                         </div>
-                        {renderTable(allEnquiries, true, true)}
+                        <AdminLeadTable
+                          leads={allEnquiries}
+                          columns={recEnquiryColumns}
+                          storageKey="bd:admin-rec-enq:hiddenCols"
+                          theme={theme}
+                          isDark={isDark}
+                          isLoading={isLoading}
+                          formatDate={formatDate}
+                        />
                       </div>
                     )}
 
@@ -6582,9 +6704,20 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                             ⚠️ Showing all leads including closed ones.
                           </div>
                         )}
-                        {renderTable(assignedTableFilter === "working"
-                          ? assignedLeads.filter((l: any) => l.status !== "Closing" && l.status !== "Closed" && !l.closingDate)
-                          : assignedLeads)}
+                        <AdminLeadTable
+                          leads={assignedTableFilter === "working"
+                            ? assignedLeads.filter((ld: any) => ld.status !== "Completed" && ld.status !== "Closing" && ld.status !== "Closed")
+                            : assignedTableFilter === "completed"
+                              ? assignedLeads.filter((ld: any) => ld.status === "Completed" || ld.status === "Closing" || ld.status === "Closed")
+                              : assignedLeads}
+                          columns={recLeadColumns}
+                          storageKey="bd:admin-rec:hiddenCols"
+                          theme={theme}
+                          isDark={isDark}
+                          isLoading={isLoading}
+                          formatDate={formatDate}
+                          onRowClick={(lead) => { setIsEnquiryView(false); setSelectedLead(lead); setSubView("detail"); prefillSalesForm(lead); setShowSalesForm(false); setShowLoanForm(false); }}
+                        />
                       </div>
                     )}
 
@@ -6600,7 +6733,16 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                             <span className={`text-[10px] sm:text-xs px-2 sm:px-3 py-1 rounded-full border font-bold ${isDark ? "text-yellow-400 border-yellow-500/30 bg-yellow-500/10" : "text-amber-700 border-amber-200 bg-amber-50"}`}>{closedLeads.length} closed</span>
                           </div>
                         </div>
-                        {renderTable(closedLeads)}
+                        <AdminLeadTable
+                          leads={closedLeads}
+                          columns={recLeadColumns}
+                          storageKey="bd:admin-rec:hiddenCols"
+                          theme={theme}
+                          isDark={isDark}
+                          isLoading={isLoading}
+                          formatDate={formatDate}
+                          onRowClick={(lead) => { setIsEnquiryView(false); setSelectedLead(lead); setSubView("detail"); prefillSalesForm(lead); setShowSalesForm(false); setShowLoanForm(false); }}
+                        />
                       </div>
                     )}
                   </div>
