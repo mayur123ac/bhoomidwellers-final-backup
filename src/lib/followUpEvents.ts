@@ -1,13 +1,10 @@
-// followUpEvents.ts — live push channel for follow-up messages.
+// followUpEvents.ts — follow-up event types and broadcast.
 //
-// Tenant-partitioned, exactly like lostLeadEvents.ts. A broadcast reaches
-// only the subscribers in the same organization. The organization id comes
-// from the server session (never from the request).
-
-type Controller = ReadableStreamDefaultController;
-
-/** organization id -> the controllers currently subscribed for that tenant. */
-const clientsByOrg = new Map<string, Set<Controller>>();
+// The SSE subscriber registry and stream factory have been removed.
+// Broadcasts are now delivered via Supabase Realtime (see broadcastToOrg
+// calls at each API call site). This module is retained for its type
+// exports and the broadcastFollowUp() function signature which the
+// reminderEvents module delegates through.
 
 // ── Event types ─────────────────────────────────────────────────────────────
 
@@ -33,78 +30,14 @@ export interface FollowUpPayload {
   clientMessageId?: string;
 }
 
-// ── Broadcast ───────────────────────────────────────────────────────────────
+// ── Broadcast (no-op for SSE, Supabase handled at call sites) ───────────────
 
-export function broadcastFollowUp(organizationId: string, event: FollowUpEvent) {
-  const subscribers = clientsByOrg.get(organizationId);
-  if (!subscribers || subscribers.size === 0) return;
-
-  const msg = `data: ${JSON.stringify(event)}\n\n`;
-  const dead: Controller[] = [];
-
-  subscribers.forEach((ctrl) => {
-    try {
-      ctrl.enqueue(msg);
-    } catch {
-      dead.push(ctrl);
-    }
-  });
-
-  dead.forEach((ctrl) => subscribers.delete(ctrl));
-  if (subscribers.size === 0) clientsByOrg.delete(organizationId);
-}
-
-// ── Subscribe / unsubscribe ─────────────────────────────────────────────────
-
-function subscribe(organizationId: string, ctrl: Controller) {
-  let set = clientsByOrg.get(organizationId);
-  if (!set) {
-    set = new Set<Controller>();
-    clientsByOrg.set(organizationId, set);
-  }
-  set.add(ctrl);
-}
-
-function unsubscribe(organizationId: string, ctrl: Controller) {
-  const set = clientsByOrg.get(organizationId);
-  if (!set) return;
-  set.delete(ctrl);
-  if (set.size === 0) clientsByOrg.delete(organizationId);
-}
-
-// ── Stream factory ──────────────────────────────────────────────────────────
-
-export function createFollowUpStream(organizationId: string) {
-  let controller: Controller;
-  let heartbeatTimer: ReturnType<typeof setInterval>;
-
-  const stream = new ReadableStream({
-    start(ctrl) {
-      controller = ctrl;
-      subscribe(organizationId, ctrl);
-      ctrl.enqueue(`data: ${JSON.stringify({ type: "connected", ts: Date.now() })}\n\n`);
-
-      heartbeatTimer = setInterval(() => {
-        try {
-          ctrl.enqueue(": heartbeat\n\n");
-        } catch {
-          clearInterval(heartbeatTimer);
-          unsubscribe(organizationId, ctrl);
-        }
-      }, 25_000);
-    },
-    cancel() {
-      clearInterval(heartbeatTimer);
-      unsubscribe(organizationId, controller);
-    },
-  });
-
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache, no-transform",
-      "Connection": "keep-alive",
-      "X-Accel-Buffering": "no",
-    },
-  });
+/**
+ * Legacy broadcast function. SSE delivery has been removed; Supabase Realtime
+ * broadcast is called directly at each API route. This function is retained
+ * because reminderEvents.ts delegates through it — those calls are also
+ * backed by their own broadcastToOrg() calls now.
+ */
+export function broadcastFollowUp(_organizationId: string, _event: FollowUpEvent) {
+  // SSE removed — Supabase broadcast is handled at each call site
 }

@@ -337,10 +337,10 @@ export async function POST(req: Request) {
       // skipped entirely — their cp_name is sub-source noise, not partner data.
       const channelPartnerId = isCpEnquiry
         ? await resolveChannelPartnerId(
-            client,
-            { cp_name, cp_company, cp_phone, source: effectiveSource },
-            actorName
-          )
+          client,
+          { cp_name, cp_company, cp_phone, source: effectiveSource },
+          actorName
+        )
         : null;
 
       // ── Route by the partner, not by the dropdown ───────────────────────────
@@ -432,7 +432,7 @@ export async function POST(req: Request) {
           returningFromLeadId,                 // $33
         ]
       );
-      
+
       const newId = insertRes.rows[0].id;
 
       // A partner with no owner yet — typically one auto-created by this very
@@ -475,10 +475,10 @@ export async function POST(req: Request) {
           [newId, actorUserId, actorName, session?.role || null]
         );
       }
-      
+
       // Always recalculate Sr. No. to maintain strictly chronological gapless order
       await recalculateSrNos(client);
-      
+
       const finalRes = await client.query(
         "SELECT * FROM walkin_enquiries WHERE id = $1",
         [newId]

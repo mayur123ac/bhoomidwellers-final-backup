@@ -32,11 +32,7 @@ import { useAttendance } from "@/components/AttendanceContext";
 import CrmUpdatesNotification from "@/components/CrmUpdatesNotification";
 import WhatsAppConversationPanel from "@/components/whatsapp/WhatsAppConversationPanel";
 import LostLeadModal from "@/components/LostLeadModal";
-import ReminderModal from "@/components/ReminderModal";
-import ReminderDuePopup from "@/components/ReminderDuePopup";
-import { useOverdueReminders } from "@/hooks/useOverdueReminders";
 import { updateLeadLostState, useLostLeadEvents } from "@/lib/lostLeadSync";
-import { useFollowUpEvents, type FollowUpSSEPayload, type FollowUpReadSSEPayload } from "@/lib/followUpSync";
 // The notification queue. Built and organization-scoped on the server — see
 // lib/notifications/feed.ts for why it is no longer derived in this file.
 import { useNotificationFeed, openNotificationLead, type CrmNotification } from "@/lib/hooks/useNotificationFeed";
@@ -48,7 +44,10 @@ import NotificationPopover from "@/components/notifications/NotificationPopover"
 // untouched and still used by the panels that render it inline.
 import { buildTheme } from "@/lib/crmTheme";
 import ChannelPartnerFormModal from "@/components/ChannelPartnerFormModal";
+import BankerVisitFormModal from "@/components/BankerVisitFormModal";
 import ChannelPartnerEnquiriesTable from "@/components/ChannelPartnerEnquiriesTable";
+import { useCpEnquiryVisible } from "@/lib/hooks/useCpEnquiryVisible";
+import BankerVisitsTable from "@/components/BankerVisitsTable";
 import SearchableSelect from "@/components/SearchableSelect";
 import BookingFormModal from "@/components/BookingFormModal";
 import BookingApplicationView from "@/components/BookingApplicationView";
@@ -466,6 +465,7 @@ export default function ReceptionistDashboard() {
   // reset to light on every navigation and was never stored anywhere; it now
   // reads the same value Preferences → Theme writes.
   const { isDark, toggleTheme } = useCrmTheme();
+  const cpEnquiryVisible = useCpEnquiryVisible("receptionist");
   const t = buildTheme(isDark);
 
   /* ── Table design tokens ────────────────────────────────────────────────────
@@ -615,6 +615,7 @@ export default function ReceptionistDashboard() {
   // Channel Partner office-visit registration. Create-only for this role: the
   // Receptionist records the partner's profile but never edits or lists them.
   const [isCpVisitModalOpen, setIsCpVisitModalOpen] = useState(false);
+  const [isBankerVisitModalOpen, setIsBankerVisitModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isSubmittingRef = useRef(false);
   const getTodayString = () => new Date().toISOString().split("T")[0];
@@ -677,7 +678,6 @@ export default function ReceptionistDashboard() {
   const [lostError, setLostError] = useState("");
   const [isSavingLost, setIsSavingLost] = useState(false);
   const [isReopening, setIsReopening] = useState(false);
-  const [showReminderModal, setShowReminderModal] = useState(false);
   // ── Data ──
   const [salesManagers, setSalesManagers] = useState<any[]>([]);
 
@@ -951,10 +951,6 @@ export default function ReceptionistDashboard() {
       setBookingData(null);
     }
   }, [selectedLead?.id, fetchLoanDealData]);
-  useEffect(() => {
-    if (!selectedLead?.id) return;
-    fetch("/api/followups/read", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ leadId: selectedLead.id }) }).catch(() => {});
-  }, [selectedLead?.id]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // DATA FETCHING
@@ -1213,32 +1209,6 @@ export default function ReceptionistDashboard() {
   refetchAllRef.current = refetchAll;
   const resyncAfterLostLeadDrop = useCallback(() => { refetchAllRef.current(); }, []);
   useLostLeadEvents(applyLostLeadUpdate, resyncAfterLostLeadDrop);
-
-  // ── Follow-up SSE: real-time follow-up delivery ──────────────────────────
-  const handleSSEFollowUp = useCallback((fu: FollowUpSSEPayload) => {
-    setFollowUps(prev => {
-      if (fu.clientMessageId) {
-        const hasOptimistic = prev.some(f => f._clientMessageId === fu.clientMessageId);
-        if (hasOptimistic) {
-          return prev.map(f => f._clientMessageId === fu.clientMessageId ? { ...fu, _status: "sent" } : f);
-        }
-      }
-      if (prev.some(f => String(f._id) === String(fu._id))) return prev;
-      return [...prev, fu];
-    });
-  }, []);
-  const handleSSEReadReceipt = useCallback((payload: FollowUpReadSSEPayload) => {
-    const idSet = new Set(payload.ids.map(String));
-    setFollowUps(prev => prev.map(f =>
-      idSet.has(String(f._id)) ? { ...f, readAt: payload.readAt } : f
-    ));
-  }, []);
-  const { overdueReminders, visible: showOverduePopup, dismissAll: dismissOverduePopup, markComplete: markReminderComplete, pushReminder } = useOverdueReminders();
-  const handleSSEReminderDue = useCallback((r: import("@/lib/followUpSync").ReminderSSEPayload) => {
-    pushReminder(r as any);
-  }, [pushReminder]);
-
-  useFollowUpEvents(handleSSEFollowUp, handleSSEReadReceipt, resyncAfterLostLeadDrop, handleSSEReminderDue);
 
   // ── The notification queue ─────────────────────────────────────────────────
   //
@@ -1531,7 +1501,15 @@ export default function ReceptionistDashboard() {
         setCpLookup(null);
         setEnquiryForm({ fullName: "", mobile: "", altMobile: "", email: "", address: "", pinCode: "", city: "", occupation: "", organization: "", budget: "", configuration: "", purpose: "", source: "", assignedTo: "", loanPlanned: "", sourceOther: "", referralName: "", cpDetails: { name: "", company: "", phone: "" }, sourcingManagerId: "", preferredLocation: "", selfAssign: false, enquiryDate: getTodayString() });
         refetchAll();
-      } else { alert("Server Error. Please check DB schema."); }
+      } else {
+        const err = await res.json().catch(() => null);
+        const msg = err?.message || `Server error (${res.status})`;
+        if (res.status === 409) {
+          showToast(msg);
+        } else {
+          alert(msg);
+        }
+      }
     } catch { alert("Network Error while submitting."); }
     finally { setIsSubmitting(false); isSubmittingRef.current = false; }
   };
@@ -1563,38 +1541,9 @@ export default function ReceptionistDashboard() {
   const handleSendCustomNote = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customNote.trim() || !selectedLead) return;
-    const clientMessageId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-    const optimistic: any = {
-      _id: clientMessageId, leadId: String(selectedLead.id), salesManagerName: user.name, createdBy: "receptionist",
-      message: customNote, siteVisitDate: null, createdAt: new Date().toISOString(),
-      followUpType: "note", createdByRole: null, sentToRole: null, sentToUserId: null,
-      parentFollowUpId: null, readAt: null, _status: "sending", _clientMessageId: clientMessageId,
-    };
+    const nm = { leadId: String(selectedLead.id), salesManagerName: user.name, createdBy: "receptionist", message: customNote, siteVisitDate: null, createdAt: new Date().toISOString() };
     setCustomNote("");
-    setFollowUps(prev => prev.some(f => String(f._id) === clientMessageId) ? prev : [...prev, optimistic]);
-    try {
-      const res = await fetch("/api/followups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ leadId: String(selectedLead.id), salesManagerName: user.name, createdBy: "receptionist", message: optimistic.message, siteVisitDate: null, clientMessageId }) });
-      const json = await res.json().catch(() => null);
-      if (json?.success && json.data) {
-        setFollowUps(prev => prev.map(f => f._clientMessageId === clientMessageId ? { ...json.data, _status: "sent" } : f));
-      } else {
-        setFollowUps(prev => prev.map(f => f._clientMessageId === clientMessageId ? { ...f, _status: "failed" } : f));
-      }
-    } catch {
-      setFollowUps(prev => prev.map(f => f._clientMessageId === clientMessageId ? { ...f, _status: "failed" } : f));
-    }
-  };
-
-  const handleCreateReminder = async (remindAt: string, note: string) => {
-    if (!selectedLead) return;
-    const res = await fetch("/api/reminders", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ leadId: selectedLead.id, remindAt, note: note || null }),
-    });
-    const json = await res.json().catch(() => null);
-    if (!res.ok) throw new Error(json?.message || "Failed to create reminder.");
-    showToast(`Reminder set for ${selectedLead.name || "lead"}`);
+    try { await fetch("/api/followups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(nm) }); fetchFollowUps(); } catch (e) { console.error(e); }
   };
 
   const handleSalesFormSubmit = async (e: React.FormEvent) => {
@@ -1896,16 +1845,6 @@ export default function ReceptionistDashboard() {
       className={`recep-panel flex flex-col md:flex-row h-screen overflow-hidden ${t.pageWrap}`}
       style={isDark ? {} : { background: "linear-gradient(135deg, #e8f6fd 0%, #f8fafc 30%, #faf0fb 62%, #f8fafc 78%, #e6fafe 100%)" }}
     >
-      {/* ── Reminder Due Full-Screen Popup ── */}
-      {showOverduePopup && (
-        <ReminderDuePopup
-          reminders={overdueReminders}
-          isDark={isDark}
-          onMarkComplete={markReminderComplete}
-          onDismiss={dismissOverduePopup}
-        />
-      )}
-
       {/* ── TOAST ── */}
       {toastMsg && (
         <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[200] px-6 py-3 rounded-xl shadow-lg flex items-center gap-4 animate-fadeIn border ${toastMsg.color === "green" ? "bg-green-600 border-green-400 text-white" : "bg-blue-600 border-blue-400 text-white"
@@ -1948,7 +1887,7 @@ export default function ReceptionistDashboard() {
         isMarkedPresent={isMarkedPresent}
         timeIn={timeIn}
         onLogout={handleLogout}
-        menuItems={RECEPTIONIST_NAV}
+        menuItems={cpEnquiryVisible ? RECEPTIONIST_NAV : RECEPTIONIST_NAV.filter(i => i.id !== "cp-enquiry-records")}
       />
 
       {/* ════════════════════════════════════════════════════
@@ -2174,14 +2113,45 @@ export default function ReceptionistDashboard() {
                 user={user}
                 isDark={isDark}
                 t={t}
-                title="Channel Partner Enquiries"
-                subtitle="All enquiries sourced through a Channel Partner"
+                title="CP Linked with Leads"
+                subtitle="Customer leads sourced through a Channel Partner"
+              />
+            </div>
+          )}
+
+          {/* ════════════════════════════════════════════════════
+              CP ENQUIRY (standalone CP records)
+          ════════════════════════════════════════════════════ */}
+          {activeTab === "cp-enquiry-records" && (
+            <div className="animate-fadeIn h-[calc(100vh-100px)] lg:h-[calc(100vh-140px)]">
+              <ChannelPartnerEnquiriesTable
+                user={user}
+                isDark={isDark}
+                t={t}
+                title="CP Enquiry"
+                subtitle="Channel Partner records registered via the CP Enquiry form"
+                apiView="cp_primary"
+              />
+            </div>
+          )}
+
+          {/* ════════════════════════════════════════════════════
+              BANKING INFO
+          ════════════════════════════════════════════════════ */}
+          {activeTab === "banking_info" && (
+            <div className="animate-fadeIn h-[calc(100vh-100px)] lg:h-[calc(100vh-140px)]">
+              <BankerVisitsTable
+                user={user}
+                isDark={isDark}
+                t={t}
+                title="Banking Info"
+                subtitle="All banker visits recorded at the front desk"
               />
             </div>
           )}
 
           {/* ── SHARED PAGE HEADER ── */}
-          {!["settings", "detail", "assistant", "assigned", "recep-leads", "closed-leads", "attendance", "analytics", "cp-enquiries"].includes(activeTab) && (
+          {!["settings", "detail", "assistant", "assigned", "recep-leads", "closed-leads", "attendance", "analytics", "cp-enquiries", "cp-enquiry-records", "banking_info"].includes(activeTab) && (
             <RpPageHeader
               title={`Hi, ${String(user?.name || "User").split(" ")[0]}`}
               subtitle="Walk-ins and enquiries logged at the front desk"
@@ -2198,6 +2168,13 @@ export default function ReceptionistDashboard() {
                 >
                   <FaUserTie className="text-[11px]" />
                   <span className="font-medium text-xs sm:text-[12px]">CP Office Visit</span>
+                </button>
+                <button
+                  onClick={() => setIsBankerVisitModalOpen(true)}
+                  className={`rp-control-label flex-1 sm:flex-none flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-md sm:rounded-lg shadow-sm ${t.btnSecondary}`}
+                >
+                  <FaUniversity className="text-[11px]" />
+                  <span className="font-medium text-xs sm:text-[12px]">Add Banker Visit</span>
                 </button>
                 <button onClick={refetchAll}
                   className={`rp-control-label text-white flex-1 sm:flex-none flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-md sm:rounded-lg shadow-sm ${t.btnPrimary}`}>
@@ -2221,6 +2198,18 @@ export default function ReceptionistDashboard() {
             isDark={isDark}
             t={t}
             variant="office_visit"
+          />
+
+          {/* ── Banker Visit Registration ── */}
+          <BankerVisitFormModal
+            isOpen={isBankerVisitModalOpen}
+            onClose={() => setIsBankerVisitModalOpen(false)}
+            onSaved={() => {
+              showToast("Banker visit recorded", "green");
+            }}
+            user={user}
+            isDark={isDark}
+            t={t}
           />
 
           {/* ════════════════════════════════════════════════════
@@ -2812,7 +2801,7 @@ export default function ReceptionistDashboard() {
                           onClick={() => setShowMobileActions(!showMobileActions)}
                           className={`sm:hidden w-8 h-8 flex-shrink-0 flex items-center justify-center border rounded-lg transition-colors shadow-sm ${showMobileActions ? t.btnPrimary : `${t.textMuted} ${t.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}`}
                         >
-                          <FaChevronDown className={`text-[10px] transition-transform duration-200 ${showMobileActions ? "rotate-180" : "text-[#fff]"}`} />
+                          <FaChevronDown className={`text-[10px] transition-transform duration-200 ${showMobileActions ? "rotate-180" : ""}`} />
                         </button>
                       </div>
 
@@ -3060,22 +3049,9 @@ export default function ReceptionistDashboard() {
                                 <div className={`rounded-xl rounded-tl-none p-3 sm:p-4 max-w-[90%] sm:max-w-[85%] shadow-sm ${bubbleCls}`}>
                                   <div className="flex flex-wrap justify-between items-center mb-2 gap-x-4 gap-y-0.5">
                                     <span className={`font-bold text-[12px] sm:text-[13px] ${t.text}`}>{msg.createdBy === "admin" ? `${msg.salesManagerName || "Admin"} (Admin)` : msg.salesManagerName}</span>
-                                    <span className={`text-[9px] sm:text-[10px] font-medium flex items-center gap-1 ${t.textFaint}`}>
-                                      {formatDate(msg.createdAt)}
-                                      {(msg.followUpType === "internal_message" || msg.followUpType === "sm_reply") && msg._status !== "sending" && msg._status !== "failed" && (
-                                        msg.readAt
-                                          ? <span className="text-blue-500 font-bold ml-0.5" title="Read">&#10003;&#10003;</span>
-                                          : <span className="opacity-60 ml-0.5" title="Sent">&#10003;</span>
-                                      )}
-                                    </span>
+                                    <span className={`text-[9px] sm:text-[10px] font-medium ${t.textFaint}`}>{formatDate(msg.createdAt)}</span>
                                   </div>
                                   <p className={`text-[12px] sm:text-[13px] whitespace-pre-wrap leading-relaxed ${t.textMuted}`}>{msg.message}</p>
-                                  {msg._status === "sending" && <span className="text-[9px] text-yellow-500 mt-1 block">Sending...</span>}
-                                  {msg._status === "failed" && (
-                                    <span className="text-[9px] text-red-500 mt-1 flex items-center gap-1">Failed to send
-                                      <button type="button" onClick={() => { setCustomNote(msg.message); setFollowUps(prev => prev.filter(f => f._clientMessageId !== msg._clientMessageId)); }} className="underline hover:text-red-400">Retry</button>
-                                    </span>
-                                  )}
                                 </div>
                               </div>
                             );
@@ -3089,9 +3065,6 @@ export default function ReceptionistDashboard() {
                             placeholder="Add follow-up note..."
                             className={`flex-1 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-[12px] sm:text-[13px] outline-none transition-colors border shadow-inner ${t.inputBg} ${t.text} ${t.inputFocus}`}
                           />
-                          <button type="button" title="Set follow-up reminder" onClick={() => setShowReminderModal(true)} className={`w-10 h-10 sm:w-11 sm:h-11 flex-shrink-0 rounded-xl flex items-center justify-center cursor-pointer transition-colors ${isDark ? "text-gray-400 hover:text-purple-400 hover:bg-white/5" : "text-gray-400 hover:text-[#00AEEF] hover:bg-blue-50"}`}>
-                            <FaClock className="text-sm sm:text-base" />
-                          </button>
                           <button type="submit" className={`w-10 h-10 sm:w-11 sm:h-11 text-white rounded-xl flex items-center justify-center cursor-pointer transition-colors shadow-sm flex-shrink-0 ${isDark ? "bg-purple-600 hover:bg-purple-500" : "bg-[#00AEEF] hover:bg-[#0099d4]"}`}>
                             <FaPaperPlane className="text-sm sm:text-base ml-[-2px]" />
                           </button>
@@ -3115,16 +3088,6 @@ export default function ReceptionistDashboard() {
               onReasonChange={(v) => { setLostReason(v); if (lostError) setLostError(""); }}
               onClose={() => setShowLostModal(false)}
               onSubmit={handleMarkLostLead}
-            />
-          )}
-
-          {showReminderModal && selectedLead && (
-            <ReminderModal
-              lead={selectedLead}
-              isDark={isDark}
-              theme={t}
-              onClose={() => setShowReminderModal(false)}
-              onSubmit={handleCreateReminder}
             />
           )}
 
@@ -3599,14 +3562,7 @@ export default function ReceptionistDashboard() {
                                       ? `${msg.salesManagerName || "Receptionist"} (Receptionist)`
                                       : msg.salesManagerName}
                                   </span>
-                                  <span className={`text-[10px] font-medium flex-shrink-0 flex items-center gap-1 ${t.textFaint}`}>
-                                    {formatDate(msg.createdAt)}
-                                    {(msg.followUpType === "internal_message" || msg.followUpType === "sm_reply") && (
-                                      msg.readAt
-                                        ? <span className="text-blue-500 font-bold ml-0.5" title="Read">&#10003;&#10003;</span>
-                                        : <span className="opacity-60 ml-0.5" title="Sent">&#10003;</span>
-                                    )}
-                                  </span>
+                                  <span className={`text-[10px] font-medium flex-shrink-0 ${t.textFaint}`}>{formatDate(msg.createdAt)}</span>
                                 </div>
                                 <p className={`text-[13px] md:text-sm whitespace-pre-wrap leading-relaxed ${t.textMuted}`}>{msg.message}</p>
                               </div>

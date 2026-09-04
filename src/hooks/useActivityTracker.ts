@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { usePathname } from "next/navigation";
+import { useRealtimeUser } from "@/lib/supabase/useRealtimeUser";
+import { useRealtimeOrg } from "@/lib/supabase/useRealtimeOrg";
 
 let lastEmittedSignature = "";
 let lastEmittedTime = 0;
@@ -36,24 +38,44 @@ export function useActivityTracker() {
   const lastActivityRef = useRef(Date.now());
   const idleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  useEffect(() => {
-    // Connect to global SSE stream to receive instant force logouts
-    const evtSource = new EventSource("/api/sse/live-activity");
-    
-    evtSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === "FORCE_LOGOUT") {
-          import("@/lib/authSession").then(({ clearCrmSession }) => {
-            clearCrmSession();
-            window.location.href = "/";
-          });
-        }
-      } catch (e) {}
-    };
-
-    return () => evtSource.close();
+  // Resolve CRM user identity for Supabase Realtime channels
+  const crmIdentity = useMemo(() => {
+    if (typeof window === "undefined") return { org: null, userId: null };
+    try {
+      const raw = localStorage.getItem("crmUser");
+      if (!raw) return { org: null, userId: null };
+      const u = JSON.parse(raw);
+      return { org: u?.org || null, userId: u?._id || u?.id || null };
+    } catch { return { org: null, userId: null }; }
   }, []);
+
+  const handleForceLogout = useCallback(() => {
+    import("@/lib/authSession").then(({ clearCrmSession }) => {
+      clearCrmSession();
+      window.location.href = "/";
+    });
+  }, []);
+
+  // User-targeted FORCE_LOGOUT (admin logs out a specific user)
+  const userForceLogoutEvents = useMemo(() => ({
+    "force_logout": () => handleForceLogout(),
+  }), [handleForceLogout]);
+
+  useRealtimeUser({
+    organizationId: crmIdentity.org,
+    userId: crmIdentity.userId,
+    events: userForceLogoutEvents,
+  });
+
+  // Org-wide FORCE_LOGOUT (organization suspended)
+  const orgForceLogoutEvents = useMemo(() => ({
+    "force_logout": () => handleForceLogout(),
+  }), [handleForceLogout]);
+
+  useRealtimeOrg({
+    organizationId: crmIdentity.org,
+    events: orgForceLogoutEvents,
+  });
   
   // Global telemetry state maintained via events
   const [activeLead, setActiveLead] = useState<{ id: string | null; name: string | null }>({ id: null, name: null });

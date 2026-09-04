@@ -35,6 +35,8 @@ import LoanDealView from "@/components/LoanDealView";
 import ChannelPartnerListView from "@/components/ChannelPartnerListView";
 import CpChatPanel from "@/components/CpChatPanel";
 import ChannelPartnerEnquiriesTable from "@/components/ChannelPartnerEnquiriesTable";
+import { useCpEnquiryVisible } from "@/lib/hooks/useCpEnquiryVisible";
+import BankerVisitsTable from "@/components/BankerVisitsTable";
 import { canViewPartners } from "@/lib/cpRbac";
 import UploadLeadSheet from "@/components/UploadLeadSheet";
 import EnquiryOverviewSection from "@/components/Enquiryoverviewsection";
@@ -44,7 +46,6 @@ import CallingButtons from "@/components/CallingButtons";
 import EmployeePerformancePanel from "@/components/EmployeePerformancePanel";
 import { contactFieldSave } from "@/lib/contactFieldSave";
 // import ActivityTimeline from "@/components/ActivityTimeline";
-
 import {
   handleMarkLostLead as markLostLeadApi,
   handleRestoreLead as restoreLeadApi,
@@ -869,6 +870,9 @@ function AdminAtlasDashboardContent() {
     return cleanupBackGuard;
   }, [router]);
 
+
+
+
   // ── Toast Notification Queue Populator ──
   //
   // Fed from the same server-built queue as the dropdown, so a toast and the
@@ -963,6 +967,7 @@ function AdminAtlasDashboardContent() {
   const userRole = (user?.role || "").toLowerCase();
   const isAdmin = userRole === "admin";
   const isSiteHead = userRole === "site_head" || userRole === "site head";
+  const cpEnquiryVisible = useCpEnquiryVisible(isSiteHead ? "site_head" : null);
   // Same gate InventoryManagementView uses for its manage actions.
   const isSalesManager = ["admin", "sales manager", "sales_manager"].includes(userRole.trim());
 
@@ -972,6 +977,9 @@ function AdminAtlasDashboardContent() {
     { id: "inventory", icon: FaBoxes, label: "Inventory" },
     { id: "channel_partners", icon: FaUserTie, label: "Channel Partners" },
     { id: "cp_management", icon: FaHandshake, label: "CP Management" },
+    { id: "cp_linked_leads", icon: FaHandshake, label: "CP Linked with Leads" },
+    { id: "cp_enquiry", icon: FaHandshake, label: "CP Enquiry" },
+    { id: "banking_info", icon: FaUniversity, label: "Banking Info" },
     { id: "cp_chat", icon: FaComments, label: "CP Chat" },
     { id: "receptionist", icon: FaClipboardList, label: "Receptionist" },
     { id: "sales", icon: FaUsers, label: "Sales Managers" },
@@ -1025,6 +1033,11 @@ function AdminAtlasDashboardContent() {
       return false;
     }
 
+    // Site Head: CP Enquiry tab is controlled by admin toggle
+    if (item.id === "cp_enquiry" && isSiteHead && !cpEnquiryVisible) {
+      return false;
+    }
+
     if (isSiteHead && (item.id === "live_activity" || item.id === "settings" || item.id === "ai")) {
       return true;
     }
@@ -1049,7 +1062,7 @@ function AdminAtlasDashboardContent() {
   // carry no heading.
   const menuGroups: Record<string, string> = {
     dashboard: "Workspace", revenue_intelligence: "Workspace", inventory: "Workspace", channel_partners: "Workspace",
-    cp_management: "Workspace", cp_chat: "Workspace",
+    cp_management: "Workspace", cp_linked_leads: "Workspace", cp_enquiry: "Workspace", cp_chat: "Workspace",
     receptionist: "Team", sales: "Team", site_head: "Team", live_activity: "Insights",
     site_visit_overview: "Insights", attendance: "Insights", monitoring: "Insights", geo: "Insights",
     caller: "Admin", employees: "Admin", notifications: "Admin"
@@ -1386,7 +1399,41 @@ function AdminAtlasDashboardContent() {
                 isDark={isDark}
                 t={theme}
                 title="Channel Partner Management"
-                subtitle="Every CP enquiry — filter by Sourcing Manager and reassign"
+                subtitle="All CP-linked leads — filter by Sourcing Manager and reassign"
+              />
+            </div>
+          )}
+          {activeView === "cp_linked_leads" && (
+            <div className="h-full">
+              <ChannelPartnerEnquiriesTable
+                user={user}
+                isDark={isDark}
+                t={theme}
+                title="CP Linked with Leads"
+                subtitle="Customer leads sourced through a Channel Partner"
+              />
+            </div>
+          )}
+          {activeView === "cp_enquiry" && (
+            <div className="h-full">
+              <ChannelPartnerEnquiriesTable
+                user={user}
+                isDark={isDark}
+                t={theme}
+                title="CP Enquiry"
+                subtitle="Standalone Channel Partner records — CPs registered via the CP Enquiry form"
+                apiView="cp_primary"
+              />
+            </div>
+          )}
+          {activeView === "banking_info" && (
+            <div className="h-full">
+              <BankerVisitsTable
+                user={user}
+                isDark={isDark}
+                t={theme}
+                title="Banking Info"
+                subtitle="All banker visits — see which Sales Manager each visit is assigned to"
               />
             </div>
           )}
@@ -3323,7 +3370,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
   // Mark internal messages as read when the conversation is opened.
   useEffect(() => {
     if (!selectedLead?.id) return;
-    fetch("/api/followups/read", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ leadId: selectedLead.id }) }).catch(() => {});
+    fetch("/api/followups/read", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ leadId: selectedLead.id }) }).catch(() => { });
   }, [selectedLead?.id]);
 
   const handleReopenLead = async () => {
@@ -4227,7 +4274,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
   }, [selectedLead?.id, fetchLoanDealData]);
   useEffect(() => {
     if (!selectedLead?.id) return;
-    fetch("/api/followups/read", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ leadId: selectedLead.id }) }).catch(() => {});
+    fetch("/api/followups/read", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ leadId: selectedLead.id }) }).catch(() => { });
   }, [selectedLead?.id]);
 
   // Transfer States
@@ -5338,7 +5385,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
   }, [selectedLead?.id, fetchLoanDealData]);
   useEffect(() => {
     if (!selectedLead?.id) return;
-    fetch("/api/followups/read", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ leadId: selectedLead.id }) }).catch(() => {});
+    fetch("/api/followups/read", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ leadId: selectedLead.id }) }).catch(() => { });
   }, [selectedLead?.id]);
 
   // ── Auto-drill into a lead when navigated from Enquiry Overview ──

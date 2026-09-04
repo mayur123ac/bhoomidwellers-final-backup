@@ -3,6 +3,7 @@ import { query } from "@/lib/db";
 import { requireRole } from "@/lib/serverAuth";
 import { broadcastEvent } from "@/lib/eventBus";
 import { getOrganizationId } from "@/lib/tenantContext";
+import { broadcastToOrg } from "@/lib/supabase/broadcast";
 
 export async function POST(req: Request) {
   try {
@@ -96,18 +97,20 @@ export async function POST(req: Request) {
 
     const currentIdleSeconds = liveStateResult[0]?.idle_duration_seconds || 0;
     if (currentIdleSeconds > 2700) { // 45 minutes
-      broadcastEvent(orgId, {
+      const alertPayload = {
         type: "SMART_ALERT",
         alertType: "EXCESSIVE_IDLE",
         userId,
         userName: auth.session.name,
-        message: `⚠ ${auth.session.name} has been idle for over ${Math.floor(currentIdleSeconds / 60)} minutes.`,
+        message: `${auth.session.name} has been idle for over ${Math.floor(currentIdleSeconds / 60)} minutes.`,
         timestamp: now.toISOString()
-      }, ["admin", "site_head"]);
+      };
+      broadcastEvent(orgId, alertPayload, ["admin", "site_head"]);
+      broadcastToOrg(orgId, "activity.smart_alert", alertPayload);
     }
 
     // Broadcast to Admins so they see the live status instantly
-    broadcastEvent(orgId, {
+    const sessionPayload = {
       type: "SESSION_UPDATE",
       userId,
       current_module,
@@ -116,7 +119,9 @@ export async function POST(req: Request) {
       current_action,
       is_idle,
       last_activity: now.toISOString()
-    }, ["admin", "site_head"]);
+    };
+    broadcastEvent(orgId, sessionPayload, ["admin", "site_head"]);
+    broadcastToOrg(orgId, "activity.session_update", sessionPayload);
 
     return NextResponse.json({ success: true });
   } catch (error) {

@@ -27,6 +27,7 @@ import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getServerSession, getSessionUserId } from "@/lib/serverAuth";
 import { broadcastEvent } from "@/lib/eventBus";
+import { broadcastToOrg } from "@/lib/supabase/broadcast";
 
 export async function POST(req: Request) {
   try {
@@ -69,6 +70,7 @@ export async function POST(req: Request) {
       // cross-tenant mode by design.
       if (orgId) {
         broadcastEvent(orgId, { type: "ATTENDANCE_SYNC", userId }, ["admin", "site_head"]);
+        broadcastToOrg(orgId, "activity.attendance_sync", { type: "ATTENDANCE_SYNC", userId });
       }
 
       // MT-03: the `UPDATE employee_attendance` that used to sit here has been

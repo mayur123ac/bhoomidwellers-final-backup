@@ -5,6 +5,7 @@ import { getOrganizationId } from "@/lib/tenantContext";
 import { jsonCompressed } from "@/lib/apiResponse";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 import { broadcastFollowUp, type FollowUpPayload } from "@/lib/followUpEvents";
+import { broadcastToOrg } from "@/lib/supabase/broadcast";
 
 /**
  * GET follow-ups.
@@ -168,9 +169,7 @@ async function handleInternalMessage(
       [leadId, text, actorName, sm.id, imOrgId, gate.userId]
     );
 
-    broadcastFollowUp(imOrgId, {
-      type: "followup:created",
-      followUp: {
+    const imFollowUp = {
         _id: String(rows[0].id),
         leadId: String(leadId),
         salesManagerName: actorName,
@@ -184,8 +183,9 @@ async function handleInternalMessage(
         sentToUserId: sm.id,
         parentFollowUpId: null,
         readAt: null,
-      },
-    });
+    };
+    broadcastFollowUp(imOrgId, { type: "followup:created", followUp: imFollowUp });
+    broadcastToOrg(imOrgId, "followup.created", { followUp: imFollowUp });
 
     return NextResponse.json(
       {
@@ -260,9 +260,7 @@ async function handleInternalMessage(
     return r.rows[0];
   });
 
-  broadcastFollowUp(smReplyOrgId, {
-    type: "followup:created",
-    followUp: {
+  const smReplyFollowUp = {
       _id: String(inserted.id),
       leadId: String(leadId),
       salesManagerName: actorName,
@@ -276,8 +274,9 @@ async function handleInternalMessage(
       sentToUserId: null,
       parentFollowUpId: parentId,
       readAt: null,
-    },
-  });
+  };
+  broadcastFollowUp(smReplyOrgId, { type: "followup:created", followUp: smReplyFollowUp });
+  broadcastToOrg(smReplyOrgId, "followup.created", { followUp: smReplyFollowUp });
 
   return NextResponse.json(
     {
@@ -413,6 +412,7 @@ export async function POST(req: Request) {
     // Broadcast to all connected clients in this organization.
     // Fire-and-forget — never delays the HTTP response.
     broadcastFollowUp(orgId, { type: "followup:created", followUp: followUpData });
+    broadcastToOrg(orgId, "followup.created", { followUp: followUpData });
 
     // Return same shape as old MongoDB response
     return NextResponse.json({

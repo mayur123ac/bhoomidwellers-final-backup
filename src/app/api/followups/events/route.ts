@@ -1,18 +1,9 @@
-// api/followups/events/route.ts
-//
-// SSE stream for follow-up events, scoped to the caller's organization.
-// Pattern mirrors /api/leads/lost/events/route.ts exactly.
-
-import { createFollowUpStream } from "@/lib/followUpEvents";
-import { requireSession } from "@/lib/serverAuth";
-import { getOrganizationId } from "@/lib/tenantContext";
+// SSE endpoint for follow-up events — DEPRECATED.
+// Realtime delivery migrated to Supabase Broadcast.
+// This endpoint returns 410 Gone so any stale client learns to stop connecting.
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const gate = await requireSession();
-  if (!gate.ok) return gate.response;
-
-  const organizationId = await getOrganizationId();
-  return createFollowUpStream(organizationId);
+  return new Response("Follow-up realtime migrated to Supabase Broadcast.", { status: 410 });
 }

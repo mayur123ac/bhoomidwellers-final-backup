@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useCallback, useRef } from "react";
+// lib/followUpSync.ts — follow-up + reminder realtime sync.
+//
+// Migrated from SSE (EventSource → /api/followups/events) to Supabase
+// Realtime Broadcast. The hook signature is preserved so every dashboard
+// caller works without changes.
+
+import { useEffect, useRef, useMemo } from "react";
+import { useRealtimeOrg } from "./supabase/useRealtimeOrg";
 
 export type FollowUpSSEPayload = {
   _id: string;
@@ -44,13 +51,12 @@ export type ReminderSSEPayload = {
   createdAt: string;
 };
 
-const FALLBACK_MIN_MS = 5_000;
-const FALLBACK_MAX_MS = 120_000;
-
 /**
- * Subscribe to follow-up SSE events. Mirrors useLostLeadEvents exactly:
- * exponential backoff on real failures, auto-reconnect on transient drops,
- * and an optional fallback sync for recovery.
+ * Subscribe to follow-up and reminder events via Supabase Realtime.
+ *
+ * Signature matches the original SSE hook so callers do not need changes.
+ * The organizationId parameter is resolved from the CRM user stored in
+ * localStorage (same source as the dashboard pages).
  */
 export function useFollowUpEvents(
   onNewFollowUp: (followUp: FollowUpSSEPayload) => void,
@@ -58,8 +64,6 @@ export function useFollowUpEvents(
   onFallbackSync?: () => void,
   onReminderDue?: (reminder: ReminderSSEPayload) => void,
 ) {
-  // Stable refs so the EventSource callbacks always see the latest handler
-  // without re-creating the stream on every render.
   const onNewRef = useRef(onNewFollowUp);
   onNewRef.current = onNewFollowUp;
   const onReadRef = useRef(onReadReceipt);
@@ -69,87 +73,45 @@ export function useFollowUpEvents(
   const onReminderDueRef = useRef(onReminderDue);
   onReminderDueRef.current = onReminderDue;
 
-  useEffect(() => {
-    let source: EventSource | null = null;
-    let closed = false;
-    let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
-    let backoffMs = FALLBACK_MIN_MS;
-
-    const scheduleFallback = () => {
-      if (closed || !onFallbackRef.current || fallbackTimer) return;
-      fallbackTimer = setTimeout(() => {
-        fallbackTimer = null;
-        if (closed) return;
-        onFallbackRef.current?.();
-        backoffMs = Math.min(backoffMs * 2, FALLBACK_MAX_MS);
-      }, backoffMs);
-    };
-
+  // Resolve org from stored CRM user (same as dashboard pages)
+  const orgId = useMemo(() => {
+    if (typeof window === "undefined") return null;
     try {
-      source = new EventSource("/api/followups/events");
-      source.onopen = () => {
-        backoffMs = FALLBACK_MIN_MS;
-        if (fallbackTimer) {
-          clearTimeout(fallbackTimer);
-          fallbackTimer = null;
-        }
-      };
-      source.onmessage = (event) => {
-        try {
-          const payload = JSON.parse(event.data);
-          if (payload.type === "followup:created" && payload.followUp) {
-            onNewRef.current(payload.followUp);
-          } else if (payload.type === "followup:read" && payload.ids) {
-            onReadRef.current?.(payload);
-          } else if (payload.type === "reminder:due" && payload.reminder) {
-            onReminderDueRef.current?.(payload.reminder);
-          }
-        } catch { /* malformed event, ignore */ }
-      };
-      source.onerror = () => {
-        if (source?.readyState === EventSource.CONNECTING) return;
-        scheduleFallback();
-      };
-    } catch {
-      onFallbackRef.current?.();
-    }
+      const raw = localStorage.getItem("crmUser");
+      if (!raw) return null;
+      const u = JSON.parse(raw);
+      return u?.org || null;
+    } catch { return null; }
+  }, []);
 
-    // Capacitor / mobile: when the app backgrounds, Android may kill the SSE
-    // connection silently. On foreground, close the stale source, reconnect,
-    // and run a fallback sync to catch anything missed.
-    const onVisibility = () => {
-      if (document.visibilityState !== "visible" || closed) return;
-      source?.close();
-      backoffMs = FALLBACK_MIN_MS;
-      if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = null; }
-      try {
-        source = new EventSource("/api/followups/events");
-        source.onopen = () => {
-          backoffMs = FALLBACK_MIN_MS;
-          if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = null; }
-        };
-        source.onmessage = (event) => {
-          try {
-            const payload = JSON.parse(event.data);
-            if (payload.type === "followup:created" && payload.followUp) onNewRef.current(payload.followUp);
-            else if (payload.type === "followup:read" && payload.ids) onReadRef.current?.(payload);
-            else if (payload.type === "reminder:due" && payload.reminder) onReminderDueRef.current?.(payload.reminder);
-          } catch { /* ignore */ }
-        };
-        source.onerror = () => {
-          if (source?.readyState === EventSource.CONNECTING) return;
-          scheduleFallback();
-        };
-      } catch { /* ignore */ }
-      onFallbackRef.current?.();
-    };
-    document.addEventListener("visibilitychange", onVisibility);
+  const events = useMemo(() => ({
+    "followup.created": (payload: Record<string, unknown>) => {
+      const followUp = payload.followUp as FollowUpSSEPayload | undefined;
+      if (followUp) onNewRef.current(followUp);
+    },
+    "followup.read": (payload: Record<string, unknown>) => {
+      if (payload.ids) onReadRef.current?.(payload as unknown as FollowUpReadSSEPayload);
+    },
+    "reminder.created": (_payload: Record<string, unknown>) => {
+      // Reminder created — no client action needed beyond awareness
+    },
+    "reminder.due": (payload: Record<string, unknown>) => {
+      const reminder = payload.reminder as ReminderSSEPayload | undefined;
+      if (reminder) onReminderDueRef.current?.(reminder);
+    },
+    "reminder.updated": (_payload: Record<string, unknown>) => {
+      // Reminder updated — client can refetch if needed
+    },
+  }), []);
 
-    return () => {
-      closed = true;
-      if (fallbackTimer) clearTimeout(fallbackTimer);
-      source?.close();
-      document.removeEventListener("visibilitychange", onVisibility);
-    };
-  }, []); // intentionally empty — refs handle callback identity
+  useRealtimeOrg({ organizationId: orgId, events });
+
+  // Run a one-time fallback sync on mount to catch anything missed before
+  // the realtime channel was established (same purpose as the SSE onopen sync).
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      onFallbackRef.current?.();
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, []);
 }

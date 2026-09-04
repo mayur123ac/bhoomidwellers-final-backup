@@ -3,6 +3,7 @@ import { query } from "@/lib/db";
 import { requireRole } from "@/lib/serverAuth";
 import { getOrganizationId } from "@/lib/tenantContext";
 import { broadcastEvent } from "@/lib/eventBus";
+import { broadcastToOrg, broadcastToUser } from "@/lib/supabase/broadcast";
 
 export async function POST(req: Request) {
   try {
@@ -34,16 +35,20 @@ export async function POST(req: Request) {
     // Tenant-scoped as well as user-scoped: user ids are global, so an id that
     // collides across tenants would otherwise sign out the wrong person.
     broadcastEvent(organizationId, { type: "FORCE_LOGOUT" }, undefined, user_id);
+    // User-targeted: only the affected user's browser receives this
+    broadcastToUser(organizationId, user_id, "force_logout", { type: "FORCE_LOGOUT" });
 
     // Also notify THIS organization's admins that the user was forcefully logged
     // out. "admin" exists in every tenant, so the role filter alone sent this to
     // all of them.
-    broadcastEvent(organizationId, {
+    const sessionUpdate = {
       type: "SESSION_UPDATE",
       userId: user_id,
       status: "OFFLINE",
       message: "Forcefully Terminated"
-    }, ["admin", "site_head"]);
+    };
+    broadcastEvent(organizationId, sessionUpdate, ["admin", "site_head"]);
+    broadcastToOrg(organizationId, "activity.session_update", sessionUpdate);
 
     return NextResponse.json({ success: true, message: "User forcefully logged out." });
   } catch (error) {

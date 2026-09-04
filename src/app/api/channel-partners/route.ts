@@ -15,6 +15,7 @@ import {
 import {
   parseAssignee,
   isActiveSourcingManager,
+  isActiveSalesManager,
   countActiveSourcingManagers,
 } from "@/lib/sourcingAssignment";
 import { notifyChannelPartnerRegistered } from "@/services/whatsapp.service";
@@ -122,6 +123,8 @@ export async function GET(req: NextRequest) {
               sm.email           AS assigned_sourcing_manager_email,
               sm.whatsapp_number AS assigned_sourcing_manager_phone,
               sm.is_active       AS assigned_sourcing_manager_active,
+              slm.name           AS assigned_sales_manager_name,
+              slm.username       AS assigned_sales_manager_username,
               -- Both counts inherit the partner's organization, so a partner row
               -- can never be decorated with another builder's totals.
               (SELECT COUNT(*) FROM walkin_enquiries w
@@ -131,6 +134,8 @@ export async function GET(req: NextRequest) {
          FROM channel_partners cp
          LEFT JOIN users sm
            ON sm.id = cp.assigned_sourcing_manager_id AND sm.organization_id = cp.organization_id
+         LEFT JOIN users slm
+           ON slm.id = cp.assigned_sales_manager_id AND slm.organization_id = cp.organization_id
         ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
         ORDER BY cp.name ASC`,
       params
@@ -261,19 +266,35 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-    if (assignee.kind !== "id" && !canSetCommercials && !willUpdateExisting) {
-      if ((await countActiveSourcingManagers()) > 0) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Assign a Sourcing Manager before registering this channel partner.",
-            code: "SOURCING_MANAGER_REQUIRED",
-          },
-          { status: 400 }
-        );
-      }
-    }
+    // Sourcing Manager assignment is now optional for all registration paths.
+    // Previously required for office-visit registrations (non-commercial roles),
+    // but the business now allows a CP to be registered with only a Sales Manager,
+    // only a Sourcing Manager, both, or neither.
     const assignedSourcingManagerId = assignee.kind === "id" ? assignee.id : null;
+
+    // ── Sales Manager assignment (optional) ──────────────────────────────────
+    const smAssignee = parseAssignee(body.assigned_sales_manager_id);
+    if (smAssignee.kind === "invalid") {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "assigned_sales_manager_id must be a Sales Manager's user id.",
+          code: "INVALID_SALES_MANAGER",
+        },
+        { status: 400 }
+      );
+    }
+    if (smAssignee.kind === "id" && !(await isActiveSalesManager(smAssignee.id))) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Selected user is not an active Sales Manager.",
+          code: "INVALID_SALES_MANAGER",
+        },
+        { status: 400 }
+      );
+    }
+    const assignedSalesManagerId = smAssignee.kind === "id" ? smAssignee.id : null;
 
     const profile = {
       company_name: (body.company_name || "").toString().trim() || null,
@@ -354,6 +375,14 @@ export async function POST(req: NextRequest) {
                assigned_sourcing_manager_by =
                  CASE WHEN assigned_sourcing_manager_id IS NULL AND $10::int IS NOT NULL
                       THEN $11 ELSE assigned_sourcing_manager_by END,
+               assigned_sales_manager_id =
+                 COALESCE(assigned_sales_manager_id, $14::int),
+               assigned_sales_manager_at =
+                 CASE WHEN assigned_sales_manager_id IS NULL AND $14::int IS NOT NULL
+                      THEN now() ELSE assigned_sales_manager_at END,
+               assigned_sales_manager_by =
+                 CASE WHEN assigned_sales_manager_id IS NULL AND $14::int IS NOT NULL
+                      THEN $11 ELSE assigned_sales_manager_by END,
                updated_by           = $11
              WHERE id = $12 AND organization_id = $13
              RETURNING *`,
@@ -371,6 +400,7 @@ export async function POST(req: NextRequest) {
               actor,
               existing.id,
               await getOrganizationId(client),
+              assignedSalesManagerId,
             ]
           );
           return { merged: true, matchedName: existing.name, row: upd.rows[0] };
@@ -384,13 +414,15 @@ export async function POST(req: NextRequest) {
             office_address, owner_contact_person, gst_number, pin_code, city,
             bank_account_details, default_commission_rate, status, created_by, updated_by,
             assigned_sourcing_manager_id, assigned_sourcing_manager_at, assigned_sourcing_manager_by,
+            assigned_sales_manager_id, assigned_sales_manager_at, assigned_sales_manager_by,
             organization_id)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, COALESCE($14, 'active'), $15, $15,
                  $16,
                  CASE WHEN $16::int IS NULL THEN NULL ELSE now() END,
-                 -- Cast needed: $15 is otherwise inferred from the NULL branch here
-                 -- and conflicts with its varchar use as created_by/updated_by.
                  CASE WHEN $16::int IS NULL THEN NULL ELSE $15::varchar END,
+                 $18,
+                 CASE WHEN $18::int IS NULL THEN NULL ELSE now() END,
+                 CASE WHEN $18::int IS NULL THEN NULL ELSE $15::varchar END,
                  $17)
          RETURNING *`,
         [
@@ -411,6 +443,7 @@ export async function POST(req: NextRequest) {
           actor,
           assignedSourcingManagerId,
           await getOrganizationId(),
+          assignedSalesManagerId,
         ]
       );
       return { merged: false, matchedName: null, row: ins.rows[0] };

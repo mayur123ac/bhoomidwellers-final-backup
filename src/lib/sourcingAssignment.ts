@@ -67,6 +67,33 @@ export async function isActiveSourcingManager(
   return rows.length > 0;
 }
 
+/** Matches "Sales Manager", "sales_manager", " SALES MANAGER " alike. */
+export const SALES_MANAGER_ROLE_PREDICATE =
+  `REPLACE(LOWER(TRIM(role)), '_', ' ') = 'sales manager'`;
+
+/**
+ * True when `id` belongs to an active user whose role is Sales Manager.
+ */
+export async function isActiveSalesManager(
+  id: number,
+  client?: PoolClient
+): Promise<boolean> {
+  const sql =
+    `SELECT id FROM users
+      WHERE id = $1
+        AND organization_id = $2
+        AND is_active = true
+        AND ${SALES_MANAGER_ROLE_PREDICATE}
+      LIMIT 1`;
+  const orgId = await getOrganizationId(client);
+  if (client) {
+    const res = await client.query(sql, [id, orgId]);
+    return res.rows.length > 0;
+  }
+  const rows = await query(sql, [id, orgId]);
+  return rows.length > 0;
+}
+
 /** How many active Sourcing Managers exist at all. */
 export async function countActiveSourcingManagers(client?: PoolClient): Promise<number> {
   // Counts THIS organization's managers. Unscoped, the "no sourcing managers

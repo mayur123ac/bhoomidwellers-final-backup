@@ -39,14 +39,16 @@ import { jsonCompressed } from "@/lib/apiResponse";
 export const dynamic = "force-dynamic";
 
 /**
- * Roles allowed to read CP enquiries at all. Per the Part 10 visibility matrix,
- * Sales Manager and Site Head have NO access to Channel Partner enquiries — this
- * is a different resource from the `channel_partners` partner-master registry,
- * which those two roles can still read via /api/channel-partners.
+ * Roles allowed to read CP enquiries. Sales Manager was added so they can see
+ * CP enquiries assigned to partners they own (via assigned_sales_manager_id).
+ * Their view is scoped to their own assignments, same as Sourcing Manager.
  */
-const VIEW_ROLES = ["admin", "receptionist", "sourcing manager"];
+const VIEW_ROLES = ["admin", "receptionist", "sourcing manager", "sales manager", "site head"];
 
-const SELECT_SQL = `
+// ── Lead-primary query (Admin / Receptionist / Sourcing Manager) ─────────────
+// Starts from walkin_enquiries so orphan enquiries (channel_partner_id IS NULL,
+// ~129 historical rows) remain visible. The CP profile is optional.
+const SELECT_SQL_LEAD_PRIMARY = `
   SELECT
     w.id, w.sr_no, w.created_at, w.enquiry_date, w.status,
     w.name  AS client_name,
@@ -57,42 +59,98 @@ const SELECT_SQL = `
     w.occupation, w.organization, w.loan_planned,
     w.source, w.assigned_to, w.assigned_receptionist,
     w.channel_partner_id,
-    -- Denormalized on the enquiry; used when channel_partner_id never resolved.
     w.cp_name, w.cp_company, w.cp_phone,
-    -- Partner master profile (NULL for partners not yet registered via office visit).
     cp.name                 AS partner_name,
     cp.company_name         AS partner_company,
     cp.phone                AS partner_phone,
     cp.office_address, cp.owner_contact_person, cp.gst_number,
     cp.rera_registration_no,
     cp.city AS partner_city, cp.pin_code AS partner_pin_code,
-    -- Assignment. sourcing_manager_id is what is stored ON THE ENQUIRY;
-    -- effective_sourcing_manager_id is who actually owns it, falling back to the
-    -- partner's owner. The joined name/username/email always describe the effective
-    -- one, so the UI never has to resolve this itself.
     w.sourcing_manager_id,
     w.sourcing_manager_assigned_at,
     w.sourcing_manager_assigned_by,
     COALESCE(w.sourcing_manager_id, cp.assigned_sourcing_manager_id) AS effective_sourcing_manager_id,
     (w.sourcing_manager_id IS NULL AND cp.assigned_sourcing_manager_id IS NOT NULL)
       AS sourcing_manager_inherited,
-    -- When inherited, the "assigned on / by" that applies is the partner's, since
-    -- nothing was ever recorded against the enquiry itself.
     cp.assigned_sourcing_manager_at AS partner_assigned_at,
     cp.assigned_sourcing_manager_by AS partner_assigned_by,
     sm.name     AS sourcing_manager_name,
     sm.username AS sourcing_manager_username,
     sm.email    AS sourcing_manager_email,
-    sm.whatsapp_number AS sourcing_manager_phone
+    sm.whatsapp_number AS sourcing_manager_phone,
+    cp.assigned_sales_manager_id,
+    cp.assigned_sales_manager_at,
+    cp.assigned_sales_manager_by,
+    slm.name     AS sales_manager_name,
+    slm.username AS sales_manager_username,
+    slm.email    AS sales_manager_email,
+    slm.whatsapp_number AS sales_manager_phone
   FROM walkin_enquiries w
-  -- Joined tenant-owned rows carry their own predicate: without it the
-  -- COALESCE below could resolve an effective owner from another organization's
-  -- partner row.
   LEFT JOIN channel_partners cp
          ON cp.id = w.channel_partner_id AND cp.organization_id = w.organization_id
   LEFT JOIN users sm
     ON sm.id = COALESCE(w.sourcing_manager_id, cp.assigned_sourcing_manager_id)
    AND sm.organization_id = w.organization_id
+  LEFT JOIN users slm
+    ON slm.id = cp.assigned_sales_manager_id
+   AND slm.organization_id = w.organization_id
+`;
+
+// ── CP-primary query (Sales Manager) ────────────────────────────────────────
+// Starts from channel_partners so a CP with zero enquiries still produces one
+// row (with NULL lead fields). A CP with N enquiries produces N rows — no data
+// is collapsed or lost. The source filter is in the JOIN condition, not WHERE,
+// so it does not eliminate CPs that have no matching enquiries.
+const SELECT_SQL_CP_PRIMARY = `
+  SELECT
+    w.id, w.sr_no,
+    COALESCE(w.created_at, cp.created_at) AS created_at,
+    w.enquiry_date, w.status,
+    w.name  AS client_name,
+    w.phone AS client_phone,
+    w.alt_phone, w.email, w.address,
+    w.city AS client_city, w.pin_code AS client_pin_code,
+    w.preferred_location, w.budget, w.configuration, w.purpose,
+    w.occupation, w.organization, w.loan_planned,
+    w.source, w.assigned_to, w.assigned_receptionist,
+    cp.id   AS channel_partner_id,
+    w.cp_name, w.cp_company, w.cp_phone,
+    cp.name                 AS partner_name,
+    cp.company_name         AS partner_company,
+    cp.phone                AS partner_phone,
+    cp.office_address, cp.owner_contact_person, cp.gst_number,
+    cp.rera_registration_no,
+    cp.city AS partner_city, cp.pin_code AS partner_pin_code,
+    w.sourcing_manager_id,
+    w.sourcing_manager_assigned_at,
+    w.sourcing_manager_assigned_by,
+    COALESCE(w.sourcing_manager_id, cp.assigned_sourcing_manager_id) AS effective_sourcing_manager_id,
+    (w.sourcing_manager_id IS NULL AND cp.assigned_sourcing_manager_id IS NOT NULL)
+      AS sourcing_manager_inherited,
+    cp.assigned_sourcing_manager_at AS partner_assigned_at,
+    cp.assigned_sourcing_manager_by AS partner_assigned_by,
+    sm.name     AS sourcing_manager_name,
+    sm.username AS sourcing_manager_username,
+    sm.email    AS sourcing_manager_email,
+    sm.whatsapp_number AS sourcing_manager_phone,
+    cp.assigned_sales_manager_id,
+    cp.assigned_sales_manager_at,
+    cp.assigned_sales_manager_by,
+    slm.name     AS sales_manager_name,
+    slm.username AS sales_manager_username,
+    slm.email    AS sales_manager_email,
+    slm.whatsapp_number AS sales_manager_phone
+  FROM channel_partners cp
+  LEFT JOIN walkin_enquiries w
+    ON w.channel_partner_id = cp.id
+   AND w.organization_id = cp.organization_id
+   AND TRIM(w.source) = ANY($1)
+  LEFT JOIN users sm
+    ON sm.id = COALESCE(w.sourcing_manager_id, cp.assigned_sourcing_manager_id)
+   AND sm.organization_id = cp.organization_id
+  LEFT JOIN users slm
+    ON slm.id = cp.assigned_sales_manager_id
+   AND slm.organization_id = cp.organization_id
 `;
 
 export async function GET(req: NextRequest) {
@@ -111,33 +169,58 @@ export async function GET(req: NextRequest) {
 
   try {
     const { searchParams } = new URL(req.url);
+    const orgId = await getOrganizationId();
+
+    // ── CP-primary query ─────────────────────────────────────────────────────
+    // Starts from channel_partners so CPs with zero enquiries are visible.
+    //
+    // Sales Manager: forced to their own assigned partners.
+    // Admin / Site Head with ?view=cp_primary: org-wide, all partners.
+    const wantsCpPrimary =
+      role === "sales manager" ||
+      (["admin", "site head", "receptionist"].includes(role) && searchParams.get("view") === "cp_primary");
+
+    if (wantsCpPrimary) {
+      const params: any[] = [
+        CP_SOURCE_VALUES as unknown as string[],  // $1 — JOIN condition
+        orgId,                                     // $2 — tenant
+      ];
+      const where = [`cp.organization_id = $2`];
+
+      if (role === "sales manager") {
+        params.push(Number(session._id));            // $3 — forced scope
+        where.push(`cp.assigned_sales_manager_id = $${params.length}`);
+      }
+
+      const rows = await query(
+        `${SELECT_SQL_CP_PRIMARY} WHERE ${where.join(" AND ")} ORDER BY COALESCE(w.created_at, cp.created_at) DESC`,
+        params
+      );
+
+      return jsonCompressed(
+        req,
+        { success: true, data: rows, count: rows.length, scopedToSelf: role === "sales manager" },
+        { status: 200 }
+      );
+    }
+
+    // ── All other roles / views: lead-primary query ──────────────────────────
     const params: any[] = [];
 
-    // Only enquiries whose source is a Channel Partner source. Uses the same
-    // CP_SOURCE_VALUES list the commission engine gates on, so this page and
-    // commission attribution never disagree about what counts as a CP lead.
     params.push(CP_SOURCE_VALUES as unknown as string[]);
     const where: string[] = [`TRIM(w.source) = ANY($${params.length})`];
 
-    // Tenant filter joins the same dynamic clause list, so it is applied inside
-    // the query alongside every other filter rather than appended to the string.
-    params.push(await getOrganizationId());
+    params.push(orgId);
     where.push(`w.organization_id = $${params.length}`);
 
-    // Filtering and scoping both run on the effective owner, not the enquiry
-    // column — otherwise the table would show a manager's name in the row while
-    // the filter for that same manager returned nothing.
     const EFFECTIVE_SM = `COALESCE(w.sourcing_manager_id, cp.assigned_sourcing_manager_id)`;
 
     if (role === "sourcing manager") {
-      // Forced, not filtered: a Sourcing Manager's own id is the only one they can
-      // ever see. Any ?sourcing_manager_id they pass is discarded.
       params.push(Number(session._id));
       where.push(`${EFFECTIVE_SM} = $${params.length}`);
     } else {
       const smFilter = searchParams.get("sourcing_manager_id");
       if (smFilter === "unassigned") {
-        // Genuinely ownerless: neither the enquiry nor the partner names anyone.
         where.push(`${EFFECTIVE_SM} IS NULL`);
       } else if (smFilter) {
         params.push(Number(smFilter));
@@ -146,12 +229,10 @@ export async function GET(req: NextRequest) {
     }
 
     const rows = await query(
-      `${SELECT_SQL} WHERE ${where.join(" AND ")} ORDER BY w.created_at DESC`,
+      `${SELECT_SQL_LEAD_PRIMARY} WHERE ${where.join(" AND ")} ORDER BY w.created_at DESC`,
       params
     );
 
-    // Compressed: unbounded result set (no LIMIT — every CP enquiry the caller
-    // is scoped to), and the joined partner columns repeat heavily across rows.
     return jsonCompressed(
       req,
       { success: true, data: rows, count: rows.length, scopedToSelf: role === "sourcing manager" },

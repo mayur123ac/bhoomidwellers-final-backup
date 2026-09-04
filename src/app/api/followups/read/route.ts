@@ -15,6 +15,7 @@ import { query } from "@/lib/db";
 import { getOrganizationId } from "@/lib/tenantContext";
 import { requireSession } from "@/lib/serverAuth";
 import { broadcastFollowUp } from "@/lib/followUpEvents";
+import { broadcastToOrg } from "@/lib/supabase/broadcast";
 
 export const dynamic = "force-dynamic";
 
@@ -49,13 +50,14 @@ export async function PATCH(req: NextRequest) {
 
     // Broadcast read receipt so the sender sees the ticks update in real time.
     if (rows.length > 0) {
-      broadcastFollowUp(orgId, {
-        type: "followup:read",
+      const readPayload = {
         ids: rows.map(r => r.id),
         leadId,
         readAt: new Date().toISOString(),
         readBy: gate.session.name || gate.session.email || "unknown",
-      });
+      };
+      broadcastFollowUp(orgId, { type: "followup:read", ...readPayload });
+      broadcastToOrg(orgId, "followup.read", readPayload);
     }
 
     return NextResponse.json({ success: true, marked: rows.length, ids: rows.map(r => r.id) }, { status: 200 });

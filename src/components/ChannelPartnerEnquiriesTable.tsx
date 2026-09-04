@@ -38,6 +38,9 @@ interface Props {
    * already carry twenty columns and scroll horizontally.
    */
   showSerial?: boolean;
+  /** When set, appended as `?view=…` to the /api/cp-enquiries request.
+   *  Use `"cp_primary"` to fetch the CP-primary query (channel_partners first). */
+  apiView?: string;
 }
 
 const dash = (t: any) => <span className={t.textFaint}>—</span>;
@@ -83,7 +86,7 @@ const COLUMN_BAR_WIDTHS: Record<string, number> = {
   "CP Phone": 84, "Office Address": 150, "Owner / Contact": 96, GST: 108, RERA: 96,
   "CP City": 62, "CP Pin": 48, "Client Name": 104, "Client Phone": 84, "Alt Phone": 84,
   "Client Email": 128, "Preferred Location": 108, Budget: 70, Requirement: 96,
-  "Sourcing Manager": 96, Status: 62,
+  "Sourcing Manager": 96, "Sales Manager": 96, Status: 62,
 };
 
 const requirementOf = (r: EnquiryRowData) => {
@@ -124,7 +127,9 @@ const EnquiryRow = React.memo(function EnquiryRow({
         <td className={`px-3 py-3 whitespace-nowrap ${t.textMuted}`}>{serial}</td>
       )}
       <td className={`px-3 py-3 font-semibold whitespace-nowrap ${t.text}`}>
-        #{String(r.sr_no || r.id).padStart(3, "0")}
+        {/* CP-only rows (from the CP-primary query) have no walkin_enquiry id/sr_no.
+            Show the lead number when one exists, dash when the CP has no linked lead. */}
+        {r.sr_no || r.id ? `#${String(r.sr_no || r.id).padStart(3, "0")}` : dash(t)}
       </td>
       <td className={cell}>{fmtDate(r.created_at) || dash(t)}</td>
       <td className={`px-3 py-3 font-medium whitespace-nowrap ${t.text}`}>
@@ -167,23 +172,34 @@ const EnquiryRow = React.memo(function EnquiryRow({
         )}
       </td>
       <td className="px-3 py-3 whitespace-nowrap">
+        {r.sales_manager_name ? (
+          <span className={`font-medium ${t.text}`}>{r.sales_manager_name}</span>
+        ) : (
+          <span className={`text-[10px] ${t.textFaint}`}>Not Assigned</span>
+        )}
+      </td>
+      <td className="px-3 py-3 whitespace-nowrap">
         <span className={`px-2.5 py-1 rounded-full text-[10px] font-semibold border ${t.statusAssigned}`}>
           {r.status || "Assigned"}
         </span>
       </td>
       {canReassign && (
         <td className="px-3 py-3 text-right whitespace-nowrap">
-          <button
-            // Row click opens the detail drawer; this must not trigger it too.
-            onClick={e => { e.stopPropagation(); onReassign(r); }}
-            className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold cursor-pointer whitespace-nowrap transition-colors ${r.effective_sourcing_manager_id
-              ? isDark ? "text-white hover:bg-white/10" : "text-black hover:bg-black/5"
-              : t.btnPrimary
-              }`}
-          >
-            <FaExchangeAlt className="inline text-[9px] mr-1" />
-            {r.effective_sourcing_manager_id ? "Reassign" : "Assign"}
-          </button>
+          {/* CP-only rows (no walkin_enquiry id) have no enquiry to reassign. */}
+          {r.id ? (
+            <button
+              onClick={e => { e.stopPropagation(); onReassign(r); }}
+              className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold cursor-pointer whitespace-nowrap transition-colors ${r.effective_sourcing_manager_id
+                ? isDark ? "text-white hover:bg-white/10" : "text-black hover:bg-black/5"
+                : t.btnPrimary
+                }`}
+            >
+              <FaExchangeAlt className="inline text-[9px] mr-1" />
+              {r.effective_sourcing_manager_id ? "Reassign" : "Assign"}
+            </button>
+          ) : (
+            <span className={`text-[10px] ${t.textFaint}`}>CP only</span>
+          )}
         </td>
       )}
     </tr>
@@ -191,7 +207,7 @@ const EnquiryRow = React.memo(function EnquiryRow({
 });
 
 function ChannelPartnerEnquiriesTable({
-  user, isDark, t, title, subtitle, showSerial = false,
+  user, isDark, t, title, subtitle, showSerial = false, apiView,
 }: Props) {
   const role = normalizeRole(user?.role);
   const isAdmin = role === "admin";
@@ -220,9 +236,10 @@ function ChannelPartnerEnquiriesTable({
   // dropping to a "Loading" row for another full round trip.
   const rowsUrl = useMemo(() => {
     const p = new URLSearchParams();
+    if (apiView) p.set("view", apiView);
     if (showFilter && smFilter) p.set("sourcing_manager_id", smFilter);
     return `/api/cp-enquiries?${p.toString()}`;
-  }, [showFilter, smFilter]);
+  }, [showFilter, smFilter, apiView]);
 
   const {
     data: rows, loading, error: rowsError, refetch: refetchRows,
@@ -282,7 +299,7 @@ function ChannelPartnerEnquiriesTable({
         r.id, r.sr_no, r.client_name, r.partner_name, r.cp_name,
         r.partner_company, r.cp_company, r.owner_contact_person,
         r.gst_number, r.rera_registration_no, r.preferred_location,
-        r.sourcing_manager_name, r.status, r.budget, r.configuration,
+        r.sourcing_manager_name, r.sales_manager_name, r.status, r.budget, r.configuration,
       ].some(v => String(v ?? "").toLowerCase().includes(q)) ||
       (digits.length >= 3 && [r.client_phone, r.alt_phone, r.partner_phone, r.cp_phone]
         .some(v => String(v ?? "").replace(/\D/g, "").includes(digits)))
@@ -318,7 +335,7 @@ function ChannelPartnerEnquiriesTable({
     "Lead No.", "Created", "CP Name", "CP Company", "CP Phone",
     "Office Address", "Owner / Contact", "GST", "RERA", "CP City", "CP Pin",
     "Client Name", "Client Phone", "Alt Phone", "Client Email",
-    "Preferred Location", "Budget", "Requirement", "Sourcing Manager", "Status",
+    "Preferred Location", "Budget", "Requirement", "Sourcing Manager", "Sales Manager", "Status",
     ...(canReassign ? [""] : []),
   ], [showSerial, canReassign]);
 
@@ -406,7 +423,9 @@ function ChannelPartnerEnquiriesTable({
           : "bg-black/5 border border-transparent text-slate-600"}`}>
           {role === "sourcing manager"
             ? "Showing only the channel partners assigned to you. View only — contact an Admin to change an assignment."
-            : "View only. The assigned Sourcing Manager is set at enquiry creation and can only be changed by an Admin."}
+            : role === "sales manager"
+              ? "Showing Channel Partners assigned to you, along with any client leads they have brought in."
+              : "View only. The assigned Sourcing Manager is set at enquiry creation and can only be changed by an Admin."}
         </div>
       )}
 
@@ -458,18 +477,21 @@ function ChannelPartnerEnquiriesTable({
                 <td colSpan={columns.length} className="px-4 py-16 text-center">
                   <FaUserTie className={`mx-auto mb-3 text-2xl ${t.textFaint}`} />
                   <p className={`text-sm font-semibold tracking-tight mb-1 ${t.text}`}>
-                    {search ? "No enquiries match your search"
-                      : role === "sourcing manager" ? "Nothing assigned to you yet"
-                        : smFilter ? "No enquiries for this filter"
-                          : "No Channel Partner enquiries yet"}
+                    {search ? 'No enquiries match your search'
+                      : role === 'sourcing manager' ? 'Nothing assigned to you yet'
+                        : role === 'sales manager' ? 'No Channel Partners assigned to you yet'
+                          : smFilter ? 'No enquiries for this filter'
+                            : 'No Channel Partner enquiries yet'}
                   </p>
                   <p className={`text-xs ${t.textMuted}`}>
-                    {search ? "Try a different name, phone or GST."
-                      : role === "sourcing manager"
-                        ? "An enquiry appears here when it is routed to you, or when it comes from a Channel Partner assigned to you. If a partner of yours has brought leads but nothing shows, ask an Admin to confirm the partner is assigned to you."
-                        : smFilter && smFilter !== "unassigned"
-                          ? "This manager has no enquiries — neither routed to them directly, nor from a Channel Partner assigned to them. An Admin assigns partners in Channel Partner Management."
-                          : "They appear here when a Receptionist logs an enquiry with source “Channel Partner”."}
+                    {search ? 'Try a different name, phone or GST.'
+                      : role === 'sourcing manager'
+                        ? 'An enquiry appears here when it is routed to you, or when it comes from a Channel Partner assigned to you. If a partner of yours has brought leads but nothing shows, ask an Admin to confirm the partner is assigned to you.'
+                        : role === 'sales manager'
+                          ? 'Channel Partners assigned to you will appear here, along with any client leads they bring in. Ask an Admin to assign a CP to you.'
+                          : smFilter && smFilter !== 'unassigned'
+                            ? 'This manager has no enquiries — neither routed to them directly, nor from a Channel Partner assigned to them. An Admin assigns partners in Channel Partner Management.'
+                            : 'They appear here when a Receptionist logs an enquiry with source “Channel Partner”.'}
                   </p>
                 </td>
               </tr>
@@ -477,7 +499,7 @@ function ChannelPartnerEnquiriesTable({
 
             {!loading && visible.map((r, i) => (
               <EnquiryRow
-                key={r.id}
+                key={r.id ?? `cp-${r.channel_partner_id}-${i}`}
                 row={r}
                 serial={showSerial ? i + 1 : null}
                 isDark={isDark}
@@ -508,10 +530,14 @@ function ChannelPartnerEnquiriesTable({
               <div className="flex items-start justify-between mb-5">
                 <div>
                   <h2 className={`text-lg font-bold tracking-tight ${t.text}`}>
-                    Enquiry #{String(detail.sr_no || detail.id).padStart(3, "0")} — {detail.client_name}
+                    {detail.sr_no || detail.id
+                      ? `Enquiry #${String(detail.sr_no || detail.id).padStart(3, "0")} — ${detail.client_name || "No client yet"}`
+                      : cpField(detail, "partner_name", "cp_name") || "Channel Partner"}
                   </h2>
                   <p className={`text-[11px] mt-0.5 ${t.textMuted}`}>
-                    Channel Partner enquiry · created {fmtDate(detail.created_at, true) || "—"}
+                    {detail.sr_no || detail.id
+                      ? `Channel Partner enquiry · created ${fmtDate(detail.created_at, true) || "—"}`
+                      : `CP registered · ${fmtDate(detail.created_at, true) || "—"} · no client lead yet`}
                   </p>
                 </div>
                 <button onClick={() => setDetail(null)} className={`p-1.5 rounded-full cursor-pointer transition-colors ${isDark ? "hover:bg-white/10" : "hover:bg-black/5"} ${t.textMuted}`}>
@@ -552,6 +578,19 @@ function ChannelPartnerEnquiriesTable({
                         ? detail.partner_assigned_by
                         : detail.sourcing_manager_assigned_by,
                     ],
+                  ],
+                },
+                {
+                  heading: "Sales Manager",
+                  highlight: true,
+                  fields: [
+                    ["Assigned Sales Manager", detail.sales_manager_name],
+                    ["Employee ID", detail.assigned_sales_manager_id ? `#${detail.assigned_sales_manager_id}` : null],
+                    ["Username", detail.sales_manager_username],
+                    ["Phone Number", detail.sales_manager_phone],
+                    ["Email", detail.sales_manager_email],
+                    ["Assigned Date", fmtDate(detail.assigned_sales_manager_at, true)],
+                    ["Assigned By", detail.assigned_sales_manager_by],
                   ],
                 },
                 {

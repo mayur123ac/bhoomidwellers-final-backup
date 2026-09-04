@@ -43,7 +43,7 @@ const NO_THEME_TOKENS = Object.freeze({});
 const NAV_ITEMS = [
   { id: "overview", icon: IoGridOutline, activeIcon: IoGrid, title: "Dashboard" },
   { id: "my-cps", icon: IoPeopleOutline, activeIcon: IoPeople, title: "Channel Partners" },
-  { id: "assigned-cps", icon: IoDocumentTextOutline, activeIcon: IoDocumentText, title: "CP Enquiries" },
+  { id: "assigned-cps", icon: IoDocumentTextOutline, activeIcon: IoDocumentText, title: "CP Linked with Leads" },
   { id: "cp-chat", icon: IoChatbubbleEllipsesOutline, activeIcon: IoChatbubbleEllipses, title: "CP Chat" },
 ];
 
@@ -453,7 +453,7 @@ export default function SourcingManagerDashboard() {
                 user={user}
                 isDark={isDark}
                 t={t}
-                title="CP Enquiries"
+                title="CP Linked with Leads"
                 subtitle="Walk-in leads associated with your partners"
                 showSerial
               />

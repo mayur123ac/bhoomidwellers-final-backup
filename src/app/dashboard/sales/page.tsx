@@ -13,6 +13,7 @@ import AttendanceView from "@/components/AttendanceView";
 import dynamic from "next/dynamic";
 
 import { clearCrmSession, getStoredCrmUser, installLoggedOutBackGuard } from "@/lib/authSession";
+import { useCpEnquiryVisible } from "@/lib/hooks/useCpEnquiryVisible";
 import { useCrmTheme } from "@/lib/hooks/useCrmTheme";
 import { useShiftTiming } from "@/hooks/useShiftTiming";
 import { motion, AnimatePresence } from "framer-motion";
@@ -61,6 +62,8 @@ import { useFollowUpEvents, type FollowUpSSEPayload, type FollowUpReadSSEPayload
 
 import AttendanceTimerWidget from "@/components/AttendanceTimerWidget";
 import UserAvatar from "@/components/UserAvatar";
+import ChannelPartnerEnquiriesTable from "@/components/ChannelPartnerEnquiriesTable";
+import BankerVisitsTable from "@/components/BankerVisitsTable";
 import AppHeader from "@/components/AppHeader";
 import HeaderClock from "@/components/HeaderClock";
 import CrmUpdatesNotification from "@/components/CrmUpdatesNotification";
@@ -500,6 +503,7 @@ export default function SalesDashboard() {
   // reset to light on every navigation and was never stored anywhere; it now
   // reads the same value Preferences → Theme writes.
   const { isDark, toggleTheme } = useCrmTheme();
+  const cpEnquiryVisible = useCpEnquiryVisible("sales_manager");
   const t = buildTheme(isDark);
   const getStatusStyle = (status: string) => {
     const s = status || "Assigned";
@@ -744,6 +748,7 @@ export default function SalesDashboard() {
           Admin one. Here a click switches the in-page view; there it navigates
           back with the view queued. Nothing about the rail itself differs. */}
       <SalesSidebar
+        items={cpEnquiryVisible ? SALES_NAV : SALES_NAV.filter(i => i.id !== "cp_enquiry")}
         activeId={activeView === "detail" ? "forms" : activeView}
         onSelect={(item) => {
           if (item.id === "settings") { router.push("/dashboard/settings/profile"); return; }
@@ -1028,6 +1033,23 @@ export default function SalesDashboard() {
                 setPendingLeadOpen({ id: leadId, openBooking: true });
                 setActiveView("forms");   // mounts SalesManagerView so it can pick up pendingLeadOpen
               }}
+            />
+          ) : activeView === "cp_enquiry" ? (
+            <ChannelPartnerEnquiriesTable
+              user={user}
+              isDark={isDark}
+              t={t}
+              title="CP Enquiries"
+              subtitle="Channel Partner enquiries assigned to you."
+              showSerial
+            />
+          ) : activeView === "banking_info" ? (
+            <BankerVisitsTable
+              user={user}
+              isDark={isDark}
+              t={t}
+              title="Banking Info"
+              subtitle="Banker visits assigned to you."
             />
           ) : activeView === "attendance" ? (
             <AttendanceView

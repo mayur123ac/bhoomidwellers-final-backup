@@ -3,6 +3,7 @@ import { query } from "@/lib/db";
 import { requireRole, getSessionUserId } from "@/lib/serverAuth";
 import { getOrganizationId } from "@/lib/tenantContext";
 import { broadcastEvent } from "@/lib/eventBus";
+import { broadcastToOrg } from "@/lib/supabase/broadcast";
 
 export async function POST(req: NextRequest) {
     try {
@@ -106,6 +107,7 @@ export async function POST(req: NextRequest) {
         // Live Activity tracker only picks up the new login_time/attendance_status
         // on their next manual refresh, since heartbeats don't carry these fields.
         broadcastEvent(orgId, { type: "ATTENDANCE_SYNC", userId: targetUserId }, ["admin", "site_head"]);
+        broadcastToOrg(orgId, "activity.attendance_sync", { type: "ATTENDANCE_SYNC", userId: targetUserId });
 
         return NextResponse.json({
             success: true,

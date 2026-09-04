@@ -32,6 +32,7 @@
 import { query } from "@/lib/db";
 import { hashPassword, passwordMeetsRules } from "@/lib/passwords";
 import { broadcastEvent } from "@/lib/eventBus";
+import { broadcastToOrg, broadcastToUser } from "@/lib/supabase/broadcast";
 import { sessionRevocationNow } from "@/lib/passwordReset";
 
 /**
@@ -297,11 +298,10 @@ export async function revokeUserSessions(params: {
   // otherwise sign out the wrong person's browser.
   try {
     broadcastEvent(organizationId, { type: "FORCE_LOGOUT" }, undefined, userId);
-    broadcastEvent(
-      organizationId,
-      { type: "SESSION_UPDATE", userId, status: "OFFLINE", message: "Forcefully Terminated" },
-      ["admin", "site_head"]
-    );
+    broadcastToUser(organizationId, userId, "force_logout", { type: "FORCE_LOGOUT" });
+    const sessionUpdate = { type: "SESSION_UPDATE", userId, status: "OFFLINE", message: "Forcefully Terminated" };
+    broadcastEvent(organizationId, sessionUpdate, ["admin", "site_head"]);
+    broadcastToOrg(organizationId, "activity.session_update", sessionUpdate);
   } catch {
     // An in-memory broadcast failing must not turn a completed revocation into
     // an error the operator will retry. The revocation already happened.
@@ -340,6 +340,7 @@ export async function revokeOrganizationSessions(
 
   try {
     broadcastEvent(organizationId, { type: "FORCE_LOGOUT" });
+    broadcastToOrg(organizationId, "force_logout", { type: "FORCE_LOGOUT" });
   } catch {
     /* see revokeUserSessions */
   }

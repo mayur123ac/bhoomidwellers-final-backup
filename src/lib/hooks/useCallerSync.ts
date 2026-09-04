@@ -1,5 +1,10 @@
-// lib/hooks/useCallerSync.ts
-import { useEffect, useRef } from "react";
+// lib/hooks/useCallerSync.ts — caller panel realtime sync via Supabase.
+//
+// Migrated from SSE (EventSource → /api/caller-leads/events) to Supabase
+// Realtime Broadcast. The hook signature and event types are preserved.
+
+import { useRef, useMemo } from "react";
+import { useRealtimeOrg } from "../supabase/useRealtimeOrg";
 
 export type SyncEvent =
   | { type: "connected"; ts: number }
@@ -15,94 +20,43 @@ interface UseCallerSyncOptions {
   onLeadUpdated?:   (event: Extract<SyncEvent, { type: "lead_updated" }>) => void;
   onLeadDeleted?:   (event: Extract<SyncEvent, { type: "lead_deleted" }>) => void;
   onFollowupAdded?: (event: Extract<SyncEvent, { type: "followup_added" }>) => void;
-  // ✅ New — called when another caller claims ownership of a lead
   onLeadOwnershipChanged?: (event: Extract<SyncEvent, { type: "lead_updated" }>) => void;
 }
 
 export function useCallerSync(options: UseCallerSyncOptions) {
-  const esRef      = useRef<EventSource | null>(null);
-  const optsRef    = useRef(options);
-  const retryDelay = useRef(1_000); // ✅ Exponential backoff
-  optsRef.current  = options;
+  const optsRef = useRef(options);
+  optsRef.current = options;
 
-  useEffect(() => {
-    let cancelled = false;
-
-    const connect = () => {
-      if (cancelled) return;
-
-      const es = new EventSource("/api/caller-leads/events");
-      esRef.current = es;
-
-      es.onopen = () => {
-        retryDelay.current = 1_000; // ✅ Reset backoff on successful connect
-      };
-
-      es.onmessage = (e) => {
-        // Ignore SSE heartbeat comments (they never reach onmessage anyway,
-        // but guard against malformed pings just in case)
-        if (!e.data || e.data.startsWith(":")) return;
-
-        try {
-          const event: SyncEvent = JSON.parse(e.data);
-          const opts = optsRef.current;
-
-          switch (event.type) {
-            case "leads_uploaded":
-              opts.onLeadsUploaded?.(event);
-              break;
-
-            case "batch_deleted":
-              opts.onBatchDeleted?.(event);
-              break;
-
-            case "lead_updated":
-              opts.onLeadUpdated?.(event);
-              // ✅ If another caller just claimed this lead, fire ownership callback
-              // so the panel can immediately reload and show the lock
-              if (event.changes.saved_by || event.changes.status === "saved") {
-                opts.onLeadOwnershipChanged?.(event);
-              }
-              break;
-
-            case "lead_deleted":
-              opts.onLeadDeleted?.(event);
-              break;
-
-            case "followup_added":
-              opts.onFollowupAdded?.(event);
-              break;
-          }
-        } catch {
-          // ignore parse errors
-        }
-      };
-
-      es.onerror = () => {
-        es.close();
-        if (!cancelled) {
-          // ✅ Exponential backoff: 1s → 2s → 4s → max 30s
-          setTimeout(connect, retryDelay.current);
-          retryDelay.current = Math.min(retryDelay.current * 2, 30_000);
-        }
-      };
-    };
-
-    connect();
-
-    // Capacitor / mobile: reconnect when app returns to foreground.
-    const onVisibility = () => {
-      if (document.visibilityState !== "visible" || cancelled) return;
-      esRef.current?.close();
-      retryDelay.current = 1_000;
-      connect();
-    };
-    document.addEventListener("visibilitychange", onVisibility);
-
-    return () => {
-      cancelled = true;
-      esRef.current?.close();
-      document.removeEventListener("visibilitychange", onVisibility);
-    };
+  const orgId = useMemo(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const raw = localStorage.getItem("crmUser");
+      if (!raw) return null;
+      return JSON.parse(raw)?.org || null;
+    } catch { return null; }
   }, []);
+
+  const events = useMemo(() => ({
+    "caller.leads_uploaded": (payload: Record<string, unknown>) => {
+      optsRef.current.onLeadsUploaded?.(payload as any);
+    },
+    "caller.batch_deleted": (payload: Record<string, unknown>) => {
+      optsRef.current.onBatchDeleted?.(payload as any);
+    },
+    "caller.lead_updated": (payload: Record<string, unknown>) => {
+      optsRef.current.onLeadUpdated?.(payload as any);
+      const changes = (payload as any).changes;
+      if (changes?.saved_by || changes?.status === "saved") {
+        optsRef.current.onLeadOwnershipChanged?.(payload as any);
+      }
+    },
+    "caller.lead_deleted": (payload: Record<string, unknown>) => {
+      optsRef.current.onLeadDeleted?.(payload as any);
+    },
+    "caller.followup_added": (payload: Record<string, unknown>) => {
+      optsRef.current.onFollowupAdded?.(payload as any);
+    },
+  }), []);
+
+  useRealtimeOrg({ organizationId: orgId, events });
 }

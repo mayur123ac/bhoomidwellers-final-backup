@@ -4,6 +4,7 @@ import { query, recalculateSrNos } from "@/lib/db";
 import { getOrganizationId } from "@/lib/tenantContext";
 import { broadcastLeadUpdate } from "@/lib/lostLeadEvents";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
+import { broadcastToOrg } from "@/lib/supabase/broadcast";
 
 type RestorePayload = {
   leadId?: number | string;
@@ -90,12 +91,14 @@ export async function PATCH(req: Request) {
     }
 
     // This tenant's subscribers only — see lib/lostLeadEvents.ts.
-    broadcastLeadUpdate(organizationId, {
+    const lostEvent = {
       type: "lead:lost-updated",
       leadId: String(leadId),
       lead: responseLead,
       ts: Date.now(),
-    });
+    };
+    broadcastLeadUpdate(organizationId, lostEvent);
+    broadcastToOrg(organizationId, "lead.lost_updated", lostEvent);
 
     return NextResponse.json(
       {

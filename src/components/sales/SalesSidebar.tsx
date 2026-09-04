@@ -27,8 +27,10 @@ import {
   FaClock,
   FaCog,
   FaFileInvoice,
+  FaHandshake,
   FaRobot,
   FaThLarge,
+  FaUniversity,
 } from "react-icons/fa";
 
 export interface SalesNavItem {
@@ -55,6 +57,8 @@ export const SALES_NAV: SalesNavItem[] = [
   { id: "closed-leads", icon: FaCheckCircle, label: "Closed Leads" },
   { id: "inventory", icon: FaBuilding, label: "Inventory" },
   { id: "site_visits", icon: FaCalendarAlt, label: "Site Visits" },
+  { id: "cp_enquiry", icon: FaHandshake, label: "CP Enquiry" },
+  { id: "banking_info", icon: FaUniversity, label: "Banking Info" },
   { id: "attendance", icon: FaClock, label: "My Attendance" },
   { id: "assistant", icon: FaRobot, label: "Bhoomi AI" },
   { id: "settings", icon: FaCog, label: "Settings", pinned: true },

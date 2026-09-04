@@ -118,6 +118,84 @@ function EndpointToggle({
   );
 }
 
+/** Controls which roles see the standalone "CP Enquiry" tab. Three independent toggles. */
+function CpEnquiryVisibilityCard() {
+  const toast = useToast();
+  const [vis, setVis] = useState({ receptionist: false, site_head: false, sales_manager: true });
+  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    api<{ receptionist: boolean; site_head: boolean; sales_manager: boolean }>(
+      "/api/settings/cp-enquiry-visibility"
+    )
+      .then((r) => setVis({ receptionist: !!r.receptionist, site_head: !!r.site_head, sales_manager: !!r.sales_manager }))
+      .catch(() => {})
+      .finally(() => setLoaded(true));
+  }, []);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const result = await api<{ message: string }>("/api/settings/cp-enquiry-visibility", {
+        method: "POST",
+        json: vis,
+      });
+      toast("success", result.message);
+    } catch (err: any) {
+      toast("error", err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const roles: { key: keyof typeof vis; label: string }[] = [
+    { key: "receptionist", label: "Receptionist" },
+    { key: "site_head", label: "Site Head" },
+    { key: "sales_manager", label: "Sales Manager" },
+  ];
+
+  return (
+    <Card
+      title="CP Enquiry Tab Visibility"
+      description="Choose which roles can see the standalone CP Enquiry tab (Channel Partner records from the CP Enquiry form)."
+      footer={
+        <>
+          <span
+            className="mr-auto rounded-full border px-3 py-1 text-xs font-semibold"
+            style={{ borderColor: T.border, color: T.muted }}
+          >
+            {roles.filter((r) => vis[r.key]).map((r) => r.label).join(", ") || "None"}
+          </span>
+          <Button onClick={save} loading={saving} disabled={!loaded}>
+            Save setting
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        {roles.map((r) => (
+          <div key={r.key} className="flex items-center justify-between">
+            <span className="text-sm font-medium" style={{ color: T.text }}>
+              {r.label}
+            </span>
+            <Toggle
+              checked={vis[r.key]}
+              onChange={(v) => setVis((prev) => ({ ...prev, [r.key]: v }))}
+              label={r.label}
+              disabled={!loaded}
+            />
+          </div>
+        ))}
+      </div>
+      <p className="mt-3 text-xs leading-relaxed" style={{ color: T.muted }}>
+        When enabled, the role sees a dedicated &quot;CP Enquiry&quot; tab showing all Channel
+        Partner records registered via the CP Enquiry form. The Admin always sees this tab.
+      </p>
+    </Card>
+  );
+}
+
 export default function WorkspaceSettingsPage() {
   const toast = useToast();
   const [user, setUser] = useState<any>(null);
@@ -349,6 +427,8 @@ export default function WorkspaceSettingsPage() {
           </>
         }
       />
+
+      <CpEnquiryVisibilityCard />
 
       {/* BolnaSettingsCard is the original dark-themed component, moved here
           unchanged. Restyling its 460 lines to the light palette is cosmetic

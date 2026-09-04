@@ -32,6 +32,7 @@ import {
   FaCog,
   FaHandshake,
   FaThLarge,
+  FaUniversity,
   FaUsers,
 } from "react-icons/fa";
 import { BhoomiAiGlyph } from "@/components/bhoomi-ai/BhoomiAiIcon";
@@ -58,7 +59,9 @@ export const RECEPTIONIST_NAV: ReceptionistNavItem[] = [
   { id: "overview", icon: FaThLarge, label: "Dashboard" },
   { id: "analytics", icon: FaChartPie, label: "Analytics" },
   { id: "recep-leads", icon: FaUsers, label: "Receptionist Leads" },
-  { id: "cp-enquiries", icon: FaHandshake, label: "Channel Partner Enquiries" },
+  { id: "cp-enquiries", icon: FaHandshake, label: "CP Linked with Leads" },
+  { id: "cp-enquiry-records", icon: FaHandshake, label: "CP Enquiry" },
+  { id: "banking_info", icon: FaUniversity, label: "Banking Info" },
   { id: "closed-leads", icon: FaCheckCircle, label: "Closed Leads" },
   // Sits with the lead tabs because that is what it is a view of: the visits
   // booked against this receptionist's own leads, not the site's diary.

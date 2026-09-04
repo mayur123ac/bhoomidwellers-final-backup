@@ -1,8 +1,9 @@
 //LiveActivityView.tsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { FaCircle, FaUsers, FaWalking, FaExclamationTriangle, FaTimes, FaChartLine, FaShieldAlt, FaBriefcase, FaChartPie, FaInfoCircle, FaHistory, FaClock, FaCog, FaSave } from "react-icons/fa";
 import AttendanceReportButton from "@/components/AttendanceReportButton";
 import { useShiftTiming } from "@/hooks/useShiftTiming";
+import { useRealtimeOrg } from "@/lib/supabase/useRealtimeOrg";
 
 export default function LiveActivityView({ theme, isDark }: { theme: any; isDark: boolean }) {
   const [sessions, setSessions] = useState<any[]>([]);
@@ -204,71 +205,74 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
     fetchSessions();
   }, [selectedDate]);
 
-  useEffect(() => {
-    // 2. Connect to Realtime Event Bus
-    const evtSource = new EventSource("/api/sse/live-activity");
+  // Resolve org ID for Supabase Realtime
+  const orgId = useMemo(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const raw = localStorage.getItem("crmUser");
+      if (!raw) return null;
+      return JSON.parse(raw)?.org || null;
+    } catch { return null; }
+  }, []);
 
-    evtSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
+  const selectedUserRef = useRef(selectedUser);
+  selectedUserRef.current = selectedUser;
 
-        // Handle SESSION updates (heartbeat transitions)
-        if (data.type === "SESSION_UPDATE" || data.type === "ACTIVITY") {
-          setSessions(prev => {
-            const exists = prev.find(s => s.user_id === data.userId);
-            if (exists) {
-              return prev.map(s => s.user_id === data.userId ? { ...s, ...data } : s);
-            }
-            // If new session, we might need a full fetch, or just append it if we have enough data
-            return prev;
-          });
-
-          if (selectedUser?.user_id === data.userId) {
-            setSelectedUser((prev: any) => prev && prev.user_id === data.userId ? ({ ...prev, ...data }) : prev);
-          }
+  const realtimeEvents = useMemo(() => ({
+    "activity.session_update": (data: Record<string, unknown>) => {
+      setSessions(prev => {
+        const exists = prev.find((s: any) => s.user_id === data.userId);
+        if (exists) {
+          return prev.map((s: any) => s.user_id === data.userId ? { ...s, ...data } : s);
         }
-
-        // Handle global floating events timeline
-        if (data.type === "ACTIVITY") {
-          setLiveEvents(prev => {
-            const newFeed = [{
-              id: Date.now() + Math.random(),
-              message: `${data.userName} ${data.action} ${data.leadName ? `(${data.leadName})` : ''}`,
-              time: new Date(data.timestamp).toLocaleTimeString()
-            }, ...prev];
-            return newFeed.slice(0, 5); // Keep last 5
-          });
+        return prev;
+      });
+      if (selectedUserRef.current?.user_id === data.userId) {
+        setSelectedUser((prev: any) => prev && prev.user_id === data.userId ? ({ ...prev, ...data }) : prev);
+      }
+    },
+    "activity.event": (data: Record<string, unknown>) => {
+      // Update sessions
+      setSessions(prev => {
+        const exists = prev.find((s: any) => s.user_id === data.userId);
+        if (exists) {
+          return prev.map((s: any) => s.user_id === data.userId ? { ...s, ...data } : s);
         }
+        return prev;
+      });
+      if (selectedUserRef.current?.user_id === data.userId) {
+        setSelectedUser((prev: any) => prev && prev.user_id === data.userId ? ({ ...prev, ...data }) : prev);
+      }
+      // Live events timeline
+      setLiveEvents(prev => {
+        const newFeed = [{
+          id: Date.now() + Math.random(),
+          message: `${data.userName} ${data.action} ${data.leadName ? `(${data.leadName})` : ''}`,
+          time: new Date(data.timestamp as string).toLocaleTimeString()
+        }, ...prev];
+        return newFeed.slice(0, 5);
+      });
+    },
+    "activity.smart_alert": (data: Record<string, unknown>) => {
+      setSmartAlerts(prev => {
+        const newAlerts = [{
+          id: Date.now() + Math.random(),
+          message: data.message as string,
+          type: data.alertType as string,
+          time: new Date(data.timestamp as string).toLocaleTimeString()
+        }, ...prev];
+        return newAlerts.slice(0, 10);
+      });
+    },
+    "activity.attendance_sync": () => {
+      fetchSessions();
+    },
+    "force_logout": () => {
+      fetchSessions();
+    },
+  }), []);
 
-        if (data.type === "FORCE_LOGOUT") {
-          fetchSessions(); // refresh list to drop the user
-        }
-
-        // A punch-in or logout changes fields (login_time, attendance_status,
-        // session_end) that heartbeats never carry, so a full refetch is the
-        // only way this table reflects them the moment they happen instead of
-        // on the next manual reload.
-        if (data.type === "ATTENDANCE_SYNC") {
-          fetchSessions();
-        }
-
-        // Handle Smart Alerts for Risk Engine
-        if (data.type === "SMART_ALERT") {
-          setSmartAlerts(prev => {
-            const newAlerts = [{
-              id: Date.now() + Math.random(),
-              message: data.message,
-              type: data.alertType,
-              time: new Date(data.timestamp).toLocaleTimeString()
-            }, ...prev];
-            return newAlerts.slice(0, 10); // keep last 10 alerts
-          });
-        }
-      } catch (e) { }
-    };
-
-    return () => evtSource.close();
-  }, [selectedUser?.user_id]);
+  useRealtimeOrg({ organizationId: orgId, events: realtimeEvents });
 
   const fetchSessions = async () => {
     const today = new Date().toISOString().split('T')[0];

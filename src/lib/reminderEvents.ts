@@ -9,6 +9,7 @@
 // The actual subscriber registry lives in followUpEvents.ts.
 
 import { broadcastFollowUp } from "./followUpEvents";
+import { broadcastToOrg } from "./supabase/broadcast";
 
 // ── Event payloads ──────────────────────────────────────────────────────────
 
@@ -37,6 +38,7 @@ export function broadcastReminderCreated(organizationId: string, reminder: Remin
     type: "reminder:created",
     reminder,
   } as any);
+  broadcastToOrg(organizationId, "reminder.created", { reminder });
 }
 
 export function broadcastReminderDue(organizationId: string, reminder: ReminderPayload) {
@@ -44,6 +46,7 @@ export function broadcastReminderDue(organizationId: string, reminder: ReminderP
     type: "reminder:due",
     reminder,
   } as any);
+  broadcastToOrg(organizationId, "reminder.due", { reminder });
 }
 
 export function broadcastReminderUpdated(organizationId: string, reminder: ReminderPayload) {
@@ -51,6 +54,7 @@ export function broadcastReminderUpdated(organizationId: string, reminder: Remin
     type: "reminder:updated",
     reminder,
   } as any);
+  broadcastToOrg(organizationId, "reminder.updated", { reminder });
 }
 
 // ── Notification dispatch interface ─────────────────────────────────────────

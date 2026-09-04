@@ -4,6 +4,7 @@ import { query } from "@/lib/db";
 import { getOrganizationId } from "@/lib/tenantContext";
 import { broadcastLeadUpdate } from "@/lib/lostLeadEvents";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
+import { broadcastToOrg } from "@/lib/supabase/broadcast";
 
 type LostLeadPayload = {
   leadId?: number | string;
@@ -123,6 +124,7 @@ export async function PATCH(req: Request) {
     // enquiry row; before it was tenant-scoped this went to every organization's
     // open dashboards.
     broadcastLeadUpdate(organizationId, event);
+    broadcastToOrg(organizationId, "lead.lost_updated", event);
 
     return NextResponse.json(
       {

@@ -1,18 +1,16 @@
-// lib/hooks/useWhatsAppSync.ts — live conversation updates over SSE.
+// lib/hooks/useWhatsAppSync.ts — WhatsApp conversation realtime sync.
 //
-// Modelled on useCallerSync: one EventSource, callbacks kept in a ref so the
-// stream is not torn down and rebuilt on every parent render, and exponential
-// backoff on reconnect.
+// Migrated from SSE (EventSource → /api/whatsapp/events) to Supabase
+// Realtime Broadcast. The hook signature and event types are preserved.
 //
-// ── Why the callbacks live in a ref ─────────────────────────────────────────
-// The obvious version puts `options` in the effect's dependency array. Because
-// callers pass inline arrow functions, that array changes identity on every
-// render, so the effect re-runs, the EventSource is closed and reopened, and the
-// browser opens a new connection several times a second. useCallerSync carries a
-// comment about exactly this. The ref keeps the handlers current while the effect
-// depends on nothing.
+// WhatsApp events include _visibility metadata so the client can apply
+// the same viewer-level filtering that the SSE broadcaster used to do
+// server-side. This preserves the security property that a sales manager
+// does not see conversations for leads assigned to someone else, even
+// though the transport is now org-wide.
 
-import { useEffect, useRef } from "react";
+import { useRef, useMemo } from "react";
+import { useRealtimeOrg } from "../supabase/useRealtimeOrg";
 
 export type WhatsAppSyncEvent =
   | { type: "connected"; ts: number }
@@ -56,88 +54,79 @@ interface Options {
   onConnectionChange?: (connected: boolean) => void;
 }
 
+/** Viewer-level access check matching lib/whatsappAccess.ts canViewerSee(). */
+const FULL_ACCESS_ROLES = ["admin", "super admin"];
+const UNMATCHED_VISIBILITY_ROLES = ["admin", "super admin", "site head"];
+const OWNERSHIP_COLUMNS: Record<string, readonly string[]> = {
+  receptionist: ["assignedTo", "assignedReceptionist"],
+  "site head": ["assignedTo", "overseeingSiteHead"],
+  "sales manager": ["assignedTo"],
+};
+
+function normalizeRole(r: unknown): string {
+  return String(r ?? "").trim().toLowerCase().replace(/_/g, " ");
+}
+
+function eq(a: string | null | undefined, b: string): boolean {
+  return String(a ?? "").trim().toLowerCase() === b.trim().toLowerCase();
+}
+
+function canViewerSeeEvent(
+  viewerRole: string,
+  viewerName: string,
+  visibility: { leadId?: number | null; matchState?: string; assignedTo?: string | null; assignedReceptionist?: string | null; overseeingSiteHead?: string | null } | undefined
+): boolean {
+  if (!visibility) return true; // no visibility metadata = show to all
+  const role = normalizeRole(viewerRole);
+  if (FULL_ACCESS_ROLES.includes(role)) return true;
+  if (visibility.matchState !== "matched") return UNMATCHED_VISIBILITY_ROLES.includes(role);
+  const cols = OWNERSHIP_COLUMNS[role];
+  if (!cols || cols.length === 0) return false;
+  for (const col of cols) {
+    if (col === "assignedTo" && eq(visibility.assignedTo, viewerName)) return true;
+    if (col === "assignedReceptionist" && eq(visibility.assignedReceptionist, viewerName)) return true;
+    if (col === "overseeingSiteHead" && eq(visibility.overseeingSiteHead, viewerName)) return true;
+  }
+  return false;
+}
+
 export function useWhatsAppSync(options: Options) {
   const optsRef = useRef(options);
   optsRef.current = options;
 
   const enabled = options.enabled !== false;
 
-  useEffect(() => {
-    if (!enabled) return;
+  const crmUser = useMemo(() => {
+    if (typeof window === "undefined") return { org: null, role: "", name: "" };
+    try {
+      const raw = localStorage.getItem("crmUser");
+      if (!raw) return { org: null, role: "", name: "" };
+      const u = JSON.parse(raw);
+      return { org: u?.org || null, role: u?.role || "", name: u?.name || u?.email || "" };
+    } catch { return { org: null, role: "", name: "" }; }
+  }, []);
 
-    let cancelled = false;
-    let es: EventSource | null = null;
-    let retryTimer: ReturnType<typeof setTimeout> | null = null;
-    let delay = 1_000;
+  const events = useMemo(() => ({
+    "whatsapp.message_created": (payload: Record<string, unknown>) => {
+      const v = payload._visibility as any;
+      if (!canViewerSeeEvent(crmUser.role, crmUser.name, v)) return;
+      optsRef.current.onMessage?.(payload as any);
+    },
+    "whatsapp.message_status": (payload: Record<string, unknown>) => {
+      const v = payload._visibility as any;
+      if (!canViewerSeeEvent(crmUser.role, crmUser.name, v)) return;
+      optsRef.current.onStatus?.(payload as any);
+    },
+    "whatsapp.conversation_updated": (payload: Record<string, unknown>) => {
+      const v = payload._visibility as any;
+      if (!canViewerSeeEvent(crmUser.role, crmUser.name, v)) return;
+      optsRef.current.onConversation?.(payload as any);
+    },
+  }), [crmUser.role, crmUser.name]);
 
-    const connect = () => {
-      if (cancelled) return;
-
-      es = new EventSource("/api/whatsapp/events");
-
-      es.onopen = () => {
-        delay = 1_000;
-        optsRef.current.onConnectionChange?.(true);
-      };
-
-      es.onmessage = (ev) => {
-        if (!ev.data || ev.data.startsWith(":")) return;
-        let event: WhatsAppSyncEvent;
-        try {
-          event = JSON.parse(ev.data);
-        } catch {
-          return;
-        }
-
-        const o = optsRef.current;
-        switch (event.type) {
-          case "message_created":
-            o.onMessage?.(event);
-            break;
-          case "message_status":
-            o.onStatus?.(event);
-            break;
-          case "conversation_updated":
-            o.onConversation?.(event);
-            break;
-        }
-      };
-
-      es.onerror = () => {
-        // EventSource reconnects on its own while it is CONNECTING; intervening
-        // would produce two live streams. Only a CLOSED stream is ours to
-        // rebuild.
-        if (es?.readyState === EventSource.CONNECTING) {
-          optsRef.current.onConnectionChange?.(false);
-          return;
-        }
-        optsRef.current.onConnectionChange?.(false);
-        es?.close();
-        es = null;
-        if (cancelled) return;
-        retryTimer = setTimeout(connect, delay);
-        delay = Math.min(delay * 2, 30_000);
-      };
-    };
-
-    connect();
-
-    // Capacitor / mobile: reconnect when app returns to foreground.
-    const onVisibility = () => {
-      if (document.visibilityState !== "visible" || cancelled) return;
-      if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
-      es?.close();
-      es = null;
-      delay = 1_000;
-      connect();
-    };
-    document.addEventListener("visibilitychange", onVisibility);
-
-    return () => {
-      cancelled = true;
-      if (retryTimer) clearTimeout(retryTimer);
-      es?.close();
-      document.removeEventListener("visibilitychange", onVisibility);
-    };
-  }, [enabled]);
+  useRealtimeOrg({
+    organizationId: crmUser.org,
+    events,
+    enabled,
+  });
 }

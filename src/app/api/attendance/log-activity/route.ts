@@ -3,6 +3,7 @@ import { query } from "@/lib/db";
 import { getOrganizationId } from "@/lib/tenantContext";
 import { requireRole } from "@/lib/serverAuth";
 import { broadcastEvent } from "@/lib/eventBus";
+import { broadcastToOrg } from "@/lib/supabase/broadcast";
 
 export async function POST(req: Request) {
   try {
@@ -38,7 +39,7 @@ export async function POST(req: Request) {
     ]);
 
     // Broadcast live historical event to Admins and Site Heads
-    broadcastEvent(orgId, {
+    const activityPayload = {
       type: "ACTIVITY",
       userId,
       userName: auth.session.name,
@@ -48,7 +49,9 @@ export async function POST(req: Request) {
       leadId: leadId || null,
       leadName: leadName || null,
       timestamp: new Date().toISOString()
-    }, ["admin", "site_head"]);
+    };
+    broadcastEvent(orgId, activityPayload, ["admin", "site_head"]);
+    broadcastToOrg(orgId, "activity.event", activityPayload);
 
     // 2. IMMEDIATELY upsert the real-time snapshot (Live State)
     // We check if lead_id changed to update lead_started_at
@@ -82,7 +85,7 @@ export async function POST(req: Request) {
     ]);
 
     // Broadcast the snapshot state immediately for instant UI refresh
-    broadcastEvent(orgId, {
+    const sessionPayload = {
       type: "SESSION_UPDATE",
       userId,
       current_module: module || "Dashboard",
@@ -91,7 +94,9 @@ export async function POST(req: Request) {
       current_action: action,
       is_idle: false,
       last_activity: new Date().toISOString()
-    }, ["admin", "site_head"]);
+    };
+    broadcastEvent(orgId, sessionPayload, ["admin", "site_head"]);
+    broadcastToOrg(orgId, "activity.session_update", sessionPayload);
 
     // Risk Engine: Check for excessive lead switching (e.g. 20+ leads in 10 mins)
     if (leadId) {
@@ -103,14 +108,16 @@ export async function POST(req: Request) {
 
       const leadCount = parseInt(switchResult[0]?.lead_count || "0", 10);
       if (leadCount >= 20) {
-        broadcastEvent(orgId, {
+        const switchAlert = {
           type: "SMART_ALERT",
           alertType: "EXCESSIVE_LEAD_SWITCHING",
           userId,
           userName: auth.session.name,
-          message: `⚠ ${auth.session.name} has rapidly opened ${leadCount} distinct leads in the last 10 minutes.`,
+          message: `${auth.session.name} has rapidly opened ${leadCount} distinct leads in the last 10 minutes.`,
           timestamp: new Date().toISOString()
-        }, ["admin", "site_head"]);
+        };
+        broadcastEvent(orgId, switchAlert, ["admin", "site_head"]);
+        broadcastToOrg(orgId, "activity.smart_alert", switchAlert);
       }
     }
 

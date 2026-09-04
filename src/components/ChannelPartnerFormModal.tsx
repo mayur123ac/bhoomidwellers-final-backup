@@ -94,6 +94,7 @@ const blankForm = {
   // Held as a string because SearchableSelect stores opaque option values; it is
   // converted to a number (or null) once, in the submit payload.
   assigned_sourcing_manager_id: "",
+  assigned_sales_manager_id: "",
 };
 
 /**
@@ -132,6 +133,11 @@ export default function ChannelPartnerFormModal({
   const [managers, setManagers] = useState<any[]>([]);
   const [managersLoading, setManagersLoading] = useState(true);
   const [managersError, setManagersError] = useState<string | null>(null);
+
+  // Sales Managers for the optional assignment dropdown.
+  const [salesManagers, setSalesManagers] = useState<any[]>([]);
+  const [salesManagersLoading, setSalesManagersLoading] = useState(true);
+  const [salesManagersError, setSalesManagersError] = useState<string | null>(null);
 
   // ── Duplicate phone check ──
   // channel_partners.id is what the commission engine attributes leads and
@@ -201,9 +207,28 @@ export default function ChannelPartnerFormModal({
     }
   };
 
+  const fetchSalesManagers = async () => {
+    setSalesManagersLoading(true);
+    setSalesManagersError(null);
+    try {
+      const res = await fetch("/api/users/sales-manager");
+      const json = await res.json();
+      if (res.ok && json.success && Array.isArray(json.data)) {
+        setSalesManagers(json.data);
+      } else {
+        setSalesManagersError(json.message || `Request failed (${res.status}).`);
+      }
+    } catch (e: any) {
+      setSalesManagersError(e?.message || "Network error.");
+    } finally {
+      setSalesManagersLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (!isOpen) return;
     fetchManagers();
+    fetchSalesManagers();
   }, [isOpen]);
 
   const managerOptions: SelectOption[] = useMemo(
@@ -214,6 +239,16 @@ export default function ChannelPartnerFormModal({
       keywords: `${m.username || ""} ${m.phone || ""} ${m.email || ""}`,
     })),
     [managers]
+  );
+
+  const salesManagerOptions: SelectOption[] = useMemo(
+    () => salesManagers.map((m: any) => ({
+      value: String(m.id),
+      label: m.name,
+      sublabel: `ID ${m.id}${m.username ? ` · ${m.username}` : ""}${m.phone ? ` · ${m.phone}` : ""}`,
+      keywords: `${m.username || ""} ${m.phone || ""} ${m.email || ""}`,
+    })),
+    [salesManagers]
   );
 
   // Debounced so a number typed at speed costs one request, not ten. `exclude_id`
@@ -318,6 +353,8 @@ export default function ChannelPartnerFormModal({
         bank_name: bank.bank || "",
         assigned_sourcing_manager_id:
           partner.assigned_sourcing_manager_id != null ? String(partner.assigned_sourcing_manager_id) : "",
+        assigned_sales_manager_id:
+          (partner as any).assigned_sales_manager_id != null ? String((partner as any).assigned_sales_manager_id) : "",
       });
     } else {
       // Pre-owned by the Sourcing Manager doing the registering. Seeded here rather
@@ -368,13 +405,9 @@ export default function ChannelPartnerFormModal({
   //
   // Editing is never blocked on it, in either variant: an Admin correcting a
   // legacy partner's GST number must not be forced to invent an assignment.
-  const managerListKnown = !managersLoading && !managersError;
-  const assignmentRequired =
-    isOfficeVisit && !isEdit && !selfAssigns && managerListKnown && managers.length > 0;
-  const assignmentError =
-    assignmentRequired && !form.assigned_sourcing_manager_id
-      ? "Assign a Sourcing Manager before registering this channel partner."
-      : null;
+  // Sourcing Manager assignment is now optional for all registration paths.
+  const assignmentRequired = false;
+  const assignmentError: string | null = null;
 
   // ── Duplicate phone ──
   // Blocks the save. Cleared only by changing the number or by explicitly choosing
@@ -425,6 +458,11 @@ export default function ChannelPartnerFormModal({
           ? Number(form.assigned_sourcing_manager_id)
           : null;
     }
+
+    // Sales Manager assignment — always optional, never role-gated.
+    payload.assigned_sales_manager_id = form.assigned_sales_manager_id
+      ? Number(form.assigned_sales_manager_id)
+      : null;
 
     // Commercial fields are omitted entirely for the office-visit variant. The
     // server strips them for non-commercial roles too, so this is belt and braces.
@@ -692,6 +730,39 @@ export default function ChannelPartnerFormModal({
     </div>
   );
 
+  const salesManagerField = (
+    <div className="mt-3">
+      <label className={labelCls}>Assign Sales Manager</label>
+      <SearchableSelect
+        value={form.assigned_sales_manager_id}
+        onChange={v => set({ assigned_sales_manager_id: v })}
+        options={salesManagerOptions}
+        isDark={isDark}
+        t={t}
+        placeholder={salesManagersLoading ? "Loading Sales Managers…" : "Search by name, ID or phone…"}
+        emptyMessage={salesManagersLoading ? "Loading…" : "No active Sales Managers yet"}
+        disabled={salesManagersLoading}
+        ariaLabel="Assign Sales Manager"
+      />
+      {salesManagersLoading ? (
+        <p className={`text-[10px] mt-1 ${t.textFaint}`}>Loading Sales Managers…</p>
+      ) : salesManagersError ? (
+        <p className="text-[10px] mt-1 text-red-500">
+          Couldn&apos;t load Sales Managers ({salesManagersError}).{" "}
+          <button type="button" onClick={fetchSalesManagers} className="underline cursor-pointer">Retry</button>
+        </p>
+      ) : salesManagers.length === 0 ? (
+        <p className={`text-[10px] mt-1 ${t.textFaint}`}>
+          No active Sales Managers yet.
+        </p>
+      ) : (
+        <p className={`text-[10px] mt-1 ${t.textFaint}`}>
+          Optional — this partner&apos;s enquiries will also appear on this Sales Manager&apos;s dashboard.
+        </p>
+      )}
+    </div>
+  );
+
   const title = isOfficeVisit
     ? isEdit ? "Edit Channel Partner" : "Channel Partner Office Visit"
     : isEdit ? "Edit Channel Partner" : "Add Channel Partner";
@@ -865,6 +936,7 @@ export default function ChannelPartnerFormModal({
                 <p className={`text-xs font-bold ${t.accentText}`}>Ownership</p>
               </div>
               {sourcingManagerField}
+              {salesManagerField}
             </div>
 
             {!isOfficeVisit && (
