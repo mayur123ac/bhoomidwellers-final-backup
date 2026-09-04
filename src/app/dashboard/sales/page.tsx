@@ -426,15 +426,19 @@ function useAdminData(onReminderDue?: (r: import("@/lib/followUpSync").ReminderS
        refreshes immediately, so pausing costs no freshness at the only moment it
        matters — when someone looks at it again. This is the pattern the admin
        dashboard already uses (dashboard/page.tsx:412-430). */
-    const interval = setInterval(() => {
-      if (typeof document !== "undefined" && document.hidden) return;
-      fetchAdminData();
-    }, SALES_POLL_MS);
-    const onVisible = () => { if (!document.hidden) fetchAdminData(); };
-    document.addEventListener("visibilitychange", onVisible);
+    let interval: ReturnType<typeof setInterval> | null = setInterval(fetchAdminData, SALES_POLL_MS);
+    const onVisibility = () => {
+      if (document.hidden) {
+        if (interval) { clearInterval(interval); interval = null; }
+      } else {
+        fetchAdminData();
+        if (!interval) interval = setInterval(fetchAdminData, SALES_POLL_MS);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
-      clearInterval(interval);
-      document.removeEventListener("visibilitychange", onVisible);
+      if (interval) clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [fetchAdminData]);
 

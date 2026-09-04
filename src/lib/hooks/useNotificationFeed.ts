@@ -68,7 +68,7 @@ export interface NotificationFeedState {
 const EMPTY: CrmNotification[] = [];
 
 /** Poll interval. Matches the dashboards' own lead refresh cadence. */
-const POLL_MS = 60_000;
+const POLL_MS = 120_000;
 
 function assertSameOrganization(items: CrmNotification[], organizationId: string | null) {
   if (!organizationId) return;
@@ -133,15 +133,19 @@ export function useNotificationFeed(options?: {
 
   useEffect(() => {
     fetchFeed();
-    const timer = setInterval(() => {
-      if (typeof document !== "undefined" && document.hidden) return;
-      fetchFeed();
-    }, POLL_MS);
-    const onVisible = () => { if (!document.hidden) fetchFeed(); };
-    document.addEventListener("visibilitychange", onVisible);
+    let timer: ReturnType<typeof setInterval> | null = setInterval(fetchFeed, POLL_MS);
+    const onVisibility = () => {
+      if (document.hidden) {
+        if (timer) { clearInterval(timer); timer = null; }
+      } else {
+        fetchFeed();
+        if (!timer) timer = setInterval(fetchFeed, POLL_MS);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
-      clearInterval(timer);
-      document.removeEventListener("visibilitychange", onVisible);
+      if (timer) clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [fetchFeed]);
 

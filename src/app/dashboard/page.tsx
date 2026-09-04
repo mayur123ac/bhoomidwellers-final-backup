@@ -507,21 +507,23 @@ function useAdminData(onReminderDue?: (r: import("@/lib/followUpSync").ReminderS
 
   useEffect(() => {
     fetchAdminData();
-    // Background tabs are skipped outright. A dashboard left open on a second
-    // monitor was previously issuing the same full-database refresh every five
-    // seconds all day; nobody was looking at it, and it competed for the same
-    // connection pool as the people actually working.
-    const interval = setInterval(() => {
-      if (typeof document !== "undefined" && document.hidden) return;
-      fetchAdminData();
-    }, ADMIN_POLL_MS);
-    // Refresh immediately on return to the tab, so pausing costs no freshness
-    // at the moment it actually matters — when someone looks at it again.
-    const onVisible = () => { if (!document.hidden) fetchAdminData(); };
-    document.addEventListener("visibilitychange", onVisible);
+    // Polling is fully paused while the tab is hidden — no timers fire, no
+    // requests go out. Returning to the tab triggers one immediate refresh
+    // and restarts the interval, so pausing costs no freshness at the moment
+    // it actually matters — when someone looks at it again.
+    let interval: ReturnType<typeof setInterval> | null = setInterval(fetchAdminData, ADMIN_POLL_MS);
+    const onVisibility = () => {
+      if (document.hidden) {
+        if (interval) { clearInterval(interval); interval = null; }
+      } else {
+        fetchAdminData();
+        if (!interval) interval = setInterval(fetchAdminData, ADMIN_POLL_MS);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
-      clearInterval(interval);
-      document.removeEventListener("visibilitychange", onVisible);
+      if (interval) clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [fetchAdminData]);
 
@@ -7402,15 +7404,19 @@ function DailyMonitoringPanel({
 
   useEffect(() => {
     fetchStats();
-    const interval = setInterval(() => {
-      if (typeof document !== "undefined" && document.hidden) return;
-      fetchStats();
-    }, 120000);
-    const onVisible = () => { if (!document.hidden) fetchStats(); };
-    document.addEventListener("visibilitychange", onVisible);
+    let interval: ReturnType<typeof setInterval> | null = setInterval(fetchStats, 120000);
+    const onVisibility = () => {
+      if (document.hidden) {
+        if (interval) { clearInterval(interval); interval = null; }
+      } else {
+        fetchStats();
+        if (!interval) interval = setInterval(fetchStats, 120000);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
-      clearInterval(interval);
-      document.removeEventListener("visibilitychange", onVisible);
+      if (interval) clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, []);
 

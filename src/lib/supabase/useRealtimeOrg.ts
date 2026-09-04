@@ -2,19 +2,14 @@
 
 // lib/supabase/useRealtimeOrg.ts — reusable hook for Supabase Realtime org channel.
 //
-// One private channel per organization, one JWT refresh loop, automatic
-// reconnect on visibility change. All CRM dashboards share this hook instead
-// of opening individual EventSource connections per event family.
+// One private channel per organization. Token refresh is handled by the shared
+// realtimeTokenManager so that multiple hooks on the same page share a single
+// /api/auth/realtime-token refresh loop instead of each running their own.
 
 import { useEffect, useRef, useCallback } from "react";
 import { supabase } from "./client";
+import { subscribe, unsubscribe, refreshNow } from "./realtimeTokenManager";
 import type { RealtimeChannel } from "@supabase/supabase-js";
-
-/** The shape returned by /api/auth/realtime-token */
-interface TokenResponse {
-  token: string;
-  expires_in: number;
-}
 
 type EventHandler = (payload: Record<string, unknown>) => void;
 
@@ -27,48 +22,19 @@ interface UseRealtimeOrgOptions {
   enabled?: boolean;
 }
 
-async function fetchRealtimeToken(): Promise<TokenResponse | null> {
-  try {
-    const res = await fetch("/api/auth/realtime-token", { method: "POST" });
-    if (!res.ok) return null;
-    return await res.json();
-  } catch {
-    return null;
-  }
-}
-
 export function useRealtimeOrg({ organizationId, events, enabled = true }: UseRealtimeOrgOptions) {
   // Refs keep the latest handlers without re-subscribing
   const eventsRef = useRef(events);
   eventsRef.current = events;
 
   const channelRef = useRef<RealtimeChannel | null>(null);
-  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cancelledRef = useRef(false);
 
-  const cleanup = useCallback(() => {
-    if (refreshTimerRef.current) {
-      clearTimeout(refreshTimerRef.current);
-      refreshTimerRef.current = null;
-    }
+  const cleanupChannel = useCallback(() => {
     if (channelRef.current) {
       supabase.removeChannel(channelRef.current);
       channelRef.current = null;
     }
-  }, []);
-
-  const scheduleRefresh = useCallback((expiresIn: number) => {
-    if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
-    // Refresh 10s before expiry, minimum 5s
-    const ms = Math.max((expiresIn - 10) * 1000, 5000);
-    refreshTimerRef.current = setTimeout(async () => {
-      if (cancelledRef.current) return;
-      const data = await fetchRealtimeToken();
-      if (data && !cancelledRef.current) {
-        supabase.realtime.setAuth(data.token);
-        scheduleRefresh(data.expires_in);
-      }
-    }, ms);
   }, []);
 
   useEffect(() => {
@@ -77,13 +43,8 @@ export function useRealtimeOrg({ organizationId, events, enabled = true }: UseRe
     cancelledRef.current = false;
 
     async function connect() {
-      const data = await fetchRealtimeToken();
+      const data = await subscribe();
       if (!data || cancelledRef.current) return;
-
-      supabase.realtime.setAuth(data.token);
-      scheduleRefresh(data.expires_in);
-
-      if (cancelledRef.current) return;
 
       // Build the channel with all event listeners
       let ch = supabase.channel(`org:${organizationId}`, {
@@ -91,8 +52,6 @@ export function useRealtimeOrg({ organizationId, events, enabled = true }: UseRe
       });
 
       // Register a broadcast listener for every event name the consumer cares about.
-      // The handler dispatches through the ref so callback identity changes don't
-      // tear down and rebuild the WebSocket.
       const eventNames = Object.keys(eventsRef.current);
       for (const eventName of eventNames) {
         ch = ch.on("broadcast", { event: eventName }, ({ payload }) => {
@@ -114,15 +73,21 @@ export function useRealtimeOrg({ organizationId, events, enabled = true }: UseRe
     // Reconnect on visibility change (Capacitor / mobile background)
     const onVisibility = () => {
       if (document.visibilityState !== "visible" || cancelledRef.current) return;
-      cleanup();
-      connect();
+      cleanupChannel();
+      // refreshNow() re-auths the shared Supabase client; only one call
+      // per visibility change actually hits the API because the manager
+      // deduplicates in-flight fetches.
+      refreshNow().then(() => {
+        if (!cancelledRef.current) connect();
+      });
     };
     document.addEventListener("visibilitychange", onVisibility);
 
     return () => {
       cancelledRef.current = true;
-      cleanup();
+      cleanupChannel();
+      unsubscribe();
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [organizationId, enabled, cleanup, scheduleRefresh]);
+  }, [organizationId, enabled, cleanupChannel]);
 }
