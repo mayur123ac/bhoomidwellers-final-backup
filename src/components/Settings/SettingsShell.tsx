@@ -112,6 +112,12 @@ export const NAV: { group: string; items: NavItem[] }[] = [
     ],
   },
   {
+    group: "Control",
+    items: [
+      { href: "/dashboard/settings/number-control", label: "Number Control", icon: FaPhoneAlt, adminOnly: true },
+    ],
+  },
+  {
     group: "Workspace",
     items: [
       { href: "/dashboard/settings/workspace", label: "Workspace Settings", icon: FaCog, adminOnly: true },

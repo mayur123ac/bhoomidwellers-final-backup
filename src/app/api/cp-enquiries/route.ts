@@ -28,6 +28,15 @@
 // partner, which means an Admin reassigning a partner moves that partner's whole
 // back catalogue in one action instead of lead by lead — and there is no
 // denormalized copy to drift out of sync.
+//
+// ── Phone Number Access Control ───────────────────────────────────────────────
+// CP phone fields (partner_phone, cp_phone) are resolved through the phone
+// access policy layer before any data leaves this handler. Raw phone values
+// NEVER reach an unauthorized client — masking is applied here, not in the UI.
+//
+// Scopes:
+//   cp_standalone view  → CP_ENQUIRY   (pure channel_partners rows)
+//   all other views     → CP_LINKED_LEAD (walkin_enquiries + channel_partners)
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getOrganizationId } from "@/lib/tenantContext";
@@ -35,6 +44,7 @@ import { getServerSession } from "@/lib/serverAuth";
 import { normalizeRole } from "@/lib/cpRbac";
 import { CP_SOURCE_VALUES } from "@/lib/cpCommissionEngine";
 import { jsonCompressed } from "@/lib/apiResponse";
+import { resolvePhones } from "@/lib/phoneAccess";
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +54,12 @@ export const dynamic = "force-dynamic";
  * Their view is scoped to their own assignments, same as Sourcing Manager.
  */
 const VIEW_ROLES = ["admin", "receptionist", "sourcing manager", "sales manager", "site head"];
+
+// Phone fields present in each query shape.
+// cp_phone  = the CP's phone as captured on the enquiry row
+// partner_phone = channel_partners.phone (the canonical CP phone)
+const CP_PHONE_FIELDS_LEAD = ["cp_phone", "partner_phone"];
+const CP_PHONE_FIELDS_STANDALONE = ["partner_phone"];
 
 // ── Lead-primary query (Admin / Receptionist / Sourcing Manager) ─────────────
 // Starts from walkin_enquiries so orphan enquiries (channel_partner_id IS NULL,
@@ -58,6 +74,7 @@ const SELECT_SQL_LEAD_PRIMARY = `
     w.preferred_location, w.budget, w.configuration, w.purpose,
     w.occupation, w.organization, w.loan_planned,
     w.source, w.assigned_to, w.assigned_receptionist,
+    w.overseeing_site_head,
     w.channel_partner_id,
     w.cp_name, w.cp_company, w.cp_phone,
     cp.name                 AS partner_name,
@@ -113,6 +130,7 @@ const SELECT_SQL_CP_PRIMARY = `
     w.preferred_location, w.budget, w.configuration, w.purpose,
     w.occupation, w.organization, w.loan_planned,
     w.source, w.assigned_to, w.assigned_receptionist,
+    w.overseeing_site_head,
     cp.id   AS channel_partner_id,
     w.cp_name, w.cp_company, w.cp_phone,
     cp.name                 AS partner_name,
@@ -171,11 +189,11 @@ const SELECT_SQL_CP_STANDALONE = `
     cp.assigned_sourcing_manager_id AS effective_sourcing_manager_id,
     cp.assigned_sourcing_manager_at AS partner_assigned_at,
     cp.assigned_sourcing_manager_by AS partner_assigned_by,
+    cp.assigned_sales_manager_id,
     sm.name     AS sourcing_manager_name,
     sm.username AS sourcing_manager_username,
     sm.email    AS sourcing_manager_email,
     sm.whatsapp_number AS sourcing_manager_phone,
-    cp.assigned_sales_manager_id,
     cp.assigned_sales_manager_at,
     cp.assigned_sales_manager_by,
     slm.name     AS sales_manager_name,
@@ -209,20 +227,36 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const orgId = await getOrganizationId();
 
+    const actor = {
+      _id: session._id,
+      name: session.name,
+      role: session.role,
+    };
+
     const viewParam = searchParams.get("view");
 
     // ── CP-standalone query ──────────────────────────────────────────────────
     // Pure channel_partners, no walkin_enquiries join. One row per CP.
     // Used by the "CP Enquiry" tab in Admin, Site Head, Receptionist.
+    // Phone scope: CP_ENQUIRY (pure CP records → their own phone)
     if (viewParam === "cp_standalone" && ["admin", "site head", "receptionist"].includes(role)) {
       const rows = await query(
         `${SELECT_SQL_CP_STANDALONE} WHERE cp.organization_id = $1 ORDER BY cp.created_at DESC`,
         [orgId]
       );
 
+      // Apply phone masking for CP_ENQUIRY scope.
+      const secured = await resolvePhones(
+        actor,
+        rows,
+        "CP_ENQUIRY",
+        orgId,
+        CP_PHONE_FIELDS_STANDALONE
+      );
+
       return jsonCompressed(
         req,
-        { success: true, data: rows, count: rows.length },
+        { success: true, data: secured, count: secured.length },
         { status: 200 }
       );
     }
@@ -230,6 +264,7 @@ export async function GET(req: NextRequest) {
     // ── CP-primary query (Sales Manager) ─────────────────────────────────────
     // Starts from channel_partners, LEFT JOINs walkin_enquiries.
     // One row per lead (a CP with N leads = N rows). Sales Manager only.
+    // Phone scope: CP_LINKED_LEAD (leads linked to CPs → CP phone on the lead)
     if (role === "sales manager") {
       const params: any[] = [
         CP_SOURCE_VALUES as unknown as string[],  // $1 — JOIN condition
@@ -246,14 +281,23 @@ export async function GET(req: NextRequest) {
         params
       );
 
+      const secured = await resolvePhones(
+        actor,
+        rows,
+        "CP_LINKED_LEAD",
+        orgId,
+        CP_PHONE_FIELDS_LEAD
+      );
+
       return jsonCompressed(
         req,
-        { success: true, data: rows, count: rows.length, scopedToSelf: true },
+        { success: true, data: secured, count: secured.length, scopedToSelf: true },
         { status: 200 }
       );
     }
 
     // ── All other roles / views: lead-primary query ──────────────────────────
+    // Phone scope: CP_LINKED_LEAD (walkin_enquiries linked to a CP)
     const params: any[] = [];
 
     params.push(CP_SOURCE_VALUES as unknown as string[]);
@@ -282,9 +326,17 @@ export async function GET(req: NextRequest) {
       params
     );
 
+    const secured = await resolvePhones(
+      actor,
+      rows,
+      "CP_LINKED_LEAD",
+      orgId,
+      CP_PHONE_FIELDS_LEAD
+    );
+
     return jsonCompressed(
       req,
-      { success: true, data: rows, count: rows.length, scopedToSelf: role === "sourcing manager" },
+      { success: true, data: secured, count: secured.length, scopedToSelf: role === "sourcing manager" },
       { status: 200 }
     );
   } catch (err: any) {

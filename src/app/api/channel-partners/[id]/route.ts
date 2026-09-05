@@ -1,4 +1,8 @@
 // api/channel-partners/[id]/route.ts
+//
+// ── Phone Number Access Control ───────────────────────────────────────────────
+// channel_partners.phone is resolved through the CP_ENQUIRY phone policy before
+// it leaves this handler. Raw phone never reaches an unauthorized client.
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getOrganizationId } from "@/lib/tenantContext";
@@ -12,6 +16,7 @@ import {
   canSeePartnerCommercials,
 } from "@/lib/cpRbac";
 import { parseAssignee, isActiveSourcingManager } from "@/lib/sourcingAssignment";
+import { resolvePhone } from "@/lib/phoneAccess";
 
 export const dynamic = "force-dynamic";
 
@@ -109,6 +114,21 @@ export async function GET(
       const { default_commission_rate, bank_account_details, ...rest } = data;
       data = rest;
     }
+
+    // Apply phone masking for CP_ENQUIRY scope.
+    // The ownership columns (assigned_sourcing_manager_id, assigned_sales_manager_id)
+    // are already on the row from SELECT cp.*.
+    const orgId = await getOrganizationId();
+    const actor = {
+      _id: auth.session._id,
+      name: auth.session.name,
+      role: auth.session.role,
+    };
+    data = {
+      ...data,
+      phone: await resolvePhone(actor, data, "CP_ENQUIRY", orgId, data.phone),
+    };
+
     return NextResponse.json({ success: true, data }, { status: 200 });
   } catch (err: any) {
     console.error("[GET /api/channel-partners/[id]]", err);

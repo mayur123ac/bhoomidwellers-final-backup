@@ -3679,7 +3679,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
         ) : (
           <div className="flex-1 flex flex-col h-full min-h-0 overflow-hidden">
             {/* Sub-header */}
-            <div className={`p-3 border-b border-gray-300 flex justify-between items-center shadow-sm z-10 flex-shrink-0 gap-1 ${theme.header}`} style={theme.headerGlass}>
+            <div className={`p-3 border-b flex justify-between items-center shadow-sm z-10 flex-shrink-0 gap-1 ${theme.header}`} style={theme.headerGlass}>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => { setSelectedManager(null); setSubView("list"); setSelectedLead(null); }}
@@ -3864,9 +3864,9 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                               <button onClick={() => openLostLeadModal()} className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center flex-1 sm:flex-none min-w-[110px] sm:min-w-[130px] gap-1 sm:gap-1.5 transition-colors cursor-pointer ${theme.btnDanger} whitespace-nowrap`}>
                                 <FaEyeSlash /> Lost Lead
                               </button>
-                              <button onClick={() => { setTransferTarget(""); setTransferNote(""); setIsTransferModalOpen(true); }} className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center flex-1 sm:flex-none min-w-[110px] sm:min-w-[130px] gap-1 sm:gap-1.5 transition-colors cursor-pointer ${isDark ? "bg-purple-600 hover:bg-purple-500 text-white" : "bg-purple-600 hover:bg-purple-700 text-white"} whitespace-nowrap`}>
+                              {/* <button onClick={() => { setTransferTarget(""); setTransferNote(""); setIsTransferModalOpen(true); }} className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center flex-1 sm:flex-none min-w-[110px] sm:min-w-[130px] gap-1 sm:gap-1.5 transition-colors cursor-pointer ${isDark ? "bg-purple-600 hover:bg-purple-500 text-white" : "bg-purple-600 hover:bg-purple-700 text-white"} whitespace-nowrap`}>
                                 <FaExchangeAlt /> Transfer
-                              </button>
+                              </button> */}
                             </>
                           )
                         )}
@@ -4645,7 +4645,6 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
     } catch (e: any) { alert(e.message ?? "Transfer failed."); }
     finally { setIsTransferring(false); }
   };
-
   // Status Classes & Sections
   const statusCls = (status: string) => {
     const s = status || "Assigned";
@@ -5049,9 +5048,9 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                               <button onClick={() => openLostLeadModal()} className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center flex-1 sm:flex-none min-w-[110px] sm:min-w-[130px] gap-1 sm:gap-1.5 transition-colors cursor-pointer ${theme.btnDanger} whitespace-nowrap`}>
                                 <FaEyeSlash /> Lost Lead
                               </button>
-                              <button onClick={() => { setTransferTarget(""); setTransferNote(""); setIsTransferModalOpen(true); }} className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center flex-1 sm:flex-none min-w-[110px] sm:min-w-[130px] gap-1 sm:gap-1.5 transition-colors cursor-pointer ${isDark ? "bg-purple-600 hover:bg-purple-500 text-white" : "bg-purple-600 hover:bg-purple-700 text-white"} whitespace-nowrap`}>
+                              {/* <button onClick={() => { setTransferTarget(""); setTransferNote(""); setIsTransferModalOpen(true); }} className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center flex-1 sm:flex-none min-w-[110px] sm:min-w-[130px] gap-1 sm:gap-1.5 transition-colors cursor-pointer ${isDark ? "bg-purple-600 hover:bg-purple-500 text-white" : "bg-purple-600 hover:bg-purple-700 text-white"} whitespace-nowrap`}>
                                 <FaExchangeAlt /> Transfer
-                              </button>
+                              </button> */}
                             </>
                           )
                         )}

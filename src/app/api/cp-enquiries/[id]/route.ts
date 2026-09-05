@@ -8,12 +8,18 @@
 // from rows already fetched from the scoped list — but the endpoint must still
 // refuse a Sourcing Manager who tries CP #7 belonging to someone else, rather than
 // leaving that guarantee undefined for whatever calls this route next.
+//
+// ── Phone Number Access Control ───────────────────────────────────────────────
+// CP phone fields (partner_phone, cp_phone) are resolved through the phone
+// access policy layer. Scope: CP_LINKED_LEAD (this is a walkin_enquiries row
+// linked to a CP). Raw phone values never reach an unauthorized client.
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getOrganizationId } from "@/lib/tenantContext";
 import { getServerSession } from "@/lib/serverAuth";
 import { normalizeRole } from "@/lib/cpRbac";
 import { CP_SOURCE_VALUES } from "@/lib/cpCommissionEngine";
+import { resolvePhone } from "@/lib/phoneAccess";
 
 export const dynamic = "force-dynamic";
 
@@ -29,12 +35,15 @@ const SELECT_SQL = `
     w.preferred_location, w.budget, w.configuration, w.purpose,
     w.occupation, w.organization, w.loan_planned,
     w.source, w.assigned_to, w.assigned_receptionist,
+    w.overseeing_site_head,
     w.channel_partner_id,
     w.cp_name, w.cp_company, w.cp_phone,
     cp.name AS partner_name, cp.company_name AS partner_company, cp.phone AS partner_phone,
     cp.office_address, cp.owner_contact_person, cp.gst_number, cp.rera_registration_no,
     cp.city AS partner_city, cp.pin_code AS partner_pin_code,
     w.sourcing_manager_id, w.sourcing_manager_assigned_at, w.sourcing_manager_assigned_by,
+    COALESCE(w.sourcing_manager_id, cp.assigned_sourcing_manager_id) AS effective_sourcing_manager_id,
+    cp.assigned_sales_manager_id,
     sm.name AS sourcing_manager_name, sm.username AS sourcing_manager_username,
     sm.email AS sourcing_manager_email, sm.whatsapp_number AS sourcing_manager_phone
   FROM walkin_enquiries w
@@ -73,7 +82,8 @@ export async function GET(
   }
 
   try {
-    const rows = await query(SELECT_SQL, [enquiryId, await getOrganizationId()]);
+    const orgId = await getOrganizationId();
+    const rows = await query(SELECT_SQL, [enquiryId, orgId]);
     if (rows.length === 0) {
       return NextResponse.json({ success: false, message: "Enquiry not found." }, { status: 404 });
     }
@@ -98,7 +108,15 @@ export async function GET(
       );
     }
 
-    return NextResponse.json({ success: true, data: row }, { status: 200 });
+    // Apply phone masking server-side. Scope: CP_LINKED_LEAD.
+    // The ownership check inside resolvePhone evaluates the same columns we
+    // already read — no extra query needed.
+    const actor = { _id: session._id, name: session.name, role: session.role };
+    const securedRow = { ...row };
+    securedRow.cp_phone = await resolvePhone(actor, row, "CP_LINKED_LEAD", orgId, row.cp_phone);
+    securedRow.partner_phone = await resolvePhone(actor, row, "CP_LINKED_LEAD", orgId, row.partner_phone);
+
+    return NextResponse.json({ success: true, data: securedRow }, { status: 200 });
   } catch (err: any) {
     console.error("[GET /api/cp-enquiries/[id]]", err);
     return NextResponse.json({ success: false, message: err.message }, { status: 500 });

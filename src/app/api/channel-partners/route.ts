@@ -1,4 +1,10 @@
 // api/channel-partners/route.ts
+//
+// ── Phone Number Access Control ───────────────────────────────────────────────
+// channel_partners.phone is a CP_ENQUIRY-scoped field. After the DB query the
+// phone column is resolved through resolvePhones(), which applies the per-role
+// policy and per-record ownership check before the data leaves this handler.
+// Raw phone values never reach an unauthorized client.
 import { NextRequest, NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
 import { getOrganizationId } from "@/lib/tenantContext";
@@ -19,6 +25,7 @@ import {
   countActiveSourcingManagers,
 } from "@/lib/sourcingAssignment";
 import { notifyChannelPartnerRegistered } from "@/services/whatsapp.service";
+import { resolvePhones } from "@/lib/phoneAccess";
 
 export const dynamic = "force-dynamic";
 
@@ -144,9 +151,26 @@ export async function GET(req: NextRequest) {
     // Roles without commercial visibility never receive the rate over the wire,
     // so hiding the column in the UI isn't the only thing protecting it.
     const canSeeRate = canSeePartnerCommercials(auth.session.role);
-    const data = canSeeRate
+    const withoutCommercials = canSeeRate
       ? rows
       : rows.map(({ default_commission_rate, bank_account_details, ...rest }: any) => rest);
+
+    // Apply phone masking for CP_ENQUIRY scope. channel_partners.phone is the
+    // CP's own contact number. Each row already carries the ownership FK columns
+    // (assigned_sourcing_manager_id, assigned_sales_manager_id) that the policy
+    // layer needs for the Gate 2 ownership check.
+    const actor = {
+      _id: auth.session._id,
+      name: auth.session.name,
+      role: auth.session.role,
+    };
+    const data = await resolvePhones(
+      actor,
+      withoutCommercials,
+      "CP_ENQUIRY",
+      await getOrganizationId(),
+      ["phone"]
+    );
 
     return NextResponse.json(
       { success: true, data, count: data.length, scopedToSelf },
