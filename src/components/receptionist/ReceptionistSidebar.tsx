@@ -58,11 +58,11 @@ export const RECEPTIONIST_RAIL_WIDTH = 72;
 export const RECEPTIONIST_NAV: ReceptionistNavItem[] = [
   { id: "overview", icon: FaThLarge, label: "Dashboard" },
   { id: "analytics", icon: FaChartPie, label: "Analytics" },
-  { id: "recep-leads", icon: FaUsers, label: "Receptionist Leads" },
-  { id: "cp-enquiries", icon: FaHandshake, label: "CP Linked with Leads" },
-  { id: "cp-enquiry-records", icon: FaHandshake, label: "CP Enquiry" },
-  { id: "banking_info", icon: FaUniversity, label: "Banking Info" },
-  { id: "closed-leads", icon: FaCheckCircle, label: "Closed Leads" },
+  { id: "recep-leads", icon: FaUsers, label: "Your Walk-in Enquiries" },
+  { id: "cp-enquiries", icon: FaHandshake, label: "CP's Walk-in Enquiries" },
+  { id: "cp-enquiry-records", icon: FaHandshake, label: "Active CP Info" },
+  { id: "banking_info", icon: FaUniversity, label: "Bankers Info" },
+  { id: "closed-leads", icon: FaCheckCircle, label: "Your Closed Sales" },
   // Sits with the lead tabs because that is what it is a view of: the visits
   // booked against this receptionist's own leads, not the site's diary.
   { id: "site_visits", icon: FaCalendarAlt, label: "Site Visit Overview" },

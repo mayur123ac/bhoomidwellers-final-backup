@@ -32,7 +32,7 @@ import { broadcastToOrg } from "@/lib/supabase/broadcast";
 
 export const dynamic = "force-dynamic";
 
-const VALID_SCOPES = new Set<PhoneScope>(["CP_ENQUIRY", "CP_LINKED_LEAD"]);
+const VALID_SCOPES = new Set<PhoneScope>(["CP_ENQUIRY", "CP_LINKED_LEAD", "LEAD_PHONE"]);
 const VALID_ROLES = new Set<PhoneRole>([
   "receptionist",
   "sales_manager",
@@ -51,7 +51,7 @@ export async function GET() {
 
   // Build the full policy object (including defaults for any missing rows).
   const policyMap: Record<string, Record<string, boolean>> = {};
-  for (const scope of ["CP_ENQUIRY", "CP_LINKED_LEAD"] as PhoneScope[]) {
+  for (const scope of ["CP_ENQUIRY", "CP_LINKED_LEAD", "LEAD_PHONE"] as PhoneScope[]) {
     policyMap[scope] = {};
     for (const role of [
       "receptionist",
@@ -199,7 +199,7 @@ export async function PUT(req: NextRequest) {
     // Return the current full policy state.
     const rows = await getAllPoliciesForOrg(orgId);
     const policyMap: Record<string, Record<string, boolean>> = {};
-    for (const scope of ["CP_ENQUIRY", "CP_LINKED_LEAD"] as PhoneScope[]) {
+    for (const scope of ["CP_ENQUIRY", "CP_LINKED_LEAD", "LEAD_PHONE"] as PhoneScope[]) {
       policyMap[scope] = {};
       for (const role of [
         "receptionist",

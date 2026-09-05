@@ -54,11 +54,11 @@ export const SALES_RAIL_WIDTH = 72;
  */
 export const SALES_NAV: SalesNavItem[] = [
   { id: "overview", icon: FaThLarge, label: "Dashboard" },
-  { id: "closed-leads", icon: FaCheckCircle, label: "Closed Leads" },
+  { id: "closed-leads", icon: FaCheckCircle, label: "Your Closed Sales" },
   { id: "inventory", icon: FaBuilding, label: "Inventory" },
   { id: "site_visits", icon: FaCalendarAlt, label: "Site Visits" },
-  { id: "cp_enquiry", icon: FaHandshake, label: "CP Enquiry" },
-  { id: "banking_info", icon: FaUniversity, label: "Banking Info" },
+  { id: "cp_enquiry", icon: FaHandshake, label: "Active CP Info" },
+  { id: "banking_info", icon: FaUniversity, label: "Bankers Info" },
   { id: "attendance", icon: FaClock, label: "My Attendance" },
   { id: "assistant", icon: FaRobot, label: "Bhoomi AI" },
   { id: "settings", icon: FaCog, label: "Settings", pinned: true },

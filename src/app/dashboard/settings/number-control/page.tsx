@@ -32,9 +32,9 @@ import {
 // ── Types ────────────────────────────────────────────────────────────────────
 
 type PhoneRole = "receptionist" | "sales_manager" | "site_head" | "sourcing_manager";
-type PhoneScope = "CP_ENQUIRY" | "CP_LINKED_LEAD";
+type PhoneScope = "CP_ENQUIRY" | "CP_LINKED_LEAD" | "LEAD_PHONE";
 type ScopePolicies = Record<PhoneRole, boolean>;
-type PolicyMap = Record<PhoneScope, ScopePolicies>;
+type PolicyMap = Partial<Record<PhoneScope, ScopePolicies>>;
 
 const ROLES: { key: PhoneRole; label: string; description: string }[] = [
   {
@@ -59,34 +59,40 @@ const ROLES: { key: PhoneRole; label: string; description: string }[] = [
   },
 ];
 
-const SCOPES: { key: PhoneScope; label: string; description: string }[] = [
+const SCOPES: { key: PhoneScope; label: string; description: string; ownershipNote?: string }[] = [
   {
     key: "CP_ENQUIRY",
-    label: "CP Enquiry (Standalone Records)",
+    label: "Active CP Info",
     description:
       "Controls visibility of the phone number on the Channel Partner master record — shown in the standalone \u201cCP Enquiry\u201d tab where there is no linked lead. Applies to channel_partners.phone.",
   },
   {
     key: "CP_LINKED_LEAD",
-    label: "CP Linked Lead",
+    label: "CP's Walk-in Enquiries",
     description:
       "Controls visibility of the CP phone numbers on enquiries that are linked to a channel partner. Applies to both cp_phone (captured at intake) and partner_phone (from the CP record).",
   },
+  {
+    key: "LEAD_PHONE",
+    label: "Lead / Customer Phone",
+    description:
+      "Controls visibility of the customer phone number on Leads. The assigned employee always has access to their own Lead\u2019s phone \u2014 this cannot be disabled.",
+    ownershipNote:
+      "Assigned employees always have access to the phone numbers of Leads assigned to them. This is enforced server-side and cannot be disabled by this toggle.",
+  },
 ];
 
+const EMPTY_SCOPE_POLICY: ScopePolicies = {
+  receptionist: true,
+  sales_manager: true,
+  site_head: true,
+  sourcing_manager: true,
+};
+
 const DEFAULT_POLICY: PolicyMap = {
-  CP_ENQUIRY: {
-    receptionist: true,
-    sales_manager: true,
-    site_head: true,
-    sourcing_manager: true,
-  },
-  CP_LINKED_LEAD: {
-    receptionist: true,
-    sales_manager: true,
-    site_head: true,
-    sourcing_manager: true,
-  },
+  CP_ENQUIRY: { ...EMPTY_SCOPE_POLICY },
+  CP_LINKED_LEAD: { ...EMPTY_SCOPE_POLICY },
+  LEAD_PHONE: { ...EMPTY_SCOPE_POLICY },
 };
 
 // ── Preview ──────────────────────────────────────────────────────────────────
@@ -141,7 +147,7 @@ export default function NumberControlPage() {
     (scope: PhoneScope, role: PhoneRole, next: boolean) => {
       setPolicies((prev) => ({
         ...prev,
-        [scope]: { ...prev[scope], [role]: next },
+        [scope]: { ...(prev[scope] ?? EMPTY_SCOPE_POLICY), [role]: next },
       }));
     },
     []
@@ -150,10 +156,12 @@ export default function NumberControlPage() {
   // Diff against saved state to build the minimal update batch.
   const save = async () => {
     const updates: { scope: PhoneScope; role: PhoneRole; can_view_full_phone: boolean }[] = [];
-    for (const scope of ["CP_ENQUIRY", "CP_LINKED_LEAD"] as PhoneScope[]) {
+    for (const scope of ["CP_ENQUIRY", "CP_LINKED_LEAD", "LEAD_PHONE"] as PhoneScope[]) {
       for (const role of ["receptionist", "sales_manager", "site_head", "sourcing_manager"] as PhoneRole[]) {
-        if (policies[scope][role] !== savedRef.current[scope][role]) {
-          updates.push({ scope, role, can_view_full_phone: policies[scope][role] });
+        const current = policies[scope]?.[role] ?? true;
+        const saved = savedRef.current[scope]?.[role] ?? true;
+        if (current !== saved) {
+          updates.push({ scope, role, can_view_full_phone: current });
         }
       }
     }
@@ -180,7 +188,7 @@ export default function NumberControlPage() {
 
   // Count how many roles currently have access blocked per scope, for the summary.
   const blockedCount = (scope: PhoneScope) =>
-    ROLES.filter((r) => !policies[scope][r.key]).length;
+    ROLES.filter((r) => !(policies[scope]?.[r.key] ?? true)).length;
 
   if (loading) {
     return (
@@ -276,11 +284,25 @@ export default function NumberControlPage() {
                 key={role.key}
                 label={role.label}
                 description={role.description}
-                checked={policies[scope.key][role.key]}
+                checked={policies[scope.key]?.[role.key] ?? true}
                 onChange={(next) => toggleRole(scope.key, role.key, next)}
                 disabled={saving}
               />
             ))}
+
+            {/* Ownership rule callout — LEAD_PHONE only. */}
+            {scope.ownershipNote && (
+              <div
+                className="mt-4 flex items-start gap-2.5 rounded-lg border px-4 py-3 text-sm"
+                style={{ borderColor: T.teal, background: T.accentSoft, color: T.text }}
+              >
+                <FaShieldAlt
+                  className="mt-0.5 h-3.5 w-3.5 flex-shrink-0"
+                  style={{ color: T.teal }}
+                />
+                <span style={{ color: T.muted }}>{scope.ownershipNote}</span>
+              </div>
+            )}
           </Card>
         );
       })}

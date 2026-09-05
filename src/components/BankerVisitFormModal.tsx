@@ -132,11 +132,10 @@ export default function BankerVisitFormModal({
 
   if (!isOpen) return null;
 
-  const inputCls = `w-full rounded-xl px-3 py-2.5 text-[13px] outline-none transition-all ${
-    isDark
-      ? "bg-[#1C1C1E] text-white placeholder-gray-500 border border-white/10 focus:border-[#9E217B]/50 focus:bg-[#2C2C2E]"
-      : "bg-black/5 text-black placeholder-gray-400 border border-black/5 focus:border-[#9E217B]/40 focus:bg-white"
-  }`;
+  const inputCls = `w-full rounded-xl px-3 py-2.5 text-[13px] outline-none transition-all ${isDark
+    ? "bg-[#1C1C1E] text-white placeholder-gray-500 border border-white/10 focus:border-[#9E217B]/50 focus:bg-[#2C2C2E]"
+    : "bg-black/5 text-black placeholder-gray-400 border border-black/5 focus:border-[#9E217B]/40 focus:bg-white"
+    }`;
 
   const labelCls = `block text-[11px] uppercase tracking-wider font-bold mb-1.5 ${t.textMuted}`;
 
@@ -147,11 +146,10 @@ export default function BankerVisitFormModal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className={`w-full max-w-lg max-h-[90vh] flex flex-col rounded-[2rem] shadow-2xl overflow-hidden ${
-          isDark
-            ? "bg-[#1C1C1E]/95 border border-white/10 backdrop-blur-3xl"
-            : "bg-white/95 border border-black/5 backdrop-blur-3xl"
-        }`}
+        className={`w-full max-w-lg max-h-[90vh] flex flex-col rounded-[2rem] shadow-2xl overflow-hidden ${isDark
+          ? "bg-[#1C1C1E]/95 border border-white/10 backdrop-blur-3xl"
+          : "bg-white/95 border border-black/5 backdrop-blur-3xl"
+          }`}
       >
         {/* Header */}
         <div className={`px-6 pt-5 pb-3 border-b ${t.tableBorder}`}>
@@ -171,9 +169,8 @@ export default function BankerVisitFormModal({
             </div>
             <button
               onClick={onClose}
-              className={`p-1.5 rounded-full cursor-pointer transition-colors ${
-                isDark ? "hover:bg-white/10" : "hover:bg-black/5"
-              } ${t.textMuted}`}
+              className={`p-1.5 rounded-full cursor-pointer transition-colors ${isDark ? "hover:bg-white/10" : "hover:bg-black/5"
+                } ${t.textMuted}`}
             >
               <FaTimes />
             </button>
@@ -329,11 +326,10 @@ export default function BankerVisitFormModal({
           <button
             onClick={onClose}
             type="button"
-            className={`px-5 py-2.5 rounded-full text-[14px] font-medium cursor-pointer transition-colors ${
-              isDark
-                ? "text-gray-300 hover:bg-white/[0.06]"
-                : "text-gray-600 hover:bg-black/[0.04]"
-            }`}
+            className={`px-5 py-2.5 rounded-full text-[14px] font-medium cursor-pointer transition-colors ${isDark
+              ? "text-gray-300 hover:bg-white/[0.06]"
+              : "text-gray-600 hover:bg-black/[0.04]"
+              }`}
           >
             Cancel
           </button>
@@ -341,11 +337,10 @@ export default function BankerVisitFormModal({
             form="bankerVisitForm"
             type="submit"
             disabled={submitting}
-            className={`px-6 py-2.5 rounded-full text-[14px] font-semibold text-white bg-blue-500 transition-all ${
-              submitting
-                ? "opacity-50 cursor-not-allowed"
-                : "cursor-pointer hover:bg-blue-600 active:scale-[0.98]"
-            }`}
+            className={`px-6 py-2.5 rounded-full text-[14px] font-semibold text-white bg-blue-500 transition-all ${submitting
+              ? "opacity-50 cursor-not-allowed"
+              : "cursor-pointer hover:bg-blue-600 active:scale-[0.98]"
+              }`}
           >
             {submitting ? "Saving..." : "Save Banker Visit"}
           </button>

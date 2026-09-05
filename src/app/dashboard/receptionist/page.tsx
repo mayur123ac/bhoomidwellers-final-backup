@@ -672,6 +672,12 @@ export default function ReceptionistDashboard() {
   /** The phone matched a registered partner whose owner will take this lead. */
   const cpRoutedByPartner = !!(cpLookup?.found && cpLookup?.routable);
 
+  // ── Revisit lead detection ──
+  const [matchedLead, setMatchedLead] = useState<null | { id: number; name: string; phone: string; assigned_to: string; created_at: string; lead_classification: string }>(null);
+  const [matchType, setMatchType] = useState<"phone" | "name" | null>(null);
+  const [isRevisit, setIsRevisit] = useState(false);
+  const matchCheckRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // ___Lost Leads
   const [showLostModal, setShowLostModal] = useState(false);
   const [lostReason, setLostReason] = useState("");
@@ -1102,6 +1108,43 @@ export default function ReceptionistDashboard() {
     return () => { cancelled = true; clearTimeout(timer); };
   }, [enquiryForm.cpDetails.phone, enquiryForm.source]);
 
+  // ── Real-time duplicate / revisit match detection ──
+  // Debounced 600 ms. Only fires when the modal is open so it doesn't consume
+  // network for every keystroke on an already-submitted form.
+  useEffect(() => {
+    if (!isEnquiryModalOpen) return;
+    if (matchCheckRef.current) clearTimeout(matchCheckRef.current);
+    const phone = (enquiryForm.mobile || "").trim();
+    const name = (enquiryForm.fullName || "").trim();
+    if (!phone && name.length < 3) {
+      setMatchedLead(null);
+      setMatchType(null);
+      setIsRevisit(false);
+      return;
+    }
+    matchCheckRef.current = setTimeout(async () => {
+      try {
+        const params = new URLSearchParams();
+        if (phone) params.set("phone", phone);
+        if (name) params.set("name", name);
+        const res = await fetch(`/api/walkin_enquiries/check-match?${params.toString()}`);
+        if (!res.ok) return;
+        const json = await res.json();
+        if (json.matched && json.lead) {
+          setMatchedLead(json.lead);
+          setMatchType(json.matchType ?? null);
+        } else {
+          setMatchedLead(null);
+          setMatchType(null);
+          setIsRevisit(false);
+        }
+      } catch {
+        // non-blocking — network errors don't block submission
+      }
+    }, 600);
+    return () => { if (matchCheckRef.current) clearTimeout(matchCheckRef.current); };
+  }, [enquiryForm.mobile, enquiryForm.fullName, isEnquiryModalOpen]);
+
   const fetchSalesManagers = async () => {
     setIsFetchingManagers(true);
     try {
@@ -1476,6 +1519,10 @@ export default function ReceptionistDashboard() {
       enquiry_date: autoDate
         ? new Date().toISOString()
         : new Date(enquiryForm.enquiryDate + "T00:00:00").toISOString(),
+      // Revisit flag — only set when the receptionist explicitly checks the box.
+      // Server re-validates the match; client-supplied revisitLeadId is advisory only.
+      isRevisit: isRevisit && matchedLead !== null,
+      revisitLeadId: isRevisit && matchedLead !== null ? matchedLead.id : null,
     };
 
     try {
@@ -1491,7 +1538,7 @@ export default function ReceptionistDashboard() {
           : "";
         showToast(
           isReturning
-            ? `Returning Lead! Previously assigned to ${json.returningFromAssignedTo || "unknown"}${routeMsg}`
+            ? `Revisit Lead! Previously assigned to ${json.returningFromAssignedTo || "unknown"}${routeMsg}`
             : json?.routedByPartner && json?.routedTo
               ? `Lead routed to ${json.routedTo} — the registered partner's Sourcing Manager.`
               : isReceptionist ? `Lead self-assigned to you!` : `Lead assigned to ${assignTo}!`
@@ -1499,6 +1546,9 @@ export default function ReceptionistDashboard() {
         setIsEnquiryModalOpen(false);
         setCpPhoneError("");
         setCpLookup(null);
+        setMatchedLead(null);
+        setMatchType(null);
+        setIsRevisit(false);
         setEnquiryForm({ fullName: "", mobile: "", altMobile: "", email: "", address: "", pinCode: "", city: "", occupation: "", organization: "", budget: "", configuration: "", purpose: "", source: "", assignedTo: "", loanPlanned: "", sourceOther: "", referralName: "", cpDetails: { name: "", company: "", phone: "" }, sourcingManagerId: "", preferredLocation: "", selfAssign: false, enquiryDate: getTodayString() });
         refetchAll();
       } else {
@@ -2113,7 +2163,7 @@ export default function ReceptionistDashboard() {
                 user={user}
                 isDark={isDark}
                 t={t}
-                title="CP Linked with Leads"
+                title="CP's Walk-in Enquiries"
                 subtitle="Customer leads sourced through a Channel Partner"
               />
             </div>
@@ -2128,7 +2178,7 @@ export default function ReceptionistDashboard() {
                 user={user}
                 isDark={isDark}
                 t={t}
-                title="CP Enquiry"
+                title="Active CP Info"
                 subtitle="Channel Partner records registered via the CP Enquiry form"
                 apiView="cp_standalone"
                 standalone
@@ -2145,14 +2195,14 @@ export default function ReceptionistDashboard() {
                 user={user}
                 isDark={isDark}
                 t={t}
-                title="Banking Info"
+                title="Bankers Info"
                 subtitle="All banker visits recorded at the front desk"
               />
             </div>
           )}
 
           {/* ── SHARED PAGE HEADER ── */}
-          {!["settings", "detail", "assistant", "assigned", "recep-leads", "closed-leads", "attendance", "analytics", "cp-enquiries", "cp-enquiry-records", "banking_info"].includes(activeTab) && (
+          {!["settings", "detail", "assistant", "assigned", "recep-leads", "closed-leads", "attendance", "analytics", "cp-enquiries", "cp-enquiry-records", "banking_info", "site_visits"].includes(activeTab) && (
             <RpPageHeader
               title={`Hi, ${String(user?.name || "User").split(" ")[0]}`}
               subtitle="Walk-ins and enquiries logged at the front desk"
@@ -2254,7 +2304,7 @@ export default function ReceptionistDashboard() {
                       isDark={isDark}
                       title="Log a new walk-in enquiry"
                     >
-                      <span className="w-full text-center">+ New Entry</span>
+                      <span className="w-full text-center">+ Create Walk-in Enquiry</span>
                     </ToolbarButton>
                   </div>
                 </div>
@@ -3107,7 +3157,7 @@ export default function ReceptionistDashboard() {
           {activeTab === "recep-leads" && (
             <div className="animate-fadeIn pb-10">
               <RpPageHeader
-                title="Receptionist Leads"
+                title="Your Walk-in Enquiries"
                 subtitle="Leads you have personally handled or captured"
                 titleClass={t.text}
                 subtitleClass={t.textFaint}
@@ -3220,7 +3270,7 @@ export default function ReceptionistDashboard() {
                         const isLost = !!lead.is_lost_lead;
                         const isNGD = lead.status === "NON GENUINE DEMAND (NGD)" || lead.leadStatus === "NON GENUINE DEMAND (NGD)" || lead.leadInterestStatus === "NON GENUINE DEMAND (NGD)";
                         const isReturning = lead.lead_classification === "RETURNING_LEAD";
-                        const rowBgClass = isLost ? (isDark ? "bg-[#1C1C1E] hover:bg-[#232325]" : "bg-slate-50 hover:bg-slate-100") : isNGD ? (isDark ? "bg-[#1a1410] hover:bg-[#211913]" : "bg-orange-50 hover:bg-orange-100") : isReturning ? (isDark ? "bg-[#0d1a14] hover:bg-[#122319]" : "bg-green-50 hover:bg-green-100") : (isDark ? "hover:bg-white/[0.04]" : "hover:bg-black/[0.02]");
+                        const rowBgClass = isLost ? (isDark ? "bg-[#1C1C1E] hover:bg-[#232325]" : "bg-slate-50 hover:bg-slate-100") : isNGD ? (isDark ? "bg-[#1a1410] hover:bg-[#211913]" : "bg-orange-50 hover:bg-orange-100") : isReturning ? `${t.rowRevisit} hover:brightness-110` : (isDark ? "hover:bg-white/[0.04]" : "hover:bg-black/[0.02]");
 
                         return (
                           <tr
@@ -3290,8 +3340,8 @@ export default function ReceptionistDashboard() {
                                   NGD
                                 </span>
                               ) : isReturning ? (
-                                <span className="inline-flex items-center gap-1.5 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-md text-[9px] sm:text-[10px] font-bold uppercase tracking-wider border border-green-500/40 text-green-400 bg-green-500/10">
-                                  Returning
+                                <span className={`inline-flex items-center gap-1.5 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-md text-[9px] sm:text-[10px] font-bold uppercase tracking-wider border ${t.statusRevisit}`}>
+                                  REVISIT
                                 </span>
                               ) : (
                                 <span className={`inline-flex items-center gap-1.5 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-md text-[9px] sm:text-[10px] font-bold uppercase tracking-wider border ${getStatusStyle(lead.status)}`}>
@@ -3321,7 +3371,7 @@ export default function ReceptionistDashboard() {
               {closedLeadView === "table" && (
                 <>
                   <RpPageHeader
-                    title="Closed Leads"
+                    title="Your Closed Sales"
                     subtitle="Leads that have reached the Closing stage"
                     titleClass={t.text}
                     subtitleClass={t.textFaint}
@@ -3354,7 +3404,7 @@ export default function ReceptionistDashboard() {
                         <div className={`p-1.5 sm:p-2 rounded-xl ${isDark ? "bg-[#0A84FF]/10" : "bg-[#007AFF]/10"}`}>
                           <FaHandshake className={`text-[14px] sm:text-lg ${isDark ? "text-[#0A84FF]" : "text-[#00AEEF]"}`} />
                         </div>
-                        <h3 className={`text-[15px] sm:text-lg font-bold tracking-tight ${t.text}`}>Closed Leads</h3>
+                        <h3 className={`text-[15px] sm:text-lg font-bold tracking-tight ${t.text}`}>Your Closed Sales</h3>
                         <span className={`text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-md tabular-nums tracking-wide ${t.btnClosingBadge}`}>
                           {filteredClosedLeads.length.toLocaleString("en-IN")}
                         </span>
@@ -4295,6 +4345,43 @@ export default function ReceptionistDashboard() {
                 </div>
               </form>
             </div>
+
+            {/* ── Revisit match banner ── */}
+            {matchedLead && (
+              <div className={`mx-6 mb-4 rounded-xl border p-4 ${isDark ? "bg-[rgba(5,150,105,0.10)] border-[rgba(5,150,105,0.35)]" : "bg-[rgba(5,150,105,0.06)] border-[rgba(5,150,105,0.30)]"}`}>
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 text-[#059669] text-lg">↩</div>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-[13px] font-semibold mb-1.5 text-[#059669]`}>
+                      {matchType === "phone" ? "Existing customer found (phone match)" : "Possible existing customer (name match)"}
+                    </p>
+                    <div className={`text-[12px] space-y-0.5 ${t.textMuted}`}>
+                      <div><span className="font-medium">Name:</span> {matchedLead.name}</div>
+                      <div><span className="font-medium">Phone:</span> {matchedLead.phone}</div>
+                      <div><span className="font-medium">Last enquiry:</span> {new Date(matchedLead.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</div>
+                      <div><span className="font-medium">Previously assigned to:</span> {matchedLead.assigned_to || "—"}</div>
+                    </div>
+                    {matchType === "name" && (
+                      <p className={`mt-2 text-[11px] ${isDark ? "text-amber-400" : "text-amber-600"}`}>
+                        Name-only match — confirm this is the same customer before marking as revisit.
+                      </p>
+                    )}
+                    {/* Only allow checkbox after explicit acknowledgement for name-only matches */}
+                    {(matchType === "phone" || matchType === "name") && (
+                      <label className="flex items-center gap-2 mt-3 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={isRevisit}
+                          onChange={e => setIsRevisit(e.target.checked)}
+                          className="w-4 h-4 rounded accent-[#059669] cursor-pointer"
+                        />
+                        <span className={`text-[13px] font-semibold text-[#059669]`}>Mark as Revisit</span>
+                      </label>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Footer — plain-text Cancel, single blue pill primary action (Apple sheet convention) */}
             <div className={`px-6 py-4 border-t flex flex-col-reverse sm:flex-row justify-end gap-2.5 ${t.tableBorder}`}>

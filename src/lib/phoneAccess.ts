@@ -25,13 +25,20 @@
 // ── Scopes ───────────────────────────────────────────────────────────────────
 // CP_ENQUIRY       channel_partners.phone — CP Enquiry view (pure CP records)
 // CP_LINKED_LEAD   cp_phone / partner_phone — CP-sourced walkin_enquiries
+// LEAD_PHONE       walkin_enquiries.phone / alt_phone — lead/customer phones
+//
+// ── Authorization model — LEAD_PHONE differs from CP scopes ──────────────────
+// CP scopes:   POLICY ON  AND  record owned   → full phone
+// LEAD_PHONE:  ADMIN  OR  assigned employee  OR  POLICY ON  → full phone
+//   Ownership alone grants access regardless of policy — the assigned employee
+//   MUST always see their own lead's phone even if their role toggle is OFF.
 
 import { query } from "@/lib/db";
 import { normalizeRole } from "@/lib/cpRbac";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type PhoneScope = "CP_ENQUIRY" | "CP_LINKED_LEAD";
+export type PhoneScope = "CP_ENQUIRY" | "CP_LINKED_LEAD" | "LEAD_PHONE";
 
 export type PhoneRole =
   | "receptionist"
@@ -284,6 +291,48 @@ function ownsRecordCpLinkedLead(
   }
 }
 
+// ── Lead ownership (LEAD_PHONE scope) ────────────────────────────────────────
+//
+// Lead assignment is name-based (legacy string columns), NOT id-based.
+// The authoritative fields are from the database row — never from client input.
+//
+//   assigned_to          → the Sales Manager's name
+//   assigned_receptionist → the Receptionist's name
+//   overseeing_site_head  → the Site Head's name
+//
+// Sourcing Manager has no per-lead assignment column in walkin_enquiries.
+// Their access is governed entirely by the role policy toggle.
+
+function ownsLeadRecord(
+  roleKey: PhoneRole,
+  actorName: string | null,
+  record: Record<string, unknown>
+): boolean {
+  const normalize = (v: unknown) =>
+    ((v as string) ?? "").trim().toLowerCase();
+  const actor = actorName ? normalize(actorName) : "";
+  if (!actor) return false;
+
+  switch (roleKey) {
+    case "sales_manager": {
+      const assigned = normalize(record.assigned_to);
+      return !!assigned && assigned === actor;
+    }
+    case "receptionist": {
+      const assigned = normalize(record.assigned_receptionist);
+      return !!assigned && assigned === actor;
+    }
+    case "site_head": {
+      const overseeing = normalize(record.overseeing_site_head);
+      return !!overseeing && overseeing === actor;
+    }
+    case "sourcing_manager":
+      // No per-lead assignment for Sourcing Managers in walkin_enquiries.
+      // Access is policy-only.
+      return false;
+  }
+}
+
 // ─── Public authorization API ─────────────────────────────────────────────────
 
 /**
@@ -317,6 +366,17 @@ export async function canViewFullPhone(
   const actorName =
     typeof actor.name === "string" && actor.name.trim() ? actor.name : null;
 
+  // ── LEAD_PHONE: different precedence model ────────────────────────────────
+  // Ownership alone grants access (overrides policy). Policy only governs
+  // employees who are NOT assigned to the lead.
+  if (scope === "LEAD_PHONE") {
+    // Gate: ownership — assigned employee always sees their own lead's phone.
+    if (ownsLeadRecord(roleKey, actorName, record)) return true;
+    // Non-owner: role policy determines access.
+    return getPhonePolicy(organizationId, scope, roleKey);
+  }
+
+  // ── CP scopes: BOTH gates must pass ───────────────────────────────────────
   // Gate 1: role-level policy.
   const policyAllows = await getPhonePolicy(organizationId, scope, roleKey);
   if (!policyAllows) return false;
@@ -382,6 +442,18 @@ export async function resolvePhones<T extends Record<string, unknown>>(
   const actorName =
     typeof actor.name === "string" && actor.name.trim() ? actor.name : null;
 
+  // ── LEAD_PHONE: ownership overrides policy ────────────────────────────────
+  // One policy query for the whole batch. Per-record: if owned → full phone
+  // regardless of policy. If not owned → policy determines.
+  if (scope === "LEAD_PHONE") {
+    const policyAllows = await getPhonePolicy(orgId, scope, roleKey);
+    return records.map((r) => {
+      const owned = ownsLeadRecord(roleKey, actorName, r as Record<string, unknown>);
+      return owned || policyAllows ? r : maskFields(r, phoneFields);
+    });
+  }
+
+  // ── CP scopes: ownership AND policy must both pass ────────────────────────
   // Gate 1: one policy query for the whole batch.
   const policyAllows = await getPhonePolicy(orgId, scope, roleKey);
 

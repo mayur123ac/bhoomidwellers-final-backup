@@ -1052,7 +1052,7 @@ export default function SalesDashboard() {
               user={user}
               isDark={isDark}
               t={t}
-              title="Banking Info"
+              title="Bankers Info"
               subtitle="Banker visits assigned to you."
             />
           ) : activeView === "attendance" ? (
@@ -1321,6 +1321,18 @@ function SalesManagerView({
   const cardsSentinelRef = useRef<HTMLDivElement>(null);
   const isAdmin = String(adminUser?.role || "").toLowerCase() === "admin";
 
+  // ── Revisit lead history ──
+  const [revisitHistory, setRevisitHistory] = useState<null | {
+    previousLead: any;
+    followUps: any[];
+    historicalSalesForm: string | null;
+    loan: any[];
+    booking: any | null;
+    cutoffAt: string;
+  }>(null);
+  const [isLoadingRevisit, setIsLoadingRevisit] = useState(false);
+  const [showPrevLead, setShowPrevLead] = useState(false);
+
   useEffect(() => { setSubView(initialView === "overview" ? "overview" : initialView === "detail" && selectedLead ? "detail" : initialView === "closed-leads" ? "closed-leads" : "cards"); }, [initialView]);
   // Collapse the AI Assistant panel whenever a different lead is opened
   useEffect(() => {
@@ -1332,7 +1344,37 @@ function SalesManagerView({
     // (tranches, lender applications, PDD, financial status) fire on every lead
     // open — four extra requests per lead that nobody asked for.
     setDetailTab("personal");
+    // Reset revisit history state when navigating to a different lead.
+    setRevisitHistory(null);
+    setShowPrevLead(false);
   }, [selectedLead?.id]);
+
+  // Fetch revisit history when a RETURNING_LEAD is opened.
+  useEffect(() => {
+    if (!selectedLead?.id || selectedLead.lead_classification !== "RETURNING_LEAD") return;
+    let cancelled = false;
+    setIsLoadingRevisit(true);
+    fetch(`/api/leads/${selectedLead.id}/revisit-history`)
+      .then(r => r.json())
+      .then(json => {
+        if (cancelled) return;
+        if (json.success && json.hasHistory) {
+          setRevisitHistory({
+            previousLead: json.previousLead,
+            followUps: json.followUps ?? [],
+            historicalSalesForm: json.historicalSalesForm ?? null,
+            loan: json.loan ?? [],
+            booking: json.booking ?? null,
+            cutoffAt: json.cutoffAt,
+          });
+        } else {
+          setRevisitHistory(null);
+        }
+      })
+      .catch(() => { if (!cancelled) setRevisitHistory(null); })
+      .finally(() => { if (!cancelled) setIsLoadingRevisit(false); });
+    return () => { cancelled = true; };
+  }, [selectedLead?.id, selectedLead?.lead_classification]);
   // Mark internal messages as read when the conversation is opened.
   useEffect(() => {
     if (!selectedLead?.id) return;
@@ -1340,7 +1382,7 @@ function SalesManagerView({
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ leadId: selectedLead.id }),
-    }).catch(() => {});
+    }).catch(() => { });
   }, [selectedLead?.id]);
   // Booking and loan both come from fetchLoanDealData now. The second effect that
   // used to live here fetched /api/booking-applications?lead_id= a SECOND time,
@@ -2068,14 +2110,22 @@ function SalesManagerView({
                           const isClosed = lead.status === "Closing" || lead.status === "Completed" || lead.status === "Closed" || lead.closingDate;
                           const isLost = !!lead.is_lost_lead;
                           const isNGD = lead.status === "NON GENUINE DEMAND (NGD)" || lead.leadStatus === "NON GENUINE DEMAND (NGD)" || lead.leadInterestStatus === "NON GENUINE DEMAND (NGD)";
+                          const isRevisit = lead.lead_classification === "RETURNING_LEAD";
                           return (
-                            <tr key={lead.id} className={`transition-colors cursor-pointer ${isLost ? t.rowLost : isNGD ? t.rowNGD : t.tableRow}`} onClick={() => {
+                            <tr key={lead.id} className={`transition-colors cursor-pointer ${isLost ? t.rowLost : isNGD ? t.rowNGD : isRevisit ? t.rowRevisit : t.tableRow}`} onClick={() => {
                               setSelectedLead(lead);
                               setMainView("detail");
                               setSubView("detail");
                             }}>
                               <td className={`px-2.5 sm:px-3 py-2 sm:py-2.5 text-[11px] sm:text-sm font-bold ${t.accentText}`}>#{lead.sr_no || lead.id}</td>
-                              <td className={`px-2.5 sm:px-4 py-2 sm:py-2.5 text-[11px] sm:text-sm font-medium ${t.text}`}>{lead.name}</td>
+                              <td className={`px-2.5 sm:px-4 py-2 sm:py-2.5 text-[11px] sm:text-sm font-medium ${t.text}`}>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span>{lead.name}</span>
+                                  {isRevisit && (
+                                    <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[8px] sm:text-[9px] font-bold uppercase tracking-wider border ${t.statusRevisit}`}>↩ REVISIT</span>
+                                  )}
+                                </div>
+                              </td>
                               <td className={`px-2.5 sm:px-4 py-2 sm:py-2.5 text-[11px] sm:text-sm ${t.textMuted}`}>{lead.propType || lead.configuration || "Pending"}</td>
                               <td className={`px-2.5 sm:px-4 py-2 sm:py-2.5 text-[11px] sm:text-sm font-semibold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget}</td>
                               <td className={`px-2.5 sm:px-4 py-2 sm:py-2.5 text-[10px] sm:text-xs ${t.textMuted}`}>{lead.source || "—"}</td>
@@ -2322,7 +2372,7 @@ function SalesManagerView({
           <div className="animate-fadeIn">
             <div className={`flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-6 sm:mb-8 border-b pb-4 sm:pb-6 ${t.tableBorder}`}>
               <div>
-                <h1 className={`text-lg sm:text-2xl font-bold ${t.text}`}>Closed Leads</h1>
+                <h1 className={`text-lg sm:text-2xl font-bold ${t.text}`}>Your Closed Sales</h1>
                 <p className={`text-xs sm:text-sm mt-0.5 ${t.textFaint}`}>Leads successfully closed</p>
               </div>
               <div className="relative w-full sm:w-auto">
@@ -2508,7 +2558,26 @@ function SalesManagerView({
                           <Ghost className="w-3 h-3" /> Lost
                         </span>
                       )}
+                      {selectedLead.lead_classification === "RETURNING_LEAD" && (
+                        <span className={`text-[9px] sm:text-[11px] font-bold px-2 py-0.5 rounded-md border flex items-center gap-1.5 flex-shrink-0 tracking-wide uppercase ${t.statusRevisit}`}>
+                          ↩ REVISIT
+                        </span>
+                      )}
                     </h1>
+                    {/* Show Previous Lead Data toggle — visible as soon as the lead is a revisit */}
+                    {selectedLead.lead_classification === "RETURNING_LEAD" && (
+                      <button
+                        type="button"
+                        onClick={() => setShowPrevLead(v => !v)}
+                        disabled={isLoadingRevisit && !revisitHistory}
+                        className={`hidden sm:flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1 rounded-lg border transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-wait ${showPrevLead ? "border-[rgba(5,150,105,0.5)] text-[#059669] bg-[rgba(5,150,105,0.10)]" : `${t.tableBorder} ${t.textMuted} ${isDark ? "hover:bg-white/5" : "hover:bg-black/5"}`}`}
+                      >
+                        {isLoadingRevisit && !revisitHistory
+                          ? <span>Loading history…</span>
+                          : <span>{showPrevLead ? "Hide" : "Show"} Previous Lead</span>
+                        }
+                      </button>
+                    )}
                   </div>
 
                   {/* MOBILE TOGGLE BUTTON — collapsed by default on small screens */}
@@ -2679,6 +2748,150 @@ function SalesManagerView({
                     />
                   ) : (
                     <div className="flex flex-col gap-3 animate-fadeIn">
+
+                      {/* ── "Show Previous Lead Data" mobile toggle ── */}
+                      {selectedLead.lead_classification === "RETURNING_LEAD" && (
+                        <button
+                          type="button"
+                          onClick={() => setShowPrevLead(v => !v)}
+                          disabled={isLoadingRevisit && !revisitHistory}
+                          className={`sm:hidden flex items-center justify-center gap-1.5 text-[11px] font-semibold px-3 py-2 rounded-lg border transition-colors cursor-pointer w-full disabled:opacity-50 disabled:cursor-wait ${showPrevLead ? "border-[rgba(5,150,105,0.5)] text-[#059669] bg-[rgba(5,150,105,0.10)]" : `${t.tableBorder} ${t.textMuted}`}`}
+                        >
+                          {isLoadingRevisit && !revisitHistory
+                            ? "Loading history…"
+                            : showPrevLead ? "Hide Previous Lead Data" : "Show Previous Lead Data"
+                          }
+                        </button>
+                      )}
+
+                      {/* ── Historical context panel (READ-ONLY) ── */}
+                      {selectedLead.lead_classification === "RETURNING_LEAD" && showPrevLead && (
+                        <div className={`rounded-xl border overflow-hidden ${isDark ? "border-[rgba(5,150,105,0.40)]" : "border-[rgba(5,150,105,0.35)]"}`}>
+                          {/* Panel header */}
+                          <div className={`px-4 py-3 flex items-center justify-between ${isDark ? "bg-[rgba(5,150,105,0.18)]" : "bg-[rgba(5,150,105,0.10)]"}`}>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[#059669] text-base font-bold">↩</span>
+                              <span className="text-[13px] font-bold text-[#059669]">PREVIOUS LEAD — HISTORICAL DATA</span>
+                            </div>
+                            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border border-[rgba(5,150,105,0.4)] text-[#059669]`}>READ ONLY</span>
+                          </div>
+
+                          {isLoadingRevisit && !revisitHistory ? (
+                            <div className="p-4"><p className={`text-xs text-center py-2 ${t.textFaint}`}>Loading previous visit data…</p></div>
+                          ) : !revisitHistory ? (
+                            <div className="p-4"><p className={`text-xs ${t.textFaint}`}>No previous visit history found or you are not authorized to view it.</p></div>
+                          ) : (
+                            <div className={`p-4 flex flex-col gap-4 ${isDark ? "bg-[rgba(5,150,105,0.05)]" : "bg-[rgba(5,150,105,0.03)]"}`}>
+
+                              {/* Previous Enquiry Summary */}
+                              <div>
+                                <p className="text-[10px] font-bold uppercase tracking-wider text-[#059669] mb-2">Previous Enquiry</p>
+                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[12px]">
+                                  <div><p className={`text-[10px] font-medium mb-0.5 ${t.textFaint}`}>Previous Visit Date</p><p className={`font-semibold ${t.text}`}>{new Date(revisitHistory.previousLead.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</p></div>
+                                  <div><p className={`text-[10px] font-medium mb-0.5 ${t.textFaint}`}>Previously Managed By</p><p className={`font-semibold ${t.text}`}>{revisitHistory.previousLead.assigned_to || "—"}</p></div>
+                                  <div><p className={`text-[10px] font-medium mb-0.5 ${t.textFaint}`}>Phone</p><p className={`font-semibold font-mono ${t.text}`}>{revisitHistory.previousLead.phone || "—"}</p></div>
+                                  <div><p className={`text-[10px] font-medium mb-0.5 ${t.textFaint}`}>Lead Status</p><p className={`font-semibold ${t.text}`}>{revisitHistory.previousLead.status || "—"}</p></div>
+                                  <div><p className={`text-[10px] font-medium mb-0.5 ${t.textFaint}`}>Interest Status</p><p className={`font-semibold ${t.text}`}>{revisitHistory.previousLead.lead_interest_status || "Pending"}</p></div>
+                                  <div><p className={`text-[10px] font-medium mb-0.5 ${t.textFaint}`}>Budget</p><p className={`font-semibold ${isDark ? "text-green-400" : "text-emerald-700"}`}>{revisitHistory.previousLead.budget || "—"}</p></div>
+                                  {revisitHistory.previousLead.is_lost_lead && (
+                                    <div className="col-span-2 sm:col-span-3">
+                                      <p className={`text-[10px] font-medium mb-0.5 ${t.textFaint}`}>Lost Lead Reason</p>
+                                      <p className={`font-semibold text-red-400`}>{revisitHistory.previousLead.lost_lead_reason || "No reason recorded."}</p>
+                                    </div>
+                                  )}
+                                  {revisitHistory.previousLead.closing_date && (
+                                    <div><p className={`text-[10px] font-medium mb-0.5 ${t.textFaint}`}>Closing Date</p><p className={`font-semibold ${t.text}`}>{formatDate(revisitHistory.previousLead.closing_date)}</p></div>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Historical Sales Form */}
+                              <div className={`border-t pt-3 ${t.tableBorder}`}>
+                                <p className="text-[10px] font-bold uppercase tracking-wider text-[#059669] mb-2">Sales Form (Previous Visit)</p>
+                                {revisitHistory.historicalSalesForm ? (
+                                  <div className={`rounded-lg p-3 border text-[11px] whitespace-pre-wrap leading-relaxed ${isDark ? "bg-[rgba(5,150,105,0.06)] border-[rgba(5,150,105,0.20)] text-gray-300" : "bg-white border-[rgba(5,150,105,0.20)] text-gray-700"}`}>
+                                    {revisitHistory.historicalSalesForm.replace("📝 Detailed Salesform Submitted:\n", "").trim()}
+                                  </div>
+                                ) : (
+                                  <p className={`text-[11px] italic ${t.textFaint}`}>No previous Sales Form data available.</p>
+                                )}
+                              </div>
+
+                              {/* Historical Loan */}
+                              <div className={`border-t pt-3 ${t.tableBorder}`}>
+                                <p className="text-[10px] font-bold uppercase tracking-wider text-[#059669] mb-2">Loan (Previous Visit)</p>
+                                {revisitHistory.loan.length > 0 ? (
+                                  <div className="flex flex-col gap-2">
+                                    {revisitHistory.loan.map((l: any, idx: number) => (
+                                      <div key={l.id ?? idx} className={`rounded-lg p-3 border text-[11px] ${isDark ? "bg-[rgba(5,150,105,0.06)] border-[rgba(5,150,105,0.20)]" : "bg-white border-[rgba(5,150,105,0.20)]"}`}>
+                                        <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                                          <div><span className={`${t.textFaint}`}>Status: </span><span className={`font-semibold ${t.text}`}>{l.status || "—"}</span></div>
+                                          <div><span className={`${t.textFaint}`}>Loan Required: </span><span className={`font-semibold ${t.text}`}>{l.loanRequired || "—"}</span></div>
+                                          {l.bankName && <div><span className={`${t.textFaint}`}>Bank: </span><span className={`font-semibold ${t.text}`}>{l.bankName}</span></div>}
+                                          {l.amountRequested && <div><span className={`${t.textFaint}`}>Amount Requested: </span><span className={`font-semibold ${t.text}`}>₹{Number(l.amountRequested).toLocaleString("en-IN")}</span></div>}
+                                          {l.amountApproved && <div><span className={`${t.textFaint}`}>Amount Approved: </span><span className={`font-semibold ${t.text}`}>₹{Number(l.amountApproved).toLocaleString("en-IN")}</span></div>}
+                                          {l.cibil && <div><span className={`${t.textFaint}`}>CIBIL: </span><span className={`font-semibold ${t.text}`}>{l.cibil}</span></div>}
+                                          {l.empType && <div><span className={`${t.textFaint}`}>Employment: </span><span className={`font-semibold ${t.text}`}>{l.empType}</span></div>}
+                                          {l.income && <div><span className={`${t.textFaint}`}>Income: </span><span className={`font-semibold ${t.text}`}>₹{Number(l.income).toLocaleString("en-IN")}</span></div>}
+                                          {l.salesManagerName && <div><span className={`${t.textFaint}`}>Updated by: </span><span className={`font-semibold ${t.text}`}>{l.salesManagerName}</span></div>}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <p className={`text-[11px] italic ${t.textFaint}`}>No previous Loan data available.</p>
+                                )}
+                              </div>
+
+                              {/* Historical Booking */}
+                              <div className={`border-t pt-3 ${t.tableBorder}`}>
+                                <p className="text-[10px] font-bold uppercase tracking-wider text-[#059669] mb-2">Booking (Previous Visit)</p>
+                                {revisitHistory.booking ? (
+                                  <div className={`rounded-lg p-3 border text-[11px] ${isDark ? "bg-[rgba(5,150,105,0.06)] border-[rgba(5,150,105,0.20)]" : "bg-white border-[rgba(5,150,105,0.20)]"}`}>
+                                    <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                                      {revisitHistory.booking.bookingNumber && <div><span className={`${t.textFaint}`}>Booking #: </span><span className={`font-semibold ${t.text}`}>{revisitHistory.booking.bookingNumber}</span></div>}
+                                      {revisitHistory.booking.bookingStatus && <div><span className={`${t.textFaint}`}>Status: </span><span className={`font-semibold ${t.text}`}>{revisitHistory.booking.bookingStatus}</span></div>}
+                                      {revisitHistory.booking.projectName && <div><span className={`${t.textFaint}`}>Project: </span><span className={`font-semibold ${t.text}`}>{revisitHistory.booking.projectName}</span></div>}
+                                      {revisitHistory.booking.flatNumber && <div><span className={`${t.textFaint}`}>Flat: </span><span className={`font-semibold ${t.text}`}>{revisitHistory.booking.flatNumber}</span></div>}
+                                      {revisitHistory.booking.agreementValue && <div><span className={`${t.textFaint}`}>Agreement Value: </span><span className={`font-semibold ${t.text}`}>₹{Number(revisitHistory.booking.agreementValue).toLocaleString("en-IN")}</span></div>}
+                                      {revisitHistory.booking.bookingAmount && <div><span className={`${t.textFaint}`}>Booking Amount: </span><span className={`font-semibold ${t.text}`}>₹{Number(revisitHistory.booking.bookingAmount).toLocaleString("en-IN")}</span></div>}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <p className={`text-[11px] italic ${t.textFaint}`}>No previous Booking available.</p>
+                                )}
+                              </div>
+
+                              {/* Historical Follow-ups */}
+                              <div className={`border-t pt-3 ${t.tableBorder}`}>
+                                <p className="text-[10px] font-bold uppercase tracking-wider text-[#059669] mb-2">
+                                  Historical Notes — before {new Date(revisitHistory.cutoffAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                                </p>
+                                {revisitHistory.followUps.length > 0 ? (
+                                  <div className="flex flex-col gap-2 max-h-[320px] overflow-y-auto custom-scrollbar pr-1">
+                                    {revisitHistory.followUps.map((f: any) => (
+                                      <div key={f.id} className={`rounded-lg p-2.5 border ${isDark ? "bg-[rgba(5,150,105,0.06)] border-[rgba(5,150,105,0.15)]" : "bg-white border-[rgba(5,150,105,0.18)]"}`}>
+                                        <div className="flex justify-between items-start mb-1 gap-2">
+                                          <span className="text-[11px] font-semibold text-[#059669]">{f.createdByName || "—"}</span>
+                                          <span className={`text-[10px] flex-shrink-0 ${t.textFaint}`}>{new Date(f.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>
+                                        </div>
+                                        <p className={`text-[11px] leading-relaxed whitespace-pre-wrap ${t.textMuted}`}>{f.message}</p>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <p className={`text-[11px] italic ${t.textFaint}`}>No historical notes before the revisit date.</p>
+                                )}
+                              </div>
+
+                              <p className={`text-[10px] italic text-center ${t.textFaint}`}>
+                                READ ONLY — All data above is from the previous visit. New notes, Sales Form, Loan, and Booking belong to the current Revisit lead.
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       {/* Tab switcher */}
                       <div className={`flex items-center gap-2 border p-1.5 rounded-xl flex-shrink-0 ${t.tableWrap}`}>
                         <button onClick={() => setDetailTab("personal")} className={`flex-1 py-2 text-xs sm:text-sm font-bold rounded-lg transition-colors cursor-pointer ${detailTab === "personal" ? t.btnPrimary : `${t.textMuted} ${isDark ? "hover:text-white hover:bg-[#222]" : "hover:text-[#1A1A1A] hover:bg-[#F1F5F9]"}`}`}>Personal Info</button>

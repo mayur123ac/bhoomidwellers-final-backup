@@ -555,7 +555,11 @@ export function ToolbarButton({
     disabled?: boolean;
 }) {
     const base =
-        "h-9 inline-flex items-center gap-2 px-3 rounded-xl text-xs font-bold whitespace-nowrap border transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d946a8] focus-visible:ring-offset-2 focus-visible:ring-offset-transparent";
+        "h-9 inline-flex items-center justify-center gap-2 px-4 rounded-xl text-[13px] font-bold tracking-wide whitespace-nowrap " +
+        "bg-[#9E217B] text-black border border-transparent " +
+        "shadow-sm hover:shadow-md hover:shadow-[#9E217B]/25 " +
+        "transition-all duration-200 hover:-translate-y-[0.5px] active:scale-[0.98] " +
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d946a8] focus-visible:ring-offset-1";
     const style =
         disabled
             ? "opacity-40 cursor-not-allowed"

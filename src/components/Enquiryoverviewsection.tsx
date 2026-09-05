@@ -307,22 +307,29 @@ const COLUMNS: Column[] = [
         locked: true,
         sortValue: (l) => String(l.name || "").toLowerCase(),
         render: (l, { isDark, theme, onNavigateToSales }) => (
-            <span
-                className={`font-bold text-[12px] sm:text-[13px] leading-tight transition-colors whitespace-normal break-words sm:whitespace-nowrap ${theme.text} ${onNavigateToSales
-                    ? isDark
-                        ? "hover:text-[#d946a8] cursor-pointer"
-                        : "hover:text-[#9E217B] cursor-pointer"
-                    : ""
-                    }`}
-                title={onNavigateToSales ? `Open lead detail for ${l.name}` : undefined}
-                onClick={(e) => {
-                    if (!onNavigateToSales) return;
-                    e.stopPropagation();
-                    onNavigateToSales(l);
-                }}
-            >
-                {l.name}
-            </span>
+            <div className="flex flex-col gap-0.5">
+                <span
+                    className={`font-bold text-[12px] sm:text-[13px] leading-tight transition-colors whitespace-normal break-words sm:whitespace-nowrap ${theme.text} ${onNavigateToSales
+                        ? isDark
+                            ? "hover:text-[#d946a8] cursor-pointer"
+                            : "hover:text-[#9E217B] cursor-pointer"
+                        : ""
+                        }`}
+                    title={onNavigateToSales ? `Open lead detail for ${l.name}` : undefined}
+                    onClick={(e) => {
+                        if (!onNavigateToSales) return;
+                        e.stopPropagation();
+                        onNavigateToSales(l);
+                    }}
+                >
+                    {l.name}
+                </span>
+                {l.lead_classification === "RETURNING_LEAD" && (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border border-[rgba(5,150,105,0.45)] text-[#059669] bg-[rgba(5,150,105,0.12)] w-fit">
+                        REVISIT
+                    </span>
+                )}
+            </div>
         ),
     },
     {
@@ -1215,7 +1222,7 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
                                             style={{
                                                 ...(lead.is_lost_lead ? { opacity: 0.55 } : undefined),
                                                 ...(isReturned && !isSelected
-                                                    ? { backgroundColor: isDark ? "rgba(16, 185, 129, 0.07)" : "#ecfdf5" }
+                                                    ? { backgroundColor: isDark ? "rgba(5, 150, 105, 0.08)" : "rgba(5, 150, 105, 0.05)" }
                                                     : undefined),
                                             }}
                                         >

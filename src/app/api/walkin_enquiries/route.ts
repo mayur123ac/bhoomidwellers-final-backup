@@ -8,6 +8,8 @@ import { getServerSession } from "@/lib/serverAuth";
 import { normalizeRole } from "@/lib/cpRbac";
 import { notifyCpLeadAssigned } from "@/services/whatsapp.service";
 import { jsonCompressed } from "@/lib/apiResponse";
+import { resolvePhones } from "@/lib/phoneAccess";
+import { broadcastToOrg } from "@/lib/supabase/broadcast";
 
 export const dynamic = "force-dynamic";
 
@@ -157,9 +159,30 @@ export async function GET(req: Request) {
     ]);
 
     const total: number = countRows[0]?.total ?? 0;
+
+    // ── Phone masking (LEAD_PHONE scope) ─────────────────────────────────────
+    // Raw phone/alt_phone MUST NOT reach an unauthorized browser.
+    // Authorization model: Admin → full; assigned employee → full (overrides
+    // policy); other employee → role policy determines access.
+    // NOTE: phone-based search still works (DB matches before masking), but the
+    // raw number only appears in the response when authorized — an unauthorized
+    // user can confirm a number exists via search but cannot retrieve the digits.
+    const actor = {
+      _id: session._id ?? (session as any).id,
+      name: session.name,
+      role: session.role,
+    };
+    const maskedRows = await resolvePhones(
+      actor,
+      rows,
+      "LEAD_PHONE",
+      listOrgId,
+      ["phone", "alt_phone"]
+    );
+
     // Compressed: the admin dashboard requests limit=10000 here, which is ~13 MB
     // of highly repetitive JSON (60 identical keys per row) and gzips ~35×.
-    return jsonCompressed(req, { success: true, data: rows, total }, { status: 200 });
+    return jsonCompressed(req, { success: true, data: maskedRows, total }, { status: 200 });
   } catch (error: any) {
     console.error("GET Enquiries Error:", error);
     return NextResponse.json({ success: false, message: error.message }, { status: 500 });
@@ -185,6 +208,8 @@ export async function POST(req: Request) {
       overseeing_site_head,
       enquiry_date,            // ← Backdated enquiry date support
       auto_date_enabled,       // ← Backdated enquiry state
+      isRevisit,               // ← Explicit manual revisit flag from the receptionist checkbox
+      revisitLeadId,           // ← Client-supplied previous lead id (server re-validates this)
     } = body;
 
     if (!name || !phone || !assignedTo) {
@@ -240,11 +265,19 @@ export async function POST(req: Request) {
           { status: 409 }
         );
       } else {
-        // More than 24 hours — returning lead
-        leadClassification = "RETURNING_LEAD";
-        returningFromLeadId = mostRecent.id;
-        returningFromLeadName = mostRecent.name;
-        returningFromAssignedTo = mostRecent.assigned_to;
+        // More than 24 hours — only classify as RETURNING_LEAD when the receptionist
+        // explicitly checked the "Mark as Revisit" checkbox. Without it, the lead is
+        // created as UNIQUE even when an older record exists. The client also sends
+        // `revisitLeadId`; we cross-check it against the actual DB match so a
+        // fabricated id cannot be injected — the link always points at the real record.
+        if (isRevisit === true) {
+          leadClassification = "RETURNING_LEAD";
+          // Use the server-resolved mostRecent.id regardless of what the client sent.
+          returningFromLeadId = mostRecent.id;
+          returningFromLeadName = mostRecent.name;
+          returningFromAssignedTo = mostRecent.assigned_to;
+        }
+        // If isRevisit is false/absent → stays UNIQUE, no link set.
       }
     }
 
@@ -486,6 +519,22 @@ export async function POST(req: Request) {
       return { row: finalRes.rows[0], routedByPartner, partnerOwner };
     });
 
+    // ── Realtime: push a "lead.created" broadcast so the assigned SM's client
+    // refreshes the notification feed without waiting for the next poll.
+    // For revisit leads this also triggers the "revisit_lead" notification
+    // kind which the feed derives from lead_classification = 'RETURNING_LEAD'.
+    // Fire-and-forget: a failed broadcast is not worse than the previous
+    // poll-only behaviour — it just means the SM sees the notification on the
+    // next poll cycle rather than immediately.
+    const broadcastOrgId = result.row?.organization_id;
+    if (broadcastOrgId) {
+      broadcastToOrg(broadcastOrgId, "lead.created", {
+        leadId: result.row.id,
+        leadClassification,
+        assignedTo: result.row.assigned_to ?? null,
+      }).catch(() => {/* fire-and-forget */});
+    }
+
     // ── WhatsApp: tell the Sourcing Manager the lead landed on ───────────────
     // sourcing_manager_id on the saved row is the EFFECTIVE manager — the
     // partner's registered owner when there is one, otherwise the form's pick
@@ -509,7 +558,7 @@ export async function POST(req: Request) {
         // the manager shown in the form, rather than discovering it later.
         routedByPartner: result.routedByPartner,
         routedTo: result.partnerOwner?.name ?? null,
-        // Returning-lead metadata — the receptionist gets a distinct toast, and
+        // Revisit-lead metadata — the receptionist gets a distinct toast, and
         // the admin/sales dashboards can show a green highlight.
         leadClassification,
         returningFromLeadId,

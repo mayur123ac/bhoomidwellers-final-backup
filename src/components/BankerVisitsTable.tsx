@@ -113,7 +113,7 @@ function BankerVisitsTable({ user, isDark, t, title, subtitle }: Props) {
             <h2
               className={`text-sm sm:text-base font-bold tracking-tight ${t.text}`}
             >
-              {title || "Banking Info"}
+              {title || "Bankers Info"}
             </h2>
             {subtitle && (
               <p className={`text-[10px] sm:text-[11px] ${t.textFaint}`}>

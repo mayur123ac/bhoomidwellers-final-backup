@@ -40,7 +40,7 @@ import { query } from "@/lib/db";
 /** Popover cap. Three, with a footer link to the full Notification Center. */
 export const NOTIFICATION_POPOVER_LIMIT = 3;
 
-export type NotificationKind = "new_lead" | "site_visit" | "follow_up" | "reminder";
+export type NotificationKind = "new_lead" | "site_visit" | "follow_up" | "reminder" | "revisit_lead";
 
 export interface CrmNotification {
   /** Stable across refreshes, so dismissals survive a poll. */
@@ -74,6 +74,12 @@ export interface CrmNotification {
   /** Whoever the lead sits with, and their role label. */
   ownerName: string;
   ownerRole: string;
+  /** Revisit leads only: the previous lead's assigned_to (old Sales Manager). */
+  prevLeadAssignedTo?: string | null;
+  /** Revisit leads only: the previous lead's created_at (their first visit date). */
+  prevLeadCreatedAt?: string | null;
+  /** Populated for revisit_lead kind. */
+  leadClassification?: string | null;
 }
 
 export interface NotificationFeed {
@@ -101,6 +107,9 @@ interface FeedRow {
   latest_visit_date: string | null;
   owner_role: string | null;
   latest_salesform: string | null;
+  lead_classification: string | null;
+  prev_lead_assigned_to: string | null;
+  prev_lead_created_at: string | null;
 }
 
 /**
@@ -124,7 +133,10 @@ const FEED_SQL = `
          act.last_activity_at,
          vis.latest_visit_date,
          own.role AS owner_role,
-         sf.message AS latest_salesform
+         sf.message AS latest_salesform,
+         w.lead_classification,
+         prev.prev_lead_assigned_to,
+         prev.prev_lead_created_at
     FROM walkin_enquiries w
     LEFT JOIN LATERAL (
       SELECT MAX(f.created_at) AS last_activity_at
@@ -167,6 +179,20 @@ const FEED_SQL = `
        ORDER BY f.created_at DESC, f.id DESC
        LIMIT 1
     ) sf ON TRUE
+    LEFT JOIN LATERAL (
+      -- Revisit leads only: fetch the previous lead's assigned_to and created_at
+      -- so the notification can show "Previously with [Old SM]" and "Last visited
+      -- [date]". The organization predicate is repeated inside this subquery even
+      -- though returning_from_lead_id is already scoped to this org via the outer
+      -- WHERE — an explicit predicate is more defensive and avoids a cross-org
+      -- leak if the FK ever references a row in another tenant.
+      SELECT p.assigned_to AS prev_lead_assigned_to,
+             p.created_at  AS prev_lead_created_at
+        FROM walkin_enquiries p
+       WHERE p.id = w.returning_from_lead_id
+         AND p.organization_id = w.organization_id
+       LIMIT 1
+    ) prev ON TRUE
    WHERE w.organization_id = $1
    ORDER BY w.id DESC`;
 
@@ -296,25 +322,59 @@ export async function buildNotificationFeed(
     const ownerRole = prettyRole(row.owner_role, row);
     const interestStatus = interestFrom(row.latest_salesform);
 
-    // ── New Lead: created today or yesterday ────────────────────────────────
+    // ── New Lead / Revisit Lead: created today or yesterday ─────────────────
     if (mine && created) {
       const createdDiffDays = (today.getTime() - startOfDay(created).getTime()) / DAY_MS;
       if (createdDiffDays <= 1 && createdDiffDays >= 0) {
-        newLeads.push({
-          id: `lead_${row.id}`,
-          kind: "new_lead",
-          leadId: row.id,
-          organizationId,
-          leadName: row.name,
-          srNo: row.sr_no,
-          title: `New Lead · ${formattedId} - ${row.name}`,
-          subtitle: `${ownerName} (${ownerRole})`,
-          at: created.toISOString(),
-          status: row.status,
-          interestStatus,
-          ownerName,
-          ownerRole,
-        });
+        const isRevisit = row.lead_classification === "RETURNING_LEAD";
+        if (isRevisit) {
+          // Revisit lead: enriched notification referencing the NEW lead id.
+          // The recipient is the newly assigned SM (row.assigned_to), confirmed
+          // by the `mine` check above. The previous lead context comes from the
+          // LATERAL subquery on returning_from_lead_id — both scoped to same org.
+          const prevSM = row.prev_lead_assigned_to ?? null;
+          const prevDate = row.prev_lead_created_at
+            ? new Date(row.prev_lead_created_at).toLocaleDateString("en-IN", {
+                day: "2-digit", month: "short", year: "numeric",
+              })
+            : null;
+          newLeads.push({
+            id: `revisit_${row.id}`,
+            kind: "revisit_lead",
+            leadId: row.id,         // NEW revisit lead id — never the old lead
+            organizationId,
+            leadName: row.name,
+            srNo: row.sr_no,
+            title: `Revisit Lead · ${formattedId} - ${row.name}`,
+            subtitle: prevSM
+              ? `Previously with ${prevSM}${prevDate ? ` · Last visited ${prevDate}` : ""}`
+              : `${ownerName} (${ownerRole})`,
+            at: created.toISOString(),
+            status: row.status,
+            interestStatus,
+            ownerName,
+            ownerRole,
+            leadClassification: row.lead_classification,
+            prevLeadAssignedTo: prevSM,
+            prevLeadCreatedAt: row.prev_lead_created_at ?? null,
+          });
+        } else {
+          newLeads.push({
+            id: `lead_${row.id}`,
+            kind: "new_lead",
+            leadId: row.id,
+            organizationId,
+            leadName: row.name,
+            srNo: row.sr_no,
+            title: `New Lead · ${formattedId} - ${row.name}`,
+            subtitle: `${ownerName} (${ownerRole})`,
+            at: created.toISOString(),
+            status: row.status,
+            interestStatus,
+            ownerName,
+            ownerRole,
+          });
+        }
       }
     }
 

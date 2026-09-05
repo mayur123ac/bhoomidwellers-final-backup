@@ -107,9 +107,13 @@ export function buildTheme(isDark: boolean) {
     statusVisit: isDark ? "text-orange-400 border-orange-500/30 bg-orange-500/10" : "text-orange-500 border-orange-400/40 bg-orange-50",
     statusClosing: isDark ? "text-yellow-400 border-yellow-500/40 bg-yellow-500/10" : "text-amber-600 border-amber-400/50 bg-amber-50",
     statusCompleted: isDark ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/10" : "text-emerald-700 border-emerald-300 bg-emerald-50",
-    statusNGD: "bg-[rgba(251,146,60,0.12)] text-[#F97316] border border-[rgba(249,115,22,0.4)]",
-    cardNGD: "bg-[rgba(249,115,22,0.06)] border border-[rgba(249,115,22,0.35)] hover:border-[#F97316] shadow-[0_4px_12px_rgba(249,115,22,0.12)] transition-all duration-300 flex flex-col h-full",
-    rowNGD: "bg-[rgba(249,115,22,0.03)]",
+    statusNGD: "bg-[rgba(234,88,12,0.15)] text-[#EA580C] border border-[rgba(234,88,12,0.45)]",
+    cardNGD: "bg-[rgba(234,88,12,0.06)] border border-[rgba(234,88,12,0.35)] hover:border-[#EA580C] shadow-[0_4px_12px_rgba(234,88,12,0.12)] transition-all duration-300 flex flex-col h-full",
+    rowNGD: "bg-[rgba(234,88,12,0.06)]",
+    // ── Revisit lead (RETURNING_LEAD) — darker emerald-600 #059669 ──
+    statusRevisit: "bg-[rgba(5,150,105,0.15)] text-[#059669] border border-[rgba(5,150,105,0.45)]",
+    rowRevisit: "bg-[rgba(5,150,105,0.06)]",
+    cardRevisit: "bg-[rgba(5,150,105,0.08)] border border-[rgba(5,150,105,0.35)] hover:border-[#059669] shadow-[0_4px_12px_rgba(5,150,105,0.12)] transition-all duration-300 flex flex-col h-full",
   };
   const apple = {
     // Backgrounds

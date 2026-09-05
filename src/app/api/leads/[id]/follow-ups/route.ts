@@ -59,6 +59,21 @@ export async function POST(req: Request) {
       );
     }
 
+    // Security: verify the lead exists and belongs to the caller's organization.
+    // Without this check any authenticated user could supply an arbitrary leadId
+    // and attach a follow-up to a lead in a different organization.
+    const orgId = await getOrganizationId();
+    const leadCheck = await query(
+      `SELECT id FROM walkin_enquiries WHERE id = $1 AND organization_id = $2`,
+      [String(leadId), orgId]
+    );
+    if (leadCheck.length === 0) {
+      return NextResponse.json(
+        { success: false, message: "Lead not found" },
+        { status: 404 }
+      );
+    }
+
     const rows = await query(
       `INSERT INTO follow_ups (lead_id, message, created_by_name, created_by_id, site_visit_date, organization_id)
        VALUES ($1, $2, $3, $6, $4, $5)
@@ -68,7 +83,7 @@ export async function POST(req: Request) {
         message,
         salesManagerName || createdBy || "sales",
         siteVisitDate    || null,
-        await getOrganizationId(),
+        orgId,
         gate.userId,
       ]
     );
