@@ -1,15 +1,21 @@
 // api/walkin_enquiries/check-match/route.ts
 //
-// Real-time lead match detection for the Client Enquiry form.
-// Called on phone/name change (debounced) to tell the receptionist that an
-// existing lead with the same phone exists before they submit.
+// Multi-field lead match detection for the Client Enquiry form.
+// Called on form field changes (debounced) to detect possible existing customers
+// before submission.
+//
+// Match rules (in priority order):
+//   1. Exact normalized primary mobile   → strong match
+//   2. Exact normalized alternate mobile  → strong match
+//   3. Exact normalized email             → strong match
+//   4. Full name + address                → strong match
+//   5. Full name + PIN/city               → supporting match
+//   Name similarity alone does NOT classify as a revisit.
 //
 // Security:
 //   - Requires authentication. All four employee roles are supported.
 //   - Returns phone masked via resolvePhone (LEAD_PHONE scope).
 //   - Only returns matches > 24h old (< 24h would 409 on submit anyway).
-//   - No follow-ups are returned here — those come from revisit-history.
-//   - matchType distinguishes a definite phone match from a possible name match.
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getOrganizationId } from "@/lib/tenantContext";
@@ -19,6 +25,57 @@ import { batchGetVisitDepths } from "@/lib/visitChain";
 
 export const dynamic = "force-dynamic";
 
+// ── Normalization helpers ──
+
+/** Strip everything except digits, return last 10 digits. */
+function normalizePhone(raw: string): string {
+  const digits = raw.replace(/\D/g, "");
+  return digits.length >= 10 ? digits.slice(-10) : digits;
+}
+
+/** Trim, lowercase, collapse whitespace. */
+function normalizeName(raw: string): string {
+  return raw.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/** Trim, lowercase. */
+function normalizeEmail(raw: string): string {
+  return raw.trim().toLowerCase();
+}
+
+/** Trim, lowercase, collapse whitespace and punctuation variations. */
+function normalizeAddress(raw: string): string {
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/[.,;:!?]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Trim and strip whitespace for exact comparison. */
+function normalizePinCode(raw: string): string {
+  return raw.replace(/\s+/g, "").trim();
+}
+
+export type MatchReason =
+  | "primary_mobile"
+  | "alternate_mobile"
+  | "email"
+  | "name_address"
+  | "name_pin_city";
+
+export interface MatchedCandidate {
+  id: number;
+  name: string;
+  phone: string; // masked
+  assigned_to: string | null;
+  created_at: string;
+  lead_classification: string;
+  visitCount: number;
+  matchReasons: MatchReason[];
+}
+
 export async function GET(req: Request) {
   try {
     const gate = await requireSession();
@@ -27,112 +84,261 @@ export async function GET(req: Request) {
 
     const { searchParams } = new URL(req.url);
     const phone = (searchParams.get("phone") ?? "").trim();
+    const altPhone = (searchParams.get("altPhone") ?? "").trim();
+    const email = (searchParams.get("email") ?? "").trim();
     const name = (searchParams.get("name") ?? "").trim();
+    const address = (searchParams.get("address") ?? "").trim();
+    const pinCode = (searchParams.get("pinCode") ?? "").trim();
+    const city = (searchParams.get("city") ?? "").trim();
 
-    // At least one of phone or name must be non-empty to run a query.
-    if (!phone && !name) {
-      return NextResponse.json({ success: true, matched: false, matchType: null, lead: null, age_hours: null });
+    // Need at least one field to run a query.
+    if (!phone && !altPhone && !email && name.length < 3) {
+      return NextResponse.json({
+        success: true,
+        matched: false,
+        candidates: [],
+      });
     }
 
     const orgId = await getOrganizationId();
 
-    let matchedRow: any = null;
-    let matchType: "phone" | "name" | null = null;
+    // Collect matched lead IDs → reasons. A lead can match on multiple fields.
+    const matchMap = new Map<number, { row: any; reasons: Set<MatchReason> }>();
 
-    // Phone match takes precedence — last-10-digit normalization uses the same
-    // index as the duplicate gate in the POST handler. A phone match is a
-    // definite identity signal; a name match is only a possibility.
-    if (phone && phone.replace(/\D/g, "").length >= 10) {
+    const addMatch = (row: any, reason: MatchReason) => {
+      const existing = matchMap.get(row.id);
+      if (existing) {
+        existing.reasons.add(reason);
+      } else {
+        matchMap.set(row.id, { row, reasons: new Set([reason]) });
+      }
+    };
+
+    // ── 1. Primary mobile match ──
+    if (phone && normalizePhone(phone).length >= 10) {
       const rows = await query(
-        `SELECT id, name, phone, assigned_to, created_at,
-                lead_classification,
+        `SELECT id, name, phone, alt_phone, email, address, pin_code, city,
+                assigned_to, created_at, lead_classification,
                 EXTRACT(EPOCH FROM (NOW() - created_at)) AS seconds_ago
          FROM walkin_enquiries
          WHERE RIGHT(regexp_replace(phone, '[^0-9]', '', 'g'), 10)
              = RIGHT(regexp_replace($1, '[^0-9]', '', 'g'), 10)
            AND organization_id = $2
          ORDER BY created_at DESC
-         LIMIT 1`,
+         LIMIT 5`,
         [phone, orgId]
       );
-      if (rows.length > 0) {
-        const row = rows[0];
-        const secondsAgo = Number(row.seconds_ago);
-        // Only surface if > 24h old — within 24h the POST will 409 anyway,
-        // and showing a match warning for something the server will reject
-        // as a same-day duplicate would confuse the receptionist.
-        if (secondsAgo >= 86400) {
-          matchedRow = row;
-          matchType = "phone";
-        }
+      for (const row of rows) {
+        if (Number(row.seconds_ago) >= 86400) addMatch(row, "primary_mobile");
       }
     }
 
-    // Name fallback — only when no phone match was found.
-    // A name-only match signals a POSSIBLE customer, not a confirmed one.
-    // The UI must present it with lower confidence and require explicit
-    // confirmation before the receptionist can check "Mark as Revisit".
-    if (!matchedRow && name.length >= 3) {
+    // ── 2. Alternate mobile match ──
+    // Check incoming phone against existing alt_phone, and incoming altPhone against existing phone & alt_phone.
+    if (phone && normalizePhone(phone).length >= 10) {
       const rows = await query(
-        `SELECT id, name, phone, assigned_to, created_at,
-                lead_classification,
+        `SELECT id, name, phone, alt_phone, email, address, pin_code, city,
+                assigned_to, created_at, lead_classification,
                 EXTRACT(EPOCH FROM (NOW() - created_at)) AS seconds_ago
          FROM walkin_enquiries
-         WHERE name ILIKE $1
+         WHERE RIGHT(regexp_replace(alt_phone, '[^0-9]', '', 'g'), 10)
+             = RIGHT(regexp_replace($1, '[^0-9]', '', 'g'), 10)
            AND organization_id = $2
          ORDER BY created_at DESC
-         LIMIT 1`,
-        [`%${name}%`, orgId]
+         LIMIT 5`,
+        [phone, orgId]
       );
-      if (rows.length > 0) {
-        const row = rows[0];
-        const secondsAgo = Number(row.seconds_ago);
-        if (secondsAgo >= 86400) {
-          matchedRow = row;
-          matchType = "name";
-        }
+      for (const row of rows) {
+        if (Number(row.seconds_ago) >= 86400) addMatch(row, "alternate_mobile");
       }
     }
 
-    if (!matchedRow) {
-      return NextResponse.json({ success: true, matched: false, matchType: null, lead: null, age_hours: null, visitCount: null });
+    if (altPhone && normalizePhone(altPhone).length >= 10) {
+      // Incoming alt against existing primary
+      const rows1 = await query(
+        `SELECT id, name, phone, alt_phone, email, address, pin_code, city,
+                assigned_to, created_at, lead_classification,
+                EXTRACT(EPOCH FROM (NOW() - created_at)) AS seconds_ago
+         FROM walkin_enquiries
+         WHERE RIGHT(regexp_replace(phone, '[^0-9]', '', 'g'), 10)
+             = RIGHT(regexp_replace($1, '[^0-9]', '', 'g'), 10)
+           AND organization_id = $2
+         ORDER BY created_at DESC
+         LIMIT 5`,
+        [altPhone, orgId]
+      );
+      for (const row of rows1) {
+        if (Number(row.seconds_ago) >= 86400) addMatch(row, "alternate_mobile");
+      }
+
+      // Incoming alt against existing alt
+      const rows2 = await query(
+        `SELECT id, name, phone, alt_phone, email, address, pin_code, city,
+                assigned_to, created_at, lead_classification,
+                EXTRACT(EPOCH FROM (NOW() - created_at)) AS seconds_ago
+         FROM walkin_enquiries
+         WHERE RIGHT(regexp_replace(alt_phone, '[^0-9]', '', 'g'), 10)
+             = RIGHT(regexp_replace($1, '[^0-9]', '', 'g'), 10)
+           AND organization_id = $2
+         ORDER BY created_at DESC
+         LIMIT 5`,
+        [altPhone, orgId]
+      );
+      for (const row of rows2) {
+        if (Number(row.seconds_ago) >= 86400) addMatch(row, "alternate_mobile");
+      }
     }
 
+    // ── 3. Email match ──
+    if (email && email.includes("@")) {
+      const normalizedEmail = normalizeEmail(email);
+      const rows = await query(
+        `SELECT id, name, phone, alt_phone, email, address, pin_code, city,
+                assigned_to, created_at, lead_classification,
+                EXTRACT(EPOCH FROM (NOW() - created_at)) AS seconds_ago
+         FROM walkin_enquiries
+         WHERE LOWER(TRIM(email)) = $1
+           AND email IS NOT NULL AND email <> 'N/A' AND email <> ''
+           AND organization_id = $2
+         ORDER BY created_at DESC
+         LIMIT 5`,
+        [normalizedEmail, orgId]
+      );
+      for (const row of rows) {
+        if (Number(row.seconds_ago) >= 86400) addMatch(row, "email");
+      }
+    }
+
+    // ── 4. Name + Address match ──
+    if (name.length >= 3 && address.length >= 5) {
+      const normalizedName = normalizeName(name);
+      const normalizedAddr = normalizeAddress(address);
+      const rows = await query(
+        `SELECT id, name, phone, alt_phone, email, address, pin_code, city,
+                assigned_to, created_at, lead_classification,
+                EXTRACT(EPOCH FROM (NOW() - created_at)) AS seconds_ago
+         FROM walkin_enquiries
+         WHERE LOWER(TRIM(regexp_replace(name, '\\s+', ' ', 'g'))) = $1
+           AND address IS NOT NULL AND address <> 'N/A' AND address <> ''
+           AND LOWER(TRIM(regexp_replace(regexp_replace(address, '[.,;:!?]+', ' ', 'g'), '\\s+', ' ', 'g'))) = $2
+           AND organization_id = $3
+         ORDER BY created_at DESC
+         LIMIT 5`,
+        [normalizedName, normalizedAddr, orgId]
+      );
+      for (const row of rows) {
+        if (Number(row.seconds_ago) >= 86400) addMatch(row, "name_address");
+      }
+    }
+
+    // ── 5. Name + PIN/City match (supporting) ──
+    if (name.length >= 3 && (pinCode.length >= 4 || city.length >= 2)) {
+      const normalizedName = normalizeName(name);
+      let pinCityRows: any[] = [];
+
+      if (pinCode.length >= 4) {
+        const normalizedPin = normalizePinCode(pinCode);
+        pinCityRows = await query(
+          `SELECT id, name, phone, alt_phone, email, address, pin_code, city,
+                  assigned_to, created_at, lead_classification,
+                  EXTRACT(EPOCH FROM (NOW() - created_at)) AS seconds_ago
+           FROM walkin_enquiries
+           WHERE LOWER(TRIM(regexp_replace(name, '\\s+', ' ', 'g'))) = $1
+             AND pin_code IS NOT NULL AND pin_code <> ''
+             AND REPLACE(pin_code, ' ', '') = $2
+             AND organization_id = $3
+           ORDER BY created_at DESC
+           LIMIT 5`,
+          [normalizedName, normalizedPin, orgId]
+        );
+      } else if (city.length >= 2) {
+        pinCityRows = await query(
+          `SELECT id, name, phone, alt_phone, email, address, pin_code, city,
+                  assigned_to, created_at, lead_classification,
+                  EXTRACT(EPOCH FROM (NOW() - created_at)) AS seconds_ago
+           FROM walkin_enquiries
+           WHERE LOWER(TRIM(regexp_replace(name, '\\s+', ' ', 'g'))) = $1
+             AND city IS NOT NULL AND city <> ''
+             AND LOWER(TRIM(city)) = LOWER(TRIM($2))
+             AND organization_id = $3
+           ORDER BY created_at DESC
+           LIMIT 5`,
+          [normalizedName, city.trim().toLowerCase(), orgId]
+        );
+      }
+
+      for (const row of pinCityRows) {
+        if (Number(row.seconds_ago) >= 86400) addMatch(row, "name_pin_city");
+      }
+    }
+
+    // ── No matches ──
+    if (matchMap.size === 0) {
+      return NextResponse.json({
+        success: true,
+        matched: false,
+        candidates: [],
+      });
+    }
+
+    // ── Build candidate list ──
     const actor = {
       _id: session._id ?? (session as any).id,
       name: session.name,
       role: session.role,
     };
 
-    // Mask the matched lead's phone before returning it.
-    const maskedPhone = await resolvePhone(actor, matchedRow, "LEAD_PHONE", orgId, matchedRow.phone);
+    const allIds = Array.from(matchMap.keys());
+    const depthMap = await batchGetVisitDepths(allIds, orgId);
 
-    const ageHours = Math.floor(Number(matchedRow.seconds_ago) / 3600);
+    const candidates: MatchedCandidate[] = [];
+    for (const [id, { row, reasons }] of matchMap) {
+      const maskedPhone = await resolvePhone(
+        actor,
+        row,
+        "LEAD_PHONE",
+        orgId,
+        row.phone
+      );
+      candidates.push({
+        id,
+        name: row.name,
+        phone: maskedPhone,
+        assigned_to: row.assigned_to ?? null,
+        created_at: row.created_at,
+        lead_classification: row.lead_classification,
+        visitCount: depthMap.get(id) ?? 1,
+        matchReasons: Array.from(reasons),
+      });
+    }
 
-    // Compute the visit count for the matched lead — count only.
-    // No historical lead data, no phone fields from other visits.
-    const depthMap = await batchGetVisitDepths([matchedRow.id], orgId);
-    const visitCount = depthMap.get(matchedRow.id) ?? 1;
+    // Sort: strong matches first (phone/email), then by recency.
+    const strongReasons: MatchReason[] = [
+      "primary_mobile",
+      "alternate_mobile",
+      "email",
+      "name_address",
+    ];
+    candidates.sort((a, b) => {
+      const aStrong = a.matchReasons.some((r) => strongReasons.includes(r));
+      const bStrong = b.matchReasons.some((r) => strongReasons.includes(r));
+      if (aStrong && !bStrong) return -1;
+      if (!aStrong && bStrong) return 1;
+      return (
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+    });
 
     return NextResponse.json({
       success: true,
       matched: true,
-      // "phone" = definite match on normalized last-10-digit phone.
-      // "name"  = possible match by name ILIKE — requires explicit confirmation.
-      matchType,
-      visitCount,
-      lead: {
-        id: matchedRow.id,
-        name: matchedRow.name,
-        phone: maskedPhone,
-        assigned_to: matchedRow.assigned_to,
-        created_at: matchedRow.created_at,
-        lead_classification: matchedRow.lead_classification,
-      },
-      age_hours: ageHours,
+      candidates,
     });
   } catch (error: any) {
     console.error("GET check-match Error:", error);
-    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
+    return NextResponse.json(
+      { success: false, message: error.message },
+      { status: 500 }
+    );
   }
 }

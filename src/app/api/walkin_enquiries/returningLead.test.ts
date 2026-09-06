@@ -136,7 +136,7 @@ describe("POST /api/walkin_enquiries — returning lead classification", () => {
       id: 50, name: "Old Client", assigned_to: "SM C", created_at: new Date(Date.now() - 100000000), seconds_ago: 100000,
     }] as any);
 
-    const res = await POST(makeRequest({}));
+    const res = await POST(makeRequest({ isRevisit: true, revisitLeadId: 50 }));
     expect(res.status).toBe(201);
     const body = await res.json();
     expect(body.success).toBe(true);

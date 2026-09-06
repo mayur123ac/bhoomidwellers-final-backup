@@ -17,10 +17,12 @@
 // events. `aria-describedby` plus a focusable wrapper keeps it reachable by
 // keyboard, which a `title` attribute on a disabled control is not.
 
-import { useCallback, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { FaPhoneAlt, FaRobot, FaSpinner } from "react-icons/fa";
 import { useCallingConfig } from "@/hooks/useCallingConfig";
-import { placeAiCall, placeManualCall } from "@/lib/callingHandlers";
+import { placeAiCall, placeManualCall, type CallSessionResult } from "@/lib/callingHandlers";
+import { isAndroidApp } from "@/lib/platform";
+import CallRecordingModal from "@/components/CallRecordingModal";
 
 interface Props {
   /** walkin_enquiries.id. The server re-reads the number from this. */
@@ -56,6 +58,23 @@ export default function CallingButtons({
   const [busy, setBusy] = useState<null | "manual" | "ai">(null);
   const [toast, setToast] = useState<Toast>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [pendingCallSession, setPendingCallSession] = useState<CallSessionResult | null>(null);
+  const pendingRef = useRef<CallSessionResult | null>(null);
+
+  // Listen for app returning from dialer (Android only)
+  useEffect(() => {
+    if (!isAndroidApp()) return;
+    let cleanup: (() => void) | undefined;
+    import("@capacitor/app").then(({ App }) => {
+      const listener = App.addListener("appStateChange", ({ isActive }) => {
+        if (isActive && pendingRef.current) {
+          setPendingCallSession({ ...pendingRef.current });
+        }
+      });
+      cleanup = () => { listener.then((h) => h.remove()); };
+    });
+    return () => { cleanup?.(); };
+  }, []);
 
   const notify = useCallback((kind: "ok" | "error", message: string) => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -102,6 +121,11 @@ export default function CallingButtons({
       });
       // `tel:` hands off to the OS and has nothing to report.
       if (result?.message) notify("ok", result.message);
+      // On Android, store the session so the recording modal can appear
+      // when the user returns from the dialer.
+      if (result?.callSession && isAndroidApp()) {
+        pendingRef.current = result.callSession;
+      }
     } catch (err: any) {
       notify("error", err?.message || "The call could not be placed.");
     } finally {
@@ -163,6 +187,23 @@ export default function CallingButtons({
           </span>
           {toast.message}
         </div>
+      )}
+
+      {pendingCallSession && (
+        <CallRecordingModal
+          callSessionId={pendingCallSession.callSessionId}
+          phoneNumber={pendingCallSession.phoneNumber}
+          callStartedAt={pendingCallSession.callStartedAt}
+          leadId={leadId}
+          onDismiss={() => {
+            setPendingCallSession(null);
+            pendingRef.current = null;
+          }}
+          onComplete={() => {
+            setPendingCallSession(null);
+            pendingRef.current = null;
+          }}
+        />
       )}
     </>
   );

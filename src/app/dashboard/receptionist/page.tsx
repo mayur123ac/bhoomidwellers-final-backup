@@ -139,7 +139,7 @@ function DraggableTableContainer({ children, className, isDark }: { children: Re
         onMouseUp={onMouseUp}
         onMouseMove={onMouseMove}
         className={`overflow-auto custom-scrollbar draggable-table-scroll ${isDragging ? "cursor-grabbing select-none" : "cursor-grab"} pb-2`}
-        style={{ maxHeight: "calc(200vh - 250px)" }}
+        style={{ maxHeight: "calc(200vh - 200px)" }}
       >
         <style>{`
           .draggable-table-scroll::-webkit-scrollbar {
@@ -439,7 +439,7 @@ function RpPageHeader({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="rp-page-header px-0 pt-3 sm:px- sm:py-0 md:py-0">
+    <div className="rp-page-header px-0 pt-3 sm:px- sm:py-0 md:py-0 mx-3 my-3">
       <div className="flex items-center gap-3 min-w-0">
         {leading}
         <div className="rp-page-header-titles">
@@ -707,9 +707,21 @@ export default function ReceptionistDashboard() {
   const cpRoutedByPartner = !!(cpLookup?.found && cpLookup?.routable);
 
   // ── Revisit lead detection ──
-  const [matchedLead, setMatchedLead] = useState<null | { id: number; name: string; phone: string; assigned_to: string; created_at: string; lead_classification: string; visitCount: number }>(null);
-  const [matchType, setMatchType] = useState<"phone" | "name" | null>(null);
+  // Multi-field revisit detection state
+  type MatchReason = "primary_mobile" | "alternate_mobile" | "email" | "name_address" | "name_pin_city";
+  type MatchCandidate = { id: number; name: string; phone: string; assigned_to: string | null; created_at: string; lead_classification: string; visitCount: number; matchReasons: MatchReason[] };
+  const [matchCandidates, setMatchCandidates] = useState<MatchCandidate[]>([]);
+  const [selectedCandidate, setSelectedCandidate] = useState<MatchCandidate | null>(null);
   const [isRevisit, setIsRevisit] = useState(false);
+  // Legacy aliases for backwards-compatible submit payload
+  const matchedLead = selectedCandidate;
+  const matchType: "phone" | "name" | null = selectedCandidate
+    ? selectedCandidate.matchReasons.some((r: MatchReason) => ["primary_mobile", "alternate_mobile"].includes(r))
+      ? "phone"
+      : selectedCandidate.matchReasons.includes("email") || selectedCandidate.matchReasons.includes("name_address")
+        ? "phone" // strong match
+        : "name"
+    : null;
   const matchCheckRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ___Lost Leads
@@ -1184,17 +1196,22 @@ export default function ReceptionistDashboard() {
     return () => { cancelled = true; clearTimeout(timer); };
   }, [enquiryForm.cpDetails.phone, enquiryForm.source]);
 
-  // ── Real-time duplicate / revisit match detection ──
+  // ── Real-time multi-field duplicate / revisit match detection ──
   // Debounced 600 ms. Only fires when the modal is open so it doesn't consume
   // network for every keystroke on an already-submitted form.
   useEffect(() => {
     if (!isEnquiryModalOpen) return;
     if (matchCheckRef.current) clearTimeout(matchCheckRef.current);
     const phone = (enquiryForm.mobile || "").trim();
+    const altPhone = (enquiryForm.altMobile || "").trim();
+    const email = (enquiryForm.email || "").trim();
     const name = (enquiryForm.fullName || "").trim();
-    if (!phone && name.length < 3) {
-      setMatchedLead(null);
-      setMatchType(null);
+    const address = (enquiryForm.address || "").trim();
+    const pinCode = (enquiryForm.pinCode || "").trim();
+    const city = (enquiryForm.city || "").trim();
+    if (!phone && !altPhone && !email && name.length < 3) {
+      setMatchCandidates([]);
+      setSelectedCandidate(null);
       setIsRevisit(false);
       return;
     }
@@ -1202,16 +1219,26 @@ export default function ReceptionistDashboard() {
       try {
         const params = new URLSearchParams();
         if (phone) params.set("phone", phone);
+        if (altPhone) params.set("altPhone", altPhone);
+        if (email) params.set("email", email);
         if (name) params.set("name", name);
+        if (address) params.set("address", address);
+        if (pinCode) params.set("pinCode", pinCode);
+        if (city) params.set("city", city);
         const res = await fetch(`/api/walkin_enquiries/check-match?${params.toString()}`);
         if (!res.ok) return;
         const json = await res.json();
-        if (json.matched && json.lead) {
-          setMatchedLead({ ...json.lead, visitCount: json.visitCount ?? 1 });
-          setMatchType(json.matchType ?? null);
+        if (json.matched && json.candidates?.length > 0) {
+          setMatchCandidates(json.candidates);
+          // Auto-select if only one candidate
+          if (json.candidates.length === 1) {
+            setSelectedCandidate(json.candidates[0]);
+          } else {
+            setSelectedCandidate(null);
+          }
         } else {
-          setMatchedLead(null);
-          setMatchType(null);
+          setMatchCandidates([]);
+          setSelectedCandidate(null);
           setIsRevisit(false);
         }
       } catch {
@@ -1219,7 +1246,7 @@ export default function ReceptionistDashboard() {
       }
     }, 600);
     return () => { if (matchCheckRef.current) clearTimeout(matchCheckRef.current); };
-  }, [enquiryForm.mobile, enquiryForm.fullName, isEnquiryModalOpen]);
+  }, [enquiryForm.mobile, enquiryForm.altMobile, enquiryForm.email, enquiryForm.fullName, enquiryForm.address, enquiryForm.pinCode, enquiryForm.city, isEnquiryModalOpen]);
 
   const fetchSalesManagers = async () => {
     setIsFetchingManagers(true);
@@ -1622,8 +1649,8 @@ export default function ReceptionistDashboard() {
         setIsEnquiryModalOpen(false);
         setCpPhoneError("");
         setCpLookup(null);
-        setMatchedLead(null);
-        setMatchType(null);
+        setMatchCandidates([]);
+        setSelectedCandidate(null);
         setIsRevisit(false);
         setEnquiryForm({ fullName: "", mobile: "", altMobile: "", email: "", address: "", pinCode: "", city: "", occupation: "", organization: "", budget: "", configuration: "", purpose: "", source: "", assignedTo: "", loanPlanned: "", sourceOther: "", referralName: "", cpDetails: { name: "", company: "", phone: "" }, sourcingManagerId: "", preferredLocation: "", selfAssign: false, enquiryDate: getTodayString() });
         refetchAll();
@@ -2346,7 +2373,7 @@ export default function ReceptionistDashboard() {
             <div className="animate-fadeIn pb-10">
 
               {/* Front Desk Log Container */}
-              <div className={`relative flex flex-col w-full rounded-2xl md:rounded-3xl overflow-hidden shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-300 transition-colors duration-300 ${isDark
+              <div className={`relative flex flex-col w-full rounded-2xl md:rounded-3xl overflow-hidden shadow-[0_8px_30px_rgb(0,0,0,0.2)] border border-gray-300 transition-colors duration-300 ${isDark
                 ? "bg-[#1C1C1E]/80 backdrop-blur-xl border-white/10"
                 : "bg-white/80 backdrop-blur-xl border-gray-200/60"
                 }`}>
@@ -2419,18 +2446,27 @@ export default function ReceptionistDashboard() {
 
                 {/* Table Area */}
                 <DraggableTableContainer isDark={isDark}>
-                  <table className="w-full text-left border-collapse whitespace-nowrap">
+                  <table
+                    className="w-full text-left border-collapse whitespace-nowrap"
+                    style={{
+                      fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+                      WebkitFontSmoothing: 'antialiased'
+                    }}
+                  >
                     <thead>
-                      <tr className={isDark ? "bg-[#2C2C2E]/50" : "bg-gray-50/50"}>
+                      <tr className={`${isDark ? "bg-[#1C1C1E]" : "bg-white"} border-b ${isDark ? "border-white/[0.08]" : "border-black/[0.06]"}`}>
                         {visibleAllLeadsCols.map(col => (
                           <th
                             key={col.key}
-                            className={`px-4 py-3.5 text-[11px] font-medium uppercase tracking-wider border ${isDark ? "text-gray-400 border-white-300/20" : "text-gray-500 border-gray-300/60"
-                              } ${col.key === "lead_no" ? `md:sticky md:left-0 md:z-20 ${isDark ? "md:bg-[#252528]" : "md:bg-[#F9FAFB]"}` :
-                                col.key === "client_name" ? `md:sticky md:left-[88px] md:z-20 ${isDark
-                                  ? "md:bg-[#252528] md:shadow-[-1px_0_0_rgba(255,255,255,0.08)_inset]"
-                                  : "md:bg-[#F9FAFB] md:shadow-[-1px_0_0_rgba(0,0,0,0.06)_inset]"
-                                  }` : ""
+                            className={`px-4 py-3 text-[12px] font-medium capitalize tracking-tight ${isDark ? "text-gray-400" : "text-gray-500"
+                              } ${col.key === "lead_no"
+                                ? `md:sticky md:left-0 md:z-20 ${isDark ? "md:bg-[#1C1C1E]" : "md:bg-white"}`
+                                : col.key === "client_name"
+                                  ? `md:sticky md:left-[88px] md:z-20 ${isDark
+                                    ? "md:bg-[#1C1C1E] md:shadow-[inset_-1px_0_0_0_rgba(255,255,255,0.08)]"
+                                    : "md:bg-white md:shadow-[inset_-1px_0_0_0_rgba(0,0,0,0.06)]"
+                                  }`
+                                  : ""
                               }`}
                             style={
                               col.key === "lead_no" ? { minWidth: '88px', maxWidth: '88px' } :
@@ -2443,86 +2479,126 @@ export default function ReceptionistDashboard() {
                       </tr>
                     </thead>
 
-                    <tbody className="divide-y divide-gray-100 dark:divide-white/[0.06]">
+                    <tbody className={`divide-y ${isDark ? "divide-white/[0.04]" : "divide-black/[0.04]"}`}>
                       {isFetchingEnquiries ? (
                         <SkeletonRows rows={8} cols={visibleAllLeadsCols.length} isDark={isDark} />
                       ) : receptionistLeads.length === 0 ? (
-                        <tr><td colSpan={visibleAllLeadsCols.length}>
-                          <EmptyState onReset={() => setSearchRecep("")} hasFilters={!!searchRecep} isDark={isDark} />
-                        </td></tr>
+                        <tr>
+                          <td colSpan={visibleAllLeadsCols.length}>
+                            <EmptyState onReset={() => setSearchRecep("")} hasFilters={!!searchRecep} isDark={isDark} />
+                          </td>
+                        </tr>
                       ) : receptionistLeads.map((enquiry: any) => (
                         <tr
                           key={enquiry.id}
-                          className={`group cursor-pointer transition-colors duration-200 ${isDark ? "hover:bg-white/[0.04]" : "hover:bg-black/[0.02]"}`}
+                          className={`group cursor-pointer transition-colors duration-200 ${isDark ? "hover:bg-white/[0.03]" : "hover:bg-black/[0.02]"
+                            }`}
                           onClick={() => { setSelectedLead(enquiry); setActiveTab("detail"); }}
                         >
+                          {/* Lead No */}
                           <td
-                            className={`px-4 py-4 text-[14px] font-medium tracking-wide md:sticky md:left-0 md:z-10 transition-colors duration-200 ${isDark
-                              ? "font-bold text-[#831B67] md:bg-[#1C1C1E] md:group-hover:bg-[#232325]"
-                              : "font-bold text-[#831B67] md:bg-white md:group-hover:bg-[#FDFDFD]"
+                            className={`px-4 py-3 text-[13px] font-medium tabular-nums tracking-tight md:sticky md:left-0 md:z-10 transition-colors duration-200 ${isDark
+                              ? "text-[#D946A8] group-hover:text-[#F472C9] md:bg-[#1C1C1E] md:group-hover:bg-[#222224]"
+                              : "text-[#9E217B] group-hover:text-[#7A185F] md:bg-white md:group-hover:bg-[#F9FAFB]"
                               }`}
-                            style={{ minWidth: '88px', fontWeight: '720', maxWidth: '88px' }}
+                            style={{ minWidth: '88px', maxWidth: '88px' }}
                           >
                             #{enquiry.sr_no || enquiry.id}
                           </td>
 
+                          {/* Client Name & Badges */}
                           <td
-                            className={`px-4 py-4 text-[13px] font-medium md:sticky md:left-[88px] md:z-10 transition-colors duration-200 ${isDark
-                              ? "text-gray-100 md:bg-[#1C1C1E] md:group-hover:bg-[#232325] md:shadow-[-1px_0_0_rgba(255,255,255,0.08)_inset]"
-                              : "text-gray-900 md:bg-white md:group-hover:bg-[#FDFDFD] md:shadow-[-1px_0_0_rgba(0,0,0,0.06)_inset]"
+                            className={`px-4 py-3 md:sticky md:left-[88px] md:z-10 transition-colors duration-200 ${isDark
+                              ? "md:bg-[#1C1C1E] md:group-hover:bg-[#222224] md:shadow-[inset_-1px_0_0_0_rgba(255,255,255,0.08)]"
+                              : "md:bg-white md:group-hover:bg-[#F9FAFB] md:shadow-[inset_-1px_0_0_0_rgba(0,0,0,0.06)]"
                               }`}
                             style={{ minWidth: '180px', maxWidth: '180px' }}
                           >
-                            <div className="flex flex-col gap-0.5">
-                              <div className="truncate">{enquiry.name}</div>
-                              {enquiry.lead_classification === "RETURNING_LEAD" && (
-                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border border-[rgba(5,150,105,0.45)] text-[#059669] bg-[rgba(5,150,105,0.12)] w-fit">
-                                  REVISIT
+                            <div className="flex flex-col gap-1">
+                              <div className={`truncate text-[13px] font-medium ${isDark ? "text-gray-100" : "text-gray-900"}`}>
+                                {enquiry.name}
+                              </div>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {enquiry.lead_classification === "RETURNING_LEAD" && (
+                                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium tracking-wide ${isDark ? "bg-emerald-500/15 text-emerald-400" : "bg-emerald-50 text-emerald-700"
+                                    }`}>
+                                    Revisit
+                                  </span>
+                                )}
+                                <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium tracking-wide ${isDark ? "bg-white/10 text-gray-300" : "bg-gray-100 text-gray-600"
+                                  }`}>
+                                  {(enquiry.visitNumber ?? 1)} {(enquiry.visitNumber ?? 1) === 1 ? "Visit" : "Visits"}
                                 </span>
-                              )}
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border border-[rgba(100,116,139,0.35)] text-[#64748B] bg-[rgba(100,116,139,0.08)] w-fit">
-                                {(enquiry.visitNumber ?? 1)} {(enquiry.visitNumber ?? 1) === 1 ? "VISIT" : "VISITS"}
-                              </span>
+                              </div>
                             </div>
                           </td>
 
-                          {!hiddenAllLeadsCols.has("source") && <td className={`px-4 py-4 text-[13px] ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                            {enquiry.source || <span className="text-[11px] opacity-40">—</span>}
-                          </td>}
+                          {/* Source */}
+                          {!hiddenAllLeadsCols.has("source") && (
+                            <td className={`px-4 py-3 text-[13px] ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                              {enquiry.source || <span className="opacity-30">—</span>}
+                            </td>
+                          )}
 
-                          {!hiddenAllLeadsCols.has("cp_name") && <td className={`px-4 py-4 text-[13px] truncate max-w-[120px] ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                            {enquiry.cp_name || <span className="text-[11px] opacity-40">—</span>}
-                          </td>}
-                          {!hiddenAllLeadsCols.has("cp_company") && <td className={`px-4 py-4 text-[13px] truncate max-w-[120px] ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                            {enquiry.cp_company || <span className="text-[11px] opacity-40">—</span>}
-                          </td>}
-                          {!hiddenAllLeadsCols.has("cp_phone") && <td className={`px-4 py-4 text-[13px] truncate max-w-[120px] ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                            {enquiry.cp_phone || <span className="text-[11px] opacity-40">—</span>}
-                          </td>}
+                          {/* CP Details */}
+                          {!hiddenAllLeadsCols.has("cp_name") && (
+                            <td className={`px-4 py-3 text-[13px] truncate max-w-[120px] ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                              {enquiry.cp_name || <span className="opacity-30">—</span>}
+                            </td>
+                          )}
+                          {!hiddenAllLeadsCols.has("cp_company") && (
+                            <td className={`px-4 py-3 text-[13px] truncate max-w-[120px] ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                              {enquiry.cp_company || <span className="opacity-30">—</span>}
+                            </td>
+                          )}
+                          {!hiddenAllLeadsCols.has("cp_phone") && (
+                            <td className={`px-4 py-3 text-[13px] tabular-nums truncate max-w-[120px] ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                              {enquiry.cp_phone || <span className="opacity-30">—</span>}
+                            </td>
+                          )}
 
-                          {!hiddenAllLeadsCols.has("budget") && <td className={`px-4 py-4 text-[13px] font-medium tabular-nums tracking-tight ${isDark ? "text-[#32D74B]" : "text-[#28CD41]"}`}>
-                            {enquiry.salesBudget || enquiry.budget}
-                          </td>}
+                          {/* Budget */}
+                          {!hiddenAllLeadsCols.has("budget") && (
+                            <td className={`px-4 py-3 text-[13px] font-medium tabular-nums ${isDark ? "text-gray-200" : "text-gray-800"}`}>
+                              {enquiry.salesBudget || enquiry.budget || <span className="opacity-30 font-normal">—</span>}
+                            </td>
+                          )}
 
-                          {!hiddenAllLeadsCols.has("phone") && <td className={`px-4 py-4 text-[13px] font-mono tracking-tight ${isDark ? "text-gray-300" : "text-gray-700"}`}>
-                            {maskPhone(enquiry.phone)}
-                          </td>}
-                          {!hiddenAllLeadsCols.has("alt_phone") && <td className={`px-4 py-4 text-[13px] font-mono tracking-tight ${isDark ? "text-gray-500" : "text-gray-400"}`}>
-                            {maskPhone(enquiry.altPhone)}
-                          </td>}
+                          {/* Phone Numbers */}
+                          {!hiddenAllLeadsCols.has("phone") && (
+                            <td className={`px-4 py-3 text-[13px] tabular-nums ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+                              {maskPhone(enquiry.phone)}
+                            </td>
+                          )}
+                          {!hiddenAllLeadsCols.has("alt_phone") && (
+                            <td className={`px-4 py-3 text-[13px] tabular-nums ${isDark ? "text-gray-500" : "text-gray-400"}`}>
+                              {maskPhone(enquiry.altPhone) || <span className="opacity-30">—</span>}
+                            </td>
+                          )}
 
-                          {!hiddenAllLeadsCols.has("date_created") && <td className={`px-4 py-4 text-[12px] min-w-[120px] ${isDark ? "text-gray-500" : "text-gray-400"}`}>
-                            {enquiry.date}
-                          </td>}
-                          {!hiddenAllLeadsCols.has("backdated") && <td className={`px-4 py-4 text-[12px] min-w-[120px] ${isDark ? "text-gray-500" : "text-gray-400"}`}>
-                            {enquiry.autoDateEnabled === false && enquiry.enquiryDate ? formatDate(enquiry.enquiryDate).split(",")[0] : <span className="opacity-40">—</span>}
-                          </td>}
+                          {/* Dates */}
+                          {!hiddenAllLeadsCols.has("date_created") && (
+                            <td className={`px-4 py-3 text-[13px] tabular-nums min-w-[120px] ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                              {enquiry.date}
+                            </td>
+                          )}
+                          {!hiddenAllLeadsCols.has("backdated") && (
+                            <td className={`px-4 py-3 text-[13px] tabular-nums min-w-[120px] ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                              {enquiry.autoDateEnabled === false && enquiry.enquiryDate
+                                ? formatDate(enquiry.enquiryDate).split(",")[0]
+                                : <span className="opacity-30">—</span>}
+                            </td>
+                          )}
 
-                          {!hiddenAllLeadsCols.has("sales_manager") && <td className="px-4 py-4">
-                            <span className={`inline-flex items-center px-2 py-1 rounded-md text-[11px] font-medium ${isDark ? "bg-[#2C2C2E] text-gray-300" : "bg-gray-100 text-gray-700"}`}>
-                              {enquiry.assignedTo || "Unassigned"}
-                            </span>
-                          </td>}
+                          {/* Sales Manager */}
+                          {!hiddenAllLeadsCols.has("sales_manager") && (
+                            <td className="px-4 py-3">
+                              <span className={`inline-flex items-center px-2 py-1 rounded-full text-[11px] font-medium tracking-tight ${isDark ? "bg-white/5 text-gray-300 border border-white/5" : "bg-black/[0.03] text-gray-700 border border-black/5"
+                                }`}>
+                                {enquiry.assignedTo || "Unassigned"}
+                              </span>
+                            </td>
+                          )}
                         </tr>
                       ))}
 
@@ -2530,7 +2606,7 @@ export default function ReceptionistDashboard() {
 
                       {!hasMore && !isFetchingEnquiries && receptionistLeads.length > 0 && (
                         <tr>
-                          <td colSpan={visibleAllLeadsCols.length} className={`px-4 py-6 text-center text-[12px] font-medium ${isDark ? "text-gray-500" : "text-gray-400"}`}>
+                          <td colSpan={visibleAllLeadsCols.length} className={`px-4 py-8 text-center text-[13px] ${isDark ? "text-gray-500" : "text-gray-400"}`}>
                             All {totalCount} records loaded
                           </td>
                         </tr>
@@ -2555,7 +2631,7 @@ export default function ReceptionistDashboard() {
                 titleClass={t.text}
                 subtitleClass={t.textFaint}
               >
-                <button onClick={refetchAll} className={`w-full sm:w-auto rp-control-label text-white flex items-center justify-center gap-2 px-4 py-3 sm:py-2 rounded-xl sm:rounded-lg shadow-sm ${t.btnPrimary}`}>
+                <button onClick={refetchAll} className={`w-full sm:w-auto rp-control-label text-white flex items-center justify-center gap-2 px-4 py-3 sm:py-2 rounded-xl sm:rounded-lg shadow-sm cursor-pointer select-none ${t.btnPrimary}`}>
                   <FaSyncAlt className="text-[13px] sm:text-[11px]" />
                   <span>Refresh Live Data</span>
                 </button>
@@ -3292,7 +3368,7 @@ export default function ReceptionistDashboard() {
                 </div>
               </RpPageHeader>
 
-              <div className={`rounded-2xl sm:rounded-3xl border overflow-hidden shadow-sm flex flex-col ${t.tableWrap}`} style={t.tableGlass}>
+              <div className={`rounded-2xl sm:rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.2)] border overflow-hidden flex flex-col   ${t.tableWrap}`} style={t.tableGlass}>
 
                 {/* ── Header Row 1: Icon + Title + Count | Search | Columns | Export | Refresh ── */}
                 <div className={`px-4 sm:px-6 py-3.5 sm:py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 border-b ${t.tableHead} ${isDark ? "border-white/[0.06]" : "border-indigo-300"}`}>
@@ -4513,47 +4589,120 @@ export default function ReceptionistDashboard() {
               </form>
             </div>
 
-            {/* ── Revisit match banner ── */}
-            {matchedLead && (
-              <div className={`mx-6 mb-4 rounded-xl border p-4 ${isDark ? "bg-[rgba(5,150,105,0.10)] border-[rgba(5,150,105,0.35)]" : "bg-[rgba(5,150,105,0.06)] border-[rgba(5,150,105,0.30)]"}`}>
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 text-[#059669] text-lg">↩</div>
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-[13px] font-semibold mb-1.5 text-[#059669]`}>
-                      {matchType === "phone" ? "Existing customer found (phone match)" : "Possible existing customer (name match)"}
-                    </p>
-                    <div className={`text-[12px] space-y-0.5 ${t.textMuted}`}>
-                      <div><span className="font-medium">Name:</span> {matchedLead.name}</div>
-                      <div><span className="font-medium">Phone:</span> {matchedLead.phone}</div>
-                      <div><span className="font-medium">Last enquiry:</span> {new Date(matchedLead.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</div>
-                      <div><span className="font-medium">Previously assigned to:</span> {matchedLead.assigned_to || "—"}</div>
-                    </div>
-                    <div className="mt-2">
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border border-[rgba(100,116,139,0.35)] text-[#64748B] bg-[rgba(100,116,139,0.08)] w-fit">
-                        {matchedLead.visitCount ?? 1} {(matchedLead.visitCount ?? 1) === 1 ? "VISIT" : "VISITS"}
-                      </span>
-                    </div>
-                    {matchType === "name" && (
-                      <p className={`mt-2 text-[11px] ${isDark ? "text-amber-400" : "text-amber-600"}`}>
-                        Name-only match — confirm this is the same customer before marking as revisit.
+            {/* ── Revisit match banner (multi-candidate) ── */}
+            {matchCandidates.length > 0 && (() => {
+              const reasonLabel = (r: MatchReason) => {
+                switch (r) {
+                  case "primary_mobile": return "Mobile Number";
+                  case "alternate_mobile": return "Alternate Mobile";
+                  case "email": return "Email";
+                  case "name_address": return "Name + Address";
+                  case "name_pin_city": return "Name + PIN/City";
+                  default: return r;
+                }
+              };
+              const strongReasons: MatchReason[] = ["primary_mobile", "alternate_mobile", "email", "name_address"];
+              const isOnlySupporting = (c: MatchCandidate) => c.matchReasons.every((r: MatchReason) => !strongReasons.includes(r));
+              const needsSelection = matchCandidates.length > 1 && !selectedCandidate;
+              return (
+                <div className={`mx-6 mb-4 min-h-[10vh] overflow-y-auto rounded-xl border p-4 ${isDark ? "bg-[rgba(5,150,105,0.10)] border-[rgba(5,150,105,0.35)]" : "bg-[rgba(5,150,105,0.06)] border-[rgba(5,150,105,0.30)]"}`}>
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 text-[#059669] text-lg">↩</div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] font-semibold mb-1.5 text-[#059669]">
+                        Possible Existing Customer
                       </p>
-                    )}
-                    {/* Only allow checkbox after explicit acknowledgement for name-only matches */}
-                    {(matchType === "phone" || matchType === "name") && (
-                      <label className="flex items-center gap-2 mt-3 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={isRevisit}
-                          onChange={e => setIsRevisit(e.target.checked)}
-                          className="w-4 h-4 rounded accent-[#059669] cursor-pointer"
-                        />
-                        <span className={`text-[13px] font-semibold text-[#059669]`}>Mark as Revisit</span>
-                      </label>
-                    )}
+                      <p className={`text-[12px] mb-2 ${t.textMuted}`}>
+                        We found {matchCandidates.length === 1 ? "an existing enquiry" : `${matchCandidates.length} existing enquiries`} matching this customer.
+                      </p>
+
+                      {/* Candidate list */}
+                      <div className="space-y-2">
+                        {matchCandidates.map((c: MatchCandidate) => {
+                          const isSelected = selectedCandidate?.id === c.id;
+                          return (
+                            <div
+                              key={c.id}
+                              onClick={() => {
+                                if (matchCandidates.length > 1) {
+                                  setSelectedCandidate(isSelected ? null : c);
+                                  if (isSelected) setIsRevisit(false);
+                                }
+                              }}
+                              className={`rounded-lg border p-3 transition-all ${matchCandidates.length > 1 ? "cursor-pointer" : ""
+                                } ${isSelected
+                                  ? isDark
+                                    ? "border-[#059669] bg-[rgba(5,150,105,0.15)]"
+                                    : "border-[#059669] bg-[rgba(5,150,105,0.08)]"
+                                  : isDark
+                                    ? "border-[rgba(255,255,255,0.08)] hover:border-[rgba(5,150,105,0.3)]"
+                                    : "border-[rgba(0,0,0,0.08)] hover:border-[rgba(5,150,105,0.3)]"
+                                }`}
+                            >
+                              {matchCandidates.length > 1 && (
+                                <div className="flex items-center gap-2 mb-1.5">
+                                  <div className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center ${isSelected ? "border-[#059669]" : isDark ? "border-gray-500" : "border-gray-400"}`}>
+                                    {isSelected && <div className="w-2 h-2 rounded-full bg-[#059669]" />}
+                                  </div>
+                                  <span className={`text-[11px] font-medium ${isSelected ? "text-[#059669]" : t.textMuted}`}>
+                                    {isSelected ? "Selected" : "Select this customer"}
+                                  </span>
+                                </div>
+                              )}
+                              <div className={`text-[12px] space-y-0.5 ${t.textMuted}`}>
+                                <div><span className="font-medium">Name:</span> {c.name}</div>
+                                <div><span className="font-medium">Phone:</span> {c.phone}</div>
+                                <div><span className="font-medium">Last enquiry:</span> {new Date(c.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</div>
+                                <div><span className="font-medium">Previously assigned to:</span> {c.assigned_to || "—"}</div>
+                              </div>
+                              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border border-[rgba(100,116,139,0.35)] text-[#64748B] bg-[rgba(100,116,139,0.08)]">
+                                  {c.visitCount ?? 1} {(c.visitCount ?? 1) === 1 ? "VISIT" : "VISITS"}
+                                </span>
+                                {c.matchReasons.map((r: MatchReason) => (
+                                  <span key={r} className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wider border ${strongReasons.includes(r)
+                                    ? "border-[rgba(5,150,105,0.4)] text-[#059669] bg-[rgba(5,150,105,0.08)]"
+                                    : isDark ? "border-amber-500/30 text-amber-400 bg-amber-500/10" : "border-amber-500/30 text-amber-600 bg-amber-50"
+                                    }`}>
+                                    Matched by: {reasonLabel(r)}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Warning for supporting-only matches */}
+                      {selectedCandidate && isOnlySupporting(selectedCandidate) && (
+                        <p className={`mt-2 text-[11px] ${isDark ? "text-amber-400" : "text-amber-600"}`}>
+                          This is a supporting match only (Name + PIN/City). Confirm this is the same customer before marking as revisit.
+                        </p>
+                      )}
+
+                      {needsSelection && (
+                        <p className={`mt-2 text-[11px] ${isDark ? "text-amber-400" : "text-amber-600"}`}>
+                          Multiple matches found. Select the correct customer above before marking as a revisit.
+                        </p>
+                      )}
+
+                      {/* Revisit checkbox — only shown when a candidate is selected */}
+                      {selectedCandidate && (
+                        <label className="flex items-center gap-2 mt-3 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={isRevisit}
+                            onChange={e => setIsRevisit(e.target.checked)}
+                            className="w-4 h-4 rounded accent-[#059669] cursor-pointer"
+                          />
+                          <span className="text-[13px] font-semibold text-[#059669]">This is a revisit</span>
+                        </label>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* Footer — plain-text Cancel, single blue pill primary action (Apple sheet convention) */}
             <div className={`px-6 py-4 border-t flex flex-col-reverse sm:flex-row justify-end gap-2.5 ${t.tableBorder}`}>

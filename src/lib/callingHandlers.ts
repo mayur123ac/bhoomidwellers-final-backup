@@ -17,6 +17,12 @@ interface CallResult {
   message?: string;
 }
 
+export interface CallSessionResult {
+  callSessionId: number;
+  phoneNumber: string;
+  callStartedAt: number;
+}
+
 /** Body shared by both routes: ids when we have them, a raw number otherwise. */
 function targetBody(t: CallTarget): Record<string, unknown> {
   if (t.leadId != null) return { leadId: t.leadId };
@@ -48,10 +54,14 @@ async function postCall(url: string, body: Record<string, unknown>): Promise<Cal
  * In `provider` mode the server asks the telephony provider to ring the user's
  * own handset and bridge it to the contact. In `tel` mode there is no server
  * involved: the browser hands a `tel:` URL to the OS.
+ *
+ * On Android (tel mode), a call session is created server-side before the
+ * dialer opens. The returned CallSessionResult lets the caller show the
+ * post-call recording modal after the user returns from the phone app.
  */
 export async function placeManualCall(
   target: CallTarget & { mode: "provider" | "tel" }
-): Promise<CallResult | null> {
+): Promise<(CallResult & { callSession?: CallSessionResult }) | null> {
   if (target.mode === "provider") {
     return postCall("/api/calls/manual", targetBody(target));
   }
@@ -61,11 +71,37 @@ export async function placeManualCall(
     throw new Error("No phone number on record.");
   }
 
+  // On Android, create a call session before opening the dialer so we can
+  // track this call and attach a recording afterwards.
+  let callSession: CallSessionResult | undefined;
+  if (target.leadId || target.callerLeadId) {
+    try {
+      const res = await fetch("/api/call-sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          leadId: target.leadId || undefined,
+          callerLeadId: target.callerLeadId || undefined,
+        }),
+      });
+      const json = await res.json().catch(() => null);
+      if (res.ok && json?.success) {
+        callSession = {
+          callSessionId: json.callSessionId,
+          phoneNumber: json.phoneNumber,
+          callStartedAt: Date.now(),
+        };
+      }
+    } catch {
+      // Non-fatal — the call can still proceed without session tracking
+    }
+  }
+
   // location.href rather than window.open: a `tel:` handed to open() leaves an
   // orphaned blank tab behind on desktop browsers that have no handler for the
   // scheme, and does nothing useful on those that do.
   window.location.href = `tel:${digits}`;
-  return null;
+  return callSession ? { callSession } : null;
 }
 
 /**

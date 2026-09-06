@@ -290,6 +290,31 @@ export async function POST(req: Request) {
       }
     }
 
+    // When the receptionist marked a revisit but the primary phone didn't match an
+    // older record (it matched on alt phone, email, or name+address instead), fall
+    // through to multi-field resolution using the client-supplied revisitLeadId.
+    // The server still re-validates: the linked lead must exist, belong to this org,
+    // and be >24h old.
+    if (isRevisit === true && leadClassification !== "RETURNING_LEAD" && revisitLeadId) {
+      const fallbackRows = await query(
+        `SELECT id, name, assigned_to, created_at,
+                EXTRACT(EPOCH FROM (NOW() - created_at)) AS seconds_ago
+         FROM walkin_enquiries
+         WHERE id = $1 AND organization_id = $2
+         LIMIT 1`,
+        [revisitLeadId, orgIdForCheck]
+      );
+      if (fallbackRows.length > 0) {
+        const fb = fallbackRows[0];
+        if (Number(fb.seconds_ago) >= 86400) {
+          leadClassification = "RETURNING_LEAD";
+          returningFromLeadId = fb.id;
+          returningFromLeadName = fb.name;
+          returningFromAssignedTo = fb.assigned_to;
+        }
+      }
+    }
+
     // Effective source is resolved once so the CP gate and the stored value agree.
     const effectiveSource = source || "Direct Walk-in";
     const isCpEnquiry = isChannelPartnerSource(effectiveSource);

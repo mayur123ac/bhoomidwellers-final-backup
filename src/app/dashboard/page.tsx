@@ -44,6 +44,7 @@ import AdminLeadTable, { type ALTColumn } from "@/components/AdminLeadTable";
 import InlineContactField from "@/components/InlineContactField";
 import BolnaCallWidget from "@/components/BolnaCallWidget";
 import CallingButtons from "@/components/CallingButtons";
+import ManualCallBubble from "@/components/ManualCallBubble";
 import EmployeePerformancePanel from "@/components/EmployeePerformancePanel";
 import { contactFieldSave } from "@/lib/contactFieldSave";
 // import ActivityTimeline from "@/components/ActivityTimeline";
@@ -4310,7 +4311,11 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                                       )}
                                     </span>
                                   </div>
-                                  <p className={`text-sm whitespace-pre-wrap leading-relaxed ${theme.textMuted}`}>{msg.message}</p>
+                                  {msg.followUpType === "call" ? (
+                                    <ManualCallBubble message={msg.message} createdAt={msg.createdAt} textClass={theme.textMuted} />
+                                  ) : (
+                                    <p className={`text-sm whitespace-pre-wrap leading-relaxed ${theme.textMuted}`}>{msg.message}</p>
+                                  )}
                                   {msg._status === "sending" && <span className="text-[9px] text-yellow-500 mt-1 block">Sending...</span>}
                                   {msg._status === "failed" && (
                                     <span className="text-[9px] text-red-500 mt-1 flex items-center gap-1">Failed to send
@@ -5743,7 +5748,11 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                                       )}
                                     </span>
                                   </div>
-                                  <p className={`text-xs sm:text-sm whitespace-pre-wrap leading-relaxed ${theme.textMuted}`}>{msg.message}</p>
+                                  {msg.followUpType === "call" ? (
+                                    <ManualCallBubble message={msg.message} createdAt={msg.createdAt} textClass={theme.textMuted} />
+                                  ) : (
+                                    <p className={`text-xs sm:text-sm whitespace-pre-wrap leading-relaxed ${theme.textMuted}`}>{msg.message}</p>
+                                  )}
                                   {msg._status === "sending" && <span className="text-[9px] text-yellow-500 mt-1 block">Sending...</span>}
                                   {msg._status === "failed" && (
                                     <span className="text-[9px] text-red-500 mt-1 flex items-center gap-1">Failed to send
@@ -7344,7 +7353,11 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                                         )}
                                       </span>
                                     </div>
-                                    <p className={`text-xs sm:text-sm whitespace-pre-wrap leading-relaxed ${theme.text}`}>{msg.message}</p>
+                                    {msg.followUpType === "call" ? (
+                                      <ManualCallBubble message={msg.message} createdAt={msg.createdAt} textClass={theme.text} />
+                                    ) : (
+                                      <p className={`text-xs sm:text-sm whitespace-pre-wrap leading-relaxed ${theme.text}`}>{msg.message}</p>
+                                    )}
                                     {msg._status === "sending" && <span className="text-[9px] text-yellow-500 mt-1 block">Sending...</span>}
                                     {msg._status === "failed" && (
                                       <span className="text-[9px] text-red-500 mt-1 flex items-center gap-1">Failed to send

@@ -13,7 +13,6 @@ import React, { useEffect, useMemo, useState, useRef } from "react";
 import {
   ColumnSelector,
   SortIcon,
-  isBlank,
 } from "./Tableui";
 
 /* ───────── types ───────── */
@@ -166,11 +165,21 @@ export default function AdminLeadTable({
       </div>
 
       {/* ── table ── */}
-      <div className={`rounded-xl overflow-hidden border ${theme.tableWrap}`} style={theme.tableGlass}>
+      <div
+        className={`rounded-xl overflow-hidden border ${theme.tableWrap}`}
+        style={theme.tableGlass}
+      >
         <DraggableScroll isDark={isDark}>
           <table className="w-full text-left border-collapse whitespace-nowrap">
-            <thead className={`text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.05em] sm:tracking-[0.09em] ${theme.tableHead} ${theme.textHeader}`}>
-              <tr>
+
+            {/* ── thead: Apple-style — minimal, refined typography ── */}
+            <thead>
+              <tr
+                className={`
+                  text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.06em] sm:tracking-[0.10em]
+                  ${theme.tableHead} ${theme.textHeader}
+                `}
+              >
                 {visibleColumns.map((col) => {
                   const sortable = !!col.sortValue;
                   const dir = sortKey === col.key ? sortDir : null;
@@ -180,15 +189,29 @@ export default function AdminLeadTable({
                       onClick={() => sortable && toggleSort(col.key)}
                       title={sortable ? `Sort by ${col.label}` : undefined}
                       className={`
-                        group px-2 py-2 sm:px-3 sm:py-3 whitespace-nowrap border-b
+                        group px-3 py-2.5 sm:px-4 sm:py-3 whitespace-nowrap
+                        border-b border-b-[1px]
                         ${col.minWidth || ""}
-                        ${isDark ? "border-white/[0.08]" : "border-gray-300"}
+                        ${isDark ? "border-white/[0.07]" : "border-gray-200/80"}
                         ${sortable ? "cursor-pointer select-none" : ""}
-                        ${sortable ? (isDark ? "hover:text-white transition-colors" : "hover:text-gray-900 transition-colors") : ""}
+                        ${sortable
+                          ? isDark
+                            ? "hover:text-white/90 transition-colors duration-150"
+                            : "hover:text-gray-800 transition-colors duration-150"
+                          : ""
+                        }
                         ${col.align === "right" ? "text-right" : col.align === "center" ? "text-center" : "text-left"}
                       `}
                     >
-                      <span className={`inline-flex items-center gap-1 sm:gap-1.5 ${col.align === "right" ? "flex-row-reverse" : col.align === "center" ? "justify-center" : ""}`}>
+                      <span
+                        className={`inline-flex items-center gap-1 sm:gap-1.5 ${
+                          col.align === "right"
+                            ? "flex-row-reverse"
+                            : col.align === "center"
+                            ? "justify-center"
+                            : ""
+                        }`}
+                      >
                         {col.label}
                         {sortable && <SortIcon dir={dir} />}
                       </span>
@@ -197,52 +220,176 @@ export default function AdminLeadTable({
                 })}
               </tr>
             </thead>
+
+            {/* ── tbody ── */}
             <tbody>
               {isLoading ? (
                 Array.from({ length: 6 }).map((_, i) => (
                   <tr key={i}>
                     {visibleColumns.map((col) => (
-                      <td key={col.key} className={`px-2 py-3 sm:px-3 sm:py-4 border-b ${isDark ? "border-white/[0.045]" : "border-gray-200"}`}>
-                        <div className={`h-3 rounded ${isDark ? "bg-white/[0.06]" : "bg-gray-200"} animate-pulse`} style={{ width: "60%" }} />
+                      <td
+                        key={col.key}
+                        className={`
+                          px-3 py-3 sm:px-4 sm:py-4 border-b
+                          ${isDark ? "border-white/[0.04]" : "border-gray-100"}
+                        `}
+                      >
+                        <div
+                          className={`h-3 rounded-full ${isDark ? "bg-white/[0.06]" : "bg-gray-200/80"} animate-pulse`}
+                          style={{ width: "60%" }}
+                        />
                       </td>
                     ))}
                   </tr>
                 ))
               ) : sorted.length === 0 ? (
                 <tr>
-                  <td colSpan={visibleColumns.length} className={`text-center py-8 sm:py-12 text-xs sm:text-sm ${theme.textMuted}`}>
+                  <td
+                    colSpan={visibleColumns.length}
+                    className={`text-center py-10 sm:py-14 text-xs sm:text-sm ${theme.textMuted}`}
+                  >
                     No leads found.
                   </td>
                 </tr>
-              ) : sorted.map((lead, idx) => (
-                <tr
-                  key={lead.id}
-                  onClick={() => onRowClick?.(lead)}
-                  className={`
-                    transition-colors ${onRowClick ? "cursor-pointer" : ""}
-                    ${idx % 2 === 1 ? (isDark ? "bg-white/[0.015]" : "bg-gray-100/60") : ""}
-                    ${isDark ? "hover:bg-white/[0.045]" : "hover:bg-[#9E217B]/[0.035]"}
-                  `}
-                  style={lead.is_lost_lead ? { opacity: 0.55 } : undefined}
-                >
-                  {visibleColumns.map((col) => (
-                    <td
-                      key={col.key}
-                      className={`
-                        px-2 py-2.5 sm:px-3 sm:py-3 whitespace-nowrap border-b
-                        ${isDark ? "border-white/[0.045]" : "border-gray-200"}
-                        ${col.align === "right" ? "text-right" : col.align === "center" ? "text-center" : "text-left"}
-                      `}
+              ) : (
+                sorted.map((lead, idx) => {
+                  /*
+                   * ── Revisit / Re-entered Lead Detection ──────────────────────
+                   * Uses the EXISTING lead_classification field set by the backend
+                   * (lib/visitChain.ts → "RETURNING_LEAD").
+                   * DO NOT change this detection logic — UI-only mapping.
+                   */
+                  const isRevisit = lead.lead_classification === "RETURNING_LEAD";
+
+                  /*
+                   * ── Row background ────────────────────────────────────────────
+                   * Revisit rows  → soft green tint (semantic signal)
+                   * Normal rows   → neutral (subtle zebra for readability)
+                   * Selected/lost → handled via style overrides below
+                   */
+                  const zebraClass =
+                    isRevisit
+                      ? "" // green tint applied via `style` below
+                      : idx % 2 === 1
+                      ? isDark
+                        ? "bg-white/[0.013]"
+                        : "bg-gray-50/70"
+                      : "";
+
+                  /*
+                   * ── Hover class ───────────────────────────────────────────────
+                   * Revisit rows  → maintain green identity on hover (slightly stronger)
+                   * Normal rows   → neutral hover
+                   * Applied via CSS custom property trick using group-hover is not
+                   * possible here without JSX state, so we handle hover inline via
+                   * onMouseEnter / onMouseLeave instead of Tailwind.
+                   */
+
+                  return (
+                    <RevisitAwareRow
+                      key={lead.id}
+                      lead={lead}
+                      isRevisit={isRevisit}
+                      zebraClass={zebraClass}
+                      isDark={isDark}
+                      onRowClick={onRowClick}
                     >
-                      {col.render(lead, ctx)}
-                    </td>
-                  ))}
-                </tr>
-              ))}
+                      {visibleColumns.map((col) => (
+                        <td
+                          key={col.key}
+                          className={`
+                            px-3 py-2.5 sm:px-4 sm:py-3 whitespace-nowrap border-b
+                            ${isDark ? "border-white/[0.04]" : "border-gray-100/80"}
+                            ${col.align === "right" ? "text-right" : col.align === "center" ? "text-center" : "text-left"}
+                          `}
+                        >
+                          {col.render(lead, ctx)}
+                        </td>
+                      ))}
+                    </RevisitAwareRow>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </DraggableScroll>
       </div>
     </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   RevisitAwareRow
+   ─────────────────────────────────────────────────────────────────────────
+   Handles hover via React state so we can apply the correct green-tinted
+   background on hover for revisit rows without duplicating Tailwind utilities
+   (Tailwind's JIT can't dynamically compose arbitrary rgba values in className).
+
+   Green tint palette (Apple-like, professional):
+     Normal revisit  → rgba(34, 197, 94, 0.08)   — clearly visible, not loud
+     Hover revisit   → rgba(34, 197, 94, 0.13)   — slightly strengthened
+     Normal row      → transparent / zebra
+     Normal hover    → very subtle neutral
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function RevisitAwareRow({
+  lead,
+  isRevisit,
+  zebraClass,
+  isDark,
+  onRowClick,
+  children,
+}: {
+  lead: Lead;
+  isRevisit: boolean;
+  zebraClass: string;
+  isDark: boolean;
+  onRowClick?: (lead: Lead) => void;
+  children: React.ReactNode;
+}) {
+  const [hovered, setHovered] = useState(false);
+
+  /*
+   * Background resolution order (highest priority first):
+   * 1. Lost lead → opacity dim (handled via style.opacity, not background)
+   * 2. Revisit + hovered → stronger green tint
+   * 3. Revisit (normal) → soft green tint
+   * 4. Normal hover → neutral
+   * 5. Zebra / transparent
+   */
+  let bgStyle: React.CSSProperties = {};
+
+  if (isRevisit) {
+    bgStyle.backgroundColor = hovered
+      ? isDark
+        ? "rgba(34, 197, 94, 0.13)"
+        : "rgba(34, 197, 94, 0.10)"
+      : isDark
+      ? "rgba(34, 197, 94, 0.08)"
+      : "rgba(34, 197, 94, 0.07)";
+  } else if (hovered && onRowClick) {
+    bgStyle.backgroundColor = isDark
+      ? "rgba(255, 255, 255, 0.04)"
+      : "rgba(0, 0, 0, 0.025)";
+  }
+
+  if (lead.is_lost_lead) {
+    bgStyle.opacity = 0.55;
+  }
+
+  return (
+    <tr
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onClick={() => onRowClick?.(lead)}
+      className={`
+        transition-colors duration-150
+        ${zebraClass}
+        ${onRowClick ? "cursor-pointer" : ""}
+      `}
+      style={bgStyle}
+    >
+      {children}
+    </tr>
   );
 }

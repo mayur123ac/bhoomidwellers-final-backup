@@ -85,7 +85,7 @@ function DraggableTableContainer({ children, className, isDark }: { children: Re
                 onMouseUp={onMouseUp}
                 onMouseMove={onMouseMove}
                 className={`overflow-auto custom-scrollbar draggable-table-scroll ${isDragging ? "cursor-grabbing select-none" : "cursor-grab"} pb-2`}
-                style={{ maxHeight: "calc(120vh - 250px)" }}
+                style={{ maxHeight: "calc(100vh - 200px)" }}
             >
                 <style>{`
           .draggable-table-scroll::-webkit-scrollbar {
@@ -648,6 +648,96 @@ const COLUMNS: Column[] = [
 ];
 
 /* ══════════════════════════════════════════════════════════════════════
+   EnquiryTableRow
+   ──────────────────────────────────────────────────────────────────────
+   Handles hover via React state so the correct green-tinted background
+   can be applied on hover for revisit rows.
+
+   Green tint palette (Apple-like, professional, semantic):
+     Normal revisit  → rgba(34, 197, 94, 0.08)   dark / rgba(34, 197, 94, 0.07) light
+     Hover revisit   → rgba(34, 197, 94, 0.13)   dark / rgba(34, 197, 94, 0.10) light
+     Selected row    → magenta brand tint (existing brand identity)
+     Normal hover    → very subtle neutral
+   ══════════════════════════════════════════════════════════════════════ */
+
+function EnquiryTableRow({
+    lead,
+    rowTitle,
+    isReturned,
+    isSelected,
+    isDuplicate,
+    isDark,
+    zebraClass,
+    selectMode,
+    toggleSelectOne,
+    onNavigateToSales,
+    colSpan: _colSpan,
+    children,
+}: {
+    lead: Record<string, any>;
+    rowTitle?: string;
+    isReturned: boolean;
+    isSelected: boolean;
+    isDuplicate: boolean;
+    isDark: boolean;
+    zebraClass: string;
+    selectMode: boolean;
+    toggleSelectOne: (id: number) => void;
+    onNavigateToSales?: ((lead: Record<string, any>) => void) | undefined;
+    colSpan: number;
+    children: React.ReactNode;
+}) {
+    const [hovered, setHovered] = React.useState(false);
+    const id = Number(lead.id);
+
+    let bgStyle: React.CSSProperties = {};
+
+    if (isSelected) {
+        bgStyle.backgroundColor = isDark ? "rgba(158, 33, 123, 0.14)" : "rgba(158, 33, 123, 0.06)";
+    } else if (isReturned) {
+        // Revisit row: green tint — slightly stronger on hover
+        bgStyle.backgroundColor = hovered
+            ? isDark
+                ? "rgba(34, 197, 94, 0.13)"
+                : "rgba(34, 197, 94, 0.10)"
+            : isDark
+                ? "rgba(34, 197, 94, 0.08)"
+                : "rgba(34, 197, 94, 0.07)";
+    } else if (hovered) {
+        bgStyle.backgroundColor = isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.025)";
+    }
+
+    if (lead.is_lost_lead) {
+        bgStyle.opacity = 0.55;
+    }
+
+    return (
+        <tr
+            title={rowTitle}
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={() => setHovered(false)}
+            onClick={() =>
+                selectMode ? toggleSelectOne(id) : onNavigateToSales?.(lead)
+            }
+            className={`cursor-pointer transition-colors duration-150 ${zebraClass}`}
+            style={bgStyle}
+        >
+            {selectMode && (
+                <td
+                    onClick={(e) => e.stopPropagation()}
+                    className={`px-2 py-2 sm:px-4 sm:py-3.5 border-b ${
+                        isDark ? "border-white/[0.04]" : "border-gray-100/80"
+                    }`}
+                >
+                    <Checkbox checked={isSelected} onChange={() => toggleSelectOne(id)} />
+                </td>
+            )}
+            {children}
+        </tr>
+    );
+}
+
+/* ══════════════════════════════════════════════════════════════════════
    Component
    ══════════════════════════════════════════════════════════════════════ */
 
@@ -1092,7 +1182,7 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
 
                 {/* ═══ Table ═══ */}
                 <DraggableTableContainer isDark={isDark}>
-                    <table className="w-full text-left text-[13px] sm:text-sm border-separate border-spacing-0">
+                    <table className="w-full text-left text-[13px] sm:text-sm border-collapse">
                         {/* No backdrop-filter here, deliberately.
                             theme.tableHead is bg-[#1A1A28] / bg-[#F1F5F9] — fully
                             opaque, no alpha. A blur behind an opaque layer is
@@ -1194,57 +1284,34 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
 
                                     const zebra =
                                         isReturned
-                                            ? ""
+                                            ? "" // green tint applied via style below
                                             : rowIdx % 2 === 1
                                                 ? isDark
-                                                    ? "bg-white/[0.015]"
-                                                    : "bg-gray-100/60"
+                                                    ? "bg-white/[0.013]"
+                                                    : "bg-gray-50/70"
                                                 : "";
 
                                     return (
-                                        <tr
+                                        <EnquiryTableRow
                                             key={lead.id}
-                                            title={rowTitle}
-                                            onClick={() =>
-                                                selectMode ? toggleSelectOne(id) : onNavigateToSales?.(lead)
-                                            }
-                                            className={`
-                        group cursor-pointer transition-colors duration-200
-                        ${zebra}
-                        ${isSelected
-                                                    ? isDark
-                                                        ? "bg-[#9E217B]/[0.14]"
-                                                        : "bg-[#9E217B]/[0.06]"
-                                                    : isReturned
-                                                        ? ""
-                                                        : isDark
-                                                            ? "hover:bg-white/[0.045]"
-                                                            : "hover:bg-[#9E217B]/[0.035]"
-                                                }
-                      `}
-                                            style={{
-                                                ...(lead.is_lost_lead ? { opacity: 0.55 } : undefined),
-                                                ...(isReturned && !isSelected
-                                                    ? { backgroundColor: isDark ? "rgba(5, 150, 105, 0.08)" : "rgba(5, 150, 105, 0.05)" }
-                                                    : undefined),
-                                            }}
+                                            lead={lead}
+                                            rowTitle={rowTitle}
+                                            isReturned={isReturned}
+                                            isSelected={isSelected}
+                                            isDuplicate={isDuplicate}
+                                            isDark={isDark}
+                                            zebraClass={zebra}
+                                            selectMode={selectMode}
+                                            toggleSelectOne={toggleSelectOne}
+                                            onNavigateToSales={onNavigateToSales}
+                                            colSpan={colSpan}
                                         >
-                                            {selectMode && (
-                                                <td
-                                                    onClick={(e) => e.stopPropagation()}
-                                                    className={`px-2 py-2 sm:px-4 sm:py-3.5 border-b ${isDark ? "border-white/[0.045]" : "border-gray-300"
-                                                        }`}
-                                                >
-                                                    <Checkbox checked={isSelected} onChange={() => toggleSelectOne(id)} />
-                                                </td>
-                                            )}
-
                                             {visibleColumns.map((col, colIdx) => (
                                                 <td
                                                     key={col.key}
                                                     className={`
-                            px-2 py-2.5 sm:px-3 sm:py-3.5 whitespace-nowrap border-b
-                            ${isDark ? "border-white/[0.045]" : "border-indigo-300"}
+                            px-3 py-2.5 sm:px-4 sm:py-3.5 whitespace-nowrap border-b
+                            ${isDark ? "border-white/[0.04]" : "border-gray-100/80"}
                             ${col.align === "right" ? "text-right" : col.align === "center" ? "text-center" : "text-left"}
                             ${colIdx === 0 && isDuplicate
                                                             ? "relative before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[3px] before:bg-amber-500"
@@ -1255,7 +1322,7 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
                                                     {col.render(lead, ctx)}
                                                 </td>
                                             ))}
-                                        </tr>
+                                        </EnquiryTableRow>
                                     );
                                 })
                             )}

@@ -445,7 +445,13 @@ function ChannelPartnerEnquiriesTable({
           <thead className={`sticky top-0 z-10 backdrop-blur-xl${isDark ? "bg-[#000000]/70 border-b border-white/10" : "bg-white/70 border-b border-black/5"}`}>
             <tr className={`text-[10px] uppercase tracking-wider ${t.textMuted}`}>
               {columns.map((h, i) => (
-                <th key={`${h}-${i}`} className="px-3 py-3 whitespace-nowrap font-semibold bg-white border-b shadow-sm border-gray-300">{h}</th>
+                <th
+                  key={`${h}-${i}`}
+                  className={`px-3 py-3 whitespace-nowrap font-semibold shadow-sm ${isDark
+                    ? "bg-[#1C1C1E] text-white border-b border-white/10"
+                    : "bg-[#F8F9FA] text-gray-900 border-b border-black/5"
+                    }`}
+                >{h}</th>
               ))}
             </tr>
           </thead>

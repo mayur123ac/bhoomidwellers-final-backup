@@ -57,6 +57,7 @@ import LoanDealForm from "@/components/LoanDealForm";
 import LoanDealView from "@/components/LoanDealView";
 import BolnaCallWidget from "@/components/BolnaCallWidget";
 import CallingButtons from "@/components/CallingButtons";
+import ManualCallBubble from "@/components/ManualCallBubble";
 // import ActivityTimeline from "@/components/ActivityTimeline";
 import { handleMarkLostLead as markLostLeadApi, restoreLostLead, updateLeadLostState, useLostLeadEvents } from "@/lib/lostLeadSync";
 import { useFollowUpEvents, type FollowUpSSEPayload, type FollowUpReadSSEPayload } from "@/lib/followUpSync";
@@ -2256,10 +2257,10 @@ function SalesManagerView({
                                 ...(isNGD && !isRevisit && !isLost ? { backgroundColor: isDark ? "rgba(234, 88, 12, 0.08)" : "rgba(234, 88, 12, 0.05)" } : undefined),
                               }}
                               onClick={() => {
-                              setSelectedLead(lead);
-                              setMainView("detail");
-                              setSubView("detail");
-                            }}>
+                                setSelectedLead(lead);
+                                setMainView("detail");
+                                setSubView("detail");
+                              }}>
                               <td className={`px-2.5 sm:px-3 py-2 sm:py-2.5 text-[11px] sm:text-sm font-bold ${t.accentText}`}>#{lead.sr_no || lead.id}</td>
                               <td className={`px-2 py-2.5 sm:px-3 sm:py-3.5 ${t.text}`}>
                                 <div className="flex flex-col gap-0.5">
@@ -2908,8 +2909,58 @@ function SalesManagerView({
                           type="button"
                           onClick={() => setShowPrevLead(v => !v)}
                           disabled={isLoadingRevisit && !revisitHistory}
-                          className={`sm:hidden flex items-center justify-center gap-1.5 text-[11px] font-semibold px-3 py-2 rounded-lg border transition-colors cursor-pointer w-full disabled:opacity-50 disabled:cursor-wait ${showPrevLead ? "border-[rgba(5,150,105,0.5)] text-[#059669] bg-[rgba(5,150,105,0.10)]" : `${t.tableBorder} ${t.textMuted}`}`}
+                          className={`
+    hidden sm:flex
+    items-center gap-1.5
+    px-3 py-1.5
+    rounded-md
+    border
+    text-[11px] font-semibold
+    transition-all duration-200
+    cursor-pointer
+    shadow-sm
+    disabled:opacity-50
+    disabled:cursor-wait
+
+    ${showPrevLead
+                              ? "bg-[#059669] border-[#059669] text-white shadow-[0_1px_5px_rgba(5,150,105,0.25)]"
+                              : isDark
+                                ? "bg-white/[0.04] border-white/10 text-slate-300 hover:bg-white/[0.08] hover:border-white/20 hover:text-white"
+                                : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300 hover:text-slate-900"
+                            }
+  `}
                         >
+                          <svg
+                            className="w-3.5 h-3.5 shrink-0"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M3 12a9 9 0 1 0 3-6.7" />
+                            <path d="M3 4v5h5" />
+                            <path d="M12 7v5l3 2" />
+                          </svg>
+
+                          <span>
+                            {showPrevLead ? "Hide History" : "View History"}
+                          </span>
+
+                          <svg
+                            className={`w-3 h-3 transition-transform duration-200 ${showPrevLead ? "rotate-180" : ""
+                              }`}
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="m6 9 6 6 6-6" />
+                          </svg>
+
                           {isLoadingRevisit && !revisitHistory
                             ? "Loading history…"
                             : showPrevLead ? "Hide Previous Lead Data" : "Show Previous Lead Data"
@@ -3395,7 +3446,11 @@ function SalesManagerView({
                                 )}
                               </span>
                             </div>
-                            <p className={`text-xs sm:text-sm whitespace-pre-wrap leading-relaxed break-words ${t.textMuted}`}>{msg.message}</p>
+                            {msg.followUpType === "call" ? (
+                              <ManualCallBubble message={msg.message} createdAt={msg.createdAt} textClass={t.textMuted} />
+                            ) : (
+                              <p className={`text-xs sm:text-sm whitespace-pre-wrap leading-relaxed break-words ${t.textMuted}`}>{msg.message}</p>
+                            )}
 
                             {/* Optimistic UI status indicators */}
                             {msg._status === "sending" && (

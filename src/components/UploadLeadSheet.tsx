@@ -183,13 +183,13 @@ export default function UploadLeadSheet({
       .then((data) => {
         if (data?.success && Array.isArray(data.data)) setManagers(data.data);
       })
-      .catch(() => {});
+      .catch(() => { });
     fetch("/api/users/site-head")
       .then((r) => r.json())
       .then((data) => {
         if (data?.success && Array.isArray(data.data)) setSiteHeads(data.data);
       })
-      .catch(() => {});
+      .catch(() => { });
   }, [open, mode]);
 
   const resetState = () => {
@@ -219,7 +219,7 @@ export default function UploadLeadSheet({
 
   const cancelJob = (id: string) => {
     // Fire and forget — don't block the close.
-    fetch(`/api/import/${id}/cancel`, { method: "POST" }).catch(() => {});
+    fetch(`/api/import/${id}/cancel`, { method: "POST" }).catch(() => { });
   };
 
   const closeModal = () => {
@@ -492,12 +492,12 @@ export default function UploadLeadSheet({
           type: anyCreated ? "success" : "error",
           msg: anyCreated
             ? `Created ${result.created} lead(s).` +
-              (result.updated ? ` Updated ${result.updated}.` : "") +
-              (result.skipped ? ` Skipped ${result.skipped}.` : "") +
-              (result.failed ? ` ${result.failed} failed.` : "")
+            (result.updated ? ` Updated ${result.updated}.` : "") +
+            (result.skipped ? ` Skipped ${result.skipped}.` : "") +
+            (result.failed ? ` ${result.failed} failed.` : "")
             : `Import completed but no leads were created.` +
-              (result.failed ? ` ${result.failed} row(s) failed — check the results below.` : "") +
-              (result.skipped ? ` ${result.skipped} skipped.` : ""),
+            (result.failed ? ` ${result.failed} row(s) failed — check the results below.` : "") +
+            (result.skipped ? ` ${result.skipped} skipped.` : ""),
         });
         if (anyCreated) onImported?.();
       }
@@ -553,8 +553,7 @@ export default function UploadLeadSheet({
         onClick={() => setOpen(true)}
         className={
           buttonClassName ||
-          `flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold border rounded-lg transition-colors hover:opacity-80 ${
-            isDark ? "bg-[#222] border-[#333] text-white" : "bg-white border-emerald-200 text-emerald-600"
+          `flex items-center gap-1.5 px-4 py-3 py-1.5 text-xs font-bold border rounded-xl transition-colors hover:opacity-80 ${isDark ? "bg-[#222] border-[#333] text-white" : "bg-white border-emerald-200 text-emerald-600"
           }`
         }
       >
@@ -633,13 +632,12 @@ export default function UploadLeadSheet({
               {/* Step 2: File picker — shown on select / analyze steps, or mapping/staging/preview for context */}
               {step !== "committed" && (
                 <label
-                  className={`flex flex-col items-center justify-center gap-2 py-6 rounded-xl transition-colors ${
-                    mode === "assign" && !assignTo
-                      ? "opacity-50 cursor-not-allowed"
-                      : step !== "select" && step !== "analyze"
+                  className={`flex flex-col items-center justify-center gap-2 py-6 rounded-xl transition-colors ${mode === "assign" && !assignTo
+                    ? "opacity-50 cursor-not-allowed"
+                    : step !== "select" && step !== "analyze"
                       ? "opacity-60 cursor-default"
                       : "cursor-pointer"
-                  }`}
+                    }`}
                   style={{ border: `2px dashed ${panelBorder}`, background: subtleBg }}
                 >
                   <FaUpload style={{ color: mutedColor }} />
@@ -938,13 +936,13 @@ export default function UploadLeadSheet({
                                               setPreviewData((prev) =>
                                                 prev
                                                   ? {
-                                                      ...prev,
-                                                      rows: prev.rows.map((row) =>
-                                                        row.id === r.id
-                                                          ? { ...row, user_override_action: newAction }
-                                                          : row
-                                                      ),
-                                                    }
+                                                    ...prev,
+                                                    rows: prev.rows.map((row) =>
+                                                      row.id === r.id
+                                                        ? { ...row, user_override_action: newAction }
+                                                        : row
+                                                    ),
+                                                  }
                                                   : prev
                                               );
                                             }
