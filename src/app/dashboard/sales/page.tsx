@@ -31,7 +31,8 @@ import {
   FaChevronLeft, FaChevronDown, FaCheckCircle, FaPaperPlane, FaTimes, FaPhoneAlt,
   FaCalendarAlt, FaUserCircle, FaMicrophone, FaWhatsapp, FaRobot,
   FaEyeSlash, FaEye, FaSearch, FaUniversity, FaUsers, FaFileAlt, FaCheck,
-  FaClock, FaBell, FaHandshake, FaClipboardList, FaBuilding, FaEdit
+  FaClock, FaBell, FaHandshake, FaClipboardList, FaBuilding, FaEdit,
+  FaDownload, FaSyncAlt, FaTable,
 } from "react-icons/fa";
 
 import InventoryManagementView from "@/components/InventoryManagementView";
@@ -79,6 +80,12 @@ import NotificationPopover from "@/components/notifications/NotificationPopover"
 import NotificationCenterView from "@/components/notifications/NotificationCenterView";
 import BhoomiAiPanel from "@/components/bhoomi-ai/BhoomiAiPanel";
 import { CRMContextManager } from "@/lib/admin-ai/contextManager";
+import {
+  SearchBar,
+  ToolbarButton,
+  ToggleSwitch,
+  ColumnSelector,
+} from "@/components/Tableui";
 
 const SiteVisitOverview = dynamic(() => import("../../dashboard/SiteVisitOverview"), { ssr: false });
 
@@ -1215,6 +1222,25 @@ function LoanStatusBadge({ status }: { status: string }) {
 // ============================================================================
 // SALES MANAGER MODULE
 // ============================================================================
+
+const SM_DB_COLS_KEY = "bd:sm:db:hiddenCols:v1";
+const SM_DB_COLUMNS: { key: string; label: string; locked?: boolean; defaultHidden?: boolean }[] = [
+  { key: "lead_no", label: "LEAD NO.", locked: true },
+  { key: "name", label: "NAME", locked: true },
+  { key: "prop_type", label: "PROP. TYPE" },
+  { key: "budget", label: "BUDGET" },
+  { key: "source", label: "SOURCE" },
+  { key: "cp_name", label: "CP NAME" },
+  { key: "cp_company", label: "CP COMPANY" },
+  { key: "cp_phone", label: "CP PHONE" },
+  { key: "status", label: "STATUS" },
+  { key: "lost_status", label: "LOST STATUS" },
+  { key: "interest", label: "INTEREST" },
+  { key: "date_created", label: "DATE CREATED" },
+  { key: "backdated", label: "BACKDATED ENTRY", defaultHidden: true },
+  { key: "site_visit", label: "SITE VISIT" },
+];
+
 function SalesManagerView({
   managers, allLeads, followUps, isLoading, adminUser, refetch, appendFollowUp, reconcileFollowUp, removeFollowUp,
   initialView, setMainView, isDark, t, featurePrefs,
@@ -1243,6 +1269,30 @@ function SalesManagerView({
   const [showLostLeads, setShowLostLeads] = useState(true);
   const [showNGDLeads, setShowNGDLeads] = useState(true);
   const [columnFilter, setColumnFilter] = useState<string>("all");
+  const [hiddenDbCols, setHiddenDbCols] = useState<Set<string>>(
+    () => new Set(SM_DB_COLUMNS.filter(c => c.defaultHidden).map(c => c.key))
+  );
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(SM_DB_COLS_KEY);
+      if (saved) setHiddenDbCols(new Set(JSON.parse(saved)));
+    } catch { /* ignore */ }
+  }, []);
+  const persistDbCols = (next: Set<string>) => {
+    setHiddenDbCols(next);
+    try { localStorage.setItem(SM_DB_COLS_KEY, JSON.stringify([...next])); } catch { /* ignore */ }
+  };
+  const visibleDbCols = SM_DB_COLUMNS.filter(c => c.locked || !hiddenDbCols.has(c.key));
+  const downloadCSV = (data: any[], filename: string) => {
+    if (!data?.length) return;
+    const headers = Object.keys(data[0]);
+    const rows = data.map(r => headers.map(k => JSON.stringify(r[k] ?? "", null)).join(","));
+    const csv = [headers.join(","), ...rows].join("\r\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
+    a.setAttribute("download", filename);
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  };
   const [detailTab, setDetailTab] = useState<"personal" | "loan">("personal");
   const [isClosingModalOpen, setIsClosingModalOpen] = useState(false);
   const [bookingData, setBookingData] = useState<any>(null);
@@ -1333,6 +1383,28 @@ function SalesManagerView({
   const [isLoadingRevisit, setIsLoadingRevisit] = useState(false);
   const [showPrevLead, setShowPrevLead] = useState(false);
 
+  // ── Full visit-chain (Admin / Site Head only) ──
+  const [visitChain, setVisitChain] = useState<null | {
+    totalVisits: number;
+    revisitCount: number;
+    currentVisitNumber: number;
+    visits: Array<{
+      leadId: number;
+      srNo: number | null;
+      visitNumber: number;
+      createdAt: string;
+      assignedTo: string | null;
+      status: string | null;
+      leadClassification: string;
+    }>;
+  }>(null);
+  const [isLoadingChain, setIsLoadingChain] = useState(false);
+  // Index into visits[] that is currently expanded; null = none expanded.
+  const [expandedVisitIdx, setExpandedVisitIdx] = useState<number | null>(null);
+  // Cache of fetched revisit-history per child leadId (key = visits[i+1].leadId).
+  const [visitDetailCache, setVisitDetailCache] = useState<Record<number, any>>({});
+  const [loadingVisitDetail, setLoadingVisitDetail] = useState<Record<number, boolean>>({});
+
   useEffect(() => { setSubView(initialView === "overview" ? "overview" : initialView === "detail" && selectedLead ? "detail" : initialView === "closed-leads" ? "closed-leads" : "cards"); }, [initialView]);
   // Collapse the AI Assistant panel whenever a different lead is opened
   useEffect(() => {
@@ -1347,6 +1419,11 @@ function SalesManagerView({
     // Reset revisit history state when navigating to a different lead.
     setRevisitHistory(null);
     setShowPrevLead(false);
+    // Reset visit chain state.
+    setVisitChain(null);
+    setExpandedVisitIdx(null);
+    setVisitDetailCache({});
+    setLoadingVisitDetail({});
   }, [selectedLead?.id]);
 
   // Fetch revisit history when a RETURNING_LEAD is opened.
@@ -1375,6 +1452,23 @@ function SalesManagerView({
       .finally(() => { if (!cancelled) setIsLoadingRevisit(false); });
     return () => { cancelled = true; };
   }, [selectedLead?.id, selectedLead?.lead_classification]);
+
+  // Fetch the full visit chain when Admin or Site Head opens a lead.
+  const isSiteHeadUser = String(adminUser?.role || "").toLowerCase().replace(/_/g, " ") === "site head";
+  useEffect(() => {
+    if (!selectedLead?.id || (!isAdmin && !isSiteHeadUser)) return;
+    let cancelled = false;
+    setIsLoadingChain(true);
+    fetch(`/api/leads/${selectedLead.id}/visit-chain`)
+      .then(r => r.json())
+      .then(json => {
+        if (!cancelled && json.success) setVisitChain(json);
+      })
+      .catch(() => { })
+      .finally(() => { if (!cancelled) setIsLoadingChain(false); });
+    return () => { cancelled = true; };
+  }, [selectedLead?.id, isAdmin, isSiteHeadUser]);
+
   // Mark internal messages as read when the conversation is opened.
   useEffect(() => {
     if (!selectedLead?.id) return;
@@ -2041,124 +2135,183 @@ function SalesManagerView({
 
             {/* Overview table */}
             <div className={`rounded-2xl sm:rounded-4xl border shadow-sm overflow-hidden ${t.tableWrap}`} style={t.tableGlass}>
-              <div className={`p-2.5 sm:p-3 border-b flex flex-col gap-2 sm:gap-3 ${t.tableBorder} ${t.modalHeader}`}>
-                <div className="flex items-center justify-between flex-wrap gap-1.5 sm:gap-2">
-                  <h3 className={`font-bold flex items-center gap-1.5 sm:gap-2 text-xs sm:text-base ${t.text}`}>
-                    <FaClipboardList className={`text-[11px] sm:text-base ${t.accentText}`} /> Leads Database
-                  </h3>
-                  <span className={`text-[10px] sm:text-xs font-bold px-2 sm:px-3 py-0.5 sm:py-1 rounded-full border ${t.btnClosingBadge}`}>
-                    Total: {filteredDatabaseLeads.length}
+              {/* ── Toolbar row 1: title + search + actions ── */}
+              <div className={`px-3 sm:px-5 pt-4 pb-2 sm:pb-3 flex flex-wrap items-center justify-between gap-2 sm:gap-3 ${t.tableHead}`}>
+                <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+                  <FaTable className={`text-[11px] sm:text-sm ${t.accentText}`} />
+                  <h3 className={`font-bold text-[13px] sm:text-[15px] tracking-tight ${t.text}`}>Leads Database</h3>
+                  <span className={`text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md tabular-nums ${t.btnClosingBadge}`}>
+                    {filteredDatabaseLeads.length.toLocaleString("en-IN")}
                   </span>
                 </div>
-                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-
-                  <label className={`flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs font-semibold cursor-pointer select-none border rounded-lg sm:rounded-xl px-2 sm:px-3 py-1.5 sm:py-2 ${t.selectSmall}`}>
-                    <input
-                      type="checkbox"
-                      checked={showLostLeads}
-                      onChange={e => setShowLostLeads(e.target.checked)}
-                      disabled={leadStatusFilter !== "all"}
-                      className="accent-[#9E217B] w-3 h-3 sm:w-3.5 sm:h-3.5 cursor-pointer"
-                    />
-                    Show Lost
-                  </label>
-                  <select
-                    value={columnFilter}
-                    onChange={e => setColumnFilter(e.target.value)}
-                    className={`rounded-lg sm:rounded-xl px-2 sm:px-3 py-1.5 sm:py-2 text-[10px] sm:text-xs font-semibold outline-none cursor-pointer border ${t.select}`}
-                  >
-                    <option value="all">All Columns</option>
-                    <option value="name">Name</option>
-                    <option value="phone">Phone</option>
-                    <option value="budget">Budget</option>
-                    <option value="propType">Property Type</option>
-                    <option value="source">Source</option>
-                    <option value="status">Status</option>
-                  </select>
-                  <div className="relative flex-1 min-w-[140px] sm:min-w-[180px]">
-                    <FaSearch className={`absolute left-2.5 sm:left-3 top-1/2 -translate-y-1/2 text-[10px] sm:text-xs ${t.textFaint}`} />
-                    <input
-                      type="text"
-                      placeholder="Search leads..."
-                      value={searchTerm}
-                      onChange={e => setSearchTerm(e.target.value)}
-                      className={`w-full rounded-lg sm:rounded-xl pl-7 sm:pl-9 pr-3 sm:pr-4 py-1.5 sm:py-2 text-xs sm:text-sm outline-none transition-colors border ${t.inputBg} ${t.text} ${t.inputFocus}`}
-                    />
-                    {searchTerm && (
-                      <button onClick={() => setSearchTerm("")} className={`absolute right-2.5 sm:right-3 top-1/2 -translate-y-1/2 ${t.textFaint} hover:text-red-400`}>
-                        <FaTimes className="text-[10px] sm:text-xs" />
-                      </button>
-                    )}
-                  </div>
+                <div className="w-full order-last sm:order-none mt-2 sm:mt-0 sm:w-auto sm:flex-1">
+                  <SearchBar value={searchTerm} onChange={setSearchTerm} isDark={isDark} placeholder="Search by Lead No, Name, Budget, Source..." />
                 </div>
+                <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap sm:ml-auto">
+                  <ColumnSelector
+                    columns={SM_DB_COLUMNS.map(c => ({ key: c.key, label: c.label, locked: c.locked }))}
+                    hidden={hiddenDbCols}
+                    onToggle={key => {
+                      const next = new Set(hiddenDbCols);
+                      next.has(key) ? next.delete(key) : next.add(key);
+                      persistDbCols(next);
+                    }}
+                    onReset={() => persistDbCols(new Set(SM_DB_COLUMNS.filter(c => c.defaultHidden).map(c => c.key)))}
+                    isDark={isDark}
+                  />
+                  <ToolbarButton
+                    onClick={() => downloadCSV(filteredDatabaseLeads.map((l: any) => ({
+                      "Lead No.": l.sr_no || l.id,
+                      "Name": l.name,
+                      "Property Type": l.propType || l.configuration || "",
+                      "Budget": l.salesBudget || l.budget || "",
+                      "Source": l.source || "",
+                      "CP Name": l.cpName || l.cp_name || "",
+                      "CP Company": l.cpCompany || l.cp_company || "",
+                      "CP Phone": l.cpPhone || l.cp_phone || "",
+                      "Status": l.status || "Assigned",
+                      "Lost": l.is_lost_lead ? "Yes" : "No",
+                      "Interest": l.leadInterestStatus || "",
+                      "Date Created": l.created_at || "",
+                      "Site Visit": l.mongoVisitDate || "",
+                    })), "SM_Leads_Database.csv")}
+                    icon={<FaDownload className="text-[10px] sm:text-[11px]" />}
+                    isDark={isDark}
+                    title="Export leads as CSV"
+                  >
+                    <span className="hidden sm:inline">Export</span>
+                  </ToolbarButton>
+                  <ToolbarButton onClick={refetch} icon={<FaSyncAlt className="text-[10px] sm:text-[11px]" />} isDark={isDark} title="Refresh leads" />
+                </div>
+              </div>
+              {/* ── Toolbar row 2: filters ── */}
+              <div className={`px-3 sm:px-5 pb-2.5 sm:pb-3.5 pt-2.5 sm:pt-3.5 flex flex-wrap items-center gap-x-2.5 sm:gap-x-5 gap-y-2 border-b ${isDark ? "border-white/[0.06]" : "border-indigo-300"}`}>
+                <span className="hidden sm:inline crm-eyebrow opacity-40">Filters</span>
+                <select
+                  value={leadStatusFilter}
+                  onChange={e => setLeadStatusFilter(e.target.value as any)}
+                  className={`h-7 sm:h-8 px-1.5 sm:px-2.5 rounded-md sm:rounded-lg text-[10px] sm:text-xs font-bold outline-none border cursor-pointer transition-colors ${isDark ? "bg-[#14141B] border-[#2A2A35] text-white" : "bg-white border-[#9CA3AF] text-[#1A1A1A]"}`}
+                >
+                  <option value="all">All leads</option>
+                  <option value="active">Active only</option>
+                  <option value="lost">Lost only</option>
+                </select>
+                <select
+                  value={columnFilter}
+                  onChange={e => setColumnFilter(e.target.value)}
+                  className={`h-7 sm:h-8 px-1.5 sm:px-2.5 rounded-md sm:rounded-lg text-[10px] sm:text-xs font-bold outline-none border cursor-pointer transition-colors ${isDark ? "bg-[#14141B] border-[#2A2A35] text-white" : "bg-white border-[#9CA3AF] text-[#1A1A1A]"}`}
+                >
+                  <option value="all">Search: all columns</option>
+                  <option value="name">Name</option>
+                  <option value="phone">Phone</option>
+                  <option value="budget">Budget</option>
+                  <option value="propType">Property Type</option>
+                  <option value="source">Source</option>
+                  <option value="status">Status</option>
+                </select>
+                <div className={`w-px h-4 sm:h-5 ${isDark ? "bg-white/10" : "bg-gray-200"}`} />
+                <ToggleSwitch
+                  checked={showLostLeads}
+                  onChange={setShowLostLeads}
+                  label="Show lost"
+                  disabled={leadStatusFilter !== "all"}
+                  title={leadStatusFilter !== "all" ? "Controlled by the All leads filter" : "Include lost leads in the table"}
+                  isDark={isDark}
+                />
+                <ToggleSwitch
+                  checked={showNGDLeads}
+                  onChange={setShowNGDLeads}
+                  label="Show NGD"
+                  accent="#EA580C"
+                  isDark={isDark}
+                />
               </div>
               <div className="overflow-x-auto w-full custom-scrollbar">
                 <table className="w-full text-left text-xs sm:text-sm whitespace-nowrap">
                   <thead className={t.tableHead}>
                     <tr>
-                      {["LEAD NO.", "NAME", "PROP. TYPE", "BUDGET", "SOURCE", "CP NAME", "CP COMPANY", "CP PHONE", "STATUS", "LOST STATUS", "INTEREST", "DATE CREATED", "BACKDATED ENTRY", "SITE VISIT", ...(isAdmin ? ["ACTIONS"] : [])].map(h => (
-                        <th key={h} className={`px-2.5 sm:px-3 py-2 sm:py-2.5 text-[9px] sm:text-xs font-bold tracking-wider border-b ${t.textHeader} ${t.tableBorder}`}>{h}</th>
+                      {visibleDbCols.map(col => (
+                        <th key={col.key} className={`px-2.5 sm:px-3 py-2 sm:py-2.5 text-[9px] sm:text-xs font-bold tracking-wider border-b ${t.textHeader} ${t.tableBorder}`}>{col.label}</th>
                       ))}
+                      {isAdmin && <th className={`px-2.5 sm:px-3 py-2 sm:py-2.5 text-[9px] sm:text-xs font-bold tracking-wider border-b ${t.textHeader} ${t.tableBorder}`}>ACTIONS</th>}
                     </tr>
                   </thead>
                   <tbody className={`divide-y ${t.tableDivide}`}>
                     {isLoading
-                      ? <tr><td colSpan={isAdmin ? 15 : 14} className={`text-center py-6 sm:py-8 text-xs sm:text-sm ${t.textMuted}`}>Loading...</td></tr>
+                      ? <tr><td colSpan={visibleDbCols.length + (isAdmin ? 1 : 0)} className={`text-center py-6 sm:py-8 text-xs sm:text-sm ${t.textMuted}`}>Loading...</td></tr>
                       : filteredDatabaseLeads.length === 0
-                        ? <tr><td colSpan={isAdmin ? 15 : 14} className={`text-center py-6 sm:py-8 text-xs sm:text-sm ${t.textMuted}`}>No leads found.</td></tr>
+                        ? <tr><td colSpan={visibleDbCols.length + (isAdmin ? 1 : 0)} className={`text-center py-6 sm:py-8 text-xs sm:text-sm ${t.textMuted}`}>No leads found.</td></tr>
                         : filteredDatabaseLeads.map((lead: any) => {
                           const isClosed = lead.status === "Closing" || lead.status === "Completed" || lead.status === "Closed" || lead.closingDate;
                           const isLost = !!lead.is_lost_lead;
                           const isNGD = lead.status === "NON GENUINE DEMAND (NGD)" || lead.leadStatus === "NON GENUINE DEMAND (NGD)" || lead.leadInterestStatus === "NON GENUINE DEMAND (NGD)";
                           const isRevisit = lead.lead_classification === "RETURNING_LEAD";
                           return (
-                            <tr key={lead.id} className={`transition-colors cursor-pointer ${isLost ? t.rowLost : isNGD ? t.rowNGD : isRevisit ? t.rowRevisit : t.tableRow}`} onClick={() => {
+                            <tr
+                              key={lead.id}
+                              className={`group cursor-pointer transition-colors duration-200 ${!isLost && !isNGD && !isRevisit ? (isDark ? "hover:bg-white/[0.045]" : "hover:bg-[#9E217B]/[0.035]") : ""}`}
+                              style={{
+                                ...(isLost ? { opacity: 0.55 } : undefined),
+                                ...(isRevisit && !isLost ? { backgroundColor: isDark ? "rgba(5, 150, 105, 0.08)" : "rgba(5, 150, 105, 0.05)" } : undefined),
+                                ...(isNGD && !isRevisit && !isLost ? { backgroundColor: isDark ? "rgba(234, 88, 12, 0.08)" : "rgba(234, 88, 12, 0.05)" } : undefined),
+                              }}
+                              onClick={() => {
                               setSelectedLead(lead);
                               setMainView("detail");
                               setSubView("detail");
                             }}>
                               <td className={`px-2.5 sm:px-3 py-2 sm:py-2.5 text-[11px] sm:text-sm font-bold ${t.accentText}`}>#{lead.sr_no || lead.id}</td>
-                              <td className={`px-2.5 sm:px-4 py-2 sm:py-2.5 text-[11px] sm:text-sm font-medium ${t.text}`}>
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span>{lead.name}</span>
+                              <td className={`px-2 py-2.5 sm:px-3 sm:py-3.5 ${t.text}`}>
+                                <div className="flex flex-col gap-0.5">
+                                  <span className="font-bold text-[12px] sm:text-[13px] leading-tight">{lead.name}</span>
                                   {isRevisit && (
-                                    <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[8px] sm:text-[9px] font-bold uppercase tracking-wider border ${t.statusRevisit}`}>↩ REVISIT</span>
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border border-[rgba(5,150,105,0.45)] text-[#059669] bg-[rgba(5,150,105,0.12)] w-fit">
+                                      REVISIT
+                                    </span>
+                                  )}
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border border-[rgba(100,116,139,0.35)] text-[#64748B] bg-[rgba(100,116,139,0.08)] w-fit">
+                                    {(lead.visitNumber ?? 1)} {(lead.visitNumber ?? 1) === 1 ? "VISIT" : "VISITS"}
+                                  </span>
+                                  {isNGD && (
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border border-[rgba(234,88,12,0.45)] text-[#EA580C] bg-[rgba(234,88,12,0.12)] w-fit">
+                                      NGD
+                                    </span>
                                   )}
                                 </div>
                               </td>
-                              <td className={`px-2.5 sm:px-4 py-2 sm:py-2.5 text-[11px] sm:text-sm ${t.textMuted}`}>{lead.propType || lead.configuration || "Pending"}</td>
-                              <td className={`px-2.5 sm:px-4 py-2 sm:py-2.5 text-[11px] sm:text-sm font-semibold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget}</td>
-                              <td className={`px-2.5 sm:px-4 py-2 sm:py-2.5 text-[10px] sm:text-xs ${t.textMuted}`}>{lead.source || "—"}</td>
-                              <td className={`px-2.5 sm:px-4 py-2 sm:py-2.5 text-[11px] sm:text-sm ${t.textMuted}`}>{lead.cpName || lead.cp_name || "—"}</td>
-                              <td className={`px-2.5 sm:px-4 py-2 sm:py-2.5 text-[11px] sm:text-sm ${t.textMuted}`}>{lead.cpCompany || lead.cp_company || "—"}</td>
-                              <td className={`px-2.5 sm:px-4 py-2 sm:py-2.5 font-mono text-[10px] sm:text-xs ${t.textMuted}`}>{lead.cpPhone || lead.cp_phone || "—"}</td>
-                              <td className="px-2.5 sm:px-4 py-2 sm:py-2.5">
+                              {!hiddenDbCols.has("prop_type") && <td className={`px-2.5 sm:px-4 py-2 sm:py-2.5 text-[11px] sm:text-sm ${t.textMuted}`}>{lead.propType || lead.configuration || "Pending"}</td>}
+                              {!hiddenDbCols.has("budget") && <td className={`px-2.5 sm:px-4 py-2 sm:py-2.5 text-[11px] sm:text-sm font-semibold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget}</td>}
+                              {!hiddenDbCols.has("source") && <td className={`px-2.5 sm:px-4 py-2 sm:py-2.5 text-[10px] sm:text-xs ${t.textMuted}`}>{lead.source || "—"}</td>}
+                              {!hiddenDbCols.has("cp_name") && <td className={`px-2.5 sm:px-4 py-2 sm:py-2.5 text-[11px] sm:text-sm ${t.textMuted}`}>{lead.cpName || lead.cp_name || "—"}</td>}
+                              {!hiddenDbCols.has("cp_company") && <td className={`px-2.5 sm:px-4 py-2 sm:py-2.5 text-[11px] sm:text-sm ${t.textMuted}`}>{lead.cpCompany || lead.cp_company || "—"}</td>}
+                              {!hiddenDbCols.has("cp_phone") && <td className={`px-2.5 sm:px-4 py-2 sm:py-2.5 font-mono text-[10px] sm:text-xs ${t.textMuted}`}>{lead.cpPhone || lead.cp_phone || "—"}</td>}
+                              {!hiddenDbCols.has("status") && <td className="px-2.5 sm:px-4 py-2 sm:py-2.5">
                                 <span className={`px-1.5 sm:px-2 py-0.5 rounded-full text-[8px] sm:text-[10px] font-bold uppercase border ${isLost
                                   ? t.statusLost
                                   : isNGD
                                     ? t.statusNGD
                                     : getStatusStyle(lead.status)
                                   }`}>{isLost ? "LOST" : isNGD ? "NGD" : isClosed ? "CLOSED" : (lead.status || "Assigned")}</span>
-                              </td>
-                              <td className="px-2.5 sm:px-4 py-2 sm:py-2.5">
+                              </td>}
+                              {!hiddenDbCols.has("lost_status") && <td className="px-2.5 sm:px-4 py-2 sm:py-2.5">
                                 {isLost ? (
                                   <span className={`px-1.5 sm:px-2 py-0.5 rounded-full text-[8px] sm:text-[10px] font-bold uppercase border inline-flex items-center gap-1 ${t.statusLost}`}>
                                     <Ghost className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> Lost Lead
                                   </span>
                                 ) : <span className={`text-[10px] sm:text-xs font-semibold ${t.textMuted}`}>Active</span>}
-                              </td>
-                              <td className="px-2.5 sm:px-4 py-2 sm:py-2.5">
+                              </td>}
+                              {!hiddenDbCols.has("interest") && <td className="px-2.5 sm:px-4 py-2 sm:py-2.5">
                                 {lead.leadInterestStatus && lead.leadInterestStatus !== "Pending"
                                   ? <InterestBadge status={lead.leadInterestStatus} size="sm" />
                                   : <span className={`text-[10px] sm:text-xs italic ${t.textFaint}`}>—</span>}
-                              </td>
-                              <td className={`px-2.5 sm:px-4 py-2 sm:py-2.5 text-[10px] sm:text-xs whitespace-normal min-w-[100px] sm:min-w-[120px] ${t.textFaint}`}>
+                              </td>}
+                              {!hiddenDbCols.has("date_created") && <td className={`px-2.5 sm:px-4 py-2 sm:py-2.5 text-[10px] sm:text-xs whitespace-normal min-w-[100px] sm:min-w-[120px] ${t.textFaint}`}>
                                 {formatDate(lead.created_at)}
-                              </td>
-                              <td className={`px-2.5 sm:px-4 py-2 sm:py-2.5 text-[10px] sm:text-xs whitespace-normal min-w-[100px] sm:min-w-[120px] ${t.textFaint}`}>
+                              </td>}
+                              {!hiddenDbCols.has("backdated") && <td className={`px-2.5 sm:px-4 py-2 sm:py-2.5 text-[10px] sm:text-xs whitespace-normal min-w-[100px] sm:min-w-[120px] ${t.textFaint}`}>
                                 {lead.auto_date_enabled === false && lead.enquiry_date ? formatDate(lead.enquiry_date).split(",")[0] : "-"}
-                              </td>
-                              <td className="px-2.5 sm:px-3 py-2 sm:py-2.5">{lead.mongoVisitDate ? <span className="text-orange-400 font-medium whitespace-nowrap text-[10px] sm:text-sm">{formatDate(lead.mongoVisitDate).split(",")[0]}</span> : <span className={`text-[10px] sm:text-xs italic ${t.textFaint}`}>Pending</span>}</td>
+                              </td>}
+                              {!hiddenDbCols.has("site_visit") && <td className="px-2.5 sm:px-3 py-2 sm:py-2.5">{lead.mongoVisitDate ? <span className="text-orange-400 font-medium whitespace-nowrap text-[10px] sm:text-sm">{formatDate(lead.mongoVisitDate).split(",")[0]}</span> : <span className={`text-[10px] sm:text-xs italic ${t.textFaint}`}>Pending</span>}</td>}
                               {isAdmin && (
                                 <td className="px-2.5 sm:px-3 py-2 sm:py-2.5" onClick={e => e.stopPropagation()}>
                                   <button
@@ -2887,6 +3040,184 @@ function SalesManagerView({
                               <p className={`text-[10px] italic text-center ${t.textFaint}`}>
                                 READ ONLY — All data above is from the previous visit. New notes, Sales Form, Loan, and Booking belong to the current Revisit lead.
                               </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* ── Visit History accordion (Admin / Site Head only) ── */}
+                      {(isAdmin || isSiteHeadUser) && visitChain && visitChain.totalVisits >= 1 && (
+                        <div className={`rounded-xl border overflow-hidden ${isDark ? "border-[rgba(100,116,139,0.30)]" : "border-[rgba(100,116,139,0.25)]"}`}>
+                          {/* Panel header */}
+                          <div className={`px-4 py-3 flex items-center justify-between ${isDark ? "bg-[rgba(100,116,139,0.10)]" : "bg-[rgba(100,116,139,0.06)]"}`}>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[13px] font-bold text-[#64748B] uppercase tracking-wider">Visit History</span>
+                            </div>
+                            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border border-[rgba(100,116,139,0.4)] text-[#64748B]`}>
+                              {visitChain.totalVisits} {visitChain.totalVisits === 1 ? "VISIT" : "VISITS"} TOTAL
+                            </span>
+                          </div>
+
+                          {isLoadingChain ? (
+                            <div className="p-4"><p className={`text-xs text-center py-2 ${t.textFaint}`}>Loading visit history…</p></div>
+                          ) : (
+                            <div className={`divide-y ${t.tableDivide}`}>
+                              {visitChain.visits.map((visit, i) => {
+                                const isCurrent = visit.visitNumber === visitChain.currentVisitNumber;
+                                const isExpanded = expandedVisitIdx === i;
+                                // To expand visit at index i: call revisit-history on visits[i+1].leadId
+                                // (the child that points back to this visit via returning_from_lead_id).
+                                const childLeadId = visitChain.visits[i + 1]?.leadId ?? null;
+                                const handleExpand = () => {
+                                  const next = isExpanded ? null : i;
+                                  setExpandedVisitIdx(next);
+                                  // Lazy-load detail for historical visits (not current).
+                                  if (!isCurrent && !isExpanded && childLeadId && !visitDetailCache[childLeadId] && !loadingVisitDetail[childLeadId]) {
+                                    setLoadingVisitDetail(prev => ({ ...prev, [childLeadId]: true }));
+                                    fetch(`/api/leads/${childLeadId}/revisit-history`)
+                                      .then(r => r.json())
+                                      .then(json => {
+                                        if (json.success && json.hasHistory) {
+                                          setVisitDetailCache(prev => ({ ...prev, [childLeadId]: json }));
+                                        }
+                                      })
+                                      .catch(() => { })
+                                      .finally(() => setLoadingVisitDetail(prev => ({ ...prev, [childLeadId]: false })));
+                                  }
+                                };
+                                return (
+                                  <div key={visit.leadId}>
+                                    {/* Row summary */}
+                                    <button
+                                      type="button"
+                                      onClick={handleExpand}
+                                      className={`w-full text-left px-4 py-2.5 flex items-center gap-2 transition-colors cursor-pointer ${isDark ? "hover:bg-white/[0.04]" : "hover:bg-black/[0.02]"}`}
+                                    >
+                                      <span className={`text-[10px] transition-transform duration-150 ${t.textFaint} ${isExpanded ? "rotate-90" : ""}`}>▸</span>
+                                      <span className={`text-[11px] font-bold ${t.textFaint}`}>Visit {visit.visitNumber}</span>
+                                      <span className={`text-[11px] ${t.textMuted}`}>·</span>
+                                      <span className={`text-[11px] ${t.textMuted}`}>
+                                        {new Date(visit.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                                      </span>
+                                      <span className={`text-[11px] ${t.textMuted}`}>·</span>
+                                      <span className={`text-[11px] font-medium truncate ${t.text}`}>{visit.assignedTo || "—"}</span>
+                                      <div className="ml-auto flex items-center gap-1.5 flex-shrink-0">
+                                        {visit.leadClassification === "RETURNING_LEAD" && (
+                                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider border border-[rgba(5,150,105,0.45)] text-[#059669] bg-[rgba(5,150,105,0.12)]">
+                                            REVISIT
+                                          </span>
+                                        )}
+                                        {isCurrent && (
+                                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider border border-[rgba(100,116,139,0.45)] text-[#64748B] bg-[rgba(100,116,139,0.12)]">
+                                            CURRENT
+                                          </span>
+                                        )}
+                                      </div>
+                                    </button>
+
+                                    {/* Expanded detail */}
+                                    {isExpanded && (
+                                      <div className={`px-4 pb-4 pt-2 ${isDark ? "bg-[rgba(100,116,139,0.05)]" : "bg-[rgba(100,116,139,0.03)]"}`}>
+                                        <div className={`rounded-lg border overflow-hidden ${isDark ? "border-[rgba(100,116,139,0.25)]" : "border-[rgba(100,116,139,0.20)]"}`}>
+                                          {/* Detail header */}
+                                          <div className={`px-3 py-2 flex items-center justify-between ${isDark ? "bg-[rgba(100,116,139,0.12)]" : "bg-[rgba(100,116,139,0.08)]"}`}>
+                                            <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748B]">VISIT {visit.visitNumber}</span>
+                                            {!isCurrent && <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border border-[rgba(100,116,139,0.4)] text-[#64748B]`}>READ ONLY</span>}
+                                          </div>
+
+                                          <div className="p-3 flex flex-col gap-3">
+                                            {/* Basic metadata — always available */}
+                                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px]">
+                                              <div><p className={`text-[9px] font-medium mb-0.5 ${t.textFaint}`}>Date</p><p className={`font-semibold ${t.text}`}>{new Date(visit.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</p></div>
+                                              <div><p className={`text-[9px] font-medium mb-0.5 ${t.textFaint}`}>Assigned To</p><p className={`font-semibold ${t.text}`}>{visit.assignedTo || "—"}</p></div>
+                                              <div><p className={`text-[9px] font-medium mb-0.5 ${t.textFaint}`}>Status</p><p className={`font-semibold ${t.text}`}>{visit.status || "—"}</p></div>
+                                              <div><p className={`text-[9px] font-medium mb-0.5 ${t.textFaint}`}>Classification</p><p className={`font-semibold ${t.text}`}>{visit.leadClassification}</p></div>
+                                              {visit.srNo && <div><p className={`text-[9px] font-medium mb-0.5 ${t.textFaint}`}>Lead #</p><p className={`font-semibold ${t.text}`}>#{visit.srNo}</p></div>}
+                                            </div>
+
+                                            {isCurrent ? (
+                                              <p className={`text-[10px] italic text-center ${t.textFaint}`}>Current lead — see main panel for full details.</p>
+                                            ) : childLeadId && loadingVisitDetail[childLeadId] ? (
+                                              <p className={`text-[10px] text-center ${t.textFaint}`}>Loading historical data…</p>
+                                            ) : childLeadId && visitDetailCache[childLeadId] ? (() => {
+                                              const hist = visitDetailCache[childLeadId];
+                                              return (
+                                                <div className="flex flex-col gap-3">
+                                                  {/* Historical Follow-ups */}
+                                                  {hist.followUps?.length > 0 && (
+                                                    <div className={`border-t pt-2 ${t.tableBorder}`}>
+                                                      <p className="text-[9px] font-bold uppercase tracking-wider text-[#64748B] mb-1.5">Historical Notes ({hist.followUps.length})</p>
+                                                      <div className="flex flex-col gap-1.5 max-h-[200px] overflow-y-auto custom-scrollbar pr-1">
+                                                        {hist.followUps.map((f: any) => (
+                                                          <div key={f.id} className={`rounded-lg p-2 border ${isDark ? "bg-[rgba(100,116,139,0.06)] border-[rgba(100,116,139,0.15)]" : "bg-white border-[rgba(100,116,139,0.18)]"}`}>
+                                                            <div className="flex justify-between items-start mb-0.5 gap-2">
+                                                              <span className="text-[10px] font-semibold text-[#64748B]">{f.createdByName || "—"}</span>
+                                                              <span className={`text-[9px] flex-shrink-0 ${t.textFaint}`}>{new Date(f.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>
+                                                            </div>
+                                                            <p className={`text-[10px] leading-relaxed whitespace-pre-wrap ${t.textMuted}`}>{f.message}</p>
+                                                          </div>
+                                                        ))}
+                                                      </div>
+                                                    </div>
+                                                  )}
+
+                                                  {/* Historical Sales Form */}
+                                                  {hist.historicalSalesForm && (
+                                                    <div className={`border-t pt-2 ${t.tableBorder}`}>
+                                                      <p className="text-[9px] font-bold uppercase tracking-wider text-[#64748B] mb-1.5">Sales Form (Historical)</p>
+                                                      <div className={`rounded-lg p-2 border text-[10px] whitespace-pre-wrap leading-relaxed ${isDark ? "bg-[rgba(100,116,139,0.06)] border-[rgba(100,116,139,0.20)] text-gray-300" : "bg-white border-[rgba(100,116,139,0.20)] text-gray-700"}`}>
+                                                        {hist.historicalSalesForm.replace("📝 Detailed Salesform Submitted:\n", "").trim()}
+                                                      </div>
+                                                    </div>
+                                                  )}
+
+                                                  {/* Historical Loan */}
+                                                  {hist.loan?.length > 0 && (
+                                                    <div className={`border-t pt-2 ${t.tableBorder}`}>
+                                                      <p className="text-[9px] font-bold uppercase tracking-wider text-[#64748B] mb-1.5">Loan (Historical)</p>
+                                                      {hist.loan.map((l: any, idx: number) => (
+                                                        <div key={l.id ?? idx} className={`rounded-lg p-2 border text-[10px] mb-1.5 ${isDark ? "bg-[rgba(100,116,139,0.06)] border-[rgba(100,116,139,0.20)]" : "bg-white border-[rgba(100,116,139,0.20)]"}`}>
+                                                          <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
+                                                            <div><span className={`${t.textFaint}`}>Status: </span><span className={`font-semibold ${t.text}`}>{l.status || "—"}</span></div>
+                                                            {l.bankName && <div><span className={`${t.textFaint}`}>Bank: </span><span className={`font-semibold ${t.text}`}>{l.bankName}</span></div>}
+                                                            {l.amountRequested && <div><span className={`${t.textFaint}`}>Requested: </span><span className={`font-semibold ${t.text}`}>₹{Number(l.amountRequested).toLocaleString("en-IN")}</span></div>}
+                                                            {l.cibil && <div><span className={`${t.textFaint}`}>CIBIL: </span><span className={`font-semibold ${t.text}`}>{l.cibil}</span></div>}
+                                                          </div>
+                                                        </div>
+                                                      ))}
+                                                    </div>
+                                                  )}
+
+                                                  {/* Historical Booking */}
+                                                  {hist.booking && (
+                                                    <div className={`border-t pt-2 ${t.tableBorder}`}>
+                                                      <p className="text-[9px] font-bold uppercase tracking-wider text-[#64748B] mb-1.5">Booking (Historical)</p>
+                                                      <div className={`rounded-lg p-2 border text-[10px] ${isDark ? "bg-[rgba(100,116,139,0.06)] border-[rgba(100,116,139,0.20)]" : "bg-white border-[rgba(100,116,139,0.20)]"}`}>
+                                                        <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
+                                                          {hist.booking.bookingNumber && <div><span className={`${t.textFaint}`}>Booking #: </span><span className={`font-semibold ${t.text}`}>{hist.booking.bookingNumber}</span></div>}
+                                                          {hist.booking.bookingStatus && <div><span className={`${t.textFaint}`}>Status: </span><span className={`font-semibold ${t.text}`}>{hist.booking.bookingStatus}</span></div>}
+                                                          {hist.booking.projectName && <div><span className={`${t.textFaint}`}>Project: </span><span className={`font-semibold ${t.text}`}>{hist.booking.projectName}</span></div>}
+                                                          {hist.booking.flatNumber && <div><span className={`${t.textFaint}`}>Flat: </span><span className={`font-semibold ${t.text}`}>{hist.booking.flatNumber}</span></div>}
+                                                        </div>
+                                                      </div>
+                                                    </div>
+                                                  )}
+
+                                                  {(!hist.followUps?.length && !hist.historicalSalesForm && !hist.loan?.length && !hist.booking) && (
+                                                    <p className={`text-[10px] italic text-center ${t.textFaint}`}>No historical data recorded for this visit.</p>
+                                                  )}
+                                                </div>
+                                              );
+                                            })() : !isCurrent ? (
+                                              <p className={`text-[10px] italic text-center ${t.textFaint}`}>No historical detail available.</p>
+                                            ) : null}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
                             </div>
                           )}
                         </div>

@@ -6,6 +6,7 @@ import {
   SearchBar,
   ToolbarButton,
   ToggleSwitch,
+  ColumnSelector,
   SortIcon,
   SkeletonRows,
   EmptyState,
@@ -22,7 +23,7 @@ import {
   FaFileInvoice, FaHandshake, FaUniversity, FaUsers, FaFileAlt,
   FaClock, FaMicrophone, FaWhatsapp, FaCheckCircle,
   FaExchangeAlt, FaUserTie, FaChartPie, FaInfoCircle, FaSyncAlt,
-  FaChevronDown
+  FaChevronDown, FaTable
 } from "react-icons/fa";
 import { FiUser, FiHelpCircle, FiLogOut, FiChevronRight } from "react-icons/fi";
 import { Ghost, AlertTriangle, Menu } from "lucide-react";
@@ -455,6 +456,39 @@ function RpPageHeader({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// COLUMN VISIBILITY — RECEPTIONIST LEADS TABLE
+// ─────────────────────────────────────────────────────────────────────────────
+const RECEP_COLS_KEY = "bd:recep:db:hiddenCols:v1";
+const RECEP_COLUMNS: { key: string; label: string; locked?: boolean }[] = [
+  { key: "lead_no", label: "Lead No.", locked: true },
+  { key: "client_name", label: "Client Name", locked: true },
+  { key: "cp_details", label: "CP Details" },
+  { key: "budget", label: "Budget" },
+  { key: "phone", label: "Phone" },
+  { key: "alt_phone", label: "Alt. Phone" },
+  { key: "date_created", label: "Date Created" },
+  { key: "assigned_to", label: "Assigned to" },
+  { key: "site_visits", label: "Site Visits" },
+  { key: "status", label: "Status" },
+];
+
+const ALL_LEADS_COLS_KEY = "bd:recep:all-leads:hiddenCols:v1";
+const ALL_LEADS_COLUMNS: { key: string; label: string; locked?: boolean }[] = [
+  { key: "lead_no", label: "Lead No.", locked: true },
+  { key: "client_name", label: "Client Name", locked: true },
+  { key: "source", label: "Source" },
+  { key: "cp_name", label: "CP Name" },
+  { key: "cp_company", label: "CP Company" },
+  { key: "cp_phone", label: "CP Phone" },
+  { key: "budget", label: "Budget" },
+  { key: "phone", label: "Phone" },
+  { key: "alt_phone", label: "Alt. Phone" },
+  { key: "date_created", label: "Date Created" },
+  { key: "backdated", label: "Backdated Entry" },
+  { key: "sales_manager", label: "Sales Manager" },
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
 // MAIN DASHBOARD
 // ─────────────────────────────────────────────────────────────────────────────
 export default function ReceptionistDashboard() {
@@ -673,7 +707,7 @@ export default function ReceptionistDashboard() {
   const cpRoutedByPartner = !!(cpLookup?.found && cpLookup?.routable);
 
   // ── Revisit lead detection ──
-  const [matchedLead, setMatchedLead] = useState<null | { id: number; name: string; phone: string; assigned_to: string; created_at: string; lead_classification: string }>(null);
+  const [matchedLead, setMatchedLead] = useState<null | { id: number; name: string; phone: string; assigned_to: string; created_at: string; lead_classification: string; visitCount: number }>(null);
   const [matchType, setMatchType] = useState<"phone" | "name" | null>(null);
   const [isRevisit, setIsRevisit] = useState(false);
   const matchCheckRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -792,6 +826,48 @@ export default function ReceptionistDashboard() {
   const [leadStatusFilter, setLeadStatusFilter] = useState<string>("all");
   const [showLostLeads, setShowLostLeads] = useState<boolean>(true);
   const [showNGDLeads, setShowNGDLeads] = useState<boolean>(true);
+
+  // Column visibility — receptionist leads table
+  const [hiddenRecepCols, setHiddenRecepCols] = useState<Set<string>>(
+    () => new Set<string>()
+  );
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(RECEP_COLS_KEY);
+      if (saved) setHiddenRecepCols(new Set(JSON.parse(saved)));
+    } catch { /* ignore */ }
+  }, []);
+  const persistRecepCols = (next: Set<string>) => {
+    setHiddenRecepCols(next);
+    try { localStorage.setItem(RECEP_COLS_KEY, JSON.stringify([...next])); } catch { /* ignore */ }
+  };
+  const visibleRecepCols = RECEP_COLUMNS.filter(c => c.locked || !hiddenRecepCols.has(c.key));
+  const downloadRecepCSV = (data: any[], filename: string) => {
+    if (!data?.length) return;
+    const headers = Object.keys(data[0]);
+    const rows = data.map((r: any) => headers.map((k: string) => JSON.stringify(r[k] ?? "", null)).join(","));
+    const csv = [headers.join(","), ...rows].join("\r\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
+    a.setAttribute("download", filename);
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  };
+
+  // Column visibility — all leads (overview/front-desk-log) table
+  const [hiddenAllLeadsCols, setHiddenAllLeadsCols] = useState<Set<string>>(
+    () => new Set<string>()
+  );
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(ALL_LEADS_COLS_KEY);
+      if (saved) setHiddenAllLeadsCols(new Set(JSON.parse(saved)));
+    } catch { /* ignore */ }
+  }, []);
+  const persistAllLeadsCols = (next: Set<string>) => {
+    setHiddenAllLeadsCols(next);
+    try { localStorage.setItem(ALL_LEADS_COLS_KEY, JSON.stringify([...next])); } catch { /* ignore */ }
+  };
+  const visibleAllLeadsCols = ALL_LEADS_COLUMNS.filter(c => c.locked || !hiddenAllLeadsCols.has(c.key));
 
   // Centralized Search Logic
   const applySearch = useCallback((leads: any[], query: string, col: string) => {
@@ -1131,7 +1207,7 @@ export default function ReceptionistDashboard() {
         if (!res.ok) return;
         const json = await res.json();
         if (json.matched && json.lead) {
-          setMatchedLead(json.lead);
+          setMatchedLead({ ...json.lead, visitCount: json.visitCount ?? 1 });
           setMatchType(json.matchType ?? null);
         } else {
           setMatchedLead(null);
@@ -2299,6 +2375,38 @@ export default function ReceptionistDashboard() {
                   </div>
 
                   <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto ml-auto">
+                    <ColumnSelector
+                      columns={ALL_LEADS_COLUMNS}
+                      hidden={hiddenAllLeadsCols}
+                      onToggle={key => {
+                        const next = new Set(hiddenAllLeadsCols);
+                        next.has(key) ? next.delete(key) : next.add(key);
+                        persistAllLeadsCols(next);
+                      }}
+                      onReset={() => persistAllLeadsCols(new Set<string>())}
+                      isDark={isDark}
+                    />
+                    <ToolbarButton
+                      onClick={() => downloadRecepCSV(receptionistLeads.map((l: any) => ({
+                        "Lead No.": l.sr_no || l.id,
+                        "Client Name": l.name,
+                        "Source": l.source || "",
+                        "CP Name": l.cp_name || "",
+                        "CP Company": l.cp_company || "",
+                        "CP Phone": l.cp_phone || "",
+                        "Budget": l.salesBudget || l.budget || "",
+                        "Phone": l.phone || "",
+                        "Alt. Phone": l.altPhone || "",
+                        "Date Created": l.date || "",
+                        "Backdated Entry": l.autoDateEnabled === false && l.enquiryDate ? formatDate(l.enquiryDate).split(",")[0] : "",
+                        "Sales Manager": l.assignedTo || "",
+                      })), `all-leads-${new Date().toISOString().slice(0, 10)}.csv`)}
+                      icon={<FaDownload className="text-[11px] sm:text-xs" />}
+                      isDark={isDark}
+                      title="Export CSV"
+                    >
+                      <span className="hidden sm:inline">Export</span>
+                    </ToolbarButton>
                     <ToolbarButton
                       onClick={() => setIsEnquiryModalOpen(true)}
                       isDark={isDark}
@@ -2314,22 +2422,22 @@ export default function ReceptionistDashboard() {
                   <table className="w-full text-left border-collapse whitespace-nowrap">
                     <thead>
                       <tr className={isDark ? "bg-[#2C2C2E]/50" : "bg-gray-50/50"}>
-                        {["Lead No.", "Client Name", "Source", "CP Name", "CP Company", "CP Phone", "Budget", "Phone", "Alt. Phone", "Date Created", "Backdated Entry", "Sales Manager"].map((h, i) => (
+                        {visibleAllLeadsCols.map(col => (
                           <th
-                            key={h}
-                            className={`px-4 py-3.5 text-[11px] font-medium uppercase tracking-wider border-b ${isDark ? "text-gray-400 border-white/10" : "text-gray-500 border-gray-200/60"
-                              } ${h === "Lead No." ? `md:sticky md:left-0 md:z-20 ${isDark ? "md:bg-[#252528]" : "md:bg-[#F9FAFB]"}` :
-                                h === "Client Name" ? `md:sticky md:left-[88px] md:z-20 ${isDark
+                            key={col.key}
+                            className={`px-4 py-3.5 text-[11px] font-medium uppercase tracking-wider border ${isDark ? "text-gray-400 border-white-300/20" : "text-gray-500 border-gray-300/60"
+                              } ${col.key === "lead_no" ? `md:sticky md:left-0 md:z-20 ${isDark ? "md:bg-[#252528]" : "md:bg-[#F9FAFB]"}` :
+                                col.key === "client_name" ? `md:sticky md:left-[88px] md:z-20 ${isDark
                                   ? "md:bg-[#252528] md:shadow-[-1px_0_0_rgba(255,255,255,0.08)_inset]"
                                   : "md:bg-[#F9FAFB] md:shadow-[-1px_0_0_rgba(0,0,0,0.06)_inset]"
                                   }` : ""
                               }`}
                             style={
-                              h === "Lead No." ? { minWidth: '88px', maxWidth: '88px' } :
-                                h === "Client Name" ? { minWidth: '180px', maxWidth: '180px' } : {}
+                              col.key === "lead_no" ? { minWidth: '88px', maxWidth: '88px' } :
+                                col.key === "client_name" ? { minWidth: '180px', maxWidth: '180px' } : {}
                             }
                           >
-                            {h}
+                            {col.label}
                           </th>
                         ))}
                       </tr>
@@ -2337,9 +2445,9 @@ export default function ReceptionistDashboard() {
 
                     <tbody className="divide-y divide-gray-100 dark:divide-white/[0.06]">
                       {isFetchingEnquiries ? (
-                        <SkeletonRows rows={8} cols={12} isDark={isDark} />
+                        <SkeletonRows rows={8} cols={visibleAllLeadsCols.length} isDark={isDark} />
                       ) : receptionistLeads.length === 0 ? (
-                        <tr><td colSpan={12}>
+                        <tr><td colSpan={visibleAllLeadsCols.length}>
                           <EmptyState onReset={() => setSearchRecep("")} hasFilters={!!searchRecep} isDark={isDark} />
                         </td></tr>
                       ) : receptionistLeads.map((enquiry: any) => (
@@ -2365,46 +2473,56 @@ export default function ReceptionistDashboard() {
                               }`}
                             style={{ minWidth: '180px', maxWidth: '180px' }}
                           >
-                            <div className="truncate">{enquiry.name}</div>
+                            <div className="flex flex-col gap-0.5">
+                              <div className="truncate">{enquiry.name}</div>
+                              {enquiry.lead_classification === "RETURNING_LEAD" && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border border-[rgba(5,150,105,0.45)] text-[#059669] bg-[rgba(5,150,105,0.12)] w-fit">
+                                  REVISIT
+                                </span>
+                              )}
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border border-[rgba(100,116,139,0.35)] text-[#64748B] bg-[rgba(100,116,139,0.08)] w-fit">
+                                {(enquiry.visitNumber ?? 1)} {(enquiry.visitNumber ?? 1) === 1 ? "VISIT" : "VISITS"}
+                              </span>
+                            </div>
                           </td>
 
-                          <td className={`px-4 py-4 text-[13px] ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                          {!hiddenAllLeadsCols.has("source") && <td className={`px-4 py-4 text-[13px] ${isDark ? "text-gray-400" : "text-gray-600"}`}>
                             {enquiry.source || <span className="text-[11px] opacity-40">—</span>}
-                          </td>
+                          </td>}
 
-                          <td className={`px-4 py-4 text-[13px] truncate max-w-[120px] ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                          {!hiddenAllLeadsCols.has("cp_name") && <td className={`px-4 py-4 text-[13px] truncate max-w-[120px] ${isDark ? "text-gray-400" : "text-gray-600"}`}>
                             {enquiry.cp_name || <span className="text-[11px] opacity-40">—</span>}
-                          </td>
-                          <td className={`px-4 py-4 text-[13px] truncate max-w-[120px] ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                          </td>}
+                          {!hiddenAllLeadsCols.has("cp_company") && <td className={`px-4 py-4 text-[13px] truncate max-w-[120px] ${isDark ? "text-gray-400" : "text-gray-600"}`}>
                             {enquiry.cp_company || <span className="text-[11px] opacity-40">—</span>}
-                          </td>
-                          <td className={`px-4 py-4 text-[13px] truncate max-w-[120px] ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                          </td>}
+                          {!hiddenAllLeadsCols.has("cp_phone") && <td className={`px-4 py-4 text-[13px] truncate max-w-[120px] ${isDark ? "text-gray-400" : "text-gray-600"}`}>
                             {enquiry.cp_phone || <span className="text-[11px] opacity-40">—</span>}
-                          </td>
+                          </td>}
 
-                          <td className={`px-4 py-4 text-[13px] font-medium tabular-nums tracking-tight ${isDark ? "text-[#32D74B]" : "text-[#28CD41]"}`}>
+                          {!hiddenAllLeadsCols.has("budget") && <td className={`px-4 py-4 text-[13px] font-medium tabular-nums tracking-tight ${isDark ? "text-[#32D74B]" : "text-[#28CD41]"}`}>
                             {enquiry.salesBudget || enquiry.budget}
-                          </td>
+                          </td>}
 
-                          <td className={`px-4 py-4 text-[13px] font-mono tracking-tight ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+                          {!hiddenAllLeadsCols.has("phone") && <td className={`px-4 py-4 text-[13px] font-mono tracking-tight ${isDark ? "text-gray-300" : "text-gray-700"}`}>
                             {maskPhone(enquiry.phone)}
-                          </td>
-                          <td className={`px-4 py-4 text-[13px] font-mono tracking-tight ${isDark ? "text-gray-500" : "text-gray-400"}`}>
+                          </td>}
+                          {!hiddenAllLeadsCols.has("alt_phone") && <td className={`px-4 py-4 text-[13px] font-mono tracking-tight ${isDark ? "text-gray-500" : "text-gray-400"}`}>
                             {maskPhone(enquiry.altPhone)}
-                          </td>
+                          </td>}
 
-                          <td className={`px-4 py-4 text-[12px] min-w-[120px] ${isDark ? "text-gray-500" : "text-gray-400"}`}>
+                          {!hiddenAllLeadsCols.has("date_created") && <td className={`px-4 py-4 text-[12px] min-w-[120px] ${isDark ? "text-gray-500" : "text-gray-400"}`}>
                             {enquiry.date}
-                          </td>
-                          <td className={`px-4 py-4 text-[12px] min-w-[120px] ${isDark ? "text-gray-500" : "text-gray-400"}`}>
+                          </td>}
+                          {!hiddenAllLeadsCols.has("backdated") && <td className={`px-4 py-4 text-[12px] min-w-[120px] ${isDark ? "text-gray-500" : "text-gray-400"}`}>
                             {enquiry.autoDateEnabled === false && enquiry.enquiryDate ? formatDate(enquiry.enquiryDate).split(",")[0] : <span className="opacity-40">—</span>}
-                          </td>
+                          </td>}
 
-                          <td className="px-4 py-4">
+                          {!hiddenAllLeadsCols.has("sales_manager") && <td className="px-4 py-4">
                             <span className={`inline-flex items-center px-2 py-1 rounded-md text-[11px] font-medium ${isDark ? "bg-[#2C2C2E] text-gray-300" : "bg-gray-100 text-gray-700"}`}>
                               {enquiry.assignedTo || "Unassigned"}
                             </span>
-                          </td>
+                          </td>}
                         </tr>
                       ))}
 
@@ -2412,7 +2530,7 @@ export default function ReceptionistDashboard() {
 
                       {!hasMore && !isFetchingEnquiries && receptionistLeads.length > 0 && (
                         <tr>
-                          <td colSpan={12} className={`px-4 py-6 text-center text-[12px] font-medium ${isDark ? "text-gray-500" : "text-gray-400"}`}>
+                          <td colSpan={visibleAllLeadsCols.length} className={`px-4 py-6 text-center text-[12px] font-medium ${isDark ? "text-gray-500" : "text-gray-400"}`}>
                             All {totalCount} records loaded
                           </td>
                         </tr>
@@ -3176,11 +3294,11 @@ export default function ReceptionistDashboard() {
 
               <div className={`rounded-2xl sm:rounded-3xl border overflow-hidden shadow-sm flex flex-col ${t.tableWrap}`} style={t.tableGlass}>
 
-                {/* ── Header Area ── */}
+                {/* ── Header Row 1: Icon + Title + Count | Search | Columns | Export | Refresh ── */}
                 <div className={`px-4 sm:px-6 py-3.5 sm:py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 border-b ${t.tableHead} ${isDark ? "border-white/[0.06]" : "border-indigo-300"}`}>
                   <div className="flex items-center gap-2.5 sm:gap-3 shrink-0 w-full sm:w-auto">
                     <div className={`p-1.5 sm:p-2 rounded-xl ${isDark ? "bg-[#0A84FF]/10" : "bg-[#007AFF]/10"}`}>
-                      <FaUserTie className={`text-[14px] sm:text-lg ${isDark ? "text-[#0A84FF]" : "text-[#00AEEF]"}`} />
+                      <FaTable className={`text-[14px] sm:text-lg ${isDark ? "text-[#0A84FF]" : "text-[#00AEEF]"}`} />
                     </div>
                     <h3 className={`text-[15px] sm:text-lg font-bold tracking-tight ${t.text}`}>Your Leads</h3>
                     <span className={`text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-md tabular-nums tracking-wide ${t.btnClosingBadge}`}>
@@ -3188,8 +3306,43 @@ export default function ReceptionistDashboard() {
                     </span>
                   </div>
 
-                  <div className="w-full sm:max-w-xs sm:ml-auto">
-                    <SearchBar value={searchRecepLeads} onChange={setSearchRecepLeads} isDark={isDark} placeholder="Search leads..." />
+                  <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto sm:ml-auto">
+                    <div className="flex-1 sm:flex-none sm:w-64">
+                      <SearchBar value={searchRecepLeads} onChange={setSearchRecepLeads} isDark={isDark} placeholder="Search leads..." />
+                    </div>
+                    <ColumnSelector
+                      columns={RECEP_COLUMNS}
+                      hidden={hiddenRecepCols}
+                      onToggle={key => {
+                        const next = new Set(hiddenRecepCols);
+                        next.has(key) ? next.delete(key) : next.add(key);
+                        persistRecepCols(next);
+                      }}
+                      onReset={() => persistRecepCols(new Set<string>())}
+                      isDark={isDark}
+                    />
+                    <ToolbarButton
+                      onClick={() => downloadRecepCSV(filteredRecepLeads.map((l: any) => ({
+                        "Lead No.": l.sr_no || l.id,
+                        "Client Name": l.name,
+                        "CP Details": l.cp_company || l.cpCompany || "",
+                        "Budget": l.salesBudget || l.budget || "",
+                        "Phone": l.phone || "",
+                        "Alt. Phone": l.altPhone || "",
+                        "Date Created": l.date || "",
+                        "Assigned to": l.assignedReceptionist || "",
+                        "Site Visits": l.mongoVisitDate || "",
+                        "Status": l.status || "",
+                      })), `leads-${new Date().toISOString().slice(0, 10)}.csv`)}
+                      icon={<FaDownload className="text-[11px] sm:text-xs" />}
+                      isDark={isDark}
+                      title="Export CSV"
+                    >
+                      <span className="hidden sm:inline">Export</span>
+                    </ToolbarButton>
+                    <ToolbarButton onClick={refetchAll} icon={<FaSyncAlt className="text-[11px] sm:text-xs" />} isDark={isDark} title="Refresh leads">
+                      <span className="hidden sm:inline">Refresh</span>
+                    </ToolbarButton>
                   </div>
                 </div>
 
@@ -3232,31 +3385,28 @@ export default function ReceptionistDashboard() {
                   <table className="w-full text-left border-collapse whitespace-nowrap">
                     <thead>
                       <tr className={isDark ? "bg-[#2C2C2E]/30" : "bg-gray-50/50"}>
-                        {/* Removed "Actions" from the headers array */}
-                        {["Lead No.", "Client Name", "CP Details", "Budget", "Phone", "Alt. Phone", "Date Created", "Assigned to", "Site Visits", "Status"].map(h => (
+                        {visibleRecepCols.map(col => (
                           <th
-                            key={h}
-                            className={`px-3 sm:px-4 py-3 sm:py-3.5 crm-eyebrow border-b ${isDark ? "text-gray-400 border-white/10" : "text-gray-500 border-gray-200/60"} ${h === "Lead No." ? `md:sticky md:left-0 md:z-20 ${isDark ? "md:bg-[#252528]" : "md:bg-[#F9FAFB]"}` :
-                              h === "Client Name" ? `md:sticky md:left-[80px] md:min-w-[172px] md:z-20 ${isDark ? "md:bg-[#252528] md:shadow-[-1px_0_0_rgba(255,255,255,0.08)_inset]" : "md:bg-[#F9FAFB] md:shadow-[-1px_0_0_rgba(0,0,0,0.06)_inset]"}` : ""
-                              } ${h === "Status" ? "text-center" : ""}`}
+                            key={col.key}
+                            className={`px-3 sm:px-4 py-3 sm:py-3.5 crm-eyebrow border-b ${isDark ? "text-gray-400 border-white/10" : "text-gray-500 border-gray-200/60"} ${col.key === "lead_no" ? `md:sticky md:left-0 md:z-20 ${isDark ? "md:bg-[#252528]" : "md:bg-[#F9FAFB]"}` :
+                              col.key === "client_name" ? `md:sticky md:left-[80px] md:min-w-[172px] md:z-20 ${isDark ? "md:bg-[#252528] md:shadow-[-1px_0_0_rgba(255,255,255,0.08)_inset]" : "md:bg-[#F9FAFB] md:shadow-[-1px_0_0_rgba(0,0,0,0.06)_inset]"}` : ""
+                              } ${col.key === "status" ? "text-center" : ""}`}
                             style={
-                              h === "Lead No." ? { minWidth: '80px', maxWidth: '80px' } :
-                                h === "Client Name" ? { minWidth: '140px', maxWidth: '140px' } : {}
+                              col.key === "lead_no" ? { minWidth: '80px', maxWidth: '80px' } :
+                                col.key === "client_name" ? { minWidth: '140px', maxWidth: '140px' } : {}
                             }
                           >
-                            {h}
+                            {col.label}
                           </th>
                         ))}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-white/[0.06]">
                       {isFetchingDirectLeads ? (
-                        /* colSpan changed from 11 to 10 */
-                        <SkeletonRows rows={8} cols={10} isDark={isDark} />
+                        <SkeletonRows rows={8} cols={visibleRecepCols.length} isDark={isDark} />
                       ) : filteredRecepLeads.length === 0 ? (
                         <tr>
-                          {/* colSpan changed from 11 to 10 */}
-                          <td colSpan={10}>
+                          <td colSpan={visibleRecepCols.length}>
                             <div className="flex flex-col items-center justify-center py-12 sm:py-16 px-4 sm:px-6 text-center">
                               <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl grid place-items-center mb-3 sm:mb-4 ${isDark ? "bg-white/[0.04] border border-white/10" : "bg-gray-50 border border-gray-200"}`}>
                                 <FaUserTie className="text-xl sm:text-2xl opacity-25" />
@@ -3270,24 +3420,45 @@ export default function ReceptionistDashboard() {
                         const isLost = !!lead.is_lost_lead;
                         const isNGD = lead.status === "NON GENUINE DEMAND (NGD)" || lead.leadStatus === "NON GENUINE DEMAND (NGD)" || lead.leadInterestStatus === "NON GENUINE DEMAND (NGD)";
                         const isReturning = lead.lead_classification === "RETURNING_LEAD";
-                        const rowBgClass = isLost ? (isDark ? "bg-[#1C1C1E] hover:bg-[#232325]" : "bg-slate-50 hover:bg-slate-100") : isNGD ? (isDark ? "bg-[#1a1410] hover:bg-[#211913]" : "bg-orange-50 hover:bg-orange-100") : isReturning ? `${t.rowRevisit} hover:brightness-110` : (isDark ? "hover:bg-white/[0.04]" : "hover:bg-black/[0.02]");
+                        const rowBgClass = (!isLost && !isNGD && !isReturning)
+                          ? (isDark ? "hover:bg-white/[0.045]" : "hover:bg-[#9E217B]/[0.035]")
+                          : "";
 
                         return (
                           <tr
                             key={lead.id}
-                            /* MOVED LOGIC: onClick shifted from action button to the row */
                             onClick={() => { setSelectedLead(lead); setAssignedSubView("detail"); setDetailTab("personal"); setShowSalesForm(false); setShowLoanForm(false); setDetailReturnTab("recep-leads"); setActiveTab("assigned"); }}
                             className={`group cursor-pointer transition-colors duration-200 ${rowBgClass}`}
+                            style={{
+                              ...(isLost ? { opacity: 0.55 } : undefined),
+                              ...(isReturning && !isLost ? { backgroundColor: isDark ? "rgba(5, 150, 105, 0.08)" : "rgba(5, 150, 105, 0.05)" } : undefined),
+                              ...(isNGD && !isReturning && !isLost ? { backgroundColor: isDark ? "rgba(234, 88, 12, 0.08)" : "rgba(234, 88, 12, 0.05)" } : undefined),
+                            }}
                           >
-                            <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-[11px] sm:text-[12px] font-bold tracking-tight md:sticky md:left-0 md:z-10 transition-colors duration-200 ${isLost || isNGD ? "bg-inherit" : (isDark ? "text-gray-400 md:bg-[#1C1C1E] md:group-hover:bg-[#232325]" : "text-gray-500 md:bg-white md:group-hover:bg-[#FDFDFD]")}`} style={{ minWidth: '80px', maxWidth: '80px' }}>
+                            <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-[11px] sm:text-[12px] font-bold tracking-tight md:sticky md:left-0 md:z-10 transition-colors duration-200 ${isLost || isNGD || isReturning ? "bg-inherit" : (isDark ? "text-gray-400 md:bg-[#1C1C1E] md:group-hover:bg-[#232325]" : "text-gray-500 md:bg-white md:group-hover:bg-[#FDFDFD]")}`} style={{ minWidth: '80px', maxWidth: '80px' }}>
                               #{lead.sr_no || lead.id}
                             </td>
 
-                            <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-[13px] sm:text-[14px] font-semibold tracking-tight md:sticky md:left-[80px] md:min-w-[172px] md:z-10 transition-colors duration-200 ${isLost || isNGD ? "bg-inherit md:shadow-[-1px_0_0_rgba(255,255,255,0.04)_inset]" : (isDark ? "text-gray-100 md:bg-[#1C1C1E] md:group-hover:bg-[#232325] md:shadow-[-1px_0_0_rgba(255,255,255,0.08)_inset]" : "text-gray-900 md:bg-white md:group-hover:bg-[#FDFDFD] md:shadow-[-1px_0_0_rgba(0,0,0,0.06)_inset]")}`} style={{ minWidth: '140px', maxWidth: '140px' }}>
-                              <div className="truncate">{lead.name}</div>
+                            <td className={`px-3 sm:px-4 py-3.5 sm:py-4 md:sticky md:left-[80px] md:min-w-[172px] md:z-10 transition-colors duration-200 ${isLost || isNGD || isReturning ? "bg-inherit md:shadow-[-1px_0_0_rgba(255,255,255,0.04)_inset]" : (isDark ? "text-gray-100 md:bg-[#1C1C1E] md:group-hover:bg-[#232325] md:shadow-[-1px_0_0_rgba(255,255,255,0.08)_inset]" : "text-gray-900 md:bg-white md:group-hover:bg-[#FDFDFD] md:shadow-[-1px_0_0_rgba(0,0,0,0.06)_inset]")}`} style={{ minWidth: '140px', maxWidth: '140px' }}>
+                              <div className="flex flex-col gap-0.5">
+                                <span className={`font-bold text-[12px] sm:text-[13px] leading-tight truncate ${isDark ? "text-gray-100" : "text-gray-900"}`}>{lead.name}</span>
+                                {isReturning && (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border border-[rgba(5,150,105,0.45)] text-[#059669] bg-[rgba(5,150,105,0.12)] w-fit">
+                                    REVISIT
+                                  </span>
+                                )}
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border border-[rgba(100,116,139,0.35)] text-[#64748B] bg-[rgba(100,116,139,0.08)] w-fit">
+                                  {(lead.visitNumber ?? 1)} {(lead.visitNumber ?? 1) === 1 ? "VISIT" : "VISITS"}
+                                </span>
+                                {isNGD && !isReturning && (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border border-[rgba(234,88,12,0.45)] text-[#EA580C] bg-[rgba(234,88,12,0.12)] w-fit">
+                                    NGD
+                                  </span>
+                                )}
+                              </div>
                             </td>
 
-                            <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-[12px] sm:text-[13px] ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                            {!hiddenRecepCols.has("cp_details") && <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-[12px] sm:text-[13px] ${isDark ? "text-gray-400" : "text-gray-600"}`}>
                               {(lead.cp_company || lead.cpCompany) ? (
                                 <div className="flex flex-col gap-0.5">
                                   <span className={`font-semibold tracking-tight ${t.text}`}>{lead.cp_company || lead.cpCompany}</span>
@@ -3296,31 +3467,31 @@ export default function ReceptionistDashboard() {
                                   )}
                                 </div>
                               ) : <span className="text-[11px] opacity-40">—</span>}
-                            </td>
+                            </td>}
 
-                            <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-[12px] sm:text-[13px] font-bold tabular-nums tracking-tight ${isDark ? "text-[#32D74B]" : "text-[#28CD41]"}`}>
+                            {!hiddenRecepCols.has("budget") && <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-[12px] sm:text-[13px] font-bold tabular-nums tracking-tight ${isDark ? "text-[#32D74B]" : "text-[#28CD41]"}`}>
                               {lead.salesBudget || lead.budget}
-                            </td>
+                            </td>}
 
-                            <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-[12px] sm:text-[13px] font-mono tracking-tight ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+                            {!hiddenRecepCols.has("phone") && <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-[12px] sm:text-[13px] font-mono tracking-tight ${isDark ? "text-gray-300" : "text-gray-700"}`}>
                               {maskPhone(lead.phone)}
-                            </td>
+                            </td>}
 
-                            <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-[12px] sm:text-[13px] font-mono tracking-tight ${isDark ? "text-gray-500" : "text-gray-400"}`}>
+                            {!hiddenRecepCols.has("alt_phone") && <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-[12px] sm:text-[13px] font-mono tracking-tight ${isDark ? "text-gray-500" : "text-gray-400"}`}>
                               {maskPhone(lead.altPhone)}
-                            </td>
+                            </td>}
 
-                            <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-[11px] sm:text-[12px] font-medium min-w-[110px] sm:min-w-[120px] ${isDark ? "text-gray-500" : "text-gray-400"}`}>
+                            {!hiddenRecepCols.has("date_created") && <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-[11px] sm:text-[12px] font-medium min-w-[110px] sm:min-w-[120px] ${isDark ? "text-gray-500" : "text-gray-400"}`}>
                               {lead.date}
-                            </td>
+                            </td>}
 
-                            <td className="px-3 sm:px-4 py-3.5 sm:py-4">
+                            {!hiddenRecepCols.has("assigned_to") && <td className="px-3 sm:px-4 py-3.5 sm:py-4">
                               <span className={`inline-flex items-center px-2 py-1 sm:py-1.5 rounded-md text-[10px] sm:text-[11px] font-bold tracking-wide ${isDark ? "bg-purple-500/10 text-purple-400 border border-purple-500/30" : "bg-[#9E217B]/10 text-[#9E217B] border border-[#9E217B]/30"}`}>
                                 {lead.assignedReceptionist || user.name}
                               </span>
-                            </td>
+                            </td>}
 
-                            <td className="px-3 sm:px-4 py-3.5 sm:py-4">
+                            {!hiddenRecepCols.has("site_visits") && <td className="px-3 sm:px-4 py-3.5 sm:py-4">
                               {lead.mongoVisitDate ? (
                                 <span className="text-orange-500 font-semibold text-[11px] sm:text-[12px] whitespace-nowrap">
                                   {formatDate(lead.mongoVisitDate).split(",")[0]}
@@ -3328,9 +3499,9 @@ export default function ReceptionistDashboard() {
                               ) : (
                                 <span className="text-[10px] sm:text-[11px] opacity-40 font-medium">Pending</span>
                               )}
-                            </td>
+                            </td>}
 
-                            <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-center`}>
+                            {!hiddenRecepCols.has("status") && <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-center`}>
                               {lead.is_lost_lead ? (
                                 <span className={`inline-flex items-center gap-1.5 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-md text-[9px] sm:text-[10px] font-bold uppercase tracking-wider border ${t.statusLost}`}>
                                   <Ghost className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> Lost
@@ -3339,16 +3510,12 @@ export default function ReceptionistDashboard() {
                                 <span className={`inline-flex items-center gap-1.5 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-md text-[9px] sm:text-[10px] font-bold uppercase tracking-wider border ${t.statusNGD}`}>
                                   NGD
                                 </span>
-                              ) : isReturning ? (
-                                <span className={`inline-flex items-center gap-1.5 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-md text-[9px] sm:text-[10px] font-bold uppercase tracking-wider border ${t.statusRevisit}`}>
-                                  REVISIT
-                                </span>
                               ) : (
                                 <span className={`inline-flex items-center gap-1.5 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-md text-[9px] sm:text-[10px] font-bold uppercase tracking-wider border ${getStatusStyle(lead.status)}`}>
                                   {lead.status || "Assigned"}
                                 </span>
                               )}
-                            </td>
+                            </td>}
 
                             {/* Removed the Actions <td> entirely */}
                           </tr>
@@ -3428,7 +3595,7 @@ export default function ReceptionistDashboard() {
                             {["Lead No.", "Client Name", "Budget", "Property", "Status", "Assigned To", "Site Visit", "Closing Date"].map(h => (
                               <th
                                 key={h}
-                                className={`px-3 sm:px-4 py-3 sm:py-3.5 crm-eyebrow border-b ${isDark ? "text-gray-400 border-white/10" : "text-gray-500 border-gray-200/60"} ${h === "Lead No." ? `md:sticky md:left-0 md:z-20 ${isDark ? "md:bg-[#252528]" : "md:bg-[#F9FAFB]"}` :
+                                className={`px-3 sm:px-4 py-3 sm:py-3.5 crm-eyebrow border ${isDark ? "text-gray-400 border-white/10" : "text-gray-500 border-gray-300/60"} ${h === "Lead No." ? `md:sticky md:left-0 md:z-20 ${isDark ? "md:bg-[#252528]" : "md:bg-[#F9FAFB]"}` :
                                   h === "Client Name" ? `md:sticky md:left-[80px] sm:md:left-[96px] md:z-20 ${isDark ? "md:bg-[#252528] md:shadow-[-1px_0_0_rgba(255,255,255,0.08)_inset]" : "md:bg-[#F9FAFB] md:shadow-[-1px_0_0_rgba(0,0,0,0.06)_inset]"}` : ""
                                   } ${h === "Status" ? "text-center" : ""}`}
                                 style={
@@ -3450,7 +3617,7 @@ export default function ReceptionistDashboard() {
                               {/* colSpan changed from 9 to 8 */}
                               <td colSpan={8}>
                                 <div className="flex flex-col items-center justify-center py-12 sm:py-16 px-4 sm:px-6 text-center">
-                                  <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl grid place-items-center mb-3 sm:mb-4 ${isDark ? "bg-white/[0.04] border border-white/10" : "bg-gray-50 border border-gray-200"}`}>
+                                  <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl grid place-items-center mb-3 sm:mb-4 ${isDark ? "bg-white/[0.04] border border-white/10" : "bg-gray-50 border border-gray-300/60"}`}>
                                     <FaHandshake className="text-xl sm:text-2xl opacity-25" />
                                   </div>
                                   <p className="text-[14px] sm:text-[15px] font-bold mb-1 tracking-tight">No closed leads yet</p>
@@ -4360,6 +4527,11 @@ export default function ReceptionistDashboard() {
                       <div><span className="font-medium">Phone:</span> {matchedLead.phone}</div>
                       <div><span className="font-medium">Last enquiry:</span> {new Date(matchedLead.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</div>
                       <div><span className="font-medium">Previously assigned to:</span> {matchedLead.assigned_to || "—"}</div>
+                    </div>
+                    <div className="mt-2">
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border border-[rgba(100,116,139,0.35)] text-[#64748B] bg-[rgba(100,116,139,0.08)] w-fit">
+                        {matchedLead.visitCount ?? 1} {(matchedLead.visitCount ?? 1) === 1 ? "VISIT" : "VISITS"}
+                      </span>
                     </div>
                     {matchType === "name" && (
                       <p className={`mt-2 text-[11px] ${isDark ? "text-amber-400" : "text-amber-600"}`}>

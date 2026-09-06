@@ -10,6 +10,7 @@ import { notifyCpLeadAssigned } from "@/services/whatsapp.service";
 import { jsonCompressed } from "@/lib/apiResponse";
 import { resolvePhones } from "@/lib/phoneAccess";
 import { broadcastToOrg } from "@/lib/supabase/broadcast";
+import { batchGetVisitDepths } from "@/lib/visitChain";
 
 export const dynamic = "force-dynamic";
 
@@ -180,9 +181,17 @@ export async function GET(req: Request) {
       ["phone", "alt_phone"]
     );
 
+    // Attach visitNumber to every row — single batch CTE, no N+1.
+    const leadIds = rows.map((r: any) => r.id as number);
+    const visitDepths = await batchGetVisitDepths(leadIds, listOrgId);
+    const rowsWithVisits = maskedRows.map((r: any) => ({
+      ...r,
+      visitNumber: visitDepths.get(r.id) ?? 1,
+    }));
+
     // Compressed: the admin dashboard requests limit=10000 here, which is ~13 MB
     // of highly repetitive JSON (60 identical keys per row) and gzips ~35×.
-    return jsonCompressed(req, { success: true, data: maskedRows, total }, { status: 200 });
+    return jsonCompressed(req, { success: true, data: rowsWithVisits, total }, { status: 200 });
   } catch (error: any) {
     console.error("GET Enquiries Error:", error);
     return NextResponse.json({ success: false, message: error.message }, { status: 500 });

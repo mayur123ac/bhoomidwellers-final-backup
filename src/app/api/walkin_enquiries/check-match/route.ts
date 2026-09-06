@@ -15,6 +15,7 @@ import { query } from "@/lib/db";
 import { getOrganizationId } from "@/lib/tenantContext";
 import { requireSession } from "@/lib/serverAuth";
 import { resolvePhone } from "@/lib/phoneAccess";
+import { batchGetVisitDepths } from "@/lib/visitChain";
 
 export const dynamic = "force-dynamic";
 
@@ -94,7 +95,7 @@ export async function GET(req: Request) {
     }
 
     if (!matchedRow) {
-      return NextResponse.json({ success: true, matched: false, matchType: null, lead: null, age_hours: null });
+      return NextResponse.json({ success: true, matched: false, matchType: null, lead: null, age_hours: null, visitCount: null });
     }
 
     const actor = {
@@ -108,12 +109,18 @@ export async function GET(req: Request) {
 
     const ageHours = Math.floor(Number(matchedRow.seconds_ago) / 3600);
 
+    // Compute the visit count for the matched lead — count only.
+    // No historical lead data, no phone fields from other visits.
+    const depthMap = await batchGetVisitDepths([matchedRow.id], orgId);
+    const visitCount = depthMap.get(matchedRow.id) ?? 1;
+
     return NextResponse.json({
       success: true,
       matched: true,
       // "phone" = definite match on normalized last-10-digit phone.
       // "name"  = possible match by name ILIKE — requires explicit confirmation.
       matchType,
+      visitCount,
       lead: {
         id: matchedRow.id,
         name: matchedRow.name,

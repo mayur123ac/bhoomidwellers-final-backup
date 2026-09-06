@@ -7,8 +7,9 @@
 // Authorization (strict):
 //   ALLOW if session role is admin or site head.
 //   ALLOW if session.name === new_revisit_lead.assigned_to (current SM).
+//   ALLOW if session.name === new_revisit_lead.assigned_receptionist (current receptionist).
 //   DENY  everyone else, including:
-//     - Receptionists
+//     - Unrelated Receptionists
 //     - Sourcing Managers
 //     - Previous Sales Manager (old ownership alone is not a credential here)
 //     - Unrelated Sales Managers
@@ -49,7 +50,7 @@ export async function GET(
 
     // Fetch the current (revisit) lead — tenant-scoped.
     const currentRows = await query(
-      `SELECT id, returning_from_lead_id, created_at, lead_classification, assigned_to
+      `SELECT id, returning_from_lead_id, created_at, lead_classification, assigned_to, assigned_receptionist
        FROM walkin_enquiries
        WHERE id = $1 AND organization_id = $2
        LIMIT 1`,
@@ -71,8 +72,9 @@ export async function GET(
     const isAdmin = role === "admin";
     const isSiteHead = role === "site head";
     const isAssignedSM = session.name === current.assigned_to;
+    const isAssignedReceptionist = session.name === current.assigned_receptionist;
 
-    if (!isAdmin && !isSiteHead && !isAssignedSM) {
+    if (!isAdmin && !isSiteHead && !isAssignedSM && !isAssignedReceptionist) {
       return NextResponse.json(
         { success: false, message: "You are not authorized to view this lead's historical data." },
         { status: 403 }

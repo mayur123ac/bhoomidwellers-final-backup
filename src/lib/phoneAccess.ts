@@ -279,14 +279,13 @@ function ownsRecordCpLinkedLead(
       );
     }
     case "site_head": {
-      const overseeing = ((record.overseeing_site_head as string) ?? "")
-        .trim()
-        .toLowerCase();
-      return (
-        !!actorName &&
-        !!overseeing &&
-        overseeing === actorName.trim().toLowerCase()
-      );
+      const norm = (v: unknown) => ((v as string) ?? "").trim().toLowerCase();
+      const actor = actorName ? actorName.trim().toLowerCase() : "";
+      if (!actor) return false;
+      const overseeing = norm(record.overseeing_site_head);
+      const assignedTo = norm(record.assigned_to);
+      return (!!overseeing && overseeing === actor) ||
+             (!!assignedTo && assignedTo === actor);
     }
   }
 }
@@ -296,9 +295,9 @@ function ownsRecordCpLinkedLead(
 // Lead assignment is name-based (legacy string columns), NOT id-based.
 // The authoritative fields are from the database row — never from client input.
 //
-//   assigned_to          → the Sales Manager's name
+//   assigned_to          → the primary handler's name (Sales Manager OR Site Head)
 //   assigned_receptionist → the Receptionist's name
-//   overseeing_site_head  → the Site Head's name
+//   overseeing_site_head  → the Site Head's name (oversight/supervision role)
 //
 // Sourcing Manager has no per-lead assignment column in walkin_enquiries.
 // Their access is governed entirely by the role policy toggle.
@@ -323,8 +322,12 @@ function ownsLeadRecord(
       return !!assigned && assigned === actor;
     }
     case "site_head": {
+      // A Site Head can be the direct handler (assigned_to) OR the overseer
+      // (overseeing_site_head). Either relationship grants ownership.
       const overseeing = normalize(record.overseeing_site_head);
-      return !!overseeing && overseeing === actor;
+      const assignedTo = normalize(record.assigned_to);
+      return (!!overseeing && overseeing === actor) ||
+             (!!assignedTo && assignedTo === actor);
     }
     case "sourcing_manager":
       // No per-lead assignment for Sourcing Managers in walkin_enquiries.

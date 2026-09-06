@@ -329,6 +329,9 @@ const COLUMNS: Column[] = [
                         REVISIT
                     </span>
                 )}
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border border-[rgba(100,116,139,0.35)] text-[#64748B] bg-[rgba(100,116,139,0.08)] w-fit">
+                    {(l.visitNumber ?? 1)} {(l.visitNumber ?? 1) === 1 ? "VISIT" : "VISITS"}
+                </span>
             </div>
         ),
     },
