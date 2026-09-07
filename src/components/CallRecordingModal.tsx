@@ -129,16 +129,18 @@ export default function CallRecordingModal({
 
   // -- Step 1: Detect call from CallLog with retry for delayed availability --
   const detectCall = useCallback(async () => {
+    console.log("[BD-CALL] detectCall: sessionId=%s phone=%s startedAt=%s", callSessionId, phoneNumber, callStartedAt);
     setStep("DETECTING_CALL");
     setError(null);
     patchStatus(callSessionId, "calling");
 
     try {
       const perms = await CallRecordingPlugin.checkPermissions();
+      console.log("[BD-CALL] CALL_LOG_PERM check:", perms.callLog);
       if (perms.callLog !== "granted") {
         const requested = await CallRecordingPlugin.requestPermissions();
+        console.log("[BD-CALL] CALL_LOG_PERM requested:", requested.callLog);
         if (requested.callLog !== "granted") {
-          // Permission denied — show info if permanently denied, else skip
           if (requested.callLog === "denied") {
             setPermissionInfo({
               which: "Call Log",
@@ -147,17 +149,20 @@ export default function CallRecordingModal({
           }
           if (mounted.current) {
             patchStatus(callSessionId, "recording_pending");
+            console.log("[BD-CALL] MODAL_STEP → SEARCHING_RECORDINGS (callLog perm denied, skipping)");
             setStep("SEARCHING_RECORDINGS");
           }
           return;
         }
       }
 
+      console.log("[BD-CALL] CALL_LOG_QUERY phone=%s after=%s", phoneNumber, callStartedAt - 5000);
       const result = await CallRecordingPlugin.getRecentCalls({
         phoneNumber,
         afterTimestamp: callStartedAt - 5000,
         limit: 5,
       });
+      console.log("[BD-CALL] CALL_LOG_RESULT count=%d entries=%o", result.calls.length, result.calls);
 
       if (!mounted.current) return;
 
@@ -166,7 +171,6 @@ export default function CallRecordingModal({
         const match = outgoing || result.calls[0];
         setCallLog(match);
 
-        // Sync call log metadata to server
         patchStatus(
           callSessionId,
           match.type === "MISSED" || match.type === "REJECTED" || match.duration === 0
@@ -179,31 +183,29 @@ export default function CallRecordingModal({
           }
         );
 
-        // Missed / rejected / zero-duration: no recording to find
         if (match.type === "MISSED" || match.type === "REJECTED" || match.duration === 0) {
+          console.log("[BD-CALL] MODAL_STEP → NOT_DETECTED (call was %s, duration=%d)", match.type, match.duration);
           setStep("NOT_DETECTED");
           return;
         }
 
+        console.log("[BD-CALL] MODAL_STEP → SEARCHING_RECORDINGS (call found, type=%s dur=%d)", match.type, match.duration);
         setStep("SEARCHING_RECORDINGS");
       } else if (retryCount.current < CALL_LOG_MAX_RETRIES) {
-        // Call log entry may not be available yet — Android can be slow to
-        // write it. Wait and retry.
         const delay = CALL_LOG_RETRY_DELAYS[retryCount.current] || 4000;
         retryCount.current++;
+        console.log("[BD-CALL] CALL_LOG_RESULT: empty, retrying (%d/%d) in %dms", retryCount.current, CALL_LOG_MAX_RETRIES, delay);
         setTimeout(() => {
           if (mounted.current) detectCall();
         }, delay);
       } else {
-        // Exhausted retries — no matching call found in log at all.
-        // The call may have been cancelled before it connected, or the
-        // call log takes unusually long. Proceed to recording search.
+        console.log("[BD-CALL] CALL_LOG_RESULT: empty after all retries → SEARCHING_RECORDINGS");
         patchStatus(callSessionId, "recording_pending");
         setStep("SEARCHING_RECORDINGS");
       }
     } catch (err: any) {
       if (!mounted.current) return;
-      console.error("Call detection error:", err);
+      console.error("[BD-CALL] detectCall error:", err);
       patchStatus(callSessionId, "recording_pending");
       setStep("SEARCHING_RECORDINGS");
     }
@@ -211,21 +213,28 @@ export default function CallRecordingModal({
 
   // -- Step 2: Search for recordings --
   const searchRecordings = useCallback(async () => {
+    console.log("[BD-CALL] RECORDING_QUERY phone=%s after=%s", phoneNumber, callStartedAt - 5000);
     setError(null);
     try {
       const perms = await CallRecordingPlugin.checkPermissions();
+      console.log("[BD-CALL] AUDIO_PERM check:", perms.audio);
       if (perms.audio !== "granted") {
         const requested = await CallRecordingPlugin.requestPermissions();
+        console.log("[BD-CALL] AUDIO_PERM requested:", requested.audio);
         if (requested.audio !== "granted") {
           if (requested.audio === "denied") {
             setPermissionInfo({
               which: "Audio Files",
               why: "The CRM needs access to audio files to find call recordings on your device. You can also use the manual file picker instead.",
             });
+            console.log("[BD-CALL] MODAL_STEP → PERMISSION_DENIED (audio)");
             setStep("PERMISSION_DENIED");
             return;
           }
-          if (mounted.current) setStep("NOT_DETECTED");
+          if (mounted.current) {
+            console.log("[BD-CALL] MODAL_STEP → NOT_DETECTED (audio perm not granted)");
+            setStep("NOT_DETECTED");
+          }
           return;
         }
       }
@@ -234,38 +243,44 @@ export default function CallRecordingModal({
         afterTimestamp: callStartedAt - 5000,
         phoneNumber,
       });
+      console.log("[BD-CALL] RECORDING_RESULT count=%d", result.recordings.length, result.recordings);
 
       if (!mounted.current) return;
 
       if (result.recordings.length === 0) {
+        console.log("[BD-CALL] MODAL_STEP → NOT_DETECTED (no recordings found)");
         setStep("NOT_DETECTED");
         return;
       }
 
-      // Score each recording for match confidence
       const scored = result.recordings
         .map((rec) => ({ rec, score: scoreRecording(rec, callLog, callStartedAt) }))
         .sort((a, b) => b.score - a.score);
 
       const topScore = scored[0].score;
+      console.log("[BD-CALL] SCORING: top=%d count=%d scores=%o", topScore, scored.length,
+        scored.map((s) => ({ name: s.rec.name, score: s.score })));
 
       if (scored.length === 1 && topScore >= HIGH_CONFIDENCE_THRESHOLD) {
         setRecordings([scored[0].rec]);
         setSelectedRecording(scored[0].rec);
         patchStatus(callSessionId, "recording_detected");
+        console.log("[BD-CALL] MODAL_STEP → RECORDING_DETECTED (single high-confidence)");
         setStep("RECORDING_DETECTED");
       } else if (scored.length > 1) {
         setRecordings(scored.map((s) => s.rec));
         setSelectedRecording(null);
+        console.log("[BD-CALL] MODAL_STEP → MULTIPLE_RECORDINGS");
         setStep("MULTIPLE_RECORDINGS");
       } else {
         setRecordings(scored.map((s) => s.rec));
         setSelectedRecording(null);
+        console.log("[BD-CALL] MODAL_STEP → NOT_DETECTED (low confidence, score=%d)", topScore);
         setStep("NOT_DETECTED");
       }
     } catch (err: any) {
       if (!mounted.current) return;
-      console.error("Recording search error:", err);
+      console.error("[BD-CALL] RECORDING_QUERY error:", err);
       setStep("NOT_DETECTED");
     }
   }, [callStartedAt, phoneNumber, callLog, callSessionId]);

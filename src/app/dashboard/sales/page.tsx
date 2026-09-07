@@ -3448,7 +3448,7 @@ function SalesManagerView({
                               </span>
                             </div>
                             {msg.followUpType === "call" ? (
-                              <ManualCallBubble message={msg.message} createdAt={msg.createdAt} textClass={t.textMuted} />
+                              <ManualCallBubble message={msg.message} createdAt={msg.createdAt} textClass={t.textMuted} onRecordingDeleted={refetch} />
                             ) : (
                               <p className={`text-xs sm:text-sm whitespace-pre-wrap leading-relaxed break-words ${t.textMuted}`}>{msg.message}</p>
                             )}

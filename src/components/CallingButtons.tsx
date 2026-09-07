@@ -67,11 +67,12 @@ export default function CallingButtons({
   // the dialer was opened, so it's still available.
   useEffect(() => {
     if (!isAndroidApp()) return;
+    console.log("[BD-CALL] mount effect: checking localStorage for pending session, leadId=%s callerLeadId=%s", leadId, callerLeadId);
     const stored = loadPendingSession();
     if (stored) {
-      // Only recover if the session belongs to this lead/callerLead
       const matchesLead = (leadId && stored.leadId === leadId) ||
         (callerLeadId && stored.callerLeadId === callerLeadId);
+      console.log("[BD-CALL] PENDING_SESSION_FOUND stored=%o matchesLead=%s", stored, matchesLead);
       if (matchesLead) {
         const session: CallSessionResult = {
           callSessionId: stored.callSessionId,
@@ -80,23 +81,48 @@ export default function CallingButtons({
         };
         pendingRef.current = session;
         setPendingCallSession(session);
+        console.log("[BD-CALL] MODAL_OPENED (from localStorage recovery)");
       }
     }
   }, [leadId, callerLeadId]);
 
-  // Listen for app returning from dialer (Android only)
+  // Listen for app returning from dialer (Android only).
+  // Uses both Capacitor App plugin AND native document 'resume' event
+  // as a fallback — the document event is fired by the Capacitor bridge
+  // itself, independent of the @capacitor/app plugin.
   useEffect(() => {
     if (!isAndroidApp()) return;
-    let cleanup: (() => void) | undefined;
+    console.log("[BD-CALL] registering resume listeners");
+
+    const onResume = () => {
+      console.log("[BD-CALL] APP_RESUMED pendingRef=%o", pendingRef.current);
+      if (pendingRef.current) {
+        setPendingCallSession({ ...pendingRef.current });
+        console.log("[BD-CALL] MODAL_OPENED (from resume event)");
+      }
+    };
+
+    // Primary: Capacitor App plugin
+    let pluginCleanup: (() => void) | undefined;
     import("@capacitor/app").then(({ App }) => {
+      console.log("[BD-CALL] @capacitor/app loaded, adding appStateChange listener");
       const listener = App.addListener("appStateChange", ({ isActive }) => {
-        if (isActive && pendingRef.current) {
-          setPendingCallSession({ ...pendingRef.current });
-        }
+        console.log("[BD-CALL] appStateChange isActive=%s", isActive);
+        if (isActive) onResume();
       });
-      cleanup = () => { listener.then((h) => h.remove()); };
+      pluginCleanup = () => { listener.then((h) => h.remove()); };
+    }).catch((err) => {
+      console.error("[BD-CALL] @capacitor/app import FAILED", err);
     });
-    return () => { cleanup?.(); };
+
+    // Fallback: Capacitor bridge fires 'resume' on document directly
+    document.addEventListener("resume", onResume);
+    console.log("[BD-CALL] document 'resume' listener registered");
+
+    return () => {
+      pluginCleanup?.();
+      document.removeEventListener("resume", onResume);
+    };
   }, []);
 
   const notify = useCallback((kind: "ok" | "error", message: string) => {
@@ -128,6 +154,7 @@ export default function CallingButtons({
 
   const runManual = async () => {
     if (manualDisabled) return;
+    console.log("[BD-CALL] runManual: mode=%s leadId=%s callerLeadId=%s phone=%s", manualCallingMode, leadId, callerLeadId, phone);
     setBusy("manual");
     try {
       const result = await placeManualCall({
@@ -136,11 +163,16 @@ export default function CallingButtons({
         phone,
         mode: manualCallingMode,
       });
+      console.log("[BD-CALL] placeManualCall returned:", result);
       if (result?.message) notify("ok", result.message);
       if (result?.callSession && isAndroidApp()) {
         pendingRef.current = result.callSession;
+        console.log("[BD-CALL] pendingRef set to", result.callSession);
+      } else {
+        console.log("[BD-CALL] NO callSession in result — modal will NOT appear");
       }
     } catch (err: any) {
+      console.error("[BD-CALL] runManual error:", err);
       notify("error", err?.message || "The call could not be placed.");
     } finally {
       setBusy(null);

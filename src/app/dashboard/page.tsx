@@ -4373,7 +4373,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                                     </span>
                                   </div>
                                   {msg.followUpType === "call" ? (
-                                    <ManualCallBubble message={msg.message} createdAt={msg.createdAt} textClass={theme.textMuted} />
+                                    <ManualCallBubble message={msg.message} createdAt={msg.createdAt} textClass={theme.textMuted} onRecordingDeleted={refetch} />
                                   ) : (
                                     <p className={`text-sm whitespace-pre-wrap leading-relaxed ${theme.textMuted}`}>{msg.message}</p>
                                   )}
@@ -5810,7 +5810,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                                     </span>
                                   </div>
                                   {msg.followUpType === "call" ? (
-                                    <ManualCallBubble message={msg.message} createdAt={msg.createdAt} textClass={theme.textMuted} />
+                                    <ManualCallBubble message={msg.message} createdAt={msg.createdAt} textClass={theme.textMuted} onRecordingDeleted={refetch} />
                                   ) : (
                                     <p className={`text-xs sm:text-sm whitespace-pre-wrap leading-relaxed ${theme.textMuted}`}>{msg.message}</p>
                                   )}
@@ -7416,7 +7416,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                                       </span>
                                     </div>
                                     {msg.followUpType === "call" ? (
-                                      <ManualCallBubble message={msg.message} createdAt={msg.createdAt} textClass={theme.text} />
+                                      <ManualCallBubble message={msg.message} createdAt={msg.createdAt} textClass={theme.text} onRecordingDeleted={refetch} />
                                     ) : (
                                       <p className={`text-xs sm:text-sm whitespace-pre-wrap leading-relaxed ${theme.text}`}>{msg.message}</p>
                                     )}

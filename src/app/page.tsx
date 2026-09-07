@@ -372,8 +372,8 @@ export default function Login() {
           >
             <img
               style={{
-                width: "100%",
-                height: "100%",
+                width: "70%",
+                height: "auto",
                 objectFit: "contain",
               }}
               src="/assets/logobrowser_trans.png"
