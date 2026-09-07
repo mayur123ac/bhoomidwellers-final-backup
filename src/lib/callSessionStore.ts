@@ -17,23 +17,29 @@ export interface PendingCallSession {
 export function savePendingSession(session: PendingCallSession): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
-  } catch {
-    // localStorage full or unavailable — non-fatal
+    console.log("[BD-CALL] SESSION_SAVED", session);
+  } catch (e) {
+    console.error("[BD-CALL] SESSION_SAVE_FAILED", e);
   }
 }
 
 export function loadPendingSession(): PendingCallSession | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
+    if (!raw) {
+      console.log("[BD-CALL] LOAD_PENDING: nothing in localStorage");
+      return null;
+    }
     const parsed = JSON.parse(raw);
-    // Sanity: discard sessions older than 1 hour (stale)
     if (Date.now() - parsed.callStartedAt > 3_600_000) {
+      console.log("[BD-CALL] LOAD_PENDING: expired, discarding");
       clearPendingSession();
       return null;
     }
+    console.log("[BD-CALL] LOAD_PENDING: found", parsed);
     return parsed;
-  } catch {
+  } catch (e) {
+    console.error("[BD-CALL] LOAD_PENDING: parse error", e);
     return null;
   }
 }

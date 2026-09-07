@@ -77,12 +77,14 @@ export async function placeManualCall(
     throw new Error("No phone number on record.");
   }
 
-  // Only create a server-side call session on Android — that's the only
-  // platform where we can read the call log and find recordings afterwards.
-  // On desktop/web, opening `tel:` is a fire-and-forget hand-off with no
-  // session to reconcile, so creating one would leave orphaned rows.
+  console.log("[BD-CALL] CALL_STARTED", { digits, mode: target.mode, leadId: target.leadId, callerLeadId: target.callerLeadId });
+
+  const android = isAndroidApp();
+  const hasId = !!(target.leadId || target.callerLeadId);
+  console.log("[BD-CALL] session guard: android=%s, hasId=%s", android, hasId);
+
   let callSession: CallSessionResult | undefined;
-  if (isAndroidApp() && (target.leadId || target.callerLeadId)) {
+  if (android && hasId) {
     try {
       const res = await fetch("/api/call-sessions", {
         method: "POST",
@@ -93,27 +95,25 @@ export async function placeManualCall(
         }),
       });
       const json = await res.json().catch(() => null);
+      console.log("[BD-CALL] POST /api/call-sessions →", res.status, json);
       if (res.ok && json?.success) {
         callSession = {
           callSessionId: json.callSessionId,
           phoneNumber: json.phoneNumber,
           callStartedAt: Date.now(),
         };
-        // Persist to localStorage so the session survives app kill/restart.
         savePendingSession({
           ...callSession,
           leadId: target.leadId,
           callerLeadId: target.callerLeadId,
         });
       }
-    } catch {
-      // Non-fatal — the call can still proceed without session tracking
+    } catch (e) {
+      console.error("[BD-CALL] session creation failed (non-fatal)", e);
     }
   }
 
-  // location.href rather than window.open: a `tel:` handed to open() leaves an
-  // orphaned blank tab behind on desktop browsers that have no handler for the
-  // scheme, and does nothing useful on those that do.
+  console.log("[BD-CALL] opening tel:", digits, "callSession=", callSession ? callSession.callSessionId : "none");
   window.location.href = `tel:${digits}`;
   return callSession ? { callSession } : null;
 }
