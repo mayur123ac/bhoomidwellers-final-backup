@@ -686,7 +686,7 @@ export default function ReceptionistDashboard() {
   const [enquiryForm, setEnquiryForm] = useState({
     fullName: "", mobile: "", altMobile: "", email: "", address: "", pinCode: "", city: "",
     occupation: "", organization: "", budget: "", configuration: "",
-    purpose: "", source: "", assignedTo: "", loanPlanned: "", sourceOther: "", referralName: "",
+    purpose: "", source: "", assignedTo: "", loanPlanned: "", sourceOther: "", referralName: "", budget: "", budgetUnit: "lakh"
     cpDetails: { name: "", company: "", phone: "" },
     sourcingManagerId: "",   // users.id of the assigned Sourcing Manager (CP enquiries only)
     preferredLocation: "",
@@ -4211,15 +4211,93 @@ export default function ReceptionistDashboard() {
                   <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-6">
 
                     <div>
-                      <label className={`block text-[12px] mb-2 font-semibold uppercase tracking-wider ${isDark ? "text-gray-400" : "text-gray-500"}`}>Budget *</label>
-                      <input
-                        type="text" required
-                        value={enquiryForm.budget}
-                        onChange={e => setEnquiryForm({ ...enquiryForm, budget: e.target.value })}
-                        className={`w-full rounded-xl px-4 py-3.5 text-[15px] outline-none transition-all border ${isDark ? "bg-[#242424] border-gray-700 text-white focus:border-[#C5A059]" : "bg-gray-50 border-gray-200 text-gray-900 focus:border-[#18392B] focus:bg-white"
-                          } focus:ring-1 focus:ring-[#C5A059]`}
-                        placeholder="e.g. 80 Lakhs, 1.5 Cr"
-                      />
+                      <label
+                        className={`block text-[12px] mb-2 font-semibold uppercase tracking-wider ${isDark ? "text-gray-400" : "text-gray-500"
+                          }`}
+                      >
+                        Budget *
+                      </label>
+
+                      <div
+                        className={`flex items-stretch w-full rounded-2xl border overflow-hidden transition-all duration-200 ${isDark
+                          ? "bg-[#242424] border-gray-700 focus-within:border-[#C5A059]"
+                          : "bg-gray-50 border-gray-200 focus-within:border-[#18392B] focus-within:bg-white"
+                          } focus-within:ring-1 focus-within:ring-[#C5A059]`}
+                      >
+                        {/* Currency */}
+                        <div
+                          className={`flex items-center pl-4 pr-2 text-[15px] font-medium ${isDark ? "text-gray-400" : "text-gray-500"
+                            }`}
+                        >
+                          ₹
+                        </div>
+
+                        {/* Amount */}
+                        <input
+                          type="number"
+                          required
+                          min="0"
+                          step="0.01"
+                          inputMode="decimal"
+                          value={enquiryForm.budget}
+                          onChange={(e) =>
+                            setEnquiryForm({
+                              ...enquiryForm,
+                              budget: e.target.value,
+                            })
+                          }
+                          className={`flex-1 min-w-0 px-2 py-3.5 text-[15px] outline-none bg-transparent ${isDark
+                            ? "text-white placeholder:text-gray-500"
+                            : "text-gray-900 placeholder:text-gray-400"
+                            }`}
+                          placeholder="Enter amount"
+                        />
+
+                        {/* Budget unit */}
+                        <div className="relative flex items-center">
+                          <select
+                            value={enquiryForm.budgetUnit || "lakh"}
+                            onChange={(e) =>
+                              setEnquiryForm({
+                                ...enquiryForm,
+                                budgetUnit: e.target.value,
+                              })
+                            }
+                            className={`h-full appearance-none border-l pl-4 pr-10 py-3.5 text-[14px] font-medium outline-none cursor-pointer ${isDark
+                              ? "bg-[#242424] text-white border-gray-700"
+                              : "bg-gray-50 text-gray-900 border-gray-200"
+                              }`}
+                          >
+                            <option value="thousand">Thousand</option>
+                            <option value="lakh">Lakh</option>
+                            <option value="crore">Crore</option>
+                          </select>
+
+                          {/* Chevron */}
+                          <svg
+                            className={`pointer-events-none absolute right-4 w-3.5 h-3.5 ${isDark ? "text-gray-400" : "text-gray-500"
+                              }`}
+                            viewBox="0 0 20 20"
+                            fill="none"
+                            aria-hidden="true"
+                          >
+                            <path
+                              d="M5 7.5L10 12.5L15 7.5"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        </div>
+                      </div>
+
+                      <p
+                        className={`mt-1.5 text-[11px] ${isDark ? "text-gray-500" : "text-gray-400"
+                          }`}
+                      >
+                        Enter the amount and select the unit.
+                      </p>
                     </div>
 
                     <div>
