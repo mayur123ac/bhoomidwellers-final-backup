@@ -467,7 +467,7 @@ function RpPageHeader({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="rp-page-header px-0 pt-3 sm:px- sm:py-0 md:py-0 mx-3 my-3">
+    <div className="rp-page-header mx-auto px-0 pt-3 sm:px- sm:py-0 md:py-0  my-3">
       <div className="flex items-center gap-3 min-w-0">
         {leading}
         <div className="rp-page-header-titles">
@@ -2352,41 +2352,106 @@ export default function ReceptionistDashboard() {
               />
             </div>
           )}
+          {/* Header container */}
+
+
+
 
           {/* ── SHARED PAGE HEADER ── */}
           {!["settings", "detail", "assistant", "assigned", "recep-leads", "closed-leads", "attendance", "analytics", "cp-enquiries", "cp-enquiry-records", "banking_info", "site_visits"].includes(activeTab) && (
-            <RpPageHeader
-              title={`Hi, ${String(user?.name || "User").split(" ")[0]}`}
-              subtitle="Walk-ins and enquiries logged at the front desk"
-              titleClass={t.text}
-              subtitleClass={t.textFaint}
-              badge={
-                <span className={`rp-chip capitalize ${isDark ? "text-[#9E217B] bg-white/80 border border-[#9E217B]/40" : "text-[#9E217B] bg-[#9E217B]/10 border border-[#9E217B]/20"}`}>Front Desk</span>
-              }
+            <div
+              className="relative overflow-hidden"
+              style={{
+                backgroundImage: "url('/assets/header-building.png')",
+                backgroundSize: "50% auto",
+                backgroundPosition: "right center",
+                backgroundRepeat: "no-repeat",
+                opacity: 1.2,
+                marginTop: "-10px",
+              }}
             >
-              <div className="flex flex-row w-full sm:w-auto gap-2 mt-2 sm:mt-0 gap-1.5 sm:gap-2.5">
-                <button
-                  onClick={() => setIsCpVisitModalOpen(true)}
-                  className={`rp-control-label flex-1 sm:flex-none flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-md sm:rounded-lg shadow-sm ${t.btnSecondary}`}
+              {/* BACKGROUND IMAGE — ADD IMAGE HERE
+      Hidden below sm via the inline `hidden sm:block` wrapper further down,
+      since at mobile widths there's no room left of the buttons to show it. */}
+              <div
+                className="absolute inset-0 pointer-events-none z-[1]"
+                style={{
+                  background: isDark
+                    ? "linear-gradient(to right, #0A0A0F 28%, rgba(10,10,15,0.82) 52%, rgba(10,10,15,0.15) 100%)"
+                    : "linear-gradient(to right, #ffffff 28%, rgba(255,255,255,0.82) 52%, rgba(255,255,255,0.10) 100%)",
+                }}
+              />
+
+              <div className="relative z-[2]">
+                <RpPageHeader
+                  title={`Hi, ${String(user?.name || "User").split(" ")[0]}`}
+                  subtitle="Walk-ins and enquiries logged at the front desk"
+                  titleClass={t.text}
+                  subtitleClass={t.textFaint}
+                  badge={
+                    <span className={`rp-chip capitalize ${isDark ? "text-[#9E217B] bg-white/80 border border-[#9E217B]/40" : "text-[#9E217B] bg-[#9E217B]/10 border border-[#9E217B]/20"}`}>Front Desk</span>
+                  }
                 >
-                  <FaUserTie className="text-[11px]" />
-                  <span className="font-medium text-xs sm:text-[12px]">CP Office Visit</span>
-                </button>
-                <button
-                  onClick={() => setIsBankerVisitModalOpen(true)}
-                  className={`rp-control-label flex-1 sm:flex-none flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-md sm:rounded-lg shadow-sm ${t.btnSecondary}`}
-                >
-                  <FaUniversity className="text-[11px]" />
-                  <span className="font-medium text-xs sm:text-[12px]">Add Banker Visit</span>
-                </button>
-                <button onClick={refetchAll}
-                  className={`rp-control-label text-white flex-1 sm:flex-none flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-md sm:rounded-lg shadow-sm ${t.btnPrimary}`}>
-                  <FaSyncAlt className="text-[11px]" />
-                  <span className="sm:hidden font-medium text-xs">Refresh Live Data</span>
-                  <span className="hidden sm:inline text-[12px]">Refresh Live Data</span>
-                </button>
+                  <div className="flex flex-row w-full sm:w-auto sm:py-1 gap-1.5 sm:gap-2.5 mt-2 sm:mt-0">
+
+                    {/* CP Office Visit — subtle purple / CP treatment */}
+                    <button
+                      onClick={() => setIsCpVisitModalOpen(true)}
+                      className={`group flex-1 sm:flex-none flex items-center justify-center sm:justify-start gap-0 sm:gap-2.5 px-2 sm:px-4 py-2 sm:py-3 rounded-xl border shadow-sm transition-all duration-200 min-w-0 ${isDark
+                        ? "bg-purple-950/40 border-purple-700/40 hover:bg-purple-900/50 hover:border-purple-500/60"
+                        : "bg-purple-50 border-purple-200 hover:bg-purple-100 hover:border-purple-300"
+                        }`}
+                    >
+                      {/* Icon chip — hidden on mobile to save width */}
+                      <div className={`hidden sm:flex flex-shrink-0 p-1.5 rounded-lg ${isDark ? "bg-purple-800/50" : "bg-purple-100"}`}>
+                        <FaUserTie className={`text-[13px] ${isDark ? "text-purple-300" : "text-purple-600"}`} />
+                      </div>
+                      <div className="flex flex-col items-center sm:items-start min-w-0">
+                        <span className={`font-semibold text-[11px] sm:text-[12px] leading-tight truncate ${isDark ? "text-purple-200" : "text-purple-800"}`}>CP Visit</span>
+                        {/* Sub-label — hidden on mobile */}
+                        <span className={`hidden sm:block text-[10px] leading-tight ${isDark ? "text-purple-400" : "text-purple-500"}`}>Channel Partner</span>
+                      </div>
+                      <FiChevronRight className={`hidden sm:block ml-auto flex-shrink-0 text-[12px] transition-colors ${isDark ? "text-purple-500 group-hover:text-purple-200" : "text-purple-300 group-hover:text-purple-600"}`} />
+                    </button>
+
+                    {/* Bank Office Visit — subtle blue / bank treatment */}
+                    <button
+                      onClick={() => setIsBankerVisitModalOpen(true)}
+                      className={`group flex-1 sm:flex-none flex items-center justify-center sm:justify-start gap-0 sm:gap-2.5 px-2 sm:px-4 py-2 sm:py-3 rounded-xl border shadow-sm transition-all duration-200 min-w-0 ${isDark
+                        ? "bg-blue-950/40 border-blue-700/40 hover:bg-blue-900/50 hover:border-blue-500/60"
+                        : "bg-blue-50 border-blue-200 hover:bg-blue-100 hover:border-blue-300"
+                        }`}
+                    >
+                      <div className={`hidden sm:flex flex-shrink-0 p-1.5 rounded-lg ${isDark ? "bg-blue-900/50" : "bg-blue-100"}`}>
+                        <FaUniversity className={`text-[13px] ${isDark ? "text-blue-300" : "text-blue-600"}`} />
+                      </div>
+                      <div className="flex flex-col items-center sm:items-start min-w-0">
+                        <span className={`font-semibold text-[11px] sm:text-[12px] leading-tight truncate ${isDark ? "text-blue-200" : "text-blue-800"}`}>Bank Visit</span>
+                        <span className={`hidden sm:block text-[10px] leading-tight ${isDark ? "text-blue-400" : "text-blue-500"}`}>Bank Partner</span>
+                      </div>
+                      <FiChevronRight className={`hidden sm:block ml-auto flex-shrink-0 text-[12px] transition-colors ${isDark ? "text-blue-500 group-hover:text-blue-200" : "text-blue-300 group-hover:text-blue-600"}`} />
+                    </button>
+
+                    {/* Create Enquiry — primary BhoomiDwellers green + gold treatment */}
+                    <button
+                      onClick={() => setIsEnquiryModalOpen(true)}
+                      className="group flex-1 sm:flex-none flex items-center justify-center sm:justify-start gap-1 sm:gap-2.5 px-2 sm:px-4 py-2 sm:py-3 rounded-xl border shadow-md transition-all duration-200 bg-[#1B3A2D] border-[#2D5A41] hover:bg-[#22472F] hover:shadow-lg hover:border-[#3A7A55] min-w-0"
+                    >
+                      {/* "+" kept on all sizes — it's the clearest visual cue for this action */}
+                      <div className="flex-shrink-0 w-5 h-5 sm:w-7 sm:h-7 rounded-full bg-[#C9A84C]/20 border border-[#C9A84C]/50 flex items-center justify-center">
+                        <span className="text-[#C9A84C] font-bold text-[12px] sm:text-[15px] leading-none">+</span>
+                      </div>
+                      <div className="flex flex-col items-center sm:items-start min-w-0">
+                        <span className="font-semibold text-[11px] sm:text-[12px] leading-tight text-white truncate">Enquiry</span>
+                        <span className="hidden sm:block text-[10px] leading-tight text-[#8DB89A]">New Walk-in</span>
+                      </div>
+                      <FiChevronRight className="hidden sm:block ml-auto flex-shrink-0 text-[12px] text-[#8DB89A] group-hover:text-white transition-colors" />
+                    </button>
+
+                  </div>
+                </RpPageHeader>
               </div>
-            </RpPageHeader>
+            </div>
           )}
 
           {/* ── CP Office Visit Registration ── */}
@@ -2479,16 +2544,20 @@ export default function ReceptionistDashboard() {
                       })), `all-leads-${new Date().toISOString().slice(0, 10)}.csv`)}
                       icon={<FaDownload className="text-[11px] sm:text-xs" />}
                       isDark={isDark}
+                      variant="export"
                       title="Export CSV"
                     >
                       <span className="hidden sm:inline">Export</span>
                     </ToolbarButton>
+
                     <ToolbarButton
-                      onClick={() => setIsEnquiryModalOpen(true)}
+                      onClick={refetchAll}
+                      icon={<FaSyncAlt className="text-[11px]" />}
                       isDark={isDark}
-                      title="Log a new walk-in enquiry"
+                      variant="refresh"
+                      title="Refresh live data"
                     >
-                      <span className="w-full text-center">+ Create Walk-in Enquiry</span>
+                      Refresh Live Data
                     </ToolbarButton>
                   </div>
                 </div>
@@ -3408,7 +3477,7 @@ export default function ReceptionistDashboard() {
                 <div className="flex flex-col sm:flex-row w-full sm:w-auto gap-2 sm:gap-3 mt-3 sm:mt-0">
                   <ToolbarButton
                     onClick={() => downloadCSV(filteredRecepLeads.map((l: any) => ({ "Lead No.": l.sr_no || l.id, "Client Name": l.name, "CP Company": l.cp_company || "N/A", "Budget": l.salesBudget || l.budget || "N/A", "Phone": l.phone || "N/A", "Alt Phone": l.altPhone || "N/A", "Date Created": l.date, "Assigned to Receptionist": l.assignedReceptionist || user.name, "Status": l.status || "Assigned" })), "Receptionist_Leads.csv")}
-                    icon={<FaDownload className="text-[13px] sm:text-[11px]" />} isDark={isDark} title="Download these leads as CSV">
+                    icon={<FaDownload className="text-[13px] sm:text-[11px]" />} variant="export" isDark={isDark} title="Download these leads as CSV">
                     <span className="w-full text-center">Export</span>
                   </ToolbarButton>
                   <ToolbarButton onClick={refetchAll} icon={<FaSyncAlt className="text-[13px] sm:text-[11px]" />} isDark={isDark} title="Refresh leads">
@@ -3461,6 +3530,7 @@ export default function ReceptionistDashboard() {
                       })), `leads-${new Date().toISOString().slice(0, 10)}.csv`)}
                       icon={<FaDownload className="text-[11px] sm:text-xs" />}
                       isDark={isDark}
+                      variant="export"
                       title="Export CSV"
                     >
                       <span className="hidden sm:inline">Export</span>

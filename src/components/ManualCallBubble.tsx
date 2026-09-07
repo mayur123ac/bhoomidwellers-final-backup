@@ -25,15 +25,22 @@ function formatDuration(seconds: number): string {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-function formatDate(iso: string): string {
+function formatDateTime(iso: string): { date: string; time: string } {
   try {
-    return new Date(iso).toLocaleDateString("en-IN", {
+    const d = new Date(iso);
+    const date = d.toLocaleDateString("en-IN", {
       day: "2-digit",
       month: "short",
       year: "numeric",
     });
+    const time = d.toLocaleTimeString("en-IN", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+    return { date, time };
   } catch {
-    return "";
+    return { date: "", time: "" };
   }
 }
 
@@ -42,15 +49,16 @@ function formatDate(iso: string): string {
  *
  * Format:
  *   Outgoing Call
- *   06 Sep 2026
+ *   06 Sep 2026, 02:15 pm
  *   Duration: 08:42
- *   [Play Recording]
+ *   [Play Recording]   (only when recording_r2_key exists)
  *   Optional note text
  */
 export default function ManualCallBubble({ message, createdAt, textClass = "" }: Props) {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [playError, setPlayError] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   let data: CallFollowUpData;
@@ -78,6 +86,7 @@ export default function ManualCallBubble({ message, createdAt, textClass = "" }:
 
     if (!sessionId) return;
     setLoading(true);
+    setPlayError(false);
     try {
       const res = await fetch(`/api/call-recordings/${sessionId}`);
       const json = await res.json();
@@ -85,16 +94,24 @@ export default function ManualCallBubble({ message, createdAt, textClass = "" }:
         setAudioUrl(json.url);
         const audio = new Audio(json.url);
         audio.addEventListener("ended", () => setPlaying(false));
+        audio.addEventListener("error", () => {
+          setPlaying(false);
+          setPlayError(true);
+        });
         audioRef.current = audio;
         audio.play();
         setPlaying(true);
+      } else {
+        setPlayError(true);
       }
     } catch {
-      // Playback unavailable — degrade silently
+      setPlayError(true);
     } finally {
       setLoading(false);
     }
   }, [playing, audioUrl, sessionId]);
+
+  const { date, time } = createdAt ? formatDateTime(createdAt) : { date: "", time: "" };
 
   return (
     <div className="space-y-1">
@@ -105,8 +122,10 @@ export default function ManualCallBubble({ message, createdAt, textClass = "" }:
         </span>
       </div>
 
-      {createdAt && (
-        <p className={`text-xs opacity-60 ${textClass}`}>{formatDate(createdAt)}</p>
+      {date && (
+        <p className={`text-xs opacity-60 ${textClass}`}>
+          {date}{time ? `, ${time}` : ""}
+        </p>
       )}
 
       {(data.duration_seconds != null && data.duration_seconds > 0) && (
@@ -115,7 +134,7 @@ export default function ManualCallBubble({ message, createdAt, textClass = "" }:
         </p>
       )}
 
-      {hasRecording && (
+      {hasRecording && !playError && (
         <button
           type="button"
           onClick={handlePlayPause}
@@ -130,6 +149,12 @@ export default function ManualCallBubble({ message, createdAt, textClass = "" }:
             <><FaPlay className="text-[9px]" /> Play Recording</>
           )}
         </button>
+      )}
+
+      {playError && (
+        <p className={`text-xs text-red-500 mt-0.5 ${textClass}`}>
+          Recording unavailable
+        </p>
       )}
 
       {data.note && (

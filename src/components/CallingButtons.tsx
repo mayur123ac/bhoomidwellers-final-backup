@@ -3,13 +3,13 @@
 // components/CallingButtons.tsx — the Manual Call and AI Call tiles that sit
 // beside the WhatsApp button on every contact.
 //
-// ── Why tiles and not icon buttons ───────────────────────────────────────────
+// -- Why tiles and not icon buttons --
 // Every place these mount is an existing `grid grid-cols-2 gap-3` of quick
 // actions whose members are icon-over-label tiles. Two 28px icon buttons dropped
 // into that grid would read as a different control set that happened to land
 // nearby, so these copy the tile shape instead.
 //
-// ── Why the wrapper span ─────────────────────────────────────────────────────
+// -- Why the wrapper span --
 // A disabled <button> does not emit pointer events in any browser, so a tooltip
 // bound to the button is invisible in exactly the state that most needs
 // explaining. The hover and focus handlers therefore live on a wrapping span,
@@ -22,6 +22,7 @@ import { FaPhoneAlt, FaRobot, FaSpinner } from "react-icons/fa";
 import { useCallingConfig } from "@/hooks/useCallingConfig";
 import { placeAiCall, placeManualCall, type CallSessionResult } from "@/lib/callingHandlers";
 import { isAndroidApp } from "@/lib/platform";
+import { loadPendingSession, clearPendingSession } from "@/lib/callSessionStore";
 import CallRecordingModal from "@/components/CallRecordingModal";
 
 interface Props {
@@ -61,6 +62,28 @@ export default function CallingButtons({
   const [pendingCallSession, setPendingCallSession] = useState<CallSessionResult | null>(null);
   const pendingRef = useRef<CallSessionResult | null>(null);
 
+  // On mount (Android only): recover a pending call session that survived
+  // an app kill/restart. The session was persisted to localStorage before
+  // the dialer was opened, so it's still available.
+  useEffect(() => {
+    if (!isAndroidApp()) return;
+    const stored = loadPendingSession();
+    if (stored) {
+      // Only recover if the session belongs to this lead/callerLead
+      const matchesLead = (leadId && stored.leadId === leadId) ||
+        (callerLeadId && stored.callerLeadId === callerLeadId);
+      if (matchesLead) {
+        const session: CallSessionResult = {
+          callSessionId: stored.callSessionId,
+          phoneNumber: stored.phoneNumber,
+          callStartedAt: stored.callStartedAt,
+        };
+        pendingRef.current = session;
+        setPendingCallSession(session);
+      }
+    }
+  }, [leadId, callerLeadId]);
+
   // Listen for app returning from dialer (Android only)
   useEffect(() => {
     if (!isAndroidApp()) return;
@@ -79,8 +102,6 @@ export default function CallingButtons({
   const notify = useCallback((kind: "ok" | "error", message: string) => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     setToast({ kind, message });
-    // Errors linger; a failure message that vanishes in 3s has to be
-    // re-triggered to be read.
     toastTimer.current = setTimeout(() => setToast(null), kind === "error" ? 8000 : 4000);
   }, []);
 
@@ -88,10 +109,6 @@ export default function CallingButtons({
   const dialable = hasDialableNumber(phone) || leadId !== null || callerLeadId !== null;
   const knownMissing = !hasDialableNumber(phone) && leadId === null && callerLeadId === null;
 
-  // Manual calling always has the tel: fallback, so only a missing number
-  // disables it. AI calling has no fallback: without Bolna there is nothing to
-  // call with. `loaded` keeps the AI tile disabled until the answer arrives
-  // rather than letting it flip enabled a moment after paint.
   const manualDisabled = !dialable || busy !== null;
   const aiDisabled = !dialable || !aiCallingEnabled || !loaded || busy !== null;
 
@@ -104,9 +121,9 @@ export default function CallingButtons({
   const aiTip = knownMissing
     ? "No phone number on record"
     : !loaded
-      ? "Checking calling configuration…"
+      ? "Checking calling configuration..."
       : !aiCallingEnabled
-        ? "AI calling not configured — add Bolna credentials in Settings → Workspace"
+        ? "AI calling not configured — add Bolna credentials in Settings -> Workspace"
         : `Have the AI agent call ${leadName || phone || "this contact"}`;
 
   const runManual = async () => {
@@ -119,10 +136,7 @@ export default function CallingButtons({
         phone,
         mode: manualCallingMode,
       });
-      // `tel:` hands off to the OS and has nothing to report.
       if (result?.message) notify("ok", result.message);
-      // On Android, store the session so the recording modal can appear
-      // when the user returns from the dialer.
       if (result?.callSession && isAndroidApp()) {
         pendingRef.current = result.callSession;
       }
@@ -144,6 +158,18 @@ export default function CallingButtons({
     } finally {
       setBusy(null);
     }
+  };
+
+  const handleModalDismiss = () => {
+    setPendingCallSession(null);
+    pendingRef.current = null;
+    clearPendingSession();
+  };
+
+  const handleModalComplete = () => {
+    setPendingCallSession(null);
+    pendingRef.current = null;
+    clearPendingSession();
   };
 
   return (
@@ -183,7 +209,7 @@ export default function CallingButtons({
           }}
         >
           <span className="mr-2" aria-hidden>
-            {toast.kind === "error" ? "✕" : "✓"}
+            {toast.kind === "error" ? "\u2715" : "\u2713"}
           </span>
           {toast.message}
         </div>
@@ -195,21 +221,15 @@ export default function CallingButtons({
           phoneNumber={pendingCallSession.phoneNumber}
           callStartedAt={pendingCallSession.callStartedAt}
           leadId={leadId}
-          onDismiss={() => {
-            setPendingCallSession(null);
-            pendingRef.current = null;
-          }}
-          onComplete={() => {
-            setPendingCallSession(null);
-            pendingRef.current = null;
-          }}
+          onDismiss={handleModalDismiss}
+          onComplete={handleModalComplete}
         />
       )}
     </>
   );
 }
 
-/* ── One quick-action tile ──────────────────────────────────────────────────*/
+/* -- One quick-action tile -- */
 
 const TONES = {
   green: {
@@ -253,9 +273,6 @@ function Tile({
   const theme = isDark ? "light" : "light";
 
   return (
-    // The span, not the button, carries the pointer handlers — see the note at
-    // the top of the file. tabIndex makes the explanation reachable by keyboard
-    // when the button itself is disabled and therefore unfocusable.
     <span
       className="relative flex"
       onMouseEnter={() => setOpen(true)}

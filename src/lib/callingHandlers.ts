@@ -6,6 +6,9 @@
 // file the record against someone else's lead. `phone` is only sent for contacts
 // that are not leads at all — a booking or a channel partner.
 
+import { isAndroidApp } from "@/lib/platform";
+import { savePendingSession } from "@/lib/callSessionStore";
+
 export interface CallTarget {
   leadId?: number | null;
   callerLeadId?: number | null;
@@ -58,6 +61,9 @@ async function postCall(url: string, body: Record<string, unknown>): Promise<Cal
  * On Android (tel mode), a call session is created server-side before the
  * dialer opens. The returned CallSessionResult lets the caller show the
  * post-call recording modal after the user returns from the phone app.
+ *
+ * Sessions are only created on Android because the recording/call-log workflow
+ * requires native APIs. On desktop, `tel:` is a fire-and-forget hand-off.
  */
 export async function placeManualCall(
   target: CallTarget & { mode: "provider" | "tel" }
@@ -71,10 +77,12 @@ export async function placeManualCall(
     throw new Error("No phone number on record.");
   }
 
-  // On Android, create a call session before opening the dialer so we can
-  // track this call and attach a recording afterwards.
+  // Only create a server-side call session on Android — that's the only
+  // platform where we can read the call log and find recordings afterwards.
+  // On desktop/web, opening `tel:` is a fire-and-forget hand-off with no
+  // session to reconcile, so creating one would leave orphaned rows.
   let callSession: CallSessionResult | undefined;
-  if (target.leadId || target.callerLeadId) {
+  if (isAndroidApp() && (target.leadId || target.callerLeadId)) {
     try {
       const res = await fetch("/api/call-sessions", {
         method: "POST",
@@ -91,6 +99,12 @@ export async function placeManualCall(
           phoneNumber: json.phoneNumber,
           callStartedAt: Date.now(),
         };
+        // Persist to localStorage so the session survives app kill/restart.
+        savePendingSession({
+          ...callSession,
+          leadId: target.leadId,
+          callerLeadId: target.callerLeadId,
+        });
       }
     } catch {
       // Non-fatal — the call can still proceed without session tracking

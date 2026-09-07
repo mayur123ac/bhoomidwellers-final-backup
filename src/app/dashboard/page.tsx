@@ -3911,8 +3911,8 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                               </span>
                             ) : null}
                             {selectedLead.lead_classification === "RETURNING_LEAD" && (
-                              <span className="text-[9px] sm:text-[11px] font-bold px-2 py-0.5 rounded-md border flex items-center gap-1.5 flex-shrink-0 tracking-wide uppercase border-[rgba(5,150,105,0.45)] text-[#059669] bg-[rgba(5,150,105,0.15)]">
-                                ↩ REVISIT
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border border-[rgba(5,150,105,0.45)] text-[#059669] bg-[rgba(5,150,105,0.12)] w-fit">
+                                REVISIT
                               </span>
                             )}
                           </h1>
@@ -5416,8 +5416,8 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                               <span className={`text-[9px] sm:text-[11px] font-bold px-2 py-0.5 sm:px-3 sm:py-1 rounded-full border flex items-center gap-1 sm:gap-1.5 ${theme.statusNGD}`}>NON GENUINE DEMAND</span>
                             ) : null}
                             {selectedLead.lead_classification === "RETURNING_LEAD" && (
-                              <span className="text-[9px] sm:text-[11px] font-bold px-2 py-0.5 rounded-md border flex items-center gap-1.5 flex-shrink-0 tracking-wide uppercase border-[rgba(5,150,105,0.45)] text-[#059669] bg-[rgba(5,150,105,0.15)]">
-                                ↩ REVISIT
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border border-[rgba(5,150,105,0.45)] text-[#059669] bg-[rgba(5,150,105,0.12)] w-fit">
+                                REVISIT
                               </span>
                             )}
                           </h1>
@@ -6996,8 +6996,9 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                                   </span>
                                 )}
                                 {selectedLead.lead_classification === "RETURNING_LEAD" && (
-                                  <span className="text-[9px] sm:text-[11px] font-bold px-2 py-0.5 rounded-md border flex items-center gap-1.5 flex-shrink-0 tracking-wide uppercase border-[rgba(5,150,105,0.45)] text-[#059669] bg-[rgba(5,150,105,0.15)]">
-                                    ↩ REVISIT
+
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border border-[rgba(5,150,105,0.45)] text-[#059669] bg-[rgba(5,150,105,0.12)] w-fit">
+                                    REVISIT
                                   </span>
                                 )}
                               </h1>

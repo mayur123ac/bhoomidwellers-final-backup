@@ -2176,6 +2176,7 @@ function SalesManagerView({
                       "Date Created": l.created_at || "",
                       "Site Visit": l.mongoVisitDate || "",
                     })), "SM_Leads_Database.csv")}
+                    variant="export"
                     icon={<FaDownload className="text-[10px] sm:text-[11px]" />}
                     isDark={isDark}
                     title="Export leads as CSV"
@@ -2713,13 +2714,13 @@ function SalesManagerView({
                         </span>
                       )}
                       {selectedLead.lead_classification === "RETURNING_LEAD" && (
-                        <span className={`text-[9px] sm:text-[11px] font-bold px-2 py-0.5 rounded-md border flex items-center gap-1.5 flex-shrink-0 tracking-wide uppercase ${t.statusRevisit}`}>
-                          ↩ REVISIT
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border border-[rgba(5,150,105,0.45)] text-[#059669] bg-[rgba(5,150,105,0.12)] w-fit">
+                          REVISIT
                         </span>
                       )}
                     </h1>
                     {/* Show Previous Lead Data toggle — visible as soon as the lead is a revisit */}
-                    {selectedLead.lead_classification === "RETURNING_LEAD" && (
+                    {/* {selectedLead.lead_classification === "RETURNING_LEAD" && (
                       <button
                         type="button"
                         onClick={() => setShowPrevLead(v => !v)}
@@ -2731,7 +2732,7 @@ function SalesManagerView({
                           : <span>{showPrevLead ? "Hide" : "Show"} Previous Lead</span>
                         }
                       </button>
-                    )}
+                    )} */}
                   </div>
 
                   {/* MOBILE TOGGLE BUTTON — collapsed by default on small screens */}
@@ -2910,25 +2911,25 @@ function SalesManagerView({
                           onClick={() => setShowPrevLead(v => !v)}
                           disabled={isLoadingRevisit && !revisitHistory}
                           className={`
-    hidden sm:flex
-    items-center gap-1.5
-    px-3 py-1.5
-    rounded-md
-    border
-    text-[11px] font-semibold
-    transition-all duration-200
-    cursor-pointer
-    shadow-sm
-    disabled:opacity-50
-    disabled:cursor-wait
+                                hidden sm:flex
+                                items-center gap-1.5
+                                px-3 py-1.5
+                                rounded-md
+                                border
+                                text-[11px] font-semibold
+                                transition-all duration-200
+                                cursor-pointer
+                                shadow-sm
+                                disabled:opacity-50
+                                disabled:cursor-wait
 
-    ${showPrevLead
+                                ${showPrevLead
                               ? "bg-[#059669] border-[#059669] text-white shadow-[0_1px_5px_rgba(5,150,105,0.25)]"
                               : isDark
                                 ? "bg-white/[0.04] border-white/10 text-slate-300 hover:bg-white/[0.08] hover:border-white/20 hover:text-white"
                                 : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300 hover:text-slate-900"
                             }
-  `}
+                         ` }
                         >
                           <svg
                             className="w-3.5 h-3.5 shrink-0"
@@ -3154,7 +3155,7 @@ function SalesManagerView({
                                       <span className={`text-[11px] font-medium truncate ${t.text}`}>{visit.assignedTo || "—"}</span>
                                       <div className="ml-auto flex items-center gap-1.5 flex-shrink-0">
                                         {visit.leadClassification === "RETURNING_LEAD" && (
-                                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider border border-[rgba(5,150,105,0.45)] text-[#059669] bg-[rgba(5,150,105,0.12)]">
+                                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border border-[rgba(5,150,105,0.45)] text-[#059669] bg-[rgba(5,150,105,0.12)] w-fit">
                                             REVISIT
                                           </span>
                                         )}

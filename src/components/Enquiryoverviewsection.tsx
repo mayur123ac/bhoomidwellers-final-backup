@@ -725,9 +725,8 @@ function EnquiryTableRow({
             {selectMode && (
                 <td
                     onClick={(e) => e.stopPropagation()}
-                    className={`px-2 py-2 sm:px-4 sm:py-3.5 border-b ${
-                        isDark ? "border-white/[0.04]" : "border-gray-100/80"
-                    }`}
+                    className={`px-2 py-2 sm:px-4 sm:py-3.5 border-b ${isDark ? "border-white/[0.04]" : "border-gray-100/80"
+                        }`}
                 >
                     <Checkbox checked={isSelected} onChange={() => toggleSelectOne(id)} />
                 </td>

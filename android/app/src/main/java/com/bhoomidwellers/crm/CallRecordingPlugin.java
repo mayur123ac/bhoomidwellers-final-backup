@@ -9,6 +9,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.provider.CallLog;
 import android.provider.MediaStore;
+import android.provider.Settings;
 import android.util.Base64;
 
 import androidx.activity.result.ActivityResult;
@@ -33,17 +34,30 @@ import java.io.InputStream;
             alias = "callLog",
             strings = { Manifest.permission.READ_CALL_LOG }
         ),
+        // API 33+ (Android 13+): granular media permission
         @Permission(
             alias = "audio",
-            strings = {
-                Manifest.permission.READ_MEDIA_AUDIO
-            }
+            strings = { Manifest.permission.READ_MEDIA_AUDIO }
+        ),
+        // API < 33 (Android 12 and below): broad storage permission
+        @Permission(
+            alias = "audioLegacy",
+            strings = { Manifest.permission.READ_EXTERNAL_STORAGE }
         )
     }
 )
 public class CallRecordingPlugin extends Plugin {
 
     private static final int MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+
+    /**
+     * Returns the correct permission alias for audio access based on the
+     * Android version. API 33+ uses READ_MEDIA_AUDIO, older versions use
+     * READ_EXTERNAL_STORAGE.
+     */
+    private String audioPermAlias() {
+        return Build.VERSION.SDK_INT >= 33 ? "audio" : "audioLegacy";
+    }
 
     @PluginMethod
     public void getRecentCalls(PluginCall call) {
@@ -191,7 +205,7 @@ public class CallRecordingPlugin extends Plugin {
                 cursor.close();
             }
         } catch (SecurityException e) {
-            call.reject("READ_MEDIA_AUDIO permission not granted", e);
+            call.reject("Audio file permission not granted", e);
             return;
         } catch (Exception e) {
             call.reject("Failed to query recordings", e);
@@ -324,24 +338,43 @@ public class CallRecordingPlugin extends Plugin {
         }
     }
 
+    /**
+     * Opens the Android application settings screen so the user can manually
+     * grant permissions that were permanently denied (shouldShowRequestPermissionRationale = false).
+     */
+    @PluginMethod
+    public void openAppSettings(PluginCall call) {
+        try {
+            Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+            intent.setData(Uri.parse("package:" + getContext().getPackageName()));
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(intent);
+            call.resolve();
+        } catch (Exception e) {
+            call.reject("Could not open app settings", e);
+        }
+    }
+
     @PluginMethod
     public void checkPermissions(PluginCall call) {
         JSObject result = new JSObject();
         result.put("callLog", getPermissionState("callLog"));
-        result.put("audio", getPermissionState("audio"));
+        result.put("audio", getPermissionState(audioPermAlias()));
         call.resolve(result);
     }
 
     @PluginMethod
     public void requestPermissions(PluginCall call) {
-        requestAllPermissions(call, "handlePermissionResult");
+        // Request callLog and the version-appropriate audio permission.
+        String[] aliases = new String[]{ "callLog", audioPermAlias() };
+        requestPermissionForAliases(aliases, call, "handlePermissionResult");
     }
 
     @PermissionCallback
     private void handlePermissionResult(PluginCall call) {
         JSObject result = new JSObject();
         result.put("callLog", getPermissionState("callLog"));
-        result.put("audio", getPermissionState("audio"));
+        result.put("audio", getPermissionState(audioPermAlias()));
         call.resolve(result);
     }
 }

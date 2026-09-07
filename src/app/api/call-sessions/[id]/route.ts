@@ -3,6 +3,27 @@ import { query } from "@/lib/db";
 import { requireSession } from "@/lib/serverAuth";
 import { getOrganizationId } from "@/lib/tenantContext";
 
+// States that are considered final — a late/duplicate client event must not
+// overwrite these. The endpoint returns 200 (idempotent) without mutating.
+const LOCKED_STATES = new Set([
+  "recording_attached",
+  "completed",
+]);
+
+// All states the client is allowed to request via PATCH.
+const ALLOWED_STATUSES = new Set([
+  "initiated",
+  "calling",
+  "completed",
+  "cancelled",
+  "missed",
+  "recording_pending",
+  "recording_detected",
+  "recording_attached",
+  "recording_unavailable",
+  "upload_failed",
+]);
+
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -22,9 +43,9 @@ export async function PATCH(
 
     const orgId = await getOrganizationId();
 
-    // Verify ownership
-    const existing = await query<{ id: number }>(
-      `SELECT id FROM call_sessions WHERE id = $1 AND organization_id = $2 AND user_id = $3`,
+    // Verify ownership AND fetch current status for transition validation
+    const existing = await query<{ id: number; status: string }>(
+      `SELECT id, status FROM call_sessions WHERE id = $1 AND organization_id = $2 AND user_id = $3`,
       [sessionId, orgId, gate.userId]
     );
     if (existing.length === 0) {
@@ -34,22 +55,31 @@ export async function PATCH(
       );
     }
 
+    const currentStatus = existing[0].status;
+
+    // If the session has already reached a final state, succeed silently.
+    // This prevents a late/retried PATCH from overwriting a completed session.
+    if (LOCKED_STATES.has(currentStatus)) {
+      return NextResponse.json({ success: true, locked: true });
+    }
+
     const body = await req.json().catch(() => ({}));
     const updates: string[] = [];
     const values: any[] = [];
     let paramIdx = 1;
 
     if (body.status) {
-      const allowed = [
-          "initiated", "calling", "completed", "cancelled", "missed",
-          "recording_pending", "recording_detected", "recording_attached",
-          "recording_unavailable", "upload_failed",
-        ];
-      if (!allowed.includes(body.status)) {
+      if (!ALLOWED_STATUSES.has(body.status)) {
         return NextResponse.json(
-          { success: false, message: `Invalid status. Allowed: ${allowed.join(", ")}` },
+          { success: false, message: `Invalid status. Allowed: ${[...ALLOWED_STATUSES].join(", ")}` },
           { status: 400 }
         );
+      }
+      // Don't allow a late event to regress from recording_unavailable either,
+      // unless it's explicitly being set to recording_attached (upload succeeded
+      // between the skip and the PATCH arriving).
+      if (currentStatus === "recording_unavailable" && body.status !== "recording_attached") {
+        return NextResponse.json({ success: true, locked: true });
       }
       updates.push(`status = $${paramIdx++}`);
       values.push(body.status);

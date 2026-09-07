@@ -542,6 +542,7 @@ export function ToolbarButton({
     isDark,
     active = false,
     tone = "neutral",
+    variant = "default",
     title,
     disabled = false,
 }: {
@@ -551,27 +552,36 @@ export function ToolbarButton({
     isDark: boolean;
     active?: boolean;
     tone?: "neutral" | "brand" | "danger";
+    variant?: "default" | "columns" | "export" | "refresh";
     title?: string;
     disabled?: boolean;
 }) {
     const base =
-        "h-10 inline-flex items-center justify-center gap-2 px-4 rounded-xl text-[13px] font-bold tracking-wide whitespace-nowrap cursor-pointer " +
-        "bg-gradient-to-r from-[#2563EB] to-[#D946EF] text-white border border-transparent " +
-        "shadow-sm shadow-[#7C3AED]/20 hover:shadow-md hover:shadow-[#D946EF]/30 " +
-        "transition-all duration-200 hover:-translate-y-[0.5px] active:scale-[0.98] " +
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A855F7] focus-visible:ring-offset-2";
+        "h-10 inline-flex items-center justify-center gap-2 px-4 rounded-xl text-[13px] font-semibold tracking-wide whitespace-nowrap cursor-pointer " +
+        "border transition-all duration-200 " +
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#18392B]/20 focus-visible:ring-offset-2 " +
+        "active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed";
+
     const style =
         disabled
             ? "opacity-40 cursor-not-allowed"
-            : tone === "danger"
-                ? "bg-red-600 border-red-600 text-white hover:bg-red-500 hover:-translate-y-[1px] hover:shadow-lg hover:shadow-red-900/30"
-                : active || tone === "brand"
+            : variant === "refresh"
+                ? isDark
+                    ? "bg-[#EDF7F1]/10 border-[#4D9F6B]/25 text-[#8FD0A6] hover:bg-[#EDF7F1]/15 hover:border-[#4D9F6B]/40"
+                    : "bg-[#F1F8F3] border-[#CFE4D5] text-[#17643A] hover:bg-[#E7F3EA] hover:border-[#B9D8C2] shadow-sm"
+                : variant === "columns" || variant === "export"
                     ? isDark
-                        ? "bg-[#9E217B]/20 border-[#9E217B]/60 text-[#e879c4] hover:bg-[#9E217B]/30"
-                        : "bg-[#9E217B]/10 border-[#9E217B]/40 text-[#9E217B] hover:bg-[#9E217B]/15"
-                    : isDark
-                        ? "bg-white/[0.04] border-white/10 text-gray-200 hover:bg-white/[0.08] hover:border-white/20 hover:-translate-y-[1px]"
-                        : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-300 hover:-translate-y-[1px] hover:shadow-sm";
+                        ? "bg-[#20252A] border-white/10 text-gray-200 hover:bg-[#292F35] hover:border-white/15"
+                        : "bg-white border-gray-200 text-[#263238] hover:bg-gray-50 hover:border-gray-300 shadow-sm"
+                    : tone === "danger"
+                        ? "bg-red-600 border-red-600 text-white hover:bg-red-500 hover:shadow-lg"
+                        : active || tone === "brand"
+                            ? isDark
+                                ? "bg-[#9E217B]/20 border-[#9E217B]/60 text-[#e879c4] hover:bg-[#9E217B]/30"
+                                : "bg-[#9E217B]/10 border-[#9E217B]/40 text-[#9E217B] hover:bg-[#9E217B]/15"
+                            : isDark
+                                ? "bg-white/[0.04] border-white/10 text-gray-200 hover:bg-white/[0.08] hover:border-white/20"
+                                : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-300";
 
     return (
         <button
@@ -623,6 +633,7 @@ export function ColumnSelector({
                 icon={<FaColumns className="text-[11px]" />}
                 isDark={isDark}
                 active={open}
+                variant="columns"
                 title="Choose visible columns"
             >
                 Columns

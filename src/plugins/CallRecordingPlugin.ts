@@ -6,7 +6,7 @@ export interface CallLogEntry {
   number: string;
   duration: number;
   date: number;
-  type: string; // OUTGOING, INCOMING, MISSED
+  type: string; // OUTGOING, INCOMING, MISSED, REJECTED
 }
 
 export interface RecordingInfo {
@@ -37,6 +37,9 @@ export interface CallRecordingPluginInterface {
   readFileAsBase64(opts: {
     uri: string;
   }): Promise<{ base64: string; mimeType: string; size: number }>;
+
+  /** Opens the Android application settings screen for this app. */
+  openAppSettings(): Promise<void>;
 
   checkPermissions(): Promise<{ callLog: PermState; audio: PermState }>;
   requestPermissions(): Promise<{ callLog: PermState; audio: PermState }>;

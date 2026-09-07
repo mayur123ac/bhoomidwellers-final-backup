@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FaPhone, FaMicrophone, FaUpload, FaCheck, FaTimes, FaFileAudio } from "react-icons/fa";
+import { FaPhone, FaMicrophone, FaUpload, FaCheck, FaTimes, FaFileAudio, FaCog } from "react-icons/fa";
 import CallRecordingPlugin, {
   type CallLogEntry,
   type RecordingInfo,
 } from "@/plugins/CallRecordingPlugin";
+import { clearPendingSession } from "@/lib/callSessionStore";
 
 // Session status values that match the server-side state machine.
 type SessionStatus =
@@ -30,6 +31,7 @@ type ModalStep =
   | "CONFIRM_ATTACH"
   | "UPLOADING"
   | "UPLOAD_FAILED"
+  | "PERMISSION_DENIED"
   | "DONE";
 
 interface Props {
@@ -40,6 +42,11 @@ interface Props {
   onDismiss: () => void;
   onComplete: () => void;
 }
+
+// Max retries for delayed call-log availability.
+// Android can take a few seconds to write the call log entry after a call ends.
+const CALL_LOG_MAX_RETRIES = 3;
+const CALL_LOG_RETRY_DELAYS = [2000, 4000, 6000]; // ms between retries
 
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -76,7 +83,7 @@ function scoreRecording(
 ): number {
   let score = 0;
 
-  // Filename contains the phone digits → strong signal
+  // Filename contains the phone digits -> strong signal
   if (rec.matchReason === "filename_match") score += 50;
 
   // Timestamp proximity to the call
@@ -114,11 +121,13 @@ export default function CallRecordingModal({
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState("");
+  const [permissionInfo, setPermissionInfo] = useState<{ which: string; why: string } | null>(null);
   const mounted = useRef(true);
+  const retryCount = useRef(0);
 
   useEffect(() => () => { mounted.current = false; }, []);
 
-  // ── Step 1: Detect call from CallLog ──────────────────────────────────────
+  // -- Step 1: Detect call from CallLog with retry for delayed availability --
   const detectCall = useCallback(async () => {
     setStep("DETECTING_CALL");
     setError(null);
@@ -129,8 +138,13 @@ export default function CallRecordingModal({
       if (perms.callLog !== "granted") {
         const requested = await CallRecordingPlugin.requestPermissions();
         if (requested.callLog !== "granted") {
-          // CallLog permission denied — skip to recording search.
-          // The feature remains functional without it.
+          // Permission denied — show info if permanently denied, else skip
+          if (requested.callLog === "denied") {
+            setPermissionInfo({
+              which: "Call Log",
+              why: "The CRM needs call log access to automatically detect call duration and result. Without it, you can still manually attach a recording.",
+            });
+          }
           if (mounted.current) {
             patchStatus(callSessionId, "recording_pending");
             setStep("SEARCHING_RECORDINGS");
@@ -170,12 +184,23 @@ export default function CallRecordingModal({
           setStep("NOT_DETECTED");
           return;
         }
-      } else {
-        // No matching call found in log at all
-        patchStatus(callSessionId, "recording_pending");
-      }
 
-      setStep("SEARCHING_RECORDINGS");
+        setStep("SEARCHING_RECORDINGS");
+      } else if (retryCount.current < CALL_LOG_MAX_RETRIES) {
+        // Call log entry may not be available yet — Android can be slow to
+        // write it. Wait and retry.
+        const delay = CALL_LOG_RETRY_DELAYS[retryCount.current] || 4000;
+        retryCount.current++;
+        setTimeout(() => {
+          if (mounted.current) detectCall();
+        }, delay);
+      } else {
+        // Exhausted retries — no matching call found in log at all.
+        // The call may have been cancelled before it connected, or the
+        // call log takes unusually long. Proceed to recording search.
+        patchStatus(callSessionId, "recording_pending");
+        setStep("SEARCHING_RECORDINGS");
+      }
     } catch (err: any) {
       if (!mounted.current) return;
       console.error("Call detection error:", err);
@@ -184,7 +209,7 @@ export default function CallRecordingModal({
     }
   }, [callSessionId, phoneNumber, callStartedAt]);
 
-  // ── Step 2: Search for recordings ─────────────────────────────────────────
+  // -- Step 2: Search for recordings --
   const searchRecordings = useCallback(async () => {
     setError(null);
     try {
@@ -192,7 +217,14 @@ export default function CallRecordingModal({
       if (perms.audio !== "granted") {
         const requested = await CallRecordingPlugin.requestPermissions();
         if (requested.audio !== "granted") {
-          // Audio permission denied — skip to manual picker.
+          if (requested.audio === "denied") {
+            setPermissionInfo({
+              which: "Audio Files",
+              why: "The CRM needs access to audio files to find call recordings on your device. You can also use the manual file picker instead.",
+            });
+            setStep("PERMISSION_DENIED");
+            return;
+          }
           if (mounted.current) setStep("NOT_DETECTED");
           return;
         }
@@ -218,18 +250,15 @@ export default function CallRecordingModal({
       const topScore = scored[0].score;
 
       if (scored.length === 1 && topScore >= HIGH_CONFIDENCE_THRESHOLD) {
-        // Single high-confidence match → suggest it, but still require confirmation
         setRecordings([scored[0].rec]);
         setSelectedRecording(scored[0].rec);
         patchStatus(callSessionId, "recording_detected");
         setStep("RECORDING_DETECTED");
       } else if (scored.length > 1) {
-        // Multiple recordings found — NEVER auto-choose
         setRecordings(scored.map((s) => s.rec));
         setSelectedRecording(null);
         setStep("MULTIPLE_RECORDINGS");
       } else {
-        // Single recording but low confidence — do NOT auto-suggest
         setRecordings(scored.map((s) => s.rec));
         setSelectedRecording(null);
         setStep("NOT_DETECTED");
@@ -247,7 +276,7 @@ export default function CallRecordingModal({
     if (step === "SEARCHING_RECORDINGS") searchRecordings();
   }, [step, searchRecordings]);
 
-  // ── Manual file picker (SAF — no special permissions needed) ──────────────
+  // -- Manual file picker (SAF — no special permissions needed) --
   const handlePickFile = async () => {
     try {
       const result = await CallRecordingPlugin.pickAudioFile();
@@ -255,13 +284,21 @@ export default function CallRecordingModal({
         setSelectedRecording(result.recording);
         setStep("CONFIRM_ATTACH");
       }
-      // If null, user cancelled the picker — stay on current step
     } catch (err: any) {
       setError("Failed to open file picker: " + (err?.message || "Unknown error"));
     }
   };
 
-  // ── Upload + finalize ─────────────────────────────────────────────────────
+  // -- Open Android app settings --
+  const handleOpenSettings = async () => {
+    try {
+      await CallRecordingPlugin.openAppSettings();
+    } catch {
+      setError("Could not open app settings. Please go to Settings > Apps > Bhoomi Dwellers manually.");
+    }
+  };
+
+  // -- Upload + finalize --
   const handleUpload = async () => {
     if (!selectedRecording) return;
     setStep("UPLOADING");
@@ -286,7 +323,7 @@ export default function CallRecordingModal({
 
       setUploadProgress("Uploading recording...");
 
-      // Convert base64 → Blob
+      // Convert base64 -> Blob
       const binaryStr = atob(fileData.base64);
       const bytes = new Uint8Array(binaryStr.length);
       for (let i = 0; i < binaryStr.length; i++) {
@@ -306,12 +343,12 @@ export default function CallRecordingModal({
 
       if (!uploadRes.ok) {
         const errData = await uploadRes.json().catch(() => null);
-        const msg = errData?.message || "Upload failed";
-        // Duplicate check
         if (uploadRes.status === 409) {
-          throw new Error("A recording is already attached to this call session.");
+          // Already uploaded — treat as success (idempotent retry)
+          setUploadProgress("Saving to timeline...");
+        } else {
+          throw new Error(errData?.message || "Upload failed");
         }
-        throw new Error(msg);
       }
 
       setUploadProgress("Saving to timeline...");
@@ -324,10 +361,14 @@ export default function CallRecordingModal({
 
       if (!completeRes.ok) {
         const errData = await completeRes.json().catch(() => null);
-        throw new Error(errData?.message || "Failed to save to timeline");
+        // 409 = already completed (idempotent)
+        if (completeRes.status !== 409) {
+          throw new Error(errData?.message || "Failed to save to timeline");
+        }
       }
 
       if (!mounted.current) return;
+      clearPendingSession();
       setStep("DONE");
       setTimeout(() => { if (mounted.current) onComplete(); }, 1500);
     } catch (err: any) {
@@ -338,7 +379,7 @@ export default function CallRecordingModal({
     }
   };
 
-  // ── Skip (no recording) ───────────────────────────────────────────────────
+  // -- Skip (no recording) --
   const handleSkip = async () => {
     patchStatus(callSessionId, "recording_unavailable");
     try {
@@ -348,19 +389,21 @@ export default function CallRecordingModal({
         body: JSON.stringify({ note: note.trim() || undefined }),
       });
     } catch {}
+    clearPendingSession();
     if (mounted.current) {
       setStep("DONE");
       setTimeout(() => { if (mounted.current) onComplete(); }, 1500);
     }
   };
 
-  // ── Cancel (discard session) ──────────────────────────────────────────────
+  // -- Cancel (discard session) --
   const handleCancel = () => {
     patchStatus(callSessionId, "cancelled");
+    clearPendingSession();
     onDismiss();
   };
 
-  // ── Call info banner (reused across steps) ────────────────────────────────
+  // -- Call info banner (reused across steps) --
   const callBanner = callLog && (
     <div className={`p-3 rounded-xl text-left ${
       callLog.type === "MISSED" || callLog.type === "REJECTED"
@@ -384,6 +427,24 @@ export default function CallRecordingModal({
       }`}>
         {callLog.type} &middot; Duration: {formatDuration(callLog.duration)}
       </p>
+    </div>
+  );
+
+  // -- Permission info banner --
+  const permBanner = permissionInfo && (
+    <div className="p-3 bg-amber-50 rounded-xl text-left space-y-2">
+      <p className="text-xs font-bold text-amber-800">
+        {permissionInfo.which} permission required
+      </p>
+      <p className="text-xs text-amber-700">{permissionInfo.why}</p>
+      <button
+        type="button"
+        onClick={handleOpenSettings}
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-amber-600 text-white hover:bg-amber-700 transition"
+      >
+        <FaCog className="text-[10px]" />
+        Open App Settings
+      </button>
     </div>
   );
 
@@ -413,21 +474,26 @@ export default function CallRecordingModal({
         {/* Body */}
         <div className="px-5 py-4 space-y-3">
 
-          {/* ── DETECTING_CALL ──────────────────────────────────────────── */}
+          {/* -- DETECTING_CALL -- */}
           {step === "DETECTING_CALL" && (
             <div className="text-center py-6">
               <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center mx-auto mb-3 animate-pulse">
                 <FaPhone className="text-blue-600" />
               </div>
               <p className="text-sm font-medium text-gray-700">Checking call log...</p>
-              <p className="text-xs text-gray-400 mt-1">Looking for your recent call</p>
+              <p className="text-xs text-gray-400 mt-1">
+                {retryCount.current > 0
+                  ? `Waiting for call log entry (attempt ${retryCount.current + 1}/${CALL_LOG_MAX_RETRIES + 1})...`
+                  : "Looking for your recent call"}
+              </p>
             </div>
           )}
 
-          {/* ── SEARCHING_RECORDINGS ────────────────────────────────────── */}
+          {/* -- SEARCHING_RECORDINGS -- */}
           {step === "SEARCHING_RECORDINGS" && (
             <div className="text-center py-4 space-y-3">
               {callBanner}
+              {permBanner}
               <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center mx-auto mb-3 animate-pulse">
                 <FaMicrophone className="text-purple-600" />
               </div>
@@ -436,10 +502,38 @@ export default function CallRecordingModal({
             </div>
           )}
 
-          {/* ── NOT_DETECTED ────────────────────────────────────────────── */}
+          {/* -- PERMISSION_DENIED -- */}
+          {step === "PERMISSION_DENIED" && (
+            <div className="space-y-3">
+              {callBanner}
+              {permBanner}
+              <div className="p-3 bg-gray-50 rounded-xl text-center">
+                <p className="text-sm font-medium text-gray-700">Cannot search recordings automatically</p>
+                <p className="text-xs text-gray-400 mt-1">
+                  You can grant the permission in App Settings, or use the manual file picker below.
+                </p>
+              </div>
+              <NoteField note={note} setNote={setNote} />
+              {error && <ErrorBanner message={error} />}
+              <div className="flex gap-2">
+                <button type="button" onClick={handlePickFile}
+                  className="flex-1 px-3 py-2.5 text-xs font-bold rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition flex items-center justify-center gap-1.5">
+                  <FaFileAudio className="text-[10px]" />
+                  Select Call Recording
+                </button>
+                <button type="button" onClick={handleSkip}
+                  className="flex-1 px-3 py-2.5 text-xs font-bold rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 transition">
+                  Skip
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* -- NOT_DETECTED -- */}
           {step === "NOT_DETECTED" && (
             <div className="space-y-3">
               {callBanner}
+              {permBanner}
               <div className="p-3 bg-gray-50 rounded-xl text-center">
                 <p className="text-sm font-medium text-gray-700">Call recording not detected</p>
                 <p className="text-xs text-gray-400 mt-1">
@@ -462,7 +556,7 @@ export default function CallRecordingModal({
             </div>
           )}
 
-          {/* ── RECORDING_DETECTED (single high-confidence match) ──────── */}
+          {/* -- RECORDING_DETECTED (single high-confidence match) -- */}
           {step === "RECORDING_DETECTED" && selectedRecording && (
             <div className="space-y-3">
               {callBanner}
@@ -497,7 +591,7 @@ export default function CallRecordingModal({
             </div>
           )}
 
-          {/* ── MULTIPLE_RECORDINGS ─────────────────────────────────────── */}
+          {/* -- MULTIPLE_RECORDINGS -- */}
           {step === "MULTIPLE_RECORDINGS" && (
             <div className="space-y-3">
               {callBanner}
@@ -537,7 +631,7 @@ export default function CallRecordingModal({
             </div>
           )}
 
-          {/* ── CONFIRM_ATTACH (after manual pick or multi-select) ─────── */}
+          {/* -- CONFIRM_ATTACH (after manual pick or multi-select) -- */}
           {step === "CONFIRM_ATTACH" && selectedRecording && (
             <div className="space-y-3">
               {callBanner}
@@ -568,7 +662,7 @@ export default function CallRecordingModal({
             </div>
           )}
 
-          {/* ── UPLOADING ───────────────────────────────────────────────── */}
+          {/* -- UPLOADING -- */}
           {step === "UPLOADING" && (
             <div className="text-center py-6">
               <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center mx-auto mb-3 animate-pulse">
@@ -578,7 +672,7 @@ export default function CallRecordingModal({
             </div>
           )}
 
-          {/* ── UPLOAD_FAILED ───────────────────────────────────────────── */}
+          {/* -- UPLOAD_FAILED -- */}
           {step === "UPLOAD_FAILED" && (
             <div className="space-y-3">
               {error && <ErrorBanner message={error} />}
@@ -600,7 +694,7 @@ export default function CallRecordingModal({
             </div>
           )}
 
-          {/* ── DONE ────────────────────────────────────────────────────── */}
+          {/* -- DONE -- */}
           {step === "DONE" && (
             <div className="text-center py-6">
               <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-3">
@@ -615,7 +709,7 @@ export default function CallRecordingModal({
   );
 }
 
-/* ── Small helper components ─────────────────────────────────────────────── */
+/* -- Small helper components -- */
 
 function NoteField({ note, setNote }: { note: string; setNote: (v: string) => void }) {
   return (
