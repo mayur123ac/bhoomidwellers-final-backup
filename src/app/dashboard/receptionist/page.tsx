@@ -685,8 +685,8 @@ export default function ReceptionistDashboard() {
   const getTodayString = () => new Date().toISOString().split("T")[0];
   const [enquiryForm, setEnquiryForm] = useState({
     fullName: "", mobile: "", altMobile: "", email: "", address: "", pinCode: "", city: "",
-    occupation: "", organization: "", budget: "", configuration: "",
-    purpose: "", source: "", assignedTo: "", loanPlanned: "", sourceOther: "", referralName: "", budget: "", budgetUnit: "lakh"
+    occupation: "", organization: "", budget: "", budgetUnit: "lakh", configuration: "",
+    purpose: "", source: "", assignedTo: "", loanPlanned: "", sourceOther: "", referralName: "",
     cpDetails: { name: "", company: "", phone: "" },
     sourcingManagerId: "",   // users.id of the assigned Sourcing Manager (CP enquiries only)
     preferredLocation: "",
@@ -1698,7 +1698,10 @@ export default function ReceptionistDashboard() {
         setMatchCandidates([]);
         setSelectedCandidate(null);
         setIsRevisit(false);
-        setEnquiryForm({ fullName: "", mobile: "", altMobile: "", email: "", address: "", pinCode: "", city: "", occupation: "", organization: "", budget: "", configuration: "", purpose: "", source: "", assignedTo: "", loanPlanned: "", sourceOther: "", referralName: "", cpDetails: { name: "", company: "", phone: "" }, sourcingManagerId: "", preferredLocation: "", selfAssign: false, enquiryDate: getTodayString() });
+        setEnquiryForm({
+          fullName: "", mobile: "", altMobile: "", email: "", address: "", pinCode: "", city: "", occupation: "", organization: "", budget: "",
+          budgetUnit: "lakh", configuration: "", purpose: "", source: "", assignedTo: "", loanPlanned: "", sourceOther: "", referralName: "", cpDetails: { name: "", company: "", phone: "" }, sourcingManagerId: "", preferredLocation: "", selfAssign: false, enquiryDate: getTodayString()
+        });
         refetchAll();
       } else {
         const err = await res.json().catch(() => null);
@@ -4246,10 +4249,10 @@ export default function ReceptionistDashboard() {
                               budget: e.target.value,
                             })
                           }
-                          className={`flex-1 min-w-0 px-2 py-3.5 text-[15px] outline-none bg-transparent ${isDark
+                          className={`flex-1 min-w-0 px-2 py-3.5 text-[15px] outline-none border-none ring-0 focus:outline-none focus:border-none focus:ring-0 bg-transparent appearance-none ${isDark
                             ? "text-white placeholder:text-gray-500"
                             : "text-gray-900 placeholder:text-gray-400"
-                            }`}
+                            } [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
                           placeholder="Enter amount"
                         />
 
