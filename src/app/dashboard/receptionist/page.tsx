@@ -675,6 +675,7 @@ export default function ReceptionistDashboard() {
 
   // ── Enquiry (new-entry) modal ──
   const [isEnquiryModalOpen, setIsEnquiryModalOpen] = useState(false);
+  const [showConfigurationDropdown, setShowConfigurationDropdown] = useState(false);
   // Channel Partner office-visit registration. Create-only for this role: the
   // Receptionist records the partner's profile but never edits or lists them.
   const [isCpVisitModalOpen, setIsCpVisitModalOpen] = useState(false);
@@ -4223,22 +4224,314 @@ export default function ReceptionistDashboard() {
 
                     <div>
                       <label className={`block text-[12px] mb-2 font-semibold uppercase tracking-wider ${isDark ? "text-gray-400" : "text-gray-500"}`}>Configuration Interested In</label>
-                      <select
-                        value={enquiryForm.configuration}
-                        onChange={e => setEnquiryForm({ ...enquiryForm, configuration: e.target.value })}
-                        className={`w-full rounded-xl px-4 py-3.5 text-[15px] outline-none transition-all border cursor-pointer appearance-none ${isDark ? "bg-[#242424] border-gray-700 text-white focus:border-[#C5A059]" : "bg-gray-50 border-gray-200 text-gray-900 focus:border-[#18392B] focus:bg-white"
-                          } focus:ring-1 focus:ring-[#C5A059]`}
-                      >
-                        <option value="" disabled>Select Configuration</option>
-                        {/* Provided static example list for standard configs, keeps value freeform */}
-                        <option value="1 BHK">1 BHK</option>
-                        <option value="2 BHK">2 BHK</option>
-                        <option value="3 BHK">3 BHK</option>
-                        <option value="4 BHK">4 BHK</option>
-                        <option value="Studio">Studio</option>
-                        <option value="Villa">Villa / Row House</option>
-                        <option value="Commercial">Commercial Shop</option>
-                      </select>
+                      {/* Configuration */}
+                      <div className="relative">
+
+
+                        <div className="relative">
+                          {/* Selected value / trigger */}
+                          <button
+                            type="button"
+                            onClick={() => setShowConfigurationDropdown(v => !v)}
+                            className={`w-full min-h-[60px] rounded-xl px-3 py-3 pr-11 text-left text-[15px] outline-none transition-all duration-200 border cursor-pointer flex items-center justify-between ${isDark
+                              ? "bg-[#242424] border-gray-700 text-white hover:border-gray-600"
+                              : "bg-gray-50 border-gray-200 text-gray-900 hover:border-gray-300"
+                              } ${showConfigurationDropdown
+                                ? isDark
+                                  ? "border-[#C5A059] bg-[#242424] ring-2 ring-[#C5A059]/10"
+                                  : "border-[#18392B] bg-white ring-2 ring-[#C5A059]/15"
+                                : ""
+                              }`}
+                            aria-haspopup="listbox"
+                            aria-expanded={showConfigurationDropdown}
+                          >
+                            <span
+                              className={
+                                enquiryForm.configuration
+                                  ? isDark
+                                    ? "text-white"
+                                    : "text-gray-900"
+                                  : isDark
+                                    ? "text-gray-500"
+                                    : "text-gray-400"
+                              }
+                            >
+                              {enquiryForm.configuration || "Select Configuration"}
+                            </span>
+
+                            {/* Chevron */}
+                            <svg
+                              className={`absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-transform duration-200 ${showConfigurationDropdown ? "rotate-180" : ""
+                                } ${isDark ? "text-gray-400" : "text-gray-500"
+                                }`}
+                              viewBox="0 0 20 20"
+                              fill="none"
+                              aria-hidden="true"
+                            >
+                              <path
+                                d="M5 7.5L10 12.5L15 7.5"
+                                stroke="currentColor"
+                                strokeWidth="1.8"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          </button>
+
+                          {/* Dropdown */}
+                          {showConfigurationDropdown && (
+                            <div
+                              className={`absolute z-50 left-0 right-0 mt-2 overflow-hidden rounded-2xl border shadow-xl ${isDark
+                                ? "bg-[#1E1E1E] border-white/10 shadow-black/40"
+                                : "bg-white border-gray-200 shadow-black/10"
+                                }`}
+                            >
+                              <div
+                                className="max-h-[280px] overflow-y-auto p-2"
+                                role="listbox"
+                              >
+                                {/* Residential */}
+                                <div className="px-3 pt-2 pb-1.5">
+                                  <span
+                                    className={`text-[10px] font-semibold uppercase tracking-[0.12em] ${isDark ? "text-[#C5A059]" : "text-[#18392B]"
+                                      }`}
+                                  >
+                                    Residential
+                                  </span>
+                                </div>
+
+                                {[
+                                  "Studio",
+                                  "1 BHK",
+                                  "2 BHK",
+                                  "3 BHK",
+                                  "4 BHK",
+                                  "5 BHK",
+                                  "6 BHK",
+                                  "7+ BHK",
+                                  "Jodi Apartment",
+                                  "Duplex",
+                                  "Triplex",
+                                  "Penthouse",
+                                  "Villa",
+                                  "Row House",
+                                  "Bungalow",
+                                ].map(option => (
+                                  <button
+                                    key={option}
+                                    type="button"
+                                    role="option"
+                                    aria-selected={enquiryForm.configuration === option}
+                                    onClick={() => {
+                                      setEnquiryForm({
+                                        ...enquiryForm,
+                                        configuration: option,
+                                      });
+                                      setShowConfigurationDropdown(false);
+                                    }}
+                                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-left text-[14px] transition-colors ${enquiryForm.configuration === option
+                                      ? isDark
+                                        ? "bg-[#C5A059]/10 text-[#C5A059] font-medium"
+                                        : "bg-[#18392B]/[0.06] text-[#18392B] font-medium"
+                                      : isDark
+                                        ? "text-gray-200 hover:bg-white/[0.06]"
+                                        : "text-gray-700 hover:bg-gray-50"
+                                      }`}
+                                  >
+                                    <span>{option}</span>
+
+                                    {enquiryForm.configuration === option && (
+                                      <svg
+                                        className="w-4 h-4 shrink-0"
+                                        viewBox="0 0 20 20"
+                                        fill="none"
+                                        aria-hidden="true"
+                                      >
+                                        <path
+                                          d="M5 10.5L8.5 14L15 7.5"
+                                          stroke="currentColor"
+                                          strokeWidth="2"
+                                          strokeLinecap="round"
+                                          strokeLinejoin="round"
+                                        />
+                                      </svg>
+                                    )}
+                                  </button>
+                                ))}
+
+                                {/* Plot & Land */}
+                                <div className="px-3 pt-4 pb-1.5">
+                                  <span
+                                    className={`text-[10px] font-semibold uppercase tracking-[0.12em] ${isDark ? "text-[#C5A059]" : "text-[#18392B]"
+                                      }`}
+                                  >
+                                    Plot & Land
+                                  </span>
+                                </div>
+
+                                {[
+                                  "Residential Plot",
+                                  "Commercial Plot",
+                                  "NA Plot",
+                                  "Farmhouse Plot",
+                                  "Agricultural Land",
+                                  "Land",
+                                ].map(option => (
+                                  <button
+                                    key={option}
+                                    type="button"
+                                    role="option"
+                                    aria-selected={enquiryForm.configuration === option}
+                                    onClick={() => {
+                                      setEnquiryForm({
+                                        ...enquiryForm,
+                                        configuration: option,
+                                      });
+                                      setShowConfigurationDropdown(false);
+                                    }}
+                                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-left text-[14px] transition-colors ${enquiryForm.configuration === option
+                                      ? isDark
+                                        ? "bg-[#C5A059]/10 text-[#C5A059] font-medium"
+                                        : "bg-[#18392B]/[0.06] text-[#18392B] font-medium"
+                                      : isDark
+                                        ? "text-gray-200 hover:bg-white/[0.06]"
+                                        : "text-gray-700 hover:bg-gray-50"
+                                      }`}
+                                  >
+                                    <span>{option}</span>
+
+                                    {enquiryForm.configuration === option && (
+                                      <svg
+                                        className="w-4 h-4 shrink-0"
+                                        viewBox="0 0 20 20"
+                                        fill="none"
+                                        aria-hidden="true"
+                                      >
+                                        <path
+                                          d="M5 10.5L8.5 14L15 7.5"
+                                          stroke="currentColor"
+                                          strokeWidth="2"
+                                          strokeLinecap="round"
+                                          strokeLinejoin="round"
+                                        />
+                                      </svg>
+                                    )}
+                                  </button>
+                                ))}
+
+                                {/* Commercial */}
+                                <div className="px-3 pt-4 pb-1.5">
+                                  <span
+                                    className={`text-[10px] font-semibold uppercase tracking-[0.12em] ${isDark ? "text-[#C5A059]" : "text-[#18392B]"
+                                      }`}
+                                  >
+                                    Commercial
+                                  </span>
+                                </div>
+
+                                {[
+                                  "Commercial Shop",
+                                  "Commercial Office",
+                                  "Showroom",
+                                  "Warehouse",
+                                  "Industrial Unit",
+                                ].map(option => (
+                                  <button
+                                    key={option}
+                                    type="button"
+                                    role="option"
+                                    aria-selected={enquiryForm.configuration === option}
+                                    onClick={() => {
+                                      setEnquiryForm({
+                                        ...enquiryForm,
+                                        configuration: option,
+                                      });
+                                      setShowConfigurationDropdown(false);
+                                    }}
+                                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-left text-[14px] transition-colors ${enquiryForm.configuration === option
+                                      ? isDark
+                                        ? "bg-[#C5A059]/10 text-[#C5A059] font-medium"
+                                        : "bg-[#18392B]/[0.06] text-[#18392B] font-medium"
+                                      : isDark
+                                        ? "text-gray-200 hover:bg-white/[0.06]"
+                                        : "text-gray-700 hover:bg-gray-50"
+                                      }`}
+                                  >
+                                    <span>{option}</span>
+
+                                    {enquiryForm.configuration === option && (
+                                      <svg
+                                        className="w-4 h-4 shrink-0"
+                                        viewBox="0 0 20 20"
+                                        fill="none"
+                                        aria-hidden="true"
+                                      >
+                                        <path
+                                          d="M5 10.5L8.5 14L15 7.5"
+                                          stroke="currentColor"
+                                          strokeWidth="2"
+                                          strokeLinecap="round"
+                                          strokeLinejoin="round"
+                                        />
+                                      </svg>
+                                    )}
+                                  </button>
+                                ))}
+
+                                {/* Other */}
+                                <div className="px-3 pt-4 pb-1.5">
+                                  <span
+                                    className={`text-[10px] font-semibold uppercase tracking-[0.12em] ${isDark ? "text-[#C5A059]" : "text-[#18392B]"
+                                      }`}
+                                  >
+                                    Other
+                                  </span>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  role="option"
+                                  aria-selected={enquiryForm.configuration === "Other"}
+                                  onClick={() => {
+                                    setEnquiryForm({
+                                      ...enquiryForm,
+                                      configuration: "Other",
+                                    });
+                                    setShowConfigurationDropdown(false);
+                                  }}
+                                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-left text-[14px] transition-colors ${enquiryForm.configuration === "Other"
+                                    ? isDark
+                                      ? "bg-[#C5A059]/10 text-[#C5A059] font-medium"
+                                      : "bg-[#18392B]/[0.06] text-[#18392B] font-medium"
+                                    : isDark
+                                      ? "text-gray-200 hover:bg-white/[0.06]"
+                                      : "text-gray-700 hover:bg-gray-50"
+                                    }`}
+                                >
+                                  <span>Other</span>
+
+                                  {enquiryForm.configuration === "Other" && (
+                                    <svg
+                                      className="w-4 h-4 shrink-0"
+                                      viewBox="0 0 20 20"
+                                      fill="none"
+                                      aria-hidden="true"
+                                    >
+                                      <path
+                                        d="M5 10.5L8.5 14L15 7.5"
+                                        stroke="currentColor"
+                                        strokeWidth="2"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                      />
+                                    </svg>
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
 
                     <div className="md:col-span-2">
