@@ -84,6 +84,8 @@ export async function POST(req: NextRequest) {
     }
 
     const actor = gate.session.name || "system";
+    const orgId = await getOrganizationId();
+
     const rows = await query(
       `INSERT INTO inventory_projects (name, city, address, rera_number, status, possession_date, created_by, updated_by, organization_id)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$7,$8)
@@ -96,7 +98,7 @@ export async function POST(req: NextRequest) {
         status,
         body.possession_date || null,
         actor,
-        await getOrganizationId(),
+        orgId,
       ],
     );
 

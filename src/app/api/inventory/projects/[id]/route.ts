@@ -164,10 +164,22 @@ export async function PATCH(
       if (!found.rows.length) return { notFound: true as const };
 
       const prevName = String(found.rows[0].name);
-      if (prevName.trim().toLowerCase() === nextName.toLowerCase()) {
-        // Same name (possibly re-cased) — nothing to propagate.
+      
+      const updates = [];
+      const values = [];
+      let idx = 1;
+      
+      if (prevName.trim().toLowerCase() !== nextName.toLowerCase()) {
+        updates.push(`name = $${idx++}`);
+        values.push(nextName);
+      }
+      
+      if (updates.length === 0) {
+        // Nothing to update
         return { unchanged: true as const, name: prevName };
       }
+
+      if (updates.some(u => u.startsWith('name'))) {
 
       // Per-tenant uniqueness, checked before the write so the user gets a
       // sentence instead of a constraint violation. uq_inventory_projects_org_name
@@ -179,14 +191,21 @@ export async function PATCH(
         [orgId, nextName, Number(id)],
       );
       if (clash.rows.length) return { clash: true as const };
+      }
+      
+      updates.push(`updated_by = $${idx++}`, `updated_at = NOW()`);
+      values.push(actor, Number(id), orgId);
 
       await client.query(
-        `UPDATE inventory_projects SET name = $1, updated_by = $2, updated_at = NOW()
-          WHERE id = $3 AND organization_id = $4`,
-        [nextName, actor, Number(id), orgId],
+        `UPDATE inventory_projects SET ${updates.join(', ')}
+          WHERE id = $${idx} AND organization_id = $${idx+1}`,
+        values
       );
 
-      // The denormalised copies. Matched on the OLD name (or the FK), scoped to
+      // Only update denormalised copies if the name actually changed
+      let unitsUpdated = 0;
+      let bookingsUpdated = 0;
+      if (updates.some(u => u.startsWith('name'))) {
       // this tenant so a same-named building belonging to another builder is
       // untouched.
       const units = await client.query(
@@ -206,14 +225,17 @@ export async function PATCH(
           WHERE organization_id = $2 AND LOWER(TRIM(project_name)) = LOWER(TRIM($3))`,
         [nextName, orgId, prevName],
       );
+      unitsUpdated = units.rowCount ?? 0;
+      bookingsUpdated = bookings.rowCount ?? 0;
+      }
 
       return {
         ok: true as const,
         id: Number(id),
         name: nextName,
         previous_name: prevName,
-        units_updated: units.rowCount ?? 0,
-        bookings_updated: bookings.rowCount ?? 0,
+        units_updated: unitsUpdated,
+        bookings_updated: bookingsUpdated,
       };
     });
 

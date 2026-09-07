@@ -2539,7 +2539,7 @@ function SalesManagerView({
               </div>
             </div>
 
-            <div className={`rounded-2xl border shadow-sm overflow-hidden flex flex-col ${t.tableWrap}`} style={t.tableGlass}>
+            <div className={`rounded-2xl border shadow-sm overflow-x-auto flex flex-col ${t.tableWrap}`} style={t.tableGlass}>
               {/* ── Table Header Area ── */}
               <div className={`px-4 sm:px-6 py-4 sm:py-5 border border-gray-400 flex justify-between items-center ${t.tableBorder}`}>
                 <h2 className={`text-base sm:text-lg font-semibold tracking-tight flex items-center gap-3 ${t.text}`}>

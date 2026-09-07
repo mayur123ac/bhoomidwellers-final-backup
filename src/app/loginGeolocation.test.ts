@@ -85,7 +85,7 @@ describe("getPosition — geolocation retry after toggle", () => {
 
   it("resolves with coordinates on a successful fix", async () => {
     const geo = {
-      getCurrentPosition: vi.fn((ok: any) => ok(fakePosition())),
+      getCurrentPosition: vi.fn((ok: any, err?: any, opts?: any) => ok(fakePosition())),
     };
     const pos = await getPosition(geo);
     expect(pos.coords.latitude).toBe(19.07);
@@ -126,7 +126,7 @@ describe("getPosition — geolocation retry after toggle", () => {
     let callCount = 0;
 
     const geo = {
-      getCurrentPosition: vi.fn((ok: any, err: any) => {
+      getCurrentPosition: vi.fn((ok: any, err: any, opts?: any) => {
         callCount++;
         if (callCount === 1) {
           // First call: device location is OFF → permission denied
@@ -158,7 +158,7 @@ describe("getPosition — geolocation retry after toggle", () => {
     let callCount = 0;
 
     const geo = {
-      getCurrentPosition: vi.fn((ok: any, err: any) => {
+      getCurrentPosition: vi.fn((ok: any, err: any, opts?: any) => {
         callCount++;
         if (callCount <= 3) {
           // First 3 attempts fail (user still fiddling with settings)
@@ -246,7 +246,7 @@ describe("getPosition — geolocation retry after toggle", () => {
 
   it("passes maximumAge: 0 on every call (no cached positions)", async () => {
     const geo = {
-      getCurrentPosition: vi.fn((ok: any) => ok(fakePosition())),
+      getCurrentPosition: vi.fn((ok: any, err?: any, opts?: any) => ok(fakePosition())),
     };
 
     await getPosition(geo);

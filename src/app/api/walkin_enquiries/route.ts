@@ -151,13 +151,18 @@ export async function GET(req: Request) {
 
     const [rows, countRows] = await Promise.all([
       query(
-        `SELECT * FROM walkin_enquiries WHERE ${where} ORDER BY ${orderBy} LIMIT ${limitParam} OFFSET ${offsetParam}`,
+        `SELECT w.*
+         FROM walkin_enquiries w
+         WHERE ${where}
+         ORDER BY ${orderBy}
+         LIMIT ${limitParam} OFFSET ${offsetParam}`,
         [...params, limit, offset]
       ),
       // Counted with the SAME predicate, so `total` describes the filtered set
       // and the pager cannot promise pages that do not exist.
       query(`SELECT COUNT(*)::int AS total FROM walkin_enquiries WHERE ${where}`, params),
     ]);
+
 
     const total: number = countRows[0]?.total ?? 0;
 
@@ -184,10 +189,12 @@ export async function GET(req: Request) {
     // Attach visitNumber to every row — single batch CTE, no N+1.
     const leadIds = rows.map((r: any) => r.id as number);
     const visitDepths = await batchGetVisitDepths(leadIds, listOrgId);
-    const rowsWithVisits = maskedRows.map((r: any) => ({
-      ...r,
-      visitNumber: visitDepths.get(r.id) ?? 1,
-    }));
+    const rowsWithVisits = maskedRows.map((r: any) => {
+      return {
+        ...r,
+        visitNumber: visitDepths.get(r.id) ?? 1,
+      };
+    });
 
     // Compressed: the admin dashboard requests limit=10000 here, which is ~13 MB
     // of highly repetitive JSON (60 identical keys per row) and gzips ~35×.
@@ -566,7 +573,7 @@ export async function POST(req: Request) {
         leadId: result.row.id,
         leadClassification,
         assignedTo: result.row.assigned_to ?? null,
-      }).catch(() => {/* fire-and-forget */});
+      }).catch(() => {/* fire-and-forget */ });
     }
 
     // ── WhatsApp: tell the Sourcing Manager the lead landed on ───────────────

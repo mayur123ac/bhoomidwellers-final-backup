@@ -187,7 +187,7 @@ describe("GET /api/walkin_enquiries/check-match — multi-field matching", () =>
     // All phone queries return empty
     mockQuery.mockResolvedValue([] as any);
     // Override: email query returns a match
-    mockQuery.mockImplementation(async (sql: string, params: any[]) => {
+    mockQuery.mockImplementation(async (sql: string, params?: any[]) => {
       if (typeof sql === "string" && sql.includes("LOWER(TRIM(email))")) {
         return [row] as any;
       }

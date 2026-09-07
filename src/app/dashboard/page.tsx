@@ -1,6 +1,6 @@
 //dashboard/page.tsx
 "use client";
-
+import { Fragment } from "react";
 import { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { clearCrmSession, getStoredCrmUser, installLoggedOutBackGuard } from "@/lib/authSession";
@@ -3142,7 +3142,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
           setSelectedVisitIdx(json.visits.length - 2);
         }
       })
-      .catch(() => {});
+      .catch(() => { });
     return () => { cancelled = true; };
   }, [selectedLead?.id, selectedLead?.lead_classification]);
 
@@ -3166,7 +3166,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
           setVisitDetailCache(prev => ({ ...prev, [childLeadId]: { previousLead: json.previousLead, followUps: json.followUps ?? [], historicalSalesForm: json.historicalSalesForm ?? null, loan: json.loan ?? [], booking: json.booking ?? null, cutoffAt: json.cutoffAt } }));
         }
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setLoadingVisitDetail(prev => ({ ...prev, [childLeadId]: false })));
   };
 
@@ -4010,129 +4010,190 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                     )}
 
                     {selectedLead.lead_classification === "RETURNING_LEAD" && showPrevLead && (
-                      <div className={`rounded-xl border overflow-hidden mb-3 flex-shrink-0 ${isDark ? "border-[rgba(5,150,105,0.40)]" : "border-[rgba(5,150,105,0.35)]"}`}>
-                        <div className={`px-4 py-3 flex flex-col gap-2 ${isDark ? "bg-[rgba(5,150,105,0.18)]" : "bg-[rgba(5,150,105,0.10)]"}`}>
-                          <div className="flex items-center justify-between">
-                            <span className="text-[11px] font-bold uppercase tracking-widest text-[#059669]">Visit History</span>
-                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border border-[rgba(5,150,105,0.4)] text-[#059669]">READ ONLY</span>
+                      <div className={`rounded-xl border shadow-sm mb-4 flex-shrink-0 overflow-hidden transition-colors ${isDark ? "bg-[#1C1C1E] border-white/10" : "bg-white border-gray-200"}`}>
+
+                        {/* Header */}
+                        <div className={`px-5 py-3.5 border-b flex items-center justify-between ${isDark ? "border-white/10 bg-black/20" : "border-gray-100 bg-gray-50/50"}`}>
+                          <div className="flex items-center gap-2.5">
+                            <div className={`p-1.5 rounded-md ${isDark ? "text-blue-400" : "text-blue-600"}`}>
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
+                            </div>
+                            <h3 className={`text-[14px] font-semibold tracking-tight ${isDark ? "text-white" : "text-gray-900"}`}>Visit History</h3>
                           </div>
-                          {visitChain && visitChain.visits.length > 1 && (
-                            <div className="flex flex-wrap gap-1.5">
-                              {visitChain.visits.slice(0, -1).map((v: any, i: number) => (
-                                <button
-                                  key={v.leadId}
-                                  type="button"
-                                  onClick={() => handleSelectVisit(i)}
-                                  className={`text-[10px] font-semibold px-2.5 py-1 rounded-md border transition-colors cursor-pointer ${selectedVisitIdx === i ? "border-[rgba(5,150,105,0.6)] text-[#059669] bg-[rgba(5,150,105,0.15)]" : `${theme.tableBorder} ${theme.textMuted} ${isDark ? "hover:bg-white/5" : "hover:bg-black/5"}`}`}
+                          <span className={`text-[9px] sm:text-[11px] font-bold px-2 py-0.5 rounded-md border flex items-center gap-1.5 flex-shrink-0 tracking-wide uppercase border-[rgba(5,150,105,0.45)] text-[#059669] bg-[rgba(5,150,105,0.15)]`}>
+                            Read Only
+                          </span>
+                        </div>
+
+                        {/* Timeline / Stepper Area */}
+                        <div className={`px-6 py-5 flex items-center overflow-x-auto custom-scrollbar border-b ${isDark ? "border-white/10 bg-[#1C1C1E]" : "border-gray-100 bg-white"}`}>
+                          {visitChain && visitChain.visits.map((v: any, i: number) => {
+                            const isLast = i === visitChain.visits.length - 1;
+                            const isSelected = selectedVisitIdx === i;
+                            const isCompleted = !isLast;
+
+                            return (
+                              <div key={v.leadId || i} className="flex items-center shrink-0">
+                                <div
+                                  onClick={() => !isLast && handleSelectVisit(i)}
+                                  className={`flex flex-col p-4 rounded-xl border min-w-[150px] transition-all duration-200 ${!isLast ? "cursor-pointer" : "cursor-default opacity-90"
+                                    } ${isSelected
+                                      ? (isDark ? "bg-blue-500/10 border-blue-400/50" : "bg-blue-50/50 border-blue-300 shadow-[0_1px_2px_rgba(59,130,246,0.05)]")
+                                      : (isDark ? "bg-white/[0.02] border-white/10 hover:bg-white/[0.04]" : "bg-white border-gray-200 hover:border-gray-300")
+                                    }`}
                                 >
-                                  Visit {v.visitNumber} · {new Date(v.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
-                                </button>
-                              ))}
-                              <span className={`text-[10px] font-semibold px-2.5 py-1 rounded-md border ${theme.tableBorder} ${theme.textFaint} opacity-60`}>
-                                Visit {visitChain.visits[visitChain.visits.length - 1].visitNumber} (Current)
-                              </span>
+                                  <div className="flex items-center gap-2 mb-1.5">
+                                    {isCompleted ? (
+                                      <div className="w-[18px] h-[18px] rounded-full bg-[#10B981] flex items-center justify-center text-white shrink-0">
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+                                      </div>
+                                    ) : (
+                                      <div className={`w-[18px] h-[18px] rounded-full border-2 flex items-center justify-center shrink-0 ${isDark ? "border-blue-400" : "border-blue-600"}`}>
+                                        <div className={`w-1.5 h-1.5 rounded-full ${isDark ? "bg-blue-400" : "bg-blue-600"}`} />
+                                      </div>
+                                    )}
+                                    <span className={`text-[13px] font-semibold tracking-tight ${isDark ? "text-gray-200" : "text-gray-900"}`}>
+                                      Visit {v.visitNumber}
+                                    </span>
+                                  </div>
+
+                                  <span className={`text-[11px] mb-3 ml-6 font-medium ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                                    {new Date(v.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                                  </span>
+
+                                  <div className="ml-6">
+                                    {isCompleted ? (
+                                      <span className={`text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded w-fit ${isDark ? "bg-emerald-500/20 text-emerald-400" : "bg-emerald-100 text-emerald-700"}`}>
+                                        Completed
+                                      </span>
+                                    ) : (
+                                      <span className={`text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded w-fit ${isDark ? "bg-blue-500/20 text-blue-400" : "bg-blue-100 text-blue-700"}`}>
+                                        Current
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Connecting Line */}
+                                {!isLast && (
+                                  <div className={`h-[1px] w-8 flex-shrink-0 ${isDark ? "bg-white/10" : "bg-gray-200"}`} />
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Detailed History View */}
+                        <div className={`p-6 md:p-8 ${isDark ? "bg-[#1C1C1E]" : "bg-gray-50/30"}`}>
+                          {(isLoadingRevisit && !displayedHistory) || isLoadingSelectedVisit ? (
+                            <div className="flex justify-center py-4">
+                              <p className={`text-[13px] flex items-center gap-2 font-medium ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                                <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                Loading visit data…
+                              </p>
+                            </div>
+                          ) : !displayedHistory ? (
+                            <p className={`text-[13px] font-medium ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                              No previous visit history found or you are not authorized to view it.
+                            </p>
+                          ) : (
+                            <div className="flex flex-col gap-8">
+
+                              {/* Core Enquiry Details */}
+                              <div>
+                                <h4 className={`text-[11px] font-bold uppercase tracking-widest mb-5 ${isDark ? "text-[#9E217B]" : "text-[#9E217B]"}`}>
+                                  {visitChain && selectedVisitIdx !== null ? `Key Details — Visit ${visitChain.visits[selectedVisitIdx].visitNumber}` : "Key Details"}
+                                </h4>
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-y-6 gap-x-4">
+                                  {[
+                                    { label: "Visit Date", val: new Date(displayedHistory.previousLead.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) },
+                                    { label: "Managed By", val: displayedHistory.previousLead.assigned_to || "—" },
+                                    { label: "Phone", val: displayedHistory.previousLead.phone || "—", isMono: true },
+                                    { label: "Interest Status", val: displayedHistory.previousLead.lead_interest_status || "Pending" },
+                                    { label: "Budget", val: displayedHistory.previousLead.budget || "—", color: isDark ? "text-green-400" : "text-[#10B981]" },
+                                    { label: "Lead Status", val: displayedHistory.previousLead.status || "—" },
+                                    ...(displayedHistory.previousLead.closing_date ? [{ label: "Closing Date", val: formatDate(displayedHistory.previousLead.closing_date) }] : [])
+                                  ].map(({ label, val, isMono, color }) => (
+                                    <div key={label}>
+                                      <p className={`text-[10px] font-medium uppercase tracking-widest mb-1.5 opacity-70 ${isDark ? "text-gray-400" : "text-gray-500"}`}>{label}</p>
+                                      <p className={`text-[13px] font-semibold tracking-tight ${isMono ? "font-mono" : ""} ${color || (isDark ? "text-gray-200" : "text-gray-900")}`}>{val}</p>
+                                    </div>
+                                  ))}
+                                </div>
+
+                                {displayedHistory.previousLead.is_lost_lead && (
+                                  <div className="mt-6 p-4 rounded-xl bg-red-50 dark:bg-red-500/10 border border-red-100 dark:border-red-500/20">
+                                    <p className="text-[10px] font-bold uppercase tracking-widest mb-1.5 text-red-600 dark:text-red-400">Lost Lead Reason</p>
+                                    <p className="text-[13px] font-medium text-red-800 dark:text-red-200">{displayedHistory.previousLead.lost_lead_reason || "No reason recorded."}</p>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Modular Cards for Forms, Loans, and Bookings */}
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+
+                                {/* Sales Form Card */}
+                                <div className={`rounded-xl border p-5 flex flex-col ${isDark ? "bg-[#1C1C1E] border-white/40" : "bg-white border-gray-300"}`}>
+                                  <h5 className={`text-[11px] font-bold uppercase tracking-widest mb-4 flex items-center gap-2 ${isDark ? "text-[#9E217B]" : "text-[#9E217B]"}`}>
+                                    <svg className="w-4 h-4 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                                    Sales Form Summary
+                                  </h5>
+                                  {displayedHistory.historicalSalesForm ? (
+                                    <div className={`text-[12px] font-medium whitespace-pre-wrap leading-relaxed flex-1 ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+                                      {displayedHistory.historicalSalesForm.replace("📝 Detailed Salesform Submitted:\n", "").trim()}
+                                    </div>
+                                  ) : (
+                                    <p className={`text-[12px] italic flex-1 flex items-center ${isDark ? "text-gray-500" : "text-gray-400"}`}>No Sales Form data available.</p>
+                                  )}
+                                </div>
+
+                                <div className="flex flex-col gap-5">
+                                  {/* Loan Card */}
+                                  <div className={`rounded-xl border p-5 flex-1 ${isDark ? "bg-[#1C1C1E] border-white/10" : "bg-white border-gray-300"}`}>
+                                    <h5 className={`text-[11px] font-bold uppercase tracking-widest mb-4 flex items-center gap-2 ${isDark ? "text-[#00AAEF]" : "text-[#00AAEF]"}`}>
+                                      <svg className="w-4 h-4 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z" /></svg>
+                                      Loan Details
+                                    </h5>
+                                    {displayedHistory.loan.length > 0 ? (
+                                      <div className="flex flex-col gap-4">
+                                        {displayedHistory.loan.map((l: any, idx: number) => (
+                                          <div key={l.id ?? idx} className="grid grid-cols-2 gap-y-4 gap-x-4">
+                                            <div><p className={`text-[10px] font-medium uppercase tracking-widest mb-1.5 opacity-70 ${isDark ? "text-gray-400" : "text-gray-500"}`}>Status</p><p className={`text-[12px] font-semibold ${isDark ? "text-gray-200" : "text-gray-900"}`}>{l.status || "—"}</p></div>
+                                            <div><p className={`text-[10px] font-medium uppercase tracking-widest mb-1.5 opacity-70 ${isDark ? "text-gray-400" : "text-gray-500"}`}>Bank</p><p className={`text-[12px] font-semibold ${isDark ? "text-gray-200" : "text-gray-900"}`}>{l.bankName || "—"}</p></div>
+                                            {l.amountRequested && <div><p className={`text-[10px] font-medium uppercase tracking-widest mb-1.5 opacity-70 ${isDark ? "text-gray-400" : "text-gray-500"}`}>Requested</p><p className={`text-[12px] font-semibold ${isDark ? "text-gray-200" : "text-gray-900"}`}>₹{Number(l.amountRequested).toLocaleString("en-IN")}</p></div>}
+                                            {l.amountApproved && <div><p className={`text-[10px] font-medium uppercase tracking-widest mb-1.5 opacity-70 ${isDark ? "text-gray-400" : "text-gray-500"}`}>Approved</p><p className={`text-[12px] font-semibold ${isDark ? "text-[#32D74B]" : "text-[#10B981]"}`}>₹{Number(l.amountApproved).toLocaleString("en-IN")}</p></div>}
+                                            {l.cibil && <div><p className={`text-[10px] font-medium uppercase tracking-widest mb-1.5 opacity-70 ${isDark ? "text-gray-400" : "text-gray-500"}`}>CIBIL</p><p className={`text-[12px] font-semibold ${isDark ? "text-gray-200" : "text-gray-900"}`}>{l.cibil}</p></div>}
+                                            {l.empType && <div><p className={`text-[10px] font-medium uppercase tracking-widest mb-1.5 opacity-70 ${isDark ? "text-gray-400" : "text-gray-500"}`}>Employment</p><p className={`text-[12px] font-semibold ${isDark ? "text-gray-200" : "text-gray-900"}`}>{l.empType}</p></div>}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <p className={`text-[12px] italic flex items-center ${isDark ? "text-gray-500" : "text-gray-400"}`}>No Loan data available.</p>
+                                    )}
+                                  </div>
+
+                                  {/* Booking Card */}
+                                  {displayedHistory.booking && (
+                                    <div className={`rounded-xl border p-5 shadow-sm flex-1 ${isDark ? "bg-[#1C1C1E] border-white/10" : "bg-white border-gray-200"}`}>
+                                      <h5 className={`text-[11px] font-bold uppercase tracking-widest mb-4 flex items-center gap-2 ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                                        <svg className="w-4 h-4 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
+                                        Booking Details
+                                      </h5>
+                                      <div className="grid grid-cols-2 gap-y-4 gap-x-4 text-[12px]">
+                                        {displayedHistory.booking.bookingNumber && <div><p className={`text-[10px] font-medium uppercase tracking-widest mb-1.5 opacity-70 ${isDark ? "text-gray-400" : "text-gray-500"}`}>Booking #</p><p className={`font-semibold font-mono ${isDark ? "text-gray-200" : "text-gray-900"}`}>{displayedHistory.booking.bookingNumber}</p></div>}
+                                        {displayedHistory.booking.bookingStatus && <div><p className={`text-[10px] font-medium uppercase tracking-widest mb-1.5 opacity-70 ${isDark ? "text-gray-400" : "text-gray-500"}`}>Status</p><p className={`font-semibold ${isDark ? "text-amber-400" : "text-amber-600"}`}>{displayedHistory.booking.bookingStatus}</p></div>}
+                                        {displayedHistory.booking.projectName && <div><p className={`text-[10px] font-medium uppercase tracking-widest mb-1.5 opacity-70 ${isDark ? "text-gray-400" : "text-gray-500"}`}>Project</p><p className={`font-semibold ${isDark ? "text-gray-200" : "text-gray-900"}`}>{displayedHistory.booking.projectName}</p></div>}
+                                        {displayedHistory.booking.flatNumber && <div><p className={`text-[10px] font-medium uppercase tracking-widest mb-1.5 opacity-70 ${isDark ? "text-gray-400" : "text-gray-500"}`}>Flat</p><p className={`font-semibold ${isDark ? "text-gray-200" : "text-gray-900"}`}>{displayedHistory.booking.flatNumber}</p></div>}
+                                        {displayedHistory.booking.agreementValue && <div><p className={`text-[10px] font-medium uppercase tracking-widest mb-1.5 opacity-70 ${isDark ? "text-gray-400" : "text-gray-500"}`}>Agreement</p><p className={`font-semibold ${isDark ? "text-gray-200" : "text-gray-900"}`}>₹{Number(displayedHistory.booking.agreementValue).toLocaleString("en-IN")}</p></div>}
+                                        {displayedHistory.booking.bookingAmount && <div><p className={`text-[10px] font-medium uppercase tracking-widest mb-1.5 opacity-70 ${isDark ? "text-gray-400" : "text-gray-500"}`}>Paid</p><p className={`font-semibold ${isDark ? "text-gray-200" : "text-gray-900"}`}>₹{Number(displayedHistory.booking.bookingAmount).toLocaleString("en-IN")}</p></div>}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
                             </div>
                           )}
                         </div>
-                        {(isLoadingRevisit && !displayedHistory) || isLoadingSelectedVisit ? (
-                          <div className="p-4"><p className={`text-xs text-center py-2 ${theme.textFaint}`}>Loading visit data…</p></div>
-                        ) : !displayedHistory ? (
-                          <div className="p-4"><p className={`text-xs ${theme.textFaint}`}>No previous visit history found or you are not authorized to view it.</p></div>
-                        ) : (
-                          <div className={`p-4 flex flex-col gap-4 ${isDark ? "bg-[rgba(5,150,105,0.05)]" : "bg-[rgba(5,150,105,0.03)]"}`}>
-                            <div>
-                              <p className="text-[10px] font-bold uppercase tracking-wider text-[#059669] mb-2">{visitChain && selectedVisitIdx !== null ? `Visit ${visitChain.visits[selectedVisitIdx].visitNumber} Enquiry` : "Previous Enquiry"}</p>
-                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[12px]">
-                                <div><p className={`text-[10px] font-medium mb-0.5 ${theme.textFaint}`}>Visit Date</p><p className={`font-semibold ${theme.text}`}>{new Date(displayedHistory.previousLead.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</p></div>
-                                <div><p className={`text-[10px] font-medium mb-0.5 ${theme.textFaint}`}>Managed By</p><p className={`font-semibold ${theme.text}`}>{displayedHistory.previousLead.assigned_to || "—"}</p></div>
-                                <div><p className={`text-[10px] font-medium mb-0.5 ${theme.textFaint}`}>Phone</p><p className={`font-semibold font-mono ${theme.text}`}>{displayedHistory.previousLead.phone || "—"}</p></div>
-                                <div><p className={`text-[10px] font-medium mb-0.5 ${theme.textFaint}`}>Lead Status</p><p className={`font-semibold ${theme.text}`}>{displayedHistory.previousLead.status || "—"}</p></div>
-                                <div><p className={`text-[10px] font-medium mb-0.5 ${theme.textFaint}`}>Interest Status</p><p className={`font-semibold ${theme.text}`}>{displayedHistory.previousLead.lead_interest_status || "Pending"}</p></div>
-                                <div><p className={`text-[10px] font-medium mb-0.5 ${theme.textFaint}`}>Budget</p><p className={`font-semibold ${isDark ? "text-green-400" : "text-emerald-700"}`}>{displayedHistory.previousLead.budget || "—"}</p></div>
-                                {displayedHistory.previousLead.is_lost_lead && (
-                                  <div className="col-span-2 sm:col-span-3">
-                                    <p className={`text-[10px] font-medium mb-0.5 ${theme.textFaint}`}>Lost Lead Reason</p>
-                                    <p className="font-semibold text-red-400">{displayedHistory.previousLead.lost_lead_reason || "No reason recorded."}</p>
-                                  </div>
-                                )}
-                                {displayedHistory.previousLead.closing_date && (
-                                  <div><p className={`text-[10px] font-medium mb-0.5 ${theme.textFaint}`}>Closing Date</p><p className={`font-semibold ${theme.text}`}>{formatDate(displayedHistory.previousLead.closing_date)}</p></div>
-                                )}
-                              </div>
-                            </div>
-                            <div className={`border-t pt-3 ${theme.tableBorder}`}>
-                              <p className="text-[10px] font-bold uppercase tracking-wider text-[#059669] mb-2">Sales Form</p>
-                              {displayedHistory.historicalSalesForm ? (
-                                <div className={`rounded-lg p-3 border text-[11px] whitespace-pre-wrap leading-relaxed ${isDark ? "bg-[rgba(5,150,105,0.06)] border-[rgba(5,150,105,0.20)] text-gray-300" : "bg-white border-[rgba(5,150,105,0.20)] text-gray-700"}`}>
-                                  {displayedHistory.historicalSalesForm.replace("📝 Detailed Salesform Submitted:\n", "").trim()}
-                                </div>
-                              ) : (
-                                <p className={`text-[11px] italic ${theme.textFaint}`}>No Sales Form data available.</p>
-                              )}
-                            </div>
-                            <div className={`border-t pt-3 ${theme.tableBorder}`}>
-                              <p className="text-[10px] font-bold uppercase tracking-wider text-[#059669] mb-2">Loan</p>
-                              {displayedHistory.loan.length > 0 ? (
-                                <div className="flex flex-col gap-2">
-                                  {displayedHistory.loan.map((l: any, idx: number) => (
-                                    <div key={l.id ?? idx} className={`rounded-lg p-3 border text-[11px] ${isDark ? "bg-[rgba(5,150,105,0.06)] border-[rgba(5,150,105,0.20)]" : "bg-white border-[rgba(5,150,105,0.20)]"}`}>
-                                      <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                                        <div><span className={theme.textFaint}>Status: </span><span className={`font-semibold ${theme.text}`}>{l.status || "—"}</span></div>
-                                        <div><span className={theme.textFaint}>Bank: </span><span className={`font-semibold ${theme.text}`}>{l.bankName || "—"}</span></div>
-                                        {l.amountRequested && <div><span className={theme.textFaint}>Requested: </span><span className={`font-semibold ${theme.text}`}>₹{Number(l.amountRequested).toLocaleString("en-IN")}</span></div>}
-                                        {l.amountApproved && <div><span className={theme.textFaint}>Approved: </span><span className={`font-semibold ${theme.text}`}>₹{Number(l.amountApproved).toLocaleString("en-IN")}</span></div>}
-                                        {l.cibil && <div><span className={theme.textFaint}>CIBIL: </span><span className={`font-semibold ${theme.text}`}>{l.cibil}</span></div>}
-                                        {l.empType && <div><span className={theme.textFaint}>Employment: </span><span className={`font-semibold ${theme.text}`}>{l.empType}</span></div>}
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : (
-                                <p className={`text-[11px] italic ${theme.textFaint}`}>No Loan data available.</p>
-                              )}
-                            </div>
-                            <div className={`border-t pt-3 ${theme.tableBorder}`}>
-                              <p className="text-[10px] font-bold uppercase tracking-wider text-[#059669] mb-2">Booking</p>
-                              {displayedHistory.booking ? (
-                                <div className={`rounded-lg p-3 border text-[11px] ${isDark ? "bg-[rgba(5,150,105,0.06)] border-[rgba(5,150,105,0.20)]" : "bg-white border-[rgba(5,150,105,0.20)]"}`}>
-                                  <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                                    {displayedHistory.booking.bookingNumber && <div><span className={theme.textFaint}>Booking #: </span><span className={`font-semibold ${theme.text}`}>{displayedHistory.booking.bookingNumber}</span></div>}
-                                    {displayedHistory.booking.bookingStatus && <div><span className={theme.textFaint}>Status: </span><span className={`font-semibold ${theme.text}`}>{displayedHistory.booking.bookingStatus}</span></div>}
-                                    {displayedHistory.booking.projectName && <div><span className={theme.textFaint}>Project: </span><span className={`font-semibold ${theme.text}`}>{displayedHistory.booking.projectName}</span></div>}
-                                    {displayedHistory.booking.flatNumber && <div><span className={theme.textFaint}>Flat: </span><span className={`font-semibold ${theme.text}`}>{displayedHistory.booking.flatNumber}</span></div>}
-                                    {displayedHistory.booking.agreementValue && <div><span className={theme.textFaint}>Agreement Value: </span><span className={`font-semibold ${theme.text}`}>₹{Number(displayedHistory.booking.agreementValue).toLocaleString("en-IN")}</span></div>}
-                                    {displayedHistory.booking.bookingAmount && <div><span className={theme.textFaint}>Booking Amount: </span><span className={`font-semibold ${theme.text}`}>₹{Number(displayedHistory.booking.bookingAmount).toLocaleString("en-IN")}</span></div>}
-                                  </div>
-                                </div>
-                              ) : (
-                                <p className={`text-[11px] italic ${theme.textFaint}`}>No Booking available.</p>
-                              )}
-                            </div>
-                            <div className={`border-t pt-3 ${theme.tableBorder}`}>
-                              <p className="text-[10px] font-bold uppercase tracking-wider text-[#059669] mb-2">
-                                Historical Notes — before {new Date(displayedHistory.cutoffAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
-                              </p>
-                              {displayedHistory.followUps.length > 0 ? (
-                                <div className="flex flex-col gap-2 max-h-[280px] overflow-y-auto custom-scrollbar pr-1">
-                                  {displayedHistory.followUps.map((f: any) => (
-                                    <div key={f.id} className={`rounded-lg p-2.5 border ${isDark ? "bg-[rgba(5,150,105,0.06)] border-[rgba(5,150,105,0.15)]" : "bg-white border-[rgba(5,150,105,0.18)]"}`}>
-                                      <div className="flex justify-between items-start mb-1 gap-2">
-                                        <span className="text-[11px] font-semibold text-[#059669]">{f.createdByName || "—"}</span>
-                                        <span className={`text-[10px] flex-shrink-0 ${theme.textFaint}`}>{new Date(f.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>
-                                      </div>
-                                      <p className={`text-[11px] leading-relaxed whitespace-pre-wrap ${theme.textMuted}`}>{f.message}</p>
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : (
-                                <p className={`text-[11px] italic ${theme.textFaint}`}>No historical notes before the revisit date.</p>
-                              )}
-                            </div>
-                            <p className={`text-[10px] italic text-center ${theme.textFaint}`}>
-                              READ ONLY — All data above is from a previous visit. New notes, Sales Form, Loan, and Booking belong to the current Revisit lead.
-                            </p>
-                          </div>
-                        )}
                       </div>
                     )}
 
@@ -4607,7 +4668,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
           setSelectedVisitIdxSH(json.visits.length - 2);
         }
       })
-      .catch(() => {});
+      .catch(() => { });
     return () => { cancelled = true; };
   }, [selectedLead?.id, selectedLead?.lead_classification]);
 
@@ -4631,7 +4692,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
           setVisitDetailCacheSH(prev => ({ ...prev, [childLeadId]: { previousLead: json.previousLead, followUps: json.followUps ?? [], historicalSalesForm: json.historicalSalesForm ?? null, loan: json.loan ?? [], booking: json.booking ?? null, cutoffAt: json.cutoffAt } }));
         }
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setLoadingVisitDetailSH(prev => ({ ...prev, [childLeadId]: false })));
   };
 
@@ -6019,7 +6080,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
           setSelectedVisitIdxRV(json.visits.length - 2);
         }
       })
-      .catch(() => {});
+      .catch(() => { });
     return () => { cancelled = true; };
   }, [selectedLead?.id, selectedLead?.lead_classification]);
 
@@ -6043,7 +6104,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
           setVisitDetailCacheRV(prev => ({ ...prev, [childLeadId]: { previousLead: json.previousLead, followUps: json.followUps ?? [], historicalSalesForm: json.historicalSalesForm ?? null, loan: json.loan ?? [], booking: json.booking ?? null, cutoffAt: json.cutoffAt } }));
         }
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setLoadingVisitDetailRV(prev => ({ ...prev, [childLeadId]: false })));
   };
 

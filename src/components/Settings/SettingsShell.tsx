@@ -57,6 +57,7 @@ import {
   FaUsers,
   FaUsersCog,
   FaUserTie,
+  FaImage,
   FaWhatsapp,
 } from "react-icons/fa";
 import { FaWandMagicSparkles } from "react-icons/fa6";
@@ -121,6 +122,7 @@ export const NAV: { group: string; items: NavItem[] }[] = [
     group: "Workspace",
     items: [
       { href: "/dashboard/settings/workspace", label: "Workspace Settings", icon: FaCog, adminOnly: true },
+      { href: "/dashboard/settings/branding", label: "Branding & Logo", icon: FaImage, adminOnly: true },
       { href: "/dashboard/settings/employees", label: "Employee Management", icon: FaIdCard, adminOnly: true },
       { href: "/dashboard/settings/members-team", label: "Members & Team", icon: FaUsersCog, adminOnly: true, status: "planned" },
       { href: "/dashboard/settings/plans", label: "Plans", icon: FaClipboardList, adminOnly: true, status: "planned" },
@@ -644,6 +646,8 @@ export default function SettingsShell({ children }: { children: React.ReactNode 
                       boxShadow: isDark ? "none" : "0 1px 3px rgba(16,24,40,0.06)",
                       position: "sticky",
                       top: 0,
+                      maxHeight: "100vh",
+                      overflowY: "auto",
                     }}
                   >
                     {localNav}
