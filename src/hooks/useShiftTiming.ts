@@ -24,7 +24,10 @@ export function useShiftTiming(pollingIntervalMs = 300_000) {
       const res = await fetch("/api/settings/working-hours", {
         cache: "no-store",
       });
+      // 401/403 is expected before login or for deactivated accounts —
+      // silently keep the defaults rather than spamming the console.
       if (!res.ok) {
+        if (res.status === 401 || res.status === 403) return;
         throw new Error("Failed to fetch shift timing");
       }
       const data = await res.json();
@@ -33,6 +36,7 @@ export function useShiftTiming(pollingIntervalMs = 300_000) {
       );
       setError(null);
     } catch (err: any) {
+      // Only log actual errors, not auth failures.
       console.error("useShiftTiming Error:", err);
       setError(err);
     } finally {

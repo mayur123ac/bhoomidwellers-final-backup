@@ -42,7 +42,7 @@ export function useActivityTracker() {
   const crmIdentity = useMemo(() => {
     if (typeof window === "undefined") return { org: null, userId: null };
     try {
-      const raw = localStorage.getItem("crmUser");
+      const raw = localStorage.getItem("crm_user");
       if (!raw) return { org: null, userId: null };
       const u = JSON.parse(raw);
       return { org: u?.org || null, userId: u?._id || u?.id || null };

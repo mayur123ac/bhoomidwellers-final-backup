@@ -44,6 +44,7 @@ import NotificationPopover from "@/components/notifications/NotificationPopover"
 // is now edited in Settings › WhatsApp Integration. The component itself is
 // untouched and still used by the panels that render it inline.
 import { buildTheme } from "@/lib/crmTheme";
+import { usePresenceRefresh } from "@/hooks/usePresenceRefresh";
 import ChannelPartnerFormModal from "@/components/ChannelPartnerFormModal";
 import BankerVisitFormModal from "@/components/BankerVisitFormModal";
 import ChannelPartnerEnquiriesTable from "@/components/ChannelPartnerEnquiriesTable";
@@ -467,7 +468,7 @@ function RpPageHeader({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="rp-page-header mx-auto px-0 pt-3 sm:px- sm:py-0 md:py-0  my-3">
+    <div className="rp-page-header mx-5 px-0 pt-3 sm:px- sm:py-0 md:py-0  my-3">
       <div className="flex items-center gap-3 min-w-0">
         {leading}
         <div className="rp-page-header-titles">
@@ -718,6 +719,7 @@ export default function ReceptionistDashboard() {
       label: m.name,
       sublabel: `ID ${m.id}${m.username ? ` · ${m.username}` : ""} · ${m.phone || m.whatsapp_number || "no phone on file"}`,
       keywords: `${m.username || ""} ${m.phone || ""} ${m.email || ""}`,
+      status: (m.presence === "ONLINE" ? "online" : "offline") as "online" | "offline",
     })),
     [sourcingManagers]
   );
@@ -1202,6 +1204,36 @@ export default function ReceptionistDashboard() {
       setIsFetchingSourcingManagers(false);
     }
   };
+
+  // Re-fetch all manager lists when any employee's session state changes,
+  // so the ONLINE / OFFLINE badge stays current while the form is open.
+  // Uses the same Supabase Realtime channel the Attendance Tracker broadcasts on.
+  const refreshPresence = useCallback(() => {
+    // Silent background refresh — no loading spinner, just update the data.
+    fetch("/api/users/sourcing-manager")
+      .then(r => r.json())
+      .then(json => {
+        if (json.success && Array.isArray(json.data)) setSourcingManagers(json.data);
+      })
+      .catch(() => {});
+    // Also refresh the Internal Form Assignment dropdown (sales managers + site heads).
+    Promise.all([
+      fetch("/api/users/sales-manager"),
+      fetch("/api/users/site-head"),
+    ]).then(async ([resSM, resSH]) => {
+      if (resSM.ok) {
+        const json = await resSM.json();
+        const arr = json.data || json;
+        if (Array.isArray(arr)) setSalesManagers(arr);
+      }
+      if (resSH.ok) {
+        const json = await resSH.json();
+        const arr = json.data || json;
+        if (Array.isArray(arr)) setSiteHeads(arr);
+      }
+    }).catch(() => {});
+  }, []);
+  usePresenceRefresh(refreshPresence);
 
   // Debounced so a 10-digit number typed at speed produces one request, not ten.
   // Only fires for CP enquiries and only on a complete number — a partial one can
@@ -4991,8 +5023,23 @@ export default function ReceptionistDashboard() {
                             className={`px-4 py-3.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${assignedToError ? "border-red-500 ring-1 ring-red-500" : isDark ? "bg-[#242424] border-gray-700 text-white" : "bg-gray-50 border-gray-200 text-gray-900"
                               }`}
                           >
-                            <span className={enquiryForm.assignedTo ? "font-semibold" : "opacity-60"}>
-                              {enquiryForm.assignedTo ? `${enquiryForm.assignedTo} ✓` : "-- Select Manager --"}
+                            <span className={`flex items-center gap-2 ${enquiryForm.assignedTo ? "font-semibold" : "opacity-60"}`}>
+                              {enquiryForm.assignedTo ? (
+                                <>
+                                  {enquiryForm.assignedTo} ✓
+                                  {(() => {
+                                    const sel = combinedAssignees.find(m => m.name === enquiryForm.assignedTo);
+                                    if (!sel) return null;
+                                    const isOnline = sel.presence === "ONLINE";
+                                    return (
+                                      <span className={`inline-flex items-center gap-1 text-[10px] font-semibold ${isOnline ? "text-emerald-500" : isDark ? "text-gray-500" : "text-gray-400"}`}>
+                                        <span className={`inline-block w-1.5 h-1.5 rounded-full ${isOnline ? "bg-emerald-500" : isDark ? "bg-gray-500" : "bg-gray-400"}`} />
+                                        {isOnline ? "Online" : "Offline"}
+                                      </span>
+                                    );
+                                  })()}
+                                </>
+                              ) : "-- Select Manager --"}
                             </span>
                             <span>{showManagerDropdown ? "▲" : "▼"}</span>
                           </div>
@@ -5012,10 +5059,22 @@ export default function ReceptionistDashboard() {
                                       setAssignedToError("");
                                       setShowManagerDropdown(false);
                                     }}
-                                    className={`px-4 py-3 cursor-pointer transition-colors border-b last:border-b-0 flex justify-between items-center ${isDark ? "border-gray-700 hover:bg-[#333] text-white" : "border-gray-100 hover:bg-gray-50 text-gray-900"} ${enquiryForm.assignedTo === m.name ? "bg-[#18392B]/10 text-[#18392B] font-semibold" : ""}`}
+                                    className={`px-4 py-3 cursor-pointer transition-colors border-b last:border-b-0 flex justify-between items-center gap-3 ${isDark ? "border-gray-700 hover:bg-[#333] text-white" : "border-gray-100 hover:bg-gray-50 text-gray-900"} ${enquiryForm.assignedTo === m.name ? "bg-[#18392B]/10 text-[#18392B] font-semibold" : ""}`}
                                   >
                                     <span>{m.name}</span>
-                                    <span className="text-[11px] opacity-60 uppercase tracking-wider">{String(m.role || "Manager").replace("_", " ")}</span>
+                                    <span className="flex items-center gap-2.5">
+                                      <span className={`inline-flex items-center gap-1 text-[10px] font-semibold ${
+                                        m.presence === "ONLINE"
+                                          ? "text-emerald-500"
+                                          : isDark ? "text-gray-500" : "text-gray-400"
+                                      }`}>
+                                        <span className={`inline-block w-1.5 h-1.5 rounded-full ${
+                                          m.presence === "ONLINE" ? "bg-emerald-500" : isDark ? "bg-gray-500" : "bg-gray-400"
+                                        }`} />
+                                        {m.presence === "ONLINE" ? "Online" : "Offline"}
+                                      </span>
+                                      <span className="text-[11px] opacity-60 uppercase tracking-wider">{String(m.role || "Manager").replace("_", " ")}</span>
+                                    </span>
                                   </div>
                                 ))
                               )}

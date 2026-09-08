@@ -22,6 +22,7 @@ import SearchableSelect, { SelectOption } from "./SearchableSelect";
 import { normalizeRole } from "@/lib/cpRbac";
 import { useCpResource, invalidateCpCache } from "@/lib/hooks/useCpResource";
 import { CpTableSkeletonRows, CpHeaderSkeleton } from "./cp/CpSkeletons";
+import { usePresenceRefresh } from "@/hooks/usePresenceRefresh";
 
 interface Props {
   user: { name: string; role: string; _id?: string };
@@ -247,10 +248,18 @@ function ChannelPartnerEnquiriesTable({
   } = useCpResource<EnquiryRowData[]>(rowsUrl, { initial: NO_ROWS });
 
   // Only the roles that can filter or reassign need the manager list.
-  const { data: managers } = useCpResource<EnquiryRowData[]>(
+  const { data: managers, refetch: refetchManagers } = useCpResource<EnquiryRowData[]>(
     showFilter || canReassign ? "/api/users/sourcing-manager" : null,
     { initial: NO_ROWS }
   );
+
+  // Re-fetch the manager list when employee session state changes so the
+  // ONLINE / OFFLINE badge in the reassignment dropdown stays current.
+  const onPresenceChange = useCallback(() => {
+    invalidateCpCache("/api/users/sourcing-manager");
+    refetchManagers();
+  }, [refetchManagers]);
+  usePresenceRefresh(onPresenceChange, showFilter || canReassign);
 
   // Reassigning changes who owns a row, so every cached CP list is stale after
   // one — including the other filters' lists and the partner registry, which
@@ -267,6 +276,7 @@ function ChannelPartnerEnquiriesTable({
       label: m.name,
       sublabel: `ID ${m.id}${m.username ? ` · ${m.username}` : ""}${m.phone ? ` · ${m.phone}` : ""}`,
       keywords: `${m.username || ""} ${m.phone || ""} ${m.email || ""}`,
+      status: ((m as any).presence === "ONLINE" ? "online" : "offline") as "online" | "offline",
     })),
     [managers]
   );

@@ -18,7 +18,10 @@ function getServerSupabase(): SupabaseClient | null {
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-  if (!url || !key) return null;
+  if (!key || !url) return null;
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    console.warn("[supabase-broadcast] SUPABASE_SERVICE_ROLE_KEY missing — falling back to anon key. Private channel broadcasts will likely fail.");
+  }
 
   _client = createClient(url, key, {
     auth: { persistSession: false },

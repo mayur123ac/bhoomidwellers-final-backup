@@ -19,14 +19,41 @@ export async function GET(req: Request) {
     // rows is still plaintext (see lib/passwords.ts). This endpoint feeds a name
     // dropdown and the notification feed's role labels; it needs identity, not
     // credentials. Any column added to `users` later is now opt-in here.
+
+    // Expire stale sessions (no heartbeat in 5 min) — same housekeeping as
+    // /api/attendance/live and the other user-list endpoints.
+    await query(
+      `UPDATE employee_sessions
+          SET is_active = false, session_end = last_heartbeat
+        WHERE is_active = true AND organization_id = $1
+          AND EXTRACT(EPOCH FROM (NOW() - last_heartbeat)) > 300`,
+      [orgId]
+    );
+
     const rows = await query(
-      `SELECT id, name, email, username, role, is_active AS "isActive",
-              whatsapp_number, phone, avatar_key, avatar_url, organization_id
-         FROM users
-        WHERE (LOWER(role) LIKE '%site%head%'
-               OR LOWER(role) = 'site_head')
-          AND organization_id = $1
-        ORDER BY name ASC`,
+      `SELECT u.id, u.name, u.email, u.username, u.role, u.is_active AS "isActive",
+              u.whatsapp_number, u.phone, u.avatar_key, u.avatar_url, u.organization_id,
+              CASE
+                WHEN EXISTS (
+                  SELECT 1 FROM employee_sessions es
+                   WHERE es.user_id = u.id
+                     AND es.organization_id = $1
+                     AND es.is_active = true
+                ) THEN 'ONLINE'
+                ELSE 'OFFLINE'
+              END AS presence
+         FROM users u
+        WHERE (LOWER(u.role) LIKE '%site%head%'
+               OR LOWER(u.role) = 'site_head')
+          AND u.organization_id = $1
+        ORDER BY
+          CASE WHEN EXISTS (
+            SELECT 1 FROM employee_sessions es
+             WHERE es.user_id = u.id
+               AND es.organization_id = $1
+               AND es.is_active = true
+          ) THEN 0 ELSE 1 END,
+          u.name ASC`,
       [orgId]
     );
 

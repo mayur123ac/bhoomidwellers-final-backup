@@ -9,6 +9,7 @@ import { clearFailedLogins } from "@/lib/loginSecurity";
 import { avatarSrc } from "@/lib/settingsUser";
 import { enrichSessionLocation } from "@/lib/reverseGeocode";
 import { describeDevice } from "@/lib/emailRouting";
+import { broadcastToOrg } from "@/lib/supabase/broadcast";
 
 export async function POST(req: Request) {
   try {
@@ -235,6 +236,18 @@ export async function POST(req: Request) {
     // and store it on the session row. Fire-and-forget: a Nominatim outage
     // must never block a sign-in.
     void enrichSessionLocation(loginSessionId, latitude, longitude, gpsAccuracy);
+
+    // Broadcast the new session to the org's realtime channel so that every
+    // other client (e.g. the assignment dropdown showing ONLINE/OFFLINE)
+    // learns about the login without polling. Same event the logout and
+    // attendance-mark routes already use.
+    if (user.organization_id) {
+      void broadcastToOrg(
+        user.organization_id as string,
+        "activity.attendance_sync",
+        { type: "ATTENDANCE_SYNC", userId: user.id }
+      );
+    }
 
     // Account & Security shows "Last login". employee_sessions already records
     // every login, but that table is heavily written by the heartbeat and the

@@ -35,11 +35,12 @@
 // walkin_enquiries.sourcing_manager_id which owns one enquiry. It is required
 // when registering through the office-visit form, because a partner who walks in
 // and is filed without an owner lands in a registry nobody is watching.
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaTimes, FaPercent, FaExclamationTriangle, FaInfoCircle, FaUserTie } from "react-icons/fa";
 import { canCreatePartners, canEditPartners, canAssignPartners, normalizeRole } from "@/lib/cpRbac";
 import SearchableSelect, { SelectOption } from "./SearchableSelect";
+import { usePresenceRefresh } from "@/hooks/usePresenceRefresh";
 
 export interface ChannelPartner {
   id: number;
@@ -231,12 +232,28 @@ export default function ChannelPartnerFormModal({
     fetchSalesManagers();
   }, [isOpen]);
 
+  // Re-fetch both manager lists when employee session state changes so the
+  // ONLINE / OFFLINE badge stays current while the modal is open.
+  const refreshPresence = useCallback(() => {
+    if (!isOpen) return;
+    fetch("/api/users/sourcing-manager")
+      .then(r => r.json())
+      .then(json => { if (json.success && Array.isArray(json.data)) setManagers(json.data); })
+      .catch(() => {});
+    fetch("/api/users/sales-manager")
+      .then(r => r.json())
+      .then(json => { if (json.success && Array.isArray(json.data)) setSalesManagers(json.data); })
+      .catch(() => {});
+  }, [isOpen]);
+  usePresenceRefresh(refreshPresence, isOpen);
+
   const managerOptions: SelectOption[] = useMemo(
     () => managers.map((m: any) => ({
       value: String(m.id),
       label: m.name,
       sublabel: `ID ${m.id}${m.username ? ` · ${m.username}` : ""}${m.phone ? ` · ${m.phone}` : ""}`,
       keywords: `${m.username || ""} ${m.phone || ""} ${m.email || ""}`,
+      status: (m.presence === "ONLINE" ? "online" : "offline") as "online" | "offline",
     })),
     [managers]
   );
@@ -247,6 +264,7 @@ export default function ChannelPartnerFormModal({
       label: m.name,
       sublabel: `ID ${m.id}${m.username ? ` · ${m.username}` : ""}${m.phone ? ` · ${m.phone}` : ""}`,
       keywords: `${m.username || ""} ${m.phone || ""} ${m.email || ""}`,
+      status: (m.presence === "ONLINE" ? "online" : "offline") as "online" | "offline",
     })),
     [salesManagers]
   );
@@ -868,7 +886,7 @@ export default function ChannelPartnerFormModal({
                 {/* Column is still owner_contact_person — renaming it would break
                     the CP enquiry table and overview, which read that key. The
                     meaning is now "who received them", i.e. the person on the desk. */}
-                <label className={labelCls}>Attendee</label>
+                <label className={labelCls}>Attended By</label>
                 <input type="text" value={form.owner_contact_person} onChange={e => set({ owner_contact_person: e.target.value })}
                   className={inputCls} placeholder="Your name" />
                 <p className={`text-[10px] mt-1 ${t.textFaint}`}>Who received this partner at the front desk.</p>

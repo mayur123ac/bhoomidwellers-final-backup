@@ -11,9 +11,11 @@ import {
   FaThLarge, FaClipboardList, FaUsers, FaIdCard,
   FaSearch, FaBell, FaChevronLeft, FaPhoneAlt, FaComments,
   FaCheckCircle, FaCalendarAlt, FaTimes, FaArrowLeft, FaChevronDown,
-  FaFileInvoice, FaFileInvoiceDollar, FaPaperPlane, FaMicrophone, FaWhatsapp, FaTable, FaChartPie, FaEyeSlash, FaUniversity, FaHandshake, FaExchangeAlt, FaBriefcase, FaDownload, FaCog, FaMapMarkerAlt, FaSignal, FaUserClock, FaTrashAlt, FaBoxes, FaUserTie,
-  FaClock
+  FaFileInvoice, FaFileInvoiceDollar, FaMicrophone, FaWhatsapp, FaTable, FaChartPie, FaEyeSlash, FaUniversity, FaHandshake, FaExchangeAlt, FaBriefcase, FaDownload, FaCog, FaMapMarkerAlt, FaSignal, FaUserClock, FaTrashAlt, FaBoxes, FaUserTie
 } from "react-icons/fa";
+import FollowUpAttachments from "@/components/FollowUpAttachments";
+import { useFollowUpAttachments } from "@/lib/hooks/useFollowUpAttachments";
+import FollowUpComposer from "@/components/FollowUpComposer";
 import { BhoomiAiGlyph } from "@/components/bhoomi-ai/BhoomiAiIcon";
 import { downloadCSV } from "@/lib/downloadCsv";
 import AdminSidebar from "@/components/admin/AdminSidebar";
@@ -3005,6 +3007,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
   const [isClosingModalOpen, setIsClosingModalOpen] = useState(false);
   const followUpEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const attView = useFollowUpAttachments();
 
   // Form States
   const [showSalesForm, setShowSalesForm] = useState(false);
@@ -3298,7 +3301,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
 
   const handleSendCustomNote = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!customNote.trim() || !selectedLead) return;
+    if ((!customNote.trim() && attView.pendingFiles.length === 0) || !selectedLead) return;
     const clientMessageId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     const optimistic: any = {
       _id: clientMessageId, leadId: String(selectedLead.id), salesManagerName: adminUser.name, createdBy: "admin",
@@ -3307,13 +3310,18 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
       parentFollowUpId: null, readAt: null, _status: "sending", _clientMessageId: clientMessageId,
     };
     setCustomNote("");
+    const hasFiles = attView.snapshotAndClear();
     appendFollowUp(optimistic);
     try {
       const res = await fetch("/api/followups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ leadId: String(selectedLead.id), salesManagerName: adminUser.name, createdBy: "admin", message: optimistic.message, siteVisitDate: null, clientMessageId }) });
       const json = await res.json().catch(() => null);
       reconcileFollowUp(clientMessageId, json?.success && json.data ? json.data : null);
+      if (json?.success && json.data?._id && hasFiles) {
+        await attView.uploadSnapshot(json.data._id);
+        refetch();
+      }
     } catch {
-      reconcileFollowUp(clientMessageId, null);
+      reconcileFollowUp(clientMessageId, null); attView.restoreSnapshot();
     }
   };
 
@@ -4377,6 +4385,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                                   ) : (
                                     <p className={`text-sm whitespace-pre-wrap leading-relaxed ${theme.textMuted}`}>{msg.message}</p>
                                   )}
+                                  <FollowUpAttachments followUpId={Number(msg._id)} textClass={theme.textMuted} onDeleted={refetch} />
                                   {msg._status === "sending" && <span className="text-[9px] text-yellow-500 mt-1 block">Sending...</span>}
                                   {msg._status === "failed" && (
                                     <span className="text-[9px] text-red-500 mt-1 flex items-center gap-1">Failed to send
@@ -4389,16 +4398,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                           })}
                           <div ref={followUpEndRef} />
                         </div>
-                        <form onSubmit={handleSendCustomNote} className={`p-3 border-t flex gap-2 items-center flex-shrink-0 ${theme.header} ${theme.tableBorder}`} style={theme.headerGlass}>
-                          <input type="text" value={customNote} onChange={e => setCustomNote(e.target.value)} placeholder="Add admin note..."
-                            className={`flex-1 rounded-xl px-3 py-2 sm:py-2.5 text-sm outline-none transition-colors border ${theme.inputInner} ${theme.text} ${theme.inputFocus}`} />
-                          <button type="button" title="Set follow-up reminder" onClick={() => setShowReminderModal(true)} className={`w-9 h-9 flex-shrink-0 rounded-xl flex items-center justify-center cursor-pointer transition-colors ${isDark ? "text-gray-400 hover:text-purple-400 hover:bg-white/5" : "text-gray-400 hover:text-purple-600 hover:bg-purple-50"}`}>
-                            <FaClock className="text-xs" />
-                          </button>
-                          <button type="submit" className={`w-9 h-9 flex-shrink-0 text-white rounded-xl flex items-center justify-center cursor-pointer transition-colors shadow-lg ${isDark ? "bg-[#9E217B] hover:bg-[#b8268f]" : "bg-[#9E217B] hover:bg-[#8a1d6b]"}`}>
-                            <FaPaperPlane className="text-xs ml-[-1px]" />
-                          </button>
-                        </form>
+                        <FollowUpComposer value={customNote} onChange={setCustomNote} onSubmit={handleSendCustomNote} pendingFiles={attView.pendingFiles} fileError={attView.fileError} onAddFiles={attView.addFiles} onRemoveFile={attView.removeFile} onReminderClick={() => setShowReminderModal(true)} isDark={isDark} theme={theme} placeholder="Add admin note..." size="compact" headerGlass={theme.headerGlass} />
                       </div>
                     </div>
                   </div>
@@ -4511,6 +4511,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
   const [isClosingModalOpen, setIsClosingModalOpen] = useState(false);
   const followUpEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const attView = useFollowUpAttachments();
 
   // Form States
   const [showSalesForm, setShowSalesForm] = useState(false);
@@ -4897,7 +4898,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
 
   const handleSendCustomNote = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!customNote.trim() || !selectedLead) return;
+    if ((!customNote.trim() && attView.pendingFiles.length === 0) || !selectedLead) return;
     const clientMessageId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     const optimistic: any = {
       _id: clientMessageId, leadId: String(selectedLead.id), salesManagerName: adminUser.name, createdBy: "admin",
@@ -4906,13 +4907,18 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
       parentFollowUpId: null, readAt: null, _status: "sending", _clientMessageId: clientMessageId,
     };
     setCustomNote("");
+    const hasFiles = attView.snapshotAndClear();
     appendFollowUp(optimistic);
     try {
       const res = await fetch("/api/followups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ leadId: String(selectedLead.id), salesManagerName: adminUser.name, createdBy: "admin", message: optimistic.message, siteVisitDate: null, clientMessageId }) });
       const json = await res.json().catch(() => null);
       reconcileFollowUp(clientMessageId, json?.success && json.data ? json.data : null);
+      if (json?.success && json.data?._id && hasFiles) {
+        await attView.uploadSnapshot(json.data._id);
+        refetch();
+      }
     } catch {
-      reconcileFollowUp(clientMessageId, null);
+      reconcileFollowUp(clientMessageId, null); attView.restoreSnapshot();
     }
   };
 
@@ -5814,6 +5820,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                                   ) : (
                                     <p className={`text-xs sm:text-sm whitespace-pre-wrap leading-relaxed ${theme.textMuted}`}>{msg.message}</p>
                                   )}
+                                  <FollowUpAttachments followUpId={Number(msg._id)} textClass={theme.textMuted} onDeleted={refetch} />
                                   {msg._status === "sending" && <span className="text-[9px] text-yellow-500 mt-1 block">Sending...</span>}
                                   {msg._status === "failed" && (
                                     <span className="text-[9px] text-red-500 mt-1 flex items-center gap-1">Failed to send
@@ -5826,16 +5833,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                           })}
                           <div ref={followUpEndRef} />
                         </div>
-                        <form onSubmit={handleSendCustomNote} className={`p-3 sm:p-5 border-t flex gap-2 sm:gap-3 items-center flex-shrink-0 ${theme.header} ${theme.tableBorder}`} style={theme.headerGlass}>
-                          <input type="text" value={customNote} onChange={e => setCustomNote(e.target.value)} placeholder="Add admin note..."
-                            className={`flex-1 rounded-xl px-3 py-2.5 sm:px-4 sm:py-3 text-[10px] sm:text-sm outline-none transition-colors border ${theme.inputInner} ${theme.text} ${theme.inputFocus}`} />
-                          <button type="button" title="Set follow-up reminder" onClick={() => setShowReminderModal(true)} className={`w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0 rounded-xl flex items-center justify-center cursor-pointer transition-colors ${isDark ? "text-gray-400 hover:text-purple-400 hover:bg-white/5" : "text-gray-400 hover:text-purple-600 hover:bg-purple-50"}`}>
-                            <FaClock className="text-[10px] sm:text-sm" />
-                          </button>
-                          <button type="submit" className={`w-10 h-10 sm:w-12 sm:h-12 text-white rounded-xl flex items-center justify-center cursor-pointer transition-colors shadow-lg ${isDark ? "bg-[#9E217B] hover:bg-[#b8268f]" : "bg-[#9E217B] hover:bg-[#8a1d6b]"}`}>
-                            <FaPaperPlane className="text-[10px] sm:text-sm ml-[-1px] sm:ml-[-2px]" />
-                          </button>
-                        </form>
+                        <FollowUpComposer value={customNote} onChange={setCustomNote} onSubmit={handleSendCustomNote} pendingFiles={attView.pendingFiles} fileError={attView.fileError} onAddFiles={attView.addFiles} onRemoveFile={attView.removeFile} onReminderClick={() => setShowReminderModal(true)} isDark={isDark} theme={theme} placeholder="Add admin note..." headerGlass={theme.headerGlass} />
                       </div>
                     </div>
                   </div>
@@ -5919,6 +5917,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
   const [showLoanForm, setShowLoanForm] = useState(false);
   const [salesForm, setSalesForm] = useState({ propertyType: "", location: "", budget: "", useType: "", purchaseDate: "", loanPlanned: "", siteVisit: "", leadStatus: "" });
   const [customNote, setCustomNote] = useState("");
+  const attView = useFollowUpAttachments();
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [transferNote, setTransferNote] = useState("");
   const [transferTarget, setTransferTarget] = useState("");
@@ -6263,7 +6262,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
 
   const handleSendCustomNote = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!customNote.trim() || !selectedLead) return;
+    if ((!customNote.trim() && attView.pendingFiles.length === 0) || !selectedLead) return;
     const clientMessageId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     const optimistic: any = {
       _id: clientMessageId, leadId: String(selectedLead.id), salesManagerName: actorName, createdBy: "admin",
@@ -6272,13 +6271,18 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
       parentFollowUpId: null, readAt: null, _status: "sending", _clientMessageId: clientMessageId,
     };
     setCustomNote("");
+    const hasFiles = attView.snapshotAndClear();
     appendFollowUp(optimistic);
     try {
       const res = await fetch("/api/followups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ leadId: String(selectedLead.id), salesManagerName: actorName, createdBy: "admin", message: optimistic.message, siteVisitDate: null, clientMessageId }) });
       const json = await res.json().catch(() => null);
       reconcileFollowUp(clientMessageId, json?.success && json.data ? json.data : null);
+      if (json?.success && json.data?._id && hasFiles) {
+        await attView.uploadSnapshot(json.data._id);
+        refetch();
+      }
     } catch {
-      reconcileFollowUp(clientMessageId, null);
+      reconcileFollowUp(clientMessageId, null); attView.restoreSnapshot();
     }
   };
 
@@ -7420,6 +7424,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                                     ) : (
                                       <p className={`text-xs sm:text-sm whitespace-pre-wrap leading-relaxed ${theme.text}`}>{msg.message}</p>
                                     )}
+                                    <FollowUpAttachments followUpId={Number(msg._id)} textClass={theme.text} onDeleted={refetch} />
                                     {msg._status === "sending" && <span className="text-[9px] text-yellow-500 mt-1 block">Sending...</span>}
                                     {msg._status === "failed" && (
                                       <span className="text-[9px] text-red-500 mt-1 flex items-center gap-1">Failed to send
@@ -7432,16 +7437,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                             })}
                           <div ref={followUpEndRef} />
                         </div>
-                        <form onSubmit={handleSendCustomNote} className={`p-3 sm:p-5 border-t flex gap-2 sm:gap-3 items-center flex-shrink-0 ${theme.chatInputInner}`}>
-                          <input type="text" value={customNote} onChange={e => setCustomNote(e.target.value)} placeholder="Add admin note..."
-                            className={`flex-1 border rounded-xl px-3 py-2.5 sm:px-4 sm:py-4 text-[10px] sm:text-sm outline-none transition-colors shadow-inner ${theme.inputInner} ${theme.text} ${theme.inputFocus}`} />
-                          <button type="button" title="Set follow-up reminder" onClick={() => setShowReminderModal(true)} className={`w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0 rounded-xl flex items-center justify-center cursor-pointer transition-colors ${isDark ? "text-gray-400 hover:text-purple-400 hover:bg-white/5" : "text-gray-400 hover:text-purple-600 hover:bg-purple-50"}`}>
-                            <FaClock className="text-[10px] sm:text-sm" />
-                          </button>
-                          <button type="submit" className={`w-10 h-10 sm:w-12 sm:h-12 text-white rounded-xl flex items-center justify-center cursor-pointer transition-colors shadow-lg ${isDark ? "bg-[#9E217B] hover:bg-[#b8268f]" : "bg-[#9E217B] hover:bg-[#8a1d6b]"}`}>
-                            <FaPaperPlane className="text-[10px] sm:text-sm ml-[-1px] sm:ml-[-2px]" />
-                          </button>
-                        </form>
+                        <FollowUpComposer value={customNote} onChange={setCustomNote} onSubmit={handleSendCustomNote} pendingFiles={attView.pendingFiles} fileError={attView.fileError} onAddFiles={attView.addFiles} onRemoveFile={attView.removeFile} onReminderClick={() => setShowReminderModal(true)} isDark={isDark} theme={theme} placeholder="Add admin note..." />
                       </div>
                     </div>
                   </div>

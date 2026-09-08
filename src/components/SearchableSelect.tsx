@@ -20,6 +20,8 @@ export interface SelectOption {
   sublabel?: string;
   /** Extra text matched by the search box but not displayed. */
   keywords?: string;
+  /** Live presence status. When set, a coloured dot + label is rendered. */
+  status?: "online" | "offline";
 }
 
 interface Props {
@@ -133,8 +135,22 @@ export default function SearchableSelect({
 
       {/* The selected option's secondary line stays visible after the list closes,
           so the picked person's id/phone remains on screen for confirmation. */}
-      {!open && selected?.sublabel && (
-        <p className={`text-[10px] mt-1 pl-2 ${t.textFaint}`}>{selected.sublabel}</p>
+      {!open && selected && (selected.sublabel || selected.status) && (
+        <div className="flex items-center gap-2 mt-1 pl-2">
+          {selected.sublabel && (
+            <p className={`text-[10px] ${t.textFaint}`}>{selected.sublabel}</p>
+          )}
+          {selected.status && (
+            <span className={`inline-flex items-center gap-1 text-[10px] font-semibold ${
+              selected.status === "online" ? "text-emerald-500" : isDark ? "text-gray-500" : "text-gray-400"
+            }`}>
+              <span className={`inline-block w-1.5 h-1.5 rounded-full ${
+                selected.status === "online" ? "bg-emerald-500" : isDark ? "bg-gray-500" : "bg-gray-400"
+              }`} />
+              {selected.status === "online" ? "Online" : "Offline"}
+            </span>
+          )}
+        </div>
       )}
 
       {open && (
@@ -163,14 +179,28 @@ export default function SearchableSelect({
                     : ""
                 }`}
               >
-                <p className={`font-medium ${
-                  value === option.value
-                    ? isDark ? "text-[#d4006e]" : "text-[#9E217B]"
-                    : t.text
-                }`}>
-                  {option.label}
-                  {value === option.value && <span className="ml-2 text-xs opacity-60">✓</span>}
-                </p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className={`font-medium ${
+                    value === option.value
+                      ? isDark ? "text-[#d4006e]" : "text-[#9E217B]"
+                      : t.text
+                  }`}>
+                    {option.label}
+                    {value === option.value && <span className="ml-2 text-xs opacity-60">✓</span>}
+                  </p>
+                  {option.status && (
+                    <span className={`inline-flex items-center gap-1 text-[10px] font-semibold shrink-0 ${
+                      option.status === "online"
+                        ? "text-emerald-500"
+                        : isDark ? "text-gray-500" : "text-gray-400"
+                    }`}>
+                      <span className={`inline-block w-1.5 h-1.5 rounded-full ${
+                        option.status === "online" ? "bg-emerald-500" : isDark ? "bg-gray-500" : "bg-gray-400"
+                      }`} />
+                      {option.status === "online" ? "Online" : "Offline"}
+                    </span>
+                  )}
+                </div>
                 {option.sublabel && (
                   <p className={`text-[10px] mt-0.5 ${t.textFaint}`}>{option.sublabel}</p>
                 )}

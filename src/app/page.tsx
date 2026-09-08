@@ -217,22 +217,25 @@ export default function Login() {
         // Platform level, so it is routed before the tenant roles and lands
         // outside /dashboard entirely. The destination re-verifies server-side;
         // this branch only decides where to send the browser.
+        // replace (not push) so the login page is removed from the history
+        // stack — otherwise Android Back navigates back to "/" and the user
+        // sees the login form even though they are still authenticated.
         if (userRole === "super admin") {
-          router.push("/super-admin");
+          router.replace("/super-admin");
         } else if (userRole === "receptionist") {
-          router.push("/dashboard/receptionist");
+          router.replace("/dashboard/receptionist");
         } else if (userRole === "admin") {
-          router.push("/dashboard");
+          router.replace("/dashboard");
         } else if (userRole === "sales manager") {
-          router.push("/dashboard/sales");
+          router.replace("/dashboard/sales");
         } else if (userRole === "site head") {
-          router.push("/dashboard");
+          router.replace("/dashboard");
         } else if (userRole === "sourcing manager") {
-          router.push("/dashboard/sourcing");
+          router.replace("/dashboard/sourcing");
         } else if (userRole === "caller") {
-          router.push("/dashboard/caller");
+          router.replace("/dashboard/caller");
         } else {
-          router.push("/dashboard");
+          router.replace("/dashboard");
         }
       } else {
         const errorData = await res.json();

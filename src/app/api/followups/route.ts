@@ -340,7 +340,7 @@ export async function POST(req: Request) {
       return await handleInternalMessage(requestedType, body, gate);
     }
 
-    if (!leadId || !message) {
+    if (!leadId || (message == null)) {
       return NextResponse.json(
         { success: false, message: "Missing fields: leadId and message are required" },
         { status: 400 }
