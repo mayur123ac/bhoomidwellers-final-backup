@@ -20,6 +20,7 @@ import { clearCrmSession, getStoredCrmUser, installLoggedOutBackGuard } from "@/
 import { useOrgName } from "@/lib/hooks/useOrgName";
 import { motion, AnimatePresence } from "framer-motion";
 import * as XLSX from "xlsx";
+import LogoutConfirmDialog from "@/components/LogoutConfirmDialog";
 import {
   FaUserTie, FaListUl, FaPlus, FaThLarge, FaCog, FaBell, FaLock, FaIdCard,
   FaClipboardList, FaUsers, FaEyeSlash, FaTrash, FaUserEdit,
@@ -44,7 +45,6 @@ import AdminSidebar from "@/components/admin/AdminSidebar";
 import AdminMobileDrawer from "@/components/admin/AdminMobileDrawer";
 import AppHeader from "@/components/AppHeader";
 import { Menu } from "lucide-react";
-import LogoutConfirmDialog from "@/components/LogoutConfirmDialog";
 
 type RoleType = { _id: string; name: string };
 type EmployeeType = {
@@ -762,8 +762,6 @@ export default function EmployeesPage() {
         setTransferTo("");
         setTransferConfirmed(false);
         fetchEmployees();
-        // Signal the admin dashboard (if open in another tab) to refetch leads.
-        try { new BroadcastChannel("crm").postMessage({ type: "leads_invalidated" }); } catch {}
       } else {
         showToast(`❌ ${data.message || "Transfer failed"}`);
       }
@@ -1023,7 +1021,7 @@ export default function EmployeesPage() {
         }}
         isMarkedPresent={isMarkedPresent}
         timeIn={timeIn}
-        onLogout={() => setShowLogoutConfirm(true)}
+        onLogout={handleLogout}
         menuItems={menuItems}
         groups={menuGroups}
       />
@@ -1223,7 +1221,7 @@ export default function EmployeesPage() {
 
                     {/* ── FOOTER: LOG OUT ── */}
                     <button
-                      onClick={() => setShowLogoutConfirm(true)}
+                      onClick={handleLogout}
                       className={`w-full flex items-center gap-2.5 py-2.5 px-3 rounded-[12px] font-semibold text-[13px] transition-colors cursor-pointer ${isDark
                         ? "text-red-400 bg-red-500/10 hover:bg-red-500/20"
                         : "text-red-600 bg-red-50 hover:bg-red-100"
@@ -2433,6 +2431,13 @@ export default function EmployeesPage() {
           </div>
         </div>
       )}
+
+      <LogoutConfirmDialog
+        open={showLogoutConfirm}
+        isDark={isDark}
+        onClose={() => setShowLogoutConfirm(false)}
+        onConfirm={handleLogout}
+      />
     </div>
   );
 }
@@ -3168,13 +3173,6 @@ function CallerControlMode({ leads, savedLeads, setSavedLeads, adminName, onExit
           })()}
         </main>
       </div>
-
-      <LogoutConfirmDialog
-        open={showLogoutConfirm}
-        isDark={isDark}
-        onClose={() => setShowLogoutConfirm(false)}
-        onConfirm={handleLogout}
-      />
     </div>
   );
 }

@@ -1209,6 +1209,13 @@ export default function SalesDashboard() {
             .absolute { max-width: calc(100vw - 16px); }
           }
         `}} />
+
+      <LogoutConfirmDialog
+        open={showLogoutConfirm}
+        isDark={isDark}
+        onClose={() => setShowLogoutConfirm(false)}
+        onConfirm={handleLogout}
+      />
     </div>
   );
 }
@@ -4296,13 +4303,6 @@ function SiteVisitScheduler({
           </div>
         </div>
       )}
-
-      <LogoutConfirmDialog
-        open={showLogoutConfirm}
-        isDark={isDark}
-        onClose={() => setShowLogoutConfirm(false)}
-        onConfirm={handleLogout}
-      />
     </div>
   );
 }
