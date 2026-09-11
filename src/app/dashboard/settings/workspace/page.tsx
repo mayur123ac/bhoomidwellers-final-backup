@@ -12,6 +12,7 @@ import { getStoredCrmUser } from "@/lib/authSession";
 import BolnaSettingsCard from "@/components/BolnaSettingsCard";
 import ManualCallingSettingsCard from "@/components/ManualCallingSettingsCard";
 import { refreshRecordingDeletePermission } from "@/lib/hooks/useRecordingDeletePermission";
+import { refreshFollowUpDeletionPermission } from "@/lib/hooks/useFollowUpDeletionPermission";
 
 import {
   Button,
@@ -282,6 +283,91 @@ function RecordingPermissionsCard() {
   );
 }
 
+/** Controls which roles can delete individual follow-up notes. */
+function FollowUpDeletionPermissionsCard() {
+  const toast = useToast();
+  const [roles, setRoles] = useState({ admin: true, site_head: false, sales_manager: false, receptionist: false });
+  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    api<{ roles: Record<string, boolean> }>("/api/settings/followup-deletion-permissions")
+      .then((r) => {
+        if (r.roles) setRoles({ admin: true, site_head: !!r.roles.site_head, sales_manager: !!r.roles.sales_manager, receptionist: !!r.roles.receptionist });
+      })
+      .catch(() => {})
+      .finally(() => setLoaded(true));
+  }, []);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const result = await api<{ message: string }>("/api/settings/followup-deletion-permissions", {
+        method: "POST",
+        json: { roles },
+      });
+      refreshFollowUpDeletionPermission();
+      toast("success", result.message);
+    } catch (err: any) {
+      toast("error", err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleRoles: { key: keyof typeof roles; label: string; disabled?: boolean }[] = [
+    { key: "admin", label: "Admin", disabled: true },
+    { key: "site_head", label: "Site Head" },
+    { key: "sales_manager", label: "Sales Manager" },
+    { key: "receptionist", label: "Receptionist" },
+  ];
+
+  return (
+    <Card
+      title="Follow-up Deletion Permissions"
+      description="Choose which roles can permanently delete follow-up notes from a lead's timeline."
+      footer={
+        <>
+          <span
+            className="mr-auto rounded-full border px-3 py-1 text-xs font-semibold"
+            style={{ borderColor: T.border, color: T.muted }}
+          >
+            {toggleRoles.filter((r) => roles[r.key]).map((r) => r.label).join(", ")}
+          </span>
+          <Button onClick={save} loading={saving} disabled={!loaded}>
+            Save setting
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        {toggleRoles.map((r) => (
+          <div key={r.key} className="flex items-center justify-between">
+            <span className="text-sm font-medium" style={{ color: T.text }}>
+              {r.label}
+              {r.disabled && (
+                <span className="ml-2 text-xs font-normal" style={{ color: T.muted }}>
+                  (always enabled)
+                </span>
+              )}
+            </span>
+            <Toggle
+              checked={roles[r.key]}
+              onChange={(v) => setRoles((prev) => ({ ...prev, [r.key]: v }))}
+              label={r.label}
+              disabled={!loaded || r.disabled}
+            />
+          </div>
+        ))}
+      </div>
+      <p className="mt-3 text-xs leading-relaxed" style={{ color: T.muted }}>
+        Deletion is permanent — the follow-up note and any attached files are removed from storage
+        and cannot be recovered. An audit log entry is created for every deletion.
+      </p>
+    </Card>
+  );
+}
+
 export default function WorkspaceSettingsPage() {
   const toast = useToast();
   const [user, setUser] = useState<any>(null);
@@ -517,6 +603,8 @@ export default function WorkspaceSettingsPage() {
       <CpEnquiryVisibilityCard />
 
       <RecordingPermissionsCard />
+
+      <FollowUpDeletionPermissionsCard />
 
       {/* BolnaSettingsCard is the original dark-themed component, moved here
           unchanged. Restyling its 460 lines to the light palette is cosmetic

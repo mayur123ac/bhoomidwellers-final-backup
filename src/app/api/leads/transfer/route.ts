@@ -93,15 +93,28 @@ export async function POST(req: Request) {
       // Don't fail the whole transfer just because follow-up logging failed.
     }
 
-    // ── 5. Update assigned_to ─────────────────────────────────────────
+    // ── 5. Update assigned_to + assigned_to_user_id ──────────────────
+    // Resolve the destination employee to a users.id so the FK stays in
+    // sync with the name. The legacy name column is kept for backward compat.
+    const destUserRows = await query(
+      `SELECT id FROM users
+       WHERE organization_id = $1
+         AND LOWER(TRIM(name)) = LOWER(TRIM($2))
+         AND deleted_at IS NULL
+       ORDER BY is_active DESC, id ASC LIMIT 1`,
+      [orgId, transfer_to]
+    );
+    const destUserId: number | null = destUserRows[0]?.id ?? null;
+
     const updatedRows = await query(
       `UPDATE walkin_enquiries
        SET assigned_to = $1,
+           assigned_to_user_id = $2,
            assigned_at = NOW(),
            last_activity_at = NOW()
-       WHERE id = $2 AND organization_id = $3
+       WHERE id = $3 AND organization_id = $4
        RETURNING *`,
-      [transfer_to, lead_id, orgId]
+      [transfer_to, destUserId, lead_id, orgId]
     );
 
     if (updatedRows.length === 0) {

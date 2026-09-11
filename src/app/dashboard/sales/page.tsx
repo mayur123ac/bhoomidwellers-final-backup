@@ -56,6 +56,7 @@ import ReminderModal from "@/components/ReminderModal";
 import ReminderDuePopup from "@/components/ReminderDuePopup";
 import { useOverdueReminders } from "@/hooks/useOverdueReminders";
 import PermanentLeadDeleteDialog from "@/components/PermanentLeadDeleteDialog";
+import LogoutConfirmDialog from "@/components/LogoutConfirmDialog";
 import LoanDealForm from "@/components/LoanDealForm";
 import LoanDealView from "@/components/LoanDealView";
 import BolnaCallWidget from "@/components/BolnaCallWidget";
@@ -63,7 +64,8 @@ import CallingButtons from "@/components/CallingButtons";
 import ManualCallBubble from "@/components/ManualCallBubble";
 // import ActivityTimeline from "@/components/ActivityTimeline";
 import { handleMarkLostLead as markLostLeadApi, restoreLostLead, updateLeadLostState, useLostLeadEvents } from "@/lib/lostLeadSync";
-import { useFollowUpEvents, type FollowUpSSEPayload, type FollowUpReadSSEPayload } from "@/lib/followUpSync";
+import { useFollowUpEvents, type FollowUpSSEPayload, type FollowUpReadSSEPayload, type FollowUpDeletedSSEPayload } from "@/lib/followUpSync";
+import { useFollowUpDeletionPermission } from "@/lib/hooks/useFollowUpDeletionPermission";
 
 import AttendanceTimerWidget from "@/components/AttendanceTimerWidget";
 import UserAvatar from "@/components/UserAvatar";
@@ -490,7 +492,12 @@ function useAdminData(onReminderDue?: (r: import("@/lib/followUpSync").ReminderS
     onReminderDueRef.current?.(r);
   }, []);
 
-  useFollowUpEvents(handleSSEFollowUp, handleSSEReadReceipt, fetchAdminData, handleSSEReminderDue);
+  const handleSSEFollowUpDeleted = useCallback((payload: FollowUpDeletedSSEPayload) => {
+    const fupIdStr = String(payload.followUpId);
+    setFollowUps(prev => prev.filter(f => String(f._id) !== fupIdStr));
+  }, []);
+
+  useFollowUpEvents(handleSSEFollowUp, handleSSEReadReceipt, fetchAdminData, handleSSEReminderDue, handleSSEFollowUpDeleted);
 
   const reconcileFollowUp = useCallback((clientMessageId: string, serverData: any | null) => {
     setFollowUps(prev => prev.map(f =>
@@ -534,7 +541,7 @@ export default function SalesDashboard() {
   };
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
-  const [user, setUser] = useState({ name: "Loading...", role: "Sales Manager", email: "", password: "" });
+  const [user, setUser] = useState<any>({ name: "Loading...", role: "Sales Manager", email: "", password: "" });
   const [activeView, setActiveView] = useState("overview");
   const [showPassword, setShowPassword] = useState(false);
   // Dismissals now live in the notification feed hook, keyed by notification id
@@ -590,7 +597,14 @@ export default function SalesDashboard() {
   const myOwnLeads = useMemo(() => {
     const role = (user.role || "").toLowerCase().replace("_", " ");
     const isUnrestricted = role === "admin" || role === "site head";
-    return isUnrestricted ? allLeads : allLeads.filter((l: any) => l.assigned_to === user.name);
+    if (isUnrestricted) return allLeads;
+    return allLeads.filter((l: any) =>
+      // ID-first: integer FK is immune to whitespace drift and name changes.
+      // Fall back to name comparison for old leads not yet backfilled.
+      l.assigned_to_user_id != null
+        ? Number(l.assigned_to_user_id) === Number(user._id)
+        : l.assigned_to?.trim() === user.name?.trim()
+    );
   }, [allLeads, user]);
 
   // ── The notification queue ─────────────────────────────────────────────────
@@ -726,7 +740,7 @@ export default function SalesDashboard() {
           .then(r => r.json())
           .then(data => {
             if (data.success) {
-              setUser(prev => ({ ...prev, whatsapp_number: data.whatsapp_number || "" }));
+              setUser((prev: any) => ({ ...prev, whatsapp_number: data.whatsapp_number || "" }));
             }
           })
           .catch(console.error);
@@ -739,6 +753,7 @@ export default function SalesDashboard() {
   }, [router]);
 
   const handleLogout = () => { clearCrmSession(); router.replace("/"); };
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   return (
     <div
@@ -990,7 +1005,7 @@ export default function SalesDashboard() {
                     </div>
                     <hr className={`-mx-4 border-0 border-t mb-2.5 mt-1 ${isDark ? "border-white/10" : "border-black/5"}`} />
                     <button
-                      onClick={handleLogout}
+                      onClick={() => setShowLogoutConfirm(true)}
                       className={`w-full flex items-center gap-2.5 py-2.5 px-3 rounded-[12px] font-semibold text-[13px] transition-colors cursor-pointer ${isDark ? "text-red-400 bg-red-500/10 hover:bg-red-500/20" : "text-red-600 bg-red-50 hover:bg-red-100"}`}
                     >
                       <FiLogOut className="w-4 h-4" />
@@ -1025,7 +1040,11 @@ export default function SalesDashboard() {
             />
           ) : activeView === "assistant" ? (
             <AssistantView
-              allLeads={user.role === "admin" ? allLeads : allLeads.filter((l: any) => l.assigned_to === user.name)}
+              allLeads={user.role === "admin" ? allLeads : allLeads.filter((l: any) =>
+                l.assigned_to_user_id != null
+                  ? Number(l.assigned_to_user_id) === Number(user._id)
+                  : l.assigned_to?.trim() === user.name?.trim()
+              )}
               isDark={isDark} t={t} user={user}
             />
           ) : activeView === "site_visits" ? (
@@ -1108,7 +1127,7 @@ export default function SalesDashboard() {
         onToggleTheme={toggleTheme}
         isMarkedPresent={isMarkedPresent}
         timeIn={timeIn}
-        onLogout={handleLogout}
+        onLogout={() => setShowLogoutConfirm(true)}
       />
 
       {/* ── BOTTOM NAV (MOBILE) — simplified to 4 core items ── */}
@@ -1250,6 +1269,28 @@ function SalesManagerView({
   initialView, setMainView, isDark, t, featurePrefs,
   pendingLeadOpen, onPendingLeadOpenHandled,        // ← NEW
 }: any) {
+  const canDeleteFollowUps = useFollowUpDeletionPermission(adminUser?.role);
+  const [deletingFollowUpId, setDeletingFollowUpId] = useState<string | null>(null);
+  const [confirmDeleteFollowUpId, setConfirmDeleteFollowUpId] = useState<string | null>(null);
+
+  const handleDeleteFollowUp = useCallback(async (followUpId: string) => {
+    if (deletingFollowUpId) return;
+    setDeletingFollowUpId(followUpId);
+    try {
+      const res = await fetch(`/api/followups/${followUpId}`, { method: "DELETE", credentials: "include" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        alert(body.message || "Failed to delete follow-up.");
+        return;
+      }
+      refetch();
+    } catch {
+      alert("Failed to delete follow-up. Please try again.");
+    } finally {
+      setDeletingFollowUpId(null);
+    }
+  }, [deletingFollowUpId, refetch]);
+
   const getStatusStyle = (status: string) => {
     const s = status || "Assigned";
     if (s === "New Lead") return t.statusNew;
@@ -1528,7 +1569,11 @@ function SalesManagerView({
   useEffect(() => {
     if (selectedLead) {
       const u = allLeads.find((l: any) => String(l.id) === String(selectedLead.id));
-      if (u && (adminUser.role === "admin" || u.assigned_to === adminUser.name)) {
+      const leadBelongsToAdmin = adminUser.role === "admin" ||
+        (u.assigned_to_user_id != null
+          ? Number(u.assigned_to_user_id) === Number(adminUser._id)
+          : u.assigned_to?.trim() === adminUser.name?.trim());
+      if (u && leadBelongsToAdmin) {
         setSelectedLead(u);
       } else {
         setSelectedLead(null);
@@ -1548,8 +1593,14 @@ function SalesManagerView({
      typed. Memoising here is what makes the existing memoisation downstream
      actually work; nothing about the values themselves changes. */
   const baseManagerLeads = useMemo(
-    () => adminUser.role === "admin" ? allLeads : allLeads.filter((l: any) => l.assigned_to === adminUser.name),
-    [allLeads, adminUser.role, adminUser.name]
+    () => adminUser.role === "admin"
+      ? allLeads
+      : allLeads.filter((l: any) =>
+          l.assigned_to_user_id != null
+            ? Number(l.assigned_to_user_id) === Number(adminUser._id)
+            : l.assigned_to?.trim() === adminUser.name?.trim()
+        ),
+    [allLeads, adminUser.role, adminUser._id, adminUser.name]
   );
 
   /* Follow-ups indexed by lead, built once per followUps change.
@@ -2666,7 +2717,9 @@ function SalesManagerView({
                   // Same rule as BookingApplicationView: admin always, sales only for own lead + not-yet-approved.
                   const role = String(adminUser?.role || "").toLowerCase();
                   const isAdminRole = role === "admin" || role === "site_head";
-                  const isOwner = adminUser?.name && selectedLead?.assigned_to === adminUser.name;
+                  const isOwner = selectedLead?.assigned_to_user_id != null
+                    ? Number(selectedLead.assigned_to_user_id) === Number(adminUser?._id)
+                    : (adminUser?.name && selectedLead?.assigned_to?.trim() === adminUser.name?.trim());
                   const notApproved = bookingData?.booking_status !== "Approved";
                   const canEdit = isAdminRole || (isOwner && notApproved);
                   if (!canEdit) return null;
@@ -3463,6 +3516,17 @@ function SalesManagerView({
                             )}
                             <FollowUpAttachments followUpId={Number(msg._id)} textClass={t.textMuted} onDeleted={refetch} />
 
+                            {canDeleteFollowUps && msg._id && msg._status !== "sending" && msg._status !== "failed" && (
+                              <button
+                                type="button"
+                                disabled={deletingFollowUpId === String(msg._id)}
+                                onClick={() => setConfirmDeleteFollowUpId(String(msg._id))}
+                                className={`mt-1 text-[9px] font-medium transition-opacity ${isDark ? "text-red-400 hover:text-red-300" : "text-red-500 hover:text-red-600"} disabled:opacity-40`}
+                              >
+                                {deletingFollowUpId === String(msg._id) ? "Deleting…" : "Delete"}
+                              </button>
+                            )}
+
                             {/* Optimistic UI status indicators */}
                             {msg._status === "sending" && (
                               <span className="text-[9px] text-yellow-500 mt-1 block">Sending...</span>
@@ -3499,6 +3563,22 @@ function SalesManagerView({
                         </div>
                       );
                     })}
+                    {confirmDeleteFollowUpId && (
+                      <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60">
+                        <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl overflow-hidden mx-4">
+                          <div className="px-5 py-4 border-b border-gray-100">
+                            <h3 className="font-bold text-sm text-gray-900">Delete follow-up?</h3>
+                          </div>
+                          <div className="px-5 py-4">
+                            <p className="text-sm text-gray-600 leading-relaxed">This will permanently delete this follow-up note and any attached files from storage. This action cannot be undone.</p>
+                          </div>
+                          <div className="flex gap-2 px-5 py-3 border-t border-gray-100 bg-gray-50">
+                            <button type="button" onClick={() => setConfirmDeleteFollowUpId(null)} className="flex-1 px-3 py-2 text-xs font-bold rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-100 transition">Cancel</button>
+                            <button type="button" onClick={() => { handleDeleteFollowUp(confirmDeleteFollowUpId!); setConfirmDeleteFollowUpId(null); }} className="flex-1 px-3 py-2 text-xs font-bold rounded-xl bg-red-600 text-white hover:bg-red-700 transition">Delete</button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                     <div ref={followUpEndRef} />
                   </div>
                   {/* Composer stays open on closed/lost leads — notes are a record of
@@ -4216,6 +4296,13 @@ function SiteVisitScheduler({
           </div>
         </div>
       )}
+
+      <LogoutConfirmDialog
+        open={showLogoutConfirm}
+        isDark={isDark}
+        onClose={() => setShowLogoutConfirm(false)}
+        onConfirm={handleLogout}
+      />
     </div>
   );
 }

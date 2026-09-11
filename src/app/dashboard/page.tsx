@@ -33,6 +33,7 @@ import { useOverdueReminders } from "@/hooks/useOverdueReminders";
 import CrmUpdatesNotification from "@/components/CrmUpdatesNotification";
 import PermanentLeadDeleteDialog from "@/components/PermanentLeadDeleteDialog";
 import BulkDeleteLeadsDialog from "@/components/BulkDeleteLeadsDialog";
+import LogoutConfirmDialog from "@/components/LogoutConfirmDialog";
 import LoanDealView from "@/components/LoanDealView";
 import ChannelPartnerListView from "@/components/ChannelPartnerListView";
 import CpChatPanel from "@/components/CpChatPanel";
@@ -57,7 +58,8 @@ import {
   updateLeadRestoreState,
   useLostLeadEvents,
 } from "@/lib/lostLeadSync";
-import { useFollowUpEvents, type FollowUpSSEPayload, type FollowUpReadSSEPayload } from "@/lib/followUpSync";
+import { useFollowUpEvents, type FollowUpSSEPayload, type FollowUpReadSSEPayload, type FollowUpDeletedSSEPayload } from "@/lib/followUpSync";
+import { useFollowUpDeletionPermission } from "@/lib/hooks/useFollowUpDeletionPermission";
 import dynamic from "next/dynamic";
 import AttendanceView from "@/components/AttendanceView";
 import AdminAssistantDock from "@/components/AdminAssistantDock";
@@ -524,9 +526,20 @@ function useAdminData(onReminderDue?: (r: import("@/lib/followUpSync").ReminderS
       }
     };
     document.addEventListener("visibilitychange", onVisibility);
+
+    // When an admin transfers leads from the employees page (a separate page),
+    // that page broadcasts a signal so this tab's lead list refreshes immediately
+    // rather than waiting for the next 120-second poll.
+    let bc: BroadcastChannel | null = null;
+    try {
+      bc = new BroadcastChannel("crm");
+      bc.onmessage = (e) => { if (e.data?.type === "leads_invalidated") fetchAdminData(); };
+    } catch { }
+
     return () => {
       if (interval) clearInterval(interval);
       document.removeEventListener("visibilitychange", onVisibility);
+      bc?.close();
     };
   }, [fetchAdminData]);
 
@@ -574,7 +587,19 @@ function useAdminData(onReminderDue?: (r: import("@/lib/followUpSync").ReminderS
     onReminderDueRef.current?.(r);
   }, []);
 
-  useFollowUpEvents(handleSSEFollowUp, handleSSEReadReceipt, fetchAdminData, handleSSEReminderDue);
+  const handleSSEFollowUpDeleted = useCallback((payload: FollowUpDeletedSSEPayload) => {
+    const fupIdStr = String(payload.followUpId);
+    setFollowUps(prev => prev.filter(f => String(f._id) !== fupIdStr));
+    setFupsByLead(prev => {
+      const next = new Map(prev);
+      const key = String(payload.leadId);
+      const bucket = next.get(key);
+      if (bucket) next.set(key, bucket.filter((f: any) => String(f._id) !== fupIdStr));
+      return next;
+    });
+  }, []);
+
+  useFollowUpEvents(handleSSEFollowUp, handleSSEReadReceipt, fetchAdminData, handleSSEReminderDue, handleSSEFollowUpDeleted);
 
   return { managers, receptionists, siteHeads, allLeads, followUps, fupsByLead, isLoading, refetch: fetchAdminData, appendFollowUp, reconcileFollowUp, removeFollowUp };
 }
@@ -630,7 +655,7 @@ const formatDate = (ds: string) => {
   try { return new Date(ds).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }); } catch { return ds; }
 };
 const formatLeadForExport = (l: any) => ({
-  "Lead No.": l.sr_no || l.id,
+  "Sr. No.": l.sr_no || l.id,
   "Client Name": l.name,
   "Budget": l.salesBudget || l.budget || "N/A",
   "Configuration": l.propType || l.configuration || "N/A",
@@ -941,6 +966,7 @@ function AdminAtlasDashboardContent() {
   }, [activeNotif, notifQueue]);
 
   const handleLogout = () => { clearCrmSession(); router.replace("/"); };
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   /**
    * Open a notification's lead in the Lead Detail panel.
@@ -1147,7 +1173,7 @@ function AdminAtlasDashboardContent() {
         onToggleTheme={toggleTheme}
         isMarkedPresent={isMarkedPresent}
         timeIn={timeIn}
-        onLogout={handleLogout}
+        onLogout={() => setShowLogoutConfirm(true)}
         menuItems={menuItems}
         groups={menuGroups}
       />
@@ -1293,7 +1319,7 @@ function AdminAtlasDashboardContent() {
                       </div>
                       <hr className={`-mx-4 border-0 border-t mb-2.5 mt-1 ${isDark ? "border-white/10" : "border-black/5"}`} />
                       <button
-                        onClick={handleLogout}
+                        onClick={() => setShowLogoutConfirm(true)}
                         className={`w-full flex items-center gap-2.5 py-2.5 px-3 rounded-[12px] font-semibold text-[13px] transition-colors cursor-pointer ${isDark ? "text-red-400 bg-red-500/10 hover:bg-red-500/20" : "text-red-600 bg-red-50 hover:bg-red-100"}`}
                       >
                         <FiLogOut className="w-4 h-4" />
@@ -1510,6 +1536,13 @@ function AdminAtlasDashboardContent() {
           <span className="text-sm font-bold">{invLinkError}</span>
         </div>
       )}
+
+      <LogoutConfirmDialog
+        open={showLogoutConfirm}
+        isDark={isDark}
+        onClose={() => setShowLogoutConfirm(false)}
+        onConfirm={handleLogout}
+      />
     </div>
   );
 }
@@ -1858,15 +1891,25 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
      Grouping by assignee once turns both O(people × leads) loops into O(leads),
      and memoising means a keystroke no longer re-runs any of it. The values are
      unchanged. */
-  const leadsByAssignedTo = useMemo(() => {
-    const map = new Map<string, any[]>();
+  // leadsByAssignedTo: name-keyed index (legacy, used as fallback for old rows)
+  // leadsByAssignedToUserId: user-id-keyed index (preferred, post-migration rows)
+  const [leadsByAssignedTo, leadsByAssignedToUserId] = useMemo(() => {
+    const byName = new Map<string, any[]>();
+    const byId = new Map<number, any[]>();
     for (const l of allLeads) {
-      const key = String(l.assigned_to ?? "");
-      let bucket = map.get(key);
-      if (!bucket) { bucket = []; map.set(key, bucket); }
-      bucket.push(l);
+      const nameKey = (l.assigned_to ?? "").trim();
+      let nameBucket = byName.get(nameKey);
+      if (!nameBucket) { nameBucket = []; byName.set(nameKey, nameBucket); }
+      nameBucket.push(l);
+
+      if (l.assigned_to_user_id != null) {
+        const idKey = Number(l.assigned_to_user_id);
+        let idBucket = byId.get(idKey);
+        if (!idBucket) { idBucket = []; byId.set(idKey, idBucket); }
+        idBucket.push(l);
+      }
     }
-    return map;
+    return [byName, byId];
   }, [allLeads]);
 
   const leadsByReceptionist = useMemo(() => {
@@ -1882,13 +1925,17 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
 
   // ── Manager stats ──────────────────────────────────────────────────────────
   const managerStats = useMemo(() => managers.map((m: any) => {
-    const mLeads = leadsByAssignedTo.get(String(m.name)) ?? EMPTY_FUPS;
+    // ID-first: use the user-id-keyed index when the manager has an id and
+    // the index has data for it. Fall back to name for pre-migration rows.
+    const mLeads = (m.id && leadsByAssignedToUserId.get(Number(m.id)))
+      ?? leadsByAssignedTo.get((m.name ?? "").trim())
+      ?? EMPTY_FUPS;
     return {
       name: m.name,
       activeLeads: mLeads.length,
       siteVisits: mLeads.filter((l: any) => l.status === "Visit Scheduled" || !!l.mongoVisitDate).length,
     };
-  }).sort((a: any, b: any) => b.activeLeads - a.activeLeads), [managers, leadsByAssignedTo]);
+  }).sort((a: any, b: any) => b.activeLeads - a.activeLeads), [managers, leadsByAssignedTo, leadsByAssignedToUserId]);
 
   useEffect(() => {
     if (!hasAutoSelectedRecep && receptionists?.length > 0 && !isLoading) {
@@ -1897,10 +1944,18 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
     }
   }, [receptionists, isLoading, hasAutoSelectedRecep]);
 
-  const activeManagerLeads = useMemo(
-    () => leadsByAssignedTo.get(String(selectedManagerName)) ?? EMPTY_FUPS,
-    [leadsByAssignedTo, selectedManagerName]
-  );
+  const activeManagerLeads = useMemo(() => {
+    // Prefer ID-keyed lookup: find the selected manager's id from the managers list,
+    // then use the id index. Fall back to name for old leads.
+    const selectedMgrObj = (managers || []).find(
+      (m: any) => (m.name ?? "").trim() === (selectedManagerName ?? "").trim()
+    );
+    if (selectedMgrObj?.id) {
+      const byId = leadsByAssignedToUserId.get(Number(selectedMgrObj.id));
+      if (byId) return byId;
+    }
+    return leadsByAssignedTo.get((selectedManagerName ?? "").trim()) ?? EMPTY_FUPS;
+  }, [leadsByAssignedTo, leadsByAssignedToUserId, selectedManagerName, managers]);
   const visitCount = useMemo(
     () => activeManagerLeads.filter((l: any) => l.status === "Visit Scheduled" || !!l.mongoVisitDate).length,
     [activeManagerLeads]
@@ -1908,7 +1963,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
 
   // ── Receptionist data ──────────────────────────────────────────────────────
   const recepAssignedLeads = useMemo(
-    () => leadsByAssignedTo.get(String(selectedReceptionistName)) ?? EMPTY_FUPS,
+    () => leadsByAssignedTo.get((selectedReceptionistName ?? "").trim()) ?? EMPTY_FUPS,
     [leadsByAssignedTo, selectedReceptionistName]
   );
   const recepSelfLeads = useMemo(
@@ -1930,7 +1985,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
     // === r.name` predicate produced, but read from the two indexes instead of
     // scanning every lead once per receptionist.
     const rLeads = [
-      ...(leadsByAssignedTo.get(String(r.name)) ?? EMPTY_FUPS),
+      ...(leadsByAssignedTo.get((r.name ?? "").trim()) ?? EMPTY_FUPS),
       ...(leadsByReceptionist.get(String(r.name)) ?? EMPTY_FUPS),
     ];
     const unique = [...new Map(rLeads.map((l: any) => [l.id, l])).values()];
@@ -1938,10 +1993,16 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
   }).sort((a: any, b: any) => b.activeLeads - a.activeLeads), [receptionists, leadsByAssignedTo, leadsByReceptionist]);
 
   // ── Site Head data ─────────────────────────────────────────────────────────
-  const activeSiteHeadLeads = useMemo(
-    () => leadsByAssignedTo.get(String(selectedSiteHeadName)) ?? EMPTY_FUPS,
-    [leadsByAssignedTo, selectedSiteHeadName]
-  );
+  const activeSiteHeadLeads = useMemo(() => {
+    const selectedShObj = (siteHeads || []).find(
+      (sh: any) => (sh.name ?? "").trim() === (selectedSiteHeadName ?? "").trim()
+    );
+    if (selectedShObj?.id) {
+      const byId = leadsByAssignedToUserId.get(Number(selectedShObj.id));
+      if (byId) return byId;
+    }
+    return leadsByAssignedTo.get((selectedSiteHeadName ?? "").trim()) ?? EMPTY_FUPS;
+  }, [leadsByAssignedTo, leadsByAssignedToUserId, selectedSiteHeadName, siteHeads]);
   const siteHeadVisitCount = useMemo(
     () => activeSiteHeadLeads.filter((l: any) => l.status === "Visit Scheduled" || !!l.mongoVisitDate).length,
     [activeSiteHeadLeads]
@@ -2977,6 +3038,28 @@ function useInventoryDeepLink({ openLeadId, allLeads, onOpenLeadHandled, open }:
 }
 
 function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, refetch, appendFollowUp, reconcileFollowUp, removeFollowUp, theme, isDark, openLeadId, onOpenLeadHandled }: any) {
+  const canDeleteFollowUps = useFollowUpDeletionPermission(adminUser?.role);
+  const [deletingFollowUpId, setDeletingFollowUpId] = useState<string | null>(null);
+  const [confirmDeleteFollowUpId, setConfirmDeleteFollowUpId] = useState<string | null>(null);
+
+  const handleDeleteFollowUp = useCallback(async (followUpId: string) => {
+    if (deletingFollowUpId) return;
+    setDeletingFollowUpId(followUpId);
+    try {
+      const res = await fetch(`/api/followups/${followUpId}`, { method: "DELETE", credentials: "include" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        alert(body.message || "Failed to delete follow-up.");
+        return;
+      }
+      refetch();
+    } catch {
+      alert("Failed to delete follow-up. Please try again.");
+    } finally {
+      setDeletingFollowUpId(null);
+    }
+  }, [deletingFollowUpId, refetch]);
+
   // Deep-link from the Inventory drawer: open the requested lead's booking view.
   // (Effect body resolves the handlers below at run-time, after render.)
   // Deep-link handler — await the fetch, only flip showBookingView once data is confirmed
@@ -3251,8 +3334,19 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
     if (leadStatusFilter === "active") return !lead.is_lost_lead;
     return showLostLeads || !lead.is_lost_lead;
   }, [leadStatusFilter, showLostLeads, showNGDLeads]);
-  const assignedLeads = useMemo(() => mergedLeads.filter((l: any) => l.assigned_to === managerName && l.status !== "Closing" && !l.closingDate && applyLostVisibility(l)), [mergedLeads, managerName, applyLostVisibility]);
-  const closedLeads = useMemo(() => mergedLeads.filter((l: any) => l.assigned_to === managerName && (l.status === "Closing" || l.status === "Closed" || !!l.closingDate)), [mergedLeads, managerName]);
+  const selectedManagerId = selectedManager?.id ?? null;
+  const assignedLeads = useMemo(() => mergedLeads.filter((l: any) => {
+    const owned = l.assigned_to_user_id != null && selectedManagerId != null
+      ? Number(l.assigned_to_user_id) === Number(selectedManagerId)
+      : l.assigned_to?.trim() === managerName?.trim();
+    return owned && l.status !== "Closing" && !l.closingDate && applyLostVisibility(l);
+  }), [mergedLeads, managerName, selectedManagerId, applyLostVisibility]);
+  const closedLeads = useMemo(() => mergedLeads.filter((l: any) => {
+    const owned = l.assigned_to_user_id != null && selectedManagerId != null
+      ? Number(l.assigned_to_user_id) === Number(selectedManagerId)
+      : l.assigned_to?.trim() === managerName?.trim();
+    return owned && (l.status === "Closing" || l.status === "Closed" || !!l.closingDate);
+  }), [mergedLeads, managerName, selectedManagerId]);
   const filteredManagers = (managers || []).filter((s: any) => s.name?.toLowerCase().includes(searchManager.toLowerCase()));
   // ── Bottom sentinel: load 20 more on scroll down ──────────────────────────────
   useEffect(() => {
@@ -3583,7 +3677,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
   // ── Column definitions for AdminLeadTable ──
   const smColumns: ALTColumn[] = [
     {
-      key: "lead_no", label: "Lead No.", minWidth: "min-w-[60px] sm:min-w-[76px]", locked: true,
+      key: "lead_no", label: "Sr. No.", minWidth: "min-w-[60px] sm:min-w-[76px]", locked: true,
       sortValue: (l) => Number(l.sr_no || l.id) || 0,
       render: (l, { isDark: dk }) => <span className={`font-bold text-[11px] sm:text-[13px] ${dk ? "text-[#d946a8]" : "text-[#9E217B]"}`}>#{l.sr_no || l.id}</span>,
     },
@@ -3724,7 +3818,11 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
             ) : (
               filteredManagers.map((sh: any) => {
                 const isSelected = selectedManager?.id === sh.id || selectedManager?.name === sh.name;
-                const count = allLeads.filter((l: any) => l.assigned_to === sh.name).length;
+                const count = allLeads.filter((l: any) =>
+                  l.assigned_to_user_id != null
+                    ? Number(l.assigned_to_user_id) === Number(sh.id)
+                    : l.assigned_to?.trim() === sh.name?.trim()
+                ).length;
 
                 return (
                   <div
@@ -3902,7 +4000,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                             <FaChevronLeft className="text-[10px] sm:text-xs" />
                           </button>
                           <h1 className={`text-sm sm:text-base lg:text-lg font-bold flex flex-wrap items-center gap-1.5 sm:gap-2 ${theme.text}`}>
-                            <span className={isDark ? "text-[#d946a8]" : "text-[#9E217B]"}>#{selectedLead.sr_no || selectedLead.id}</span>
+                            <span className={isDark ? "text-[#9E217B]" : "text-[#9E217B]"}>#{selectedLead.sr_no || selectedLead.id}</span>
                             <span>{selectedLead.name}</span>
                             {selectedLead.status === "Closing" && (
                               <span className={`text-[9px] sm:text-[11px] font-bold px-2 py-0.5 sm:px-3 sm:py-1 rounded-full border flex items-center gap-1 sm:gap-1.5 ${theme.statusClosing}`}>
@@ -4348,7 +4446,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
 
                       {/* RIGHT PANEL: FOLLOW-UPS — 65% on small laptops (lg), 60% on desktop (xl) */}
                       <div className={`w-full lg:w-[58%] xl:w-[55%] flex flex-col rounded-xl overflow-hidden shadow-2xl min-h-[500px] lg:h-full lg:min-h-0 border ${theme.chatPanel}`} style={theme.chatPanelGl}>
-                        <div className={`flex-1 p-2 overflow-y-auto custom-scrollbar flex flex-col gap-2 ${theme.chatArea}`}>
+                        <div className={`flex-1 p-6 overflow-y-auto custom-scrollbar flex flex-col gap-4 ${theme.chatArea}`}>
                           <div className="flex justify-start">
                             <div className={`rounded-xl rounded-tl-none p-3 max-w-[85%] shadow-md ${theme.fupSalesform}`}>
                               <div className={`flex justify-between items-center mb-2 gap-3`}>
@@ -4386,6 +4484,16 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                                     <p className={`text-sm whitespace-pre-wrap leading-relaxed ${theme.textMuted}`}>{msg.message}</p>
                                   )}
                                   <FollowUpAttachments followUpId={Number(msg._id)} textClass={theme.textMuted} onDeleted={refetch} />
+                                  {canDeleteFollowUps && msg._id && msg._status !== "sending" && msg._status !== "failed" && (
+                                    <button
+                                      type="button"
+                                      disabled={deletingFollowUpId === String(msg._id)}
+                                      onClick={() => setConfirmDeleteFollowUpId(String(msg._id))}
+                                      className={`mt-1 text-[9px] font-medium transition-opacity ${isDark ? "text-red-400 hover:text-red-300" : "text-red-500 hover:text-red-600"} disabled:opacity-40`}
+                                    >
+                                      {deletingFollowUpId === String(msg._id) ? "Deleting…" : "Delete"}
+                                    </button>
+                                  )}
                                   {msg._status === "sending" && <span className="text-[9px] text-yellow-500 mt-1 block">Sending...</span>}
                                   {msg._status === "failed" && (
                                     <span className="text-[9px] text-red-500 mt-1 flex items-center gap-1">Failed to send
@@ -4398,6 +4506,22 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                           })}
                           <div ref={followUpEndRef} />
                         </div>
+                        {confirmDeleteFollowUpId && (
+                          <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60">
+                            <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl overflow-hidden mx-4">
+                              <div className="px-5 py-4 border-b border-gray-100">
+                                <h3 className="font-bold text-sm text-gray-900">Delete follow-up?</h3>
+                              </div>
+                              <div className="px-5 py-4">
+                                <p className="text-sm text-gray-600 leading-relaxed">This will permanently delete this follow-up note and any attached files from storage. This action cannot be undone.</p>
+                              </div>
+                              <div className="flex gap-2 px-5 py-3 border-t border-gray-100 bg-gray-50">
+                                <button type="button" onClick={() => setConfirmDeleteFollowUpId(null)} className="flex-1 px-3 py-2 text-xs font-bold rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-100 transition">Cancel</button>
+                                <button type="button" onClick={() => { handleDeleteFollowUp(confirmDeleteFollowUpId!); setConfirmDeleteFollowUpId(null); }} className="flex-1 px-3 py-2 text-xs font-bold rounded-xl bg-red-600 text-white hover:bg-red-700 transition">Delete</button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                         <FollowUpComposer value={customNote} onChange={setCustomNote} onSubmit={handleSendCustomNote} pendingFiles={attView.pendingFiles} fileError={attView.fileError} onAddFiles={attView.addFiles} onRemoveFile={attView.removeFile} onReminderClick={() => setShowReminderModal(true)} isDark={isDark} theme={theme} placeholder="Add admin note..." size="compact" headerGlass={theme.headerGlass} />
                       </div>
                     </div>
@@ -4502,6 +4626,28 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
 // ADMIN SITE HEAD VIEW
 // ============================================================================
 function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUser, refetch, appendFollowUp, reconcileFollowUp, removeFollowUp, theme, isDark }: any) {
+  const canDeleteFollowUps = useFollowUpDeletionPermission(adminUser?.role);
+  const [deletingFollowUpId, setDeletingFollowUpId] = useState<string | null>(null);
+  const [confirmDeleteFollowUpId, setConfirmDeleteFollowUpId] = useState<string | null>(null);
+
+  const handleDeleteFollowUp = useCallback(async (followUpId: string) => {
+    if (deletingFollowUpId) return;
+    setDeletingFollowUpId(followUpId);
+    try {
+      const res = await fetch(`/api/followups/${followUpId}`, { method: "DELETE", credentials: "include" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        alert(body.message || "Failed to delete follow-up.");
+        return;
+      }
+      refetch();
+    } catch {
+      alert("Failed to delete follow-up. Please try again.");
+    } finally {
+      setDeletingFollowUpId(null);
+    }
+  }, [deletingFollowUpId, refetch]);
+
   const [selectedSiteHead, setSelectedSiteHead] = useState<any>(null);
   const [searchSiteHead, setSearchSiteHead] = useState("");
   const [activeSection, setActiveSection] = useState<"assignedTable" | "closed">("assignedTable");
@@ -5086,7 +5232,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
   // ── Column definitions for AdminLeadTable ──
   const shColumns: ALTColumn[] = [
     {
-      key: "lead_no", label: "Lead No.", minWidth: "min-w-[60px] sm:min-w-[76px]", locked: true,
+      key: "lead_no", label: "Sr. No.", minWidth: "min-w-[60px] sm:min-w-[76px]", locked: true,
       sortValue: (l) => Number(l.sr_no || l.id) || 0,
       render: (l, { isDark: dk }) => <span className={`font-bold text-[11px] sm:text-[13px] ${dk ? "text-[#d946a8]" : "text-[#9E217B]"}`}>#{l.sr_no || l.id}</span>,
     },
@@ -5249,7 +5395,11 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
               : filteredSiteHeads.length === 0 ? <div className={`p-8 text-center text-sm ${theme.textMuted}`}>No Site Heads found.</div>
                 : filteredSiteHeads.map((sh: any) => {
                   const isSelected = selectedSiteHead?.id === sh.id || selectedSiteHead?.name === sh.name;
-                  const count = allLeads.filter((l: any) => l.assigned_to === sh.name).length;
+                  const count = allLeads.filter((l: any) =>
+                    l.assigned_to_user_id != null
+                      ? Number(l.assigned_to_user_id) === Number(sh.id)
+                      : l.assigned_to?.trim() === sh.name?.trim()
+                  ).length;
                   return (
                     <div key={sh.id || sh.name} onClick={() => { setSelectedSiteHead(sh); setSubView("list"); setActiveSection("assignedTable"); setSelectedLead(null); }}
                       className={`p-5 flex items-center gap-2 cursor-pointer transition-all border-b ${theme.tableBorder} ${isSelected ? (isDark ? "border-r-4 border-r-[#9E217B] bg-[#9E217B]/10" : "border-r-4 border-r-[#9E217B] bg-pink-50") : "hover:opacity-80 border-r-4 border-r-transparent"}`}>
@@ -5411,7 +5561,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                             <FaChevronLeft className="text-[10px] sm:text-xs" />
                           </button>
                           <h1 className={`text-sm sm:text-base lg:text-lg font-bold flex flex-wrap items-center gap-1.5 sm:gap-2 ${theme.text}`}>
-                            <span className={isDark ? "text-[#d946a8]" : "text-[#9E217B]"}>#{selectedLead.sr_no || selectedLead.id}</span>
+                            <span className={isDark ? "text-[#9E217B]" : "text-[#9E217B]"}>#{selectedLead.sr_no || selectedLead.id}</span>
                             <span>{selectedLead.name}</span>
                             {selectedLead.status === "Closing" && (
                               <span className={`text-[9px] sm:text-[11px] font-bold px-2 py-0.5 sm:px-3 sm:py-1 rounded-full border flex items-center gap-1 sm:gap-1.5 ${theme.statusClosing}`}><FaHandshake className="text-[10px] sm:text-xs" /> Closing</span>
@@ -5782,7 +5932,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
 
                       {/* RIGHT PANEL: FOLLOW-UPS (Scrollable and stacked on mobile) */}
                       <div className={`w-full lg:w-[60%] flex flex-col rounded-xl overflow-hidden shadow-2xl min-h-[500px] lg:h-full lg:min-h-0 border ${theme.chatPanel}`} style={theme.chatPanelGl}>
-                        <div className={`flex-1 p-3 sm:p-6 overflow-y-auto custom-scrollbar flex flex-col gap-2 sm:gap-3 ${theme.chatArea}`}>
+                        <div className={`flex-1 p-3 sm:p-6 overflow-y-auto custom-scrollbar flex flex-col gap-4 sm:gap-3 ${theme.chatArea}`}>
                           {/* System message */}
                           <div className="flex justify-start">
                             <div className={`rounded-xl rounded-tl-none p-3 sm:p-5 max-w-[90%] sm:max-w-[85%] shadow-md ${theme.fupSalesform}`}>
@@ -5821,6 +5971,16 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                                     <p className={`text-xs sm:text-sm whitespace-pre-wrap leading-relaxed ${theme.textMuted}`}>{msg.message}</p>
                                   )}
                                   <FollowUpAttachments followUpId={Number(msg._id)} textClass={theme.textMuted} onDeleted={refetch} />
+                                  {canDeleteFollowUps && msg._id && msg._status !== "sending" && msg._status !== "failed" && (
+                                    <button
+                                      type="button"
+                                      disabled={deletingFollowUpId === String(msg._id)}
+                                      onClick={() => setConfirmDeleteFollowUpId(String(msg._id))}
+                                      className={`mt-1 text-[9px] font-medium transition-opacity ${isDark ? "text-red-400 hover:text-red-300" : "text-red-500 hover:text-red-600"} disabled:opacity-40`}
+                                    >
+                                      {deletingFollowUpId === String(msg._id) ? "Deleting…" : "Delete"}
+                                    </button>
+                                  )}
                                   {msg._status === "sending" && <span className="text-[9px] text-yellow-500 mt-1 block">Sending...</span>}
                                   {msg._status === "failed" && (
                                     <span className="text-[9px] text-red-500 mt-1 flex items-center gap-1">Failed to send
@@ -5833,6 +5993,22 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                           })}
                           <div ref={followUpEndRef} />
                         </div>
+                        {confirmDeleteFollowUpId && (
+                          <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60">
+                            <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl overflow-hidden mx-4">
+                              <div className="px-5 py-4 border-b border-gray-100">
+                                <h3 className="font-bold text-sm text-gray-900">Delete follow-up?</h3>
+                              </div>
+                              <div className="px-5 py-4">
+                                <p className="text-sm text-gray-600 leading-relaxed">This will permanently delete this follow-up note and any attached files from storage. This action cannot be undone.</p>
+                              </div>
+                              <div className="flex gap-2 px-5 py-3 border-t border-gray-100 bg-gray-50">
+                                <button type="button" onClick={() => setConfirmDeleteFollowUpId(null)} className="flex-1 px-3 py-2 text-xs font-bold rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-100 transition">Cancel</button>
+                                <button type="button" onClick={() => { handleDeleteFollowUp(confirmDeleteFollowUpId!); setConfirmDeleteFollowUpId(null); }} className="flex-1 px-3 py-2 text-xs font-bold rounded-xl bg-red-600 text-white hover:bg-red-700 transition">Delete</button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                         <FollowUpComposer value={customNote} onChange={setCustomNote} onSubmit={handleSendCustomNote} pendingFiles={attView.pendingFiles} fileError={attView.fileError} onAddFiles={attView.addFiles} onRemoveFile={attView.removeFile} onReminderClick={() => setShowReminderModal(true)} isDark={isDark} theme={theme} placeholder="Add admin note..." headerGlass={theme.headerGlass} />
                       </div>
                     </div>
@@ -5901,6 +6077,28 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
 // RECEPTIONIST VIEW
 // ============================================================================
 function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refetch, appendFollowUp, reconcileFollowUp, removeFollowUp, theme, isDark, adminUser }: any) {
+  const canDeleteFollowUps = useFollowUpDeletionPermission(adminUser?.role);
+  const [deletingFollowUpId, setDeletingFollowUpId] = useState<string | null>(null);
+  const [confirmDeleteFollowUpId, setConfirmDeleteFollowUpId] = useState<string | null>(null);
+
+  const handleDeleteFollowUp = useCallback(async (followUpId: string) => {
+    if (deletingFollowUpId) return;
+    setDeletingFollowUpId(followUpId);
+    try {
+      const res = await fetch(`/api/followups/${followUpId}`, { method: "DELETE", credentials: "include" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        alert(body.message || "Failed to delete follow-up.");
+        return;
+      }
+      refetch();
+    } catch {
+      alert("Failed to delete follow-up. Please try again.");
+    } finally {
+      setDeletingFollowUpId(null);
+    }
+  }, [deletingFollowUpId, refetch]);
+
   const [assignedTableFilter, setAssignedTableFilter] = useState<"working" | "completed" | "all">("working");
   const [selectedReceptionist, setSelectedReceptionist] = useState<any>(null);
   const [searchRecep, setSearchRecep] = useState("");
@@ -6524,7 +6722,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
   // ── Column definitions for AdminLeadTable ──
   const recBaseColumns: ALTColumn[] = [
     {
-      key: "lead_no", label: "Lead No.", minWidth: "min-w-[60px] sm:min-w-[76px]", locked: true,
+      key: "lead_no", label: "Sr. No.", minWidth: "min-w-[60px] sm:min-w-[76px]", locked: true,
       sortValue: (l) => Number(l.sr_no || l.id) || 0,
       render: (l, { isDark: dk }) => <span className={`font-bold text-[11px] sm:text-[13px] ${dk ? "text-[#d946a8]" : "text-[#9E217B]"}`}>#{l.sr_no || l.id}</span>,
     },
@@ -6831,15 +7029,15 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
         ) : (
           <div className="flex-1 flex flex-col h-full overflow-hidden">
             {/* Sub-header */}
-            <div className={`p-2 sm:p-5 border-b flex justify-between items-center shadow-sm z-10 flex-shrink-0 gap-2 ${theme.header}`} style={theme.headerGlass}>
+            <div className={`p-2 sm:p-3 border-b flex justify-between items-center shadow-sm z-10 flex-shrink-0 gap-2 ${theme.header}`} style={theme.headerGlass}>
               <div>
                 <h2 className={`text-md sm:text-lg font-bold flex items-center gap-2 ${theme.text}`}>
                   <FaClipboardList className={isDark ? "text-[#d946a8]" : "text-[#9E217B]"} />
                   {selectedReceptionist.name}'s Dashboard
                 </h2>
-                <p className={`text-[10px] sm:text-xs mt-0.5 sm:mt-1 ${theme.textFaint}`}>
+                {/* <p className={`text-[10px] sm:text-xs mt-0.5 sm:mt-1 ${theme.textFaint}`}>
                   {subView === "detail" ? `Viewing lead details · Admin acting on behalf of ${selectedReceptionist.name}` : "Admin view — monitor receptionist activity across all sections"}
-                </p>
+                </p> */}
               </div>
               {subView === "list" && (
                 <span className={`text-[10px] sm:text-xs px-2 py-1 sm:px-3 sm:py-1 rounded-full border font-bold flex items-center gap-1 sm:gap-1.5 ${isDark ? "text-green-400 border-green-500/30 bg-green-500/10" : "text-green-700 border-green-200 bg-green-50"}`}>
@@ -6967,11 +7165,11 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                 </div>
               ) : (
                 <div className={`flex-1 overflow-y-auto p-2 sm:p-2 ${theme.scroll}`}>
-                  <div className="animate-fadeIn max-w-[1200px] mx-auto flex flex-col min-h-full lg:h-[calc(100vh-130px)]">
+                  <div className="animate-fadeIn max-w-full mx-auto flex flex-col min-h-full lg:h-[calc(100vh-130px)]">
                     {(() => {
                       const isNGD = selectedLead.status === "NON GENUINE DEMAND (NGD)" || selectedLead.leadStatus === "NON GENUINE DEMAND (NGD)" || selectedLead.leadInterestStatus === "NON GENUINE DEMAND (NGD)";
                       return (
-                        <div className={`sticky top-0 z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2 rounded-xl border p-2 shadow-sm flex-shrink-0 ${selectedLead.is_lost_lead ? theme.cardLost : isNGD ? theme.cardNGD : theme.card}`} style={theme.cardGlass}>
+                        <div className={`sticky top-0 z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-1 rounded-xl border p-2 shadow-sm flex-shrink-0 ${selectedLead.is_lost_lead ? theme.cardLost : isNGD ? theme.cardNGD : theme.card}`} style={theme.cardGlass}>
                           <div className="flex items-center justify-between w-full sm:w-auto gap-2">
                             <div className="flex items-center gap-1.5 sm:gap-2">
                               <button onClick={() => { setSubView("list"); setSelectedLead(null); setIsEnquiryView(false); setShowSalesForm(false); setShowLoanForm(false); }}
@@ -6979,7 +7177,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                                 <FaChevronLeft className="text-[10px] sm:text-xs" />
                               </button>
                               <h1 className={`text-sm sm:text-base lg:text-lg font-bold flex flex-wrap items-center gap-1.5 sm:gap-2 ${theme.text}`}>
-                                <span className={isDark ? "text-[#d946a8]" : "text-[#9E217B]"}>#{selectedLead.sr_no || selectedLead.id}</span>
+                                <span className={isDark ? "text-[#9E217B]" : "text-[#9E217B]"}>#{selectedLead.sr_no || selectedLead.id}</span>
                                 <span>{selectedLead.name}</span>
                                 <span className={`text-[9px] sm:text-[10px] px-1.5 py-0.5 sm:px-2 sm:py-0.5 rounded-full border ${theme.settingsBg} ${theme.textFaint}`}>
                                   {selectedLead.assigned_receptionist || selectedReceptionist?.name}
@@ -7081,7 +7279,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                     })()}
 
                     {/* AI voice calling */}
-                    <div className="mb-2 mt-1 sm:mt-2 flex-shrink-0">
+                    {/* <div className="mb-2 mt-1 sm:mt-2 flex-shrink-0">
                       <BolnaCallWidget
                         leadId={Number(selectedLead.id)}
                         leadName={selectedLead.name}
@@ -7089,7 +7287,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                         userData={{ project: selectedLead.propType || selectedLead.configuration }}
                         compact
                       />
-                    </div>
+                    </div> */}
 
                     {/* ── Revisit: mobile toggle + historical panel ── */}
                     {selectedLead.lead_classification === "RETURNING_LEAD" && (
@@ -7229,9 +7427,9 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                       </div>
                     )}
 
-                    <div className="flex flex-col lg:flex-row gap-2 sm:gap-3 flex-1 min-h-0 pb-2">
+                    <div className="flex flex-col lg:flex-row gap-2 sm:gap-3 flex-1 min-h-0 pb-2 w-full">
                       {/* LEFT PANEL */}
-                      <div className="w-full lg:w-[45%] flex flex-col gap-2 lg:h-full pb-2 min-h-0">
+                      <div className="w-full lg:w-[50%] flex flex-col gap-2 lg:h-full pb-2 min-h-0">
                         {showSalesForm ? (
                           <div className={`rounded-xl border p-3 sm:p-5 shadow-xl flex flex-col lg:h-full ${theme.modalCard} ${theme.scroll}`}
                             style={{ ...theme.modalGlass, overflowY: "auto", scrollbarWidth: "thin" }}>
@@ -7297,11 +7495,11 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                           />
                         ) : (
                           <div className="flex flex-col lg:h-full animate-fadeIn">
-                            <div className={`flex items-center gap-1 sm:gap-2 mb-2 sm:mb-4 p-1 sm:p-1.5 rounded-xl flex-shrink-0 ${theme.tableWrap}`}>
+                            <div className={`flex items-center gap-1 sm:gap-2 mb-1 sm:mb-1 p-1 sm:p-1.5 rounded-xl flex-shrink-0 ${theme.tableWrap}`}>
                               <button onClick={() => setDetailTab("personal")} className={`flex-1 py-1.5 sm:py-2 text-[10px] sm:text-sm font-bold rounded-lg transition-colors cursor-pointer ${detailTab === "personal" ? theme.btnPrimary : `${theme.textMuted} hover:opacity-80`}`}>Personal Information</button>
                               <button onClick={() => setDetailTab("loan")} className={`flex-1 py-1.5 sm:py-2 text-[10px] sm:text-sm font-bold rounded-lg transition-colors cursor-pointer ${detailTab === "loan" ? theme.btnSecondary : `${theme.textMuted} hover:opacity-80`}`}>Loan Tracking</button>
                             </div>
-                            <div className={`flex-1 overflow-y-auto custom-scrollbar rounded-xl p-3 sm:p-6 pt-2 sm:pt-4 pb-4 shadow-lg border ${theme.chatPanel}`} style={theme.chatPanelGl}>
+                            <div className={`flex-1 overflow-y-auto custom-scrollbar rounded-xl p-3 sm:p-6 pt-2 min-h-[68vh] sm:pt-4 pb-4 shadow-lg border ${theme.chatPanel}`} style={theme.chatPanelGl}>
                               {detailTab === "personal" ? (
                                 <div>
                                   <div className="grid grid-cols-2 gap-y-4 sm:gap-y-6 gap-x-2 sm:gap-x-4 text-xs sm:text-sm">
@@ -7425,6 +7623,16 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                                       <p className={`text-xs sm:text-sm whitespace-pre-wrap leading-relaxed ${theme.text}`}>{msg.message}</p>
                                     )}
                                     <FollowUpAttachments followUpId={Number(msg._id)} textClass={theme.text} onDeleted={refetch} />
+                                    {canDeleteFollowUps && msg._id && msg._status !== "sending" && msg._status !== "failed" && (
+                                      <button
+                                        type="button"
+                                        disabled={deletingFollowUpId === String(msg._id)}
+                                        onClick={() => setConfirmDeleteFollowUpId(String(msg._id))}
+                                        className={`mt-1 text-[9px] font-medium transition-opacity ${isDark ? "text-red-400 hover:text-red-300" : "text-red-500 hover:text-red-600"} disabled:opacity-40`}
+                                      >
+                                        {deletingFollowUpId === String(msg._id) ? "Deleting…" : "Delete"}
+                                      </button>
+                                    )}
                                     {msg._status === "sending" && <span className="text-[9px] text-yellow-500 mt-1 block">Sending...</span>}
                                     {msg._status === "failed" && (
                                       <span className="text-[9px] text-red-500 mt-1 flex items-center gap-1">Failed to send
@@ -7437,6 +7645,22 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                             })}
                           <div ref={followUpEndRef} />
                         </div>
+                        {confirmDeleteFollowUpId && (
+                          <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60">
+                            <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl overflow-hidden mx-4">
+                              <div className="px-5 py-4 border-b border-gray-100">
+                                <h3 className="font-bold text-sm text-gray-900">Delete follow-up?</h3>
+                              </div>
+                              <div className="px-5 py-4">
+                                <p className="text-sm text-gray-600 leading-relaxed">This will permanently delete this follow-up note and any attached files from storage. This action cannot be undone.</p>
+                              </div>
+                              <div className="flex gap-2 px-5 py-3 border-t border-gray-100 bg-gray-50">
+                                <button type="button" onClick={() => setConfirmDeleteFollowUpId(null)} className="flex-1 px-3 py-2 text-xs font-bold rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-100 transition">Cancel</button>
+                                <button type="button" onClick={() => { handleDeleteFollowUp(confirmDeleteFollowUpId!); setConfirmDeleteFollowUpId(null); }} className="flex-1 px-3 py-2 text-xs font-bold rounded-xl bg-red-600 text-white hover:bg-red-700 transition">Delete</button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                         <FollowUpComposer value={customNote} onChange={setCustomNote} onSubmit={handleSendCustomNote} pendingFiles={attView.pendingFiles} fileError={attView.fileError} onAddFiles={attView.addFiles} onRemoveFile={attView.removeFile} onReminderClick={() => setShowReminderModal(true)} isDark={isDark} theme={theme} placeholder="Add admin note..." />
                       </div>
                     </div>

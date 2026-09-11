@@ -4,6 +4,7 @@ import { query } from "@/lib/db";
 import { getOrganizationId } from "@/lib/tenantContext";
 import { requireRole } from "@/lib/serverAuth";
 import { hashPassword } from "@/lib/passwords";
+import { propagateUserRename } from "@/lib/renameUserReferences";
 
 // ── GET: Fetch all employees ──────────────────────────────────────────────────
 export async function GET() {
@@ -96,7 +97,7 @@ export async function POST(req: Request) {
       `INSERT INTO users (name, username, email, password, role, is_active, organization_id)
        VALUES ($1, $2, $3, $4, $5, true, $6)
        RETURNING id, name, email, role, organization_id`,
-      [name, username?.trim(), email?.trim().toLowerCase(), hashed, role, orgId]
+      [name?.trim(), username?.trim(), email?.trim().toLowerCase(), hashed, role, orgId]
     );
 
     const row = created[0];
@@ -150,7 +151,8 @@ export async function PUT(req: Request) {
       // through the OTP-gated POST /api/admin/password-change/confirm endpoint,
       // which hashes the value and revokes the target's sessions. Accepting a
       // raw password field on this general-edit path would bypass both controls.
-      const { name, username, email, role } = body.editData;
+      const { name: rawName, username, email, role } = body.editData;
+      const name = rawName?.trim();
 
       // Username conflict check (exclude self)
       if (username) {
@@ -191,8 +193,20 @@ export async function PUT(req: Request) {
       // part of the WHERE clause. Another organization's id matches 0 rows and the
       // handler below answers 404 — the same answer a nonexistent id gets, so this
       // cannot be used to probe which ids exist.
+      const orgId = await getOrganizationId();
+
+      // Read old name before overwriting so rename propagation has a baseline.
+      let oldName: string | null = null;
+      if (name) {
+        const existing = await query<{ name: string }>(
+          `SELECT name FROM users WHERE id = $1 AND organization_id = $2 LIMIT 1`,
+          [userId, orgId]
+        );
+        oldName = existing[0]?.name ?? null;
+      }
+
       values.push(userId);
-      values.push(await getOrganizationId());
+      values.push(orgId);
       const updated = await query(
         `UPDATE users SET ${setClauses.join(", ")} WHERE id = $${p} AND organization_id = $${p + 1} RETURNING *`,
         values
@@ -200,6 +214,13 @@ export async function PUT(req: Request) {
 
       if (updated.length === 0) {
         return NextResponse.json({ message: "User not found." }, { status: 404 });
+      }
+
+      // Keep name-keyed lead ownership in sync with the new name.
+      if (name && oldName && oldName.trim() !== name) {
+        propagateUserRename(oldName, name).catch((e: any) =>
+          console.error("[PUT /api/employees] propagateUserRename failed:", e?.message)
+        );
       }
 
       const u = updated[0];

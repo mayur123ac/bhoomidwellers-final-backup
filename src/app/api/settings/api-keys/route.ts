@@ -46,8 +46,9 @@ export async function GET() {
 
     return NextResponse.json({
       success: true,
-      keys,
+      data: keys,
       scopes: SCOPES,
+      defaults: { rateLimitPerMin: 120, maxRateLimitPerMin: 1000 },
     });
   } catch (err: any) {
     console.error("[GET /api/settings/api-keys]", err);
@@ -96,12 +97,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       message: "API key created.",
+      plaintextKey: rawKey,
       key: {
         id: rows[0]?.id,
         name: body.name.trim(),
         key_prefix: prefix,
         scopes,
-        plaintext: rawKey,
       },
     });
   } catch (err: any) {

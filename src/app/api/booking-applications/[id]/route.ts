@@ -4,7 +4,7 @@ import { query, transaction } from "@/lib/db";
 import { getOrganizationId } from "@/lib/tenantContext";
 import { uploadBufferToR2 } from "@/lib/r2";
 import { syncBookingUnit, releaseUnitForBooking, flatIdentityChanged, parseFloor } from "@/lib/inventorySync";
-import { requireSession, requireRoles } from "@/lib/serverAuth";
+import { requireSession, requireRoles, getSessionUserId } from "@/lib/serverAuth";
 import { resolveGstRate, calcGstAmount } from "@/lib/gst";
 import { resolveStampDutyRate, resolveRegistrationFeeRate, calcStampDuty } from "@/lib/charges";
 // Shared so a saved booking returns the same shape a fetched one does.
@@ -155,6 +155,7 @@ export async function PUT(
     // the whole check. The form may still send them; they are ignored.
     const user_role = (gate.session.role || "").trim().toLowerCase().replace(/_/g, " ");
     const user_name = gate.session.name || "system";
+    const sessionUserId = getSessionUserId(gate.session);
 
     if (user_role === "receptionist") {
       return NextResponse.json({ success: false, message: "Receptionists cannot edit bookings." }, { status: 403 });
@@ -162,7 +163,7 @@ export async function PUT(
 
     // Check current booking and ownership
     const existing = await query(
-      `SELECT b.*, w.assigned_to,
+      `SELECT b.*, w.assigned_to, w.assigned_to_user_id,
               f.token_amount, f.ocr_amount, TO_CHAR(f.ocr_received_date, 'YYYY-MM-DD') AS ocr_received_date, f.ocr_payment_mode, f.ocr_remarks,
               f.sdr_amount, TO_CHAR(f.sdr_payment_date, 'YYYY-MM-DD') AS sdr_payment_date, f.sdr_status, f.sdr_remarks,
               f.cash_component, TO_CHAR(f.cash_component_date, 'YYYY-MM-DD') AS cash_component_date, f.cash_component_remarks,
@@ -201,7 +202,12 @@ export async function PUT(
           { status: 403 }
         );
       }
-      if (currentData.assigned_to !== user_name) {
+      // ID-first ownership check: integer FK is immune to name drift.
+      // Fall back to name comparison for bookings on older leads.
+      const ownsLead = currentData.assigned_to_user_id != null && sessionUserId != null
+        ? Number(currentData.assigned_to_user_id) === sessionUserId
+        : currentData.assigned_to === user_name;
+      if (!ownsLead) {
         return NextResponse.json(
           { success: false, message: "Only the assigned Sales Manager can edit this booking." },
           { status: 403 }

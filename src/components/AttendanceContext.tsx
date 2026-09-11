@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 /** Flip to false to silence the attendance sync tracing. */
 const ATTENDANCE_DEBUG = true;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const log = (...args: any[]) => {
   if (ATTENDANCE_DEBUG) console.log("%c[attendance-sync]", "color:#9E217B;font-weight:bold", ...args);
 };
@@ -20,10 +21,14 @@ const OPTIMISTIC_GRACE_MS = 10_000;
 interface AttendanceContextType {
   isMarkedPresent: boolean;
   timeIn: string | null;
+  logoutTime: string | null;
+  isDayCompleted: boolean;
+  workingTrack: number | null;
   status: string | null;
   employeeId: number | null;
   isLoading: boolean;
   markAttendanceOptimistic: (timeIn: string) => void;
+  markDayComplete: (logoutTime: string, workingTrack?: number | null) => void;
   refreshAttendance: () => Promise<void>;
 }
 
@@ -32,6 +37,8 @@ const AttendanceContext = createContext<AttendanceContextType | undefined>(undef
 export function AttendanceProvider({ children }: { children: React.ReactNode }) {
   const [isMarkedPresent, setIsMarkedPresent] = useState(false);
   const [timeIn, setTimeIn] = useState<string | null>(null);
+  const [logoutTime, setLogoutTime] = useState<string | null>(null);
+  const [workingTrack, setWorkingTrack] = useState<number | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [employeeId, setEmployeeId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -49,6 +56,8 @@ export function AttendanceProvider({ children }: { children: React.ReactNode }) 
     setIsMarkedPresent(false);
     setStatus(null);
     setTimeIn(null);
+    setLogoutTime(null);
+    setWorkingTrack(null);
   }, []);
 
   const reset = useCallback(() => {
@@ -97,6 +106,8 @@ export function AttendanceProvider({ children }: { children: React.ReactNode }) 
         setIsMarkedPresent(true);
         setStatus(data.status ?? "Present");
         setTimeIn(data.timeIn || null);
+        setLogoutTime(data.logoutTime || null);
+        setWorkingTrack(data.workingTrack ?? null);
         optimisticRef.current = null;
         return;
       }
@@ -154,19 +165,33 @@ export function AttendanceProvider({ children }: { children: React.ReactNode }) 
     setIsMarkedPresent(true);
     setStatus("Present");
     setTimeIn(newTimeIn);
+    setLogoutTime(null);
+    setWorkingTrack(null);
     setIsLoading(false);
     log("optimistic update applied → Present", { employeeId: employeeIdRef.current, timeIn: newTimeIn });
   }, []);
+
+  const markDayComplete = useCallback((newLogoutTime: string, newWorkingTrack?: number | null) => {
+    setLogoutTime(newLogoutTime);
+    if (newWorkingTrack != null) setWorkingTrack(newWorkingTrack);
+    log("optimistic day-complete applied", { logoutTime: newLogoutTime, workingTrack: newWorkingTrack });
+  }, []);
+
+  const isDayCompleted = isMarkedPresent && !!logoutTime;
 
   return (
     <AttendanceContext.Provider
       value={{
         isMarkedPresent,
         timeIn,
+        logoutTime,
+        isDayCompleted,
+        workingTrack,
         status,
         employeeId,
         isLoading,
         markAttendanceOptimistic,
+        markDayComplete,
         refreshAttendance: fetchStatus,
       }}
     >

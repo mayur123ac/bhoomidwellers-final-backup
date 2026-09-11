@@ -25,7 +25,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getOrganizationId } from "@/lib/tenantContext";
-import { requireSession } from "@/lib/serverAuth";
+import { requireSession, getSessionUserId } from "@/lib/serverAuth";
 import { normalizeRole } from "@/lib/cpRbac";
 import { resolvePhone } from "@/lib/phoneAccess";
 
@@ -49,8 +49,11 @@ export async function GET(
     const orgId = await getOrganizationId();
 
     // Fetch the current (revisit) lead — tenant-scoped.
+    // Include the integer FK columns so authorization prefers ID over name.
     const currentRows = await query(
-      `SELECT id, returning_from_lead_id, created_at, lead_classification, assigned_to, assigned_receptionist
+      `SELECT id, returning_from_lead_id, created_at, lead_classification,
+              assigned_to, assigned_receptionist,
+              assigned_to_user_id, assigned_receptionist_user_id
        FROM walkin_enquiries
        WHERE id = $1 AND organization_id = $2
        LIMIT 1`,
@@ -71,8 +74,14 @@ export async function GET(
     const role = normalizeRole(session.role);
     const isAdmin = role === "admin";
     const isSiteHead = role === "site head";
-    const isAssignedSM = session.name === current.assigned_to;
-    const isAssignedReceptionist = session.name === current.assigned_receptionist;
+    const sessionUserId = getSessionUserId(session);
+    // ID-first: use integer FK when available; fall back to name for old rows.
+    const isAssignedSM = current.assigned_to_user_id != null && sessionUserId != null
+      ? Number(current.assigned_to_user_id) === sessionUserId
+      : session.name === current.assigned_to;
+    const isAssignedReceptionist = current.assigned_receptionist_user_id != null && sessionUserId != null
+      ? Number(current.assigned_receptionist_user_id) === sessionUserId
+      : session.name === current.assigned_receptionist;
 
     if (!isAdmin && !isSiteHead && !isAssignedSM && !isAssignedReceptionist) {
       return NextResponse.json(

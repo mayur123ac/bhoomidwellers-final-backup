@@ -72,14 +72,16 @@ interface SmDigest { text: string; counts: Record<string, number>; }
 
 /**
  * Everything the assistant is allowed to know, and nothing else.
- * Every statement here is filtered by `smName`.
+ * Every statement here is filtered by `smUserId` (ID-first) with `smName` as
+ * the legacy fallback for rows created before the FK migration.
  */
-async function buildSmDigest(smName: string, currentLeadId: number | null): Promise<SmDigest> {
-  // assigned_to is matched on NAME, so the organization filter below is what
-  // actually separates two builders' managers who happen to share a name.
-  // It is added per query rather than folded into `scope`, because the
-  // placeholder index differs between these statements.
-  const scope = `LOWER(TRIM(w.assigned_to)) = LOWER(TRIM($1))`;
+async function buildSmDigest(smName: string, smUserId: number | null, currentLeadId: number | null): Promise<SmDigest> {
+  // ID-first scope: prefer assigned_to_user_id when it is populated; fall
+  // back to trimmed/lowercased name comparison for pre-migration rows.
+  // $1 = smUserId (may be null → IS NOT NULL check is always false → name branch fires)
+  // $2 = smName   (name fallback)
+  // $3 = chatOrgId
+  const scope = `(($1::int IS NOT NULL AND w.assigned_to_user_id = $1::int) OR (w.assigned_to_user_id IS NULL AND LOWER(TRIM(w.assigned_to)) = LOWER(TRIM($2))))`;
   const chatOrgId = await getOrganizationId();
 
   const [totals] = await query<any>(
@@ -87,7 +89,8 @@ async function buildSmDigest(smName: string, currentLeadId: number | null): Prom
             COUNT(*) FILTER (WHERE COALESCE(w.is_lost_lead,false) = false)::int active,
             COUNT(*) FILTER (WHERE w.is_lost_lead)::int lost,
             COUNT(*) FILTER (WHERE LOWER(COALESCE(w.status,'')) IN ('closing','closed'))::int closing
-       FROM walkin_enquiries w WHERE ${scope} AND w.organization_id = $2`, [smName, chatOrgId]);
+       FROM walkin_enquiries w WHERE ${scope} AND w.organization_id = $3`,
+    [smUserId, smName, chatOrgId]);
 
   // Staleness from the last actual follow-up, not last_activity_at — that column
   // is touched by any edit, so it would report "contacted" for a typo fix.
@@ -96,12 +99,13 @@ async function buildSmDigest(smName: string, currentLeadId: number | null): Prom
             EXTRACT(DAY FROM NOW() - lastf.last_at)::int AS days_since
        FROM walkin_enquiries w
        LEFT JOIN (SELECT lead_id, MAX(created_at) last_at FROM follow_ups
-                   WHERE organization_id = $2 GROUP BY lead_id) lastf
+                   WHERE organization_id = $3 GROUP BY lead_id) lastf
               ON lastf.lead_id = w.id
       WHERE ${scope} AND COALESCE(w.is_lost_lead,false) = false
-        AND w.organization_id = $2
+        AND w.organization_id = $3
         AND (lastf.last_at IS NULL OR lastf.last_at < NOW() - INTERVAL '7 days')
-      ORDER BY lastf.last_at ASC NULLS FIRST LIMIT 25`, [smName, chatOrgId]);
+      ORDER BY lastf.last_at ASC NULLS FIRST LIMIT 25`,
+    [smUserId, smName, chatOrgId]);
 
   // "Due today" = site visits actually scheduled for today. See the header note.
   const dueToday = await query<any>(
@@ -109,8 +113,9 @@ async function buildSmDigest(smName: string, currentLeadId: number | null): Prom
        FROM site_visits sv JOIN walkin_enquiries w
          ON w.id = sv.lead_id AND w.organization_id = sv.organization_id
       WHERE ${scope} AND sv.visit_date::date = (NOW() AT TIME ZONE 'Asia/Kolkata')::date
-        AND sv.organization_id = $2
-      ORDER BY sv.visit_date ASC LIMIT 25`, [smName, chatOrgId]);
+        AND sv.organization_id = $3
+      ORDER BY sv.visit_date ASC LIMIT 25`,
+    [smUserId, smName, chatOrgId]);
 
   const [sv] = await query<any>(
     `SELECT COUNT(*) FILTER (WHERE LOWER(COALESCE(sv.status,'')) = 'completed')::int done,
@@ -118,15 +123,16 @@ async function buildSmDigest(smName: string, currentLeadId: number | null): Prom
        FROM site_visits sv JOIN walkin_enquiries w
          ON w.id = sv.lead_id AND w.organization_id = sv.organization_id
       WHERE ${scope}
-        AND sv.organization_id = $2
-        AND DATE_TRUNC('month', sv.visit_date) = DATE_TRUNC('month', NOW())`, [smName, chatOrgId]);
+        AND sv.organization_id = $3
+        AND DATE_TRUNC('month', sv.visit_date) = DATE_TRUNC('month', NOW())`,
+    [smUserId, smName, chatOrgId]);
 
   let current: any = null;
   if (currentLeadId) {
     // Scoped too — asking about someone else's lead by id must not leak it.
     const rows = await query<any>(
-      `SELECT w.* FROM walkin_enquiries w WHERE ${scope} AND w.id = $2 AND w.organization_id = $3 LIMIT 1`,
-      [smName, currentLeadId, chatOrgId]);
+      `SELECT w.* FROM walkin_enquiries w WHERE ${scope} AND w.id = $4 AND w.organization_id = $3 LIMIT 1`,
+      [smUserId, smName, chatOrgId, currentLeadId]);
     current = rows[0] ?? null;
   }
 
@@ -249,7 +255,7 @@ export async function POST(req: Request) {
 
   let digest: SmDigest;
   try {
-    digest = await buildSmDigest(smName, currentLeadId);
+    digest = await buildSmDigest(smName, gate.userId, currentLeadId);
   } catch (e: any) {
     console.error("[sm-ai-chat] digest failed:", e?.message || e);
     return NextResponse.json(

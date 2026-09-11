@@ -21,10 +21,17 @@ import { requireSession, requireRoles } from "@/lib/serverAuth";
  */
 const FULL_CALENDAR_ROLES = new Set(["admin", "sales manager"]);
 
-/** walkin_enquiries columns that make a lead this user's, per role. */
+/** walkin_enquiries varchar columns that identify a lead's owner, per role. */
 const OWN_LEAD_COLUMNS: Record<string, string[]> = {
   receptionist: ["assigned_to", "assigned_receptionist"],
   "site head": ["assigned_to", "overseeing_site_head"],
+};
+
+/** Corresponding FK columns for each varchar ownership column. */
+const FK_COLUMN: Record<string, string> = {
+  assigned_to: "assigned_to_user_id",
+  assigned_receptionist: "assigned_receptionist_user_id",
+  overseeing_site_head: "overseeing_site_head_user_id",
 };
 
 // GET site visits with lead info joined — the whole organization for the roles
@@ -38,6 +45,7 @@ export async function GET(req: Request) {
     // users table holds both "site_head" and "Site Head".
     const role = String(gate.session.role ?? "").trim().toLowerCase().replace(/_/g, " ");
     const viewerName = String(gate.session.name ?? "").trim();
+    const viewerUserId = gate.userId;
     const seesEverything = FULL_CALENDAR_ROLES.has(role);
     const ownColumns = OWN_LEAD_COLUMNS[role] ?? ["assigned_to"];
 
@@ -89,17 +97,28 @@ export async function GET(req: Request) {
       params.push(to);
     }
 
-    // The ownership predicate. One bind for the name, reused by each column;
-    // the name is BOUND, never interpolated, and comes from the signed session
-    // rather than the query string — a caller cannot ask for someone else's
-    // calendar by passing a different name.
+    // ID-first ownership predicate: for each ownership column, use the FK
+    // user-id column when it is set, fall back to the name string for rows
+    // created before the FK migration. Identity comes from the signed session.
     if (!seesEverything) {
-      params.push(viewerName);
-      const idx = params.length;
-      const ors = ownColumns
-        .map((col) => `LOWER(TRIM(COALESCE(we.${col}, ''))) = LOWER(TRIM($${idx}))`)
-        .join(" OR ");
-      conditions.push(`(${ors})`);
+      const ors: string[] = [];
+      for (const col of ownColumns) {
+        const fkCol = FK_COLUMN[col];
+        if (fkCol && viewerUserId !== null) {
+          params.push(viewerUserId);
+          const uidx = params.length;
+          params.push(viewerName);
+          const nidx = params.length;
+          ors.push(
+            `(we.${fkCol} = $${uidx} OR (we.${fkCol} IS NULL AND LOWER(TRIM(COALESCE(we.${col}, ''))) = LOWER(TRIM($${nidx}))))`
+          );
+        } else {
+          // No user ID available — name-only fallback (covers null-id sessions).
+          params.push(viewerName);
+          ors.push(`LOWER(TRIM(COALESCE(we.${col}, ''))) = LOWER(TRIM($${params.length}))`);
+        }
+      }
+      conditions.push(`(${ors.join(" OR ")})`);
     }
 
     if (conditions.length > 0) {

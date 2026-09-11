@@ -75,6 +75,7 @@ export async function GET(req: Request) {
             WHEN es.is_active THEN 'Pending'
             ELSE 'Absent'
           END                                          AS attendance_status,
+          ar.working_track                              AS attendance_working_track,
           EXTRACT(EPOCH FROM (
             COALESCE(
               CASE WHEN es.is_active THEN NOW() ELSE es.session_end END,
@@ -84,7 +85,7 @@ export async function GET(req: Request) {
         FROM employee_sessions es
         JOIN users u ON u.id = es.user_id
         LEFT JOIN (
-          SELECT DISTINCT ON (employee_id) employee_id, attendance_status
+          SELECT DISTINCT ON (employee_id) employee_id, attendance_status, working_track
           FROM attendance_records
           WHERE DATE(login_time) = $2::date AND organization_id = $3
         ) ar ON u.id = ar.employee_id
@@ -116,6 +117,7 @@ export async function GET(req: Request) {
             WHEN es.is_active THEN 'Pending'
             ELSE 'Absent'
           END                                          AS attendance_status,
+          ar.working_track                              AS attendance_working_track,
           EXTRACT(EPOCH FROM (
             COALESCE(
               CASE WHEN es.is_active THEN NOW() ELSE es.session_end END,
@@ -125,7 +127,7 @@ export async function GET(req: Request) {
         FROM employee_sessions es
         JOIN users u ON u.id = es.user_id
         LEFT JOIN (
-          SELECT DISTINCT ON (employee_id) employee_id, attendance_status
+          SELECT DISTINCT ON (employee_id) employee_id, attendance_status, working_track
           FROM attendance_records
           WHERE DATE(login_time) = $2::date AND organization_id = $3
         ) ar ON u.id = ar.employee_id

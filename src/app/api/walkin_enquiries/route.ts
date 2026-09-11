@@ -226,6 +226,7 @@ export async function POST(req: Request) {
       auto_date_enabled,       // ← Backdated enquiry state
       isRevisit,               // ← Explicit manual revisit flag from the receptionist checkbox
       revisitLeadId,           // ← Client-supplied previous lead id (server re-validates this)
+      budget_unit,
     } = body;
 
     if (!name || !phone || !assignedTo) {
@@ -406,6 +407,55 @@ export async function POST(req: Request) {
     const result = await transaction(async (client) => {
       // MT-05: resolved once per transaction, on this client.
       const orgId = await getOrganizationId(client);
+
+      // Resolve name-based ownership to user IDs within this org.
+      // These run inside the transaction so the lookups are consistent with
+      // the INSERT and cannot race against a concurrent employee rename.
+      // Rows where the name has no matching user get NULL (not an error).
+      const [assignedToUserRow, recepUserRow, siteHeadUserRow] = await Promise.all([
+        assignedTo
+          ? client.query(
+              `SELECT id FROM users
+               WHERE organization_id = $1
+                 AND LOWER(TRIM(name)) = LOWER(TRIM($2))
+                 AND deleted_at IS NULL
+               ORDER BY is_active DESC, id ASC LIMIT 1`,
+              [orgId, assignedTo]
+            )
+          : Promise.resolve({ rows: [] as { id: number }[] }),
+        assigned_receptionist
+          ? client.query(
+              `SELECT id FROM users
+               WHERE organization_id = $1
+                 AND LOWER(TRIM(name)) = LOWER(TRIM($2))
+                 AND deleted_at IS NULL
+               ORDER BY is_active DESC, id ASC LIMIT 1`,
+              [orgId, assigned_receptionist]
+            )
+          : Promise.resolve({ rows: [] as { id: number }[] }),
+        overseeing_site_head
+          ? client.query(
+              `SELECT id FROM users
+               WHERE organization_id = $1
+                 AND LOWER(TRIM(name)) = LOWER(TRIM($2))
+                 AND deleted_at IS NULL
+               ORDER BY is_active DESC, id ASC LIMIT 1`,
+              [orgId, overseeing_site_head]
+            )
+          : Promise.resolve({ rows: [] as { id: number }[] }),
+      ]);
+
+      const assignedToUserId: number | null =
+        (assignedToUserRow.rows[0]?.id ?? null);
+      // Receptionist user ID: prefer DB lookup; fall back to the session user
+      // when the receptionist who submits the form IS the assigned_receptionist
+      // (the common case). This avoids a lookup returning NULL for the current
+      // session user whose row we already know.
+      const assignedReceptionistUserId: number | null =
+        recepUserRow.rows[0]?.id ?? actorUserId ?? null;
+      const overseeingSiteHeadUserId: number | null =
+        siteHeadUserRow.rows[0]?.id ?? null;
+
       // Resolve the channel partner (find-or-create) in the same transaction as the
       // enquiry insert, so a failure here rolls back both. Non-CP sources are
       // skipped entirely — their cp_name is sub-source noise, not partner data.
@@ -445,7 +495,9 @@ export async function POST(req: Request) {
           pin_code, city, preferred_location,
           sourcing_manager_id, sourcing_manager_assigned_at, sourcing_manager_assigned_by,
           organization_id,
-          lead_classification, returning_from_lead_id
+          lead_classification, returning_from_lead_id,
+          assigned_to_user_id, assigned_receptionist_user_id, overseeing_site_head_user_id,
+          budget_unit
         )
         VALUES (
           $1,  $2,  $3,  $4,  $5,  $6,
@@ -460,7 +512,8 @@ export async function POST(req: Request) {
           CASE WHEN $29::int IS NULL THEN NULL ELSE now() END,
           CASE WHEN $29::int IS NULL THEN NULL ELSE $30 END,
           $31,
-          $32, $33
+          $32, $33,
+          $34, $35, $36, $37
         )
         RETURNING id`,
         [
@@ -483,7 +536,7 @@ export async function POST(req: Request) {
           loan_planned || "Pending",          // $17
           assignedTo,                         // $18
           assigned_receptionist || null,      // $19
-          status || "Assigned",                // $20
+          status || "Assigned",               // $20
           is_global_shared || false,          // $21
           overseeing_site_head || null,       // $22
           enquiry_date || new Date().toISOString(), // $23
@@ -494,16 +547,20 @@ export async function POST(req: Request) {
           // would look like a real area value to that query.
           pin_code || null,                   // $26
           city || null,                       // $27
-          preferred_location || null,          // $28
+          preferred_location || null,         // $28
           // Only meaningful for Channel Partner sources; every other source sends
           // null and the assigned_at/by columns stay NULL via the CASE above.
           // This is the *effective* manager — the registered partner's owner when
           // there is one, otherwise whoever the form selected.
-          effectiveSourcingManagerId,          // $29
-          actorName,                           // $30
-          orgId,                               // $31
-          leadClassification,                  // $32
-          returningFromLeadId,                 // $33
+          effectiveSourcingManagerId,         // $29
+          actorName,                          // $30
+          orgId,                              // $31
+          leadClassification,                 // $32
+          returningFromLeadId,                // $33
+          assignedToUserId,                   // $34 — integer FK, may be null for unresolved names
+          assignedReceptionistUserId,         // $35 — integer FK, may be null
+          overseeingSiteHeadUserId,           // $36 — integer FK, may be null
+          budget_unit || null,                // $37
         ]
       );
 

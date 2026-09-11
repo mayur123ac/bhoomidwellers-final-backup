@@ -290,7 +290,7 @@ const COLS_STORAGE_KEY = "bd:overview:hiddenCols:v2";
 const COLUMNS: Column[] = [
     {
         key: "lead_no",
-        label: "Lead No.",
+        label: "Sr. No.",
         minWidth: "min-w-[60px] sm:min-w-[76px]",
         locked: true,
         sortValue: (l) => Number(l.sr_no || l.id) || 0,
@@ -1081,7 +1081,7 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
                         title="Restrict search to one column"
                     >
                         <option value="all">Search: all columns</option>
-                        <option value="lead_no">Lead No.</option>
+                        <option value="lead_no">Sr. No.</option>
                         <option value="name">Name</option>
                         <option value="prop_type">Property Type</option>
                         <option value="budget">Budget</option>

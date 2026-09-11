@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getOrganizationId } from "@/lib/tenantContext";
-import { requireSession, requireRoles } from "@/lib/serverAuth";
+import { requireSession, requireRoles, getSessionUserId } from "@/lib/serverAuth";
 import { batchGetVisitDepths } from "@/lib/visitChain";
 
 // GET /api/receptionist/assigned?name=Receptionist
@@ -10,24 +10,24 @@ export async function GET(req: Request) {
     const gate = await requireSession();
     if (!gate.ok) return gate.response;
 
-    const { searchParams } = new URL(req.url);
-    const name = searchParams.get("name");
-
-    if (!name) {
-      return NextResponse.json(
-        { success: false, message: "Query param 'name' is required" },
-        { status: 400 }
-      );
-    }
+    // Identity comes from the signed session, not from the query string.
+    // A client-supplied name could impersonate any employee.
+    const sessionUserId = getSessionUserId(gate.session);
+    const sessionName = String(gate.session.name ?? "").trim();
 
     const orgId = await getOrganizationId();
+
+    // ID-first: if the lead has assigned_to_user_id set, match on that.
+    // Fall back to name comparison for rows created before the FK migration.
     const rows = await query(
-      // assigned_to matches on NAME — see receptionist/leads for why the
-      // organization filter is load-bearing here.
       `SELECT * FROM walkin_enquiries
-       WHERE assigned_to = $1 AND organization_id = $2
+       WHERE (
+         assigned_to_user_id = $1
+         OR (assigned_to_user_id IS NULL AND LOWER(TRIM(assigned_to)) = LOWER(TRIM($2)))
+       )
+       AND organization_id = $3
        ORDER BY created_at DESC`,
-      [name, orgId]
+      [sessionUserId, sessionName, orgId]
     );
 
     // Attach visitNumber — single batch CTE, no N+1.

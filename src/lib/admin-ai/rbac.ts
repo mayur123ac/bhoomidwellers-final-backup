@@ -65,6 +65,16 @@ export const OWNERSHIP_COLUMNS: Record<string, readonly string[]> = {
 };
 
 /**
+ * FK integer-id columns that correspond 1-to-1 with OWNERSHIP_COLUMNS.
+ * Used by ownershipClause() in services.ts to prefer ID comparison over name.
+ */
+export const FK_OWNERSHIP_COLUMNS: Record<string, readonly string[]> = {
+  receptionist: ["assigned_to_user_id", "assigned_receptionist_user_id"],
+  "site head": ["assigned_to_user_id", "overseeing_site_head_user_id"],
+  "sales manager": ["assigned_to_user_id"],
+};
+
+/**
  * The authorization envelope for one AI request.
  *
  * `organizationId` is the canonical tenant UUID, resolved server-side by
@@ -80,14 +90,17 @@ export interface AiScope {
   /** True when the scope may read across every user's records. */
   canReadAllRecords: boolean;
   /**
-   * walkin_enquiries columns that mark a lead as THIS user's, for the roles that
-   * only see their own. Empty for Admin, who is filtered by tenant alone.
-   *
-   * The tool layer turns this into `(assigned_to = $n OR ...)`. It is derived
-   * from the session role here — never from a tool argument — so no phrasing of
-   * a question can swap in another employee's name.
+   * walkin_enquiries VARCHAR columns that mark a lead as THIS user's.
+   * Empty for Admin. Used as the name-fallback in ownershipClause().
    */
   ownershipColumns: readonly string[];
+  /**
+   * Corresponding FK integer-id columns (parallel array to ownershipColumns).
+   * ownershipClause() prefers these for rows where the FK is populated,
+   * falling back to ownershipColumns for pre-migration rows (FK = NULL).
+   * Empty for Admin (no ownership filter needed).
+   */
+  ownershipFkColumns: readonly string[];
 }
 
 export type AiAuthResult =
@@ -158,6 +171,7 @@ export async function authorizeAiRequest(): Promise<AiAuthResult> {
       organizationId: await getOrganizationId(),
       canReadAllRecords,
       ownershipColumns: canReadAllRecords ? [] : OWNERSHIP_COLUMNS[role] ?? ["assigned_to"],
+      ownershipFkColumns: canReadAllRecords ? [] : FK_OWNERSHIP_COLUMNS[role] ?? ["assigned_to_user_id"],
     },
   };
 }

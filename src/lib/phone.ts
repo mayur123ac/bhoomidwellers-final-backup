@@ -33,12 +33,12 @@ export type E164FailureReason =
 
 export type E164Result =
   | {
-      ok: true;
-      /** Canonical form with the leading plus: "+919876543210". */
-      e164: string;
-      /** The same number as bare digits: "919876543210". What Meta wants. */
-      digits: string;
-    }
+    ok: true;
+    /** Canonical form with the leading plus: "+919876543210". */
+    e164: string;
+    /** The same number as bare digits: "919876543210". What Meta wants. */
+    digits: string;
+  }
   | { ok: false; reason: E164FailureReason };
 
 /** E.164 permits 1–15 digits; the leading digit is never zero. */

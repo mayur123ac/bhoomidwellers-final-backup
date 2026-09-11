@@ -54,6 +54,7 @@ import UsersView from "@/components/superadmin/UsersView";
 import ActivityView from "@/components/superadmin/ActivityView";
 import SettingsView from "@/components/superadmin/SettingsView";
 import AddOrganizationModal, { type CreatedOrg } from "@/components/superadmin/AddOrganizationModal";
+import LogoutConfirmDialog from "@/components/LogoutConfirmDialog";
 
 type TabId = "dashboard" | "organizations" | "users" | "updates" | "activity" | "settings";
 
@@ -129,6 +130,7 @@ export default function SuperAdminPanel() {
     clearCrmSession();
     router.replace("/");
   };
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   const openOrg = data.orgs.find(o => o.id === openOrgId) ?? null;
   const activeTitle = tab === "settings" ? "Settings" : NAV.find(n => n.id === tab)?.title ?? "Dashboard";
@@ -330,7 +332,7 @@ export default function SuperAdminPanel() {
 
                   {/* Destructive, so it is the only red control in the menu. */}
                   <button
-                    onClick={handleLogout}
+                    onClick={() => setShowLogoutConfirm(true)}
                     className="w-full mt-2 py-2 rounded-xl font-medium text-[12px] transition-colors"
                     style={{ color: t.danger, background: tint(t.danger, 0.1) }}
                   >
@@ -465,6 +467,13 @@ export default function SuperAdminPanel() {
           reload();
           setTab("organizations");
         }}
+      />
+
+      <LogoutConfirmDialog
+        open={showLogoutConfirm}
+        isDark={isDark}
+        onClose={() => setShowLogoutConfirm(false)}
+        onConfirm={handleLogout}
       />
     </div>
   );

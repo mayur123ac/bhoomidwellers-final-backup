@@ -56,10 +56,40 @@ const KNOWN_ASSET_TABLES = [
   },
 ];
 
+// Deletion order: child-before-parent. Three rules govern ordering:
+//
+//   1. A table whose FK points to booking_applications (RESTRICT) must be
+//      deleted or nulled out BEFORE booking_applications rows are deleted.
+//      Affected: disbursement_tranches, financial_adjustments (have lead_id),
+//                cp_commissions, inventory_units.booking_id (subquery — handled
+//                separately in deleteLeadDatabaseRecords below this list).
+//
+//   2. A table whose FK points directly to walkin_enquiries (RESTRICT, no CASCADE)
+//      must be deleted before walkin_enquiries row is deleted.
+//      Affected: lead_reminders, financial_adjustments (lead_id FK).
+//
+//   3. Tables with ON DELETE CASCADE are safe in any position — the DB
+//      removes their rows automatically (site_visits, cp_assignment_history, …).
+//
+// The list is processed in order; the SAVEPOINT in the bulk-delete route means
+// a table that throws mid-way aborts only the current lead, not the whole batch.
 const LEAD_RELATED_DELETES = [
+  // ── Must come before booking_applications (RESTRICT FK via booking_id) ──────
+  // disbursement_tranches has a direct lead_id column (no FK) AND a RESTRICT
+  // booking_id FK; deleting by lead_id removes the booking_id reference first.
+  { table: "disbursement_tranches", column: "lead_id" },
+  // financial_adjustments has BOTH a RESTRICT lead_id FK (→ walkin_enquiries)
+  // AND a RESTRICT booking_id FK (→ booking_applications). Placing it here
+  // clears both dependencies before either parent is deleted.
+  { table: "financial_adjustments", column: "lead_id" },
+  // ── Booking document children (all have ON DELETE CASCADE, order flexible) ──
   { table: "booking_documents", column: "lead_id" },
   { table: "booking_forms", column: "lead_id" },
+  // booking_applications: cp_commissions and inventory_units.booking_id are
+  // cleared by the subquery block in deleteLeadDatabaseRecords() just before
+  // this list is processed — see BOOKING_SUBQUERY_DELETES/NULLS below.
   { table: "booking_applications", column: "lead_id" },
+  // ── Remaining lead-scoped tables ─────────────────────────────────────────────
   { table: "customer_documents", column: "lead_id" },
   { table: "lead_documents", column: "lead_id" },
   { table: "uploaded_documents", column: "lead_id" },
@@ -72,6 +102,8 @@ const LEAD_RELATED_DELETES = [
   { table: "email_history", column: "lead_id" },
   { table: "call_history", column: "lead_id" },
   { table: "reminders", column: "lead_id" },
+  // lead_reminders: added 2026-09-02, RESTRICT FK — must precede walkin_enquiries
+  { table: "lead_reminders", column: "lead_id" },
   { table: "notification_records", column: "lead_id" },
   { table: "notifications", column: "lead_id" },
   { table: "ai_conversations", column: "lead_id" },
@@ -336,6 +368,38 @@ export async function deleteLeadDatabaseRecords(
   // and it must not depend on every future caller remembering to check first.
   const orgId = await getOrganizationId(client);
 
+  // ── Pre-booking cleanup ───────────────────────────────────────────────────────
+  // cp_commissions and inventory_units.booking_id hold RESTRICT FKs to
+  // booking_applications(id) but have no lead_id column, so they cannot appear
+  // in LEAD_RELATED_DELETES. Clear them via subquery before booking_applications
+  // rows are deleted by the main loop below.
+  const baHasLeadId = await tableHasColumn(client, "booking_applications", "lead_id");
+  if (baHasLeadId) {
+    // Tables whose only lead link is booking_id → booking_applications: DELETE them.
+    for (const tbl of ["cp_commissions"]) {
+      if (!(await tableHasColumn(client, tbl, "booking_id"))) continue;
+      const r = await client.query(
+        `DELETE FROM ${quoteIdent(tbl)}
+         WHERE booking_id IN (
+           SELECT id FROM booking_applications WHERE lead_id::text = $1
+         )`,
+        [String(leadId)]
+      );
+      deletedRecords[tbl] = r.rowCount ?? 0;
+    }
+    // inventory_units: NULL out booking_id so the unit re-enters available stock.
+    if (await tableHasColumn(client, "inventory_units", "booking_id")) {
+      const r = await client.query(
+        `UPDATE inventory_units SET booking_id = NULL
+         WHERE booking_id IN (
+           SELECT id FROM booking_applications WHERE lead_id::text = $1
+         )`,
+        [String(leadId)]
+      );
+      deletedRecords["inventory_units.booking_id_nulled"] = r.rowCount ?? 0;
+    }
+  }
+
   for (const item of LEAD_RELATED_DELETES) {
     if (!(await tableHasColumn(client, item.table, item.column))) continue;
 
@@ -347,6 +411,25 @@ export async function deleteLeadDatabaseRecords(
       [String(leadId)]
     );
     deletedRecords[item.table] = result.rowCount ?? 0;
+  }
+
+  // Inventory units hold RESTRICT FKs via lead_id and held_for_lead_id.
+  // We NULL them out (not DELETE) so the unit returns to available status.
+  // booking_id is handled by the pre-booking block above before booking_applications
+  // is deleted; it is intentionally omitted here to avoid double-processing.
+  const INVENTORY_NULL_COLS: { table: string; column: string }[] = [
+    { table: "inventory_units", column: "lead_id" },
+    { table: "inventory_units", column: "held_for_lead_id" },
+    { table: "inventory_cost_sheets", column: "lead_id" },
+    { table: "inventory_offers", column: "lead_id" },
+  ];
+  for (const item of INVENTORY_NULL_COLS) {
+    if (!(await tableHasColumn(client, item.table, item.column))) continue;
+    const result = await client.query(
+      `UPDATE ${quoteIdent(item.table)} SET ${quoteIdent(item.column)} = NULL WHERE ${quoteIdent(item.column)}::text = $1`,
+      [String(leadId)]
+    );
+    deletedRecords[`${item.table}.${item.column}_nulled`] = result.rowCount ?? 0;
   }
 
   let clearedLiveStateRows = 0;

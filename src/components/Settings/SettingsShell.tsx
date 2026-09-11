@@ -75,6 +75,7 @@ import UserAvatar from "@/components/UserAvatar";
 import AppHeader from "@/components/AppHeader";
 import HeaderClock from "@/components/HeaderClock";
 import { clearCrmSession, getStoredCrmUser } from "@/lib/authSession";
+import LogoutConfirmDialog from "@/components/LogoutConfirmDialog";
 import { canViewPartners } from "@/lib/cpRbac";
 import { SectionErrorBoundary, SETTINGS_THEME_CSS, T, ToastProvider } from "./ui";
 import { useOrgName } from "@/lib/hooks/useOrgName";
@@ -343,6 +344,7 @@ export default function SettingsShell({ children }: { children: React.ReactNode 
     clearCrmSession();
     router.replace("/");
   };
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   const pageStyle = isDark
     ? { background: "#0a0a0a" }
@@ -609,7 +611,7 @@ export default function SettingsShell({ children }: { children: React.ReactNode 
                         </div>
                         <hr className={`-mx-4 border-0 border-t mb-2.5 mt-1 ${isDark ? "border-white/10" : "border-black/5"}`} />
                         <button
-                          onClick={handleLogout}
+                          onClick={() => setShowLogoutConfirm(true)}
                           className={`w-full flex items-center gap-2.5 py-2.5 px-3 rounded-[12px] font-semibold text-[13px] transition-colors cursor-pointer ${isDark ? "text-red-400 bg-red-500/10 hover:bg-red-500/20" : "text-red-600 bg-red-50 hover:bg-red-100"}`}
                         >
                           <FiLogOut className="w-4 h-4" />
@@ -754,7 +756,7 @@ export default function SettingsShell({ children }: { children: React.ReactNode 
               onToggleTheme={toggleTheme}
               isMarkedPresent={isMarkedPresent}
               timeIn={timeIn}
-              onLogout={handleLogout}
+              onLogout={() => setShowLogoutConfirm(true)}
             />
           )}
 
@@ -776,11 +778,18 @@ export default function SettingsShell({ children }: { children: React.ReactNode 
               onToggleTheme={toggleTheme}
               isMarkedPresent={isMarkedPresent}
               timeIn={timeIn}
-              onLogout={handleLogout}
+              onLogout={() => setShowLogoutConfirm(true)}
               menuItems={railForRole(user?.role)}
               groups={RAIL_GROUPS}
             />
           )}
+
+          <LogoutConfirmDialog
+            open={showLogoutConfirm}
+            isDark={isDark}
+            onClose={() => setShowLogoutConfirm(false)}
+            onConfirm={handleLogout}
+          />
         </div>
       </ToastProvider>
     </div>

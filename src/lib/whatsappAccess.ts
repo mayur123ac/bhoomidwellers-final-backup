@@ -63,7 +63,7 @@ export const canSeeUnmatched = (role: unknown) =>
   UNMATCHED_VISIBILITY_ROLES.includes(normalizeRole(role));
 
 /**
- * The lead columns that make a lead "this viewer's".
+ * The lead varchar columns that make a lead "this viewer's".
  *
  * Mirrors OWNERSHIP_COLUMNS in lib/admin-ai/rbac.ts. Sourcing Manager is absent
  * deliberately: their book is channel partners, and sourcing_manager_id is an
@@ -75,6 +75,13 @@ const OWNERSHIP_COLUMNS: Record<string, readonly string[]> = {
   receptionist: ["assigned_to", "assigned_receptionist"],
   "site head": ["assigned_to", "overseeing_site_head"],
   "sales manager": ["assigned_to"],
+};
+
+/** Corresponding FK integer-id columns for each varchar ownership column. */
+const FK_COLUMN: Record<string, string> = {
+  assigned_to: "assigned_to_user_id",
+  assigned_receptionist: "assigned_receptionist_user_id",
+  overseeing_site_head: "overseeing_site_head_user_id",
 };
 
 export function ownershipColumnsFor(role: unknown): readonly string[] {
@@ -122,16 +129,27 @@ export function conversationScope(
   const params: unknown[] = [];
   let p = nextParam;
 
-  // Name comparison is trimmed and case-insensitive: the same person appears as
-  // "Megha", "megha " and "MEGHA" across leads entered by different people at
-  // the front desk, and an exact match silently hides their own leads from them.
-  const namePlaceholder = `$${p++}`;
-  params.push(viewer.name);
+  // ID-first predicate: for each ownership column pair (FK + name), prefer the
+  // integer FK when it is set on the row. Fall back to case-insensitive name
+  // comparison for rows created before the FK migration (FK = NULL).
+  // Name comparison is trimmed on both sides: "Megha", "megha " and "MEGHA"
+  // all belong to the same person.
+  const colPredicates = cols.map((col) => {
+    const fkCol = FK_COLUMN[col];
+    if (fkCol && viewer.userId !== null) {
+      const uidx = p++;
+      params.push(viewer.userId);
+      const nidx = p++;
+      params.push(viewer.name);
+      return `(${leadAlias}.${fkCol} = $${uidx} OR (${leadAlias}.${fkCol} IS NULL AND lower(btrim(${leadAlias}.${col})) = lower(btrim($${nidx}))))`;
+    }
+    // No user ID in session — name-only fallback.
+    const nidx = p++;
+    params.push(viewer.name);
+    return `lower(btrim(${leadAlias}.${col})) = lower(btrim($${nidx}))`;
+  });
 
-  const owned = cols
-    .map((col) => `lower(btrim(${leadAlias}.${col})) = lower(btrim(${namePlaceholder}))`)
-    .join(" OR ");
-
+  const owned = colPredicates.join(" OR ");
   const parts = [`(${leadAlias}.id IS NOT NULL AND (${owned}))`];
 
   if (canSeeUnmatched(viewer.role)) {
@@ -161,12 +179,25 @@ export function leadScope(
   const cols = ownershipColumnsFor(viewer.role);
   if (cols.length === 0) return { sql: "FALSE", params: [] };
 
-  const placeholder = `$${nextParam}`;
-  const owned = cols
-    .map((col) => `lower(btrim(${leadAlias}.${col})) = lower(btrim(${placeholder}))`)
-    .join(" OR ");
+  // Same ID-first pattern as conversationScope but without the match_state branch.
+  const params: unknown[] = [];
+  let p = nextParam;
 
-  return { sql: `(${owned})`, params: [viewer.name] };
+  const colPredicates = cols.map((col) => {
+    const fkCol = FK_COLUMN[col];
+    if (fkCol && viewer.userId !== null) {
+      const uidx = p++;
+      params.push(viewer.userId);
+      const nidx = p++;
+      params.push(viewer.name);
+      return `(${leadAlias}.${fkCol} = $${uidx} OR (${leadAlias}.${fkCol} IS NULL AND lower(btrim(${leadAlias}.${col})) = lower(btrim($${nidx}))))`;
+    }
+    const nidx = p++;
+    params.push(viewer.name);
+    return `lower(btrim(${leadAlias}.${col})) = lower(btrim($${nidx}))`;
+  });
+
+  return { sql: `(${colPredicates.join(" OR ")})`, params };
 }
 
 /**
@@ -179,9 +210,14 @@ export function leadScope(
 export interface EventVisibility {
   leadId: number | null;
   matchState: string;
+  // VARCHAR fields — kept for backward compat and name-fallback on pre-FK rows.
   assignedTo?: string | null;
   assignedReceptionist?: string | null;
   overseeingSiteHead?: string | null;
+  // FK integer fields — authoritative when present; loaded by loadVisibility().
+  assignedToUserId?: number | null;
+  assignedReceptionistUserId?: number | null;
+  overseeingSiteHeadUserId?: number | null;
 }
 
 const eq = (a: string | null | undefined, b: string) =>
@@ -195,11 +231,29 @@ export function canViewerSee(viewer: Viewer, v: EventVisibility): boolean {
   const cols = ownershipColumnsFor(viewer.role);
   if (cols.length === 0) return false;
 
+  const viewerId = viewer.userId;
   const name = viewer.name;
+
   for (const col of cols) {
-    if (col === "assigned_to" && eq(v.assignedTo, name)) return true;
-    if (col === "assigned_receptionist" && eq(v.assignedReceptionist, name)) return true;
-    if (col === "overseeing_site_head" && eq(v.overseeingSiteHead, name)) return true;
+    if (col === "assigned_to") {
+      // ID-first: if FK field is present on the event, use it.
+      if (v.assignedToUserId !== undefined) {
+        if (v.assignedToUserId !== null && viewerId !== null && Number(v.assignedToUserId) === viewerId) return true;
+        if (v.assignedToUserId === null && eq(v.assignedTo, name)) return true;
+      } else if (eq(v.assignedTo, name)) return true;
+    }
+    if (col === "assigned_receptionist") {
+      if (v.assignedReceptionistUserId !== undefined) {
+        if (v.assignedReceptionistUserId !== null && viewerId !== null && Number(v.assignedReceptionistUserId) === viewerId) return true;
+        if (v.assignedReceptionistUserId === null && eq(v.assignedReceptionist, name)) return true;
+      } else if (eq(v.assignedReceptionist, name)) return true;
+    }
+    if (col === "overseeing_site_head") {
+      if (v.overseeingSiteHeadUserId !== undefined) {
+        if (v.overseeingSiteHeadUserId !== null && viewerId !== null && Number(v.overseeingSiteHeadUserId) === viewerId) return true;
+        if (v.overseeingSiteHeadUserId === null && eq(v.overseeingSiteHead, name)) return true;
+      } else if (eq(v.overseeingSiteHead, name)) return true;
+    }
   }
   return false;
 }

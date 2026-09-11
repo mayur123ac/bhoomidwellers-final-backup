@@ -1,47 +1,151 @@
-// api/settings/notification-recipients/verify/route.ts
+// app/api/settings/notification-recipients/verify/route.ts
 //
-// POST — handles OTP send and verify for alternative email verification.
-// Minimal stub: email delivery requires SMTP credentials that are not yet
-// configured (see memory: email-smtp-pending-credentials.md). This route
-// returns the correct shape so the UI does not 404, and will be wired to
-// real OTP delivery once SMTP is live.
+// The staged verification workflow:
+//
+//   GET    → current verification state
+//   POST   → send a code to the STAGED address
+//   PUT    → check the code and promote the staged address to live
+//   DELETE → discard the staged address
+//
+// Staging itself happens in PATCH /api/settings/notification-recipients, which
+// is what "Save Changes" calls. Nothing here writes the live address except a
+// successful PUT.
+//
+// All four are thin. Every rule — the expiry, the attempt cap, the cooldown, the
+// hourly ceiling, the promotion, the audit entries — lives in
+// lib/alternativeEmailVerification.ts, so there is one place where they interlock.
+//
+// ── Authorisation ───────────────────────────────────────────────────────────
+// requireSession(), and the user id comes from the verified session cookie
+// rather than the body. A body-supplied id would let anyone verify an address
+// against a colleague's account — and a verified alternative address both
+// receives that account's security mail and works as a sign-in identifier.
+
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/serverAuth";
+import { requestContext } from "@/lib/auditLog";
+import {
+  clearPendingEmail,
+  getVerificationState,
+  sendVerificationCode,
+  verifyCode,
+} from "@/lib/alternativeEmailVerification";
 
 export const dynamic = "force-dynamic";
+
+export async function GET() {
+  const gate = await requireSession();
+  if (!gate.ok) return gate.response;
+  if (!gate.userId) {
+    return NextResponse.json({ success: false, message: "Session carries no user id." }, { status: 400 });
+  }
+
+  return NextResponse.json({ success: true, state: await getVerificationState(gate.userId) });
+}
 
 export async function POST(req: NextRequest) {
   const gate = await requireSession();
   if (!gate.ok) return gate.response;
-
-  try {
-    const body = await req.json();
-    const { action } = body;
-
-    if (action === "send") {
-      // Stub: would send OTP via SMTP.
-      return NextResponse.json({
-        success: true,
-        message: "Email verification is not yet available. SMTP credentials are pending.",
-        sessionId: null,
-        expiresIn: 0,
-        resendAvailableIn: 60,
-      });
-    }
-
-    if (action === "verify") {
-      return NextResponse.json({
-        success: false,
-        message: "Email verification is not yet available. SMTP credentials are pending.",
-      });
-    }
-
-    return NextResponse.json(
-      { success: false, message: "Unknown action." },
-      { status: 400 }
-    );
-  } catch (err: any) {
-    console.error("[POST /api/settings/notification-recipients/verify]", err);
-    return NextResponse.json({ success: false, message: err.message }, { status: 500 });
+  if (!gate.userId) {
+    return NextResponse.json({ success: false, message: "Session carries no user id." }, { status: 400 });
   }
+
+  const { ip, userAgent } = requestContext(req);
+
+  const result = await sendVerificationCode({
+    userId: gate.userId,
+    actorName: gate.session.name,
+    ip,
+    userAgent,
+  });
+
+  if (!result.ok) {
+    // 429 for the two rate limits, 400 otherwise — a client backing off needs to
+    // tell "too fast" apart from "nothing staged".
+    const status = result.code === "COOLDOWN" || result.code === "HOURLY_LIMIT" ? 429 : 400;
+    return NextResponse.json(
+      { success: false, code: result.code, message: result.message, state: result.state },
+      { status }
+    );
+  }
+
+  if (!result.delivered) {
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Failed to send OTP. Please check the email server configuration.",
+        state: result.state,
+      },
+      { status: 500 }
+    );
+  }
+
+  return NextResponse.json({
+    success: true,
+    message: `A 6-digit code has been sent to ${result.address}.`,
+    address: result.address,
+    sessionId: result.sessionId,
+    delivered: true,
+    state: result.state,
+  });
+}
+
+export async function PUT(req: NextRequest) {
+  const gate = await requireSession();
+  if (!gate.ok) return gate.response;
+  if (!gate.userId) {
+    return NextResponse.json({ success: false, message: "Session carries no user id." }, { status: 400 });
+  }
+
+  let body: Record<string, unknown>;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ success: false, message: "Invalid JSON body." }, { status: 400 });
+  }
+
+  const { ip, userAgent } = requestContext(req);
+
+  const result = await verifyCode({
+    userId: gate.userId,
+    actorName: gate.session.name,
+    otp: String(body.otp ?? ""),
+    sessionId: body.sessionId == null ? null : String(body.sessionId),
+    ip,
+    userAgent,
+  });
+
+  if (!result.ok) {
+    const status = result.code === "TOO_MANY_ATTEMPTS" ? 429 : 400;
+    return NextResponse.json(
+      { success: false, code: result.code, message: result.message, state: result.state },
+      { status }
+    );
+  }
+
+  return NextResponse.json({
+    success: true,
+    message: "Alternative email verified and saved successfully.",
+    address: result.address,
+    state: result.state,
+  });
+}
+
+export async function DELETE(req: NextRequest) {
+  const gate = await requireSession();
+  if (!gate.ok) return gate.response;
+  if (!gate.userId) {
+    return NextResponse.json({ success: false, message: "Session carries no user id." }, { status: 400 });
+  }
+
+  const { ip, userAgent } = requestContext(req);
+
+  const state = await clearPendingEmail({
+    userId: gate.userId,
+    actorName: gate.session.name,
+    ip,
+    userAgent,
+  });
+
+  return NextResponse.json({ success: true, message: "Pending change discarded.", state });
 }

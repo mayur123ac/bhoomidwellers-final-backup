@@ -33,6 +33,11 @@ export type FollowUpReadSSEPayload = {
   readBy: string;
 };
 
+export type FollowUpDeletedSSEPayload = {
+  followUpId: string;
+  leadId: string;
+};
+
 export type ReminderSSEPayload = {
   id: number;
   leadId: number;
@@ -63,6 +68,7 @@ export function useFollowUpEvents(
   onReadReceipt?: (payload: FollowUpReadSSEPayload) => void,
   onFallbackSync?: () => void,
   onReminderDue?: (reminder: ReminderSSEPayload) => void,
+  onFollowUpDeleted?: (payload: FollowUpDeletedSSEPayload) => void,
 ) {
   const onNewRef = useRef(onNewFollowUp);
   onNewRef.current = onNewFollowUp;
@@ -72,6 +78,8 @@ export function useFollowUpEvents(
   onFallbackRef.current = onFallbackSync;
   const onReminderDueRef = useRef(onReminderDue);
   onReminderDueRef.current = onReminderDue;
+  const onDeletedRef = useRef(onFollowUpDeleted);
+  onDeletedRef.current = onFollowUpDeleted;
 
   // Resolve org from stored CRM user (same as dashboard pages)
   const orgId = useMemo(() => {
@@ -101,6 +109,15 @@ export function useFollowUpEvents(
     },
     "reminder.updated": (_payload: Record<string, unknown>) => {
       // Reminder updated — client can refetch if needed
+    },
+    "followup.deleted": (payload: Record<string, unknown>) => {
+      const p = payload as unknown as FollowUpDeletedSSEPayload;
+      if (p.followUpId) {
+        onDeletedRef.current?.(p);
+      } else {
+        // Fallback: full refetch if payload is malformed
+        onFallbackRef.current?.();
+      }
     },
   }), []);
 

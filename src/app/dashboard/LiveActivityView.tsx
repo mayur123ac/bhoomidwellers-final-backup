@@ -29,6 +29,7 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
     logoutTime: true,
     liveTimer: true,
     workingHours: true,
+    todayWorkingHours: true,
     risk: true,
   });
   // NEW STATES
@@ -599,7 +600,8 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
                       {visibleColumns.punctuality && <th className="px-2.5 sm:px-3 py-2 font-bold">Punctuality</th>}
                       {visibleColumns.logoutTime && <th className="px-2.5 sm:px-3 py-2 font-bold">Logout Time</th>}
                       {visibleColumns.liveTimer && <th className="px-2.5 sm:px-3 py-2 font-bold">Live Timer</th>}
-                      {visibleColumns.workingHours && <th className="px-2.5 sm:px-3 py-2 font-bold">Working Hours</th>}
+                      {/* {visibleColumns.workingHours && <th className="px-2.5 sm:px-3 py-2 font-bold">Working Hours</th>} */}
+                      {visibleColumns.todayWorkingHours && <th className="px-2.5 sm:px-3 py-2 font-bold">Today's Working Hours</th>}
                       {visibleColumns.risk && <th className="px-2.5 sm:px-3 py-2 font-bold">Risk</th>}
                       <th className="px-2.5 sm:px-3 py-2 font-bold">Attendance</th>
                     </tr>
@@ -609,7 +611,7 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
                   <tbody>
                     {isFutureDate ? (
                       <tr>
-                        <td colSpan={13} className="py-12 sm:py-16 text-center">
+                        <td colSpan={14} className="py-12 sm:py-16 text-center">
                           <div className="flex flex-col items-center gap-2">
                             <span className="text-3xl sm:text-4xl">📅</span>
                             <p className={`text-xs sm:text-sm font-bold ${theme.text}`}>No Data Available</p>
@@ -620,9 +622,9 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
                         </td>
                       </tr>
                     ) : isLoading ? (
-                      <tr><td colSpan={13} className="py-8 text-center text-xs sm:text-sm">Loading telemetry...</td></tr>
+                      <tr><td colSpan={14} className="py-8 text-center text-xs sm:text-sm">Loading telemetry...</td></tr>
                     ) : sessions.length === 0 ? (
-                      <tr><td colSpan={13} className="py-8 text-center text-xs sm:text-sm">No operational data.</td></tr>
+                      <tr><td colSpan={14} className="py-8 text-center text-xs sm:text-sm">No operational data.</td></tr>
                     ) : (
                       sessions.map((s, i) => (
                         <React.Fragment key={i}>
@@ -668,7 +670,7 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
                                 {s.login_device_name ? (
                                   <div className="leading-tight">
                                     <span className={`font-medium ${theme.text}`}>{s.login_device_name}</span>
-                                    {s.login_os && <><br/><span className="text-[10px] sm:text-[11px]">{s.login_os}</span></>}
+                                    {s.login_os && <><br /><span className="text-[10px] sm:text-[11px]">{s.login_os}</span></>}
                                   </div>
                                 ) : <span className={theme.textFaint}>—</span>}
                               </td>
@@ -693,9 +695,19 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
                                 </button>
                               </td>
                             )}
-                            {visibleColumns.workingHours && (
+                            {/* {visibleColumns.workingHours && (
                               <td className={`px-2.5 sm:px-3 py-2 sm:py-2.5 border-b font-mono font-bold ${theme.text} ${theme.tableBorder}`}>
                                 {s.session_start ? getWorkingHours(s.session_start, s.session_end, s.session_is_active) : "-"}
+                              </td>
+                            )} */}
+                            {visibleColumns.todayWorkingHours && (
+                              <td className={`px-2.5 sm:px-3 py-2 sm:py-2.5 border-b font-mono font-bold ${theme.tableBorder}`}>
+                                {s.working_track != null ? (() => {
+                                  const wt = Number(s.working_track);
+                                  const h = Math.floor(wt / 3600);
+                                  const m = Math.floor((wt % 3600) / 60);
+                                  return <span className="text-[#9E217B]">{`${h}h ${String(m).padStart(2, '0')}m`}</span>;
+                                })() : <span className={theme.textFaint}>—</span>}
                               </td>
                             )}
                             {visibleColumns.risk && (

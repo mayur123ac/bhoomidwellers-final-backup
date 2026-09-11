@@ -15,18 +15,16 @@ export async function GET(req: NextRequest) {
 
   try {
     const empty = {
-      totalRequests: 0,
-      successRate: 100,
-      avgLatencyMs: 0,
-      dailyBreakdown: [] as any[],
-      byEndpoint: [] as any[],
+      windowDays: days,
+      totals: { requests: 0, errors: 0, avgMs: null as number | null },
+      daily: [] as any[],
+      endpoints: [] as any[],
       byKey: [] as any[],
     };
 
     let data = empty;
 
     try {
-      // Daily breakdown
       const conditions = ["created_at >= NOW() - $1::int * INTERVAL '1 day'"];
       const params: any[] = [days];
       let idx = 2;
@@ -41,7 +39,7 @@ export async function GET(req: NextRequest) {
       const daily = await query<any>(
         `SELECT DATE(created_at) AS date,
                 COUNT(*)::int AS requests,
-                COUNT(*) FILTER (WHERE status_code < 400)::int AS successes,
+                COUNT(*) FILTER (WHERE status_code >= 400)::int AS errors,
                 AVG(latency_ms)::int AS avg_latency
          FROM api_request_log
          WHERE ${where}
@@ -51,20 +49,20 @@ export async function GET(req: NextRequest) {
       );
 
       const total = daily.reduce((sum: number, r: any) => sum + r.requests, 0);
-      const successes = daily.reduce((sum: number, r: any) => sum + r.successes, 0);
+      const totalErrors = daily.reduce((sum: number, r: any) => sum + r.errors, 0);
       const avgLatency = daily.length > 0
         ? Math.round(daily.reduce((sum: number, r: any) => sum + (r.avg_latency ?? 0), 0) / daily.length)
-        : 0;
+        : null;
 
       data = {
-        totalRequests: total,
-        successRate: total > 0 ? Math.round((successes / total) * 100) : 100,
-        avgLatencyMs: avgLatency,
-        dailyBreakdown: daily.map((r: any) => ({
-          date: r.date,
+        windowDays: days,
+        totals: { requests: total, errors: totalErrors, avgMs: avgLatency },
+        daily: daily.map((r: any) => ({
+          day: r.date,
           requests: r.requests,
+          errors: r.errors,
         })),
-        byEndpoint: [],
+        endpoints: [],
         byKey: [],
       };
     } catch {

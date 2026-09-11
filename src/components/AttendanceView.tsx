@@ -471,7 +471,8 @@ export default function AttendanceView({
                   "Punctuality",
                   "Logout Time",
                   "Logged Time",
-                  "Total Working Hour",
+                  // "Total Working Hour",
+                  "Working Hour",
                   "Attendance",
                 ].map((h) => (
                   <th
@@ -596,7 +597,7 @@ export default function AttendanceView({
                       </td>
 
                       {/* Live Timer (Cumulative Total) — ticks every second on active row */}
-                      <td className={`px-4 py-3 border-b font-mono font-black ${t.tableBorder}`}>
+                      {/* <td className={`px-4 py-3 border-b font-mono font-black ${t.tableBorder}`}>
                         {isActive ? (
                           <span className="text-[#00AEEF]" title="Total working time today across all sessions">
                             {getCumulativeLiveTimer()}
@@ -606,8 +607,23 @@ export default function AttendanceView({
                             {getSessionDuration(s.session_start, s.session_end, false)}
                           </span>
                         )}
-                      </td>
+                      </td> */}
 
+                      {/* Working Hour — from attendance record (set on checkout) */}
+                      <td className={`px-4 py-3 border-b font-mono ${t.tableBorder}`}>
+                        {i === 0 && s.attendance_working_track != null ? (
+                          <span className="font-bold text-[#9E217B]">
+                            {(() => {
+                              const sec = Number(s.attendance_working_track);
+                              const h = Math.floor(sec / 3600);
+                              const m = Math.floor((sec % 3600) / 60);
+                              return `${String(h).padStart(2, "0")}h ${String(m).padStart(2, "0")}m`;
+                            })()}
+                          </span>
+                        ) : (
+                          <span className={t.textFaint}>—</span>
+                        )}
+                      </td>
 
                       {/* Attendance — checkbox + submit */}
                       <td className={`px-4 py-3 border-b ${t.tableBorder}`}>

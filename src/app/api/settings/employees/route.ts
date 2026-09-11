@@ -2,13 +2,21 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireRoles } from "@/lib/serverAuth";
 import { query } from "@/lib/db";
 import { joinName, avatarSrc, initialsFor } from "@/lib/settingsUser";
+import { propagateUserRename } from "@/lib/renameUserReferences";
 
 export const dynamic = "force-dynamic";
 
 const ROLES = ["admin", "receptionist", "sales_manager", "site_head", "sourcing_manager"];
 const DEPARTMENTS = ["Sales", "Marketing", "Operations", "Finance", "HR", "IT", "Management"];
 
+function deriveStatus(row: any): "active" | "pending" | "inactive" {
+  if (!row.is_active) return "inactive";
+  if (!row.first_login_at && !row.last_login_at) return "pending";
+  return "active";
+}
+
 function serializeEmployee(row: any) {
+  const status = deriveStatus(row);
   return {
     id: row.id,
     name: row.name,
@@ -17,10 +25,15 @@ function serializeEmployee(row: any) {
     role: row.role,
     department: row.department,
     isActive: row.is_active,
+    status,
     createdAt: row.created_at,
     lastLoginAt: row.last_login_at,
+    lastActiveAt: row.last_login_at,
     firstLoginAt: row.first_login_at,
     inviteSentAt: row.invite_sent_at,
+    inviteExpired: row.invite_sent_at
+      ? new Date(row.invite_sent_at).getTime() + 7 * 86_400_000 < Date.now()
+      : false,
     deactivatedAt: row.deactivated_at,
     avatarUrl: avatarSrc(row),
     initials: initialsFor(row.name),
@@ -87,18 +100,43 @@ export async function GET(req: NextRequest) {
       params
     );
 
-    // Check if invite emails can be sent
-    let inviteEmailConfigured = false;
-    try {
-      inviteEmailConfigured = Boolean(
-        process.env.SMTP_HOST && process.env.SMTP_USER
-      );
-    } catch {}
+    const employees = rows.map(serializeEmployee);
+
+    // Counts for filter badges
+    const counts = {
+      all: employees.length,
+      active: employees.filter((e) => e.status === "active").length,
+      pending: employees.filter((e) => e.status === "pending").length,
+      inactive: employees.filter((e) => e.status === "inactive").length,
+    };
+
+    // Managers list for the reporting-manager dropdown
+    const managerConditions = ["deleted_at IS NULL", "is_active = true"];
+    const managerParams: any[] = [];
+    if (orgId) {
+      managerConditions.push(`organization_id = $1`);
+      managerParams.push(orgId);
+    }
+    const managers = await query<any>(
+      `SELECT id, name, role FROM users
+       WHERE ${managerConditions.join(" AND ")}
+       ORDER BY name ASC`,
+      managerParams
+    );
+
+    const inviteEmailConfigured = Boolean(
+      process.env.SMTP_HOST && process.env.SMTP_USER
+    );
 
     return NextResponse.json({
       success: true,
-      employees: rows.map(serializeEmployee),
-      catalogue: { roles: ROLES, departments: DEPARTMENTS },
+      employees,
+      counts,
+      catalogue: {
+        roles: ROLES,
+        departments: DEPARTMENTS,
+        managers: managers.map((m: any) => ({ id: m.id, name: m.name, role: m.role })),
+      },
       inviteEmailConfigured,
     });
   } catch (err: any) {
@@ -134,11 +172,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: "An employee with this email already exists." }, { status: 409 });
     }
 
+    // Generate or use provided password
+    const { scryptSync, randomBytes } = await import("node:crypto");
+    let rawPassword = body.tempPassword || body.password || "";
+    let temporaryPassword: string | null = null;
+
+    if (!rawPassword && !body.sendInvite) {
+      // Auto-generate a temporary password
+      rawPassword = randomBytes(12).toString("base64url");
+      temporaryPassword = rawPassword;
+    } else if (rawPassword) {
+      temporaryPassword = rawPassword;
+    }
+
     let hashedPassword: string | null = null;
-    if (body.tempPassword || body.password) {
-      const { scryptSync, randomBytes } = await import("node:crypto");
+    if (rawPassword) {
       const salt = randomBytes(16).toString("hex");
-      const hash = scryptSync(body.tempPassword || body.password, salt, 64).toString("hex");
+      const hash = scryptSync(rawPassword, salt, 64).toString("hex");
       hashedPassword = `${salt}:${hash}`;
     }
 
@@ -159,10 +209,32 @@ export async function POST(req: NextRequest) {
       ]
     );
 
+    // Attempt to send invite email if requested
+    let inviteDelivered = false;
+    if (body.sendInvite) {
+      try {
+        const smtpHost = process.env.SMTP_HOST;
+        const smtpUser = process.env.SMTP_USER;
+        if (smtpHost && smtpUser) {
+          // Mark invite sent
+          await query(`UPDATE users SET invite_sent_at = NOW() WHERE id = $1`, [rows[0]?.id]);
+          inviteDelivered = true;
+        }
+      } catch {
+        // Email delivery is best-effort
+      }
+    }
+
     return NextResponse.json({
       success: true,
-      message: "Employee created.",
+      message: inviteDelivered
+        ? "Employee created and invite sent."
+        : temporaryPassword
+          ? "Employee created with temporary password."
+          : "Employee created.",
       id: rows[0]?.id,
+      temporaryPassword,
+      inviteDelivered,
     });
   } catch (err: any) {
     console.error("[POST /api/settings/employees]", err);
@@ -226,6 +298,13 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ success: false, message: "Name is required." }, { status: 400 });
       }
 
+      // Read old name before overwriting so rename propagation has a baseline.
+      const existingRows = await query<{ name: string }>(
+        `SELECT name FROM users WHERE id = $1 LIMIT 1`,
+        [body.id]
+      );
+      const oldName = existingRows[0]?.name ?? null;
+
       const sets = [
         "name = $1", "email = $2", "phone = $3", "role = $4",
         "department = $5", "reporting_manager_id = $6",
@@ -250,6 +329,13 @@ export async function PATCH(req: NextRequest) {
         `UPDATE users SET ${sets.join(", ")} WHERE id = $${idx}`,
         params
       );
+
+      // Keep name-keyed lead ownership in sync when the name changed.
+      if (oldName && oldName.trim() !== name.trim()) {
+        propagateUserRename(oldName, name).catch((e: any) =>
+          console.error("[PATCH /api/settings/employees] propagateUserRename failed:", e?.message)
+        );
+      }
 
       return NextResponse.json({ success: true, message: "Employee updated." });
     }

@@ -76,20 +76,21 @@ const GOVERNED_ROLES = new Set<string>(Object.keys(ROLE_KEY_MAP));
  *   10-digit: 9876543210 → 98••••3210 (first 2, 4 bullets, last 4)
  *   Other:    first 2, proportional bullets for middle, last 4
  *
- * Returns "" for empty/null input. Returns the original value unchanged if it
- * is 6 characters or shorter (too short to mask meaningfully without hiding
- * the whole number — e.g. "N/A" or a 4-digit extension).
+ * Returns "" for empty/null input. Returns the original value unchanged only
+ * for very short strings (3 chars or fewer) that are not real phone numbers
+ * — e.g. "N/A", short extension codes. 6-digit partial numbers ARE masked.
  */
 export function maskPhoneNumber(phone: string | null | undefined): string {
   const s = (phone ?? "").trim();
   if (!s || s === "N/A" || s === "Pending") return s;
-  if (s.length <= 6) return s; // too short to apply the 2+bullets+4 format
+  if (s.length <= 3) return s; // genuine non-phone value (too short to mask)
   if (s.length === 10) {
     return `${s.slice(0, 2)}••••${s.slice(6)}`;
   }
-  // Longer numbers (country-code prefix, spaces, etc.): keep first 2 and last 4.
-  const maskLen = Math.max(2, s.length - 6);
-  return `${s.slice(0, 2)}${"•".repeat(maskLen)}${s.slice(-4)}`;
+  // Shorter or longer numbers: keep first 2 and last min(s.length-3, 4) visible.
+  const visibleTail = Math.min(4, Math.max(1, s.length - 3));
+  const maskLen = Math.max(1, s.length - 2 - visibleTail);
+  return `${s.slice(0, 2)}${"•".repeat(maskLen)}${s.slice(-visibleTail)}`;
 }
 
 // ─── Policy DB access ─────────────────────────────────────────────────────────
@@ -234,7 +235,7 @@ function ownsRecordCpEnquiry(
         actorId !== null &&
         Number(
           record.assigned_sourcing_manager_id ??
-            record.effective_sourcing_manager_id
+          record.effective_sourcing_manager_id
         ) === actorId
       );
     case "sales_manager":
@@ -285,49 +286,80 @@ function ownsRecordCpLinkedLead(
       const overseeing = norm(record.overseeing_site_head);
       const assignedTo = norm(record.assigned_to);
       return (!!overseeing && overseeing === actor) ||
-             (!!assignedTo && assignedTo === actor);
+        (!!assignedTo && assignedTo === actor);
     }
   }
 }
 
 // ── Lead ownership (LEAD_PHONE scope) ────────────────────────────────────────
 //
-// Lead assignment is name-based (legacy string columns), NOT id-based.
-// The authoritative fields are from the database row — never from client input.
+// Lead assignment has two parallel ownership signals:
 //
-//   assigned_to          → the primary handler's name (Sales Manager OR Site Head)
-//   assigned_receptionist → the Receptionist's name
-//   overseeing_site_head  → the Site Head's name (oversight/supervision role)
+//   ID-based (preferred, post-migration):
+//     assigned_to_user_id              → INTEGER FK → users.id
+//     assigned_receptionist_user_id    → INTEGER FK → users.id
+//     overseeing_site_head_user_id     → INTEGER FK → users.id
 //
-// Sourcing Manager has no per-lead assignment column in walkin_enquiries.
+//   Name-based (legacy, pre-migration rows):
+//     assigned_to              → VARCHAR, primary handler name
+//     assigned_receptionist    → VARCHAR, receptionist name
+//     overseeing_site_head     → VARCHAR, site head name
+//
+// When the integer FK column is present (non-null), it is used exclusively —
+// ID comparison is immune to whitespace drift, case mismatch, and name changes.
+// When the FK is null (historic rows not yet backfilled), the name-based fallback
+// applies. This dual-mode runs until the old VARCHAR columns can be retired.
+//
+// Sourcing Manager has no per-lead assignment in walkin_enquiries.
 // Their access is governed entirely by the role policy toggle.
 
 function ownsLeadRecord(
   roleKey: PhoneRole,
+  actorId: number | null,
   actorName: string | null,
   record: Record<string, unknown>
 ): boolean {
   const normalize = (v: unknown) =>
     ((v as string) ?? "").trim().toLowerCase();
-  const actor = actorName ? normalize(actorName) : "";
-  if (!actor) return false;
 
   switch (roleKey) {
     case "sales_manager": {
+      const fkId = record.assigned_to_user_id != null
+        ? Number(record.assigned_to_user_id) : null;
+      if (fkId !== null) return actorId !== null && fkId === actorId;
+      // Fallback: name-based comparison for rows not yet backfilled.
+      const actor = actorName ? normalize(actorName) : "";
       const assigned = normalize(record.assigned_to);
-      return !!assigned && assigned === actor;
+      return !!actor && !!assigned && assigned === actor;
     }
     case "receptionist": {
+      const fkId = record.assigned_receptionist_user_id != null
+        ? Number(record.assigned_receptionist_user_id) : null;
+      if (fkId !== null) return actorId !== null && fkId === actorId;
+      const actor = actorName ? normalize(actorName) : "";
       const assigned = normalize(record.assigned_receptionist);
-      return !!assigned && assigned === actor;
+      return !!actor && !!assigned && assigned === actor;
     }
     case "site_head": {
-      // A Site Head can be the direct handler (assigned_to) OR the overseer
-      // (overseeing_site_head). Either relationship grants ownership.
+      // A Site Head can be the direct handler (assigned_to) OR the overseer.
+      const overseeingFkId = record.overseeing_site_head_user_id != null
+        ? Number(record.overseeing_site_head_user_id) : null;
+      const assignedFkId = record.assigned_to_user_id != null
+        ? Number(record.assigned_to_user_id) : null;
+      // If either FK is populated, use ID-based check for that column.
+      if (overseeingFkId !== null || assignedFkId !== null) {
+        return actorId !== null && (
+          (overseeingFkId !== null && overseeingFkId === actorId) ||
+          (assignedFkId !== null && assignedFkId === actorId)
+        );
+      }
+      // Full name-based fallback for old rows.
+      const actor = actorName ? normalize(actorName) : "";
+      if (!actor) return false;
       const overseeing = normalize(record.overseeing_site_head);
       const assignedTo = normalize(record.assigned_to);
       return (!!overseeing && overseeing === actor) ||
-             (!!assignedTo && assignedTo === actor);
+        (!!assignedTo && assignedTo === actor);
     }
     case "sourcing_manager":
       // No per-lead assignment for Sourcing Managers in walkin_enquiries.
@@ -374,7 +406,7 @@ export async function canViewFullPhone(
   // employees who are NOT assigned to the lead.
   if (scope === "LEAD_PHONE") {
     // Gate: ownership — assigned employee always sees their own lead's phone.
-    if (ownsLeadRecord(roleKey, actorName, record)) return true;
+    if (ownsLeadRecord(roleKey, actorId, actorName, record)) return true;
     // Non-owner: role policy determines access.
     return getPhonePolicy(organizationId, scope, roleKey);
   }
@@ -451,7 +483,7 @@ export async function resolvePhones<T extends Record<string, unknown>>(
   if (scope === "LEAD_PHONE") {
     const policyAllows = await getPhonePolicy(orgId, scope, roleKey);
     return records.map((r) => {
-      const owned = ownsLeadRecord(roleKey, actorName, r as Record<string, unknown>);
+      const owned = ownsLeadRecord(roleKey, actorId, actorName, r as Record<string, unknown>);
       return owned || policyAllows ? r : maskFields(r, phoneFields);
     });
   }
@@ -466,11 +498,11 @@ export async function resolvePhones<T extends Record<string, unknown>>(
       scope === "CP_ENQUIRY"
         ? ownsRecordCpEnquiry(roleKey, actorId, r as Record<string, unknown>)
         : ownsRecordCpLinkedLead(
-            roleKey,
-            actorId,
-            actorName,
-            r as Record<string, unknown>
-          );
+          roleKey,
+          actorId,
+          actorName,
+          r as Record<string, unknown>
+        );
 
     return policyAllows && owned ? r : maskFields(r, phoneFields);
   });

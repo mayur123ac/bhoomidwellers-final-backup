@@ -14,7 +14,16 @@ export async function GET(req: Request) {
 
     const { searchParams } = new URL(req.url);
     const queryDate = searchParams.get("date");
-    const targetDate = queryDate || new Date().toISOString().split('T')[0];
+    // When no explicit date is requested, derive today's Indian business date
+    // in Asia/Kolkata rather than using new Date().toISOString().split('T')[0],
+    // which gives the UTC date. UTC and IST differ by +5:30, so between
+    // 12:00 AM IST and 5:30 AM IST the UTC date is still the previous calendar
+    // day — causing the live view to show yesterday's data for the first 5.5
+    // hours of every Indian working day. Intl.DateTimeFormat with en-CA locale
+    // returns YYYY-MM-DD in the specified timezone, matching what the admin's
+    // date picker shows.
+    const todayIst = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+    const targetDate = queryDate || todayIst;
     const orgId = await getOrganizationId();
 
     // 1. Automatic Session Expiration Cleanup
@@ -66,7 +75,8 @@ export async function GET(req: Request) {
         sc.active_sessions_count,
         
         EXTRACT(EPOCH FROM (NOW() - s.session_start)) as session_duration_seconds,
-        CASE 
+        ar.working_track,
+        CASE
           WHEN s.user_id IS NULL THEN 'OFFLINE'
           WHEN s.is_active = false THEN 'OFFLINE'
           WHEN l.is_idle THEN 'IDLE'
@@ -90,10 +100,14 @@ export async function GET(req: Request) {
       ) sc ON u.id = sc.user_id
       LEFT JOIN employee_live_state l ON u.id = l.user_id AND l.organization_id = $2
       LEFT JOIN (
-        SELECT DISTINCT ON (employee_id) employee_id, attendance_status
+        -- ORDER BY id ASC matches mark/status/checkout routes: the first
+        -- attendance_records row for the day is the authoritative one, and
+        -- working_track is written to that row by the checkout route.
+        SELECT DISTINCT ON (employee_id) employee_id, attendance_status, working_track
         FROM attendance_records
-        WHERE DATE(login_time) = $1::date
+        WHERE DATE(login_time AT TIME ZONE 'Asia/Kolkata') = $1::date
           AND organization_id = $2
+        ORDER BY employee_id, id ASC
       ) ar ON u.id = ar.employee_id
       -- Every derived table carries its own organization predicate INSIDE the
       -- subquery, ahead of its DISTINCT ON / GROUP BY: a filter applied after the

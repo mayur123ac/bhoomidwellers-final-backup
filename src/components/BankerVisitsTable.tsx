@@ -154,7 +154,7 @@ function BankerVisitsTable({ user, isDark, t, title, subtitle }: Props) {
               }`}
           >
             <tr
-              className={`text-[10px] uppercase tracking-wider ${t.textMuted}`}
+              className={`text-[10px] uppercase tracking-wider border-b border-gray-400 ${t.textMuted}`}
             >
               {COLUMNS.map((h) => (
                 <th

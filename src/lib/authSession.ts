@@ -2,12 +2,16 @@ import { clearTheme } from "@/lib/theme";
 import { clearAvatar } from "@/lib/userAvatar";
 
 export function getStoredCrmUser() {
+  if (typeof window === "undefined") return null;
+
   try {
     const stored = localStorage.getItem("crm_user");
     if (!stored) return null;
     return JSON.parse(stored);
   } catch {
-    localStorage.removeItem("crm_user");
+    try {
+      localStorage.removeItem("crm_user");
+    } catch {}
     return null;
   }
 }

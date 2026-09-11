@@ -771,9 +771,14 @@ export async function loadVisibility(
   assignedTo: string | null;
   assignedReceptionist: string | null;
   overseeingSiteHead: string | null;
+  assignedToUserId: number | null;
+  assignedReceptionistUserId: number | null;
+  overseeingSiteHeadUserId: number | null;
 }> {
   const sql = `SELECT c.lead_id, c.match_state,
-                      l.assigned_to, l.assigned_receptionist, l.overseeing_site_head
+                      l.assigned_to, l.assigned_receptionist, l.overseeing_site_head,
+                      l.assigned_to_user_id, l.assigned_receptionist_user_id,
+                      l.overseeing_site_head_user_id
                  FROM public.whatsapp_conversations c
                  LEFT JOIN public.walkin_enquiries l ON l.id = c.lead_id
                 WHERE c.id = $1 AND c.organization_id = $2`;
@@ -790,6 +795,9 @@ export async function loadVisibility(
       assignedTo: null,
       assignedReceptionist: null,
       overseeingSiteHead: null,
+      assignedToUserId: null,
+      assignedReceptionistUserId: null,
+      overseeingSiteHeadUserId: null,
     };
   }
   const r = rows[0];
@@ -799,6 +807,9 @@ export async function loadVisibility(
     assignedTo: r.assigned_to,
     assignedReceptionist: r.assigned_receptionist,
     overseeingSiteHead: r.overseeing_site_head,
+    assignedToUserId: r.assigned_to_user_id ?? null,
+    assignedReceptionistUserId: r.assigned_receptionist_user_id ?? null,
+    overseeingSiteHeadUserId: r.overseeing_site_head_user_id ?? null,
   };
 }
 

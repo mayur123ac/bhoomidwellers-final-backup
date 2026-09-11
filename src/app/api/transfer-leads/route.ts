@@ -38,11 +38,40 @@ export async function POST(req: Request) {
       // filter a same-named manager in another builder would have their entire
       // lead book reassigned by this call.
       const orgId = await getOrganizationId(client);
+
+      // Resolve both source and target names to user IDs.
+      // WHERE uses dual predicate so migrated rows (FK set) are caught even
+      // if the name string diverged from the canonical display name.
+      const [fromUserRow, toUserRow] = await Promise.all([
+        client.query(
+          `SELECT id FROM users
+           WHERE organization_id = $1
+             AND LOWER(TRIM(name)) = LOWER(TRIM($2))
+             AND deleted_at IS NULL
+           ORDER BY is_active DESC, id ASC LIMIT 1`,
+          [orgId, from.trim()]
+        ),
+        client.query(
+          `SELECT id FROM users
+           WHERE organization_id = $1
+             AND LOWER(TRIM(name)) = LOWER(TRIM($2))
+             AND deleted_at IS NULL
+           ORDER BY is_active DESC, id ASC LIMIT 1`,
+          [orgId, to]
+        ),
+      ]);
+      const fromUserId: number | null = fromUserRow.rows[0]?.id ?? null;
+      const toUserId: number | null = toUserRow.rows[0]?.id ?? null;
+
       const result = await client.query(
         `UPDATE public.walkin_enquiries
-         SET assigned_to = $2
-         WHERE assigned_to = $1 AND organization_id = $3`,
-        [from.trim(), to.trim(), orgId]
+         SET assigned_to = $2,
+             assigned_to_user_id = $5
+         WHERE (
+           ($4::int IS NOT NULL AND assigned_to_user_id = $4::int)
+           OR (assigned_to_user_id IS NULL AND LOWER(TRIM(COALESCE(assigned_to, ''))) = LOWER(TRIM($1)))
+         ) AND organization_id = $3`,
+        [from.trim(), to, orgId, fromUserId, toUserId]
       );
       return result.rowCount ?? 0;
     });

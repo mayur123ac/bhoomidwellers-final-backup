@@ -99,6 +99,10 @@ interface FeedRow {
   name: string;
   assigned_to: string | null;
   assigned_receptionist: string | null;
+  // Integer FK columns added by 2026-09-10_ownership_user_id_migration.sql.
+  // Present on all new leads; may be null on old rows not yet backfilled.
+  assigned_to_user_id: number | null;
+  assigned_receptionist_user_id: number | null;
   created_at: string;
   status: string | null;
   is_lost_lead: boolean;
@@ -126,6 +130,8 @@ const FEED_SQL = `
          w.name,
          w.assigned_to,
          w.assigned_receptionist,
+         w.assigned_to_user_id,
+         w.assigned_receptionist_user_id,
          w.created_at,
          w.status,
          COALESCE(w.is_lost_lead, false) AS is_lost_lead,
@@ -155,14 +161,20 @@ const FEED_SQL = `
        LIMIT 1
     ) vis ON TRUE
     LEFT JOIN LATERAL (
-      -- The assignee's role, for the "Amogh (Site Head)" label. Resolved by NAME,
-      -- because walkin_enquiries stores assignments as names, not ids — and name
-      -- is not unique across tenants, so the organization predicate is what stops
-      -- a same-named user in another organization supplying the label.
+      -- The assignee's role, for the "Amogh (Site Head)" label.
+      -- ID-first: when the integer FK column is populated, match by id — this is
+      -- immune to name drift and whitespace. Fall back to name matching only for
+      -- historic rows that predate the 2026-09-10 backfill migration.
       SELECT u.role
         FROM users u
        WHERE u.organization_id = w.organization_id
-         AND LOWER(TRIM(u.name)) = LOWER(TRIM(COALESCE(NULLIF(w.assigned_to, ''), w.assigned_receptionist)))
+         AND (
+           u.id = COALESCE(w.assigned_to_user_id, w.assigned_receptionist_user_id)
+           OR (
+             COALESCE(w.assigned_to_user_id, w.assigned_receptionist_user_id) IS NULL
+             AND LOWER(TRIM(u.name)) = LOWER(TRIM(COALESCE(NULLIF(w.assigned_to, ''), w.assigned_receptionist)))
+           )
+         )
        ORDER BY u.id
        LIMIT 1
     ) own ON TRUE
@@ -264,7 +276,18 @@ function prettyRole(role: string | null, row: FeedRow): string {
   return row.assigned_to ? "Manager" : row.assigned_receptionist ? "Receptionist" : "Unassigned";
 }
 
-function ownsLead(row: FeedRow, viewerName: string): boolean {
+function ownsLead(row: FeedRow, viewerName: string, viewerId?: number | null): boolean {
+  // ID-first: integer FK columns are unambiguous and immune to name drift.
+  // When the row has at least one FK populated, trust only the ID check.
+  const hasFk = row.assigned_to_user_id != null || row.assigned_receptionist_user_id != null;
+  if (hasFk) {
+    if (viewerId == null) return false;
+    return (
+      (row.assigned_to_user_id != null && Number(row.assigned_to_user_id) === viewerId) ||
+      (row.assigned_receptionist_user_id != null && Number(row.assigned_receptionist_user_id) === viewerId)
+    );
+  }
+  // Fallback: name-based comparison for rows not yet backfilled.
   const me = viewerName.trim().toLowerCase();
   if (!me) return false;
   return (
@@ -315,7 +338,7 @@ export async function buildNotificationFeed(
     // shipping another tenant's lead into someone's notification list.
     if (row.organization_id !== organizationId) continue;
 
-    const mine = wholeSite || ownsLead(row, viewerName);
+    const mine = wholeSite || ownsLead(row, viewerName, userId ?? undefined);
     const created = parseDate(row.created_at);
     const formattedId = String(row.id).padStart(3, "0");
     const ownerName = row.assigned_to?.trim() || row.assigned_receptionist?.trim() || "Unassigned";

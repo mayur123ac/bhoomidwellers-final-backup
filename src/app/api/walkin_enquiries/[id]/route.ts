@@ -203,6 +203,22 @@ export async function PUT(
         fields.push("last_activity_at = NOW()");
       }
 
+      // Atomically update assigned_to_user_id when the named assignee changes
+      // so the FK stays authoritative for all ID-first read paths.
+      if (assignmentChanged) {
+        const newUserResult = await client.query(
+          `SELECT id FROM users
+           WHERE organization_id = $1
+             AND LOWER(TRIM(name)) = LOWER(TRIM($2))
+             AND deleted_at IS NULL
+           ORDER BY is_active DESC, id ASC LIMIT 1`,
+          [await getOrganizationId(client), body.assigned_to]
+        );
+        const newAssignedToUserId: number | null = newUserResult.rows[0]?.id ?? null;
+        values.push(newAssignedToUserId);
+        fields.push(`assigned_to_user_id = $${values.length}`);
+      }
+
       if (fields.length === 0) {
         return { noFields: true };
       }

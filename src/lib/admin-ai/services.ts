@@ -61,29 +61,50 @@ const MAX_ROWS = 25;
    `booking_applications.lead_id -> walkin_enquiries`.
    ════════════════════════════════════════════════════════════════════════════ */
 
+/** Reverse map: FK column → corresponding varchar column. */
+const FK_TO_NAME_COL: Record<string, string> = {
+  assigned_to_user_id: "assigned_to",
+  assigned_receptionist_user_id: "assigned_receptionist",
+  overseeing_site_head_user_id: "overseeing_site_head",
+};
+
 /**
  * `{ sql, params }` for an ownership predicate on a walkin_enquiries alias.
  *
- * Returns `"TRUE"` for a scope that reads everything, so callers can always
- * concatenate the fragment without branching. `startIndex` is the next free
- * bind position — these are appended after each handler's own parameters.
+ * Returns `"TRUE"` for a scope that reads everything. `startIndex` is the next
+ * free bind position — returned params are appended after each handler's own.
+ *
+ * ID-first: for each ownership column pair (FK + name), when the FK column is
+ * populated on a lead row, match by integer user-id. Fall back to trimmed,
+ * case-insensitive name comparison for pre-migration rows (FK = NULL).
+ * `scope.userId` is always a valid integer for a non-admin scope (enforced in
+ * authorizeAiRequest).
  */
 function ownershipClause(
   scope: AiScope,
   alias: string,
   startIndex: number
 ): { sql: string; params: any[] } {
-  if (scope.canReadAllRecords || scope.ownershipColumns.length === 0) {
+  if (scope.canReadAllRecords || scope.ownershipFkColumns.length === 0) {
     return { sql: "TRUE", params: [] };
   }
-  // One bind for the name, reused by every column — TRIM/LOWER on both sides
-  // because these columns are free-typed employee names and "  Megha" has been
-  // seen in the data.
-  const idx = startIndex;
-  const ors = scope.ownershipColumns
-    .map((col) => `LOWER(TRIM(COALESCE(${alias}.${col}, ''))) = LOWER(TRIM($${idx}))`)
-    .join(" OR ");
-  return { sql: `(${ors})`, params: [scope.userName] };
+
+  const params: any[] = [];
+  const ors: string[] = [];
+  let idx = startIndex;
+
+  for (const fkCol of scope.ownershipFkColumns) {
+    const nameCol = FK_TO_NAME_COL[fkCol] ?? fkCol.replace(/_user_id$/, "");
+    // $idx = userId, $idx+1 = userName
+    params.push(scope.userId, scope.userName);
+    const uidx = idx++;
+    const nidx = idx++;
+    ors.push(
+      `(${alias}.${fkCol} = $${uidx} OR (${alias}.${fkCol} IS NULL AND LOWER(TRIM(COALESCE(${alias}.${nameCol}, ''))) = LOWER(TRIM($${nidx}))))`
+    );
+  }
+
+  return { sql: `(${ors.join(" OR ")})`, params };
 }
 
 /**

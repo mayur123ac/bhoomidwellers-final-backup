@@ -86,11 +86,11 @@ const NO_ROWS: EnquiryRowData[] = [];
  * resizing under the operator when the rows arrive.
  */
 const COLUMN_BAR_WIDTHS: Record<string, number> = {
-  "Sr. No.": 28, "Lead No.": 44, Created: 78, "CP Name": 104, "CP Company": 112,
+  "Lead No.": 28, "Sr. No.": 44, Created: 78, "CP Name": 104, "CP Company": 112,
   "CP Phone": 84, "Office Address": 150, "Owner / Contact": 96, GST: 108, RERA: 96,
   "CP City": 62, "CP Pin": 48, "Client Name": 104, "Client Phone": 84, "Alt Phone": 84,
   "Client Email": 128, "Preferred Location": 108, Budget: 70, Requirement: 96,
-  "Sourcing Manager": 96, "Sales Manager": 96, Status: 62,
+  "Sourcing Manager": 96, "Sales M anager": 96, Status: 62,
 };
 
 const requirementOf = (r: EnquiryRowData) => {

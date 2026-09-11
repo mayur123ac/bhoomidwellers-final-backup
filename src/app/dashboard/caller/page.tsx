@@ -21,6 +21,7 @@ import CallingButtons from "@/components/CallingButtons";
 import UserAvatar from "@/components/UserAvatar";
 import HeaderClock from "@/components/HeaderClock";
 import { APP_HEADER_HEIGHT, APP_HEADER_PADDING } from "@/components/AppHeader";
+import LogoutConfirmDialog from "@/components/LogoutConfirmDialog";
 
 // ─────────────────────────────────────────────
 // TYPES
@@ -904,6 +905,7 @@ export default function PresalesCallerPanel() {
   const interestedLeads = savedLeads.filter(l => l.interestStatus === "Interested");
   const notIntLeads = savedLeads.filter(l => l.status === "not_interested");
   const handleLogout = () => { clearCrmSession(); router.replace("/"); };
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   const sidebarItems = [
     { id: "dashboard" as SidebarSection, icon: FaThLarge, label: "Dashboard", badge: null, activeColor: "text-purple-400 bg-purple-500/10", dotColor: "bg-purple-500" },
@@ -1008,7 +1010,7 @@ export default function PresalesCallerPanel() {
                   <p className="text-gray-400 text-xs truncate mb-3">{user.email}</p>
                   <hr className="border-[#2a2a2a] mb-3" />
                   <p className="text-gray-400 text-sm flex justify-between">Role<span className="text-purple-400 font-bold capitalize">{user.role}</span></p>
-                  <button onClick={handleLogout} className="w-full mt-4 bg-red-900/30 text-red-400 hover:bg-red-900/50 border border-red-900/30 py-2 rounded-lg font-semibold cursor-pointer text-sm">Logout</button>
+                  <button onClick={() => setShowLogoutConfirm(true)} className="w-full mt-4 bg-red-900/30 text-red-400 hover:bg-red-900/50 border border-red-900/30 py-2 rounded-lg font-semibold cursor-pointer text-sm">Logout</button>
                 </div>
               )}
             </div>
@@ -1177,6 +1179,13 @@ export default function PresalesCallerPanel() {
         @keyframes fadeIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
         .animate-fadeIn{animation:fadeIn 0.2s ease-out}
       `}} />
+
+      <LogoutConfirmDialog
+        open={showLogoutConfirm}
+        isDark={true}
+        onClose={() => setShowLogoutConfirm(false)}
+        onConfirm={handleLogout}
+      />
     </div>
   );
 }

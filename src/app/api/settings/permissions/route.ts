@@ -1,93 +1,171 @@
+// app/api/settings/permissions/route.ts — per-employee permission management.
+//
+// GET  /api/settings/permissions
+//   Admin: returns all active employees in the org with their current
+//   permission overrides. Used by the Members & Team admin panel.
+//   Employee: returns the caller's own permissions. Used by the Members & Team
+//   self-service view.
+//
+// PUT  /api/settings/permissions
+//   Admin only. Updates one or more permissions for a target employee.
+//   Body: { targetUserId: number, can_change_password?: boolean }
+//
+// Permissions themselves are stored in `user_permissions` (see lib/permissions.ts).
+// The table is created on first access — no migration needed.
+
 import { NextRequest, NextResponse } from "next/server";
-import { requireSession, requireRoles } from "@/lib/serverAuth";
 import { query } from "@/lib/db";
+import { getOrganizationId } from "@/lib/tenantContext";
+import { requireRoles, requireSession } from "@/lib/serverAuth";
+import { writeAuditLog, requestContext } from "@/lib/auditLog";
+import { getPermissions, listPermissions, setPermissions } from "@/lib/permissions";
 import { avatarSrc } from "@/lib/settingsUser";
 
 export const dynamic = "force-dynamic";
 
-const DEFAULT_PERMISSIONS = { can_change_password: true };
+// ── GET ───────────────────────────────────────────────────────────────────────
 
-// GET /api/settings/permissions
-export async function GET(req: NextRequest) {
+export async function GET() {
   const gate = await requireSession();
   if (!gate.ok) return gate.response;
 
-  const userId = gate.userId;
-  const orgId = gate.session.org;
-  const role = (gate.session.role ?? "").toLowerCase().replace(/_/g, " ");
-  const isAdmin = role === "admin" || role === "super admin";
+  const userId = gate.userId!;
+  const session = gate.session;
+  const isAdmin =
+    session.role === "admin" ||
+    session.role === "super_admin" ||
+    session.role === "Admin" ||
+    session.role === "Super Admin";
 
-  try {
-    if (isAdmin) {
-      // Admin view: list all members with their permissions
-      const conditions = ["u.deleted_at IS NULL"];
-      const params: any[] = [];
-      let idx = 1;
+  const orgId = await getOrganizationId();
 
-      if (orgId) {
-        conditions.push(`u.organization_id = $${idx++}`);
-        params.push(orgId);
-      }
-
-      const rows = await query<any>(
-        `SELECT u.id, u.name, u.email, u.role, u.department,
-                u.avatar_key, u.avatar_url, u.permissions
-         FROM users u
-         WHERE ${conditions.join(" AND ")}
-         ORDER BY u.name ASC`,
-        params
-      );
-
-      const members = rows.map((r: any) => ({
-        id: r.id,
-        name: r.name,
-        email: r.email,
-        role: r.role,
-        department: r.department,
-        avatarUrl: avatarSrc(r),
-        permissions: r.permissions ?? DEFAULT_PERMISSIONS,
-      }));
-
-      return NextResponse.json({ success: true, members });
-    } else {
-      // Non-admin view: just their own permissions
-      const rows = await query<any>(
-        `SELECT permissions FROM users WHERE id = $1 LIMIT 1`,
-        [userId]
-      );
-      const permissions = rows[0]?.permissions ?? DEFAULT_PERMISSIONS;
-      return NextResponse.json({ success: true, own: true, permissions });
-    }
-  } catch (err: any) {
-    console.error("[GET /api/settings/permissions]", err);
-    return NextResponse.json({ success: false, message: err.message }, { status: 500 });
+  if (!isAdmin) {
+    // Non-admin: return only their own permissions.
+    const perms = await getPermissions(userId);
+    return NextResponse.json({ own: true, permissions: perms });
   }
+
+  // Admin: return all employees with their permission overrides.
+  const [permList, employees] = await Promise.all([
+    listPermissions(orgId),
+    query<{
+      id: number;
+      name: string;
+      email: string | null;
+      role: string | null;
+      department: string | null;
+      is_active: boolean;
+      avatar_key: string | null;
+      avatar_url: string | null;
+    }>(
+      `SELECT id, name, email, role, department, is_active, avatar_key, avatar_url
+         FROM users
+        WHERE organization_id = $1
+          AND is_active = true
+          AND deleted_at IS NULL
+        ORDER BY name`,
+      [orgId]
+    ),
+  ]);
+
+  const permMap = new Map(permList.map((p) => [p.userId, p]));
+
+  const members = employees.map((emp) => {
+    const p = permMap.get(emp.id);
+    return {
+      id: emp.id,
+      name: emp.name,
+      email: emp.email,
+      role: emp.role,
+      department: emp.department,
+      avatarUrl: avatarSrc({ avatar_key: emp.avatar_key, avatar_url: emp.avatar_url }),
+      permissions: {
+        can_change_password: p?.can_change_password ?? true,
+      },
+    };
+  });
+
+  return NextResponse.json({ own: false, members });
 }
 
-// POST /api/settings/permissions — update a member's permissions (admin only)
-export async function POST(req: NextRequest) {
+// ── PUT ───────────────────────────────────────────────────────────────────────
+
+export async function PUT(req: NextRequest) {
+  const { ip, userAgent } = requestContext(req);
+
   const gate = await requireRoles(["admin", "super_admin"]);
   if (!gate.ok) return gate.response;
 
+  const adminId = gate.userId!;
+  const admin = gate.session;
+  const orgId = await getOrganizationId();
+
+  let body: Record<string, unknown>;
   try {
-    const body = await req.json();
-
-    if (!body.userId) {
-      return NextResponse.json({ success: false, message: "User ID is required." }, { status: 400 });
-    }
-
-    const permissions = {
-      can_change_password: body.permissions?.can_change_password !== false,
-    };
-
-    await query(
-      `UPDATE users SET permissions = $1::jsonb WHERE id = $2`,
-      [JSON.stringify(permissions), body.userId]
+    body = await req.json();
+  } catch {
+    return NextResponse.json(
+      { success: false, message: "Invalid JSON body." },
+      { status: 400 }
     );
-
-    return NextResponse.json({ success: true, message: "Permissions saved." });
-  } catch (err: any) {
-    console.error("[POST /api/settings/permissions]", err);
-    return NextResponse.json({ success: false, message: err.message }, { status: 500 });
   }
+
+  const targetUserId = Number(body?.targetUserId);
+  if (!Number.isFinite(targetUserId) || targetUserId <= 0) {
+    return NextResponse.json(
+      { success: false, message: "Invalid target user." },
+      { status: 400 }
+    );
+  }
+
+  // Verify the target exists in the same org.
+  const targets = await query<{ name: string }>(
+    `SELECT name FROM users
+      WHERE id = $1
+        AND organization_id = $2
+        AND deleted_at IS NULL
+      LIMIT 1`,
+    [targetUserId, orgId]
+  );
+  if (targets.length === 0) {
+    return NextResponse.json(
+      { success: false, message: "Employee not found." },
+      { status: 404 }
+    );
+  }
+  const targetName = targets[0].name;
+
+  // Extract and validate permission values.
+  const updates: { can_change_password?: boolean } = {};
+  if (body.can_change_password !== undefined) {
+    if (typeof body.can_change_password !== "boolean") {
+      return NextResponse.json(
+        { success: false, message: "can_change_password must be a boolean." },
+        { status: 400 }
+      );
+    }
+    updates.can_change_password = body.can_change_password;
+  }
+
+  if (Object.keys(updates).length === 0) {
+    return NextResponse.json(
+      { success: false, message: "No permission fields supplied." },
+      { status: 400 }
+    );
+  }
+
+  await setPermissions(targetUserId, orgId, updates, adminId);
+
+  void writeAuditLog({
+    userId: adminId,
+    actorName: admin.name,
+    action: "permissions.updated",
+    entityType: "user",
+    entityId: String(targetUserId),
+    ipAddress: ip,
+    userAgent,
+    newValue: { targetName, updates },
+  });
+
+  return NextResponse.json({ success: true, message: "Permissions updated." });
 }

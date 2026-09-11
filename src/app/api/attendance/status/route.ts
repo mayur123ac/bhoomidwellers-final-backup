@@ -46,10 +46,11 @@ export async function GET() {
                 (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date::text AS today_ist,
                 ar.id,
                 ar.login_time,
+                ar.logout_time,
                 ar.attendance_status
             FROM (SELECT 1) AS _
             LEFT JOIN LATERAL (
-                SELECT id, login_time, attendance_status
+                SELECT id, login_time, logout_time, attendance_status, working_track
                 FROM attendance_records
                 WHERE employee_id = $1 AND organization_id = $2
                   AND DATE(login_time AT TIME ZONE 'Asia/Kolkata') = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date
@@ -68,8 +69,10 @@ export async function GET() {
             date: row?.today_ist ?? null,
             status: row?.attendance_status ?? null,
             timeIn: row?.login_time ?? null,
+            logoutTime: row?.logout_time ?? null,
+            workingTrack: row?.working_track ?? null,
         }, { status: 200 });
-    } catch (err: any) {
+    } catch (err) {
         console.error("Attendance Status Error:", err);
         return NextResponse.json({ success: false, message: "Internal Server Error" }, { status: 500 });
     }

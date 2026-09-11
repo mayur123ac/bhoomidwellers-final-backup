@@ -29,6 +29,7 @@ import UserAvatar from "@/components/UserAvatar";
 import HeaderClock from "@/components/HeaderClock";
 import AppHeader, { HeaderControl, AppLogo } from "@/components/AppHeader";
 import { APP_HEADER_HEIGHT, APP_HEADER_PADDING } from "@/components/AppHeader";
+import LogoutConfirmDialog from "@/components/LogoutConfirmDialog";
 /**
  * The theme object two panels on this page are given.
  *
@@ -117,6 +118,7 @@ export default function SourcingManagerDashboard() {
   }, [router, fetchPartners]);
 
   const handleLogout = () => { clearCrmSession(); router.replace("/"); };
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   // ── Stats ──
   const now = new Date();
@@ -301,7 +303,7 @@ export default function SourcingManagerDashboard() {
                       </div>
                     </div>
 
-                    <button onClick={handleLogout} className="w-full py-2 rounded-xl font-medium text-[11px] text-red-500 bg-red-50 dark:bg-red-500/10 transition-colors active:scale-95">
+                    <button onClick={() => setShowLogoutConfirm(true)} className="w-full py-2 rounded-xl font-medium text-[11px] text-red-500 bg-red-50 dark:bg-red-500/10 transition-colors active:scale-95">
                       Log Out
                     </button>
                   </motion.div>
@@ -513,6 +515,13 @@ export default function SourcingManagerDashboard() {
         isDark={isDark}
         t={NO_THEME_TOKENS}
         variant="office_visit"
+      />
+
+      <LogoutConfirmDialog
+        open={showLogoutConfirm}
+        isDark={isDark}
+        onClose={() => setShowLogoutConfirm(false)}
+        onConfirm={handleLogout}
       />
     </div>
   );

@@ -40,6 +40,34 @@ export async function bulkInsertLeads(
     // tenant depend on when each row happened to be processed.
     const orgId = await getOrganizationId(client);
 
+    // Resolve ownership names → user IDs once for the entire batch.
+    // Both assignedTo and overseeingSiteHead are constant across all rows in
+    // a single import, so one lookup each is sufficient.
+    const [assignedToUserRow, siteHeadUserRow] = await Promise.all([
+      assignedTo
+        ? client.query(
+            `SELECT id FROM users
+             WHERE organization_id = $1
+               AND LOWER(TRIM(name)) = LOWER(TRIM($2))
+               AND deleted_at IS NULL
+             ORDER BY is_active DESC, id ASC LIMIT 1`,
+            [orgId, assignedTo]
+          )
+        : Promise.resolve({ rows: [] as { id: number }[] }),
+      overseeingSiteHead
+        ? client.query(
+            `SELECT id FROM users
+             WHERE organization_id = $1
+               AND LOWER(TRIM(name)) = LOWER(TRIM($2))
+               AND deleted_at IS NULL
+             ORDER BY is_active DESC, id ASC LIMIT 1`,
+            [orgId, overseeingSiteHead]
+          )
+        : Promise.resolve({ rows: [] as { id: number }[] }),
+    ]);
+    const assignedToUserId: number | null = assignedToUserRow.rows[0]?.id ?? null;
+    const siteHeadUserId: number | null = siteHeadUserRow.rows[0]?.id ?? null;
+
     let inserted = 0;
     const skipped: SkippedRow[] = [];
 
@@ -70,6 +98,7 @@ export async function bulkInsertLeads(
           loan_planned, assigned_to, assigned_receptionist, status,
           is_global_shared, overseeing_site_head,
           enquiry_date, auto_date_enabled, external_ref, channel_partner_id,
+          assigned_to_user_id, overseeing_site_head_user_id,
           organization_id
         )
         VALUES (
@@ -80,7 +109,8 @@ export async function bulkInsertLeads(
           $17, $18, $19, $20,
           $21, $22,
           $23, $24, $25, $26,
-          $27
+          $27, $28,
+          $29
         )
         ON CONFLICT (organization_id, external_ref) WHERE external_ref IS NOT NULL DO NOTHING
         RETURNING id`,
@@ -111,7 +141,9 @@ export async function bulkInsertLeads(
           false, // $24 auto_date_enabled
           clamp(row.external_ref || null, 100), // $25 external_ref
           channelPartnerId, // $26
-          orgId, // $27
+          assignedToUserId, // $27
+          siteHeadUserId, // $28
+          orgId, // $29
         ]
       );
 

@@ -39,6 +39,7 @@ const adminScope: AiScope = {
   organizationId: ORG_A,
   canReadAllRecords: true,
   ownershipColumns: [],
+  ownershipFkColumns: [],
 };
 
 /** Receptionist of org A — owns leads via assigned_to / assigned_receptionist. */
@@ -49,6 +50,7 @@ const receptionistScope: AiScope = {
   organizationId: ORG_A,
   canReadAllRecords: false,
   ownershipColumns: ["assigned_to", "assigned_receptionist"],
+  ownershipFkColumns: ["assigned_to_user_id", "assigned_receptionist_user_id"],
 };
 
 /** Site Head of org A — owns leads via assigned_to / overseeing_site_head. */
@@ -59,6 +61,7 @@ const siteHeadScope: AiScope = {
   organizationId: ORG_A,
   canReadAllRecords: false,
   ownershipColumns: ["assigned_to", "overseeing_site_head"],
+  ownershipFkColumns: ["assigned_to_user_id", "overseeing_site_head_user_id"],
 };
 
 /**
