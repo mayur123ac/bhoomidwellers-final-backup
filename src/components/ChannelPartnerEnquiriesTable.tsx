@@ -350,7 +350,7 @@ function ChannelPartnerEnquiriesTable({
     ]
     : [
       ...(showSerial ? ["Sr. No."] : []),
-      "Lead No.", "Created", "CP Name", "CP Company", "CP Phone",
+      "Sr. No.", "Created", "CP Name", "CP Company", "CP Phone",
       "Office Address", "Owner / Contact", "GST", "RERA", "CP City", "CP Pin",
       "Client Name", "Client Phone", "Alt Phone", "Client Email",
       "Preferred Location", "Budget", "Requirement", "Sourcing Manager", "Sales Manager", "Status",

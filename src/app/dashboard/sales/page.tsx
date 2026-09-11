@@ -1603,10 +1603,10 @@ function SalesManagerView({
     () => adminUser.role === "admin"
       ? allLeads
       : allLeads.filter((l: any) =>
-          l.assigned_to_user_id != null
-            ? Number(l.assigned_to_user_id) === Number(adminUser._id)
-            : l.assigned_to?.trim() === adminUser.name?.trim()
-        ),
+        l.assigned_to_user_id != null
+          ? Number(l.assigned_to_user_id) === Number(adminUser._id)
+          : l.assigned_to?.trim() === adminUser.name?.trim()
+      ),
     [allLeads, adminUser.role, adminUser._id, adminUser.name]
   );
 
@@ -2229,7 +2229,7 @@ function SalesManagerView({
                   />
                   <ToolbarButton
                     onClick={() => downloadCSV(filteredDatabaseLeads.map((l: any) => ({
-                      "Lead No.": l.sr_no || l.id,
+                      "Sr. No.": l.sr_no || l.id,
                       "Name": l.name,
                       "Property Type": l.propType || l.configuration || "",
                       "Budget": l.salesBudget || l.budget || "",
@@ -2623,7 +2623,7 @@ function SalesManagerView({
                 <table className="w-full text-left border-collapse whitespace-nowrap">
                   <thead>
                     <tr className={t.tableHead}>
-                      {["Lead No.", "Client Name", "Budget", "Property", "Source", "Cp Name", "Cp Company", "Cp Number", "Status", "Site Visit", "Closing Date", "Actions"].map(h => (
+                      {["Sr.No.", "Client Name", "Budget", "Property", "Source", "Cp Name", "Cp Company", "Cp Number", "Status", "Site Visit", "Closing Date", "Actions"].map(h => (
                         <th
                           key={h}
                           className={`px-4 sm:px-6 py-3 sm:py-4 crm-eyebrow border-b ${t.textHeader} ${t.tableBorder}`}
