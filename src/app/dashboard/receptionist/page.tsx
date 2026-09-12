@@ -689,6 +689,7 @@ export default function ReceptionistDashboard() {
     fullName: "", mobile: "", altMobile: "", email: "", address: "", pinCode: "", city: "",
     occupation: "", organization: "", budget: "", budgetUnit: "lakh", configuration: "",
     purpose: "", source: "", assignedTo: "", loanPlanned: "", sourceOther: "", referralName: "",
+    budgetNotDisclosed: false,
     cpDetails: { name: "", company: "", phone: "" },
     sourcingManagerId: "",   // users.id of the assigned Sourcing Manager (CP enquiries only)
     preferredLocation: "",
@@ -990,7 +991,7 @@ export default function ReceptionistDashboard() {
   const cleanMobileDigits = (raw: string) => raw.replace(/\D/g, "").slice(0, 10);
   const formatBudget = (budget: any, unit: any): string => {
     const b = String(budget || "").trim();
-    if (!b || b === "Pending" || b === "N/A") return b || "Pending";
+    if (!b || b === "Pending" || b === "N/A" || b === "Not Disclosed") return b || "Pending";
     const u = String(unit || "").trim().toLowerCase();
     const label = u === "thousand" ? "Thousand" : u === "crore" ? "Crore" : u === "lakh" ? "Lakh" : "";
     return label ? `₹${b} ${label}` : `₹${b}`;
@@ -1620,9 +1621,13 @@ export default function ReceptionistDashboard() {
     const next = notifQueue[0];
     setActiveNotif(next);
     setNotifQueue(prev => prev.slice(1));
+  }, [activeNotif, notifQueue]);
+
+  useEffect(() => {
+    if (!activeNotif) return;
     const timer = setTimeout(() => setActiveNotif(null), 2000);
     return () => clearTimeout(timer);
-  }, [activeNotif, notifQueue]);
+  }, [activeNotif]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // MERGED LEADS (enrich with follow-up data, same as Sales Manager)
@@ -1777,8 +1782,8 @@ export default function ReceptionistDashboard() {
       city: enquiryForm.city || null,
       occupation: enquiryForm.occupation || "N/A",
       organization: enquiryForm.organization || "N/A",
-      budget: enquiryForm.budget || "Pending",
-      budget_unit: enquiryForm.budget ? enquiryForm.budgetUnit : null,
+      budget: enquiryForm.budgetNotDisclosed ? "Not Disclosed" : (enquiryForm.budget || "Pending"),
+      budget_unit: enquiryForm.budgetNotDisclosed ? null : (enquiryForm.budget ? enquiryForm.budgetUnit : null),
       configuration: enquiryForm.configuration || "N/A",
       purpose: enquiryForm.purpose || "N/A",
       source: enquiryForm.source,
@@ -1835,7 +1840,7 @@ export default function ReceptionistDashboard() {
         setIsRevisit(false);
         setEnquiryForm({
           fullName: "", mobile: "", altMobile: "", email: "", address: "", pinCode: "", city: "", occupation: "", organization: "", budget: "",
-          budgetUnit: "lakh", configuration: "", purpose: "", source: "", assignedTo: "", loanPlanned: "", sourceOther: "", referralName: "", cpDetails: { name: "", company: "", phone: "" }, sourcingManagerId: "", preferredLocation: "", selfAssign: false, enquiryDate: getTodayString()
+          budgetUnit: "lakh", configuration: "", purpose: "", source: "", assignedTo: "", loanPlanned: "", sourceOther: "", referralName: "", budgetNotDisclosed: false, cpDetails: { name: "", company: "", phone: "" }, sourcingManagerId: "", preferredLocation: "", selfAssign: false, enquiryDate: getTodayString()
         });
         refetchAll();
       } else {
@@ -2533,7 +2538,7 @@ export default function ReceptionistDashboard() {
                     {/* CP Office Visit — subtle purple / CP treatment */}
                     <button
                       onClick={() => setIsCpVisitModalOpen(true)}
-                      className={`group flex-1 sm:flex-none flex items-center justify-center sm:justify-start gap-0 sm:gap-2.5 px-2 sm:px-4 py-2 sm:py-3 rounded-xl border shadow-sm transition-all duration-200 min-w-0 ${isDark
+                      className={`group flex-1 sm:flex-none flex items-center justify-center sm:justify-start gap-0 sm:gap-2.5 px-2 sm:px-4 py-2 sm:py-3 rounded-xl border shadow-sm transition-all duration-200 min-w-0 cursor-pointer ${isDark
                         ? "bg-purple-950/40 border-purple-700/40 hover:bg-purple-900/50 hover:border-purple-500/60"
                         : "bg-purple-50 border-purple-200 hover:bg-purple-100 hover:border-purple-300"
                         }`}
@@ -2553,7 +2558,7 @@ export default function ReceptionistDashboard() {
                     {/* Bank Office Visit — subtle blue / bank treatment */}
                     <button
                       onClick={() => setIsBankerVisitModalOpen(true)}
-                      className={`group flex-1 sm:flex-none flex items-center justify-center sm:justify-start gap-0 sm:gap-2.5 px-2 sm:px-4 py-2 sm:py-3 rounded-xl border shadow-sm transition-all duration-200 min-w-0 ${isDark
+                      className={`group flex-1 sm:flex-none flex items-center justify-center sm:justify-start gap-0 sm:gap-2.5 px-2 sm:px-4 py-2 sm:py-3 rounded-xl border shadow-sm transition-all duration-200 min-w-0 cursor-pointer ${isDark
                         ? "bg-blue-950/40 border-blue-700/40 hover:bg-blue-900/50 hover:border-blue-500/60"
                         : "bg-blue-50 border-blue-200 hover:bg-blue-100 hover:border-blue-300"
                         }`}
@@ -2571,7 +2576,7 @@ export default function ReceptionistDashboard() {
                     {/* Create Enquiry — primary BhoomiDwellers green + gold treatment */}
                     <button
                       onClick={() => setIsEnquiryModalOpen(true)}
-                      className="group flex-1 sm:flex-none flex items-center justify-center sm:justify-start gap-1 sm:gap-2.5 px-2 sm:px-4 py-2 sm:py-3 rounded-xl border shadow-md transition-all duration-200 bg-[#1B3A2D] border-[#2D5A41] hover:bg-[#22472F] hover:shadow-lg hover:border-[#3A7A55] min-w-0"
+                      className="group flex-1 sm:flex-none flex items-center justify-center sm:justify-start gap-1 sm:gap-2.5 px-2 sm:px-4 py-2 sm:py-3 rounded-xl border shadow-md transition-all duration-200 bg-[#1B3A2D] border-[#2D5A41] hover:bg-[#22472F] cursor-pointer hover:shadow-lg hover:border-[#3A7A55] min-w-0"
                     >
                       {/* "+" kept on all sizes — it's the clearest visual cue for this action */}
                       <div className="flex-shrink-0 w-5 h-5 sm:w-7 sm:h-7 rounded-full bg-[#C9A84C]/20 border border-[#C9A84C]/50 flex items-center justify-center">
@@ -4474,92 +4479,125 @@ export default function ReceptionistDashboard() {
                   <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-6">
 
                     <div>
-                      <label
-                        className={`block text-[12px] mb-2 font-semibold uppercase tracking-wider ${isDark ? "text-gray-400" : "text-gray-500"
-                          }`}
-                      >
-                        Budget *
-                      </label>
-
-                      <div
-                        className={`flex items-stretch w-full rounded-2xl border overflow-hidden transition-all duration-200 ${isDark
-                          ? "bg-[#242424] border-gray-700 focus-within:border-[#C5A059]"
-                          : "bg-gray-50 border-gray-200 focus-within:border-[#18392B] focus-within:bg-white"
-                          } focus-within:ring-1 focus-within:ring-[#C5A059]`}
-                      >
-                        {/* Currency */}
-                        <div
-                          className={`flex items-center pl-4 pr-2 text-[15px] font-medium ${isDark ? "text-gray-400" : "text-gray-500"
+                      <div className="flex items-center justify-between mb-2">
+                        <label
+                          className={`block text-[12px] font-semibold uppercase tracking-wider ${isDark ? "text-gray-400" : "text-gray-500"
                             }`}
                         >
-                          ₹
-                        </div>
-
-                        {/* Amount */}
-                        <input
-                          type="number"
-                          required
-                          min="0"
-                          step="0.01"
-                          inputMode="decimal"
-                          value={enquiryForm.budget}
-                          onChange={(e) =>
+                          Budget {!enquiryForm.budgetNotDisclosed && "*"}
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() =>
                             setEnquiryForm({
                               ...enquiryForm,
-                              budget: e.target.value,
+                              budgetNotDisclosed: !enquiryForm.budgetNotDisclosed,
+                              budget: "",
                             })
                           }
-                          className={`flex-1 min-w-0 px-2 py-3.5 text-[15px] outline-none border-none ring-0 focus:outline-none focus:border-none focus:ring-0 bg-transparent appearance-none ${isDark
-                            ? "text-white placeholder:text-gray-500"
-                            : "text-gray-900 placeholder:text-gray-400"
-                            } [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
-                          placeholder="Enter amount"
-                        />
+                          className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-colors cursor-pointer ${enquiryForm.budgetNotDisclosed
+                            ? "eq-selected-btn"
+                            : isDark
+                              ? "bg-[#242424] border-gray-700 text-gray-400 hover:border-[#C5A059]"
+                              : "bg-gray-50 border-gray-200 text-gray-500 hover:border-[#18392B]"
+                            }`}
+                        >
+                          {enquiryForm.budgetNotDisclosed ? "✓ Not Disclosed" : "Not Disclosed?"}
+                        </button>
+                      </div>
 
-                        {/* Budget unit */}
-                        <div className="relative flex items-center">
-                          <select
-                            value={enquiryForm.budgetUnit || "lakh"}
+                      {enquiryForm.budgetNotDisclosed ? (
+                        <div
+                          className={`w-full rounded-2xl border px-4 py-3.5 text-[15px] italic ${isDark
+                            ? "bg-[#242424] border-gray-700 text-gray-500"
+                            : "bg-gray-50 border-gray-200 text-gray-400"
+                            }`}
+                        >
+                          Customer has not disclosed a budget
+                        </div>
+                      ) : (
+                        <div
+                          className={`flex items-stretch w-full rounded-2xl border overflow-hidden transition-all duration-200 ${isDark
+                            ? "bg-[#242424] border-gray-700 focus-within:border-[#C5A059]"
+                            : "bg-gray-50 border-gray-200 focus-within:border-[#18392B] focus-within:bg-white"
+                            } focus-within:ring-1 focus-within:ring-[#C5A059]`}
+                        >
+                          {/* Currency */}
+                          <div
+                            className={`flex items-center pl-4 pr-2 text-[15px] font-medium ${isDark ? "text-gray-400" : "text-gray-500"
+                              }`}
+                          >
+                            ₹
+                          </div>
+
+                          {/* Amount */}
+                          <input
+                            type="number"
+                            required
+                            min="0"
+                            step="0.01"
+                            inputMode="decimal"
+                            value={enquiryForm.budget}
                             onChange={(e) =>
                               setEnquiryForm({
                                 ...enquiryForm,
-                                budgetUnit: e.target.value,
+                                budget: e.target.value,
                               })
                             }
-                            className={`h-full appearance-none border-l pl-4 pr-10 py-3.5 text-[14px] font-medium outline-none cursor-pointer ${isDark
-                              ? "bg-[#242424] text-white border-gray-700"
-                              : "bg-gray-50 text-gray-900 border-gray-200"
-                              }`}
-                          >
-                            <option value="thousand">Thousand</option>
-                            <option value="lakh">Lakh</option>
-                            <option value="crore">Crore</option>
-                          </select>
+                            className={`flex-1 min-w-0 px-2 py-3.5 text-[15px] outline-none border-none ring-0 focus:outline-none focus:border-none focus:ring-0 bg-transparent appearance-none ${isDark
+                              ? "text-white placeholder:text-gray-500"
+                              : "text-gray-900 placeholder:text-gray-400"
+                              } [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
+                            placeholder="Enter amount"
+                          />
 
-                          {/* Chevron */}
-                          <svg
-                            className={`pointer-events-none absolute right-4 w-3.5 h-3.5 ${isDark ? "text-gray-400" : "text-gray-500"
-                              }`}
-                            viewBox="0 0 20 20"
-                            fill="none"
-                            aria-hidden="true"
-                          >
-                            <path
-                              d="M5 7.5L10 12.5L15 7.5"
-                              stroke="currentColor"
-                              strokeWidth="1.8"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                          </svg>
+                          {/* Budget unit */}
+                          <div className="relative flex items-center">
+                            <select
+                              value={enquiryForm.budgetUnit || "lakh"}
+                              onChange={(e) =>
+                                setEnquiryForm({
+                                  ...enquiryForm,
+                                  budgetUnit: e.target.value,
+                                })
+                              }
+                              className={`h-full appearance-none border-l pl-4 pr-10 py-3.5 text-[14px] font-medium outline-none cursor-pointer ${isDark
+                                ? "bg-[#242424] text-white border-gray-700"
+                                : "bg-gray-50 text-gray-900 border-gray-200"
+                                }`}
+                            >
+                              <option value="thousand">Thousand</option>
+                              <option value="lakh">Lakh</option>
+                              <option value="crore">Crore</option>
+                            </select>
+
+                            {/* Chevron */}
+                            <svg
+                              className={`pointer-events-none absolute right-4 w-3.5 h-3.5 ${isDark ? "text-gray-400" : "text-gray-500"
+                                }`}
+                              viewBox="0 0 20 20"
+                              fill="none"
+                              aria-hidden="true"
+                            >
+                              <path
+                                d="M5 7.5L10 12.5L15 7.5"
+                                stroke="currentColor"
+                                strokeWidth="1.8"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          </div>
                         </div>
-                      </div>
+                      )}
 
                       <p
                         className={`mt-1.5 text-[11px] ${isDark ? "text-gray-500" : "text-gray-400"
                           }`}
                       >
-                        Enter the amount and select the unit.
+                        {enquiryForm.budgetNotDisclosed
+                          ? "Tap \"Not Disclosed\" again to enter an amount."
+                          : "Enter the amount and select the unit."}
                       </p>
                     </div>
 
@@ -4886,6 +4924,8 @@ export default function ReceptionistDashboard() {
                         placeholder="e.g. Baner, Wakad"
                       />
                     </div>
+
+
 
                     <div className="md:col-span-2">
                       <label className={`block text-[12px] mb-3 font-semibold uppercase tracking-wider ${isDark ? "text-gray-400" : "text-gray-500"}`}>Purpose of Purchase</label>

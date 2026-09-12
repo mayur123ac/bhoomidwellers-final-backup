@@ -598,9 +598,13 @@ export default function EmployeesPage() {
     const nextNotif = notifQueue[0];
     setActiveNotif(nextNotif);
     setNotifQueue(prev => prev.slice(1));
+  }, [notifQueue, activeNotif]);
+
+  useEffect(() => {
+    if (!activeNotif) return;
     const t = setTimeout(() => setActiveNotif(null), 2000);
     return () => clearTimeout(t);
-  }, [notifQueue, activeNotif]);
+  }, [activeNotif]);
 
   useEffect(() => {
     if (activeSection === "callers") fetchCallerData();

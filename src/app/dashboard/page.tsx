@@ -957,13 +957,15 @@ function AdminAtlasDashboardContent() {
     const nextNotif = notifQueue[0];
     setActiveNotif(nextNotif);
     setNotifQueue(prev => prev.slice(1));
+  }, [activeNotif, notifQueue]);
 
+  useEffect(() => {
+    if (!activeNotif) return;
     const timer = setTimeout(() => {
       setActiveNotif(null);
     }, 2000);
-
     return () => clearTimeout(timer);
-  }, [activeNotif, notifQueue]);
+  }, [activeNotif]);
 
   const handleLogout = () => { clearCrmSession(); router.replace("/"); };
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
