@@ -16,7 +16,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 
 vi.mock("@/lib/db", () => {
   const mockClient = {
-    query: vi.fn(async () => ({ rows: [{ id: 999 }] })),
+    query: vi.fn(async () => ({ rows: [{ id: 999, normalized_role: "sales manager" }] })),
   };
   return {
     query: vi.fn(async () => []),
@@ -34,6 +34,7 @@ vi.mock("@/lib/serverAuth", () => ({
   getServerSession: vi.fn(async () => ({
     _id: "1", name: "Front Desk", email: "desk@test.com", role: "Receptionist", org: "test-org",
   })),
+  getSessionUserId: vi.fn((_session: any) => 1),
 }));
 
 vi.mock("@/lib/cpCommissionEngine", () => ({
@@ -86,7 +87,7 @@ describe("POST /api/walkin_enquiries — returning lead classification", () => {
 
     // Default transaction mock: returns a row with the classification
     const mockClient = {
-      query: vi.fn(async () => ({ rows: [{ id: 999 }] })),
+      query: vi.fn(async () => ({ rows: [{ id: 999, normalized_role: "sales manager" }] })),
     };
     mockTransaction.mockImplementation(async (fn: any) => {
       const result = await fn(mockClient);

@@ -22,7 +22,7 @@ import {
   FaPhoneAlt, FaUserCircle, FaBriefcase, FaSearch, FaDownload,
   FaFileInvoice, FaHandshake, FaUniversity, FaUsers, FaFileAlt,
   FaClock, FaMicrophone, FaWhatsapp, FaCheckCircle,
-  FaExchangeAlt, FaUserTie, FaChartPie, FaInfoCircle, FaSyncAlt,
+  FaUserTie, FaChartPie, FaInfoCircle, FaSyncAlt,
   FaChevronDown, FaTable, FaUser, FaHome, FaBullhorn
 } from "react-icons/fa";
 import { FiUser, FiHelpCircle, FiLogOut, FiChevronRight } from "react-icons/fi";
@@ -860,19 +860,8 @@ export default function ReceptionistDashboard() {
   const [assignedCardsPage, setAssignedCardsPage] = useState(1);
   const assignedSentinelRef = useRef<HTMLDivElement>(null);
 
-  // ── Transfer modal ──
-
-  // const [transferNote, setTransferNote]       = useState("");
-  // const [transferTarget, setTransferTarget]   = useState("");
-  // const [isTransferring, setIsTransferring]   = useState(false);
-  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);  // keep existing
-
-  // Transfer state (Receptionist Lead → Manager)
+  // Transfer modal state removed (P0-3: receptionists may not transfer leads).
   const [assignedToError, setAssignedToError] = useState("");
-
-  const [transferNote, setTransferNote] = useState("");
-  const [transferTarget, setTransferTarget] = useState("");
-  const [isTransferring, setIsTransferring] = useState(false);
   // ── Receptionist Leads tab ──
   const [searchRecepLeads, setSearchRecepLeads] = useState("");
   const recepLeadsSentinelRef = useRef<HTMLDivElement>(null);
@@ -1982,43 +1971,7 @@ export default function ReceptionistDashboard() {
     finally { setIsReopening(false); }
   };
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // TRANSFER LEAD
-  // ─────────────────────────────────────────────────────────────────────────
-  const handleTransferLead = async () => {
-    if (!selectedLead || !transferTarget || transferNote.trim().length < 50) return;
-    setIsTransferring(true);
-
-    try {
-      const res = await fetch("/api/leads/transfer", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          lead_id: selectedLead.id,
-          transfer_to: transferTarget,
-          transfer_note: transferNote,
-          transferred_by: user.name,
-        }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message ?? "Transfer failed");
-      }
-
-      setIsTransferModalOpen(false);
-      setTransferNote("");
-      setTransferTarget("");
-      showToast(`✅ Lead #${selectedLead.sr_no || selectedLead.id} transferred to ${transferTarget}!`);
-      setAssignedSubView("cards");
-      setActiveTab(detailReturnTab);
-      refetchAll();
-    } catch (e: any) {
-      alert(e.message ?? "Transfer failed. Try again.");
-    } finally {
-      setIsTransferring(false);
-    }
-  };
+  // handleTransferLead removed (P0-3: receptionists may not transfer leads).
 
   // handleChatSubmit lived here: a setTimeout, three `userMsg.includes(...)`
   // branches and a default apology. It is gone with the mock it drove.
@@ -3379,10 +3332,7 @@ export default function ReceptionistDashboard() {
                                   <AlertTriangle className="w-3.5 h-3.5" /> Mark Lost
                                 </button>
                               )}
-                              <button onClick={() => { setTransferTarget(""); setTransferNote(""); setIsTransferModalOpen(true); }}
-                                className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center gap-1 sm:gap-1.5 flex-1 sm:flex-none min-w-[80px] sm:min-w-[110px] min-h-[36px] sm:min-h-0 transition-colors cursor-pointer shadow-sm whitespace-nowrap ${isDark ? "bg-purple-600 hover:bg-purple-500 text-white" : "bg-purple-600 hover:bg-purple-700 text-white"}`}>
-                                <FaExchangeAlt className="text-[10px]" /> Transfer
-                              </button>
+                              {/* Transfer button removed (P0-3) */}
                             </>
                           )
                         )}
@@ -3645,7 +3595,7 @@ export default function ReceptionistDashboard() {
               >
                 <div className="flex flex-col sm:flex-row w-full sm:w-auto gap-2 sm:gap-3 mt-3 sm:mt-0">
                   <ToolbarButton
-                    onClick={() => downloadCSV(filteredRecepLeads.map((l: any) => ({ "Sr. No.": l.sr_no || l.id, "Client Name": l.name, "CP Company": l.cp_company || "N/A", "Budget": l.salesBudget || l.budget || "N/A", "Phone": maskPhone(l.phone), "Alt Phone": maskPhone(l.altPhone), "Date Created": l.date, "Assigned to Receptionist": l.assignedReceptionist || user.name, "Status": l.status || "Assigned" })), "Receptionist_Leads.csv")}
+                    onClick={() => downloadCSV(filteredRecepLeads.map((l: any) => ({ "Sr. No.": l.sr_no || l.id, "Client Name": l.name, "CP Company": l.cp_company || "N/A", "Budget": l.salesBudget || l.budget || "N/A", "Phone": maskPhone(l.phone), "Alt Phone": maskPhone(l.altPhone), "Date Created": l.date, "Assigned to": l.assignedReceptionist || l.assignedTo || "Unassigned", "Status": l.status || "Assigned" })), "Receptionist_Leads.csv")}
                     icon={<FaDownload className="text-[13px] sm:text-[11px]" />} variant="export" isDark={isDark} title="Download these leads as CSV">
                     <span className="w-full text-center">Export</span>
                   </ToolbarButton>
@@ -3851,7 +3801,7 @@ export default function ReceptionistDashboard() {
 
                             {!hiddenRecepCols.has("assigned_to") && <td className="px-3 sm:px-4 py-3.5 sm:py-4">
                               <span className={`inline-flex items-center px-2 py-1 sm:py-1.5 rounded-md text-[10px] sm:text-[11px] font-bold tracking-wide ${isDark ? "bg-purple-500/10 text-purple-400 border border-purple-500/30" : "bg-[#9E217B]/10 text-[#9E217B] border border-[#9E217B]/30"}`}>
-                                {lead.assignedReceptionist || user.name}
+                                {lead.assignedReceptionist || lead.assignedTo || "Unassigned"}
                               </span>
                             </td>}
 
@@ -5400,80 +5350,7 @@ export default function ReceptionistDashboard() {
           onClose={() => setIsWaModalOpen(false)}
         />
       )}
-      {isTransferModalOpen && selectedLead && (
-        <div className="fixed inset-0 bg-black/75 z-[200] flex justify-center items-center p-4 sm:p-6 animate-fadeIn" style={{ backdropFilter: "blur(8px)" }}>
-          <div className={`rounded-2xl w-full max-w-lg shadow-2xl border overflow-hidden ${t.modalCard}`} style={t.modalGlass}>
-            {/* Header */}
-            <div className={`p-5 border-b flex justify-between items-center ${isDark ? "bg-purple-900/20 border-purple-500/20" : "bg-purple-50 border-purple-200"}`}>
-              <div>
-                <h2 className={`text-lg font-bold flex items-center gap-2 ${isDark ? "text-purple-400" : "text-purple-700"}`}>
-                  <FaExchangeAlt /> Transfer Lead #{selectedLead.sr_no || selectedLead.id}
-                </h2>
-                <p className={`text-xs mt-1 ${t.textMuted}`}>Transferring: <strong>{selectedLead.name}</strong></p>
-              </div>
-              <button onClick={() => { setIsTransferModalOpen(false); setTransferNote(""); setTransferTarget(""); }}
-                className={`p-2 ${t.textMuted} hover:text-red-500 transition-colors`}><FaTimes /></button>
-            </div>
-
-            {/* Body */}
-            <div className={`p-6 ${t.modalInner}`}>
-              {/* Transfer target */}
-              <div className="mb-5">
-                <label className={`block text-sm font-bold mb-2 ${isDark ? "text-purple-400" : "text-purple-700"}`}>Transfer to Sales Manager *</label>
-                <select required value={transferTarget} onChange={e => setTransferTarget(e.target.value)}
-                  className={`w-full rounded-xl p-3 text-sm outline-none transition-colors border-2 cursor-pointer ${isDark ? "bg-[#14141B] border-purple-500/40 text-white" : "bg-white border-purple-300 text-[#1A1A1A]"}`}>
-                  <option value="" disabled>-- Select Sales Manager --</option>
-                  {isFetchingManagers ? <option disabled>Loading managers…</option> : combinedAssignees.length > 0 ? combinedAssignees.map((m: any, i: number) => <option key={i} value={m.name}>{m.name} ({String(m.role || "Sales Manager").replace("_", " ")})</option>) : <option disabled>No assignees available</option>}
-                </select>
-              </div>
-
-              {/* Handover note */}
-              <div>
-                <label className={`block text-sm font-bold mb-2 ${isDark ? "text-purple-400" : "text-purple-700"}`}>Handover Summary *</label>
-                <p className={`text-xs mb-3 leading-relaxed ${t.textMuted}`}>
-                  Please summarize all completed actions, discussions held, current interest level, and any pending tasks so the Sales Manager can seamlessly continue from where you left off.
-                </p>
-                <textarea
-                  required
-                  value={transferNote}
-                  onChange={e => setTransferNote(e.target.value)}
-                  placeholder="e.g. Client was contacted twice. Showed interest in 2BHK under 80L budget. Site visit is being considered. Client has pre-approved loan from HDFC. Next step: schedule site visit and share project brochure."
-                  rows={7}
-                  className={`w-full rounded-xl px-4 py-3 text-sm outline-none resize-none leading-relaxed border-2 transition-colors custom-scrollbar ${isDark ? "bg-[#14141B] border-purple-500/30 text-white placeholder:text-gray-600 focus:border-purple-500" : "bg-white border-purple-200 text-[#1A1A1A] placeholder:text-gray-400 focus:border-purple-500"}`}
-                />
-                {transferNote.length > 0 && transferNote.length < 50 && (
-                  <p className="text-xs text-amber-500 mt-1.5">⚠ Please provide a more detailed summary (min 50 characters).</p>
-                )}
-              </div>
-
-              <div className={`mt-4 p-3 rounded-lg border text-xs ${isDark ? "bg-blue-900/10 border-blue-500/20 text-blue-400" : "bg-blue-50 border-blue-200 text-blue-700"}`}>
-                <p className="font-bold mb-1">ℹ What happens after transfer:</p>
-                <ul className="space-y-1 list-disc pl-4">
-                  <li>Lead is reassigned to the selected Sales Manager</li>
-                  <li>All your follow-ups and notes remain fully visible</li>
-                  <li>Your name is preserved in the lead history</li>
-                  <li>Sales Manager will see the full context and continue</li>
-                </ul>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className={`p-5 border-t flex justify-end gap-3 ${t.modalHeader} ${t.tableBorder}`}>
-              <button onClick={() => { setIsTransferModalOpen(false); setTransferNote(""); setTransferTarget(""); }}
-                className={`px-6 py-2.5 rounded-lg font-bold cursor-pointer transition-colors ${t.textMuted} hover:text-red-500`}>Cancel</button>
-              <button
-                onClick={handleTransferLead}
-                disabled={isTransferring || !transferTarget || !transferNote.trim()}
-                className={`px-8 py-2.5 rounded-lg font-bold transition-colors flex items-center gap-2 ${isTransferring || !transferTarget || transferNote.trim().length < 50
-                  ? "opacity-50 cursor-not-allowed bg-purple-400 text-white"
-                  : "cursor-pointer bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-600/20"
-                  }`}>
-                {isTransferring ? "Transferring…" : <><FaExchangeAlt /> Confirm Transfer</>}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Transfer modal removed (P0-3) */}
 
       {/* ── STYLES ── */}
 

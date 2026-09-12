@@ -13,8 +13,7 @@ import BhoomiAiPanel from "@/components/bhoomi-ai/BhoomiAiPanel";
 import { BhoomiAiGlyph } from "@/components/bhoomi-ai/BhoomiAiIcon";
 // The canvas colour, imported rather than retyped, so the header and the
 // workspace below it cannot drift to two slightly different darks.
-import { FiChevronDown, FiCheck } from "react-icons/fi";
-// Add this near your other state declarations:
+// FiChevronDown and FiCheck removed (P0-4: transfer modal removed)
 import { FiUser, FiHelpCircle, FiLogOut, FiChevronRight } from "react-icons/fi";
 import { clearCrmSession, getStoredCrmUser, installLoggedOutBackGuard } from "@/lib/authSession";
 import { useOrgName } from "@/lib/hooks/useOrgName";
@@ -28,7 +27,7 @@ import {
   FaFileExcel, FaDesktop, FaCheckCircle, FaTimes, FaPaperPlane,
   FaCalendarAlt, FaHeart, FaTimesCircle, FaAngleLeft, FaCommentAlt,
   FaMoneyBillWave, FaMapMarkerAlt, FaBullseye, FaSave, FaUniversity, FaBriefcase, FaChartPie,
-  FaExchangeAlt, FaEye, FaExclamationTriangle, FaSignal, FaUserClock, FaWhatsapp,
+  FaEye, FaSignal, FaUserClock, FaWhatsapp,
   FaFileInvoiceDollar, FaBoxes, FaHandshake
 } from "react-icons/fa";
 import NotificationsPanel from "@/components/NotificationsPanel";
@@ -385,13 +384,7 @@ export default function EmployeesPage() {
   const [isFetchingManagers, setIsFetchingManagers] = useState(true);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
-  // ── Transfer Leads state ──
-  const [transferModalOpen, setTransferModalOpen] = useState(false);
-  const [transferFrom, setTransferFrom] = useState<EmployeeType | null>(null);
-  const [transferTo, setTransferTo] = useState("");
-  const [transferLoading, setTransferLoading] = useState(false);
-  const [transferConfirmed, setTransferConfirmed] = useState(false);
-  const [dropdownOpen, setDropdownOpen] = useState(false);
+  // Transfer Leads state removed (P0-4: bulk transfer endpoint retired).
   const combinedAssignees = useMemo(() => {
     return [...salesManagers, ...siteHeads];
   }, [salesManagers, siteHeads]);
@@ -744,37 +737,7 @@ export default function EmployeesPage() {
     finally { setCpLoading(false); }
   };
 
-  // ── Transfer Leads handler ──
-  const handleTransferLeads = async () => {
-    if (!transferFrom || !transferTo || !transferConfirmed) return;
-    setTransferLoading(true);
-    try {
-      const res = await fetch("/api/transfer-leads", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-user-role": user?.role || "",
-        },
-        body: JSON.stringify({ from: transferFrom.name, to: transferTo }),
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        const count = data.transferred || 0;
-        showToast(count > 0 ? `✅ ${count} lead(s) transferred successfully` : "ℹ️ No leads found to transfer");
-        setTransferModalOpen(false);
-        setTransferFrom(null);
-        setTransferTo("");
-        setTransferConfirmed(false);
-        fetchEmployees();
-      } else {
-        showToast(`❌ ${data.message || "Transfer failed"}`);
-      }
-    } catch (err: any) {
-      showToast(`❌ ${err.message || "Transfer failed"}`);
-    } finally {
-      setTransferLoading(false);
-    }
-  };
+  // handleTransferLeads removed (P0-4: bulk transfer endpoint retired).
 
   // ── Caller API ──
   const fetchCallerData = async () => {
@@ -1578,14 +1541,7 @@ export default function EmployeesPage() {
                                     className={`p-2 rounded-lg transition-colors cursor-pointer ${t.textMuted} hover:text-[#d946a8] hover:bg-[#9E217B]/10`}>
                                     <FaUserEdit />
                                   </button>
-                                  {user?.role?.toLowerCase() === "admin" && (
-                                    <button
-                                      onClick={() => { setTransferFrom(emp); setTransferTo(""); setTransferConfirmed(false); setTransferModalOpen(true); }}
-                                      title="Transfer Leads"
-                                      className={`p-2 rounded-lg transition-colors cursor-pointer ${isDark ? "text-orange-400/70 hover:text-orange-300 hover:bg-orange-500/10" : "text-orange-500/70 hover:text-orange-600 hover:bg-orange-500/10"}`}>
-                                      <FaExchangeAlt />
-                                    </button>
-                                  )}
+                                  {/* Transfer Leads button removed (P0-4) */}
                                   <button onClick={() => handleDeleteEmployee(emp._id, emp.name)}
                                     className={`p-2 rounded-lg transition-colors cursor-pointer ${t.textLight2} hover:text-red-500 hover:bg-red-500/10`}>
                                     <FaTrash />
@@ -2078,218 +2034,7 @@ export default function EmployeesPage() {
         )}
       </div>
 
-      {/* ── TRANSFER LEADS MODAL ── */}
-      <AnimatePresence>
-        {transferModalOpen && transferFrom && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-[999] flex items-center justify-center p-4 sm:p-6 bg-black/40 backdrop-blur-[4px]"
-            onClick={() => { if (!transferLoading) { setTransferModalOpen(false); } }}
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              transition={{ duration: 0.2, ease: "easeOut" }}
-              onClick={(e) => e.stopPropagation()}
-              className={`w-full max-w-[420px] rounded-[24px] shadow-2xl overflow-hidden border ${isDark ? "bg-[#1C1C1E]/95 border-white/10" : "bg-[#F2F2F7]/95 border-black/5"
-                }`}
-              style={{ backdropFilter: "blur(24px) saturate(180%)" }}
-            >
-              {/* ── HEADER ── */}
-              <div className={`px-5 py-4 border-b flex items-center gap-3.5 ${isDark ? "border-white/10" : "border-black/5"}`}>
-                <div className="w-10 h-10 rounded-full flex items-center justify-center bg-orange-500/10 flex-shrink-0">
-                  <FaExchangeAlt className="text-[17px] text-orange-500" />
-                </div>
-                <div>
-                  <h2 className={`font-semibold text-[17px] tracking-tight leading-tight ${isDark ? "text-white" : "text-black"}`}>
-                    Transfer All Leads
-                  </h2>
-                  <p className={`text-[13px] tracking-tight mt-0.5 ${isDark ? "text-white/60" : "text-black/60"}`}>
-                    Reassign workload between employees
-                  </p>
-                </div>
-              </div>
-
-              {/* ── BODY ── */}
-              <div className="px-5 py-5 space-y-5">
-
-                {/* iOS Grouped List for Inputs */}
-                <div className={`rounded-[12px] ${isDark ? "bg-[#2C2C2E]" : "bg-white"}`}>
-
-                  {/* Transfer From */}
-                  <div className={`px-4 py-3 border-b flex flex-col gap-1.5 ${isDark ? "border-white/10" : "border-black/5"}`}>
-                    <span className={`text-[12px] font-medium tracking-wide uppercase ${isDark ? "text-white/50" : "text-black/50"}`}>
-                      Transfer From
-                    </span>
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-semibold text-white bg-[#9E217B] flex-shrink-0">
-                        {transferFrom.name.charAt(0).toUpperCase()}
-                      </div>
-                      <span className={`text-[15px] font-medium truncate ${isDark ? "text-white" : "text-black"}`}>
-                        {transferFrom.name}
-                      </span>
-                      <span className={`ml-auto text-[11px] font-medium px-2 py-0.5 rounded border flex-shrink-0 ${isDark ? "text-[#d946a8] bg-[#9E217B]/10 border-[#9E217B]/20" : "text-[#9E217B] bg-[#9E217B]/10 border-[#9E217B]/20"
-                        }`}>
-                        {transferFrom.role}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Transfer To */}
-
-                  <div className="px-4 py-3 flex flex-col gap-1.5 relative"> {/* <-- 1. MUST HAVE 'relative' */}
-                    <label className={`text-[12px] font-medium tracking-wide uppercase ${isDark ? "text-white/50" : "text-black/50"}`}>
-                      Transfer To
-                    </label>
-
-                    {/* Custom Select Trigger */}
-                    <button
-                      type="button"
-                      onClick={() => setDropdownOpen(!dropdownOpen)}
-                      className={`w-full text-left bg-transparent outline-none text-[15px] font-medium cursor-pointer flex justify-between items-center transition-opacity hover:opacity-70 ${!transferTo
-                        ? (isDark ? "text-white/30" : "text-black/30")
-                        : (isDark ? "text-white" : "text-black")
-                        }`}
-                    >
-                      <span className="truncate pr-2">
-                        {transferTo
-                          ? (() => {
-                            const emp = employees.find((e) => e.name === transferTo);
-                            return emp ? `${emp.name} (${emp.role})` : transferTo;
-                          })()
-                          : "-- Select target employee --"}
-                      </span>
-                      <FiChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform duration-200 ${dropdownOpen ? "rotate-180" : ""}`} />
-                    </button>
-
-                    {/* Custom Dropdown List */}
-                    <AnimatePresence>
-                      {dropdownOpen && (
-                        <>
-                          {/* Invisible backdrop to close dropdown when clicking outside */}
-                          <div
-                            className="fixed inset-0 z-40"
-                            onClick={() => setDropdownOpen(false)}
-                          />
-
-                          {/* 2. MUST HAVE 'absolute top-full left-0 w-full z-50' */}
-                          <motion.div
-                            initial={{ opacity: 0, y: -5, scale: 0.98 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, y: -5, scale: 0.98 }}
-                            transition={{ duration: 0.15, ease: "easeOut" }}
-                            className={`absolute top-full mt-2 left-0 w-full z-50 rounded-[14px] border shadow-2xl overflow-y-auto ${isDark ? "bg-[#2C2C2E]/95 border-white/10" : "bg-[#F2F2F7]/95 border-black/5"
-                              }`}
-                            style={{ backdropFilter: "blur(24px) saturate(180%)" }}
-                          >
-                            <div className="max-h-[200px] overflow-y-auto custom-scrollbar p-1.5 flex flex-col gap-0.5">
-                              {employees
-                                .filter(emp => emp._id !== transferFrom._id && emp.isActive && emp.email !== ADMIN_EMAIL)
-                                .map(emp => (
-                                  <button
-                                    key={emp._id}
-                                    type="button"
-                                    onClick={() => {
-                                      setTransferTo(emp.name);
-                                      setDropdownOpen(false);
-                                    }}
-                                    className={`w-full text-left px-3 py-2.5 rounded-[10px] text-[14px] transition-colors flex items-center justify-between group ${transferTo === emp.name
-                                      ? isDark
-                                        ? "bg-white/10 text-white font-semibold"
-                                        : "bg-black/5 text-black font-semibold"
-                                      : isDark
-                                        ? "text-white hover:bg-white/5"
-                                        : "text-black hover:bg-black/[0.04]"
-                                      }`}
-                                  >
-                                    <span className="truncate">
-                                      {emp.name} <span className="opacity-50 text-[12px] font-normal tracking-tight">({emp.role})</span>
-                                    </span>
-                                    {transferTo === emp.name && (
-                                      <FiCheck className="w-4 h-4 ml-2 flex-shrink-0" />
-                                    )}
-                                  </button>
-                                ))}
-
-                              {/* Fallback if list is empty */}
-                              {employees.filter(emp => emp._id !== transferFrom._id && emp.isActive && emp.email !== ADMIN_EMAIL).length === 0 && (
-                                <div className={`px-3 py-3 text-[13px] text-center italic ${isDark ? "text-white/40" : "text-black/40"}`}>
-                                  No other employees available
-                                </div>
-                              )}
-                            </div>
-                          </motion.div>
-                        </>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                </div>
-
-                {/* Warning Banner */}
-                <div className={`flex items-start gap-3 rounded-[12px] p-3.5 ${isDark ? "bg-orange-500/15" : "bg-orange-50"}`}>
-                  <FaExclamationTriangle className={`text-[15px] mt-[2px] flex-shrink-0 ${isDark ? "text-orange-400" : "text-orange-500"}`} />
-                  <p className={`text-[13px] leading-relaxed tracking-tight ${isDark ? "text-orange-200" : "text-orange-800"}`}>
-                    This will transfer <strong className="font-semibold">ALL</strong> leads currently assigned to <strong className="font-semibold">{transferFrom.name}</strong> to the selected employee.
-                  </p>
-                </div>
-
-                {/* Confirmation Checkbox */}
-                <label className="flex items-center gap-3 cursor-pointer select-none group px-1">
-                  <input
-                    type="checkbox"
-                    checked={transferConfirmed}
-                    onChange={e => setTransferConfirmed(e.target.checked)}
-                    className="w-[18px] h-[18px] rounded-[4px] border-2 accent-orange-500 cursor-pointer"
-                  />
-                  <span className={`text-[13px] font-medium tracking-tight transition-colors ${isDark ? "text-white/60 group-hover:text-white/80" : "text-black/60 group-hover:text-black/80"
-                    }`}>
-                    I understand this action cannot be undone
-                  </span>
-                </label>
-              </div>
-
-              {/* ── FOOTER ── */}
-              <div className={`px-5 py-4 border-t flex items-center justify-end gap-2.5 ${isDark ? "border-white/10" : "border-black/5"}`}>
-                <button
-                  onClick={() => { setTransferModalOpen(false); setTransferFrom(null); setTransferTo(""); setTransferConfirmed(false); }}
-                  disabled={transferLoading}
-                  className={`px-5 py-2.5 rounded-[12px] text-[14px] font-semibold transition-colors ${isDark ? "bg-white/10 hover:bg-white/15 text-white" : "bg-black/5 hover:bg-black/10 text-black"
-                    }`}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleTransferLeads}
-                  disabled={!transferTo || !transferConfirmed || transferLoading}
-                  className={`px-5 py-2.5 rounded-[12px] text-[14px] font-semibold transition-all flex items-center gap-2 ${!transferTo || !transferConfirmed || transferLoading
-                    ? isDark
-                      ? "bg-white/5 text-white/30 cursor-not-allowed"
-                      : "bg-black/5 text-black/30 cursor-not-allowed"
-                    : "bg-orange-500 hover:bg-orange-600 text-white shadow-sm active:scale-95"
-                    }`}
-                >
-                  {transferLoading ? (
-                    <>
-                      <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                      </svg>
-                      Transferring...
-                    </>
-                  ) : (
-                    "Transfer Now"
-                  )}
-                </button>
-              </div>
-
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Transfer Leads modal removed (P0-4) */}
 
       {/* ── TOAST NOTIFICATION ── */}
       <AnimatePresence>

@@ -183,7 +183,7 @@ export default function SalesSidebar({
         />
         <div className="flex items-center px-3 mb-6 mt-1 overflow-hidden">
           <img
-            src="/assets/logobrowser_trans.svg"
+            src="/assets/logobrowser_trans.png"
             alt="Logo"
             className="w-10 h-10 rounded-xl object-cover flex-shrink-0 cursor-pointer transition-all duration-300"
           />

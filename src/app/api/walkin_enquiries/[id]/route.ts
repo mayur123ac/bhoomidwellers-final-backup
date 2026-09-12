@@ -1,9 +1,10 @@
 // app/api/walkin_enquiries/[id]/route.ts
 import { NextResponse } from "next/server";
 import { query, transaction, recalculateSrNos } from "@/lib/db";
-import { requireRole, getServerSession } from "@/lib/serverAuth";
+import { requireRole, getServerSession, getSessionUserId } from "@/lib/serverAuth";
 import { normalizeRole } from "@/lib/cpRbac";
 import { getOrganizationId } from "@/lib/tenantContext";
+import { canEditLead, isAssignableRole } from "@/lib/leadAuth";
 import {
   deleteLeadAssets,
   deleteLeadDatabaseRecords,
@@ -109,6 +110,10 @@ export async function PUT(
 
     const body = await req.json();
 
+    // P0-7: Audit identity comes from session, never from body.
+    const sessionUserId = getSessionUserId(session);
+    const sessionName = String(session.name ?? "").trim();
+
     const allowedFields = [
       "name",
       "status",
@@ -125,7 +130,8 @@ export async function PUT(
       "is_lost_lead",
       "lost_lead_reason",
       "lost_lead_marked_at",
-      "lost_lead_marked_by",
+      // "lost_lead_marked_by" is intentionally omitted — it is derived from
+      // the session on the server side, never accepted from the client.
       "enquiry_date",
       "assigned_at",
       "first_contact_at",
@@ -135,10 +141,16 @@ export async function PUT(
       "referral_info",
     ];
 
-
     const result = await transaction(async (client) => {
+      // P0-2: Fetch ownership FK columns so canEditLead() can enforce per-record
+      // ownership. The previous query only included id/assigned_to/status/is_lost_lead,
+      // making it impossible to check whether this session owns the lead.
       const existingRows = await client.query(
-        "SELECT id, assigned_to, status, is_lost_lead FROM walkin_enquiries WHERE id = $1 AND organization_id = $2",
+        `SELECT id, assigned_to, status, is_lost_lead,
+                assigned_to_user_id, assigned_receptionist_user_id, overseeing_site_head_user_id,
+                assigned_receptionist, overseeing_site_head
+         FROM walkin_enquiries
+         WHERE id = $1 AND organization_id = $2`,
         [leadId, await getOrganizationId(client)]
       );
 
@@ -147,6 +159,18 @@ export async function PUT(
       }
 
       const existingLead = existingRows.rows[0];
+
+      // P0-2: Ownership check — reject callers who don't own this lead.
+      if (
+        !canEditLead({
+          sessionRole: session.role,
+          sessionUserId,
+          sessionName,
+          lead: existingLead,
+        })
+      ) {
+        return { forbidden: true } as const;
+      }
       const previousAssignee = existingLead.assigned_to;
       const assignmentChanged =
         typeof body.assigned_to === "string" &&
@@ -203,17 +227,33 @@ export async function PUT(
         fields.push("last_activity_at = NOW()");
       }
 
+      // P0-7: If is_lost_lead is being set to true, stamp lost_lead_marked_by
+      // from the session — never from the request body.
+      if (body.is_lost_lead === true) {
+        values.push(sessionName || "Unknown");
+        fields.push(`lost_lead_marked_by = $${values.length}`);
+      } else if (body.is_lost_lead === false) {
+        // Restoring: clear the marker.
+        values.push(null);
+        fields.push(`lost_lead_marked_by = $${values.length}`);
+      }
+
       // Atomically update assigned_to_user_id when the named assignee changes
       // so the FK stays authoritative for all ID-first read paths.
       if (assignmentChanged) {
+        // P0-5: Validate the new assignee's role before updating.
         const newUserResult = await client.query(
-          `SELECT id FROM users
+          `SELECT id, REPLACE(LOWER(TRIM(role)), '_', ' ') AS normalized_role
+           FROM users
            WHERE organization_id = $1
              AND LOWER(TRIM(name)) = LOWER(TRIM($2))
              AND deleted_at IS NULL
            ORDER BY is_active DESC, id ASC LIMIT 1`,
           [await getOrganizationId(client), body.assigned_to]
         );
+        if (newUserResult.rows.length > 0 && !isAssignableRole(newUserResult.rows[0].normalized_role)) {
+          return { invalidTarget: true } as const;
+        }
         const newAssignedToUserId: number | null = newUserResult.rows[0]?.id ?? null;
         values.push(newAssignedToUserId);
         fields.push(`assigned_to_user_id = $${values.length}`);
@@ -242,7 +282,10 @@ export async function PUT(
           [
             leadId,
             body.assigned_to,
-            body.assigned_by || body.transferred_by || body.updated_by || "System/API",
+            // P0-7: assigned_by comes from session, never from the request body.
+            // The body fields (assigned_by, transferred_by, updated_by) are all
+            // client-controlled and were used to forge the audit trail.
+            sessionName || "System/API",
             body.assignment_reason || body.transfer_note || "Lead Assigned",
           ]
         );
@@ -260,10 +303,30 @@ export async function PUT(
       return { data: updateRows.rows[0] };
     });
 
-   if (!result) {
+    if (!result) {
       return NextResponse.json(
         { success: false, message: "Lead not found" },
         { status: 404 }
+      );
+    }
+
+    // P0-2: ownership check failed inside the transaction.
+    if ("forbidden" in result) {
+      return NextResponse.json(
+        { success: false, message: "You do not have permission to edit this lead." },
+        { status: 403 }
+      );
+    }
+
+    // P0-5: assignedTo target has a non-assignable role.
+    if ("invalidTarget" in result) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "The selected assignee does not have a role that can receive leads.",
+          code: "INVALID_ASSIGNEE_ROLE",
+        },
+        { status: 422 }
       );
     }
 

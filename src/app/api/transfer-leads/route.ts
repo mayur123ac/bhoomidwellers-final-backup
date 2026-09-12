@@ -1,10 +1,34 @@
 // app/api/transfer-leads/route.ts
+//
+// P0-4: This endpoint (bulk name-to-name lead reassignment, admin-only) is
+// retired. Use PUT /api/walkin_enquiries/[id] for individual reassignments, or
+// the admin all-leads panel which calls /api/leads/transfer.
+//
+// Returning 410 Gone rather than deleting the file so any stale client gets a
+// clear signal rather than a 404 that looks like a routing error.
 import { NextResponse } from "next/server";
+
+export async function POST(_req: Request) {
+  return NextResponse.json(
+    {
+      success: false,
+      message:
+        "This endpoint has been retired. Use /api/leads/transfer for individual lead reassignment.",
+      code: "ENDPOINT_RETIRED",
+    },
+    { status: 410 }
+  );
+}
+
+// The implementation below is preserved as dead code for audit trail purposes.
+// It will be removed in a future cleanup.
+
+/*
 import { query, transaction } from "@/lib/db";
 import { getOrganizationId } from "@/lib/tenantContext";
 import { requireRole } from "@/lib/serverAuth";
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   try {
     const auth = await requireRole(["admin"]);
     if (!auth.isAuthorized) {
@@ -94,3 +118,4 @@ export async function POST(req: Request) {
     );
   }
 }
+*/

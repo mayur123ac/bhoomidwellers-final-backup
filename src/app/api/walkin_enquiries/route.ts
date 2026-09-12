@@ -4,8 +4,9 @@ import { query, transaction, recalculateSrNos } from "@/lib/db";
 import { getOrganizationId } from "@/lib/tenantContext";
 import { isChannelPartnerSource, resolveChannelPartnerId } from "@/lib/cpCommissionEngine";
 import { claimPartnerForSourcingManager, resolvePartnerOwner } from "@/lib/sourcingAssignment";
-import { getServerSession } from "@/lib/serverAuth";
+import { getServerSession, getSessionUserId } from "@/lib/serverAuth";
 import { normalizeRole } from "@/lib/cpRbac";
+import { isAssignableRole } from "@/lib/leadAuth";
 import { notifyCpLeadAssigned } from "@/services/whatsapp.service";
 import { jsonCompressed } from "@/lib/apiResponse";
 import { resolvePhones } from "@/lib/phoneAccess";
@@ -236,6 +237,16 @@ export async function POST(req: Request) {
       );
     }
 
+    // P0-1: Universal auth gate — must be authenticated before any DB access.
+    // Previously only CP enquiries had this check; unauthenticated callers could
+    // create non-CP leads without a session.
+    if (!session?.role) {
+      return NextResponse.json(
+        { success: false, message: "You must be signed in to create an enquiry." },
+        { status: 401 }
+      );
+    }
+
     // Server-side duplicate & returning-lead detection.
     //
     // Three outcomes for the same normalized phone within this organization:
@@ -326,19 +337,24 @@ export async function POST(req: Request) {
     // Effective source is resolved once so the CP gate and the stored value agree.
     const effectiveSource = source || "Direct Walk-in";
     const isCpEnquiry = isChannelPartnerSource(effectiveSource);
-    const sessionRole = normalizeRole(session?.role);
-    const actorName = (session?.name || assigned_receptionist || "system").toString();
-    const actorUserIdRaw = Number(session?._id ?? session?.id);
-    const actorUserId = Number.isInteger(actorUserIdRaw) ? actorUserIdRaw : null;
+    const sessionRole = normalizeRole(session.role);
+
+    // P0-7: actorName derives ONLY from the signed session cookie — never from
+    // the request body. The previous fallback to `assigned_receptionist` (a body
+    // field) let any caller forge the audit trail identity.
+    const actorName = String(session.name || "system").trim() || "system";
+    const actorUserId = getSessionUserId(session);
+
+    // P0-5: The assignedTo target must be a role that can own leads. This
+    // prevents admins or sourcing managers being stamped as lead owners, which
+    // would break ownership filters on every downstream query. The check is
+    // against the USER'S ROLE in the DB, not the string in the body — but the
+    // lookup is deferred to the transaction where we can inspect the DB record.
+    // A pre-flight check on the name alone would fail for valid employees whose
+    // role hasn't been resolved yet, so the validation happens inside the
+    // transaction after resolving the user row.
 
     if (isCpEnquiry) {
-      if (!session?.role) {
-        return NextResponse.json(
-          { success: false, message: "You must be signed in to create a Channel Partner enquiry." },
-          { status: 401 }
-        );
-      }
-
       if (!["receptionist", "admin"].includes(sessionRole)) {
         return NextResponse.json(
           { success: false, message: "Only Receptionists and Admins can create Channel Partner enquiries." },
@@ -408,29 +424,57 @@ export async function POST(req: Request) {
       // MT-05: resolved once per transaction, on this client.
       const orgId = await getOrganizationId(client);
 
+      // P0-5: Validate that assignedTo names a user whose role can own a lead.
+      // Fetch the role alongside the id so we can reject admin/sourcing-manager
+      // targets without a second round-trip. The org predicate is mandatory —
+      // an attacker cannot route a lead to a manager in another tenant.
+      const assignedToUserRow = assignedTo
+        ? await client.query(
+            `SELECT id, REPLACE(LOWER(TRIM(role)), '_', ' ') AS normalized_role
+             FROM users
+             WHERE organization_id = $1
+               AND LOWER(TRIM(name)) = LOWER(TRIM($2))
+               AND deleted_at IS NULL
+             ORDER BY is_active DESC, id ASC LIMIT 1`,
+            [orgId, assignedTo]
+          )
+        : { rows: [] as { id: number; normalized_role: string }[] };
+
+      if (assignedToUserRow.rows.length > 0) {
+        const targetRole = assignedToUserRow.rows[0].normalized_role;
+        if (!isAssignableRole(targetRole)) {
+          // Return a sentinel instead of throwing so the transaction rolls back
+          // cleanly and we can return the right HTTP status outside.
+          return { invalidTarget: true } as const;
+        }
+      }
+
+      // P0-6: Derive assigned_receptionist from the session, not from the body.
+      // If the session role is receptionist AND they are also the primary
+      // assignee (self-assign flow), mark them as the receptionist too.
+      // If the session role is not receptionist, assigned_receptionist is NULL —
+      // a receptionist cannot forge another receptionist's name into this field.
+      const sessionIsReceptionist = sessionRole === "receptionist";
+      const sessionNameLower = actorName.trim().toLowerCase();
+      const assignedToLower = (assignedTo ?? "").trim().toLowerCase();
+      const effectiveAssignedReceptionist: string | null =
+        sessionIsReceptionist && sessionNameLower && sessionNameLower === assignedToLower
+          ? actorName.trim()
+          : null;
+
       // Resolve name-based ownership to user IDs within this org.
       // These run inside the transaction so the lookups are consistent with
       // the INSERT and cannot race against a concurrent employee rename.
       // Rows where the name has no matching user get NULL (not an error).
-      const [assignedToUserRow, recepUserRow, siteHeadUserRow] = await Promise.all([
-        assignedTo
+      const [recepUserRow, siteHeadUserRow] = await Promise.all([
+        effectiveAssignedReceptionist
           ? client.query(
               `SELECT id FROM users
                WHERE organization_id = $1
                  AND LOWER(TRIM(name)) = LOWER(TRIM($2))
                  AND deleted_at IS NULL
                ORDER BY is_active DESC, id ASC LIMIT 1`,
-              [orgId, assignedTo]
-            )
-          : Promise.resolve({ rows: [] as { id: number }[] }),
-        assigned_receptionist
-          ? client.query(
-              `SELECT id FROM users
-               WHERE organization_id = $1
-                 AND LOWER(TRIM(name)) = LOWER(TRIM($2))
-                 AND deleted_at IS NULL
-               ORDER BY is_active DESC, id ASC LIMIT 1`,
-              [orgId, assigned_receptionist]
+              [orgId, effectiveAssignedReceptionist]
             )
           : Promise.resolve({ rows: [] as { id: number }[] }),
         overseeing_site_head
@@ -446,13 +490,17 @@ export async function POST(req: Request) {
       ]);
 
       const assignedToUserId: number | null =
-        (assignedToUserRow.rows[0]?.id ?? null);
-      // Receptionist user ID: prefer DB lookup; fall back to the session user
-      // when the receptionist who submits the form IS the assigned_receptionist
-      // (the common case). This avoids a lookup returning NULL for the current
-      // session user whose row we already know.
+        assignedToUserRow.rows[0]?.id ?? null;
+
+      // CRITICAL: do NOT fall back to actorUserId here.
+      // assigned_receptionist_user_id must remain NULL whenever assigned_receptionist
+      // was not explicitly provided — i.e. when the receptionist assigned the lead to
+      // another employee (Sales Manager / Site Head / etc.).
+      // The previous `?? actorUserId` fallback was the root cause of the dual-ownership
+      // bug: it stamped every receptionist-created lead with the receptionist's own ID
+      // even when the lead was intentionally assigned to a different employee.
       const assignedReceptionistUserId: number | null =
-        recepUserRow.rows[0]?.id ?? actorUserId ?? null;
+        recepUserRow.rows[0]?.id ?? null;
       const overseeingSiteHeadUserId: number | null =
         siteHeadUserRow.rows[0]?.id ?? null;
 
@@ -535,7 +583,7 @@ export async function POST(req: Request) {
           cp_phone || null,                   // $16
           loan_planned || "Pending",          // $17
           assignedTo,                         // $18
-          assigned_receptionist || null,      // $19
+          effectiveAssignedReceptionist,      // $19 — server-derived, never from body
           status || "Assigned",               // $20
           is_global_shared || false,          // $21
           overseeing_site_head || null,       // $22
@@ -616,6 +664,18 @@ export async function POST(req: Request) {
       );
       return { row: finalRes.rows[0], routedByPartner, partnerOwner };
     });
+
+    // P0-5: sentinel returned when the assignedTo target has a non-assignable role.
+    if (result && "invalidTarget" in result) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "The selected assignee does not have a role that can receive leads.",
+          code: "INVALID_ASSIGNEE_ROLE",
+        },
+        { status: 422 }
+      );
+    }
 
     // ── Realtime: push a "lead.created" broadcast so the assigned SM's client
     // refreshes the notification feed without waiting for the next poll.

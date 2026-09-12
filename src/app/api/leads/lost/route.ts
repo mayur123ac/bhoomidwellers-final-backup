@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getOrganizationId } from "@/lib/tenantContext";
 import { broadcastLeadUpdate } from "@/lib/lostLeadEvents";
-import { requireSession, requireRoles } from "@/lib/serverAuth";
+import { requireRoles } from "@/lib/serverAuth";
 import { broadcastToOrg } from "@/lib/supabase/broadcast";
 
 type LostLeadPayload = {
@@ -38,11 +38,16 @@ export async function PATCH(req: Request) {
     const leadId = body.leadId ?? body.lead_id;
     const isLost = body.is_lost_lead;
     const reason = (body.lost_reason ?? body.reason ?? "").trim();
-    const actor = (body.lost_marked_by ?? body.marked_by ?? body.restored_by ?? "").trim();
 
-    if (!leadId || typeof isLost !== "boolean" || !actor) {
+    // P0-7: actor derives from the authenticated session — never from the
+    // request body. The previous code accepted lost_marked_by/marked_by/
+    // restored_by from the body and wrote them directly to the DB column and
+    // follow-up note, allowing any caller to forge the audit identity.
+    const actor = String(gate.session?.name ?? "").trim() || "System";
+
+    if (!leadId || typeof isLost !== "boolean") {
       return NextResponse.json(
-        { success: false, message: "Missing required fields: leadId, is_lost_lead, lost_marked_by" },
+        { success: false, message: "Missing required fields: leadId, is_lost_lead" },
         { status: 400 }
       );
     }

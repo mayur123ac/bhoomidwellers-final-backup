@@ -492,7 +492,7 @@ export default function SettingsShell({ children }: { children: React.ReactNode 
             onExpandedChange={setIsSidebarHovered}
             adminItems={railForRole(user?.role)}
             adminGroups={RAIL_GROUPS}
-            adminLogoSrc="/assets/logobrowser_trans.svg"
+            adminLogoSrc="/assets/logobrowser_trans.png"
             // On mobile, hide the global rail — the settings local nav drawer
             // (opened by the header's leading button) provides navigation instead.
             hideOnMobile={true}

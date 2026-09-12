@@ -162,7 +162,7 @@ export default function SourcingManagerDashboard() {
         style={{ width: sidebarExpanded ? "260px" : "76px" }}
       >
         <div className="flex items-center px-2 mb-8 overflow-hidden h-10">
-          <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center">
+          <div className="flex-shrink-0 w-9 h-9 flex items-center justify-center">
             <img src="/assets/logobrowser_trans.png" alt="Logo" className="w-9 h-9 min-w-[36px] rounded-xl object-cover flex-shrink-0" />
           </div>
           <div className={`ml-3 flex flex-col whitespace-nowrap transition-opacity duration-300 ${sidebarExpanded ? 'opacity-100' : 'opacity-0'}`}>

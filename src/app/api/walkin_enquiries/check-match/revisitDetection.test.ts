@@ -22,7 +22,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 
 vi.mock("@/lib/db", () => {
   const mockClient = {
-    query: vi.fn(async () => ({ rows: [{ id: 999 }] })),
+    query: vi.fn(async () => ({ rows: [{ id: 999, normalized_role: "sales manager" }] })),
   };
   return {
     query: vi.fn(async () => []),
@@ -44,6 +44,7 @@ vi.mock("@/lib/serverAuth", () => ({
   getServerSession: vi.fn(async () => ({
     _id: "1", name: "Front Desk", email: "desk@test.com", role: "Receptionist", org: "org-alpha",
   })),
+  getSessionUserId: vi.fn((_session: any) => 1),
 }));
 
 vi.mock("@/lib/phoneAccess", () => ({
@@ -331,7 +332,7 @@ describe("POST /api/walkin_enquiries — revisit checkbox creates correct visits
     mockQuery.mockResolvedValue([] as any);
 
     const mockClient = {
-      query: vi.fn(async () => ({ rows: [{ id: 999 }] })),
+      query: vi.fn(async () => ({ rows: [{ id: 999, normalized_role: "sales manager" }] })),
     };
     mockTransaction.mockImplementation(async (fn: any) => {
       const result = await fn(mockClient);

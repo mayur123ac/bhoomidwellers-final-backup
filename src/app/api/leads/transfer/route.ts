@@ -2,20 +2,21 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getOrganizationId } from "@/lib/tenantContext";
-import { requireSession, requireRoles } from "@/lib/serverAuth";
+import { requireRoles } from "@/lib/serverAuth";
 
 export async function POST(req: Request) {
   try {
     // Reassigns a lead to another manager.
     //
-    // Receptionist is included because handing a walk-in to a Sales Manager is
-    // the front desk's core job — the receptionist dashboard has a dedicated
-    // transfer modal for it ("Transfer state (Receptionist Lead → Manager)").
-    // An earlier gate of admin+sales-manager broke that flow; the endpoint had
-    // no check at all before, so this narrows access rather than widening it.
-    // Sourcing Manager and Site Head are excluded: neither works the walk-in
-    // queue, and lead routing is not theirs to change.
-    const gate = await requireRoles(["admin", "sales manager", "receptionist"]);
+    // P0-3: Receptionist removed from the allowed-roles list. A receptionist's
+    // job is to CREATE and assign leads at intake — not to reassign them after
+    // they have landed on a Sales Manager's desk. Allowing receptionists to
+    // transfer arbitrary leads is a privilege-escalation path: they could move
+    // any lead in the org to any other employee, bypassing ownership entirely.
+    // Admin and Sales Manager retain access because they have a legitimate
+    // post-intake reassignment function (Admin: all-leads panel; SM: site-head
+    // panel re-routing).
+    const gate = await requireRoles(["admin", "sales manager", "site head"]);
     if (!gate.ok) return gate.response;
 
     // MT-05: resolved once for the whole handler, from the authenticated
@@ -23,17 +24,21 @@ export async function POST(req: Request) {
     const orgId = await getOrganizationId();
 
     const body = await req.json();
-    const { lead_id, transfer_to, transfer_note, transferred_by } = body as {
-      lead_id:        number | string;
-      transfer_to:    string;
-      transfer_note:  string;
-      transferred_by: string;
+    const { lead_id, transfer_to, transfer_note } = body as {
+      lead_id:       number | string;
+      transfer_to:   string;
+      transfer_note: string;
     };
 
+    // P0-7: transferred_by derives from the authenticated session, never from
+    // the request body. The previous code accepted it as a client field and
+    // wrote it directly to follow_ups.created_by_name and lead_assignment_logs.
+    const transferred_by = String(gate.session?.name ?? "").trim() || "System";
+
     // ── Validation ────────────────────────────────────────────────────
-    if (!lead_id || !transfer_to || !transferred_by) {
+    if (!lead_id || !transfer_to) {
       return NextResponse.json(
-        { success: false, message: "Missing required fields: lead_id, transfer_to, transferred_by" },
+        { success: false, message: "Missing required fields: lead_id, transfer_to" },
         { status: 400 }
       );
     }
