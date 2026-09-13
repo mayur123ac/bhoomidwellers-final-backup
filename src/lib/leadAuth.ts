@@ -22,6 +22,16 @@ export const LEAD_ASSIGNABLE_ROLES: ReadonlySet<string> = new Set([
   "receptionist",
 ]);
 
+/**
+ * Roles that a Receptionist is allowed to assign leads to (besides themselves).
+ * Admin, Super Admin, and Sourcing Manager are intentionally excluded.
+ */
+export const RECEPTIONIST_ASSIGNABLE_TARGETS: ReadonlySet<string> = new Set([
+  "sales manager",
+  "senior sales manager",
+  "site head",
+]);
+
 /** Roles that identify themselves via the receptionist ownership column. */
 export const RECEPTIONIST_ROLES: ReadonlySet<string> = new Set(["receptionist"]);
 

@@ -4,7 +4,7 @@ import { query, transaction, recalculateSrNos } from "@/lib/db";
 import { requireRole, getServerSession, getSessionUserId } from "@/lib/serverAuth";
 import { normalizeRole } from "@/lib/cpRbac";
 import { getOrganizationId } from "@/lib/tenantContext";
-import { canEditLead, isAssignableRole } from "@/lib/leadAuth";
+import { canEditLead, isAssignableRole, RECEPTIONIST_ASSIGNABLE_TARGETS } from "@/lib/leadAuth";
 import {
   deleteLeadAssets,
   deleteLeadDatabaseRecords,
@@ -263,11 +263,13 @@ export async function PUT(
         values.push(newAssignedToUserId);
         fields.push(`assigned_to_user_id = $${values.length}`);
 
-        // P1-6 / FIX-G: ID-based receptionist self-assignment guard.
-        // Fires here so newAssignedToUserId (DB-resolved for body.assigned_to)
-        // is already available. Fails closed if sessionUserId cannot be determined.
+        // P1-6 / FIX-G / FIX-H: Receptionist reassignment guard.
+        // A receptionist may reassign to themselves, or to a Sales Manager /
+        // Senior Sales Manager / Site Head. Other targets are denied.
         if (normalizeRole(session.role) === "receptionist") {
-          if (sessionUserId === null || newAssignedToUserId !== sessionUserId) {
+          const isSelf = sessionUserId !== null && newAssignedToUserId === sessionUserId;
+          const targetRole = newUserResult.rows[0]?.normalized_role ?? "";
+          if (!isSelf && !RECEPTIONIST_ASSIGNABLE_TARGETS.has(targetRole)) {
             return { forbiddenReassign: true } as const;
           }
         }

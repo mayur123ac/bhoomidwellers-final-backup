@@ -132,16 +132,8 @@ describe("POST /api/walkin_enquiries — assignment ownership regression", () =>
     mockQuery.mockResolvedValue([] as any);
 
     // Rebuild transaction mock each test so the INSERT capture is fresh.
-    // The mock returns { id: 999, normalized_role: "sales manager" } for all
-    // user SELECT queries so the P0-5 role validation (added by the security
-    // fix) passes without needing a real DB. The normalized_role field is only
-    // read when the route checks isAssignableRole(); "sales manager" is a valid
-    // assignable role so every test that expects a 201 will still reach the INSERT.
-    //
-    // FIX-G: The P0-5 lookup for "Priya Desk" must return id=42 (matching the
-    // session _id) so the ID-based receptionist self-assign guard sees
-    // assignedToUserId === actorUserId and allows the self-assign through.
-    // All other name lookups still return id=999.
+    // FIX-G/FIX-H: Returns correct role for each persona so both the P0-5
+    // role validation and the P1-6 receptionist assignment guard work correctly.
     mockTransaction.mockImplementation(async (fn: any) => {
       const client = {
         query: vi.fn(async (sql: string, params: any[]) => {
@@ -315,8 +307,8 @@ describe("P1-6 POST /api/walkin_enquiries — receptionist self-assignment enfor
     // Default: no prior leads (avoids duplicate rejection)
     mockQuery.mockResolvedValue([] as any);
 
-    // FIX-G: "Priya Desk" lookup returns id=42 so the ID-based self-assign guard
-    // passes for the receptionist self-assign case (actorUserId=42 === assignedToUserId=42).
+    // FIX-G/FIX-H: Name→role lookup mock. Returns the correct role for each
+    // test persona so the receptionist assignment guard can check target roles.
     mockTransaction.mockImplementation(async (fn: any) => {
       const client = {
         query: vi.fn(async (sql: string, params: any[]) => {
@@ -324,8 +316,24 @@ describe("P1-6 POST /api/walkin_enquiries — receptionist self-assignment enfor
             (globalThis as any).__lastInsertParams = params;
             return { rows: [{ id: 999, normalized_role: "sales manager" }] };
           }
-          if (params && params[1] === "Priya Desk") {
+          const name = params?.[1];
+          if (name === "Priya Desk") {
             return { rows: [{ id: 42, normalized_role: "receptionist" }] };
+          }
+          if (name === "Sunita Front") {
+            return { rows: [{ id: 800, normalized_role: "receptionist" }] };
+          }
+          if (name === "Site Head A") {
+            return { rows: [{ id: 801, normalized_role: "site head" }] };
+          }
+          if (name === "Admin Boss") {
+            return { rows: [{ id: 802, normalized_role: "admin" }] };
+          }
+          if (name === "Super Boss") {
+            return { rows: [{ id: 803, normalized_role: "super admin" }] };
+          }
+          if (name === "Sourcing Mgr A") {
+            return { rows: [{ id: 804, normalized_role: "sourcing manager" }] };
           }
           return { rows: [{ id: 999, normalized_role: "sales manager" }] };
         }),
@@ -352,14 +360,10 @@ describe("P1-6 POST /api/walkin_enquiries — receptionist self-assignment enfor
     expect(body.message).toMatch(/only assign leads to themselves/i);
   });
 
-  // P1-6 T3: Receptionist tries to assign to a sales manager — 403
-  // Even though a sales manager is an assignable role, receptionists cannot
-  // assign to them directly — they must self-assign.
-  it("[P1-6 T3] receptionist assigns to a sales manager → 403 Forbidden", async () => {
+  // P1-6 T3: Receptionist assigns to a Sales Manager — ALLOWED (FIX-H)
+  it("[P1-6 T3] receptionist assigns to a sales manager → 201 OK", async () => {
     const res = await POST(makeRequest({ assignedTo: "Sales Manager A" }));
-    expect(res.status).toBe(403);
-    const body = await res.json();
-    expect(body.message).toMatch(/only assign leads to themselves/i);
+    expect(res.status).toBe(201);
   });
 
   // P1-6 T4: Admin assigns to any receptionist — no restriction on admins
@@ -373,6 +377,36 @@ describe("P1-6 POST /api/walkin_enquiries — receptionist self-assignment enfor
     } as any);
     const res = await POST(makeRequest({ assignedTo: "Priya Desk" }));
     expect(res.status).toBe(201);
+  });
+
+  // P1-6 T5: Receptionist assigns to a Site Head — ALLOWED (FIX-H)
+  it("[P1-6 T5] receptionist assigns to a site head → 201 OK", async () => {
+    const res = await POST(makeRequest({ assignedTo: "Site Head A" }));
+    expect(res.status).toBe(201);
+  });
+
+  // P1-6 T6: Receptionist assigns to an Admin — DENIED (P0-5 invalidTarget)
+  it("[P1-6 T6] receptionist assigns to an admin → 422 invalidTarget", async () => {
+    const res = await POST(makeRequest({ assignedTo: "Admin Boss" }));
+    expect(res.status).toBe(422);
+    const body = await res.json();
+    expect(body.code).toBe("INVALID_ASSIGNEE_ROLE");
+  });
+
+  // P1-6 T7: Receptionist assigns to a Super Admin — DENIED
+  it("[P1-6 T7] receptionist assigns to a super admin → 422 invalidTarget", async () => {
+    const res = await POST(makeRequest({ assignedTo: "Super Boss" }));
+    expect(res.status).toBe(422);
+    const body = await res.json();
+    expect(body.code).toBe("INVALID_ASSIGNEE_ROLE");
+  });
+
+  // P1-6 T8: Receptionist assigns to a Sourcing Manager — DENIED
+  it("[P1-6 T8] receptionist assigns to a sourcing manager → 422 invalidTarget", async () => {
+    const res = await POST(makeRequest({ assignedTo: "Sourcing Mgr A" }));
+    expect(res.status).toBe(422);
+    const body = await res.json();
+    expect(body.code).toBe("INVALID_ASSIGNEE_ROLE");
   });
 });
 

@@ -6,7 +6,7 @@ import { isChannelPartnerSource, resolveChannelPartnerId } from "@/lib/cpCommiss
 import { claimPartnerForSourcingManager, resolvePartnerOwner } from "@/lib/sourcingAssignment";
 import { getServerSession, getSessionUserId } from "@/lib/serverAuth";
 import { normalizeRole } from "@/lib/cpRbac";
-import { isAssignableRole } from "@/lib/leadAuth";
+import { isAssignableRole, RECEPTIONIST_ASSIGNABLE_TARGETS } from "@/lib/leadAuth";
 import { notifyCpLeadAssigned } from "@/services/whatsapp.service";
 import { jsonCompressed } from "@/lib/apiResponse";
 import { resolvePhones } from "@/lib/phoneAccess";
@@ -495,14 +495,14 @@ export async function POST(req: Request) {
       const assignedToUserId: number | null =
         assignedToUserRow.rows[0]?.id ?? null;
 
-      // P1-6 / FIX-G: ID-based receptionist self-assignment guard.
-      // Replaces the removed pre-transaction name-string comparison.
-      // actorUserId comes from the HMAC-signed session; assignedToUserId is
-      // DB-resolved — two employees sharing a display name can no longer
-      // cross-trigger each other's guard. Fails closed (403) if the session
-      // user-ID cannot be determined.
+      // P1-6 / FIX-G / FIX-H: Receptionist assignment guard.
+      // A receptionist may assign to themselves, or to a Sales Manager /
+      // Senior Sales Manager / Site Head. Assignment to Admin, Super Admin,
+      // Sourcing Manager, or another Receptionist is denied.
       if (sessionRole === "receptionist" && assignedTo) {
-        if (actorUserId === null || assignedToUserId !== actorUserId) {
+        const isSelf = actorUserId !== null && assignedToUserId === actorUserId;
+        const targetRole = assignedToUserRow.rows[0]?.normalized_role ?? "";
+        if (!isSelf && !RECEPTIONIST_ASSIGNABLE_TARGETS.has(targetRole)) {
           return { forbiddenSelfAssign: true } as const;
         }
       }
