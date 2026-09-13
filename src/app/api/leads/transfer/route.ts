@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getOrganizationId } from "@/lib/tenantContext";
 import { requireRoles } from "@/lib/serverAuth";
+import { isAssignableRole } from "@/lib/leadAuth";
 
 export async function POST(req: Request) {
   try {
@@ -67,7 +68,43 @@ export async function POST(req: Request) {
       );
     }
 
-    // ── 3. Build follow-up message ────────────────────────────────────
+    // ── 3. Validate destination employee (FIX-A, FIX-B) ─────────────
+    // FIX-B: require is_active = true — a deactivated employee cannot
+    //        receive leads even if their account has not been deleted.
+    // FIX-A: call isAssignableRole() — admins and sourcing managers
+    //        are not valid lead-assignment targets.
+    const destUserRows = await query(
+      `SELECT id, REPLACE(LOWER(TRIM(role)), '_', ' ') AS normalized_role
+         FROM users
+        WHERE organization_id = $1
+          AND LOWER(TRIM(name)) = LOWER(TRIM($2))
+          AND deleted_at IS NULL
+          AND is_active = true
+        ORDER BY id ASC LIMIT 1`,
+      [orgId, transfer_to]
+    );
+
+    if (destUserRows.length === 0) {
+      return NextResponse.json(
+        { success: false, message: `"${transfer_to}" is not an active employee in this organisation.` },
+        { status: 422 }
+      );
+    }
+
+    const destUserId: number = destUserRows[0].id;
+
+    if (!isAssignableRole(destUserRows[0].normalized_role)) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: `Leads cannot be transferred to a ${destUserRows[0].normalized_role || "user with this role"} — only Sales Managers, Site Heads, and Receptionists are valid transfer targets.`,
+          code: "INVALID_ASSIGNEE",
+        },
+        { status: 422 }
+      );
+    }
+
+    // ── 4. Build follow-up message ────────────────────────────────────
     const leadNo = existing[0].sr_no || lead_id;
     const transferMessage =
       `🔄 Lead Transferred by ${transferred_by} (Receptionist)\n` +
@@ -99,18 +136,6 @@ export async function POST(req: Request) {
     }
 
     // ── 5. Update assigned_to + assigned_to_user_id ──────────────────
-    // Resolve the destination employee to a users.id so the FK stays in
-    // sync with the name. The legacy name column is kept for backward compat.
-    const destUserRows = await query(
-      `SELECT id FROM users
-       WHERE organization_id = $1
-         AND LOWER(TRIM(name)) = LOWER(TRIM($2))
-         AND deleted_at IS NULL
-       ORDER BY is_active DESC, id ASC LIMIT 1`,
-      [orgId, transfer_to]
-    );
-    const destUserId: number | null = destUserRows[0]?.id ?? null;
-
     const updatedRows = await query(
       `UPDATE walkin_enquiries
        SET assigned_to = $1,

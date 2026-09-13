@@ -354,6 +354,9 @@ export async function POST(req: Request) {
     // role hasn't been resolved yet, so the validation happens inside the
     // transaction after resolving the user row.
 
+    // P1-6 pre-flight name-string guard removed by FIX-G — replaced with a
+    // stable user-ID comparison inside the transaction further below.
+
     if (isCpEnquiry) {
       if (!["receptionist", "admin"].includes(sessionRole)) {
         return NextResponse.json(
@@ -491,6 +494,18 @@ export async function POST(req: Request) {
 
       const assignedToUserId: number | null =
         assignedToUserRow.rows[0]?.id ?? null;
+
+      // P1-6 / FIX-G: ID-based receptionist self-assignment guard.
+      // Replaces the removed pre-transaction name-string comparison.
+      // actorUserId comes from the HMAC-signed session; assignedToUserId is
+      // DB-resolved — two employees sharing a display name can no longer
+      // cross-trigger each other's guard. Fails closed (403) if the session
+      // user-ID cannot be determined.
+      if (sessionRole === "receptionist" && assignedTo) {
+        if (actorUserId === null || assignedToUserId !== actorUserId) {
+          return { forbiddenSelfAssign: true } as const;
+        }
+      }
 
       // CRITICAL: do NOT fall back to actorUserId here.
       // assigned_receptionist_user_id must remain NULL whenever assigned_receptionist
@@ -664,6 +679,15 @@ export async function POST(req: Request) {
       );
       return { row: finalRes.rows[0], routedByPartner, partnerOwner };
     });
+
+    // P1-6/FIX-G: receptionist tried to assign to someone other than themselves
+    // (ID-based guard runs inside the transaction after the P0-5 user-ID lookup).
+    if (result && "forbiddenSelfAssign" in result) {
+      return NextResponse.json(
+        { success: false, message: "Receptionists can only assign leads to themselves." },
+        { status: 403 }
+      );
+    }
 
     // P0-5: sentinel returned when the assignedTo target has a non-assignable role.
     if (result && "invalidTarget" in result) {

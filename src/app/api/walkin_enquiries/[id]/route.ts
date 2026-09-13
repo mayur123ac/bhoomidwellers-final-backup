@@ -139,6 +139,8 @@ export async function PUT(
       "site_visit_history",
       "loan_tracking_info",
       "referral_info",
+      "budget",
+      "budget_unit",
     ];
 
     const result = await transaction(async (client) => {
@@ -176,6 +178,9 @@ export async function PUT(
         typeof body.assigned_to === "string" &&
         body.assigned_to.trim().length > 0 &&
         body.assigned_to !== previousAssignee;
+
+      // P1-6 name-string guard removed by FIX-G — replaced with an ID comparison
+      // inside the assignmentChanged block below, after newAssignedToUserId resolves.
 
       // 🔒 Final-state lock guard — Closed/Lost leads are read-only,
       // except for the explicit Reopen (status away from "Closing")
@@ -257,6 +262,15 @@ export async function PUT(
         const newAssignedToUserId: number | null = newUserResult.rows[0]?.id ?? null;
         values.push(newAssignedToUserId);
         fields.push(`assigned_to_user_id = $${values.length}`);
+
+        // P1-6 / FIX-G: ID-based receptionist self-assignment guard.
+        // Fires here so newAssignedToUserId (DB-resolved for body.assigned_to)
+        // is already available. Fails closed if sessionUserId cannot be determined.
+        if (normalizeRole(session.role) === "receptionist") {
+          if (sessionUserId === null || newAssignedToUserId !== sessionUserId) {
+            return { forbiddenReassign: true } as const;
+          }
+        }
       }
 
       if (fields.length === 0) {
@@ -314,6 +328,14 @@ export async function PUT(
     if ("forbidden" in result) {
       return NextResponse.json(
         { success: false, message: "You do not have permission to edit this lead." },
+        { status: 403 }
+      );
+    }
+
+    // P1-6: receptionist tried to reassign to someone other than themselves.
+    if ("forbiddenReassign" in result) {
+      return NextResponse.json(
+        { success: false, message: "Receptionists can only assign leads to themselves." },
         { status: 403 }
       );
     }
@@ -431,7 +453,10 @@ export async function DELETE(
       }
 
       const localAssetResult = await deleteLeadLocalUploads(leadId);
-      const databaseResult = await deleteLeadDatabaseRecords(client, leadId);
+      const databaseResult = await deleteLeadDatabaseRecords(client, leadId, {
+        adminName: auth.session.name || "Admin",
+        adminRole: auth.session.role || "admin",
+      });
 
       const leadNumber = lead.sr_no ? String(lead.sr_no) : String(lead.id);
       await insertLeadDeletionAudit(client, {

@@ -13,6 +13,7 @@ import AttendanceView from "@/components/AttendanceView";
 import dynamic from "next/dynamic";
 
 import { clearCrmSession, getStoredCrmUser, installLoggedOutBackGuard } from "@/lib/authSession";
+import { formatBudget } from "@/lib/formatBudget";
 import { useCpEnquiryVisible } from "@/lib/hooks/useCpEnquiryVisible";
 import { useCrmTheme } from "@/lib/hooks/useCrmTheme";
 import { useShiftTiming } from "@/hooks/useShiftTiming";
@@ -383,7 +384,7 @@ function useAdminData(onReminderDue?: (r: import("@/lib/followUpSync").ReminderS
 
         const fupsWithDate = leadFups.filter((f: any) => f.siteVisitDate?.trim() !== "");
         const latestVisitDate = fupsWithDate.length > 0 ? fupsWithDate[fupsWithDate.length - 1].siteVisitDate : null;
-        const activeBudget = extractField("Budget") !== "Pending" ? extractField("Budget") : lead.budget;
+        const activeBudget = extractField("Budget") !== "Pending" ? extractField("Budget") : formatBudget(lead.budget, lead.budget_unit);
 
         const closingFups = leadFups.filter((f: any) => f.message?.includes("✅ Lead Marked as Closing"));
         const reopenFups = leadFups.filter((f: any) => f.message?.includes("↩️ Lead Reopened"));
@@ -620,6 +621,7 @@ export default function SalesDashboard() {
   const notifications = useNotificationFeed({
     followUpReminders: featurePrefs.toggles.followUpReminders !== false,
     siteVisitAlerts: featurePrefs.toggles.siteVisitAlerts !== false,
+    playSound: true,
   });
   const followUpLeads = notifications.followUps;
   // This bell means "today & tomorrow", which is narrower than the window the

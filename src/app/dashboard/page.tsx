@@ -18,6 +18,7 @@ import { useFollowUpAttachments } from "@/lib/hooks/useFollowUpAttachments";
 import FollowUpComposer from "@/components/FollowUpComposer";
 import { BhoomiAiGlyph } from "@/components/bhoomi-ai/BhoomiAiIcon";
 import { downloadCSV } from "@/lib/downloadCsv";
+import { formatBudget } from "@/lib/formatBudget";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 import AdminMobileDrawer from "@/components/admin/AdminMobileDrawer";
 import LoginTimerWidget from "@/components/LoginTimerWidget";
@@ -415,7 +416,7 @@ function useAdminData(onReminderDue?: (r: import("@/lib/followUpSync").ReminderS
         const lastReopenAt = reopenFups.length > 0 ? new Date(reopenFups[reopenFups.length - 1].createdAt).getTime() : 0;
         const closingFupsSinceReopen = closingFups.filter((f: any) => new Date(f.createdAt).getTime() > lastReopenAt);
         const closingDate = closingFupsSinceReopen.length > 0 ? closingFupsSinceReopen[closingFupsSinceReopen.length - 1].createdAt : null;
-        const activeBudget = extractField("Budget") !== "Pending" ? extractField("Budget") : lead.budget;
+        const activeBudget = extractField("Budget") !== "Pending" ? extractField("Budget") : formatBudget(lead.budget, lead.budget_unit);
 
 
         const sfLoanPlanned = extractField("Loan Planned");
@@ -817,7 +818,7 @@ function AdminAtlasDashboardContent() {
   //
   // `notificationHistory` keeps its name so the popover below reads the same,
   // but it is now the server's list: New Leads and Site Visits, newest first.
-  const notifications = useNotificationFeed();
+  const notifications = useNotificationFeed({ playSound: true });
   const notificationHistory = useMemo(
     () =>
       [...notifications.newLeads, ...notifications.siteVisits].sort(
@@ -1714,7 +1715,6 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
           lead_id: reassignLead.id,
           transfer_to: reassignTarget,
           transfer_note: `🔁 Reassigned by ${user?.name || "Admin"} — Reason: ${reassignNote}`,
-          transferred_by: user?.name || "Admin",
         }),
       });
 
@@ -3301,7 +3301,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
       const closingFupsSinceReopen = closingFups.filter((f: any) => new Date(f.createdAt).getTime() > lastReopenAt);
       const closingDate = closingFupsSinceReopen.length > 0 ? closingFupsSinceReopen[closingFupsSinceReopen.length - 1].createdAt : null;
       const sfBudget = g("Budget");
-      const activeBudget = sfBudget !== "Pending" && sfBudget !== "N/A" ? sfBudget : (lead.budget || "Pending");
+      const activeBudget = sfBudget !== "Pending" && sfBudget !== "N/A" ? sfBudget : formatBudget(lead.budget, lead.budget_unit);
 
       return {
         ...lead,
@@ -3596,7 +3596,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
     if (!selectedLead || !transferTarget || !transferNote.trim()) return;
     setIsTransferring(true);
     try {
-      const res = await fetch("/api/leads/transfer", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lead_id: selectedLead.id, transfer_to: transferTarget, transfer_note: transferNote, transferred_by: adminUser.name }) });
+      const res = await fetch("/api/leads/transfer", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lead_id: selectedLead.id, transfer_to: transferTarget, transfer_note: transferNote }) });
       if (!res.ok) throw new Error("Transfer failed");
       setIsTransferModalOpen(false); setTransferNote(""); setTransferTarget("");
       showToast(`Lead #${selectedLead.sr_no || selectedLead.id} transferred to ${transferTarget}!`);
@@ -4961,7 +4961,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
       const closingFupsSinceReopen = closingFups.filter((f: any) => new Date(f.createdAt).getTime() > lastReopenAt);
       const closingDate = closingFupsSinceReopen.length > 0 ? closingFupsSinceReopen[closingFupsSinceReopen.length - 1].createdAt : null;
       const sfBudget = g("Budget");
-      const activeBudget = sfBudget !== "Pending" && sfBudget !== "N/A" ? sfBudget : (lead.budget || "Pending");
+      const activeBudget = sfBudget !== "Pending" && sfBudget !== "N/A" ? sfBudget : formatBudget(lead.budget, lead.budget_unit);
 
       return {
         ...lead,
@@ -5204,7 +5204,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
     if (!selectedLead || !transferTarget || !transferNote.trim()) return;
     setIsTransferring(true);
     try {
-      const res = await fetch("/api/leads/transfer", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lead_id: selectedLead.id, transfer_to: transferTarget, transfer_note: transferNote, transferred_by: adminUser.name }) });
+      const res = await fetch("/api/leads/transfer", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lead_id: selectedLead.id, transfer_to: transferTarget, transfer_note: transferNote }) });
       if (!res.ok) throw new Error("Transfer failed");
       setIsTransferModalOpen(false); setTransferNote(""); setTransferTarget("");
       showToast(`Lead #${selectedLead.sr_no || selectedLead.id} transferred to ${transferTarget}!`);
@@ -6534,7 +6534,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
     if (!selectedLead || !transferTarget || !transferNote.trim()) return;
     setIsTransferring(true);
     try {
-      const res = await fetch("/api/leads/transfer", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lead_id: selectedLead.id, transfer_to: transferTarget, transfer_note: transferNote, transferred_by: actorName }) });
+      const res = await fetch("/api/leads/transfer", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lead_id: selectedLead.id, transfer_to: transferTarget, transfer_note: transferNote }) });
       if (!res.ok) throw new Error("Transfer failed");
       setIsTransferModalOpen(false); setTransferNote(""); setTransferTarget("");
       showToast(`Lead #${selectedLead.sr_no || selectedLead.id} transferred to ${transferTarget}!`);
@@ -6559,7 +6559,6 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
           lead_id: selectedLead.id,
           transfer_to: reassignTarget,
           transfer_note: `🔁 Reassigned by ${actorName} (Admin) — Reason: ${reassignNote}`,
-          transferred_by: actorName,
         }),
       });
       if (!res.ok) {
@@ -6634,7 +6633,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
       const closingFupsSinceReopen = closingFups.filter((f: any) => new Date(f.createdAt).getTime() > lastReopenAt);
       const closingDate = closingFupsSinceReopen.length > 0 ? closingFupsSinceReopen[closingFupsSinceReopen.length - 1].createdAt : null;
       const sfBudget = g("Budget");
-      const activeBudget = sfBudget !== "Pending" && sfBudget !== "N/A" ? sfBudget : (lead.budget || "Pending");
+      const activeBudget = sfBudget !== "Pending" && sfBudget !== "N/A" ? sfBudget : formatBudget(lead.budget, lead.budget_unit);
 
       return {
         ...lead,

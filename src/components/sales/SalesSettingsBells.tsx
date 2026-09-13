@@ -22,6 +22,7 @@ export default function SalesSettingsBells({
   const notifications = useNotificationFeed({
     followUpReminders: true,
     siteVisitAlerts: true,
+    playSound: true,
   });
 
   const followUpLeads = notifications.followUps;

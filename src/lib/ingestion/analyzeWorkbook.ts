@@ -2,6 +2,7 @@
 // Mapping wizard: workbook analysis, explicit-mapping parse, and value normalization.
 import * as XLSX from "xlsx";
 import { isChannelPartnerSource } from "@/lib/cpCommissionEngine";
+import { parseBudgetString } from "@/lib/formatBudget";
 import {
   FIELD_ALIASES,
   NORMALIZED_ALIASES,
@@ -513,7 +514,11 @@ export function parseWithMapping(
       cp_phone: cpPhoneRaw || null,
       feedback: cellToString(mapped.feedback) || null,
       configuration: cellToString(mapped.configuration) || null,
-      budget: cellToString(mapped.budget) || null,
+      ...(() => {
+        const raw = cellToString(mapped.budget) || null;
+        const parsed = parseBudgetString(raw);
+        return { budget: parsed.value || null, budget_unit: parsed.unit };
+      })(),
     });
   }
 

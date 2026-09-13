@@ -478,6 +478,37 @@ export async function commitImport(
     );
     const stagedRows = stagedRes.rows as ImportRow[];
 
+    // 3a2. FIX-C: resolve job-level ownership names to stable user IDs once per
+    //      commit so every created lead gets FK columns populated from the start.
+    //      Uses the same org-scoped name lookup as POST /api/walkin_enquiries.
+    //      Executed once per job (not per row) because assigned_to and
+    //      overseeing_site_head are job-wide, not per-row fields.
+    //      If no matching user is found the FK stays null — the name column still
+    //      carries the assignment and canEditLead() falls back to name comparison.
+    const assignedToUserRows = job.assigned_to
+      ? await client.query<{ id: number }>(
+          `SELECT id FROM users
+             WHERE organization_id = $1
+               AND LOWER(TRIM(name)) = LOWER(TRIM($2))
+               AND deleted_at IS NULL
+             ORDER BY is_active DESC, id ASC LIMIT 1`,
+          [orgId, job.assigned_to]
+        )
+      : { rows: [] as { id: number }[] };
+    const assignedToUserId: number | null = assignedToUserRows.rows[0]?.id ?? null;
+
+    const siteHeadUserRows = job.overseeing_site_head
+      ? await client.query<{ id: number }>(
+          `SELECT id FROM users
+             WHERE organization_id = $1
+               AND LOWER(TRIM(name)) = LOWER(TRIM($2))
+               AND deleted_at IS NULL
+             ORDER BY is_active DESC, id ASC LIMIT 1`,
+          [orgId, job.overseeing_site_head]
+        )
+      : { rows: [] as { id: number }[] };
+    const overseeingSiteHeadUserId: number | null = siteHeadUserRows.rows[0]?.id ?? null;
+
     let created = 0;
     let updated = 0;
     let skipped = 0;
@@ -704,7 +735,8 @@ export async function commitImport(
               loan_planned, assigned_to, assigned_receptionist, status,
               is_global_shared, overseeing_site_head,
               enquiry_date, auto_date_enabled, external_ref, channel_partner_id,
-              organization_id, import_job_id
+              organization_id, import_job_id,
+              assigned_to_user_id, overseeing_site_head_user_id
             )
             VALUES (
               $1,  $2,  $3,  $4,  $5,  $6,
@@ -714,7 +746,8 @@ export async function commitImport(
               $17, $18, $19, $20,
               $21, $22,
               $23, $24, $25, $26,
-              $27, $28
+              $27, $28,
+              $29, $30
             )
             ON CONFLICT (organization_id, external_ref) WHERE external_ref IS NOT NULL DO NOTHING
             RETURNING id`,
@@ -747,6 +780,8 @@ export async function commitImport(
             channelPartnerId,                               // $26
             orgId,                                          // $27
             jobId,                                          // $28 import_job_id
+            assignedToUserId,                               // $29 assigned_to_user_id
+            overseeingSiteHeadUserId,                       // $30 overseeing_site_head_user_id
           ]
         );
 

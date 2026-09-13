@@ -14,6 +14,7 @@ import {
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { clearCrmSession, getStoredCrmUser, installLoggedOutBackGuard } from "@/lib/authSession";
+import { formatBudget } from "@/lib/formatBudget";
 import { useCrmTheme } from "@/lib/hooks/useCrmTheme";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -978,13 +979,6 @@ export default function ReceptionistDashboard() {
   // Input only ever holds raw digits — the "+91" prefix is rendered separately,
   // so there's no reformatting-while-typing to fight the cursor over.
   const cleanMobileDigits = (raw: string) => raw.replace(/\D/g, "").slice(0, 10);
-  const formatBudget = (budget: any, unit: any): string => {
-    const b = String(budget || "").trim();
-    if (!b || b === "Pending" || b === "N/A" || b === "Not Disclosed") return b || "Pending";
-    const u = String(unit || "").trim().toLowerCase();
-    const label = u === "thousand" ? "Thousand" : u === "crore" ? "Crore" : u === "lakh" ? "Lakh" : "";
-    return label ? `₹${b} ${label}` : `₹${b}`;
-  };
   const maskPhone = (phone: any) => {
     if (!phone || phone === "N/A") return "N/A";
     const s = String(phone).trim();
@@ -1169,7 +1163,12 @@ export default function ReceptionistDashboard() {
 
   const initialLoad = async () => {
     setIsFetchingEnquiries(true);
-    setOffset(0); setHasMore(true); setEnquiries([]);
+    setOffset(0); setHasMore(true);
+    // Do NOT clear enquiries before the fetch completes. fetchPage with
+    // append=false replaces the list atomically when the data arrives, so
+    // existingCPs stays populated during the round-trip and the CP Company
+    // autocomplete remains usable for a second enquiry opened immediately
+    // after the first one is submitted.
     await fetchPage(0, false, searchRecep);
     setIsFetchingEnquiries(false);
   };
@@ -1259,6 +1258,9 @@ export default function ReceptionistDashboard() {
   // Only fires for CP enquiries and only on a complete number — a partial one can
   // never match the 10-digit key, and asking would flash a misleading
   // "new partner" state on every keystroke.
+  // When a registered partner is found, CP Name and CP Company are filled in if
+  // the receptionist left them blank — they should not have to copy values they
+  // can already see in the info banner.
   useEffect(() => {
     const digits = (enquiryForm.cpDetails.phone || "").replace(/\D/g, "");
     if (enquiryForm.source !== "Channel Partner" || digits.length < 10) {
@@ -1274,13 +1276,21 @@ export default function ReceptionistDashboard() {
         const json = await res.json();
         if (cancelled) return;
         setCpLookup(res.ok && json.success ? json : null);
-        // A registered partner's owner is the manager this lead will actually go
-        // to, so the field is set to match rather than left showing a different
-        // name than the outcome.
-        if (res.ok && json.success && json.routable) {
+        if (res.ok && json.success && json.found && json.partner) {
           setEnquiryForm(prev => ({
             ...prev,
-            sourcingManagerId: String(json.partner.assigned_sourcing_manager_id),
+            cpDetails: {
+              // Fill blank fields only — never overwrite what the receptionist typed.
+              name: prev.cpDetails.name || json.partner.name || "",
+              company: prev.cpDetails.company || json.partner.company_name || "",
+              phone: prev.cpDetails.phone,
+            },
+            // A registered partner's owner is the manager this lead will actually go
+            // to, so the field is set to match rather than left showing a different
+            // name than the outcome.
+            ...(json.routable
+              ? { sourcingManagerId: String(json.partner.assigned_sourcing_manager_id) }
+              : {}),
           }));
         }
       } catch {
@@ -1293,6 +1303,64 @@ export default function ReceptionistDashboard() {
     }, 400);
     return () => { cancelled = true; clearTimeout(timer); };
   }, [enquiryForm.cpDetails.phone, enquiryForm.source]);
+
+  // Debounced CP name lookup — fires when the receptionist types a CP name and
+  // looks it up in channel_partners master table. Fills company and phone if they
+  // are currently blank (fill-if-blank prevents overwriting anything already typed).
+  // Minimum 2 characters to avoid triggering on a single initial.
+  useEffect(() => {
+    const name = (enquiryForm.cpDetails.name || "").trim();
+    if (enquiryForm.source !== "Channel Partner" || name.length < 2) return;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/channel-partners/lookup?name=${encodeURIComponent(name)}`);
+        const json = await res.json();
+        if (cancelled || !res.ok || !json.success || !json.found || !json.partner) return;
+        setEnquiryForm(prev => {
+          const d = { ...prev.cpDetails };
+          if (!d.company && json.partner.company_name) d.company = json.partner.company_name;
+          if (!d.phone && json.partner.phone) d.phone = json.partner.phone;
+          return {
+            ...prev,
+            cpDetails: d,
+            ...(json.routable && !prev.sourcingManagerId
+              ? { sourcingManagerId: String(json.partner.assigned_sourcing_manager_id) }
+              : {}),
+          };
+        });
+      } catch { /* silent: a failed lookup is not blocking */ }
+    }, 400);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [enquiryForm.cpDetails.name, enquiryForm.source]);
+
+  // Debounced CP company lookup — mirrors the name lookup above but searches
+  // channel_partners.company_name. Fills name and phone if blank.
+  useEffect(() => {
+    const company = (enquiryForm.cpDetails.company || "").trim();
+    if (enquiryForm.source !== "Channel Partner" || company.length < 2) return;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/channel-partners/lookup?company=${encodeURIComponent(company)}`);
+        const json = await res.json();
+        if (cancelled || !res.ok || !json.success || !json.found || !json.partner) return;
+        setEnquiryForm(prev => {
+          const d = { ...prev.cpDetails };
+          if (!d.name && json.partner.name) d.name = json.partner.name;
+          if (!d.phone && json.partner.phone) d.phone = json.partner.phone;
+          return {
+            ...prev,
+            cpDetails: d,
+            ...(json.routable && !prev.sourcingManagerId
+              ? { sourcingManagerId: String(json.partner.assigned_sourcing_manager_id) }
+              : {}),
+          };
+        });
+      } catch { /* silent: a failed lookup is not blocking */ }
+    }, 400);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [enquiryForm.cpDetails.company, enquiryForm.source]);
 
   // ── Walk-in Enquiry: PIN → City lookup ──
   // Identical debounce + cancel pattern to the CP form. Runs whenever the modal
@@ -1531,7 +1599,7 @@ export default function ReceptionistDashboard() {
   // replaces a useEffect that re-derived the New Lead and Site Visit rules here
   // in the browser — the same two rules the Admin and Sales dashboards each kept
   // their own copy of. See lib/notifications/feed.ts.
-  const notifications = useNotificationFeed();
+  const notifications = useNotificationFeed({ playSound: true });
   const notificationHistory = useMemo(
     () =>
       [...notifications.newLeads, ...notifications.siteVisits].sort(
@@ -3613,7 +3681,7 @@ export default function ReceptionistDashboard() {
                     <div className={`p-1.5 sm:p-2 rounded-xl ${isDark ? "bg-[#0A84FF]/10" : "bg-[#007AFF]/10"}`}>
                       <FaTable className={`text-[14px] sm:text-lg ${isDark ? "text-[#0A84FF]" : "text-[#00AEEF]"}`} />
                     </div>
-                    <h3 className={`text-[15px] sm:text-lg font-bold tracking-tight ${t.text}`}>Your Leads</h3>
+                    <h3 className={`text-[15px] sm:text-lg font-bold tracking-tight ${t.text}`}>Your Enquiris</h3>
                     <span className={`text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-md tabular-nums tracking-wide ${t.btnClosingBadge}`}>
                       {filteredRecepLeads.length.toLocaleString("en-IN")}
                     </span>
@@ -3885,7 +3953,7 @@ export default function ReceptionistDashboard() {
                         <div className={`p-1.5 sm:p-2 rounded-xl ${isDark ? "bg-[#0A84FF]/10" : "bg-[#007AFF]/10"}`}>
                           <FaHandshake className={`text-[14px] sm:text-lg ${isDark ? "text-[#0A84FF]" : "text-[#00AEEF]"}`} />
                         </div>
-                        <h3 className={`text-[15px] sm:text-lg font-bold tracking-tight ${t.text}`}>Your Closed Sales</h3>
+                        <h3 className={`text-[15px] sm:text-lg font-bold tracking-tight ${t.text}`}>Your Closed Enquiries</h3>
                         <span className={`text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-md tabular-nums tracking-wide ${t.btnClosingBadge}`}>
                           {filteredClosedLeads.length.toLocaleString("en-IN")}
                         </span>

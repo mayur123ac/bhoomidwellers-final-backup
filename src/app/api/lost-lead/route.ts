@@ -19,16 +19,20 @@ export async function POST(req: Request) {
     if (!gate.ok) return gate.response;
 
     const body = await req.json();
-    const { lead_id, reason, marked_by } = body as {
+    const { lead_id, reason } = body as {
       lead_id: number | string;
       reason: string;
-      marked_by: string;
     };
 
+    // P1-7: markedBy derives from the authenticated session, never from the
+    // request body. The previous code accepted marked_by as a client field and
+    // wrote it directly to lost_lead_marked_by and follow_ups.created_by_name.
+    const markedBy = String(gate.session.name ?? "").trim() || "Unknown";
+
     // Validation
-    if (!lead_id || !reason || !marked_by) {
+    if (!lead_id || !reason) {
       return NextResponse.json(
-        { success: false, message: "Missing required fields: lead_id, reason, marked_by" },
+        { success: false, message: "Missing required fields: lead_id, reason" },
         { status: 400 }
       );
     }
@@ -69,18 +73,18 @@ export async function POST(req: Request) {
            lost_lead_marked_by = $2
        WHERE id = $3 AND organization_id = $4
        RETURNING *`,
-      [reason.trim(), marked_by, lead_id, await getOrganizationId()]
+      [reason.trim(), markedBy, lead_id, await getOrganizationId()]
     );
 
     // Create activity log entry via follow_ups
     const leadNo = existing[0].sr_no || lead_id;
-    const logMessage = `🚨 Marked as Lost Lead\nReason: ${reason.trim()}\nBy: ${marked_by}`;
+    const logMessage = `🚨 Marked as Lost Lead\nReason: ${reason.trim()}\nBy: ${markedBy}`;
 
     try {
       await query(
         `INSERT INTO follow_ups (lead_id, message, created_by_name, created_by_id, site_visit_date, organization_id)
          VALUES ($1, $2, $3, $6, $4, $5)`,
-        [String(lead_id), logMessage, marked_by, null, await getOrganizationId(), gate.userId]
+        [String(lead_id), logMessage, markedBy, null, await getOrganizationId(), gate.userId]
       );
     } catch (fuErr: any) {
       console.warn("[lost-lead] follow_ups insert failed:", fuErr.message);
@@ -113,14 +117,18 @@ export async function PUT(req: Request) {
     if (!gate.ok) return gate.response;
 
     const body = await req.json();
-    const { lead_id, restored_by } = body as {
+    const { lead_id } = body as {
       lead_id: number | string;
-      restored_by: string;
     };
 
-    if (!lead_id || !restored_by) {
+    // P1-8: restoredBy derives from the authenticated session, never from the
+    // request body. The previous code accepted restored_by as a client field and
+    // wrote it directly to follow_ups.created_by_name.
+    const restoredBy = String(gate.session.name ?? "").trim() || "Unknown";
+
+    if (!lead_id) {
       return NextResponse.json(
-        { success: false, message: "Missing required fields: lead_id, restored_by" },
+        { success: false, message: "Missing required fields: lead_id" },
         { status: 400 }
       );
     }
@@ -159,13 +167,13 @@ export async function PUT(req: Request) {
 
     // Create activity log entry
     const leadNo = existing[0].sr_no || lead_id;
-    const logMessage = `✅ Restored from Lost Lead to Active Pipeline\nBy: ${restored_by}`;
+    const logMessage = `✅ Restored from Lost Lead to Active Pipeline\nBy: ${restoredBy}`;
 
     try {
       await query(
         `INSERT INTO follow_ups (lead_id, message, created_by_name, created_by_id, site_visit_date, organization_id)
          VALUES ($1, $2, $3, $6, $4, $5)`,
-        [String(lead_id), logMessage, restored_by, null, await getOrganizationId(), gate.userId]
+        [String(lead_id), logMessage, restoredBy, null, await getOrganizationId(), gate.userId]
       );
     } catch (fuErr: any) {
       console.warn("[lost-lead] follow_ups insert failed:", fuErr.message);

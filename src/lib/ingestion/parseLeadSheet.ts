@@ -4,6 +4,7 @@ import * as XLSX from "xlsx";
 // Type-only deps inside cpCommissionEngine, so importing it here adds no runtime
 // weight to the client bundle this parser runs in.
 import { isChannelPartnerSource } from "@/lib/cpCommissionEngine";
+import { parseBudgetString } from "@/lib/formatBudget";
 
 export interface ParsedLead {
   name: string;
@@ -17,6 +18,7 @@ export interface ParsedLead {
   feedback: string | null; // raw remarks text, stored verbatim as a follow-up
   configuration: string | null;
   budget: string | null;
+  budget_unit: string | null;
 }
 
 export interface ErrorRow {
@@ -353,7 +355,11 @@ export function parseLeadSheet(buffer: ArrayBuffer | Buffer): ParseResult {
       cp_phone: cpPhoneRaw || null,
       feedback: cellToString(mapped.feedback) || null,
       configuration: cellToString(mapped.configuration) || null,
-      budget: cellToString(mapped.budget) || null,
+      ...(() => {
+        const raw = cellToString(mapped.budget) || null;
+        const parsed = parseBudgetString(raw);
+        return { budget: parsed.value || null, budget_unit: parsed.unit };
+      })(),
     });
   }
 

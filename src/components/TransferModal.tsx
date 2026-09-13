@@ -93,7 +93,6 @@ export default function TransferModal({
           lead_id: selectedLead.id,
           transfer_to: transferTarget,
           transfer_note: transferNote,
-          transferred_by: transferredBy,
         }),
       });
 

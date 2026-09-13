@@ -99,7 +99,7 @@ export async function bulkInsertLeads(
           is_global_shared, overseeing_site_head,
           enquiry_date, auto_date_enabled, external_ref, channel_partner_id,
           assigned_to_user_id, overseeing_site_head_user_id,
-          organization_id
+          organization_id, budget_unit
         )
         VALUES (
           $1,  $2,  $3,  $4,  $5,  $6,
@@ -110,7 +110,7 @@ export async function bulkInsertLeads(
           $21, $22,
           $23, $24, $25, $26,
           $27, $28,
-          $29
+          $29, $30
         )
         ON CONFLICT (organization_id, external_ref) WHERE external_ref IS NOT NULL DO NOTHING
         RETURNING id`,
@@ -144,6 +144,7 @@ export async function bulkInsertLeads(
           assignedToUserId, // $27
           siteHeadUserId, // $28
           orgId, // $29
+          row.budget_unit || null, // $30
         ]
       );
 

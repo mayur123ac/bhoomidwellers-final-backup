@@ -104,6 +104,8 @@ export async function POST(req: Request) {
           // recalc:false — we recalc once after the whole batch.
           const databaseResult = await deleteLeadDatabaseRecords(client, leadId, {
             recalc: false,
+            adminName,
+            adminRole: auth.session.role || "admin",
           });
 
           const leadNumber = lead.sr_no ? String(lead.sr_no) : String(lead.id);

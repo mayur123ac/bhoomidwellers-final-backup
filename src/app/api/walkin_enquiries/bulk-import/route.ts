@@ -7,6 +7,7 @@ import { requireRole } from "@/lib/serverAuth";
 import { parseLeadSheet, RowCapError } from "@/lib/ingestion/parseLeadSheet";
 import { bulkInsertLeads } from "@/lib/ingestion/bulkInsertLeads";
 import { getOrganizationId } from "@/lib/tenantContext";
+import { isAssignableRole } from "@/lib/leadAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -110,6 +111,42 @@ export async function POST(req: Request) {
         return NextResponse.json(
           { success: false, message: "assignedTo is required." },
           { status: 400 }
+        );
+      }
+
+      // FIX-F: validate that the assignedTo target has an assignable role.
+      // Admins and site heads supply this name from a form field (client input).
+      // Without this check, leads could be bulk-imported assigned to an admin,
+      // sourcing manager, or any other non-lead-holding role — the same gap that
+      // the runtime POST route closes via isAssignableRole() (P0-5).
+      const orgId = await getOrganizationId();
+      const assigneeRows = await query(
+        `SELECT id, REPLACE(LOWER(TRIM(role)), '_', ' ') AS normalized_role
+           FROM users
+          WHERE organization_id = $1
+            AND LOWER(TRIM(name)) = LOWER(TRIM($2))
+            AND deleted_at IS NULL
+            AND is_active = true
+          ORDER BY id ASC LIMIT 1`,
+        [orgId, assignedTo]
+      );
+      if (assigneeRows.length === 0) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: `"${assignedTo}" is not an active employee in this organisation.`,
+          },
+          { status: 422 }
+        );
+      }
+      if (!isAssignableRole(assigneeRows[0].normalized_role)) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: `Leads cannot be imported assigned to a ${assigneeRows[0].normalized_role || "user with this role"} — only Sales Managers, Site Heads, and Receptionists are valid assignees.`,
+            code: "INVALID_ASSIGNEE",
+          },
+          { status: 422 }
         );
       }
     }

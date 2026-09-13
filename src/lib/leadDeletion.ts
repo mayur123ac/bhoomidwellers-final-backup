@@ -4,6 +4,7 @@ import type { PoolClient } from "pg";
 import { bucketName, deleteObjectFromR2, listR2KeysByPrefix } from "@/lib/r2";
 import { recalculateSrNos } from "@/lib/db";
 import { getOrganizationId } from "@/lib/tenantContext";
+import { releaseUnitForBooking } from "@/lib/inventorySync";
 
 type R2Failure = {
   key: string;
@@ -82,6 +83,11 @@ const LEAD_RELATED_DELETES = [
   // AND a RESTRICT booking_id FK (→ booking_applications). Placing it here
   // clears both dependencies before either parent is deleted.
   { table: "financial_adjustments", column: "lead_id" },
+  // loan_applications: has lead_id (ON DELETE CASCADE → walkin_enquiries) and
+  // booking_id (ON DELETE CASCADE → booking_applications). Explicit delete here
+  // before booking_applications prevents the booking CASCADE from racing with
+  // the lead CASCADE when both parents are deleted in the same transaction.
+  { table: "loan_applications", column: "lead_id" },
   // ── Booking document children (all have ON DELETE CASCADE, order flexible) ──
   { table: "booking_documents", column: "lead_id" },
   { table: "booking_forms", column: "lead_id" },
@@ -140,6 +146,98 @@ export async function getExistingColumns(client: PoolClient, tableName: string) 
 async function tableHasColumn(client: PoolClient, tableName: string, columnName: string) {
   const columns = await getExistingColumns(client, tableName);
   return columns.has(columnName);
+}
+
+// ── Booking cancellation pre-step ────────────────────────────────────────────
+// Reuses the exact same cancellation mechanism as CancellationModal / the
+// booking PUT route:
+//   1. SET booking_status = 'Cancelled' with reason/cancelled_by/cancelled_at
+//   2. releaseUnitForBooking() — sets inventory unit back to 'available',
+//      NULLs unit.lead_id + unit.booking_id, writes inventory_unit_history
+//   3. INSERT booking_history record
+//
+// Only runs on non-Cancelled bookings. Already-cancelled bookings (whose unit
+// is already released) are skipped so the inventory unit is not double-touched.
+//
+// ISOLATION: the WHERE clause on booking_applications is scoped to both
+// lead_id AND organization_id, so only the deleted lead's org-scoped bookings
+// are touched. releaseUnitForBooking() itself calls getOrganizationId() for
+// the history insert — also org-scoped.
+async function cancelBookingsForLead(
+  client: PoolClient,
+  leadId: number,
+  adminName: string,
+  adminRole: string,
+  orgId: string,
+): Promise<{ cancelledIds: number[] }> {
+  // Guard: table may not exist in all environments.
+  if (!(await tableHasColumn(client, "booking_applications", "lead_id"))) {
+    return { cancelledIds: [] };
+  }
+
+  const bookingRows = await client.query(
+    `SELECT id, booking_status
+       FROM booking_applications
+      WHERE lead_id = $1 AND organization_id = $2 AND booking_status != 'Cancelled'
+      ORDER BY id ASC`,
+    [leadId, orgId],
+  );
+
+  const cancelledIds: number[] = [];
+  for (const row of bookingRows.rows) {
+    const bookingId = row.id as number;
+    const prevStatus = String(row.booking_status ?? "");
+
+    // Step 1 — Mark booking Cancelled (same fields as CancellationModal PUT).
+    await client.query(
+      `UPDATE booking_applications
+          SET booking_status        = 'Cancelled',
+              cancellation_reason   = 'Lead permanently deleted by admin',
+              cancelled_by          = $2,
+              cancelled_at          = NOW(),
+              updated_at            = NOW()
+        WHERE id = $1 AND organization_id = $3`,
+      [bookingId, adminName, orgId],
+    );
+
+    // Step 2 — Release the linked inventory unit (existing mechanism).
+    // Sets unit.status='available', NULLs unit.lead_id + unit.booking_id,
+    // and writes inventory_unit_history if the status actually changed.
+    await releaseUnitForBooking(
+      client,
+      bookingId,
+      "lead permanently deleted",
+      adminName,
+    );
+
+    // Step 3 — Booking history record (same format as existing cancellation flow).
+    const historyPayload = JSON.stringify({
+      booking_status: { from: prevStatus, to: "Cancelled" },
+      cancellation_reason: "Lead permanently deleted by admin",
+    });
+    // booking_history gained organization_id after the baseline migration.
+    // Use tableHasColumn so this is safe against older schema snapshots.
+    const bhHasOrgId = await tableHasColumn(client, "booking_history", "organization_id");
+    if (bhHasOrgId) {
+      await client.query(
+        `INSERT INTO booking_history
+           (booking_id, updated_by, user_role, changed_fields, organization_id)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [bookingId, adminName, adminRole, historyPayload, orgId],
+      );
+    } else {
+      await client.query(
+        `INSERT INTO booking_history
+           (booking_id, updated_by, user_role, changed_fields)
+         VALUES ($1, $2, $3, $4)`,
+        [bookingId, adminName, adminRole, historyPayload],
+      );
+    }
+
+    cancelledIds.push(bookingId);
+  }
+
+  return { cancelledIds };
 }
 
 function normalizePotentialR2Key(raw: string) {
@@ -260,6 +358,31 @@ export async function deleteLeadAssets(
 
   const bookingNumbers = await collectBookingApplicationKeys(client, leadId, keys);
 
+  // follow_up_attachments stores R2 keys in r2_object_key but has no lead_id
+  // column — it links to follow_ups via follow_up_id. Collect keys via subquery
+  // before the generic loop which cannot handle indirect joins.
+  // ISOLATION: follow_ups.lead_id = $leadId ensures only this lead's attachments
+  // are included. Cannot match another lead's follow-ups.
+  const fuaHasR2Key = await tableHasColumn(client, "follow_up_attachments", "r2_object_key");
+  const fuaHasFollowUpId = await tableHasColumn(client, "follow_up_attachments", "follow_up_id");
+  const fuHasLeadId = await tableHasColumn(client, "follow_ups", "lead_id");
+  if (fuaHasR2Key && fuaHasFollowUpId && fuHasLeadId) {
+    const fuaRows = await client.query(
+      `SELECT r2_object_key
+         FROM follow_up_attachments
+        WHERE follow_up_id IN (
+          SELECT id FROM follow_ups WHERE lead_id::text = $1
+        )`,
+      [String(leadId)],
+    );
+    for (const row of fuaRows.rows) {
+      if (row.r2_object_key) {
+        const k = normalizePotentialR2Key(row.r2_object_key);
+        if (k) keys.add(k);
+      }
+    }
+  }
+
   for (const table of KNOWN_ASSET_TABLES) {
     await collectKeysFromTable(
       client,
@@ -355,11 +478,12 @@ export async function deleteLeadLocalUploads(leadId: number): Promise<LocalAsset
 export async function deleteLeadDatabaseRecords(
   client: PoolClient,
   leadId: number,
-  options: { recalc?: boolean } = {}
+  options: { recalc?: boolean; adminName?: string; adminRole?: string } = {}
 ): Promise<LeadDatabaseDeletionResult> {
   // recalc defaults to true so existing single-delete behavior is unchanged.
   // Bulk delete passes recalc:false and calls recalculateSrNos once after the batch.
-  const { recalc = true } = options;
+  // adminName/adminRole are used for the booking cancellation audit trail.
+  const { recalc = true, adminName = "Admin", adminRole = "admin" } = options;
   const deletedRecords: Record<string, number> = {};
 
   // Both callers already refuse a lead belonging to another organization before
@@ -368,11 +492,36 @@ export async function deleteLeadDatabaseRecords(
   // and it must not depend on every future caller remembering to check first.
   const orgId = await getOrganizationId(client);
 
+  // ── Step 0: Cancel non-Cancelled bookings FIRST ───────────────────────────────
+  // Requirement: "existing booking cancellation flow runs FIRST if the lead has
+  // a booking." This runs cancelBookingsForLead(), which for each non-Cancelled
+  // booking on this lead:
+  //   1. Sets booking_status='Cancelled' with reason + cancelled_by + cancelled_at
+  //   2. Calls releaseUnitForBooking() — puts the inventory unit back to 'available',
+  //      NULLs unit.lead_id + unit.booking_id, writes inventory_unit_history
+  //   3. Inserts a booking_history record (same as CancellationModal)
+  //
+  // Already-Cancelled bookings are skipped (their unit is already released).
+  // This MUST run before the pre-booking cleanup block so that the cancellation
+  // metadata and booking_history records exist before booking_applications is deleted.
+  //
+  // ISOLATION: cancelBookingsForLead() scopes its query to both lead_id=$1 AND
+  // organization_id=$2. It cannot touch another lead's bookings.
+  const { cancelledIds } = await cancelBookingsForLead(
+    client, leadId, adminName, adminRole, orgId,
+  );
+  deletedRecords["booking_cancellations"] = cancelledIds.length;
+
   // ── Pre-booking cleanup ───────────────────────────────────────────────────────
   // cp_commissions and inventory_units.booking_id hold RESTRICT FKs to
   // booking_applications(id) but have no lead_id column, so they cannot appear
   // in LEAD_RELATED_DELETES. Clear them via subquery before booking_applications
   // rows are deleted by the main loop below.
+  //
+  // After Step 0, inventory_units.booking_id is already NULL for bookings that
+  // were just cancelled. The UPDATE below is a safe no-op for those rows.
+  // cp_commissions still needs an explicit DELETE — the cancellation step does
+  // not remove commission records (they are financial records, not status fields).
   const baHasLeadId = await tableHasColumn(client, "booking_applications", "lead_id");
   if (baHasLeadId) {
     // Tables whose only lead link is booking_id → booking_applications: DELETE them.
@@ -388,6 +537,9 @@ export async function deleteLeadDatabaseRecords(
       deletedRecords[tbl] = r.rowCount ?? 0;
     }
     // inventory_units: NULL out booking_id so the unit re-enters available stock.
+    // Redundant for bookings cancelled in Step 0 (already NULL'd by releaseUnitForBooking),
+    // but needed for any booking that was already Cancelled before this deletion and
+    // whose booking_id was not properly cleared by a prior release.
     if (await tableHasColumn(client, "inventory_units", "booking_id")) {
       const r = await client.query(
         `UPDATE inventory_units SET booking_id = NULL
@@ -398,6 +550,29 @@ export async function deleteLeadDatabaseRecords(
       );
       deletedRecords["inventory_units.booking_id_nulled"] = r.rowCount ?? 0;
     }
+  }
+
+  // ── follow_up_attachments: delete before follow_ups ───────────────────────────
+  // follow_up_attachments.follow_up_id is a plain INTEGER (no FK constraint) so
+  // it does not block deletion of follow_ups. However it would be orphaned if
+  // follow_ups is deleted first. Delete here via subquery before the main loop
+  // processes follow_ups.
+  //
+  // ISOLATION: the subquery filters follow_ups by lead_id::text = $leadId so only
+  // this lead's follow-up attachments are deleted. Another lead's follow_ups are
+  // untouched even if they share the same organization.
+  if (
+    await tableHasColumn(client, "follow_up_attachments", "follow_up_id") &&
+    await tableHasColumn(client, "follow_ups", "lead_id")
+  ) {
+    const r = await client.query(
+      `DELETE FROM follow_up_attachments
+        WHERE follow_up_id IN (
+          SELECT id FROM follow_ups WHERE lead_id::text = $1
+        )`,
+      [String(leadId)],
+    );
+    deletedRecords["follow_up_attachments"] = r.rowCount ?? 0;
   }
 
   for (const item of LEAD_RELATED_DELETES) {
