@@ -1,12 +1,14 @@
-// api/settings/self-password-change/request-otp/route.ts
+// api/settings/password/recover/route.ts — Case B Step 1.
 //
-// Generates a 6-digit OTP, stores its SHA-256 hash in email_change_otps (the
-// same hardened table used by forgot-password and admin-password-change), sends
-// the plaintext to the user's registered email, and returns a generic success
-// message. The OTP is NEVER included in the API response.
+// "Forgot current password?" for a logged-in user. Sends a recovery OTP
+// to the user's canonical email (users.email) using a separate purpose
+// (self_password_recovery) so it cannot cross-authorize a Case A flow.
 //
-// Rate limits, attempt caps, expiry, and previous-OTP invalidation all reuse
-// the proven helpers in lib/passwordReset.ts.
+// The user's identity comes from the authenticated session — the client
+// cannot substitute another user's email or user_id.
+//
+// A session alone is NOT sufficient to change the password. The user must
+// also prove control of their registered email via the OTP.
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/serverAuth";
 import { query } from "@/lib/db";
@@ -14,7 +16,7 @@ import { writeAuditLog, requestContext } from "@/lib/auditLog";
 import { EmailService } from "@/lib/email/EmailService";
 import { isMailConfigured } from "@/lib/email/config";
 import {
-  SELF_PW_CHANGE_PURPOSE,
+  SELF_PW_RECOVERY_PURPOSE,
   RESET_OTP_TTL_MINUTES,
   checkRateLimitForPurpose,
   generateOtp,
@@ -38,8 +40,9 @@ export async function POST(req: NextRequest) {
   const { ip, userAgent } = requestContext(req);
 
   try {
-    const rows = await query<{ permissions: any; email: string; name: string }>(
-      `SELECT permissions, email, name FROM users WHERE id = $1 AND deleted_at IS NULL LIMIT 1`,
+    // ── Load user from session (NOT from request body) ───────────────────────
+    const rows = await query<{ email: string; name: string }>(
+      `SELECT email, name FROM users WHERE id = $1 AND deleted_at IS NULL LIMIT 1`,
       [userId]
     );
     if (rows.length === 0) {
@@ -49,16 +52,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { permissions: rawPerms, email, name } = rows[0];
-    const permissions = rawPerms ?? { can_change_password: true };
-    if (!permissions.can_change_password) {
-      return NextResponse.json(
-        { success: false, message: "Password changes are disabled for your account." },
-        { status: 403 }
-      );
-    }
+    const { email, name } = rows[0];
 
-    // ── Pre-flight: require a working mail transport ────────────────────────
+    // ── Pre-flight: require mail transport ────────────────────────────────────
     if (!isMailConfigured()) {
       return NextResponse.json(
         {
@@ -71,8 +67,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ── Rate limit ─────────────────────────────────────────────────────────
-    const rate = await checkRateLimitForPurpose(userId, SELF_PW_CHANGE_PURPOSE);
+    // ── Rate limit ───────────────────────────────────────────────────────────
+    const rate = await checkRateLimitForPurpose(userId, SELF_PW_RECOVERY_PURPOSE);
     if (!rate.ok) {
       return NextResponse.json(
         {
@@ -87,14 +83,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ── Supersede any live code for this user + purpose ─────────────────────
+    // ── Supersede existing codes ─────────────────────────────────────────────
     await query(
       `UPDATE email_change_otps SET consumed_at = now()
         WHERE user_id = $1 AND purpose = $2 AND consumed_at IS NULL`,
-      [userId, SELF_PW_CHANGE_PURPOSE]
+      [userId, SELF_PW_RECOVERY_PURPOSE]
     );
 
-    // ── Generate, hash, store ──────────────────────────────────────────────
+    // ── Generate, hash, store ────────────────────────────────────────────────
     const otp = generateOtp();
     const expiresAt = new Date(Date.now() + RESET_OTP_TTL_MINUTES * 60 * 1000);
 
@@ -103,35 +99,32 @@ export async function POST(req: NextRequest) {
          (user_id, new_email, sent_to, otp_hash, expires_at, purpose, organization_id)
        VALUES ($1, $2, $2, $3, $4, $5,
                (SELECT organization_id FROM users WHERE id = $1))`,
-      [userId, email, hashOtp(otp), expiresAt, SELF_PW_CHANGE_PURPOSE]
+      [userId, email, hashOtp(otp), expiresAt, SELF_PW_RECOVERY_PURPOSE]
     );
 
-    // ── Send the email ─────────────────────────────────────────────────────
+    // ── Send the email ───────────────────────────────────────────────────────
     const firstName = (name || "").trim().split(/\s+/)[0] || "there";
     const sendResult = await EmailService.sendOTP(
       email,
       {
         name: firstName,
         code: otp,
-        purpose: "Password change",
+        purpose: "change your password",
         expiryMinutes: RESET_OTP_TTL_MINUTES,
       },
       { userId, ip, userAgent }
     );
 
     if (!sendResult.delivered) {
-      // Consume the code so it cannot be redeemed without email access.
       await query(
         `UPDATE email_change_otps SET consumed_at = now()
           WHERE user_id = $1 AND purpose = $2 AND consumed_at IS NULL`,
-        [userId, SELF_PW_CHANGE_PURPOSE]
+        [userId, SELF_PW_RECOVERY_PURPOSE]
       );
       return NextResponse.json(
         {
           success: false,
-          message:
-            "The verification code could not be delivered to your email address. " +
-            "Please check your email configuration or contact support.",
+          message: "The verification code could not be delivered. Please try again later.",
         },
         { status: 503 }
       );
@@ -140,7 +133,7 @@ export async function POST(req: NextRequest) {
     void writeAuditLog({
       userId,
       actorName: name,
-      action: "self_password_change.otp_requested",
+      action: "self_password_recovery.otp_requested",
       entityType: "user",
       entityId: String(userId),
       ipAddress: ip,
@@ -150,13 +143,13 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: `A verification code has been sent to your email (${email}). It expires in ${RESET_OTP_TTL_MINUTES} minutes.`,
+      message: `A recovery code has been sent to your email (${email}). It expires in ${RESET_OTP_TTL_MINUTES} minutes.`,
       mailDelivered: true,
     });
   } catch (err: any) {
-    console.error("[POST /api/settings/self-password-change/request-otp]", err?.message);
+    console.error("[POST /api/settings/password/recover]", err?.message);
     return NextResponse.json(
-      { success: false, message: "Could not send verification code." },
+      { success: false, message: "Could not send recovery code." },
       { status: 500 }
     );
   }

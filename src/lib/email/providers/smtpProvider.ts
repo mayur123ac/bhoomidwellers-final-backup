@@ -292,6 +292,10 @@ export class SmtpProvider implements EmailProvider {
         };
       }
 
+      const domain = to.split("@")[1] || "unknown";
+      console.info(
+        `[email:smtp] accepted: domain=${domain} messageId=${info.messageId} response=${info.response}`
+      );
       return { delivered: true, provider: this.name, messageId: info.messageId };
     } catch (err) {
       const error = classify(err);

@@ -1,16 +1,17 @@
-// api/settings/self-password-change/request-otp/route.ts
+// api/settings/password/verify-current/route.ts — Case A Step 1.
 //
-// Generates a 6-digit OTP, stores its SHA-256 hash in email_change_otps (the
-// same hardened table used by forgot-password and admin-password-change), sends
-// the plaintext to the user's registered email, and returns a generic success
-// message. The OTP is NEVER included in the API response.
+// Verifies the user's current password server-side. If correct, generates
+// an OTP (purpose = self_password_change), sends it to users.email, and
+// returns success. If wrong, rejects without generating any OTP.
 //
-// Rate limits, attempt caps, expiry, and previous-OTP invalidation all reuse
-// the proven helpers in lib/passwordReset.ts.
+// The current password is NEVER trusted from the frontend alone. It is
+// verified against the stored hash (scrypt or legacy plaintext) using
+// verifyPassword(), which handles both formats with constant-time comparison.
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/serverAuth";
 import { query } from "@/lib/db";
 import { writeAuditLog, requestContext } from "@/lib/auditLog";
+import { verifyPassword } from "@/lib/passwords";
 import { EmailService } from "@/lib/email/EmailService";
 import { isMailConfigured } from "@/lib/email/config";
 import {
@@ -38,8 +39,24 @@ export async function POST(req: NextRequest) {
   const { ip, userAgent } = requestContext(req);
 
   try {
-    const rows = await query<{ permissions: any; email: string; name: string }>(
-      `SELECT permissions, email, name FROM users WHERE id = $1 AND deleted_at IS NULL LIMIT 1`,
+    const body = await req.json().catch(() => ({}));
+    const currentPassword = (body?.currentPassword ?? "").toString();
+
+    if (!currentPassword) {
+      return NextResponse.json(
+        { success: false, message: "Current password is required." },
+        { status: 400 }
+      );
+    }
+
+    // ── Load user ────────────────────────────────────────────────────────────
+    const rows = await query<{
+      password: string | null;
+      email: string;
+      name: string;
+    }>(
+      `SELECT password, email, name
+         FROM users WHERE id = $1 AND deleted_at IS NULL LIMIT 1`,
       [userId]
     );
     if (rows.length === 0) {
@@ -49,16 +66,27 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { permissions: rawPerms, email, name } = rows[0];
-    const permissions = rawPerms ?? { can_change_password: true };
-    if (!permissions.can_change_password) {
+    const { password: stored, email, name } = rows[0];
+
+    // ── Verify current password ──────────────────────────────────────────────
+    const ok = await verifyPassword(currentPassword, stored);
+    if (!ok) {
+      void writeAuditLog({
+        userId,
+        actorName: name,
+        action: "self_password_change.current_password_failed",
+        entityType: "user",
+        entityId: String(userId),
+        ipAddress: ip,
+        userAgent,
+      });
       return NextResponse.json(
-        { success: false, message: "Password changes are disabled for your account." },
+        { success: false, message: "Current password is incorrect." },
         { status: 403 }
       );
     }
 
-    // ── Pre-flight: require a working mail transport ────────────────────────
+    // ── Pre-flight: require mail transport ────────────────────────────────────
     if (!isMailConfigured()) {
       return NextResponse.json(
         {
@@ -71,7 +99,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ── Rate limit ─────────────────────────────────────────────────────────
+    // ── Rate limit ───────────────────────────────────────────────────────────
     const rate = await checkRateLimitForPurpose(userId, SELF_PW_CHANGE_PURPOSE);
     if (!rate.ok) {
       return NextResponse.json(
@@ -87,14 +115,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ── Supersede any live code for this user + purpose ─────────────────────
+    // ── Supersede existing codes ─────────────────────────────────────────────
     await query(
       `UPDATE email_change_otps SET consumed_at = now()
         WHERE user_id = $1 AND purpose = $2 AND consumed_at IS NULL`,
       [userId, SELF_PW_CHANGE_PURPOSE]
     );
 
-    // ── Generate, hash, store ──────────────────────────────────────────────
+    // ── Generate, hash, store ────────────────────────────────────────────────
     const otp = generateOtp();
     const expiresAt = new Date(Date.now() + RESET_OTP_TTL_MINUTES * 60 * 1000);
 
@@ -106,21 +134,20 @@ export async function POST(req: NextRequest) {
       [userId, email, hashOtp(otp), expiresAt, SELF_PW_CHANGE_PURPOSE]
     );
 
-    // ── Send the email ─────────────────────────────────────────────────────
+    // ── Send the email ───────────────────────────────────────────────────────
     const firstName = (name || "").trim().split(/\s+/)[0] || "there";
     const sendResult = await EmailService.sendOTP(
       email,
       {
         name: firstName,
         code: otp,
-        purpose: "Password change",
+        purpose: "change your password",
         expiryMinutes: RESET_OTP_TTL_MINUTES,
       },
       { userId, ip, userAgent }
     );
 
     if (!sendResult.delivered) {
-      // Consume the code so it cannot be redeemed without email access.
       await query(
         `UPDATE email_change_otps SET consumed_at = now()
           WHERE user_id = $1 AND purpose = $2 AND consumed_at IS NULL`,
@@ -129,9 +156,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          message:
-            "The verification code could not be delivered to your email address. " +
-            "Please check your email configuration or contact support.",
+          message: "The verification code could not be delivered. Please try again later.",
         },
         { status: 503 }
       );
@@ -154,9 +179,9 @@ export async function POST(req: NextRequest) {
       mailDelivered: true,
     });
   } catch (err: any) {
-    console.error("[POST /api/settings/self-password-change/request-otp]", err?.message);
+    console.error("[POST /api/settings/password/verify-current]", err?.message);
     return NextResponse.json(
-      { success: false, message: "Could not send verification code." },
+      { success: false, message: "Could not process your request." },
       { status: 500 }
     );
   }

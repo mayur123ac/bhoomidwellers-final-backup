@@ -176,10 +176,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                 t.kind === "success"
                   ? T.success
                   : t.kind === "error"
-                  ? T.danger
-                  : t.kind === "warning"
-                  ? T.warning
-                  : T.teal,
+                    ? T.danger
+                    : t.kind === "warning"
+                      ? T.warning
+                      : T.teal,
             }}
           >
             <span aria-hidden className="text-base leading-none">
@@ -413,7 +413,7 @@ export function Button({
       disabled={rest.disabled || loading}
       // 44px min height — the spec's touch-target floor, and it applies on
       // desktop too rather than only under a media query.
-      className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg border px-5 text-sm font-semibold transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+      className="inline-flex min-h-[44px] cursor-pointer items-center justify-center gap-2 rounded-lg border px-5 text-sm font-semibold transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
       style={palette[variant]}
     >
       {loading && (
@@ -562,9 +562,8 @@ export function Checkbox({
     <div>
       <label
         htmlFor={id}
-        className={`flex items-center gap-2.5 py-1.5 ${
-          disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"
-        }`}
+        className={`flex items-center gap-2.5 py-1.5 ${disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"
+          }`}
       >
         <input
           id={id}

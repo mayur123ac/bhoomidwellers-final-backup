@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { clearCrmSession } from "@/lib/authSession";
 import {
@@ -9,6 +9,7 @@ import {
   Field,
   InfoBanner,
   Modal,
+  OTPInput,
   PageHeader,
   PasswordStrengthIndicator,
   Skeleton,
@@ -34,104 +35,334 @@ function formatWhen(value: string | null | undefined): string {
   });
 }
 
-/* ── Password change ────────────────────────────────────────────────────────*/
+/* ── Password change (multi-step: Case A + Case B) ─────────────────────────*/
+
+type PwStep = "current" | "otp" | "newPassword" | "done";
+type PwMode = "change" | "recover";
 
 function PasswordChangeModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const toast = useToast();
   const router = useRouter();
+
+  const [mode, setMode] = useState<PwMode>("change");
+  const [step, setStep] = useState<PwStep>("current");
+
+  // Step 1 — current password (Case A only)
   const [current, setCurrent] = useState("");
+  // Step 2 — OTP
+  const [otp, setOtp] = useState("");
+  // Step 3 — new password
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
+
+  // Shared
+  const [authToken, setAuthToken] = useState("");
+  const [authExpiry, setAuthExpiry] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+  const [attemptsRemaining, setAttemptsRemaining] = useState<number | null>(null);
+
+  // Timer for auth token expiry
+  const expiryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (open) {
+      setMode("change");
+      setStep("current");
       setCurrent("");
+      setOtp("");
       setNext("");
       setConfirm("");
+      setAuthToken("");
+      setAuthExpiry(0);
       setError(null);
+      setInfo(null);
+      setAttemptsRemaining(null);
+      if (expiryTimer.current) clearTimeout(expiryTimer.current);
     }
+    return () => {
+      if (expiryTimer.current) clearTimeout(expiryTimer.current);
+    };
   }, [open]);
+
+  const purpose = mode === "recover" ? "self_password_recovery" : "self_password_change";
 
   const rulesMet = Object.values(checkRules(next)).every(Boolean);
   const matches = next.length > 0 && next === confirm;
 
-  const submit = async () => {
+  // ── Case A Step 1: verify current password, server sends OTP ────────────
+  const submitCurrentPassword = async () => {
     setBusy(true);
     setError(null);
     try {
-      await api("/api/settings/password", {
+      const res = await api<{ message: string }>("/api/settings/password/verify-current", {
         method: "POST",
-        json: { currentPassword: current, newPassword: next, confirmPassword: confirm },
+        json: { currentPassword: current },
       });
+      setInfo(res.message);
+      setStep("otp");
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
 
-      toast("success", "Password updated. Re-login required.");
-      // The server already cleared the cookie. Clear the client cache too and
-      // send them to the login screen, rather than leaving a signed-out browser
-      // sitting on a page whose next request will 401.
+  // ── Case B Step 1: request recovery OTP ─────────────────────────────────
+  const requestRecoveryOtp = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await api<{ message: string }>("/api/settings/password/recover", {
+        method: "POST",
+        json: {},
+      });
+      setInfo(res.message);
+      setMode("recover");
+      setStep("otp");
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // ── Step 2: verify OTP → get authToken ──────────────────────────────────
+  const submitOtp = async (code?: string) => {
+    const otpValue = code ?? otp;
+    if (!/^\d{6}$/.test(otpValue)) return;
+    setBusy(true);
+    setError(null);
+    setAttemptsRemaining(null);
+    try {
+      const res = await api<{
+        message: string;
+        authToken: string;
+        authExpiresInMinutes: number;
+        restart?: boolean;
+      }>("/api/settings/password/verify-otp", {
+        method: "POST",
+        json: { otp: otpValue, purpose },
+      });
+      setAuthToken(res.authToken);
+      setAuthExpiry(res.authExpiresInMinutes);
+      setInfo(`Code verified. You have ${res.authExpiresInMinutes} minutes to set a new password.`);
+      setStep("newPassword");
+
+      // Start expiry timer
+      if (expiryTimer.current) clearTimeout(expiryTimer.current);
+      expiryTimer.current = setTimeout(() => {
+        setError("Authorization expired. Please start over.");
+        setStep("current");
+        setAuthToken("");
+        setOtp("");
+        setNext("");
+        setConfirm("");
+        setInfo(null);
+      }, res.authExpiresInMinutes * 60 * 1000);
+    } catch (err: any) {
+      const body = err;
+      setError(err.message);
+      if (body.attemptsRemaining != null) setAttemptsRemaining(body.attemptsRemaining);
+      if (body.restart) {
+        // OTP is locked/expired — must restart
+        setOtp("");
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // ── Step 3: change password ─────────────────────────────────────────────
+  const submitNewPassword = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await api<{ message: string }>("/api/settings/password/change", {
+        method: "POST",
+        json: { authToken, newPassword: next, confirmPassword: confirm, purpose },
+      });
+      if (expiryTimer.current) clearTimeout(expiryTimer.current);
+      setStep("done");
+      toast("success", res.message);
       clearCrmSession();
-      setTimeout(() => router.replace("/"), 1200);
+      setTimeout(() => router.replace("/"), 2000);
     } catch (err: any) {
       setError(err.message);
       setBusy(false);
     }
   };
 
+  // ── "Forgot current password?" handler ──────────────────────────────────
+  const handleForgot = () => {
+    setError(null);
+    setInfo(null);
+    setCurrent("");
+    requestRecoveryOtp();
+  };
+
+  // ── Render helpers ──────────────────────────────────────────────────────
+  const stepTitle: Record<PwStep, string> = {
+    current: "Change password",
+    otp: "Enter verification code",
+    newPassword: "Set new password",
+    done: "Password changed",
+  };
+
+  const stepDescription: Record<PwStep, string> = {
+    current: "Verify your identity before changing your password.",
+    otp: mode === "recover"
+      ? "A recovery code has been sent to your registered email."
+      : "A verification code has been sent to your registered email.",
+    newPassword: `You have ${authExpiry} minutes to set a new password. You'll be signed out afterwards.`,
+    done: "You will be redirected to the login page.",
+  };
+
+  const canClose = step !== "done" && !busy;
+
   return (
     <Modal
       open={open}
-      onClose={onClose}
-      title="Change password"
-      description="You'll be signed out and asked to sign in again with the new password."
+      onClose={canClose ? onClose : undefined}
+      title={stepTitle[step]}
+      description={stepDescription[step]}
       footer={
-        <>
-          <Button variant="secondary" onClick={onClose} disabled={busy}>
-            Cancel
-          </Button>
-          <Button onClick={submit} loading={busy} disabled={!current || !rulesMet || !matches}>
-            Update Password
-          </Button>
-        </>
+        step === "done" ? null : (
+          <>
+            {canClose && (
+              <Button variant="secondary" onClick={onClose} disabled={busy}>
+                Cancel
+              </Button>
+            )}
+
+            {step === "current" && (
+              <Button
+                onClick={submitCurrentPassword}
+                loading={busy}
+                disabled={!current}
+              >
+                Verify &amp; Send Code
+              </Button>
+            )}
+
+            {step === "otp" && (
+              <Button
+                onClick={() => submitOtp()}
+                loading={busy}
+                disabled={!/^\d{6}$/.test(otp)}
+              >
+                Verify Code
+              </Button>
+            )}
+
+            {step === "newPassword" && (
+              <Button
+                onClick={submitNewPassword}
+                loading={busy}
+                disabled={!rulesMet || !matches}
+              >
+                Update Password
+              </Button>
+            )}
+          </>
+        )
       }
     >
-      <Field label="Current Password" htmlFor="current-password" required error={error}>
-        <TextInput
-          id="current-password"
-          type="password"
-          value={current}
-          hasError={Boolean(error)}
-          onChange={(e) => setCurrent(e.target.value)}
-          autoComplete="current-password"
-        />
-      </Field>
+      {error && (
+        <InfoBanner tone="warning">{error}</InfoBanner>
+      )}
 
-      <Field label="New Password" htmlFor="new-password" required>
-        <TextInput
-          id="new-password"
-          type="password"
-          value={next}
-          onChange={(e) => setNext(e.target.value)}
-          autoComplete="new-password"
-        />
-        <PasswordStrengthIndicator password={next} />
-      </Field>
+      {info && !error && step !== "done" && (
+        <InfoBanner tone="info">{info}</InfoBanner>
+      )}
 
-      <Field
-        label="Confirm Password"
-        htmlFor="confirm-password"
-        required
-        error={confirm && !matches ? "Passwords do not match." : null}
-      >
-        <TextInput
-          id="confirm-password"
-          type="password"
-          value={confirm}
-          hasError={Boolean(confirm) && !matches}
-          onChange={(e) => setConfirm(e.target.value)}
-          autoComplete="new-password"
-        />
-      </Field>
+      {/* ── Step 1: Current password (Case A) ─────────────────────────────── */}
+      {step === "current" && (
+        <>
+          <Field label="Current Password" htmlFor="current-password" required>
+            <TextInput
+              id="current-password"
+              type="password"
+              value={current}
+              hasError={Boolean(error)}
+              onChange={(e) => { setCurrent(e.target.value); setError(null); }}
+              autoComplete="current-password"
+            />
+          </Field>
+
+          <button
+            type="button"
+            onClick={handleForgot}
+            disabled={busy}
+            className="mt-1 text-sm font-medium hover:underline"
+            style={{ color: T.teal, background: "none", border: "none", cursor: "pointer", padding: 0 }}
+          >
+            Forgot your current password?
+          </button>
+        </>
+      )}
+
+      {/* ── Step 2: OTP ───────────────────────────────────────────────────── */}
+      {step === "otp" && (
+        <>
+          <Field label="6-digit code" htmlFor="pw-otp" required>
+            <OTPInput
+              value={otp}
+              onChange={(v) => { setOtp(v); setError(null); }}
+              disabled={busy}
+              error={Boolean(error)}
+              onComplete={(code) => submitOtp(code)}
+            />
+          </Field>
+
+          {attemptsRemaining != null && attemptsRemaining > 0 && (
+            <p className="mt-1 text-xs" style={{ color: T.warning }}>
+              {attemptsRemaining} attempt{attemptsRemaining === 1 ? "" : "s"} remaining.
+            </p>
+          )}
+        </>
+      )}
+
+      {/* ── Step 3: New password ──────────────────────────────────────────── */}
+      {step === "newPassword" && (
+        <>
+          <Field label="New Password" htmlFor="new-password" required>
+            <TextInput
+              id="new-password"
+              type="password"
+              value={next}
+              onChange={(e) => setNext(e.target.value)}
+              autoComplete="new-password"
+            />
+            <PasswordStrengthIndicator password={next} />
+          </Field>
+
+          <Field
+            label="Confirm Password"
+            htmlFor="confirm-password"
+            required
+            error={confirm && !matches ? "Passwords do not match." : null}
+          >
+            <TextInput
+              id="confirm-password"
+              type="password"
+              value={confirm}
+              hasError={Boolean(confirm) && !matches}
+              onChange={(e) => setConfirm(e.target.value)}
+              autoComplete="new-password"
+            />
+          </Field>
+        </>
+      )}
+
+      {/* ── Step 4: Done ──────────────────────────────────────────────────── */}
+      {step === "done" && (
+        <InfoBanner tone="info">
+          Your password has been changed and all sessions have been revoked.
+          Redirecting to login...
+        </InfoBanner>
+      )}
     </Modal>
   );
 }

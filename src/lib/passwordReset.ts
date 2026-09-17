@@ -18,7 +18,7 @@
 // Only the SHA-256 of the code is written. The plaintext exists in the outbound
 // email and in the request that verifies it, and nowhere else — not in a
 // response, not in a log, not in an audit row.
-import { createHash, randomInt } from "crypto";
+import { createHash, createHmac, randomInt, timingSafeEqual } from "crypto";
 import { query } from "@/lib/db";
 
 /** Matches the existing email-change flow. Short enough to limit exposure. */
@@ -43,9 +43,45 @@ export const GENERIC_RESET_MESSAGE =
   "a 6-digit code has been sent to it. Employee passwords are managed by your " +
   "administrator — please contact them for a reset.";
 
-/** SHA-256, matching the hashing the email-change flow already uses. */
+/**
+ * Reads the OTP pepper from the environment at call time.
+ *
+ * Not cached at module scope: `next build` evaluates route modules with an
+ * environment that may not include .env.local, and a module-scope read would
+ * freeze that absence into the build — the same issue documented in
+ * lib/email/config.ts. Reading on every call costs one property access against
+ * a CSPRNG + HMAC, which is nothing.
+ *
+ * Returns `null` when the variable is missing or too short. The caller
+ * (hashOtp) treats null as a hard failure — no silent fallback to unsalted
+ * SHA-256.
+ */
+function getOtpPepper(): string | null {
+  const pepper = process.env.OTP_PEPPER;
+  if (!pepper || pepper.length < 16) return null;
+  return pepper;
+}
+
+/**
+ * HMAC-SHA256 keyed by the server-side OTP_PEPPER.
+ *
+ * The pepper never enters the database, so a database dump cannot be used to
+ * precompute the million possible 6-digit verifiers offline. Without the
+ * pepper the HMAC is irreproducible.
+ *
+ * Throws if OTP_PEPPER is missing or too short. This is fail-closed by design:
+ * a deployment that forgets the variable must break at OTP generation, not
+ * silently downgrade to bare SHA-256 which is offline-reversible.
+ */
 export function hashOtp(otp: string): string {
-  return createHash("sha256").update(otp).digest("hex");
+  const pepper = getOtpPepper();
+  if (!pepper) {
+    throw new Error(
+      "OTP_PEPPER is not configured or is too short (minimum 16 characters). " +
+      "OTP operations are unavailable until it is set."
+    );
+  }
+  return createHmac("sha256", pepper).update(otp).digest("hex");
 }
 
 /** A 6-digit code from the CSPRNG. Math.random() is predictable. */
@@ -304,7 +340,11 @@ export async function checkOtp(userId: number, submitted: string): Promise<OtpCh
     return { ok: false, reason: "locked", attemptsRemaining: 0 };
   }
 
-  if (hashOtp(submitted) !== row.otp_hash) {
+  const supplied = Buffer.from(hashOtp(submitted), "hex");
+  const stored = Buffer.from(row.otp_hash, "hex");
+  const matches = supplied.length === stored.length && timingSafeEqual(supplied, stored);
+
+  if (!matches) {
     const bumped = await query<{ attempts: number }>(
       `UPDATE email_change_otps SET attempts = attempts + 1
         WHERE id = $1 RETURNING attempts`,
@@ -321,6 +361,12 @@ export async function checkOtp(userId: number, submitted: string): Promise<OtpCh
 
 /** Purpose string for admin-initiated employee password changes. */
 export const ADMIN_PW_CHANGE_PURPOSE = "admin_password_change";
+/** Purpose string for self-service password changes from Account & Security. */
+export const SELF_PW_CHANGE_PURPOSE = "self_password_change";
+/** Purpose string for primary-email change verification. */
+export const EMAIL_CHANGE_PURPOSE = "email_change";
+/** Purpose string for logged-in "forgot current password" recovery. */
+export const SELF_PW_RECOVERY_PURPOSE = "self_password_recovery";
 
 /**
  * Per-account rate limiting for any OTP purpose.
@@ -400,7 +446,11 @@ export async function checkOtpForPurpose(
     return { ok: false, reason: "locked", attemptsRemaining: 0 };
   }
 
-  if (hashOtp(submitted) !== row.otp_hash) {
+  const supplied = Buffer.from(hashOtp(submitted), "hex");
+  const stored = Buffer.from(row.otp_hash, "hex");
+  const matches = supplied.length === stored.length && timingSafeEqual(supplied, stored);
+
+  if (!matches) {
     const bumped = await query<{ attempts: number }>(
       `UPDATE email_change_otps SET attempts = attempts + 1
         WHERE id = $1 RETURNING attempts`,

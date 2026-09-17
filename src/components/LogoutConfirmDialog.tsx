@@ -58,7 +58,7 @@ export default function LogoutConfirmDialog({
             type="button"
             onClick={onClose}
             disabled={isLoggingOut}
-            className={`rounded-lg p-2 transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${isDark ? "text-gray-400 hover:bg-white/5 hover:text-white" : "text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+            className={`rounded-lg p-2 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${isDark ? "text-gray-400 hover:bg-white/5 hover:text-white" : "text-gray-400 hover:bg-gray-100 hover:text-gray-600"
               }`}
             aria-label="Close"
           >
@@ -72,7 +72,7 @@ export default function LogoutConfirmDialog({
             type="button"
             onClick={onClose}
             disabled={isLoggingOut}
-            className={`rounded-lg px-4 py-2.5 text-sm font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${isDark ? "text-gray-300 hover:bg-white/5 hover:text-white" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+            className={`rounded-lg px-4 py-2.5 text-sm font-bold transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${isDark ? "text-gray-300 hover:bg-white/5 hover:text-white" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
               }`}
           >
             Cancel
@@ -81,7 +81,7 @@ export default function LogoutConfirmDialog({
             type="button"
             onClick={handleConfirm}
             disabled={isLoggingOut}
-            className={`inline-flex items-center justify-center gap-2 rounded-lg px-5 py-2.5 text-sm font-black text-white transition-colors disabled:cursor-not-allowed disabled:opacity-70 ${isDark ? "bg-red-600 hover:bg-red-500" : "bg-red-600 hover:bg-red-500"
+            className={`inline-flex items-center justify-center gap-2 rounded-lg px-5 py-2.5 text-sm font-black text-white transition-colors disabled:cursor-not-allowed cursor-pointer  disabled:opacity-70 ${isDark ? "bg-red-600 hover:bg-red-500" : "bg-red-600 hover:bg-red-500"
               }`}
           >
             <LogOut className="h-4 w-4" />

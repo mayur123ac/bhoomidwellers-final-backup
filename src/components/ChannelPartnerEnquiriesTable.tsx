@@ -15,14 +15,15 @@
 // fields under bare labels ("Phone Number", "City", "Email"). Since both
 // walkin_enquiries and channel_partners now carry city/pin_code/phone/email, every
 // header here is prefixed CP / Client so a row can never be misread.
-import React, { useCallback, useDeferredValue, useMemo, useState } from "react";
+import React, { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { FaSearch, FaTimes, FaUserTie, FaExchangeAlt, FaHandshake } from "react-icons/fa";
+import { FaSearch, FaTimes, FaUserTie, FaExchangeAlt, FaHandshake, FaEllipsisV, FaTrash, FaPen } from "react-icons/fa";
 import SearchableSelect, { SelectOption } from "./SearchableSelect";
 import { normalizeRole } from "@/lib/cpRbac";
 import { useCpResource, invalidateCpCache } from "@/lib/hooks/useCpResource";
 import { CpTableSkeletonRows, CpHeaderSkeleton } from "./cp/CpSkeletons";
 import { usePresenceRefresh } from "@/hooks/usePresenceRefresh";
+import ChannelPartnerFormModal, { ChannelPartner } from "./ChannelPartnerFormModal";
 
 interface Props {
   user: { name: string; role: string; _id?: string };
@@ -111,6 +112,7 @@ const requirementOf = (r: EnquiryRowData) => {
  */
 const EnquiryRow = React.memo(function EnquiryRow({
   row: r, serial, isDark, t, canReassign, standalone, onOpen, onReassign,
+  showActions, isMenuOpen, onMenuToggle, onAction,
 }: {
   row: EnquiryRowData;
   /** Position on screen, or null when the Sr. No. column is off. */
@@ -122,6 +124,14 @@ const EnquiryRow = React.memo(function EnquiryRow({
   standalone: boolean;
   onOpen: (row: EnquiryRowData) => void;
   onReassign: (row: EnquiryRowData) => void;
+  /** Show kebab action column (Admin + standalone). */
+  showActions?: boolean;
+  /** Whether this row's kebab menu is currently open. */
+  isMenuOpen?: boolean;
+  /** Toggle the kebab menu for this row. */
+  onMenuToggle?: (row: EnquiryRowData, e: React.MouseEvent) => void;
+  /** Fire an action from the kebab menu. */
+  onAction?: (row: EnquiryRowData, action: "reassign" | "delete" | "edit") => void;
 }) {
   const cell = `px-3 py-3 whitespace-nowrap ${t.textMuted}`;
   return (
@@ -204,6 +214,44 @@ const EnquiryRow = React.memo(function EnquiryRow({
           )}
         </td>
       )}
+      {showActions && (
+        <td className="px-2 py-3 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+          <div className="relative inline-block">
+            <button
+              onClick={e => { e.stopPropagation(); onMenuToggle?.(r, e); }}
+              className={`p-1.5 rounded-lg cursor-pointer transition-colors ${isDark ? "hover:bg-white/10" : "hover:bg-black/5"} ${t.textMuted}`}
+              title="Actions"
+            >
+              <FaEllipsisV className="text-[11px]" />
+            </button>
+            {isMenuOpen && (
+              <div
+                className={`absolute right-0 top-full mt-1 z-50 rounded-xl shadow-xl border py-1 w-[136px] ${isDark ? "bg-[#2C2C2E] border-white/10" : "bg-white border-black/10"}`}
+                onClick={e => e.stopPropagation()}
+              >
+                <button
+                  onClick={() => onAction?.(r, "reassign")}
+                  className={`block w-full text-left px-3.5 py-2 text-[11px] cursor-pointer transition-colors ${isDark ? "hover:bg-white/10 text-white" : "hover:bg-black/5 text-black"}`}
+                >
+                  <FaExchangeAlt className="inline text-[9px] mr-2 opacity-60" />Reassign
+                </button>
+                <button
+                  onClick={() => onAction?.(r, "delete")}
+                  className="block w-full text-left px-3.5 py-2 text-[11px] cursor-pointer transition-colors text-red-500 hover:bg-red-500/10"
+                >
+                  <FaTrash className="inline text-[9px] mr-2 opacity-60" />Delete
+                </button>
+                <button
+                  onClick={() => onAction?.(r, "edit")}
+                  className={`block w-full text-left px-3.5 py-2 text-[11px] cursor-pointer transition-colors ${isDark ? "hover:bg-white/10 text-white" : "hover:bg-black/5 text-black"}`}
+                >
+                  <FaPen className="inline text-[9px] mr-2 opacity-60" />Edit
+                </button>
+              </div>
+            )}
+          </div>
+        </td>
+      )}
     </tr>
   );
 });
@@ -230,6 +278,59 @@ function ChannelPartnerEnquiriesTable({
   const [reassignBusy, setReassignBusy] = useState(false);
   const [reassignError, setReassignError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+
+  // ── Admin-only kebab actions (standalone "Active CP Info" only) ──
+  const showActions = standalone && isAdmin;
+  const [activeMenuId, setActiveMenuId] = useState<number | null>(null);
+  // Delete
+  const [deleteTarget, setDeleteTarget] = useState<EnquiryRowData | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  // Edit
+  const [editTarget, setEditTarget] = useState<EnquiryRowData | null>(null);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  // CP-level reassignment (to Sales Manager / Site Head)
+  const [reassignCpTarget, setReassignCpTarget] = useState<EnquiryRowData | null>(null);
+  const [reassignCpTo, setReassignCpTo] = useState("");
+  const [reassignCpBusy, setReassignCpBusy] = useState(false);
+  const [reassignCpError, setReassignCpError] = useState<string | null>(null);
+
+  // Fetch assignable users for CP reassignment (Sales Managers + Site Heads)
+  const { data: salesMgrList } = useCpResource<EnquiryRowData[]>(
+    showActions ? "/api/users/sales-manager" : null,
+    { initial: NO_ROWS }
+  );
+  const { data: siteHeadList } = useCpResource<EnquiryRowData[]>(
+    showActions ? "/api/users/site-head" : null,
+    { initial: NO_ROWS }
+  );
+  const cpAssignOptions: SelectOption[] = useMemo(
+    () => [
+      ...salesMgrList.map((m: any) => ({
+        value: String(m.id),
+        label: m.name,
+        sublabel: `Sales Manager · ID ${m.id}${m.username ? ` · ${m.username}` : ""}`,
+        keywords: `sales manager ${m.username || ""} ${m.phone || ""} ${m.email || ""}`,
+        status: ((m as any).presence === "ONLINE" ? "online" : "offline") as "online" | "offline",
+      })),
+      ...siteHeadList.map((m: any) => ({
+        value: String(m.id),
+        label: m.name,
+        sublabel: `Site Head · ID ${m.id}${m.username ? ` · ${m.username}` : ""}`,
+        keywords: `site head ${m.username || ""} ${m.phone || ""} ${m.email || ""}`,
+        status: ((m as any).presence === "ONLINE" ? "online" : "offline") as "online" | "offline",
+      })),
+    ],
+    [salesMgrList, siteHeadList]
+  );
+
+  // Close kebab menu on outside click
+  useEffect(() => {
+    if (activeMenuId === null) return;
+    const close = () => setActiveMenuId(null);
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, [activeMenuId]);
 
   // The same URL the panel has always requested — the query string is built
   // identically, so the server sees no change. What is different is that the
@@ -341,12 +442,104 @@ function ChannelPartnerEnquiriesTable({
     }
   };
 
+  // ── Kebab action handlers (Admin + standalone only) ──────────────────────
+  const onMenuToggle = useCallback((row: EnquiryRowData, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setActiveMenuId(prev => prev === row.channel_partner_id ? null : row.channel_partner_id);
+  }, []);
+
+  const onKebabAction = useCallback((row: EnquiryRowData, action: "reassign" | "delete" | "edit") => {
+    setActiveMenuId(null);
+    if (action === "reassign") {
+      setReassignCpError(null);
+      setReassignCpTo(row.assigned_sourcing_manager_id ? String(row.assigned_sourcing_manager_id) : "");
+      setReassignCpTarget(row);
+    } else if (action === "delete") {
+      setDeleteError(null);
+      setDeleteTarget(row);
+    } else if (action === "edit") {
+      setEditTarget(row);
+      setEditModalOpen(true);
+    }
+  }, []);
+
+  /** Map the standalone API row shape to ChannelPartner for the edit modal. */
+  const rowToCp = useCallback((row: EnquiryRowData): ChannelPartner => ({
+    id: row.channel_partner_id,
+    name: row.partner_name || "",
+    company_name: row.partner_company || null,
+    rera_registration_no: row.rera_registration_no || null,
+    pan_number: row.pan_number || null,
+    phone: row.partner_phone || null,
+    email: row.partner_email || null,
+    office_address: row.office_address || null,
+    pin_code: row.partner_pin_code || null,
+    city: row.partner_city || null,
+    owner_contact_person: row.owner_contact_person || null,
+    gst_number: row.gst_number || null,
+    bank_account_details: row.bank_account_details || null,
+    default_commission_rate: row.default_commission_rate ?? null,
+    status: row.cp_status || "active",
+    assigned_sourcing_manager_id: row.assigned_sourcing_manager_id || null,
+    created_at: row.created_at || null,
+    created_by: row.created_by || null,
+  }), []);
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleteBusy(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/channel-partners/${deleteTarget.channel_partner_id}`, { method: "DELETE" });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        setDeleteError(json.message || "Delete failed.");
+        return;
+      }
+      setDeleteTarget(null);
+      flash(json.message || "Channel partner deleted.");
+      fetchRows();
+    } catch (e: any) {
+      setDeleteError(e.message || "Network error.");
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
+
+  const handleReassignCp = async () => {
+    if (!reassignCpTarget) return;
+    setReassignCpBusy(true);
+    setReassignCpError(null);
+    try {
+      const res = await fetch(`/api/channel-partners/${reassignCpTarget.channel_partner_id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          assigned_sourcing_manager_id: reassignCpTo === "" ? null : Number(reassignCpTo),
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        setReassignCpError(json.message || "Reassignment failed.");
+        return;
+      }
+      setReassignCpTarget(null);
+      flash(json.message || "Channel partner reassigned.");
+      fetchRows();
+    } catch (e: any) {
+      setReassignCpError(e.message || "Network error.");
+    } finally {
+      setReassignCpBusy(false);
+    }
+  };
+
   const columns = useMemo(() => standalone
     ? [
       ...(showSerial ? ["Sr. No."] : []),
       "Created", "CP Name", "CP Company", "CP Phone",
       "Office Address", "Owner / Contact", "GST", "RERA", "CP City", "CP Pin",
       "Sourcing Manager", "Sales Manager", "Status",
+      ...(showActions ? ["Action"] : []),
     ]
     : [
       ...(showSerial ? ["Sr. No."] : []),
@@ -356,7 +549,7 @@ function ChannelPartnerEnquiriesTable({
       "Preferred Location", "Budget", "Requirement", "Sourcing Manager", "Sales Manager", "Status",
       ...(canReassign ? [""] : []),
     ],
-    [showSerial, canReassign, standalone]);
+    [showSerial, canReassign, standalone, showActions]);
 
   const skeletonWidths = useMemo(
     () => columns.map(c => COLUMN_BAR_WIDTHS[c] ?? 64),
@@ -533,6 +726,10 @@ function ChannelPartnerEnquiriesTable({
                 standalone={standalone}
                 onOpen={openDetail}
                 onReassign={openReassign}
+                showActions={showActions}
+                isMenuOpen={activeMenuId === r.channel_partner_id}
+                onMenuToggle={onMenuToggle}
+                onAction={onKebabAction}
               />
             ))}
           </tbody>
@@ -769,6 +966,161 @@ function ChannelPartnerEnquiriesTable({
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* ── Admin kebab: Delete confirmation ── */}
+      <AnimatePresence>
+        {deleteTarget && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[140] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+            onClick={() => !deleteBusy && setDeleteTarget(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.96, y: 12 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.96, y: 12 }}
+              onClick={e => e.stopPropagation()}
+              className={`w-full max-w-md rounded-2xl p-6 shadow-2xl ${isDark ? "bg-[#1C1C1E] border border-white/10" : "bg-white border border-black/5"}`}
+            >
+              <div className="flex items-start justify-between mb-4">
+                <h3 className={`text-base font-bold ${t.text}`}>Delete channel partner?</h3>
+                <button onClick={() => !deleteBusy && setDeleteTarget(null)} className={`p-1.5 rounded-lg cursor-pointer ${t.textMuted}`}>
+                  <FaTimes />
+                </button>
+              </div>
+
+              <p className={`text-xs mb-2 ${t.textMuted}`}>
+                <span className={`font-bold ${t.text}`}>{cpField(deleteTarget, "partner_name", "cp_name")}</span>
+                {cpField(deleteTarget, "partner_company", "cp_company") ? ` · ${cpField(deleteTarget, "partner_company", "cp_company")}` : ""}
+              </p>
+              <p className={`text-xs mb-4 ${t.textMuted}`}>
+                This permanently removes the partner record. It is refused if any lead,
+                booking or commission still references them.
+              </p>
+
+              {deleteError && (
+                <div className="mb-4 rounded-lg px-3 py-2 text-xs bg-red-500/10 border border-red-500/30 text-red-500">
+                  {deleteError}
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-3">
+                <button
+                  onClick={() => setDeleteTarget(null)}
+                  className={`px-4 py-2 rounded-xl text-xs font-semibold cursor-pointer ${t.textMuted}`}
+                >
+                  Cancel
+                </button>
+                {!deleteError && (
+                  <button
+                    onClick={handleDelete}
+                    disabled={deleteBusy}
+                    className={`px-5 py-2 rounded-xl text-xs font-bold cursor-pointer bg-red-600 hover:bg-red-700 text-white ${deleteBusy ? "opacity-50 cursor-not-allowed" : ""}`}
+                  >
+                    {deleteBusy ? "Deleting..." : "Delete"}
+                  </button>
+                )}
+                {deleteError && (
+                  <button
+                    onClick={() => {
+                      const row = deleteTarget;
+                      setDeleteTarget(null);
+                      setEditTarget(row);
+                      setEditModalOpen(true);
+                    }}
+                    className={`px-5 py-2 rounded-xl text-xs font-bold cursor-pointer ${t.btnPrimary}`}
+                  >
+                    Mark Inactive Instead
+                  </button>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Admin kebab: CP Reassignment (Sales Manager / Site Head) ── */}
+      <AnimatePresence>
+        {reassignCpTarget && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[140] flex items-center justify-center bg-black/40 backdrop-blur-md p-4"
+            onClick={() => !reassignCpBusy && setReassignCpTarget(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.96, y: 12 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.96, y: 12 }}
+              onClick={e => e.stopPropagation()}
+              className={`w-full max-w-md rounded-[2rem] p-6 shadow-2xl ${isDark ? "bg-[#1C1C1E]/85 border-white/10 backdrop-blur-3xl" : "bg-white/85 border-black/5 backdrop-blur-3xl"}`}
+            >
+              <div className="flex items-start justify-between mb-4">
+                <h3 className={`text-base font-bold tracking-tight ${t.text}`}>Reassign Channel Partner</h3>
+                <button onClick={() => !reassignCpBusy && setReassignCpTarget(null)} className={`p-1.5 rounded-full cursor-pointer transition-colors ${isDark ? "hover:bg-white/10" : "hover:bg-black/5"} ${t.textMuted}`}>
+                  <FaTimes />
+                </button>
+              </div>
+
+              <p className={`text-xs mb-4 leading-relaxed ${t.textMuted}`}>
+                <span className={`font-semibold ${t.text}`}>
+                  {cpField(reassignCpTarget, "partner_name", "cp_name") || "Unnamed partner"}
+                </span>
+                {reassignCpTarget.sourcing_manager_name && ` · currently ${reassignCpTarget.sourcing_manager_name}`}
+              </p>
+
+              <label className={`block text-[11px] uppercase tracking-wider mb-1.5 font-bold ${t.textMuted}`}>
+                Sales Manager / Site Head
+              </label>
+              <SearchableSelect
+                value={reassignCpTo}
+                onChange={setReassignCpTo}
+                options={cpAssignOptions}
+                isDark={isDark}
+                t={t}
+                placeholder="Select a Sales Manager or Site Head…"
+                emptyMessage="No active Sales Managers or Site Heads found"
+                ariaLabel="Reassign target"
+              />
+              <button onClick={() => setReassignCpTo("")}
+                className={`mt-2 text-[10px] underline cursor-pointer transition-opacity hover:opacity-70 ${t.textFaint}`}>
+                Clear assignment instead
+              </button>
+
+              {reassignCpError && (
+                <div className="mt-4 rounded-xl px-4 py-3 text-xs bg-red-500/10 border border-red-500/25 text-red-500">
+                  {reassignCpError}
+                </div>
+              )}
+
+              <div className="mt-6 flex items-center justify-end gap-3">
+                <button onClick={() => setReassignCpTarget(null)}
+                  className={`px-4 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-colors ${isDark ? "hover:bg-white/5 text-white" : "hover:bg-black/5 text-black"}`}>
+                  Cancel
+                </button>
+                <button onClick={handleReassignCp} disabled={reassignCpBusy}
+                  className={`px-5 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-opacity ${t.btnPrimary} ${reassignCpBusy ? "opacity-50 cursor-not-allowed" : "hover:opacity-90"}`}>
+                  {reassignCpBusy ? "Saving…" : reassignCpTo === "" ? "Clear Assignment" : "Save Assignment"}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Admin kebab: Edit (reuses ChannelPartnerFormModal) ── */}
+      {showActions && (
+        <ChannelPartnerFormModal
+          isOpen={editModalOpen}
+          onClose={() => { setEditModalOpen(false); setEditTarget(null); }}
+          onSaved={() => {
+            setEditModalOpen(false);
+            setEditTarget(null);
+            flash("Channel partner updated.");
+            fetchRows();
+          }}
+          partner={editTarget ? rowToCp(editTarget) : null}
+          user={user}
+          isDark={isDark}
+          t={t}
+          variant="full"
+        />
+      )}
     </div>
   );
 }

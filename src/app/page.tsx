@@ -430,14 +430,8 @@ export default function Login() {
 
           {/* Password */}
           <div>
-            <div className="flex justify-between mb-1.5">
+            <div className="mb-1.5">
               <label className={`${theme.label} text-xs font-medium transition-colors duration-300`}>Password</label>
-              <Link
-                href="#"
-                className="text-[#9F5CFF] hover:text-[#7B2FF7] text-xs font-medium transition-colors duration-150"
-              >
-                Forgot Password?
-              </Link>
             </div>
             <div className="relative">
               <MdLock className={`absolute left-3 top-1/2 -translate-y-1/2 ${theme.iconColor} text-[1.1rem] transition-colors duration-300`} />

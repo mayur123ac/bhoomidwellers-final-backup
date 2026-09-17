@@ -61,18 +61,38 @@ export interface OtpTemplateInput {
 
 export function otpTemplate(input: OtpTemplateInput): Template {
   const link = safeUrl(input.verifyUrl);
+  const isReset = /reset.*password/i.test(input.purpose);
+  const isPasswordChange = /change.*password|password.*change/i.test(input.purpose);
+
+  const subject = isReset
+    ? "Reset your CRM password — verification code"
+    : isPasswordChange
+      ? "Change your CRM password — verification code"
+      : "Your verification code - Bhoomi Dwellers CRM";
+
+  const heading = isReset
+    ? "Reset your password"
+    : isPasswordChange
+      ? "Change your password"
+      : "Verify your email address";
 
   const context: DetailRow[] = [
     { label: "Requested from", value: input.requestedFromIp },
     { label: "Device", value: input.requestedFromDevice },
   ];
 
-  return build("Your verification code - Bhoomi Dwellers CRM", {
+  const securityNote = isReset
+    ? "If you did not request a password reset, you can ignore this email — your account " +
+      "has not been changed. Never share this code with anyone. CRM support will never ask for it."
+    : "Nobody from Bhoomi Dwellers will ever ask you for this code. If you did not request " +
+      "it, you can ignore this email — nothing changes until the code is entered.";
+
+  return build(subject, {
     // The code is deliberately NOT in the preheader or the subject. Both are
     // visible on a locked phone screen, which would defeat the point of a
     // second factor the moment someone glances at the notification.
     preview: `Your verification code expires in ${input.expiryMinutes} minutes.`,
-    heading: "Verify your email address",
+    heading,
     bodyHtml: `
 ${p(`Hi ${input.name},`)}
 ${p(`Use this code to ${input.purpose}.`)}
@@ -90,9 +110,7 @@ Use this code to ${input.purpose}:
 The code expires in ${input.expiryMinutes} minutes and can be used once.
 ${link ? `\nOr verify in one click:\n${link}\n` : ""}
 ${detailText(context)}`,
-    securityNote:
-      "Nobody from Bhoomi Dwellers will ever ask you for this code. If you did not request " +
-      "it, you can ignore this email — nothing changes until the code is entered.",
+    securityNote,
   });
 }
 

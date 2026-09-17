@@ -22,6 +22,7 @@ export default function AttendanceView({
   const [isLoading, setIsLoading] = useState(true);
   const [markingId, setMarkingId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string>(
     () => new Date().toISOString().split("T")[0]
   );
@@ -278,6 +279,16 @@ export default function AttendanceView({
     (s) => s.attendance_status?.toLowerCase() === "present"
   );
 
+  // When "Show History" is OFF, display only the current/latest session per employee
+  const displaySessions = showHistory
+    ? sessions
+    : sessions.length <= 1
+      ? sessions
+      : (() => {
+          const active = sessions.find((s) => s.session_is_active);
+          return active ? [active] : [sessions[sessions.length - 1]];
+        })();
+
   // ── Temporary tracing: page state vs shared/header state ─────────────────────
   // Both rows below must agree. Delete this effect once the sync is verified.
   useEffect(() => {
@@ -454,9 +465,31 @@ export default function AttendanceView({
               year: "numeric",
             })}
           </h3>
-          <span className={`text-xs font-bold px-3 py-1 rounded-full border ${t.btnClosingBadge}`}>
-            {sessions.length} session{sessions.length !== 1 ? "s" : ""}
-          </span>
+          <div className="flex items-center gap-3">
+            {sessions.length > 1 && (
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <span className={`text-[11px] font-bold ${t.textMuted}`}>Show History</span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={showHistory}
+                  onClick={() => setShowHistory((p) => !p)}
+                  className={`relative w-9 h-5 rounded-full transition-colors ${showHistory
+                    ? "bg-[#9E217B]"
+                    : isDark ? "bg-gray-600" : "bg-gray-300"
+                  }`}
+                >
+                  <span
+                    className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${showHistory ? "translate-x-4" : "translate-x-0"
+                    }`}
+                  />
+                </button>
+              </label>
+            )}
+            <span className={`text-xs font-bold px-3 py-1 rounded-full border ${t.btnClosingBadge}`}>
+              {sessions.length} session{sessions.length !== 1 ? "s" : ""}
+            </span>
+          </div>
         </div>
 
         <div className="overflow-x-auto w-full">
@@ -505,7 +538,7 @@ export default function AttendanceView({
                     </div>
                   </td>
                 </tr>
-              ) : sessions.length === 0 ? (
+              ) : displaySessions.length === 0 ? (
                 <tr>
                   <td colSpan={10} className="py-16 text-center">
                     <div className="flex flex-col items-center gap-2">
@@ -518,7 +551,7 @@ export default function AttendanceView({
                   </td>
                 </tr>
               ) : (
-                sessions.map((s: any, i: number) => {
+                displaySessions.map((s: any, i: number) => {
                   const punct = getPunctualityInfo(s.session_start);
                   const isActive = !!s.session_is_active;
                   const isAlreadyMarked = s.attendance_status?.toLowerCase() === "present";

@@ -1,89 +1,121 @@
+// api/settings/email-verify/route.ts — verify the email-change OTP.
+//
+// Uses the hardened OTP infrastructure: checkOtpForPurpose() for hash
+// comparison with attempt counting, and atomic consumption in a transaction
+// that also promotes the email. No bypass, no fallback, fail-closed.
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/serverAuth";
-import { query } from "@/lib/db";
+import { transaction, query } from "@/lib/db";
+import { writeAuditLog, requestContext } from "@/lib/auditLog";
+import {
+  EMAIL_CHANGE_PURPOSE,
+  checkOtpForPurpose,
+  MAX_OTP_ATTEMPTS,
+} from "@/lib/passwordReset";
 
 export const dynamic = "force-dynamic";
 
-// POST /api/settings/email-verify — verify the email change OTP
+const INVALID = "That code is invalid or has expired. Request a new one.";
+
 export async function POST(req: NextRequest) {
   const gate = await requireSession();
   if (!gate.ok) return gate.response;
 
   const userId = gate.userId;
   if (!userId) {
-    return NextResponse.json({ success: false, message: "Session carries no user ID." }, { status: 400 });
+    return NextResponse.json(
+      { success: false, message: "Session carries no user ID." },
+      { status: 400 }
+    );
   }
 
+  const { ip, userAgent } = requestContext(req);
+
+  const bad = (message: string, status = 400, extra?: Record<string, unknown>) =>
+    NextResponse.json({ success: false, message, ...extra }, { status });
+
   try {
-    const { code } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const otp = (body?.otp ?? body?.code ?? "").toString().trim();
 
-    if (!code?.trim()) {
-      return NextResponse.json({ success: false, message: "Verification code is required." }, { status: 400 });
-    }
+    if (!/^\d{6}$/.test(otp)) return bad(INVALID);
 
-    // Look up the pending verification
-    let verified = false;
-    try {
-      const rows = await query<any>(
-        `SELECT email FROM email_verification_codes
-         WHERE user_id = $1 AND code = $2 AND expires_at > NOW()
-         LIMIT 1`,
-        [userId, code.trim()]
-      );
-      if (rows.length > 0) {
-        // Promote secondary_email to primary email
-        await query(
-          `UPDATE users SET
-             email = $1,
-             secondary_email_verified = true,
-             last_email_change_at = NOW()
-           WHERE id = $2`,
-          [rows[0].email, userId]
-        );
+    // ── Verify OTP (attempt-counted, expiry-checked, hash-compared) ────────
+    const check = await checkOtpForPurpose(userId, otp, EMAIL_CHANGE_PURPOSE);
+    if (!check.ok) {
+      void writeAuditLog({
+        userId,
+        actorName: gate.session.name,
+        action: "email_change.otp_failed",
+        entityType: "user",
+        entityId: String(userId),
+        ipAddress: ip,
+        userAgent,
+        newValue: { reason: check.reason, attemptsRemaining: check.attemptsRemaining },
+      });
 
-        // Clean up
-        await query(`DELETE FROM email_verification_codes WHERE user_id = $1`, [userId]);
-        verified = true;
-      }
-    } catch {
-      // Table may not exist
-    }
-
-    if (!verified) {
-      // Fallback: check if secondary_email is set and verify it directly
-      const userRows = await query<any>(
-        `SELECT secondary_email FROM users WHERE id = $1 LIMIT 1`,
-        [userId]
-      );
-      if (userRows.length > 0 && userRows[0].secondary_email) {
-        await query(
-          `UPDATE users SET secondary_email_verified = true WHERE id = $1`,
-          [userId]
-        );
-        verified = true;
-      }
-    }
-
-    if (!verified) {
-      return NextResponse.json(
-        { success: false, message: "Invalid or expired verification code." },
-        { status: 400 }
+      const restart = check.reason === "locked" || check.reason === "expired" || check.reason === "none";
+      return bad(
+        check.reason === "locked"
+          ? "Too many incorrect attempts. Request a new code."
+          : INVALID,
+        400,
+        { attemptsRemaining: check.attemptsRemaining, restart }
       );
     }
 
-    // Return updated user
-    const rows = await query<any>(
-      `SELECT email, secondary_email, secondary_email_verified FROM users WHERE id = $1 LIMIT 1`,
-      [userId]
-    );
+    // The new_email column on the OTP row holds the address that was verified.
+    const newEmail = check.row.new_email;
+    if (!newEmail) return bad(INVALID);
+
+    // ── Atomic: consume OTP + promote email in one transaction ──────────────
+    const updated = await transaction(async client => {
+      const consumed = await client.query(
+        `UPDATE email_change_otps
+            SET consumed_at = now()
+          WHERE id = $1 AND consumed_at IS NULL AND purpose = $2
+        RETURNING id`,
+        [check.row.id, EMAIL_CHANGE_PURPOSE]
+      );
+      if (consumed.rows.length === 0) return null;
+
+      const res = await client.query(
+        `UPDATE users
+            SET email = $2,
+                secondary_email_verified = true,
+                last_email_change_at = NOW(),
+                updated_at = NOW()
+          WHERE id = $1
+            AND deleted_at IS NULL
+        RETURNING id, email, secondary_email, secondary_email_verified`,
+        [userId, newEmail]
+      );
+      return res.rows[0] ?? null;
+    });
+
+    if (!updated) return bad(INVALID);
+
+    void writeAuditLog({
+      userId,
+      actorName: gate.session.name,
+      action: "email_change.completed",
+      entityType: "user",
+      entityId: String(userId),
+      ipAddress: ip,
+      userAgent,
+      newValue: { newEmail, outcome: "email_changed" },
+    });
 
     return NextResponse.json({
       success: true,
       message: "Email verified successfully.",
-      user: rows[0] ?? {},
+      user: updated,
     });
   } catch (err: any) {
-    console.error("[POST /api/settings/email-verify]", err);
-    return NextResponse.json({ success: false, message: err.message }, { status: 500 });
+    console.error("[POST /api/settings/email-verify]", err?.message);
+    return NextResponse.json(
+      { success: false, message: "Could not verify the email." },
+      { status: 500 }
+    );
   }
 }

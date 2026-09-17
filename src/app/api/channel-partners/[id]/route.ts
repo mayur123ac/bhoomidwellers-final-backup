@@ -15,7 +15,7 @@ import {
   canAssignPartners,
   canSeePartnerCommercials,
 } from "@/lib/cpRbac";
-import { parseAssignee, isActiveSourcingManager } from "@/lib/sourcingAssignment";
+import { parseAssignee, isActiveAssignableTarget } from "@/lib/sourcingAssignment";
 import { resolvePhone } from "@/lib/phoneAccess";
 
 export const dynamic = "force-dynamic";
@@ -217,13 +217,13 @@ export async function PATCH(
         { status: 400 }
       );
     }
-    if (assignee.kind === "id" && !(await isActiveSourcingManager(assignee.id))) {
+    if (assignee.kind === "id" && !(await isActiveAssignableTarget(assignee.id))) {
       // Guards against parking a partner on a Receptionist or a deactivated
-      // account, where they would be invisible on every Sourcing Manager panel.
+      // account, where they would be invisible on every management panel.
       return NextResponse.json(
         {
           success: false,
-          message: "That user is not an active Sourcing Manager.",
+          message: "That user is not an active Sourcing Manager, Sales Manager, or Site Head.",
           code: "INVALID_SOURCING_MANAGER",
         },
         { status: 400 }
