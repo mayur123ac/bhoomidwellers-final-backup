@@ -1197,7 +1197,7 @@ function AdminAtlasDashboardContent() {
         {!isFocusMode && (
           <AppHeader
             isDark={isDark}
-            context={activeView.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
+            context={menuItems.find(m => m.id === activeView)?.label || activeView.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
             role={user?.role || "Admin"}
           >
             <div className="flex items-center gap-4 flex-shrink-0 relative z-[50]" ref={topbarRef}>

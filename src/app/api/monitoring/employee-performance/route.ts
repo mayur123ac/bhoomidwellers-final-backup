@@ -54,6 +54,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ success: false, message: "Invalid employee_id." }, { status: 400 });
   }
 
+  // ── Dashboard view (Phase 1 — period breakdowns) ────────────────────────
+  if (view === "dashboard") {
+    return handleDashboardView(orgId, employeeId);
+  }
+
   // ── Lead-level view ──────────────────────────────────────────────────────
   if (view === "leads") {
     return handleLeadsView(req, orgId, interval, employeeId);
@@ -470,6 +475,153 @@ async function handleSummaryView(
       stagnantLeads,
       period,
       generatedAt: new Date().toISOString(),
+    },
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DASHBOARD VIEW (Phase 1)
+// Period-based breakdowns for the redesigned Employee Performance panel.
+// Returns all period buckets in a single response so the frontend only
+// needs one fetch per employee switch.
+// ═══════════════════════════════════════════════════════════════════════════
+
+async function handleDashboardView(orgId: string, employeeId: number | null) {
+  // IST boundary expressions (evaluated once per query by Postgres)
+  const TS    = `(NOW() AT TIME ZONE 'Asia/Kolkata')`;
+  const TODAY = `(date_trunc('day',   ${TS}) AT TIME ZONE 'Asia/Kolkata')`;
+  const WEEK  = `(date_trunc('week',  ${TS}) AT TIME ZONE 'Asia/Kolkata')`;
+  const MONTH = `(date_trunc('month', ${TS}) AT TIME ZONE 'Asia/Kolkata')`;
+
+  // Employee filter fragments — safe: validated as integer in the caller
+  const empLead    = employeeId !== null ? `AND w.assigned_to_user_id = ${Number(employeeId)}` : "";
+  const empCall    = employeeId !== null ? `AND cs.user_id = ${Number(employeeId)}` : "";
+  const empFup     = employeeId !== null ? `AND f.created_by_id = ${Number(employeeId)}` : "";
+  const empVisit   = employeeId !== null ? `AND sv.created_by_id = ${Number(employeeId)}` : "";
+  const empBooking = employeeId !== null ? `AND ba.created_by_id = ${Number(employeeId)}` : "";
+
+  const [roster, leadResult, contactedResult, followupResult, siteVisitResult, bookingResult] =
+    await Promise.all([
+      // 1. Full roster — always unfiltered so the dropdown can list everyone
+      query<{ id: number; name: string; role: string; created_at: string }>(
+        `SELECT id, name, role, created_at FROM users
+         WHERE organization_id = $1 AND is_active = true
+           AND role IN ('Sales Manager', 'Site Head', 'Receptionist')
+         ORDER BY name`,
+        [orgId],
+      ),
+
+      // 2. Total leads
+      query<{ total: string }>(
+        `SELECT COUNT(*) AS total
+         FROM walkin_enquiries w
+         WHERE w.organization_id = $1
+           AND w.assigned_to_user_id IS NOT NULL
+           ${empLead}`,
+        [orgId],
+      ),
+
+      // 3. Contacted — unique leads via call_sessions (manual call initiation)
+      query<any>(
+        `SELECT
+           COUNT(DISTINCT lead_id) FILTER (WHERE cs.created_at >= ${TODAY})                       AS today,
+           COUNT(DISTINCT lead_id) FILTER (WHERE cs.created_at >= ${WEEK})                        AS this_week,
+           COUNT(DISTINCT lead_id) FILTER (WHERE cs.created_at >= ${MONTH})                       AS this_month,
+           COUNT(DISTINCT lead_id) FILTER (WHERE cs.created_at >= NOW() - INTERVAL '1 month')     AS last_1_month,
+           COUNT(DISTINCT lead_id) FILTER (WHERE cs.created_at >= NOW() - INTERVAL '3 months')    AS last_3_months,
+           COUNT(DISTINCT lead_id) FILTER (WHERE cs.created_at >= NOW() - INTERVAL '6 months')    AS last_6_months
+         FROM call_sessions cs
+         WHERE cs.organization_id = $1
+           AND cs.lead_id IS NOT NULL
+           ${empCall}`,
+        [orgId],
+      ),
+
+      // 4. Followups done (human follow-ups only, same filters as summary view)
+      query<any>(
+        `SELECT
+           COUNT(*) FILTER (WHERE f.created_at >= ${TODAY})  AS today,
+           COUNT(*) FILTER (WHERE f.created_at >= ${WEEK})   AS this_week,
+           COUNT(*) FILTER (WHERE f.created_at >= ${MONTH})  AS this_month
+         FROM follow_ups f
+         WHERE f.organization_id = $1
+           AND f.created_by_id IS NOT NULL
+           AND f.follow_up_type NOT IN ('internal_message', 'sm_reply')
+           AND f.message NOT ILIKE '%Lead Transferred%'
+           AND f.message NOT ILIKE '%Lead Marked as Closing%'
+           ${empFup}`,
+        [orgId],
+      ),
+
+      // 5. Site visits scheduled
+      query<any>(
+        `SELECT
+           COUNT(*) FILTER (WHERE sv.created_at >= ${TODAY})  AS today,
+           COUNT(*) FILTER (WHERE sv.created_at >= ${WEEK})   AS this_week,
+           COUNT(*) FILTER (WHERE sv.created_at >= ${MONTH})  AS this_month
+         FROM site_visits sv
+         WHERE sv.organization_id = $1
+           AND sv.created_by_id IS NOT NULL
+           ${empVisit}`,
+        [orgId],
+      ),
+
+      // 6. Bookings (confirmed only)
+      query<any>(
+        `SELECT
+           COUNT(*) FILTER (WHERE ba.created_at >= ${TODAY})                                    AS today,
+           COUNT(*) FILTER (WHERE ba.created_at >= ${WEEK})                                     AS this_week,
+           COUNT(*) FILTER (WHERE ba.created_at >= ${MONTH})                                    AS this_month,
+           COUNT(*) FILTER (WHERE ba.created_at >= NOW() - INTERVAL '3 months')                 AS last_3_months,
+           COUNT(*) FILTER (WHERE ba.created_at >= NOW() - INTERVAL '6 months')                 AS last_6_months,
+           COUNT(*) FILTER (WHERE ba.created_at >= NOW() - INTERVAL '12 months')                AS last_12_months,
+           COUNT(*)                                                                             AS till_now
+         FROM booking_applications ba
+         WHERE ba.organization_id = $1
+           AND ba.created_by_id IS NOT NULL
+           AND ba.booking_status = 'Confirmed'
+           ${empBooking}`,
+        [orgId],
+      ),
+    ]);
+
+  const c = contactedResult[0] || {};
+  const f = followupResult[0] || {};
+  const s = siteVisitResult[0] || {};
+  const b = bookingResult[0] || {};
+
+  return NextResponse.json({
+    success: true,
+    data: {
+      employees: roster,
+      totalLeads: Number(leadResult[0]?.total || 0),
+      contacted: {
+        today:       Number(c.today || 0),
+        thisWeek:    Number(c.this_week || 0),
+        thisMonth:   Number(c.this_month || 0),
+        last1Month:  Number(c.last_1_month || 0),
+        last3Months: Number(c.last_3_months || 0),
+        last6Months: Number(c.last_6_months || 0),
+      },
+      followups: {
+        today:     Number(f.today || 0),
+        thisWeek:  Number(f.this_week || 0),
+        thisMonth: Number(f.this_month || 0),
+      },
+      siteVisits: {
+        today:     Number(s.today || 0),
+        thisWeek:  Number(s.this_week || 0),
+        thisMonth: Number(s.this_month || 0),
+      },
+      bookings: {
+        today:        Number(b.today || 0),
+        thisWeek:     Number(b.this_week || 0),
+        thisMonth:    Number(b.this_month || 0),
+        last3Months:  Number(b.last_3_months || 0),
+        last6Months:  Number(b.last_6_months || 0),
+        last12Months: Number(b.last_12_months || 0),
+        tillNow:      Number(b.till_now || 0),
+      },
     },
   });
 }
