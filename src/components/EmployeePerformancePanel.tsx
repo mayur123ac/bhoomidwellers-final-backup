@@ -1,12 +1,16 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   MdPeople,
   MdPhone,
   MdPlaylistAddCheck,
   MdCalendarToday,
   MdFlag,
+  MdKeyboardArrowDown,
+  MdInfoOutline,
+  MdCheck
 } from "react-icons/md";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -63,33 +67,33 @@ const BOOKING_PERIODS = [
 // ── Breakdown rows for detail panels ─────────────────────────────────────────
 
 const CONTACTED_BREAKDOWN = [
-  { key: "today", label: "Contacted Today" },
-  { key: "thisWeek", label: "Contacted This Week" },
-  { key: "thisMonth", label: "Contacted This Month" },
-  { key: "last3Months", label: "Contacted in Last 3 Months" },
-  { key: "last6Months", label: "Contacted in Last 6 Months" },
+  { key: "today", label: "Today" },
+  { key: "thisWeek", label: "This Week" },
+  { key: "thisMonth", label: "This Month" },
+  { key: "last3Months", label: "Last 3 Months" },
+  { key: "last6Months", label: "Last 6 Months" },
 ];
 
 const FOLLOWUP_BREAKDOWN = [
-  { key: "today", label: "Followups Today" },
-  { key: "thisWeek", label: "Followups This Week" },
-  { key: "thisMonth", label: "Followups This Month" },
+  { key: "today", label: "Today" },
+  { key: "thisWeek", label: "This Week" },
+  { key: "thisMonth", label: "This Month" },
 ];
 
 const SITE_VISIT_BREAKDOWN = [
-  { key: "today", label: "Site Visits Today" },
-  { key: "thisWeek", label: "Site Visits This Week" },
-  { key: "thisMonth", label: "Site Visits This Month" },
+  { key: "today", label: "Today" },
+  { key: "thisWeek", label: "This Week" },
+  { key: "thisMonth", label: "This Month" },
 ];
 
 const BOOKING_BREAKDOWN = [
-  { key: "today", label: "Bookings Today" },
-  { key: "thisWeek", label: "Bookings This Week" },
-  { key: "thisMonth", label: "Bookings This Month" },
-  { key: "last3Months", label: "Bookings Last 3 Months" },
-  { key: "last6Months", label: "Bookings Last 6 Months" },
-  { key: "last12Months", label: "Bookings Last 12 Months" },
-  { key: "tillNow", label: "Total Bookings (Till Now)" },
+  { key: "today", label: "Today" },
+  { key: "thisWeek", label: "This Week" },
+  { key: "thisMonth", label: "This Month" },
+  { key: "last3Months", label: "Last 3 Months" },
+  { key: "last6Months", label: "Last 6 Months" },
+  { key: "last12Months", label: "Last 12 Months" },
+  { key: "tillNow", label: "Till Now" },
 ];
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -110,6 +114,16 @@ function fmtDate(dateStr: string): string {
   }
 }
 
+// ── Apple System Colors ──────────────────────────────────────────────────────
+
+const iosColors = {
+  blue: { light: "#007AFF", dark: "#0A84FF", bgLight: "#E5F1FF", bgDark: "rgba(10,132,255,0.15)" },
+  green: { light: "#34C759", dark: "#32D74B", bgLight: "#EBF9EE", bgDark: "rgba(50,215,75,0.15)" },
+  red: { light: "#FF3B30", dark: "#FF453A", bgLight: "#FFECEB", bgDark: "rgba(255,69,58,0.15)" },
+  orange: { light: "#FF9500", dark: "#FF9F0A", bgLight: "#FFF4E5", bgDark: "rgba(255,159,10,0.15)" },
+  purple: { light: "#AF52DE", dark: "#BF5AF2", bgLight: "#F7EBFC", bgDark: "rgba(191,90,242,0.15)" },
+};
+
 // ── Component ────────────────────────────────────────────────────────────────
 
 export default function EmployeePerformancePanel({
@@ -126,7 +140,7 @@ export default function EmployeePerformancePanel({
   const [followupPeriod, setFollowupPeriod] = useState("thisMonth");
   const [siteVisitPeriod, setSiteVisitPeriod] = useState("thisMonth");
   const [bookingPeriod, setBookingPeriod] = useState("thisMonth");
-
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const fetchData = useCallback(async () => {
     try {
       const params = new URLSearchParams({ view: "dashboard" });
@@ -150,10 +164,10 @@ export default function EmployeePerformancePanel({
 
   if (loading) {
     return (
-      <div className={`h-full flex items-center justify-center ${theme.textMuted}`}>
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 rounded-full border-2 border-[#9E217B] border-t-transparent animate-spin" />
-          <p className="text-sm">Loading performance data...</p>
+      <div className={`h-full flex items-center justify-center bg-[#F2F2F7] dark:bg-[#000000] font-sans antialiased`}>
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-8 h-8 rounded-full border-[3px] border-[#8E8E93] border-t-transparent animate-spin" />
+          <p className="text-[15px] font-medium text-[#8E8E93]">Loading performance data...</p>
         </div>
       </div>
     );
@@ -161,8 +175,8 @@ export default function EmployeePerformancePanel({
 
   if (!data) {
     return (
-      <div className={`h-full flex items-center justify-center ${theme.textMuted}`}>
-        <p>Failed to load performance data.</p>
+      <div className={`h-full flex items-center justify-center bg-[#F2F2F7] dark:bg-[#000000] font-sans antialiased`}>
+        <p className="text-[15px] text-[#8E8E93]">Failed to load performance data.</p>
       </div>
     );
   }
@@ -172,306 +186,232 @@ export default function EmployeePerformancePanel({
       ? data.employees.find((e) => e.id === employeeId) || null
       : null;
 
-  const today = new Date().toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-
-  const selectCls = `text-[11px] font-bold border rounded-md px-1.5 py-0.5 cursor-pointer appearance-none ${isDark
-    ? "bg-[#1a1a2e] border-[#333] text-white/70"
-    : "bg-gray-50 border-gray-200 text-gray-600"
-    }`;
-
   // ── Render ──
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
-      {/* ═══ Header ═══ */}
-      <div
-        className={`p-2 sm:p-6 border-b flex-shrink-0 ${theme.header}`}
-        style={theme.headerGlass}
-      >
-        {/* Title */}
-        {/* <div className="mb-4">
-          <h2 className={`text-lg font-bold flex items-center gap-2 ${theme.text}`}>
-            Employee Performance
-          </h2>
-          <p className={`text-xs mt-1 ${theme.textFaint}`}>
-            Track individual performance and key activities across leads,
-            followups, site visits and bookings.
-          </p>
-        </div> */}
+    <div className={`h-full flex flex-col overflow-hidden font-sans antialiased transition-colors duration-300 ${isDark ? "bg-[#000000]" : "bg-[#F2F2F7]"}`}>
 
-        {/* Employee selector row */}
-        <div className="flex flex-wrap items-center gap-4">
-          {/* Dropdown */}
-          <div className="flex items-center gap-3">
-            <div
-              className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${isDark
-                ? "bg-[#9E217B]/20 text-[#d946a8]"
-                : "bg-[#9E217B]/10 text-[#9E217B]"
-                }`}
-            >
-              {selectedEmployee
-                ? selectedEmployee.name.charAt(0).toUpperCase()
-                : "A"}
-            </div>
-            <div>
-              <label className={`crm-eyebrow block mb-0.5 ${theme.textFaint}`}>
-                Select Employee
-              </label>
-              <select
-                value={employeeId}
-                onChange={(e) =>
-                  setEmployeeId(
-                    e.target.value === "all" ? "all" : Number(e.target.value),
-                  )
-                }
-                className={`text-sm font-bold rounded-lg border px-3 py-1.5 cursor-pointer ${isDark
-                  ? "bg-[#1a1a2e] border-[#333] text-white"
-                  : "bg-white border-gray-200 text-gray-900"
-                  }`}
-              >
-                <option value="all">All Employees</option>
-                {data.employees.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.name}
-                  </option>
-                ))}
-              </select>
+      {/* ═══ Apple-style Header Area ═══ */}
+
+      <div className={`flex-shrink-0 pt-8 pb-6 px-6 sm:px-10 border-b ${isDark ? "border-white/10 bg-[#1C1C1E]/80 backdrop-blur-xl" : "border-[#E5E5EA] bg-white/80 backdrop-blur-xl"} sticky top-0 z-10`}>
+
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+
+          {/* Left: Title & Overview/Employee Status */}
+          <div className="flex items-center gap-4 flex-1 min-w-0">
+            <h1 className={`text-xl sm:text-2xl font-bold tracking-tight shrink-0 ${isDark ? "text-white" : "text-black"}`}>
+              Performance
+            </h1>
+
+            {/* Divider */}
+            <div className={`hidden md:block w-[1px] h-6 ${isDark ? "bg-[#38383A]" : "bg-[#E5E5EA]"}`} />
+
+            {/* Dynamic Employee Quick-Info */}
+            <div className="hidden md:flex items-center gap-3 overflow-hidden">
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={employeeId}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 10 }}
+                  transition={{ duration: 0.2 }}
+                  className="flex items-center gap-3 truncate"
+                >
+                  {selectedEmployee ? (
+                    <>
+                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold tracking-tight shadow-inner shrink-0 ${isDark ? "bg-[#2C2C2E] text-white" : "bg-[#F2F2F7] text-black"}`}>
+                        {selectedEmployee.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex items-center gap-3 text-[13px]">
+                        <span className={`font-semibold tracking-tight ${isDark ? "text-white" : "text-black"}`}>
+                          {selectedEmployee.role.replace("_", " ")}
+                        </span>
+                        <span className="text-[#8E8E93]">&middot;</span>
+                        <span className="text-[#8E8E93] tracking-tight">Joined {fmtDate(selectedEmployee.created_at)}</span>
+                        <span className="text-[#8E8E93]">&middot;</span>
+                        <span className="font-medium tracking-tight text-[#34C759] flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#34C759]" /> Active
+                        </span>
+                      </div>
+                    </>
+                  ) : (
+                    <span className={`text-[13px] font-medium tracking-tight ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
+                      Organization-wide aggregate metrics
+                    </span>
+                  )}
+                </motion.div>
+              </AnimatePresence>
             </div>
           </div>
 
-          {/* Employee info chips */}
-          {selectedEmployee && (
-            <div
-              className={`flex items-center gap-5 text-xs ${theme.textMuted}`}
-            >
-              <div>
-                <span className={`crm-eyebrow block ${theme.textFaint}`}>
-                  Role
+          {/* Right: Picker */}
+          <div className="flex items-center gap-4 shrink-0">
+            <div className="relative">
+              {/* Trigger Button */}
+              <button
+                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                onBlur={() => setTimeout(() => setIsDropdownOpen(false), 200)}
+                className={`flex items-center justify-between gap-2 pl-4 pr-3 py-1.5 min-w-[180px] rounded-full text-[13px] font-medium tracking-tight outline-none cursor-pointer transition-colors shadow-[0_2px_8px_rgba(0,0,0,0.04)] ${isDark
+                  ? "bg-[#2C2C2E] hover:bg-[#3A3A3C] text-white border border-white/5"
+                  : "bg-white hover:bg-gray-50 text-black border border-black/5"
+                  }`}
+              >
+                <span className="truncate max-w-[140px]">
+                  {employeeId === "all"
+                    ? "All Employees"
+                    : data.employees.find(e => e.id === employeeId)?.name || "Select"}
                 </span>
-                <p className={`font-bold ${theme.text}`}>
-                  {selectedEmployee.role}
-                </p>
-              </div>
-              <div>
-                <span className={`crm-eyebrow block ${theme.textFaint}`}>
-                  Joined
-                </span>
-                <p className={`font-bold ${theme.text}`}>
-                  {fmtDate(selectedEmployee.created_at)}
-                </p>
-              </div>
-              <div>
-                <span className={`crm-eyebrow block ${theme.textFaint}`}>
-                  Status
-                </span>
-                <p className="font-bold text-green-500 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
-                  Active
-                </p>
-              </div>
-            </div>
-          )}
+                <MdKeyboardArrowDown className={`w-4 h-4 transition-transform duration-300 flex-shrink-0 ${isDropdownOpen ? "rotate-180" : ""} ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`} />
+              </button>
 
-          {/* Performance period */}
-          <div className="ml-auto text-right hidden sm:block">
-            <p className={`crm-eyebrow ${theme.textFaint}`}>
-              Performance Period
-            </p>
-            <p className={`text-xs font-bold mt-0.5 ${theme.text}`}>
-              1 Jan {new Date().getFullYear()} &mdash; {today}
-            </p>
+              {/* Floating Menu Popover */}
+              <AnimatePresence>
+                {isDropdownOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95, y: -5, filter: "blur(4px)" }}
+                    animate={{ opacity: 1, scale: 1, y: 0, filter: "blur(0px)" }}
+                    exit={{ opacity: 0, scale: 0.95, y: -5, filter: "blur(4px)" }}
+                    transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
+                    className={`absolute right-0 top-[calc(100%+6px)] w-[220px] p-1.5 rounded-[16px] shadow-[0_12px_40px_rgba(0,0,0,0.12)] z-50 backdrop-blur-2xl ${isDark
+                      ? "bg-[#1C1C1E]/80 border border-white/10"
+                      : "bg-white/85 border border-black/5"
+                      }`}
+                  >
+                    <div className="max-h-[250px] overflow-y-auto custom-scrollbar">
+                      <div
+                        onClick={() => { setEmployeeId("all"); setIsDropdownOpen(false); }}
+                        className={`px-3 py-2 text-[13px] font-medium tracking-tight rounded-[10px] cursor-pointer transition-colors flex items-center justify-between group ${isDark ? "hover:bg-white/10 text-white" : "hover:bg-black/5 text-black"}`}
+                      >
+                        <span className={employeeId === "all" ? (isDark ? "text-white" : "text-black") : ""}>All Employees</span>
+                        {employeeId === "all" && <MdCheck className={`w-3.5 h-3.5 ${isDark ? "text-[#0A84FF]" : "text-[#007AFF]"}`} />}
+                      </div>
+
+                      <div className={`h-[1px] w-[calc(100%-24px)] mx-auto my-1 ${isDark ? "bg-white/10" : "bg-black/5"}`} />
+
+                      {data.employees.map((e) => (
+                        <div
+                          key={e.id}
+                          onClick={() => { setEmployeeId(e.id); setIsDropdownOpen(false); }}
+                          className={`px-3 py-2 text-[13px] font-medium tracking-tight rounded-[10px] cursor-pointer transition-colors flex items-center justify-between mt-0.5 ${isDark ? "hover:bg-white/10 text-white" : "hover:bg-black/5 text-black"}`}
+                        >
+                          <span className={employeeId === e.id ? (isDark ? "text-white" : "text-black") : ""}>{e.name}</span>
+                          {employeeId === e.id && <MdCheck className={`w-3.5 h-3.5 ${isDark ? "text-[#0A84FF]" : "text-[#007AFF]"}`} />}
+                        </div>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* ═══ Content ═══ */}
-      <div className={`flex-1 overflow-y-auto p-4 sm:p-6 ${theme.scroll}`}>
-        <div className="space-y-5">
-          {/* ── Summary cards ── */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-            {/* Total Leads */}
+      {/* ═══ Scrollable Content ═══ */}
+      <div className={`flex-1 overflow-y-auto px-6 sm:px-10 py-8 custom-scrollbar`}>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.1, ease: [0.25, 0.1, 0.25, 1] }}
+          className="space-y-8 max-w-[1400px] mx-auto"
+        >
+
+          {/* ── Summary Cards (iOS Widget Style) ── */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 sm:gap-5">
             <SummaryCard
               Icon={MdPeople}
-              accentBg={isDark ? "bg-blue-500/15" : "bg-blue-50"}
-              accentColor="text-blue-500"
+              colorConfig={iosColors.blue}
               title="Total Leads"
               value={data.totalLeads}
-              subtitle={
-                selectedEmployee
-                  ? "Leads assigned to this employee"
-                  : "Leads assigned to employees"
-              }
-              theme={theme}
               isDark={isDark}
             />
-
-            {/* Leads Contacted */}
             <SummaryCard
               Icon={MdPhone}
-              accentBg={isDark ? "bg-green-500/15" : "bg-green-50"}
-              accentColor="text-green-500"
-              title="Leads Contacted"
+              colorConfig={iosColors.green}
+              title="Contacted"
               value={data.contacted[contactedPeriod] ?? 0}
-              subtitle="Leads contacted via manual calls"
-              theme={theme}
               isDark={isDark}
-              periodDropdown={
-                <select
-                  value={contactedPeriod}
-                  onChange={(e) => setContactedPeriod(e.target.value)}
-                  className={selectCls}
-                >
-                  {CONTACTED_PERIODS.map((p) => (
-                    <option key={p.value} value={p.value}>
-                      {p.label}
-                    </option>
-                  ))}
-                </select>
-              }
+              periodValue={contactedPeriod}
+              setPeriodValue={setContactedPeriod}
+              periods={CONTACTED_PERIODS}
             />
-
-            {/* Followups Done */}
             <SummaryCard
               Icon={MdPlaylistAddCheck}
-              accentBg={isDark ? "bg-rose-500/15" : "bg-rose-50"}
-              accentColor="text-rose-500"
-              title="Followups Done"
+              colorConfig={iosColors.red}
+              title="Followups"
               value={data.followups[followupPeriod] ?? 0}
-              subtitle="Total followups completed"
-              theme={theme}
               isDark={isDark}
-              periodDropdown={
-                <select
-                  value={followupPeriod}
-                  onChange={(e) => setFollowupPeriod(e.target.value)}
-                  className={selectCls}
-                >
-                  {FOLLOWUP_PERIODS.map((p) => (
-                    <option key={p.value} value={p.value}>
-                      {p.label}
-                    </option>
-                  ))}
-                </select>
-              }
+              periodValue={followupPeriod}
+              setPeriodValue={setFollowupPeriod}
+              periods={FOLLOWUP_PERIODS}
             />
-
-            {/* Site Visits Scheduled */}
             <SummaryCard
               Icon={MdCalendarToday}
-              accentBg={isDark ? "bg-teal-500/15" : "bg-teal-50"}
-              accentColor="text-teal-500"
-              title="Site Visits Scheduled"
+              colorConfig={iosColors.orange}
+              title="Site Visits"
               value={data.siteVisits[siteVisitPeriod] ?? 0}
-              subtitle="Site visits scheduled for leads"
-              theme={theme}
               isDark={isDark}
-              periodDropdown={
-                <select
-                  value={siteVisitPeriod}
-                  onChange={(e) => setSiteVisitPeriod(e.target.value)}
-                  className={selectCls}
-                >
-                  {SITE_VISIT_PERIODS.map((p) => (
-                    <option key={p.value} value={p.value}>
-                      {p.label}
-                    </option>
-                  ))}
-                </select>
-              }
+              periodValue={siteVisitPeriod}
+              setPeriodValue={setSiteVisitPeriod}
+              periods={SITE_VISIT_PERIODS}
             />
-
-            {/* Bookings Done */}
             <SummaryCard
               Icon={MdFlag}
-              accentBg={isDark ? "bg-orange-500/15" : "bg-orange-50"}
-              accentColor="text-orange-500"
-              title="Bookings Done"
+              colorConfig={iosColors.purple}
+              title="Bookings"
               value={data.bookings[bookingPeriod] ?? 0}
-              subtitle="Confirmed bookings"
-              theme={theme}
               isDark={isDark}
-              periodDropdown={
-                <select
-                  value={bookingPeriod}
-                  onChange={(e) => setBookingPeriod(e.target.value)}
-                  className={selectCls}
-                >
-                  {BOOKING_PERIODS.map((p) => (
-                    <option key={p.value} value={p.value}>
-                      {p.label}
-                    </option>
-                  ))}
-                </select>
-              }
+              periodValue={bookingPeriod}
+              setPeriodValue={setBookingPeriod}
+              periods={BOOKING_PERIODS}
             />
           </div>
 
-          {/* ── Breakdown panels ── */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+          {/* ── Breakdown Panels (iOS Grouped List Style) ── */}
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 sm:gap-8">
             <BreakdownPanel
               Icon={MdPhone}
-              accentColor="text-green-500"
-              title="Leads Contacted"
+              colorConfig={iosColors.green}
+              title="Contacts Breakdown"
               values={data.contacted}
               rows={CONTACTED_BREAKDOWN}
-              theme={theme}
               isDark={isDark}
             />
             <BreakdownPanel
               Icon={MdPlaylistAddCheck}
-              accentColor="text-rose-500"
-              title="Followups Done"
+              colorConfig={iosColors.red}
+              title="Followups Breakdown"
               values={data.followups}
               rows={FOLLOWUP_BREAKDOWN}
-              theme={theme}
               isDark={isDark}
             />
             <BreakdownPanel
               Icon={MdCalendarToday}
-              accentColor="text-teal-500"
-              title="Site Visits Scheduled"
+              colorConfig={iosColors.orange}
+              title="Site Visits Breakdown"
               values={data.siteVisits}
               rows={SITE_VISIT_BREAKDOWN}
-              theme={theme}
               isDark={isDark}
             />
             <BreakdownPanel
               Icon={MdFlag}
-              accentColor="text-orange-500"
-              title="Bookings Done"
+              colorConfig={iosColors.purple}
+              title="Bookings Breakdown"
               values={data.bookings}
               rows={BOOKING_BREAKDOWN}
-              theme={theme}
               isDark={isDark}
             />
           </div>
 
-          {/* ── Note ── */}
-          <div
-            className={`flex items-start gap-2.5 rounded-xl p-3.5 text-xs ${isDark
-              ? "bg-blue-500/5 border border-blue-500/10"
-              : "bg-blue-50 border border-blue-100"
-              }`}
-          >
-            <span
-              className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${isDark
-                ? "bg-blue-500/20 text-blue-400"
-                : "bg-blue-100 text-blue-600"
-                }`}
-            >
-              i
-            </span>
-            <p className={theme.textMuted}>
-              <strong>Note:</strong> Contacts are counted when a manual call is
-              made from the CRM. Followups are counted when a followup is marked
-              as done. Site visit and booking data is fetched from existing APIs.
+          {/* ── Info Note ── */}
+          <div className={`mt-8 flex items-start gap-3 rounded-2xl p-4 ${isDark ? "bg-[#1C1C1E] shadow-sm" : "bg-white shadow-[0_2px_12px_rgba(0,0,0,0.04)]"}`}>
+            <MdInfoOutline className={`w-5 h-5 flex-shrink-0 mt-0.5 ${isDark ? "text-[#0A84FF]" : "text-[#007AFF]"}`} />
+            <p className={`text-[15px] leading-relaxed ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
+              Contacts are counted when a manual call is made from the CRM. Followups are counted when marked as done. Site visit and booking data syncs continuously from external records.
             </p>
           </div>
-        </div>
+
+        </motion.div>
       </div>
     </div>
   );
@@ -481,108 +421,170 @@ export default function EmployeePerformancePanel({
 
 function SummaryCard({
   Icon,
-  accentBg,
-  accentColor,
+  colorConfig,
   title,
   value,
-  subtitle,
-  theme,
   isDark,
-  periodDropdown,
+  periodValue,
+  setPeriodValue,
+  periods
 }: {
-  Icon: React.ComponentType<{ className?: string }>;
-  accentBg: string;
-  accentColor: string;
+  Icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
+  colorConfig: { light: string; dark: string; bgLight: string; bgDark: string };
   title: string;
   value: number;
-  subtitle: string;
-  theme: any;
   isDark: boolean;
-  periodDropdown?: React.ReactNode;
+  periodValue?: string;
+  setPeriodValue?: (val: string) => void;
+  periods?: { value: string; label: string }[];
 }) {
+  const accentColor = isDark ? colorConfig.dark : colorConfig.light;
+  const iconBg = isDark ? colorConfig.bgDark : colorConfig.bgLight;
+  const [isOpen, setIsOpen] = useState(false); // <-- ADDED THIS
+
+
+
   return (
     <div
-      className={`rounded-xl p-4 border ${theme.card}`}
-      style={theme.cardGlass}
+      className={`relative flex flex-col justify-between rounded-[24px] p-5 h-[160px] transition-transform duration-300 hover:scale-[1.02] ${isDark
+        ? "bg-[#1C1C1E] shadow-sm"
+        : "bg-white shadow-[0_4px_24px_rgba(0,0,0,0.04)]"
+        }`}
     >
-      {/* Header row */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <div
-            className={`w-8 h-8 rounded-full flex items-center justify-center ${accentBg}`}
-          >
-            <Icon className={`text-[1.1rem] ${accentColor}`} />
-          </div>
-          <span className={`text-xs font-bold ${theme.text}`}>{title}</span>
+      <div className="flex items-start justify-between">
+        <div
+          className="w-10 h-10 rounded-[12px] flex items-center justify-center"
+          style={{ backgroundColor: iconBg }}
+        >
+          <Icon className="text-[20px]" style={{ color: accentColor }} />
         </div>
-        <span className={`text-sm ${theme.textFaint}`}>&rsaquo;</span>
+
+        {periods && setPeriodValue && periodValue && (
+          <div className="relative">
+            {/* Trigger Button */}
+            <button
+              onClick={() => setIsOpen(!isOpen)}
+              onBlur={() => setTimeout(() => setIsOpen(false), 200)}
+              className={`flex items-center justify-between gap-1.5 pl-3 pr-2 py-1 rounded-full text-[11px] font-semibold tracking-wide outline-none cursor-pointer transition-colors ${isDark
+                ? "bg-[#2C2C2E] text-white hover:bg-[#3A3A3C]"
+                : "bg-[#F2F2F7] text-black hover:bg-[#E5E5EA]"
+                }`}
+            >
+              <span className="truncate max-w-[80px]">
+                {periods.find((p) => p.value === periodValue)?.label || "Select"}
+              </span>
+              <MdKeyboardArrowDown className={`w-3.5 h-3.5 transition-transform duration-300 flex-shrink-0 ${isOpen ? "rotate-180" : ""} ${isDark ? "text-gray-400" : "text-gray-500"}`} />
+            </button>
+
+            {/* Floating Menu Popover */}
+            <AnimatePresence>
+              {isOpen && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95, y: -5, filter: "blur(4px)" }}
+                  animate={{ opacity: 1, scale: 1, y: 0, filter: "blur(0px)" }}
+                  exit={{ opacity: 0, scale: 0.95, y: -5, filter: "blur(4px)" }}
+                  transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
+                  className={`absolute right-0 top-[calc(100%+6px)] w-[160px] p-1.5 rounded-[14px] shadow-[0_8px_30px_rgba(0,0,0,0.12)] z-50 backdrop-blur-2xl ${isDark
+                    ? "bg-[#1C1C1E]/80 border border-white/10"
+                    : "bg-white/85 border border-black/5"
+                    }`}
+                >
+                  <div className="max-h-[200px] overflow-y-auto custom-scrollbar">
+                    {periods.map((p, i) => (
+                      <div key={p.value}>
+                        <div
+                          onClick={() => { setPeriodValue(p.value); setIsOpen(false); }}
+                          className={`px-3 py-2 text-[12px] font-medium tracking-tight rounded-[8px] cursor-pointer transition-colors flex items-center justify-between group ${isDark ? "hover:bg-white/10 text-white" : "hover:bg-black/5 text-black"
+                            }`}
+                        >
+                          <span className={periodValue === p.value ? (isDark ? "text-white" : "text-black") : (isDark ? "text-[#8E8E93]" : "text-[#8E8E93]")}>
+                            {p.label}
+                          </span>
+                          {periodValue === p.value && <MdCheck className={`w-3.5 h-3.5 ${isDark ? "text-[#0A84FF]" : "text-[#007AFF]"}`} />}
+                        </div>
+                        {/* iOS Style Divider between items */}
+                        {i < periods.length - 1 && (
+                          <div className={`h-[1px] w-[calc(100%-16px)] mx-auto my-0.5 ${isDark ? "bg-white/10" : "bg-black/5"}`} />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
       </div>
 
-      {/* Value */}
-      <p className={`text-3xl font-black mb-1 ${theme.text}`}>
-        {fmtNum(value)}
-      </p>
-
-      {/* Period dropdown */}
-      {periodDropdown && <div className="mb-2">{periodDropdown}</div>}
-
-      {/* Subtitle */}
-      <p className={`text-[10px] leading-tight ${theme.textFaint}`}>
-        {subtitle}
-      </p>
+      <div className="mt-auto">
+        <motion.p
+          key={value}
+          initial={{ opacity: 0, filter: "blur(4px)" }}
+          animate={{ opacity: 1, filter: "blur(0px)" }}
+          transition={{ duration: 0.3 }}
+          className={`text-[34px] font-bold tracking-[-0.04em] leading-none mb-1.5 ${isDark ? "text-white" : "text-black"}`}
+        >
+          {fmtNum(value)}
+        </motion.p>
+        <span className={`text-[13px] font-medium tracking-tight ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
+          {title}
+        </span>
+      </div>
     </div>
   );
 }
 
 function BreakdownPanel({
   Icon,
-  accentColor,
+  colorConfig,
   title,
   values,
   rows,
-  theme,
   isDark,
 }: {
   Icon: React.ComponentType<{ className?: string }>;
-  accentColor: string;
+  colorConfig: { light: string; dark: string; bgLight: string; bgDark: string };
   title: string;
   values: Record<string, number>;
   rows: { key: string; label: string }[];
-  theme: any;
   isDark: boolean;
 }) {
-  return (
-    <div
-      className={`rounded-xl border overflow-hidden ${theme.card}`}
-      style={theme.cardGlass}
-    >
-      {/* Header */}
-      <div
-        className={`flex items-center justify-between px-4 py-3 border-b ${theme.tableBorder}`}
-      >
-        <div className="flex items-center gap-2">
-          <Icon className={`text-sm ${accentColor}`} />
-          <span className={`text-sm font-bold ${theme.text}`}>{title}</span>
-        </div>
-        <span className={`text-sm ${theme.textFaint}`}>&rsaquo;</span>
-      </div>
+  const accentColor = isDark ? colorConfig.dark : colorConfig.light;
 
-      {/* Rows */}
-      <div className="px-4 py-1">
-        {rows.map((row, i) => (
-          <div
-            key={row.key}
-            className={`flex items-center justify-between py-2.5 ${i < rows.length - 1
-              ? `border-b ${isDark ? "border-white/5" : "border-gray-100"}`
-              : ""
-              }`}
-          >
-            <span className={`text-xs ${theme.textMuted}`}>{row.label}</span>
-            <span className={`text-sm font-bold tabular-nums ${theme.text}`}>
-              {fmtNum(values[row.key] ?? 0)}
-            </span>
-          </div>
-        ))}
+  return (
+    <div className="flex flex-col gap-2.5">
+      <h3 className={`text-[13px] font-semibold uppercase tracking-wider pl-4 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
+        {title}
+      </h3>
+      <div
+        className={`rounded-[20px] overflow-hidden ${isDark
+          ? "bg-[#1C1C1E] shadow-sm"
+          : "bg-white shadow-[0_4px_20px_rgba(0,0,0,0.03)]"
+          }`}
+      >
+        <div className="px-5">
+          {rows.map((row, i) => (
+            <div
+              key={row.key}
+              className={`flex items-center justify-between py-3.5 ${i < rows.length - 1
+                ? `border-b ${isDark ? "border-[#38383A]" : "border-[#E5E5EA]"}`
+                : ""
+                }`}
+            >
+              <span className={`text-[15px] font-medium tracking-tight ${isDark ? "text-white" : "text-black"}`}>
+                {row.label}
+              </span>
+              <motion.span
+                key={values[row.key]}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className={`text-[15px] font-semibold ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}
+              >
+                {fmtNum(values[row.key] ?? 0)}
+              </motion.span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

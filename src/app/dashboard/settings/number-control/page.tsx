@@ -100,17 +100,17 @@ const DEFAULT_POLICY: PolicyMap = {
 function PhonePreview({ masked }: { masked: boolean }) {
   return (
     <div
-      className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-mono"
+      className="inline-flex items-center gap-2 rounded-[10px] border px-3 py-2 text-[13px] font-mono tracking-tight"
       style={{ borderColor: T.border, background: T.surfaceAlt, color: T.text }}
     >
       {masked ? (
         <>
-          <FaEyeSlash className="h-3.5 w-3.5 flex-shrink-0" style={{ color: T.muted }} />
-          <span style={{ color: T.muted }}>98••••3210</span>
+          <FaEyeSlash className="h-3 w-3 flex-shrink-0" style={{ color: T.muted }} />
+          <span style={{ color: T.muted }}>98\u2022\u2022\u2022\u20223210</span>
         </>
       ) : (
         <>
-          <FaEye className="h-3.5 w-3.5 flex-shrink-0" style={{ color: T.teal }} />
+          <FaEye className="h-3 w-3 flex-shrink-0" style={{ color: T.teal }} />
           <span>9876543210</span>
         </>
       )}
@@ -219,7 +219,7 @@ export default function NumberControlPage() {
       <InfoBanner>
         <strong>Server-side enforcement.</strong> Phone numbers are masked on the server before
         they leave the API. Masked numbers appear as{" "}
-        <code className="rounded px-1 font-mono text-xs" style={{ background: T.accentSoft }}>
+        <code className="rounded-[6px] px-1 font-mono text-xs" style={{ background: T.accentSoft }}>
           98••••3210
         </code>{" "}
         — the first 2 and last 4 digits remain visible. Disabling a role takes effect immediately
@@ -235,7 +235,7 @@ export default function NumberControlPage() {
             description={scope.description}
             footer={
               <div className="flex w-full items-center justify-between gap-4">
-                <div className="flex items-center gap-2 text-xs" style={{ color: T.muted }}>
+                <div className="flex items-center gap-2 crm-caption" style={{ color: T.muted, fontWeight: 400 }}>
                   <FaShieldAlt className="h-3 w-3 flex-shrink-0" />
                   {blocked === 0 ? (
                     <span>All roles can see full numbers in this scope.</span>
@@ -246,7 +246,7 @@ export default function NumberControlPage() {
                   )}
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="text-xs font-medium" style={{ color: T.muted }}>
+                  <span className="crm-caption font-medium" style={{ color: T.muted }}>
                     Preview:
                   </span>
                   <PhonePreview masked={blocked > 0} />
@@ -256,21 +256,21 @@ export default function NumberControlPage() {
           >
             {/* Admin row — always enabled, no toggle. */}
             <div
-              className="flex items-start justify-between gap-4 border-b py-3.5"
+              className="flex items-start justify-between gap-4 border-b py-4"
               style={{ borderColor: T.border }}
             >
               <div className="flex-1">
-                <p className="text-sm font-medium" style={{ color: T.text }}>
+                <p className="crm-body font-medium" style={{ color: T.text }}>
                   Admin
                 </p>
-                <p className="mt-0.5 text-xs" style={{ color: T.muted }}>
+                <p className="mt-0.5 crm-secondary" style={{ color: T.muted }}>
                   Full access to all phone numbers. Not configurable.
                 </p>
               </div>
               <div className="flex items-center gap-2">
                 <FaPhoneAlt className="h-3 w-3" style={{ color: T.success }} />
                 <span
-                  className="rounded-full px-2.5 py-0.5 text-xs font-semibold"
+                  className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold tracking-wide"
                   style={{ background: T.successSoft, color: T.successText }}
                 >
                   Always on
@@ -293,7 +293,7 @@ export default function NumberControlPage() {
             {/* Ownership rule callout — LEAD_PHONE only. */}
             {scope.ownershipNote && (
               <div
-                className="mt-4 flex items-start gap-2.5 rounded-lg border px-4 py-3 text-sm"
+                className="mt-4 flex items-start gap-2.5 rounded-[12px] border px-4 py-3.5 crm-secondary"
                 style={{ borderColor: T.teal, background: T.accentSoft, color: T.text }}
               >
                 <FaShieldAlt

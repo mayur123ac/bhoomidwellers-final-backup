@@ -110,7 +110,7 @@ export default function AdditionalFeaturesPage() {
       <>
         <PageHeader title="Additional Features" />
         <Card>
-          <p className="text-sm" style={{ color: T.danger }}>
+          <p className="crm-body" style={{ color: T.danger }}>
             Could not load your feature settings.
           </p>
         </Card>
@@ -162,14 +162,14 @@ export default function AdditionalFeaturesPage() {
             explaining it again every time someone asks why their lead numbers
             did not change. */}
         <div
-          className="mt-2 flex items-start justify-between gap-4 rounded-lg border px-4 py-3"
-          style={{ borderColor: T.border, background: T.sidebar }}
+          className="mt-2 flex items-start justify-between gap-4 rounded-[14px] border px-4 py-3.5"
+          style={{ borderColor: T.border, background: T.surfaceAlt }}
         >
           <div className="flex-1">
-            <p className="text-sm font-medium" style={{ color: T.text }}>
+            <p className="crm-body font-medium" style={{ color: T.text }}>
               Company lead numbering
             </p>
-            <p className="mt-0.5 text-xs" style={{ color: T.muted }}>
+            <p className="mt-0.5 crm-secondary leading-relaxed" style={{ color: T.muted }}>
               {platform.leadNumberSorting.enabled
                 ? "Backdated-priority mode — lead numbers follow the enquiry date, not the order they were entered."
                 : "Default mode — lead numbers follow the order leads were entered."}{" "}
@@ -260,17 +260,17 @@ function PlatformRow({
 }) {
   return (
     <div
-      className="flex items-start justify-between gap-4 rounded-lg border px-4 py-3.5"
+      className="flex items-start justify-between gap-4 rounded-[14px] border px-4 py-4"
       style={{
         borderColor: available ? T.success : T.border,
-        background: available ? T.successSoft : T.sidebar,
+        background: available ? T.successSoft : T.surfaceAlt,
       }}
     >
       <div className="flex-1">
-        <p className="text-sm font-semibold" style={{ color: T.text }}>
+        <p className="crm-body font-semibold" style={{ color: T.text }}>
           {title}
         </p>
-        <p className="mt-1 text-xs leading-relaxed" style={{ color: T.muted }}>
+        <p className="mt-1 crm-secondary leading-relaxed" style={{ color: T.muted }}>
           {detail}
         </p>
       </div>

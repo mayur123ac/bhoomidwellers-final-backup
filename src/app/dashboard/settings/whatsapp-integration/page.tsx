@@ -137,7 +137,7 @@ export default function WhatsAppIntegrationPage() {
       <>
         <PageHeader title="WhatsApp Integration" />
         <Card>
-          <p className="text-sm" style={{ color: T.danger }}>
+          <p className="crm-body" style={{ color: T.danger }}>
             Could not load your WhatsApp settings.
           </p>
         </Card>
@@ -256,20 +256,20 @@ export default function WhatsAppIntegrationPage() {
             lead will actually open, and seeing it is how you catch a typo. */}
         {!apiActive && cleaned.length >= 10 && (
           <div
-            className="mt-4 rounded-lg border px-4 py-3 text-xs"
-            style={{ borderColor: T.border, background: T.sidebar, color: T.muted }}
+            className="mt-4 rounded-[14px] border px-4 py-3.5"
+            style={{ borderColor: T.border, background: T.surfaceAlt, color: T.muted }}
           >
-            <p className="mb-1 font-semibold" style={{ color: T.text }}>
+            <p className="mb-1 crm-body font-semibold" style={{ color: T.text }}>
               <FaWhatsapp className="mr-1.5 inline" aria-hidden />
               Leads will be messaged from
             </p>
-            <p className="font-mono break-all">+{cleaned}</p>
+            <p className="crm-body font-mono break-all">+{cleaned}</p>
           </div>
         )}
       </Card>
 
       <Card title="How this works">
-        <ul className="space-y-2.5 text-sm" style={{ color: T.muted }}>
+        <ul className="space-y-2.5 crm-secondary leading-relaxed" style={{ color: T.muted }}>
           <li>
             <strong style={{ color: T.text }}>Without the Business API</strong> — clicking “Send
             WhatsApp” on a lead opens WhatsApp Web or the app on your device. The message is sent by
@@ -302,17 +302,17 @@ function ChannelRow({
 }) {
   return (
     <div
-      className="flex items-start justify-between gap-4 rounded-lg border px-4 py-3.5"
+      className="flex items-start justify-between gap-4 rounded-[14px] border px-4 py-4"
       style={{
         borderColor: live ? T.success : T.border,
-        background: live ? T.successSoft : T.sidebar,
+        background: live ? T.successSoft : T.surfaceAlt,
       }}
     >
       <div className="flex-1">
-        <p className="text-sm font-semibold" style={{ color: T.text }}>
+        <p className="crm-body font-semibold" style={{ color: T.text }}>
           {title}
         </p>
-        <p className="mt-1 text-xs leading-relaxed" style={{ color: T.muted }}>
+        <p className="mt-1 crm-secondary leading-relaxed" style={{ color: T.muted }}>
           {detail}
         </p>
       </div>

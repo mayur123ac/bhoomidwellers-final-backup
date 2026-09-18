@@ -172,7 +172,7 @@ function SelfPasswordChangeModal({
               error={Boolean(error)}
             />
             {error && (
-              <p className="mt-1 text-xs" style={{ color: T.danger }}>
+              <p className="mt-1 crm-caption" style={{ color: T.danger, fontWeight: 400 }}>
                 {error}
               </p>
             )}
@@ -212,7 +212,7 @@ function SelfPasswordChangeModal({
               setOtp("");
               setError(null);
             }}
-            className="mt-1 text-xs underline"
+            className="mt-1 crm-caption underline"
             style={{ color: T.teal }}
           >
             Resend code
@@ -243,13 +243,13 @@ function MemberRow({
 
   return (
     <div
-      className="flex flex-col gap-4 border-b py-5 last:border-b-0 sm:flex-row sm:items-start"
+      className="flex flex-col gap-4 border-b py-4 last:border-b-0 sm:flex-row sm:items-start"
       style={{ borderColor: T.border }}
     >
       {/* Avatar + identity */}
       <div className="flex flex-1 items-center gap-3 min-w-0">
         <div
-          className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white"
+          className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-[12px] font-semibold text-white"
           style={{ background: T.teal }}
         >
           {member.avatarUrl ? (
@@ -264,12 +264,12 @@ function MemberRow({
           )}
         </div>
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium" style={{ color: T.text }}>
+          <p className="truncate crm-body font-medium" style={{ color: T.text }}>
             {member.name}
           </p>
-          <p className="truncate text-xs" style={{ color: T.muted }}>
+          <p className="truncate crm-caption mt-0.5" style={{ color: T.muted, fontWeight: 400 }}>
             {member.role ?? "No role"}
-            {member.department ? ` · ${member.department}` : ""}
+            {member.department ? ` \u00B7 ${member.department}` : ""}
           </p>
         </div>
       </div>
@@ -390,7 +390,7 @@ function AdminView() {
         title="About permissions"
         description="How per-employee overrides work alongside roles."
       >
-        <div className="space-y-2 text-sm" style={{ color: T.muted }}>
+        <div className="space-y-2.5 crm-secondary leading-relaxed" style={{ color: T.muted }}>
           <p>
             <strong style={{ color: T.text }}>Can change password</strong> — Controls
             whether an employee can update their own password via the Account &
@@ -453,7 +453,7 @@ function EmployeeView() {
                 <Button onClick={() => setPasswordModal(true)}>
                   Change My Password
                 </Button>
-                <p className="mt-1.5 text-xs" style={{ color: T.muted }}>
+                <p className="mt-1.5 crm-secondary" style={{ color: T.muted }}>
                   A verification code will be emailed to you. You will be signed
                   out after the change.
                 </p>

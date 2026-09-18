@@ -101,15 +101,15 @@ export const SETTINGS_THEME_CSS = `
   --st-accent-soft:rgba(217,70,168,0.10);
   --st-accent-tint:rgba(217,70,168,0.18);
   --st-accent-ring:rgba(217,70,168,0.40);
-  --st-surface:#111111;
-  --st-surface-alt:#0f0f0f;
+  --st-surface:#1C1C1E;
+  --st-surface-alt:#141414;
   --st-surface-hover:rgba(255,255,255,0.05);
-  --st-border:#242424;
-  --st-text:#ffffff;
-  --st-muted:#9CA3AF;
-  --st-track:#2a2a2a;
-  --st-neutral-soft:#1e1e1e;
-  --st-neutral-text:#9CA3AF;
+  --st-border:rgba(255,255,255,0.08);
+  --st-text:#EBEBF5;
+  --st-muted:#8E8E93;
+  --st-track:#2C2C2E;
+  --st-neutral-soft:rgba(255,255,255,0.06);
+  --st-neutral-text:#8E8E93;
   --st-success:#34d399; --st-success-soft:rgba(52,211,153,0.12); --st-success-text:#6ee7b7;
   --st-danger:#f87171;  --st-danger-soft:rgba(248,113,113,0.12); --st-danger-text:#fca5a5;
   --st-danger-ring:rgba(248,113,113,0.40);
@@ -122,6 +122,17 @@ export const SETTINGS_THEME_CSS = `
    stylesheet, which has no idea about the tokens above. */
 [data-st-theme="dark"]{ color-scheme: dark; }
 [data-st-theme="light"]{ color-scheme: light; }
+/* Apple-style focus ring for Settings inputs */
+[data-st-theme] .st-input:focus{
+  outline:none;
+  box-shadow:0 0 0 3px var(--st-accent-ring);
+  border-color:var(--st-accent);
+}
+/* Card hover lift */
+[data-st-theme="light"] .st-card-hover:hover{box-shadow:0 4px 24px rgba(0,0,0,0.06)}
+[data-st-theme="dark"] .st-card-hover:hover{box-shadow:0 4px 24px rgba(0,0,0,0.3)}
+/* Smooth transitions for interactive elements */
+[data-st-theme] .st-transition{transition:all 0.2s cubic-bezier(0.25,0.1,0.25,1)}
 `;
 
 /* ── Toasts ─────────────────────────────────────────────────────────────────*/
@@ -144,48 +155,58 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const push = useCallback((kind: ToastKind, message: string) => {
     const id = nextId.current++;
     setToasts((current) => [...current, { id, kind, message }]);
-    // Errors linger — they usually carry something the user has to read and act
-    // on, and a validation message that vanishes in 3s has to be re-triggered
-    // to be read.
     const ttl = kind === "error" ? 8000 : 4000;
     setTimeout(() => setToasts((c) => c.filter((t) => t.id !== id)), ttl);
   }, []);
 
   const value = useMemo(() => ({ push }), [push]);
 
+  const kindIcon: Record<ToastKind, string> = {
+    success: "\u2713",
+    error: "\u2715",
+    warning: "!",
+    info: "i",
+  };
+
+  const kindBorder: Record<ToastKind, string> = {
+    success: T.success,
+    error: T.danger,
+    warning: T.warning,
+    info: T.teal,
+  };
+
+  const kindBg: Record<ToastKind, string> = {
+    success: T.successSoft,
+    error: T.dangerSoft,
+    warning: T.warningSoft,
+    info: T.accentSoft,
+  };
+
   return (
     <ToastContext.Provider value={value}>
       {children}
       <div
-        // pointer-events-none on the CONTAINER, restored on each toast below.
-        // This layer sits at z-100, above the z-90 modal, so a visible toast
-        // would otherwise swallow clicks aimed at whatever is underneath it —
-        // on a short viewport that includes the OTP boxes in the centred
-        // dialog. Toasts are purely informational and never need the clicks.
-        className="pointer-events-none fixed bottom-6 right-6 z-[100] flex flex-col gap-2"
+        className="pointer-events-none fixed bottom-6 right-6 z-[100] flex flex-col gap-2.5"
         role="status"
         aria-live="polite"
       >
         {toasts.map((t) => (
           <div
             key={t.id}
-            className="pointer-events-auto flex max-w-sm items-start gap-3 rounded-lg border px-4 py-3 shadow-lg animate-fadeIn"
+            className="pointer-events-auto flex max-w-sm items-center gap-3 rounded-[14px] border px-4 py-3.5 shadow-[0_8px_30px_rgba(0,0,0,0.12)] animate-fadeIn backdrop-blur-xl"
             style={{
               background: T.surface,
-              borderColor:
-                t.kind === "success"
-                  ? T.success
-                  : t.kind === "error"
-                    ? T.danger
-                    : t.kind === "warning"
-                      ? T.warning
-                      : T.teal,
+              borderColor: kindBorder[t.kind],
             }}
           >
-            <span aria-hidden className="text-base leading-none">
-              {t.kind === "success" ? "✓" : t.kind === "error" ? "✕" : t.kind === "warning" ? "!" : "i"}
+            <span
+              aria-hidden
+              className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+              style={{ background: kindBorder[t.kind] }}
+            >
+              {kindIcon[t.kind]}
             </span>
-            <span className="text-sm" style={{ color: T.text }}>
+            <span className="crm-body" style={{ color: T.text }}>
               {t.message}
             </span>
           </div>
@@ -213,13 +234,13 @@ export function PageHeader({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+    <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
       <div>
-        <h1 className="text-2xl font-semibold" style={{ color: T.text }}>
+        <h1 className="crm-title-lg" style={{ color: T.text }}>
           {title}
         </h1>
         {subtitle && (
-          <p className="mt-1 text-sm" style={{ color: T.muted }}>
+          <p className="mt-1.5 crm-secondary" style={{ color: T.muted }}>
             {subtitle}
           </p>
         )}
@@ -244,21 +265,27 @@ export function Card({
 }) {
   return (
     <section
-      className="mb-6 rounded-xl border"
-      style={{ background: T.surface, borderColor: tone === "danger" ? T.danger : T.border }}
+      className="mb-6 overflow-hidden rounded-[18px] border st-transition"
+      style={{
+        background: T.surface,
+        borderColor: tone === "danger" ? T.danger : T.border,
+        boxShadow: tone === "danger"
+          ? undefined
+          : "var(--st-card-shadow, 0 2px 12px rgba(0,0,0,0.03))",
+      }}
     >
       {(title || description) && (
-        <header className="border-b px-6 py-4" style={{ borderColor: T.border }}>
+        <header className="border-b px-6 py-5" style={{ borderColor: T.border }}>
           {title && (
             <h2
-              className="text-base font-semibold"
+              className="crm-section"
               style={{ color: tone === "danger" ? T.danger : T.text }}
             >
               {title}
             </h2>
           )}
           {description && (
-            <p className="mt-1 text-sm" style={{ color: T.muted }}>
+            <p className="mt-1 crm-secondary" style={{ color: T.muted }}>
               {description}
             </p>
           )}
@@ -268,7 +295,7 @@ export function Card({
       {footer && (
         <footer
           className="flex flex-wrap items-center justify-end gap-3 border-t px-6 py-4"
-          style={{ borderColor: T.border, background: T.sidebar }}
+          style={{ borderColor: T.border, background: T.surfaceAlt }}
         >
           {footer}
         </footer>
@@ -286,12 +313,17 @@ export function InfoBanner({
 }) {
   const accent = tone === "warning" ? T.warning : T.teal;
   const wash = tone === "warning" ? T.warningSoft : T.accentSoft;
+  const iconBg = tone === "warning" ? T.warningSoft : T.accentSoft;
   return (
     <div
-      className="mb-6 flex items-start gap-3 rounded-lg border px-4 py-3 text-sm"
+      className="mb-6 flex items-start gap-3 rounded-[14px] border px-4 py-3.5 crm-body"
       style={{ borderColor: accent, background: wash, color: T.text }}
     >
-      <span aria-hidden className="font-bold leading-5">
+      <span
+        aria-hidden
+        className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-[10px] font-bold"
+        style={{ background: iconBg, color: accent }}
+      >
         {tone === "warning" ? "!" : "i"}
       </span>
       <div className="leading-relaxed">{children}</div>
@@ -317,10 +349,10 @@ export function Field({
   children: React.ReactNode;
 }) {
   return (
-    <div className="mb-4">
+    <div className="mb-5">
       <label
         htmlFor={htmlFor}
-        className="mb-1.5 block text-sm font-medium"
+        className="mb-2 block crm-label"
         style={{ color: T.text }}
       >
         {label}
@@ -332,15 +364,13 @@ export function Field({
         )}
       </label>
       {children}
-      {/* Errors carry an icon as well as colour, so the state does not depend on
-          being able to distinguish red from grey. */}
       {error ? (
-        <p className="mt-1.5 flex items-center gap-1 text-xs" style={{ color: T.danger }}>
-          <span aria-hidden>✕</span>
+        <p className="mt-1.5 flex items-center gap-1.5 crm-caption" style={{ color: T.danger }}>
+          <span aria-hidden className="text-[10px]">\u2715</span>
           {error}
         </p>
       ) : hint ? (
-        <p className="mt-1.5 text-xs" style={{ color: T.muted }}>
+        <p className="mt-1.5 crm-caption" style={{ color: T.muted, fontWeight: 400 }}>
           {hint}
         </p>
       ) : null}
@@ -349,16 +379,13 @@ export function Field({
 }
 
 export const inputClass =
-  "w-full rounded-lg border px-3 py-2.5 text-sm outline-none transition-colors focus:ring-2 disabled:cursor-not-allowed disabled:opacity-60";
+  "w-full rounded-[10px] border px-3.5 py-2.5 text-[14px] leading-5 tracking-tight outline-none st-input st-transition disabled:cursor-not-allowed disabled:opacity-60";
 
 export function inputStyle(hasError?: boolean): React.CSSProperties {
   return {
     borderColor: hasError ? T.danger : T.border,
     color: T.text,
     background: T.surface,
-    // Tailwind's ring colour utilities would need config; setting the custom
-    // property directly keeps the focus ring on-accent without touching the
-    // shared Tailwind theme that the dashboard screens also use.
     ["--tw-ring-color" as any]: hasError ? T.dangerRing : T.accentRing,
   };
 }
@@ -400,10 +427,13 @@ export function Button({
   variant?: "primary" | "secondary" | "danger" | "ghost";
   loading?: boolean;
 }) {
+  const base =
+    "inline-flex min-h-[44px] cursor-pointer items-center justify-center gap-2 rounded-[10px] border px-5 text-[13px] font-semibold tracking-tight st-transition disabled:cursor-not-allowed disabled:opacity-50";
+
   const palette: Record<string, React.CSSProperties> = {
     primary: { background: T.teal, color: "#fff", borderColor: T.teal },
     secondary: { background: T.surface, color: T.text, borderColor: T.border },
-    danger: { background: T.danger, color: "#fff", borderColor: T.danger },
+    danger: { background: T.dangerSoft, color: T.dangerText, borderColor: "transparent" },
     ghost: { background: "transparent", color: T.teal, borderColor: "transparent" },
   };
 
@@ -411,9 +441,7 @@ export function Button({
     <button
       {...rest}
       disabled={rest.disabled || loading}
-      // 44px min height — the spec's touch-target floor, and it applies on
-      // desktop too rather than only under a media query.
-      className="inline-flex min-h-[44px] cursor-pointer items-center justify-center gap-2 rounded-lg border px-5 text-sm font-semibold transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+      className={`${base} hover:opacity-90`}
       style={palette[variant]}
     >
       {loading && (
@@ -446,15 +474,15 @@ export function Toggle({
       aria-label={label}
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      className="relative h-7 w-[52px] flex-shrink-0 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+      className="relative h-[22px] w-[36px] flex-shrink-0 rounded-full transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
       style={{
         background: checked ? T.teal : T.track,
         ["--tw-ring-color" as any]: T.accentRing,
       }}
     >
       <span
-        className="absolute top-0.5 left-0.5 h-6 w-6 rounded-full shadow transition-transform"
-        style={{ background: "#fff", transform: checked ? "translateX(24px)" : "translateX(0)" }}
+        className="absolute top-[2px] left-[2px] h-[18px] w-[18px] rounded-full bg-white shadow-sm transition-transform duration-200 ease-in-out"
+        style={{ transform: checked ? "translateX(14px)" : "translateX(0)" }}
       />
     </button>
   );
@@ -475,15 +503,15 @@ export function ToggleRow({
 }) {
   return (
     <div
-      className="flex items-start justify-between gap-4 border-b py-3.5 last:border-b-0"
+      className="flex items-start justify-between gap-4 border-b py-4 last:border-b-0"
       style={{ borderColor: T.border }}
     >
       <div className="flex-1">
-        <p className="text-sm font-medium" style={{ color: T.text }}>
+        <p className="crm-body font-medium" style={{ color: T.text }}>
           {label}
         </p>
         {description && (
-          <p className="mt-0.5 text-xs" style={{ color: T.muted }}>
+          <p className="mt-0.5 crm-secondary" style={{ color: T.muted }}>
             {description}
           </p>
         )}
@@ -512,7 +540,7 @@ export function Radio({
   return (
     <label
       htmlFor={id}
-      className="flex cursor-pointer items-start gap-3 rounded-lg border p-3.5 transition-colors"
+      className="flex cursor-pointer items-start gap-3 rounded-[12px] border p-4 st-transition"
       style={{
         borderColor: checked ? T.teal : T.border,
         background: checked ? T.accentSoft : T.surface,
@@ -529,11 +557,11 @@ export function Radio({
         style={{ accentColor: T.teal }}
       />
       <span>
-        <span className="block text-sm font-medium" style={{ color: T.text }}>
+        <span className="block crm-body font-medium" style={{ color: T.text }}>
           {label}
         </span>
         {description && (
-          <span className="mt-0.5 block text-xs" style={{ color: T.muted }}>
+          <span className="mt-0.5 block crm-secondary" style={{ color: T.muted }}>
             {description}
           </span>
         )}
@@ -548,7 +576,6 @@ export function Checkbox({
   label,
   id,
   disabled,
-  /** Shown beneath the label when disabled, to say WHY it cannot be ticked. */
   disabledReason,
 }: {
   checked: boolean;
@@ -573,16 +600,14 @@ export function Checkbox({
           onChange={(e) => onChange(e.target.checked)}
           className="h-4 w-4 rounded disabled:cursor-not-allowed"
           style={{ accentColor: T.teal }}
-          // Points at the explanation below rather than relying on the visual
-          // dimming, which conveys nothing to a screen reader.
           aria-describedby={disabled && disabledReason ? `${id}-reason` : undefined}
         />
-        <span className="text-sm" style={{ color: T.text }}>
+        <span className="crm-body" style={{ color: T.text }}>
           {label}
         </span>
       </label>
       {disabled && disabledReason && (
-        <p id={`${id}-reason`} className="ml-7 text-xs" style={{ color: T.muted }}>
+        <p id={`${id}-reason`} className="ml-7 crm-caption" style={{ color: T.muted, fontWeight: 400 }}>
           {disabledReason}
         </p>
       )}
@@ -598,19 +623,18 @@ export function StatusBadge({
   children: React.ReactNode;
 }) {
   const map: Record<string, { bg: string; fg: string; icon: string }> = {
-    active: { bg: T.successSoft, fg: T.successText, icon: "●" },
-    success: { bg: T.successSoft, fg: T.successText, icon: "✓" },
-    pending: { bg: T.warningSoft, fg: T.warningText, icon: "◐" },
-    inactive: { bg: T.neutralSoft, fg: T.neutralText, icon: "○" },
-    danger: { bg: T.dangerSoft, fg: T.dangerText, icon: "✕" },
-    neutral: { bg: T.neutralSoft, fg: T.neutralText, icon: "•" },
+    active: { bg: T.successSoft, fg: T.successText, icon: "\u25CF" },
+    success: { bg: T.successSoft, fg: T.successText, icon: "\u2713" },
+    pending: { bg: T.warningSoft, fg: T.warningText, icon: "\u25D0" },
+    inactive: { bg: T.neutralSoft, fg: T.neutralText, icon: "\u25CB" },
+    danger: { bg: T.dangerSoft, fg: T.dangerText, icon: "\u2715" },
+    neutral: { bg: T.neutralSoft, fg: T.neutralText, icon: "\u2022" },
   };
   const s = map[status] ?? map.neutral;
 
   return (
-    // Icon plus text, never colour alone.
     <span
-      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold"
+      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold tracking-wide"
       style={{ background: s.bg, color: s.fg }}
     >
       <span aria-hidden>{s.icon}</span>
@@ -640,28 +664,11 @@ export function Modal({
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
 
-  // ── Why onClose lives in a ref ──────────────────────────────────────────
-  // Every caller passes an inline arrow — `onClose={() => setModal(false)}` —
-  // so `onClose` is a NEW function identity on every parent render. With it in
-  // the dependency array below, the effect tore down and re-ran after every
-  // keystroke, and its cleanup calls `previouslyFocused.focus()`.
-  //
-  // That stole focus out of whatever the user was typing into and threw it back
-  // to the element that opened the dialog, ~30ms before the re-run dragged it
-  // to the first input. In the OTP dialog it looked exactly like the boxes
-  // could not accept keyboard input at all: a digit would land, focus would
-  // jump away, and the next keystroke went nowhere.
-  //
-  // The ref keeps the handler current without making it a dependency, so the
-  // effect now runs once per open/close — which is the only time any of the
-  // things it does (trap focus, lock scroll, restore focus) should happen.
   const onCloseRef = useRef(onClose);
   useEffect(() => {
     onCloseRef.current = onClose;
   }, [onClose]);
 
-  // Escape to close, and a focus trap so tabbing cannot wander behind the
-  // overlay onto controls the user cannot see.
   useEffect(() => {
     if (!open) return;
 
@@ -695,13 +702,6 @@ export function Modal({
     const bodyOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
 
-    // Move focus into the dialog so a screen reader announces it and the first
-    // Tab lands inside rather than on the page behind.
-    //
-    // `[data-autofocus]` wins when present. Without it the first focusable
-    // element is whatever happens to sit highest in the DOM — in the OTP dialog
-    // that is a "Change email" link, not the code boxes, so the caret landed
-    // somewhere the user then had to click away from.
     const timer = setTimeout(() => {
       const panel = panelRef.current;
       if (!panel) return;
@@ -717,20 +717,16 @@ export function Modal({
       document.removeEventListener("keydown", onKeyDown);
       document.body.style.overflow = bodyOverflow;
       clearTimeout(timer);
-      // Only on genuine close/unmount now. Previously this also ran on every
-      // re-render, which is what made typing impossible.
       previouslyFocused?.focus?.();
     };
-    // `open` only. onClose is reached through onCloseRef, which the exhaustive
-    // deps rule correctly does not require as a dependency — see the note above
-    // for why it must not be one.
   }, [open]);
 
   if (!open) return null;
 
   return (
     <div
-      className="fixed inset-0 z-[90] flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4"
+      className="fixed inset-0 z-[90] flex items-end justify-center p-0 sm:items-center sm:p-4"
+      style={{ background: "rgba(0,0,0,0.4)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" }}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -740,17 +736,17 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={`max-h-[92vh] w-full ${width} overflow-y-auto rounded-t-2xl shadow-2xl sm:rounded-2xl`}
+        className={`max-h-[92vh] w-full ${width} overflow-y-auto rounded-t-[20px] shadow-[0_20px_50px_rgba(0,0,0,0.2)] sm:rounded-[20px]`}
         style={{ background: T.surface }}
       >
-        <header className="border-b px-6 py-4" style={{ borderColor: T.border }}>
+        <header className="border-b px-6 py-5" style={{ borderColor: T.border }}>
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-lg font-semibold" style={{ color: T.text }}>
+              <h2 className="crm-title" style={{ color: T.text }}>
                 {title}
               </h2>
               {description && (
-                <p className="mt-1 text-sm" style={{ color: T.muted }}>
+                <p className="mt-1 crm-secondary" style={{ color: T.muted }}>
                   {description}
                 </p>
               )}
@@ -759,10 +755,10 @@ export function Modal({
               type="button"
               onClick={onClose}
               aria-label="Close dialog"
-              className="-mr-2 -mt-1 flex h-11 w-11 items-center justify-center rounded-lg text-xl st-hover-surface"
+              className="-mr-2 -mt-1 flex h-8 w-8 items-center justify-center rounded-full text-base st-hover-surface st-transition"
               style={{ color: T.muted }}
             >
-              ✕
+              \u2715
             </button>
           </div>
         </header>
@@ -772,7 +768,7 @@ export function Modal({
         {footer && (
           <footer
             className="flex flex-wrap items-center justify-end gap-3 border-t px-6 py-4"
-            style={{ borderColor: T.border, background: T.sidebar }}
+            style={{ borderColor: T.border, background: T.surfaceAlt }}
           >
             {footer}
           </footer>
@@ -784,35 +780,6 @@ export function Modal({
 
 /* ── OTP input ──────────────────────────────────────────────────────────────*/
 
-/**
- * Six-box one-time-code entry.
- *
- * ── Six slots internally, a digits-only string outwards ─────────────────────
- * The boxes are backed by a fixed six-element array held in this component, not
- * derived from the `value` prop. Two things forced that, and both were bugs
- * found by the tests rather than by reading the code:
- *
- * 1. Deriving each render from `value` loses fast keystrokes. Two keys pressed
- *    inside one React batch both read the same stale prop, so the second
- *    overwrites the first — typing "4281" quickly landed as "42".
- *
- * 2. A slot has to be able to be empty *in place*. Backspacing the middle of
- *    "428170" must leave box 3 blank, not slide "70" left by one. A plain
- *    string cannot express a hole without a placeholder, and the previous
- *    implementation used a literal space — which was then submitted to the
- *    server inside the code, and made `otp.length === 6` (how both callers
- *    enable their Verify button) true for values that were not six digits.
- *
- * Outwards, `onChange` emits the slots joined with holes dropped. So a complete
- * code is exactly six characters and an incomplete one is shorter, which is the
- * check the callers already make, and no space ever escapes.
- *
- * ── Focus ───────────────────────────────────────────────────────────────────
- * `key={i}` is stable over a fixed-length array, so React updates these inputs
- * in place and never remounts them; typing cannot lose focus here. The bug that
- * made this component feel dead was not in this file at all — it was Modal's
- * focus effect re-running on every render. See the note there.
- */
 export function OTPInput({
   value,
   onChange,
@@ -824,10 +791,8 @@ export function OTPInput({
   value: string;
   onChange: (next: string) => void;
   disabled?: boolean;
-  /** Focus the first empty box on mount. On by default. */
   autoFocus?: boolean;
   error?: boolean;
-  /** Fired once the sixth digit lands, for submit-on-complete. */
   onComplete?: (code: string) => void;
 }) {
   const refs = useRef<(HTMLInputElement | null)[]>([]);
@@ -839,21 +804,8 @@ export function OTPInput({
 
   const [slots, setSlots] = useState<string[]>(() => toSlots(value));
 
-  // ── Why the slots are mirrored in a ref ─────────────────────────────────
-  // React does not run a setState updater synchronously during the event
-  // handler — it runs during the next render. So an edit cannot both read the
-  // previous slots and emit the new string from inside the updater; the emitted
-  // value would still be null when the handler finished.
-  //
-  // The ref is the synchronous copy. Each keystroke reads it, writes it, and
-  // emits from it immediately, so two keys pressed inside one React batch chain
-  // correctly instead of both reading the same stale array.
   const slotsRef = useRef<string[]>(slots);
 
-  // Adopt the prop when it disagrees with what these boxes are showing — a
-  // parent resetting to "" after a failed attempt, or seeding a code. Compared
-  // against the dense join because that is exactly what this component last
-  // emitted, so its own updates never round-trip back and clobber a hole.
   useEffect(() => {
     const incoming = value.replace(/\D/g, "").slice(0, 6);
     if (incoming !== slotsRef.current.join("")) {
@@ -861,23 +813,11 @@ export function OTPInput({
       slotsRef.current = adopted;
       setSlots(adopted);
     }
-    // Driven by the prop alone. slotsRef is a ref, so it is deliberately not a
-    // dependency — reacting to this component's own edits would fight the user.
   }, [value]);
 
-  /** The box a caret belongs in: the first empty one, or the last if full. */
   const firstEmpty = slots.findIndex((slot) => slot === "");
   const activeIndex = firstEmpty === -1 ? 5 : firstEmpty;
 
-  // ── The caret can sit past the last box ─────────────────────────────────
-  // A real text caret can be after the final character; six separate inputs
-  // cannot express that, because focus has to be ON an element. So position 6
-  // is tracked here while focus stays on box 5.
-  //
-  // Without it, filling all six boxes leaves the caret clamped to the last one
-  // and every further keystroke silently overwrites the sixth digit — type
-  // "1234567890" and you end up with "123450". Google and Stripe both ignore
-  // input once the code is complete, which is what position 6 encodes.
   const caretRef = useRef(0);
 
   const focusBox = useCallback((index: number) => {
@@ -885,26 +825,10 @@ export function OTPInput({
     const input = refs.current[clamped];
     if (!input) return;
     input.focus();
-    // Selecting the existing digit means the next keystroke replaces it rather
-    // than being swallowed by maxLength — otherwise typing over a filled box
-    // silently does nothing.
     input.select();
-    // After focus(), because the element's own onFocus fires synchronously
-    // inside it and would otherwise overwrite this with the clamped value.
     caretRef.current = Math.max(0, Math.min(index, 6));
   }, []);
 
-  /**
-   * Apply an edit and move the caret.
-   *
-   * The updater form is what makes fast typing work: each keystroke transforms
-   * whatever the previous one produced, rather than re-reading a `value` prop
-   * that React has not re-rendered yet.
-   *
-   * Focus moves synchronously. These inputs are never remounted, so the element
-   * exists throughout — deferring to requestAnimationFrame only opened a window
-   * where the next keypress landed in the box the caret had not left yet.
-   */
   const commit = useCallback(
     (edit: (previous: string[]) => { next: string[]; focus: number }) => {
       const { next, focus } = edit(slotsRef.current);
@@ -921,8 +845,6 @@ export function OTPInput({
     [onChange, onComplete, focusBox]
   );
 
-  // Autofocus on mount only. Not tied to `value`, or every keystroke would drag
-  // the caret back to the first empty box.
   useEffect(() => {
     if (!autoFocus || disabled) return;
     const timer = setTimeout(() => focusBox(activeIndex), 0);
@@ -934,19 +856,12 @@ export function OTPInput({
     const typed = raw.replace(/\D/g, "");
     if (!typed) return;
 
-    // The code is complete and the caret is past the end. Further digits are
-    // ignored rather than overwriting the sixth. Backspace, an arrow key or a
-    // click all move the caret back and make editing possible again.
     if (caretRef.current >= 6 && typed.length === 1) {
-      // Re-render so the box discards whatever the DOM briefly showed.
       setSlots(slotsRef.current.slice());
       return;
     }
 
     commit((previous) => {
-      // A phone keyboard or password manager can drop the whole code into one
-      // box without firing a paste event, so multi-character input is spread
-      // rather than truncated.
       if (typed.length > 1) {
         const next = previous.slice();
         for (let i = 0; i < typed.length && index + i < 6; i++) next[index + i] = typed[i];
@@ -961,14 +876,9 @@ export function OTPInput({
 
   const handleKeyDown = (index: number, event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Backspace") {
-      // Handled here rather than letting the input clear itself, so "delete the
-      // digit" and "step back" are one predictable rule instead of depending on
-      // whether the caret happened to sit before or after the character.
       event.preventDefault();
       commit((previous) => {
         const next = previous.slice();
-        // A digit under the caret is cleared IN PLACE — the box goes blank and
-        // the ones after it do not slide left.
         if (next[index]) {
           next[index] = "";
           return { next, focus: index };
@@ -992,8 +902,6 @@ export function OTPInput({
       return;
     }
 
-    // preventDefault so the caret does not also move inside the box, which
-    // would take two presses to leave it.
     if (event.key === "ArrowLeft") {
       event.preventDefault();
       focusBox(index - 1);
@@ -1018,9 +926,6 @@ export function OTPInput({
       return;
     }
 
-    // Everything non-numeric is rejected at the keystroke, so a stray letter
-    // never momentarily appears and then vanishes. Control combinations
-    // (Ctrl+V, Cmd+A, Tab, Enter) must still get through.
     if (
       event.key.length === 1 &&
       !/[0-9]/.test(event.key) &&
@@ -1038,9 +943,6 @@ export function OTPInput({
     if (!pasted) return;
 
     commit((previous) => {
-      // Pasting into a box fills from THAT box onward, so a full code pasted
-      // into the first one replaces everything, while two digits pasted into
-      // box four correct just the tail.
       const next = previous.slice();
       for (let i = 0; i < pasted.length && index + i < 6; i++) next[index + i] = pasted[i];
       return { next, focus: Math.min(index + pasted.length, 5) };
@@ -1048,7 +950,7 @@ export function OTPInput({
   };
 
   return (
-    <div className="flex gap-2" role="group" aria-label="6-digit verification code">
+    <div className="flex gap-2.5" role="group" aria-label="6-digit verification code">
       {slots.map((digit, i) => (
         <input
           key={i}
@@ -1060,18 +962,11 @@ export function OTPInput({
           disabled={disabled}
           inputMode="numeric"
           pattern="[0-9]*"
-          // Only the first box advertises one-time-code. On all six, iOS offers
-          // to autofill each box with the whole code.
           autoComplete={i === 0 ? "one-time-code" : "off"}
           data-autofocus={i === 0 ? "true" : undefined}
           data-testid={`otp-${i}`}
           aria-label={`Digit ${i + 1} of 6`}
           maxLength={1}
-          // Boxes ahead of the caret stay reachable by click but send the caret
-          // to the first empty one, which is what makes gaps unrepresentable.
-          // Clicking a box beyond the first empty one sends the caret to the
-          // first empty one instead, so a code cannot be started in the middle.
-          // Boxes at or before it are clicked normally.
           onMouseDown={(event) => {
             if (disabled) return;
             if (i > activeIndex) {
@@ -1081,15 +976,12 @@ export function OTPInput({
           }}
           onFocus={(event) => {
             event.currentTarget.select();
-            // A click or a Tab lands here without going through focusBox, so the
-            // caret has to be recorded — otherwise it would still read 6 from a
-            // completed code and the box would refuse to accept a replacement.
             caretRef.current = i;
           }}
           onChange={(event) => handleChange(i, event.target.value)}
           onKeyDown={(event) => handleKeyDown(i, event)}
           onPaste={(event) => handlePaste(i, event)}
-          className="h-14 w-12 rounded-lg border text-center text-xl font-semibold outline-none focus:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
+          className="h-14 w-12 rounded-[12px] border text-center text-xl font-semibold outline-none st-input st-transition disabled:cursor-not-allowed disabled:opacity-50"
           style={inputStyle(error)}
         />
       ))}
@@ -1107,7 +999,6 @@ export interface PasswordRules {
   special: boolean;
 }
 
-/** Mirrors checkPasswordRules() in lib/passwords.ts — the server is the authority. */
 export function checkRules(password: string): PasswordRules {
   return {
     length: password.length >= 8,
@@ -1135,24 +1026,24 @@ export function PasswordStrengthIndicator({ password }: { password: string }) {
   ];
 
   return (
-    <div className="mt-2">
-      <div className="mb-2 flex items-center gap-3">
+    <div className="mt-3">
+      <div className="mb-2.5 flex items-center gap-3">
         <div className="h-1.5 flex-1 overflow-hidden rounded-full" style={{ background: T.track }}>
           <div
-            className="h-full rounded-full transition-all"
+            className="h-full rounded-full st-transition"
             style={{ width: `${Math.max(ratio * 100, password ? 8 : 0)}%`, background: colour }}
           />
         </div>
         {password && (
-          <span className="text-xs font-semibold" style={{ color: colour }}>
+          <span className="crm-caption" style={{ color: colour }}>
             {label}
           </span>
         )}
       </div>
-      <ul className="space-y-1">
+      <ul className="space-y-1.5">
         {items.map(([key, text]) => (
-          <li key={key} className="flex items-center gap-2 text-xs" style={{ color: rules[key] ? T.success : T.muted }}>
-            <span aria-hidden>{rules[key] ? "✓" : "○"}</span>
+          <li key={key} className="flex items-center gap-2 crm-caption" style={{ color: rules[key] ? T.success : T.muted, fontWeight: 400 }}>
+            <span aria-hidden>{rules[key] ? "\u2713" : "\u25CB"}</span>
             <span>{text}</span>
           </li>
         ))}
@@ -1167,7 +1058,7 @@ export function SearchableSelect({
   value,
   onChange,
   options,
-  placeholder = "Search…",
+  placeholder = "Search\u2026",
   id,
 }: {
   value: string;
@@ -1191,8 +1082,6 @@ export function SearchableSelect({
 
   const selected = options.find((o) => o.value === value);
 
-  // There are ~400 IANA zones; the list is capped so the dropdown does not
-  // render hundreds of DOM nodes on every keystroke.
   const filtered = useMemo(() => {
     const needle = search.trim().toLowerCase();
     const matches = needle
@@ -1215,31 +1104,31 @@ export function SearchableSelect({
         className={`${inputClass} flex items-center justify-between text-left`}
         style={inputStyle(false)}
       >
-        <span className="truncate">{selected?.label ?? "Select…"}</span>
+        <span className="truncate">{selected?.label ?? "Select\u2026"}</span>
         <span aria-hidden style={{ color: T.muted }}>
-          ▾
+          \u25BE
         </span>
       </button>
 
       {open && (
         <div
-          className="absolute z-30 mt-1 w-full rounded-lg border shadow-lg"
+          className="absolute z-30 mt-1.5 w-full rounded-[16px] border shadow-[0_12px_40px_rgba(0,0,0,0.12)] overflow-hidden backdrop-blur-2xl"
           style={{ background: T.surface, borderColor: T.border }}
         >
-          <div className="border-b p-2" style={{ borderColor: T.border }}>
+          <div className="border-b p-2.5" style={{ borderColor: T.border }}>
             <input
               autoFocus
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder={placeholder}
               aria-label={placeholder}
-              className="w-full rounded-md border px-2.5 py-2 text-sm outline-none focus:ring-2"
+              className="w-full rounded-[10px] border px-3 py-2 text-[13px] tracking-tight outline-none st-input"
               style={inputStyle(false)}
             />
           </div>
           <ul role="listbox" className="max-h-64 overflow-y-auto custom-scrollbar py-1">
             {filtered.length === 0 && (
-              <li className="px-3 py-2.5 text-sm" style={{ color: T.muted }}>
+              <li className="px-3.5 py-2.5 crm-secondary" style={{ color: T.muted }}>
                 No matches
               </li>
             )}
@@ -1253,7 +1142,7 @@ export function SearchableSelect({
                     onChange(option.value);
                     setOpen(false);
                   }}
-                  className="w-full px-3 py-2.5 text-left text-sm st-hover-surface"
+                  className="w-full px-3.5 py-2.5 text-left text-[13px] tracking-tight rounded-[10px] mx-0 st-hover-surface st-transition"
                   style={{
                     color: T.text,
                     background: option.value === value ? T.accentTint : undefined,
@@ -1277,7 +1166,15 @@ export function Skeleton({ rows = 3 }: { rows?: number }) {
   return (
     <div className="animate-pulse space-y-3" aria-hidden>
       {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="h-10 rounded-lg" style={{ background: T.track }} />
+        <div
+          key={i}
+          className="rounded-[10px]"
+          style={{
+            background: T.track,
+            height: i === 0 ? "20px" : "44px",
+            width: i === 0 ? "40%" : "100%",
+          }}
+        />
       ))}
     </div>
   );
@@ -1285,12 +1182,18 @@ export function Skeleton({ rows = 3 }: { rows?: number }) {
 
 export function EmptyState({ title, description }: { title: string; description?: string }) {
   return (
-    <div className="py-10 text-center">
-      <p className="text-sm font-medium" style={{ color: T.text }}>
+    <div className="py-12 text-center">
+      <div
+        className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full"
+        style={{ background: T.neutralSoft }}
+      >
+        <span className="text-lg" style={{ color: T.muted }}>\u2014</span>
+      </div>
+      <p className="crm-body font-medium" style={{ color: T.text }}>
         {title}
       </p>
       {description && (
-        <p className="mx-auto mt-1 max-w-md text-sm" style={{ color: T.muted }}>
+        <p className="mx-auto mt-1.5 max-w-md crm-secondary" style={{ color: T.muted }}>
           {description}
         </p>
       )}
@@ -1320,16 +1223,22 @@ export class SectionErrorBoundary extends React.Component<
     if (this.state.error) {
       return (
         <div
-          className="rounded-xl border p-8 text-center"
+          className="rounded-[18px] border p-10 text-center"
           style={{ background: T.surface, borderColor: T.danger }}
         >
-          <p className="text-base font-semibold" style={{ color: T.danger }}>
+          <div
+            className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full"
+            style={{ background: T.dangerSoft }}
+          >
+            <span className="text-lg" style={{ color: T.danger }}>\u2715</span>
+          </div>
+          <p className="crm-section" style={{ color: T.danger }}>
             This section failed to load
           </p>
-          <p className="mx-auto mt-2 max-w-md text-sm" style={{ color: T.muted }}>
+          <p className="mx-auto mt-2 max-w-md crm-secondary" style={{ color: T.muted }}>
             {this.state.error.message}
           </p>
-          <div className="mt-5">
+          <div className="mt-6">
             <Button variant="secondary" onClick={() => this.setState({ error: null })}>
               Try again
             </Button>
@@ -1343,11 +1252,6 @@ export class SectionErrorBoundary extends React.Component<
 
 /* ── Fetch helper ───────────────────────────────────────────────────────────*/
 
-/**
- * JSON fetch that turns a non-2xx into a thrown Error carrying the server's own
- * message. Without this every caller writes the same six lines and half of them
- * end up showing "[object Object]" on failure.
- */
 export async function api<T = any>(
   url: string,
   init?: RequestInit & { json?: unknown }

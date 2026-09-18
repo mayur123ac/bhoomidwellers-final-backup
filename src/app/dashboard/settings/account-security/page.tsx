@@ -224,7 +224,7 @@ function PasswordChangeModal({ open, onClose }: { open: boolean; onClose: () => 
   return (
     <Modal
       open={open}
-      onClose={canClose ? onClose : undefined}
+      onClose={canClose ? onClose : () => {}}
       title={stepTitle[step]}
       description={stepDescription[step]}
       footer={
@@ -295,7 +295,7 @@ function PasswordChangeModal({ open, onClose }: { open: boolean; onClose: () => 
             type="button"
             onClick={handleForgot}
             disabled={busy}
-            className="mt-1 text-sm font-medium hover:underline"
+            className="mt-1 crm-body font-medium hover:underline"
             style={{ color: T.teal, background: "none", border: "none", cursor: "pointer", padding: 0 }}
           >
             Forgot your current password?
@@ -317,7 +317,7 @@ function PasswordChangeModal({ open, onClose }: { open: boolean; onClose: () => 
           </Field>
 
           {attemptsRemaining != null && attemptsRemaining > 0 && (
-            <p className="mt-1 text-xs" style={{ color: T.warning }}>
+            <p className="mt-1 crm-caption" style={{ color: T.warning, fontWeight: 400 }}>
               {attemptsRemaining} attempt{attemptsRemaining === 1 ? "" : "s"} remaining.
             </p>
           )}
@@ -476,47 +476,47 @@ function SessionManager() {
       </InfoBanner>
 
       <div className="-mx-6 overflow-x-auto px-6">
-        <table className="w-full min-w-[560px] border-collapse text-sm">
+        <table className="w-full min-w-[560px] border-collapse">
           <thead>
-            <tr className="text-left" style={{ color: T.muted }}>
-              <th className="border-b py-2.5 pr-4 font-medium" style={{ borderColor: T.border }}>
+            <tr className="text-left">
+              <th className="border-b py-2.5 pr-4 crm-caption" style={{ borderColor: T.border, color: T.muted, fontWeight: 600 }}>
                 Device
               </th>
-              <th className="border-b py-2.5 pr-4 font-medium" style={{ borderColor: T.border }}>
+              <th className="border-b py-2.5 pr-4 crm-caption" style={{ borderColor: T.border, color: T.muted, fontWeight: 600 }}>
                 IP address
               </th>
-              <th className="border-b py-2.5 pr-4 font-medium" style={{ borderColor: T.border }}>
+              <th className="border-b py-2.5 pr-4 crm-caption" style={{ borderColor: T.border, color: T.muted, fontWeight: 600 }}>
                 Started
               </th>
-              <th className="border-b py-2.5 pr-4 font-medium" style={{ borderColor: T.border }}>
+              <th className="border-b py-2.5 pr-4 crm-caption" style={{ borderColor: T.border, color: T.muted, fontWeight: 600 }}>
                 Status
               </th>
-              <th className="border-b py-2.5 font-medium" style={{ borderColor: T.border }} />
+              <th className="border-b py-2.5 crm-caption" style={{ borderColor: T.border, color: T.muted, fontWeight: 600 }} />
             </tr>
           </thead>
           <tbody>
             {sessions.map((session) => (
               <tr key={session.id}>
-                <td className="border-b py-3 pr-4" style={{ borderColor: T.border, color: T.text }}>
-                  {session.device ?? "Unknown device"}
+                <td className="border-b py-3.5 pr-4 st-hover-surface transition-colors" style={{ borderColor: T.border, color: T.text }}>
+                  <span className="crm-body font-medium">{session.device ?? "Unknown device"}</span>
                   {session.isCurrent && (
-                    <span className="ml-2 text-xs font-semibold" style={{ color: T.teal }}>
+                    <span className="ml-2 crm-caption font-semibold" style={{ color: T.teal }}>
                       This device
                     </span>
                   )}
                 </td>
-                <td className="border-b py-3 pr-4" style={{ borderColor: T.border, color: T.muted }}>
-                  {session.ipAddress ?? "—"}
+                <td className="border-b py-3.5 pr-4" style={{ borderColor: T.border, color: T.muted }}>
+                  <span className="crm-secondary">{session.ipAddress ?? "—"}</span>
                 </td>
-                <td className="border-b py-3 pr-4" style={{ borderColor: T.border, color: T.muted }}>
-                  {formatWhen(session.startedAt)}
+                <td className="border-b py-3.5 pr-4" style={{ borderColor: T.border, color: T.muted }}>
+                  <span className="crm-secondary">{formatWhen(session.startedAt)}</span>
                 </td>
-                <td className="border-b py-3 pr-4" style={{ borderColor: T.border }}>
+                <td className="border-b py-3.5 pr-4" style={{ borderColor: T.border }}>
                   <StatusBadge status={session.isActive ? "active" : "inactive"}>
                     {session.isActive ? "Active" : "Ended"}
                   </StatusBadge>
                 </td>
-                <td className="border-b py-3 text-right" style={{ borderColor: T.border }}>
+                <td className="border-b py-3.5 text-right" style={{ borderColor: T.border }}>
                   {session.isActive && (
                     <Button variant="ghost" onClick={() => signOut(session.id)} disabled={busy}>
                       Sign out
@@ -573,7 +573,7 @@ export default function AccountSecurityPage() {
       <>
         <PageHeader title="Account & Security" />
         <Card>
-          <p className="text-sm" style={{ color: T.danger }}>
+          <p className="crm-body" style={{ color: T.danger }}>
             Could not load your account. Try reloading the page.
           </p>
         </Card>
@@ -627,40 +627,33 @@ export default function AccountSecurityPage() {
 
       <Card title="Account Status">
         <dl className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <dt className="text-xs" style={{ color: T.muted }}>
-              Account created
-            </dt>
-            <dd className="mt-0.5 text-sm" style={{ color: T.text }}>
-              {formatWhen(account.createdAt)}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs" style={{ color: T.muted }}>
-              Last login
-            </dt>
-            <dd className="mt-0.5 text-sm" style={{ color: T.text }}>
-              {formatWhen(account.lastLoginAt)}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs" style={{ color: T.muted }}>
-              Account status
-            </dt>
-            <dd className="mt-1">
-              <StatusBadge status={account.status === "active" ? "active" : "danger"}>
-                {account.status === "active" ? "Active" : "Suspended"}
-              </StatusBadge>
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs" style={{ color: T.muted }}>
-              Password last changed
-            </dt>
-            <dd className="mt-0.5 text-sm" style={{ color: T.text }}>
-              {account.passwordChangedAt ? formatWhen(account.passwordChangedAt) : "Never"}
-            </dd>
-          </div>
+          {[
+            { label: "Account created", value: formatWhen(account.createdAt) },
+            { label: "Last login", value: formatWhen(account.lastLoginAt) },
+            { label: "Account status", badge: true },
+            { label: "Password last changed", value: account.passwordChangedAt ? formatWhen(account.passwordChangedAt) : "Never" },
+          ].map((item) => (
+            <div
+              key={item.label}
+              className="rounded-[14px] border px-4 py-3.5"
+              style={{ borderColor: T.border, background: T.surfaceAlt }}
+            >
+              <dt className="crm-caption" style={{ color: T.muted, fontWeight: 500 }}>
+                {item.label}
+              </dt>
+              {item.badge ? (
+                <dd className="mt-1.5">
+                  <StatusBadge status={account.status === "active" ? "active" : "danger"}>
+                    {account.status === "active" ? "Active" : "Suspended"}
+                  </StatusBadge>
+                </dd>
+              ) : (
+                <dd className="mt-1 crm-body font-medium" style={{ color: T.text }}>
+                  {item.value}
+                </dd>
+              )}
+            </div>
+          ))}
         </dl>
       </Card>
 

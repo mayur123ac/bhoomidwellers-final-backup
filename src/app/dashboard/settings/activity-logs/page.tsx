@@ -175,11 +175,11 @@ export default function ActivityLogsPage() {
             {/* Wide table scrolls inside its own container so the page body
                 never scrolls sideways on a phone. */}
             <div className="-mx-6 overflow-x-auto px-6">
-              <table className="w-full min-w-[720px] border-collapse text-sm">
+              <table className="w-full min-w-[720px] border-collapse">
                 <thead>
-                  <tr className="text-left" style={{ color: T.muted }}>
+                  <tr className="text-left">
                     {["Timestamp", "User", "Action", "Details", "IP Address", "Device"].map((h) => (
-                      <th key={h} className="border-b py-2.5 pr-4 font-medium" style={{ borderColor: T.border }}>
+                      <th key={h} className="border-b py-3 pr-4 crm-caption" style={{ borderColor: T.border, color: T.muted, fontWeight: 600 }}>
                         {h}
                       </th>
                     ))}
@@ -187,8 +187,8 @@ export default function ActivityLogsPage() {
                 </thead>
                 <tbody>
                   {data.rows.map((row: any) => (
-                    <tr key={row.id}>
-                      <td className="border-b py-3 pr-4 whitespace-nowrap" style={{ borderColor: T.border, color: T.muted }}>
+                    <tr key={row.id} className="st-hover-surface transition-colors">
+                      <td className="border-b py-3.5 pr-4 whitespace-nowrap crm-secondary" style={{ borderColor: T.border, color: T.muted }}>
                         {new Date(row.timestamp).toLocaleString(undefined, {
                           month: "short",
                           day: "2-digit",
@@ -196,10 +196,10 @@ export default function ActivityLogsPage() {
                           minute: "2-digit",
                         })}
                       </td>
-                      <td className="border-b py-3 pr-4" style={{ borderColor: T.border, color: T.text }}>
-                        {row.actor ?? "—"}
+                      <td className="border-b py-3.5 pr-4 crm-body font-medium" style={{ borderColor: T.border, color: T.text }}>
+                        {row.actor ?? "\u2014"}
                       </td>
-                      <td className="border-b py-3 pr-4" style={{ borderColor: T.border }}>
+                      <td className="border-b py-3.5 pr-4" style={{ borderColor: T.border }}>
                         <StatusBadge
                           status={
                             row.action?.includes("failed")
@@ -212,14 +212,14 @@ export default function ActivityLogsPage() {
                           {row.action}
                         </StatusBadge>
                       </td>
-                      <td className="border-b py-3 pr-4" style={{ borderColor: T.border, color: T.text }}>
-                        <span className="line-clamp-2 block max-w-md">{row.details ?? "—"}</span>
+                      <td className="border-b py-3.5 pr-4 crm-body" style={{ borderColor: T.border, color: T.text }}>
+                        <span className="line-clamp-2 block max-w-md">{row.details ?? "\u2014"}</span>
                       </td>
-                      <td className="border-b py-3 pr-4" style={{ borderColor: T.border, color: T.muted }}>
-                        {row.ipAddress ?? "—"}
+                      <td className="border-b py-3.5 pr-4 crm-secondary" style={{ borderColor: T.border, color: T.muted }}>
+                        {row.ipAddress ?? "\u2014"}
                       </td>
-                      <td className="border-b py-3 pr-4" style={{ borderColor: T.border, color: T.muted }}>
-                        <span className="line-clamp-1 block max-w-[200px]">{row.device ?? "—"}</span>
+                      <td className="border-b py-3.5 pr-4 crm-secondary" style={{ borderColor: T.border, color: T.muted }}>
+                        <span className="line-clamp-1 block max-w-[200px]">{row.device ?? "\u2014"}</span>
                       </td>
                     </tr>
                   ))}
@@ -227,9 +227,9 @@ export default function ActivityLogsPage() {
               </table>
             </div>
 
-            <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-              <p className="text-xs" style={{ color: T.muted }}>
-                Page {data.page} of {data.totalPages} · {data.total} entries
+            <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+              <p className="crm-caption" style={{ color: T.muted, fontWeight: 400 }}>
+                Page {data.page} of {data.totalPages} \u00B7 {data.total} entries
               </p>
               <div className="flex gap-2">
                 <Button

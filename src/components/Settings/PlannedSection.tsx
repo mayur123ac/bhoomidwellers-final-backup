@@ -37,7 +37,7 @@ export default function PlannedSection({
 
       {alternative && (
         <Card title="What to use instead">
-          <div className="text-sm leading-relaxed" style={{ color: T.text }}>
+          <div className="crm-body leading-relaxed" style={{ color: T.text }}>
             {alternative}
           </div>
         </Card>
@@ -49,7 +49,7 @@ export default function PlannedSection({
         ) : (
           <ul className="space-y-2">
             {requires.map((item) => (
-              <li key={item} className="flex items-start gap-2.5 text-sm" style={{ color: T.text }}>
+              <li key={item} className="flex items-start gap-2.5 crm-body" style={{ color: T.text }}>
                 <span aria-hidden style={{ color: T.muted }}>
                   ○
                 </span>

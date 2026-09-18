@@ -69,13 +69,13 @@ function messageOf(error: unknown): string {
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div
-      className="flex flex-wrap items-start justify-between gap-3 border-b py-2.5 last:border-b-0"
+      className="flex flex-wrap items-start justify-between gap-3 border-b py-3.5 last:border-b-0"
       style={{ borderColor: T.border }}
     >
-      <span className="text-sm" style={{ color: T.muted }}>
+      <span className="crm-secondary" style={{ color: T.muted }}>
         {label}
       </span>
-      <span className="text-sm font-medium break-all" style={{ color: T.text }}>
+      <span className="crm-body font-medium break-all" style={{ color: T.text }}>
         {value}
       </span>
     </div>
@@ -153,7 +153,7 @@ export default function EmailSendersPage() {
       <>
         <PageHeader title="Email Senders" />
         <Card>
-          <p className="text-sm" style={{ color: T.danger }}>
+          <p className="crm-body" style={{ color: T.danger }}>
             Could not load the mail configuration.
           </p>
           <div className="mt-4">
@@ -225,16 +225,16 @@ export default function EmailSendersPage() {
               <li key={`${problem.severity}-${problem.variable}-${problem.message}`} className="flex items-start gap-2.5">
                 <span
                   aria-hidden
-                  className="mt-0.5 text-sm font-bold"
+                  className="mt-0.5 crm-body font-bold"
                   style={{ color: problem.severity === "error" ? T.danger : T.warning }}
                 >
                   {problem.severity === "error" ? "✗" : "!"}
                 </span>
                 <div>
-                  <code className="text-xs font-semibold" style={{ color: T.text }}>
+                  <code className="crm-caption font-semibold" style={{ color: T.text }}>
                     {problem.variable}
                   </code>
-                  <p className="mt-0.5 text-sm leading-relaxed" style={{ color: T.muted }}>
+                  <p className="mt-0.5 crm-secondary leading-relaxed" style={{ color: T.muted }}>
                     {problem.message}
                   </p>
                 </div>
@@ -276,13 +276,13 @@ export default function EmailSendersPage() {
           ].map((stat) => (
             <div
               key={stat.label}
-              className="rounded-lg border px-4 py-3"
-              style={{ borderColor: T.border, background: T.sidebar }}
+              className="rounded-[14px] border px-4 py-3.5"
+              style={{ borderColor: T.border, background: T.surfaceAlt }}
             >
-              <div className="text-2xl font-semibold tabular-nums" style={{ color: stat.colour }}>
+              <div className="text-[22px] font-semibold tracking-tight tabular-nums" style={{ color: stat.colour }}>
                 {stat.value}
               </div>
-              <div className="text-xs" style={{ color: T.muted }}>
+              <div className="crm-caption mt-1" style={{ color: T.muted, fontWeight: 500 }}>
                 {stat.label}
               </div>
             </div>
@@ -291,37 +291,37 @@ export default function EmailSendersPage() {
 
         {status.recentFailures.length > 0 && (
           <div className="mt-6">
-            <p className="mb-2 text-sm font-semibold" style={{ color: T.text }}>
+            <p className="crm-label mb-3" style={{ color: T.text }}>
               Most recent failures
             </p>
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+              <table className="w-full text-left">
                 <thead>
-                  <tr style={{ color: T.muted }}>
-                    <th className="py-2 pr-3 font-medium">When</th>
-                    <th className="py-2 pr-3 font-medium">Type</th>
-                    <th className="py-2 pr-3 font-medium">Recipient</th>
-                    <th className="py-2 font-medium">Reason</th>
+                  <tr>
+                    <th className="py-2.5 pr-3 crm-caption" style={{ color: T.muted, fontWeight: 600 }}>When</th>
+                    <th className="py-2.5 pr-3 crm-caption" style={{ color: T.muted, fontWeight: 600 }}>Type</th>
+                    <th className="py-2.5 pr-3 crm-caption" style={{ color: T.muted, fontWeight: 600 }}>Recipient</th>
+                    <th className="py-2.5 crm-caption" style={{ color: T.muted, fontWeight: 600 }}>Reason</th>
                   </tr>
                 </thead>
                 <tbody>
                   {status.recentFailures.map((failure, index) => (
                     <tr
                       key={`${failure.created_at}-${index}`}
-                      className="border-t align-top"
+                      className="border-t align-top st-hover-surface transition-colors"
                       style={{ borderColor: T.border }}
                     >
-                      <td className="py-2 pr-3 whitespace-nowrap" style={{ color: T.muted }}>
+                      <td className="py-2.5 pr-3 whitespace-nowrap crm-secondary" style={{ color: T.muted }}>
                         {new Date(failure.created_at).toLocaleString()}
                       </td>
-                      <td className="py-2 pr-3 whitespace-nowrap" style={{ color: T.text }}>
+                      <td className="py-2.5 pr-3 whitespace-nowrap crm-body font-medium" style={{ color: T.text }}>
                         {failure.email_type}
                       </td>
-                      <td className="py-2 pr-3 break-all" style={{ color: T.text }}>
+                      <td className="py-2.5 pr-3 break-all crm-body" style={{ color: T.text }}>
                         {failure.recipient}
                       </td>
-                      <td className="py-2" style={{ color: T.muted }}>
-                        {failure.error ?? "—"}
+                      <td className="py-2.5 crm-secondary" style={{ color: T.muted }}>
+                        {failure.error ?? "\u2014"}
                       </td>
                     </tr>
                   ))}

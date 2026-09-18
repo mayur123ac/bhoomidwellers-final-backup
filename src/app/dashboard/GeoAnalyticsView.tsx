@@ -2,11 +2,13 @@
 
 // ============================================================================
 // GEO ANALYTICS VIEW — Admin Panel Only
-// Lead Movement & Route Mapping Upgrade
+// Lead Movement & Route Mapping Upgrade (Apple UI/UX Version)
 // ============================================================================
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import dynamic from "next/dynamic";
+import { motion, AnimatePresence } from "framer-motion";
+import { FaHome, FaBuilding, FaLocationArrow, FaRupeeSign, FaMapMarkerAlt, FaSpinner } from "react-icons/fa";
 
 // ─── STATIC MMR GEOCODING TABLE ──────────────────────────────────────────────
 const MMR_GEOCODES: Record<string, [number, number]> = {
@@ -189,10 +191,10 @@ const LeafletMapWrapper = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="w-full h-full flex items-center justify-center" style={{ background: "rgba(0,0,0,0.5)" }}>
+      <div className="w-full h-full flex items-center justify-center bg-black/5 dark:bg-white/5 backdrop-blur-md">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-[#9E217B] border-t-transparent rounded-full animate-spin" />
-          <p className="text-gray-400 text-xs">Loading map...</p>
+          <div className="w-8 h-8 border-[3px] border-[#8E8E93] border-t-transparent rounded-full animate-spin" />
+          <p className="text-[#8E8E93] text-[13px] font-medium tracking-tight">Loading maps engine...</p>
         </div>
       </div>
     ),
@@ -400,153 +402,186 @@ export default function GeoAnalyticsView({
 
   const configOptions = ["All", "1 BHK", "2 BHK", "3 BHK", "4 BHK+", "Studio/1RK", "Not Specified", "Other"];
   const budgetOptions = ["All", "Below 25L", "25L–50L", "50L–1Cr", "1Cr+"];
-
   const originOptions = ["All", ...POPULAR_LOCATIONS];
   const destOptions = ["All", ...POPULAR_LOCATIONS];
 
   const summaryCards = [
-    { label: "Top Origin Region", value: analytics.topOrigin, icon: "🏠", color: "text-blue-400" },
-    { label: "Top Demand Region", value: analytics.topDest, icon: "🏢", color: "text-[#d946a8]" },
-    { label: "Top Migration Flow", value: analytics.topFlow, icon: "↗️", color: "text-orange-400" },
-    { label: "Average Budget", value: fmtBudget(analytics.avgBudget), icon: "💰", color: "text-green-400" },
+    { label: "Top Origin", value: analytics.topOrigin, icon: <FaHome />, color: isDark ? "text-[#0A84FF]" : "text-[#007AFF]", bg: isDark ? "bg-[#0A84FF]/15" : "bg-[#E5F1FF]" },
+    { label: "Top Demand", value: analytics.topDest, icon: <FaBuilding />, color: isDark ? "text-[#BF5AF2]" : "text-[#AF52DE]", bg: isDark ? "bg-[#BF5AF2]/15" : "bg-[#F7EBFC]" },
+    { label: "Top Migration Flow", value: analytics.topFlow, icon: <FaLocationArrow />, color: isDark ? "text-[#FF9F0A]" : "text-[#FF9500]", bg: isDark ? "bg-[#FF9F0A]/15" : "bg-[#FFF4E5]" },
+    { label: "Average Budget", value: fmtBudget(analytics.avgBudget), icon: <FaRupeeSign />, color: isDark ? "text-[#32D74B]" : "text-[#34C759]", bg: isDark ? "bg-[#32D74B]/15" : "bg-[#EBF9EE]" },
   ];
 
   return (
-    <div className={`flex flex-col h-full overflow-y-auto`}>
-      {/* Header strip */}
-      <div className={`flex-shrink-0 px-6 py-4 border-b ${theme.tableBorder}`}>
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="text-lg">🗺️</span>
-          <div>
-            <h2 className={`font-bold text-base ${theme.text}`}>Lead Movement & Demand Map</h2>
-            <p className={`text-xs ${theme.textFaint}`}>Real-time geographic tracking of lead origin vs. purchase demand</p>
+    <div className={`flex flex-col h-full overflow-y-auto font-sans antialiased transition-colors duration-300 ${isDark ? "bg-[#000000]" : "bg-[#F2F2F7]"}`}>
+
+      {/* ── Apple-Style Header Area ── */}
+      <div className={`flex-shrink-0 pt-6 pb-4 px-6 sm:px-10 border-b ${isDark ? "border-white/10 bg-[#1C1C1E]/80 backdrop-blur-xl" : "border-[#E5E5EA] bg-white/80 backdrop-blur-xl"} sticky top-0 z-20`}>
+
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex flex-col gap-0.5">
+            <h1 className={`text-xl sm:text-2xl font-bold tracking-tight ${isDark ? "text-white" : "text-black"}`}>
+              Geo Analytics
+            </h1>
+            <p className={`text-[13px] font-medium tracking-tight ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
+              Lead Movement & Demand Map
+            </p>
           </div>
-          {isGeocoding && (
-            <div className="flex items-center gap-2 ml-auto">
-              <div className="w-32 h-1.5 rounded-full bg-gray-700 overflow-hidden">
-                <div className="h-full bg-[#9E217B] transition-all duration-300 rounded-full" style={{ width: `${geocodeProgress}%` }} />
+
+          <div className="flex items-center gap-4">
+            {isGeocoding ? (
+              <div className="flex items-center gap-3">
+                <FaSpinner className={`animate-spin ${isDark ? "text-[#0A84FF]" : "text-[#007AFF]"}`} />
+                <div className={`w-[120px] h-1.5 rounded-full overflow-hidden ${isDark ? "bg-[#38383A]" : "bg-[#E5E5EA]"}`}>
+                  <div className={`h-full rounded-full transition-all duration-300 ${isDark ? "bg-[#0A84FF]" : "bg-[#007AFF]"}`} style={{ width: `${geocodeProgress}%` }} />
+                </div>
+                <span className={`text-[12px] font-semibold tracking-tight ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
+                  {geocodeProgress}%
+                </span>
               </div>
-              <span className={`text-xs ${theme.textFaint}`}>Locating leads... {geocodeProgress}%</span>
-            </div>
-          )}
-          {!isGeocoding && mappedLeads.length > 0 && (
-            <span className={`ml-auto text-xs px-2 py-1 rounded-full border ${theme.settingsBg} ${theme.textMuted}`}>
-              {filteredLeads.length} leads mapped
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Summary Cards */}
-      <div className="flex-shrink-0 grid grid-cols-2 lg:grid-cols-4 gap-3 px-6 py-4">
-        {summaryCards.map(card => (
-          <div key={card.label} className={`rounded-xl border p-4 ${theme.card}`} style={theme.cardGlass}>
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-base">{card.icon}</span>
-              <p className={`text-[10px] uppercase font-bold tracking-wider ${theme.textFaint}`}>{card.label}</p>
-            </div>
-            <p className={`text-lg font-black truncate ${card.color}`}>{card.value}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Filters */}
-      <div className={`flex-shrink-0 px-6 pb-3 flex flex-col gap-3`}>
-        <div className="flex flex-wrap gap-6">
-          {/* Origin filter */}
-          <div className="flex items-center gap-2">
-            <span className={`text-xs font-semibold ${theme.textMuted}`}>Lives In:</span>
-            <div className="flex flex-wrap gap-1">
-              {originOptions.map(opt => (
-                <button
-                  key={opt}
-                  onClick={() => setOriginFilter(opt)}
-                  className={`text-[10px] font-bold px-2.5 py-1 rounded-full border transition-all cursor-pointer ${originFilter === opt
-                      ? isDark ? "bg-blue-600/20 border-blue-500/60 text-blue-400" : "bg-blue-100 border-blue-400 text-blue-700"
-                      : `${theme.settingsBg} ${theme.textMuted}`
-                    }`}
-                >{opt}</button>
-              ))}
-            </div>
-          </div>
-
-          {/* Dest filter */}
-          <div className="flex items-center gap-2">
-            <span className={`text-xs font-semibold ${theme.textMuted}`}>Wants To Buy In:</span>
-            <div className="flex flex-wrap gap-1">
-              {destOptions.map(opt => (
-                <button
-                  key={opt}
-                  onClick={() => setDestFilter(opt)}
-                  className={`text-[10px] font-bold px-2.5 py-1 rounded-full border transition-all cursor-pointer ${destFilter === opt
-                      ? isDark ? "bg-[#9E217B]/20 border-[#9E217B]/60 text-[#d946a8]" : "bg-[#9E217B]/15 border-[#9E217B] text-[#9E217B]"
-                      : `${theme.settingsBg} ${theme.textMuted}`
-                    }`}
-                >{opt}</button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap gap-6">
-          {/* Config filter */}
-          <div className="flex items-center gap-2">
-            <span className={`text-xs font-semibold ${theme.textMuted}`}>Config:</span>
-            <div className="flex flex-wrap gap-1">
-              {configOptions.map(opt => (
-                <button
-                  key={opt}
-                  onClick={() => setConfigFilter(opt)}
-                  className={`text-[10px] font-bold px-2.5 py-1 rounded-full border transition-all cursor-pointer ${configFilter === opt
-                      ? isDark ? "bg-green-600/20 border-green-500/60 text-green-400" : "bg-green-100 border-green-400 text-green-700"
-                      : `${theme.settingsBg} ${theme.textMuted}`
-                    }`}
-                >{opt}</button>
-              ))}
-            </div>
-          </div>
-          {/* Budget filter */}
-          <div className="flex items-center gap-2">
-            <span className={`text-xs font-semibold ${theme.textMuted}`}>Budget:</span>
-            <div className="flex flex-wrap gap-1">
-              {budgetOptions.map(opt => (
-                <button
-                  key={opt}
-                  onClick={() => setBudgetFilter(opt)}
-                  className={`text-[10px] font-bold px-2.5 py-1 rounded-full border transition-all cursor-pointer ${budgetFilter === opt
-                      ? isDark ? "bg-orange-600/20 border-orange-500/60 text-orange-400" : "bg-orange-100 border-orange-400 text-orange-700"
-                      : `${theme.settingsBg} ${theme.textMuted}`
-                    }`}
-                >{opt}</button>
-              ))}
-            </div>
+            ) : mappedLeads.length > 0 && (
+              <div className={`px-3 py-1.5 rounded-full border text-[12px] font-semibold tracking-wide flex items-center gap-2 ${isDark ? "bg-[#1C1C1E] border-white/10 text-[#EBEBF5]" : "bg-white border-black/5 text-[#333333] shadow-sm"
+                }`}>
+                <FaMapMarkerAlt className={isDark ? "text-[#32D74B]" : "text-[#34C759]"} />
+                {filteredLeads.length} leads mapped
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Map Area */}
-      <div className="flex-1 px-6 pb-6">
-        <div
-          className={`w-full rounded-2xl border overflow-hidden relative z-0 ${theme.tableWrap}`}
-          style={{ ...theme.tableGlass, height: "calc(100vh - 220px)", minHeight: "75vh" }}
+      <div className="flex-1 overflow-y-auto px-6 sm:px-10 py-6 custom-scrollbar">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.1, ease: [0.25, 0.1, 0.25, 1] }}
+          className="space-y-6 max-w-[1600px] mx-auto"
         >
-          {filteredLeads.length === 0 && !isGeocoding && (
-            <div className={`absolute inset-0 flex flex-col items-center justify-center z-10 ${isDark ? "bg-[#121212]" : "bg-[#F8FAFC]"}`}>
-              <span className="text-4xl mb-3">🗺️</span>
-              <p className={`font-bold text-sm ${theme.text}`}>No leads match your filters</p>
-              <p className={`text-xs mt-1 ${theme.textFaint}`}>
-                {mappedLeads.length === 0
-                  ? "Leads need address data to appear on the map"
-                  : "Try adjusting the filters above"}
-              </p>
+
+          {/* ── Summary Cards (iOS Widget Style) ── */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+            {summaryCards.map(card => (
+              <div key={card.label} className={`rounded-[24px] p-5 flex flex-col justify-between h-[130px] transition-transform hover:scale-[1.02] ${isDark ? "bg-[#1C1C1E] shadow-sm border border-white/5" : "bg-white shadow-[0_4px_24px_rgba(0,0,0,0.04)] border border-black/5"}`}>
+                <div className="flex items-center gap-3">
+                  <div className={`w-9 h-9 rounded-[10px] flex items-center justify-center ${card.bg}`}>
+                    <span className={`text-[16px] ${card.color}`}>{card.icon}</span>
+                  </div>
+                  <p className={`text-[11px] uppercase font-bold tracking-wider ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
+                    {card.label}
+                  </p>
+                </div>
+                <p className={`text-2xl sm:text-[26px] font-bold tracking-tight truncate mt-auto ${isDark ? "text-white" : "text-black"}`}>
+                  {card.value}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          {/* ── Filters (Apple-Style Segmented Pills) ── */}
+          <div className={`rounded-[24px] p-6 space-y-5 ${isDark ? "bg-[#1C1C1E] shadow-sm border border-white/5" : "bg-white shadow-[0_4px_24px_rgba(0,0,0,0.04)] border border-black/5"}`}>
+
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6">
+              <span className={`text-[13px] font-semibold tracking-tight w-24 shrink-0 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>Lives In</span>
+              <div className="flex flex-wrap gap-2">
+                {originOptions.map(opt => (
+                  <button
+                    key={`org-${opt}`}
+                    onClick={() => setOriginFilter(opt)}
+                    className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold tracking-wide transition-colors ${originFilter === opt
+                      ? (isDark ? "bg-[#0A84FF] text-white" : "bg-[#007AFF] text-white")
+                      : (isDark ? "bg-[#2C2C2E] text-[#8E8E93] hover:bg-[#3A3A3C] hover:text-white" : "bg-[#F2F2F7] text-[#8E8E93] hover:bg-[#E5E5EA] hover:text-black")
+                      }`}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
             </div>
-          )}
-          <LeafletMapWrapper
-            leads={filteredLeads}
-            isDark={isDark}
-            isGeocoding={isGeocoding}
-          />
-        </div>
+
+            <div className={`h-[1px] w-full ${isDark ? "bg-[#38383A]" : "bg-[#E5E5EA]"}`} />
+
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6">
+              <span className={`text-[13px] font-semibold tracking-tight w-24 shrink-0 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>Wants to Buy</span>
+              <div className="flex flex-wrap gap-2">
+                {destOptions.map(opt => (
+                  <button
+                    key={`dst-${opt}`}
+                    onClick={() => setDestFilter(opt)}
+                    className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold tracking-wide transition-colors ${destFilter === opt
+                      ? (isDark ? "bg-[#BF5AF2] text-white" : "bg-[#AF52DE] text-white")
+                      : (isDark ? "bg-[#2C2C2E] text-[#8E8E93] hover:bg-[#3A3A3C] hover:text-white" : "bg-[#F2F2F7] text-[#8E8E93] hover:bg-[#E5E5EA] hover:text-black")
+                      }`}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className={`h-[1px] w-full ${isDark ? "bg-[#38383A]" : "bg-[#E5E5EA]"}`} />
+
+            <div className="flex flex-col xl:flex-row gap-5 xl:gap-8">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6 flex-1">
+                <span className={`text-[13px] font-semibold tracking-tight w-24 shrink-0 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>Config</span>
+                <div className="flex flex-wrap gap-2">
+                  {configOptions.map(opt => (
+                    <button
+                      key={`cfg-${opt}`}
+                      onClick={() => setConfigFilter(opt)}
+                      className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold tracking-wide transition-colors ${configFilter === opt
+                        ? (isDark ? "bg-[#32D74B] text-white" : "bg-[#34C759] text-white")
+                        : (isDark ? "bg-[#2C2C2E] text-[#8E8E93] hover:bg-[#3A3A3C] hover:text-white" : "bg-[#F2F2F7] text-[#8E8E93] hover:bg-[#E5E5EA] hover:text-black")
+                        }`}
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6 flex-1">
+                <span className={`text-[13px] font-semibold tracking-tight w-24 xl:w-auto shrink-0 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>Budget</span>
+                <div className="flex flex-wrap gap-2">
+                  {budgetOptions.map(opt => (
+                    <button
+                      key={`bdg-${opt}`}
+                      onClick={() => setBudgetFilter(opt)}
+                      className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold tracking-wide transition-colors ${budgetFilter === opt
+                        ? (isDark ? "bg-[#FF9F0A] text-white" : "bg-[#FF9500] text-white")
+                        : (isDark ? "bg-[#2C2C2E] text-[#8E8E93] hover:bg-[#3A3A3C] hover:text-white" : "bg-[#F2F2F7] text-[#8E8E93] hover:bg-[#E5E5EA] hover:text-black")
+                        }`}
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Map Container ── */}
+          <div
+            className={`w-full rounded-[24px] overflow-hidden relative z-0 shadow-sm border ${isDark ? "border-white/10" : "border-black/5"}`}
+            style={{ height: "calc(100vh - 380px)", minHeight: "500px" }}
+          >
+            {filteredLeads.length === 0 && !isGeocoding && (
+              <div className={`absolute inset-0 flex flex-col items-center justify-center z-10 backdrop-blur-md ${isDark ? "bg-[#1C1C1E]/80" : "bg-white/80"}`}>
+                <span className="text-4xl mb-4 opacity-50">🗺️</span>
+                <p className={`font-semibold text-[15px] tracking-tight ${isDark ? "text-white" : "text-black"}`}>No leads match your filters</p>
+                <p className={`text-[13px] mt-1 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
+                  {mappedLeads.length === 0
+                    ? "Leads need valid address data to appear on the map."
+                    : "Try adjusting the configuration or location filters above."}
+                </p>
+              </div>
+            )}
+            <LeafletMapWrapper
+              leads={filteredLeads}
+              isDark={isDark}
+              isGeocoding={isGeocoding}
+            />
+          </div>
+
+        </motion.div>
       </div>
     </div>
   );

@@ -32,7 +32,7 @@
 // user_id), not of this file.
 
 import { useCallback, useEffect, useState } from "react";
-import { FaBullhorn, FaTimes, FaCheck, FaExclamationCircle } from "react-icons/fa";
+import { FaBullhorn, FaTimes, FaCheck, FaExclamationCircle, FaCircle } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
 import UpdateBody from "@/components/superadmin/UpdateBody";
 
@@ -49,18 +49,6 @@ interface CrmUpdate {
   has_read: boolean;
 }
 
-/**
- * How often the feed is refetched.
- *
- * There is realtime infrastructure in this app (lib/eventBus.ts + the SSE
- * stream), but it is deliberately tenant-scoped with no cross-tenant broadcast
- * mode — its header says so explicitly, because a platform-wide announcement
- * should be an explicit separate mechanism rather than an omitted argument that
- * quietly crosses tenants. A System Update is exactly that platform-wide case.
- * So this uses the app's other established pattern instead: a poll, like
- * AttendanceView (30s) and the dashboard stats (30s). Two minutes is right for
- * something published a few times a month.
- */
 const POLL_MS = 120_000;
 
 export default function CrmUpdatesNotification({
@@ -87,9 +75,6 @@ export default function CrmUpdatesNotification({
 
   const fetchUpdates = useCallback(async () => {
     try {
-      // No ?userId= — the server reads the identity from the session cookie.
-      // Passing one was how read status for any account used to be fetchable by
-      // editing a query parameter.
       const res = await fetch("/api/updates");
       if (!res.ok) return;
       const json = await res.json();
@@ -107,15 +92,11 @@ export default function CrmUpdatesNotification({
     return () => window.clearInterval(id);
   }, [userId, fetchUpdates]);
 
-  // Opening the panel refetches, so the badge cannot be stale at the exact
-  // moment someone acts on it.
   useEffect(() => {
     if (isActuallyOpen) fetchUpdates();
   }, [isActuallyOpen, fetchUpdates]);
 
   const markAsRead = async (updateId: number) => {
-    // Optimistic: the badge should drop the instant it is clicked. A failure is
-    // corrected by the next poll rather than by an alert.
     setUpdates(prev => prev.map(u => (u.id === updateId ? { ...u, has_read: true } : u)));
     try {
       await fetch("/api/updates", {
@@ -148,44 +129,56 @@ export default function CrmUpdatesNotification({
 
   /**
    * The palette the formatted body renders against.
-   *
-   * `theme` here is the host dashboard's theme object, which is Tailwind CLASS
-   * names, not colours — so the six colours the renderer needs are derived from
-   * `isDark` instead. They match the CRM's own text/muted/accent values.
+   * Apple UI colors adopted for rendering the inner safe-HTML.
    */
   const bodyPalette = {
-    text: isDark ? "#E5E7EB" : "#111827",
-    textMuted: isDark ? "#9CA3AF" : "#6B7280",
-    accent: "#9E217B",
-    border: isDark ? "#333333" : "#E5E7EB",
+    text: isDark ? "#FFFFFF" : "#000000",
+    textMuted: isDark ? "#8E8E93" : "#8E8E93",
+    accent: isDark ? "#0A84FF" : "#007AFF",
+    border: isDark ? "#38383A" : "#E5E5EA",
     raised: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
     surface: isDark ? "#1C1C1E" : "#FFFFFF",
   };
 
   return (
-    <div className="relative">
-      <div className="relative cursor-pointer" onClick={handleToggle}>
-        <FaBullhorn className={`${theme.textMuted} hover:text-[#9E217B] transition-colors w-5 h-5`} />
-        {unreadCount > 0 && (
-          <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-[#9E217B] rounded-full text-[9px] font-black text-white flex items-center justify-center shadow-md">
-            {unreadCount > 9 ? "9+" : unreadCount}
-          </span>
-        )}
-      </div>
+    <div className="relative font-sans antialiased">
+      {/* ── Apple-Style Notification Bell ── */}
+      <button
+        className="relative cursor-pointer flex items-center justify-center w-9 h-9 rounded-full transition-colors cursor-pointer outline-none hover:bg-black/5 dark:hover:bg-white/10"
+        onClick={handleToggle}
+        aria-label="System Updates"
+      >
+        <FaBullhorn className={`w-[18px] h-[18px] transition-colors ${isDark ? "text-[#EBEBF5]" : "text-[#333333]"}`} />
 
+        {/* Apple Red Notification Badge */}
+        <AnimatePresence>
+          {unreadCount > 0 && (
+            <motion.span
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              exit={{ scale: 0 }}
+              className={`absolute top-0.5 right-0.5 min-w-[16px] h-[16px] px-1 rounded-full text-[10px] font-bold text-white flex items-center justify-center shadow-[0_2px_4px_rgba(255,59,48,0.3)] ${isDark ? "bg-[#FF453A]" : "bg-[#FF3B30]"}`}
+            >
+              {unreadCount > 9 ? "9+" : unreadCount}
+            </motion.span>
+          )}
+        </AnimatePresence>
+      </button>
+
+      {/* ── Apple-Style Popover ── */}
       <AnimatePresence>
         {isActuallyOpen && (
           <motion.div
-            initial={{ opacity: 0, y: -8, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -6, scale: 0.98 }}
-            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-            className={`fixed right-4 top-14 md:absolute md:top-12 md:right-0 w-[360px] max-w-[calc(100vw-2rem)] border rounded-xl shadow-2xl flex flex-col z-50 ${theme.dropdown}`}
-            style={theme.dropdownGlass}
+            initial={{ opacity: 0, scale: 0.95, y: -5, filter: "blur(4px)" }}
+            animate={{ opacity: 1, scale: 1, y: 0, filter: "blur(0px)" }}
+            exit={{ opacity: 0, scale: 0.95, y: -5, filter: "blur(4px)" }}
+            transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
+            className={`fixed right-4 top-14 md:absolute md:top-[calc(100%+8px)] md:right-0 w-[380px] max-w-[calc(100vw-2rem)] rounded-[20px] shadow-[0_12px_40px_rgba(0,0,0,0.12)] flex flex-col z-50 overflow-hidden backdrop-blur-2xl ${isDark ? "bg-[#1C1C1E]/85 border border-white/10" : "bg-white/90 border border-black/5"
+              }`}
           >
-            <div className={`p-4 border-b flex justify-between items-center ${theme.tableBorder}`}>
-              <h3 className={`font-bold text-sm flex items-center gap-2 ${theme.text}`}>
-                <FaBullhorn className="text-[#9E217B]" />
+            {/* Header */}
+            <div className={`px-5 py-3.5 border-b flex justify-between items-center ${isDark ? "border-[#38383A] bg-[#2C2C2E]/20" : "border-[#E5E5EA] bg-white/40"}`}>
+              <h3 className={`font-semibold text-[15px] tracking-tight flex items-center gap-2 ${isDark ? "text-white" : "text-black"}`}>
                 System Updates
               </h3>
               <div className="flex items-center gap-3">
@@ -193,100 +186,123 @@ export default function CrmUpdatesNotification({
                   <button
                     onClick={markAllAsRead}
                     disabled={marking}
-                    className="text-[10px] font-bold text-[#9E217B] hover:text-[#d946a8] transition-colors disabled:opacity-50"
+                    className={`text-[12px] cursor-pointer font-medium tracking-tight transition-colors disabled:opacity-50 ${isDark ? "text-[#0A84FF] hover:text-[#5E5CE6]" : "text-[#007AFF] hover:text-[#005bb5]"}`}
                   >
                     Mark all as read
                   </button>
                 )}
                 <button
                   onClick={() => (onToggle ? onToggle() : setInternalIsOpen(false))}
-                  className={`${theme.textMuted} hover:text-red-500 transition-colors`}
+                  className={`p-1.5 rounded-full cursor-pointer transition-colors ${isDark ? "text-[#8E8E93] hover:bg-white/10 hover:text-white" : "text-[#8E8E93] hover:bg-black/5 hover:text-black"}`}
                   aria-label="Close"
                 >
-                  <FaTimes className="text-xs" />
+                  <FaTimes className="text-[12px]" />
                 </button>
               </div>
             </div>
 
-            <div className={`max-h-[400px] overflow-y-auto ${theme.scroll}`}>
+            {/* Content List */}
+            <div className={`max-h-[420px] overflow-y-auto custom-scrollbar`}>
               {updates.length === 0 ? (
-                <p className={`p-6 text-center text-xs ${theme.textMuted}`}>No new updates.</p>
+                <div className="py-12 flex flex-col items-center justify-center text-center">
+                  <FaCheck className={`text-3xl mb-3 ${isDark ? "text-[#32D74B]" : "text-[#34C759]"} opacity-80`} />
+                  <p className={`text-[14px] font-semibold tracking-tight ${isDark ? "text-white" : "text-black"}`}>You're all caught up</p>
+                  <p className={`text-[12px] mt-1 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>No new system updates.</p>
+                </div>
               ) : (
-                updates.map(update => (
-                  <div
-                    key={update.id}
-                    className={`p-4 border-b last:border-b-0 transition-colors ${!update.has_read
+                updates.map((update, idx) => (
+                  <div key={update.id}>
+                    <div
+                      className={`px-5 py-4 transition-colors relative ${!update.has_read
                         ? isDark
-                          ? "bg-[#9E217B]/10 border-[#9E217B]/20"
-                          : "bg-[#9E217B]/5 border-[#9E217B]/10"
+                          ? "bg-[#0A84FF]/5"
+                          : "bg-[#007AFF]/5"
                         : isDark
-                          ? "hover:bg-white/5 border-[#333]"
-                          : "hover:bg-black/5 border-[#E5E7EB]"
-                      }`}
-                  >
-                    <div className="flex justify-between items-start mb-2 gap-2">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold ${isDark ? "bg-indigo-900/40 text-indigo-300" : "bg-indigo-100 text-indigo-700"
-                            }`}
-                        >
-                          v{String(update.version).replace(/^v/i, "")}
+                          ? "hover:bg-white/5"
+                          : "hover:bg-black/[0.02]"
+                        }`}
+                    >
+                      {/* Unread Dot Indicator */}
+                      {!update.has_read && (
+                        <FaCircle className={`absolute left-2.5 top-[22px] text-[8px] ${isDark ? "text-[#0A84FF]" : "text-[#007AFF]"}`} />
+                      )}
+
+                      <div className="flex justify-between items-start mb-2.5 gap-3 pl-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {/* Version Pill */}
+                          <span
+                            className={`px-2 py-0.5 rounded-[6px] text-[10px] font-bold tracking-wide uppercase ${isDark ? "bg-[#32D74B]/15 text-[#32D74B]" : "bg-[#EBF9EE] text-[#34C759]"
+                              }`}
+                          >
+                            v{String(update.version).replace(/^v/i, "")}
+                          </span>
+
+                          {/* Category Pill */}
+                          {update.category && (
+                            <span
+                              className={`px-2 py-0.5 rounded-[6px] text-[10px] font-semibold tracking-wide ${isDark ? "bg-[#2C2C2E] text-[#8E8E93]" : "bg-[#F2F2F7] text-[#8E8E93]"
+                                }`}
+                            >
+                              {update.category}
+                            </span>
+                          )}
+
+                          {/* Important Flag */}
+                          {update.is_important && (
+                            <span
+                              className={`flex items-center gap-1 text-[10px] font-bold tracking-wide ${isDark ? "text-[#FF453A]" : "text-[#FF3B30]"
+                                }`}
+                            >
+                              <FaExclamationCircle className="text-[10px]" /> Important
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Date */}
+                        <span className={`text-[11px] font-medium tracking-tight whitespace-nowrap pt-0.5 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
+                          {new Date(update.published_at || update.created_at).toLocaleDateString("en-IN", {
+                            day: "2-digit",
+                            month: "short",
+                          })}
                         </span>
-                        {/* The type. Carried in the row all along, shown now. */}
-                        {update.category && (
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-semibold ${isDark ? "bg-white/10 text-gray-300" : "bg-black/5 text-gray-600"
-                              }`}
-                          >
-                            {update.category}
-                          </span>
-                        )}
-                        {update.is_important && (
-                          <span
-                            className={`flex items-center gap-1 text-[10px] font-bold ${isDark ? "text-red-400" : "text-red-600"
-                              }`}
-                          >
-                            <FaExclamationCircle /> Important
-                          </span>
-                        )}
-                        {!update.has_read && <span className="w-2 h-2 bg-[#9E217B] rounded-full animate-pulse" />}
                       </div>
-                      <span className={`text-[10px] whitespace-nowrap ${theme.textMuted}`}>
-                        {new Date(update.published_at || update.created_at).toLocaleDateString("en-IN", {
-                          day: "2-digit",
-                          month: "short",
-                        })}
-                      </span>
+
+                      <div className="pl-1">
+                        <h4 className={`text-[14px] font-semibold tracking-tight leading-snug ${isDark ? "text-white" : "text-black"}`}>
+                          {update.title}
+                        </h4>
+
+                        {update.description && (
+                          <div className={`text-[13px] mt-1.5 leading-relaxed tracking-tight ${isDark ? "text-[#EBEBF5]/80" : "text-[#333333]"}`}>
+                            <UpdateBody t={bodyPalette} content={update.description} />
+                          </div>
+                        )}
+
+                        {update.features?.length > 0 && (
+                          <ul className="mt-3 space-y-1.5">
+                            {update.features.map((feat, i) => (
+                              <li key={i} className={`flex items-start gap-2 text-[12px] tracking-tight ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
+                                <FaCheck className={`mt-0.5 flex-shrink-0 text-[10px] ${isDark ? "text-[#0A84FF]" : "text-[#007AFF]"}`} />
+                                <span className="leading-snug">{feat}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+
+                        {!update.has_read && (
+                          <button
+                            onClick={() => markAsRead(update.id)}
+                            className={`mt-3.5 text-[11px] cursor-pointer font-semibold tracking-wide transition-colors ${isDark ? "text-[#0A84FF] hover:text-[#5E5CE6]" : "text-[#007AFF] hover:text-[#005bb5]"
+                              }`}
+                          >
+                            Mark as read
+                          </button>
+                        )}
+                      </div>
                     </div>
-
-                    <h4 className={`text-sm font-bold ${theme.text}`}>{update.title}</h4>
-
-                    {update.description && (
-                      <div className="text-xs mt-1 leading-relaxed">
-                        {/* Formatted, and structurally unable to inject HTML — see
-                            components/superadmin/UpdateBody.tsx. */}
-                        <UpdateBody t={bodyPalette} content={update.description} />
-                      </div>
-                    )}
-
-                    {update.features?.length > 0 && (
-                      <ul className="mt-3 space-y-1">
-                        {update.features.map((feat, i) => (
-                          <li key={i} className={`flex items-start gap-1.5 text-[11px] ${theme.textMuted}`}>
-                            <FaCheck className="text-[#9E217B] mt-0.5 flex-shrink-0 text-[8px]" />
-                            <span>{feat}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-
-                    {!update.has_read && (
-                      <button
-                        onClick={() => markAsRead(update.id)}
-                        className="mt-3 text-[10px] font-bold text-[#9E217B] hover:text-[#d946a8] transition-colors"
-                      >
-                        Mark as read
-                      </button>
+                    {/* iOS Style Inner Divider */}
+                    {idx < updates.length - 1 && (
+                      <div className={`h-[1px] ml-6 ${isDark ? "bg-[#38383A]" : "bg-[#E5E5EA]"}`} />
                     )}
                   </div>
                 ))

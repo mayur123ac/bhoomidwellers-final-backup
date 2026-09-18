@@ -32,11 +32,11 @@ import {
 
 function StatTile({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-lg border p-4" style={{ borderColor: T.border }}>
-      <p className="text-xs" style={{ color: T.muted }}>
+    <div className="rounded-[14px] border p-4" style={{ borderColor: T.border, background: T.surfaceAlt }}>
+      <p className="crm-caption" style={{ color: T.muted, fontWeight: 500 }}>
         {label}
       </p>
-      <p className="mt-1 text-2xl font-semibold" style={{ color: T.text }}>
+      <p className="mt-1.5 text-[22px] font-semibold tracking-tight" style={{ color: T.text }}>
         {value.toLocaleString()}
       </p>
     </div>
@@ -95,7 +95,7 @@ function EndpointToggle({
       footer={
         <>
           <span
-            className="mr-auto rounded-full border px-3 py-1 text-xs font-semibold"
+            className="mr-auto rounded-full border px-3 py-1 crm-caption"
             style={{
               borderColor: enabled ? T.teal : T.border,
               color: enabled ? T.teal : T.muted,
@@ -111,7 +111,7 @@ function EndpointToggle({
       }
     >
       <div className="flex items-start justify-between gap-4">
-        <div className="flex-1 text-sm leading-relaxed" style={{ color: T.muted }}>
+        <div className="flex-1 crm-secondary leading-relaxed" style={{ color: T.muted }}>
           {detail}
         </div>
         <Toggle checked={enabled} onChange={setEnabled} label={title} disabled={!loaded} />
@@ -164,7 +164,7 @@ function CpEnquiryVisibilityCard() {
       footer={
         <>
           <span
-            className="mr-auto rounded-full border px-3 py-1 text-xs font-semibold"
+            className="mr-auto rounded-full border px-3 py-1 crm-caption"
             style={{ borderColor: T.border, color: T.muted }}
           >
             {roles.filter((r) => vis[r.key]).map((r) => r.label).join(", ") || "None"}
@@ -175,10 +175,10 @@ function CpEnquiryVisibilityCard() {
         </>
       }
     >
-      <div className="space-y-3">
+      <div className="space-y-0">
         {roles.map((r) => (
-          <div key={r.key} className="flex items-center justify-between">
-            <span className="text-sm font-medium" style={{ color: T.text }}>
+          <div key={r.key} className="flex items-center justify-between py-3.5 border-b last:border-b-0" style={{ borderColor: T.border }}>
+            <span className="crm-body font-medium" style={{ color: T.text }}>
               {r.label}
             </span>
             <Toggle
@@ -190,7 +190,7 @@ function CpEnquiryVisibilityCard() {
           </div>
         ))}
       </div>
-      <p className="mt-3 text-xs leading-relaxed" style={{ color: T.muted }}>
+      <p className="mt-4 crm-secondary leading-relaxed" style={{ color: T.muted }}>
         When enabled, the role sees a dedicated &quot;CP Enquiry&quot; tab showing all Channel
         Partner records registered via the CP Enquiry form. The Admin always sees this tab.
       </p>
@@ -244,7 +244,7 @@ function RecordingPermissionsCard() {
       footer={
         <>
           <span
-            className="mr-auto rounded-full border px-3 py-1 text-xs font-semibold"
+            className="mr-auto rounded-full border px-3 py-1 crm-caption"
             style={{ borderColor: T.border, color: T.muted }}
           >
             {toggleRoles.filter((r) => roles[r.key]).map((r) => r.label).join(", ")}
@@ -255,13 +255,13 @@ function RecordingPermissionsCard() {
         </>
       }
     >
-      <div className="space-y-3">
+      <div className="space-y-0">
         {toggleRoles.map((r) => (
-          <div key={r.key} className="flex items-center justify-between">
-            <span className="text-sm font-medium" style={{ color: T.text }}>
+          <div key={r.key} className="flex items-center justify-between py-3.5 border-b last:border-b-0" style={{ borderColor: T.border }}>
+            <span className="crm-body font-medium" style={{ color: T.text }}>
               {r.label}
               {r.disabled && (
-                <span className="ml-2 text-xs font-normal" style={{ color: T.muted }}>
+                <span className="ml-2 crm-caption font-normal" style={{ color: T.muted }}>
                   (always enabled)
                 </span>
               )}
@@ -275,7 +275,7 @@ function RecordingPermissionsCard() {
           </div>
         ))}
       </div>
-      <p className="mt-3 text-xs leading-relaxed" style={{ color: T.muted }}>
+      <p className="mt-4 crm-secondary leading-relaxed" style={{ color: T.muted }}>
         Deletion is permanent — the voice file is removed from cloud storage and cannot be recovered.
         An audit log entry is created for every deletion.
       </p>
@@ -329,7 +329,7 @@ function FollowUpDeletionPermissionsCard() {
       footer={
         <>
           <span
-            className="mr-auto rounded-full border px-3 py-1 text-xs font-semibold"
+            className="mr-auto rounded-full border px-3 py-1 crm-caption"
             style={{ borderColor: T.border, color: T.muted }}
           >
             {toggleRoles.filter((r) => roles[r.key]).map((r) => r.label).join(", ")}
@@ -340,13 +340,13 @@ function FollowUpDeletionPermissionsCard() {
         </>
       }
     >
-      <div className="space-y-3">
+      <div className="space-y-0">
         {toggleRoles.map((r) => (
-          <div key={r.key} className="flex items-center justify-between">
-            <span className="text-sm font-medium" style={{ color: T.text }}>
+          <div key={r.key} className="flex items-center justify-between py-3.5 border-b last:border-b-0" style={{ borderColor: T.border }}>
+            <span className="crm-body font-medium" style={{ color: T.text }}>
               {r.label}
               {r.disabled && (
-                <span className="ml-2 text-xs font-normal" style={{ color: T.muted }}>
+                <span className="ml-2 crm-caption font-normal" style={{ color: T.muted }}>
                   (always enabled)
                 </span>
               )}
@@ -360,7 +360,7 @@ function FollowUpDeletionPermissionsCard() {
           </div>
         ))}
       </div>
-      <p className="mt-3 text-xs leading-relaxed" style={{ color: T.muted }}>
+      <p className="mt-4 crm-secondary leading-relaxed" style={{ color: T.muted }}>
         Deletion is permanent — the follow-up note and any attached files are removed from storage
         and cannot be recovered. An audit log entry is created for every deletion.
       </p>
@@ -535,7 +535,7 @@ export default function WorkspaceSettingsPage() {
                   type="color"
                   value={form[key]}
                   onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
-                  className="h-11 w-14 cursor-pointer rounded border"
+                  className="h-11 w-14 cursor-pointer rounded-[10px] border p-0.5"
                   style={{ borderColor: T.border }}
                 />
                 <TextInput
@@ -576,7 +576,7 @@ export default function WorkspaceSettingsPage() {
             <strong style={{ color: T.text }}>ON</strong> — Backdated Entry takes highest priority.
             Leads with a Backdated Entry date are sorted by that date; others use Date Created.
             <br />
-            <span className="mt-1 block text-xs">
+            <span className="mt-1 block crm-caption" style={{ fontWeight: 400 }}>
               Saving re-numbers every lead immediately.
             </span>
           </>
@@ -611,7 +611,7 @@ export default function WorkspaceSettingsPage() {
           work with real regression risk against a live voice integration, so it
           keeps its own surface for now rather than being half-converted. */}
       <section
-        className="mb-6 overflow-hidden rounded-xl border"
+        className="mb-6 overflow-hidden rounded-[18px] border"
         style={{ borderColor: T.border, background: "#0a0a0a" }}
       >
         <div className="p-4">
@@ -623,7 +623,7 @@ export default function WorkspaceSettingsPage() {
           the same reason — it shares that card's visual language, and the two
           are read together as "how calls get placed". */}
       <section
-        className="mb-6 overflow-hidden rounded-xl border"
+        className="mb-6 overflow-hidden rounded-[18px] border"
         style={{ borderColor: T.border, background: "#0a0a0a" }}
       >
         <div className="p-4">

@@ -189,8 +189,8 @@ function EmployeeModal({
           Copy this now — it is stored as a hash and cannot be shown again.
         </InfoBanner>
         <div
-          className="flex items-center justify-between gap-3 rounded-lg border p-4"
-          style={{ borderColor: T.border, background: T.sidebar }}
+          className="flex items-center justify-between gap-3 rounded-[12px] border p-4"
+          style={{ borderColor: T.border, background: T.surfaceAlt }}
         >
           <code className="font-mono text-base" style={{ color: T.text }}>
             {issued}
@@ -218,7 +218,7 @@ function EmployeeModal({
       footer={
         <>
           {!editing && (
-            <label className="mr-auto flex items-center gap-2 text-sm" style={{ color: T.muted }}>
+            <label className="mr-auto flex items-center gap-2 crm-body" style={{ color: T.muted }}>
               <input
                 type="checkbox"
                 checked={addAnother}
@@ -239,7 +239,7 @@ function EmployeeModal({
     >
       {error && (
         <div
-          className="mb-4 rounded-lg border px-4 py-3 text-sm"
+          className="mb-4 rounded-[12px] border px-4 py-3 crm-body"
           style={{ borderColor: T.danger, background: T.dangerSoft, color: T.danger }}
         >
           {error}
@@ -358,10 +358,10 @@ function EmployeeModal({
         <div className="mt-2 border-t pt-4" style={{ borderColor: T.border }}>
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-sm font-medium" style={{ color: T.text }}>
+              <p className="crm-body font-medium" style={{ color: T.text }}>
                 Invite via email
               </p>
-              <p className="mt-0.5 text-xs" style={{ color: T.muted }}>
+              <p className="mt-0.5 crm-secondary" style={{ color: T.muted }}>
                 {inviteEmailConfigured
                   ? "Sends a setup link that expires in 7 days."
                   : "Unavailable — this server has no email transport configured."}
@@ -452,7 +452,7 @@ function RemoveModal({
     >
       {error && (
         <div
-          className="mb-4 rounded-lg border px-4 py-3 text-sm"
+          className="mb-4 rounded-[12px] border px-4 py-3 crm-body"
           style={{ borderColor: T.danger, background: T.dangerSoft, color: T.danger }}
         >
           {error}
@@ -678,10 +678,10 @@ export default function EmployeesPage() {
 
       {selected.length > 0 && (
         <div
-          className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border px-5 py-3"
+          className="mb-4 flex flex-wrap items-center gap-3 rounded-[14px] border px-5 py-3"
           style={{ borderColor: T.teal, background: T.accentSoft }}
         >
-          <span className="text-sm font-medium" style={{ color: T.text }}>
+          <span className="crm-body font-medium" style={{ color: T.text }}>
             {selected.length} selected
           </span>
           <Button variant="secondary" onClick={() => bulkStatus(false)} disabled={busy}>
@@ -713,10 +713,10 @@ export default function EmployeesPage() {
           <EmptyState title="No employees match these filters" />
         ) : (
           <div className="-mx-6 overflow-x-auto px-6">
-            <table className="w-full min-w-[860px] border-collapse text-sm">
+            <table className="w-full min-w-[860px] border-collapse">
               <thead>
-                <tr className="text-left" style={{ color: T.muted }}>
-                  <th className="border-b py-2.5 pr-3" style={{ borderColor: T.border }}>
+                <tr className="text-left">
+                  <th className="border-b py-3 pr-3 crm-caption" style={{ borderColor: T.border, color: T.muted }}>
                     <input
                       type="checkbox"
                       aria-label="Select all employees"
@@ -726,7 +726,7 @@ export default function EmployeesPage() {
                     />
                   </th>
                   {["Name", "Email", "Role", "Department", "Manager", "Status", "Last Active", ""].map((h) => (
-                    <th key={h} className="border-b py-2.5 pr-4 font-medium" style={{ borderColor: T.border }}>
+                    <th key={h} className="border-b py-3 pr-4 crm-caption" style={{ borderColor: T.border, color: T.muted, fontWeight: 600 }}>
                       {h}
                     </th>
                   ))}
@@ -737,8 +737,8 @@ export default function EmployeesPage() {
                   // The key belongs on the fragment: it, not the rows inside it,
                   // is what React counts as the list child.
                   <Fragment key={employee.id}>
-                    <tr>
-                      <td className="border-b py-3 pr-3" style={{ borderColor: T.border }}>
+                    <tr className="st-hover-surface transition-colors">
+                      <td className="border-b py-3.5 pr-3" style={{ borderColor: T.border }}>
                         <input
                           type="checkbox"
                           aria-label={`Select ${employee.name}`}
@@ -753,14 +753,14 @@ export default function EmployeesPage() {
                           style={{ accentColor: T.teal }}
                         />
                       </td>
-                      <td className="border-b py-3 pr-4" style={{ borderColor: T.border }}>
+                      <td className="border-b py-3.5 pr-4" style={{ borderColor: T.border }}>
                         <button
                           type="button"
                           onClick={() => setExpanded(expanded === employee.id ? null : employee.id)}
                           className="flex items-center gap-2.5 text-left"
                         >
                           <span
-                            className="flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden rounded-full text-xs font-bold text-white"
+                            className="flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden rounded-full text-[11px] font-bold text-white"
                             style={{ background: T.teal }}
                           >
                             {employee.avatarUrl ? (
@@ -769,24 +769,24 @@ export default function EmployeesPage() {
                               employee.initials
                             )}
                           </span>
-                          <span className="font-medium" style={{ color: T.text }}>
+                          <span className="crm-body font-medium" style={{ color: T.text }}>
                             {employee.name}
                           </span>
                         </button>
                       </td>
-                      <td className="border-b py-3 pr-4" style={{ borderColor: T.border, color: T.muted }}>
-                        {employee.email ?? "—"}
+                      <td className="border-b py-3.5 pr-4 crm-secondary" style={{ borderColor: T.border, color: T.muted }}>
+                        {employee.email ?? "\u2014"}
                       </td>
-                      <td className="border-b py-3 pr-4" style={{ borderColor: T.border, color: T.text }}>
-                        {employee.role ?? "—"}
+                      <td className="border-b py-3.5 pr-4 crm-body font-medium" style={{ borderColor: T.border, color: T.text }}>
+                        {employee.role ?? "\u2014"}
                       </td>
-                      <td className="border-b py-3 pr-4" style={{ borderColor: T.border, color: T.muted }}>
-                        {employee.department ?? "—"}
+                      <td className="border-b py-3.5 pr-4 crm-secondary" style={{ borderColor: T.border, color: T.muted }}>
+                        {employee.department ?? "\u2014"}
                       </td>
-                      <td className="border-b py-3 pr-4" style={{ borderColor: T.border, color: T.muted }}>
-                        {employee.reportingManagerName ?? "—"}
+                      <td className="border-b py-3.5 pr-4 crm-secondary" style={{ borderColor: T.border, color: T.muted }}>
+                        {employee.reportingManagerName ?? "\u2014"}
                       </td>
-                      <td className="border-b py-3 pr-4" style={{ borderColor: T.border }}>
+                      <td className="border-b py-3.5 pr-4" style={{ borderColor: T.border }}>
                         <StatusBadge status={employee.status}>
                           {employee.status === "active"
                             ? "Active"
@@ -795,10 +795,10 @@ export default function EmployeesPage() {
                             : "Inactive"}
                         </StatusBadge>
                       </td>
-                      <td className="border-b py-3 pr-4 whitespace-nowrap" style={{ borderColor: T.border, color: T.muted }}>
+                      <td className="border-b py-3.5 pr-4 whitespace-nowrap crm-secondary" style={{ borderColor: T.border, color: T.muted }}>
                         {formatWhen(employee.lastActiveAt)}
                       </td>
-                      <td className="border-b py-3 text-right whitespace-nowrap" style={{ borderColor: T.border }}>
+                      <td className="border-b py-3.5 text-right whitespace-nowrap" style={{ borderColor: T.border }}>
                         <button
                           type="button"
                           onClick={() => {
@@ -806,19 +806,19 @@ export default function EmployeesPage() {
                             setModalOpen(true);
                           }}
                           aria-label={`Edit ${employee.name}`}
-                          className="mr-1 h-11 w-11 rounded-lg st-hover-surface"
+                          className="mr-1 inline-flex h-9 w-9 items-center justify-center rounded-[10px] st-hover-surface transition-colors"
                           style={{ color: T.muted }}
                         >
-                          ✎
+                          \u270E
                         </button>
                         <button
                           type="button"
                           onClick={() => setRemoving(employee)}
                           aria-label={`Remove ${employee.name}`}
-                          className="h-11 w-11 rounded-lg hover:bg-red-50"
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-[10px] transition-colors"
                           style={{ color: T.danger }}
                         >
-                          🗑
+                          \uD83D\uDDD1
                         </button>
                       </td>
                     </tr>
@@ -826,24 +826,24 @@ export default function EmployeesPage() {
                     {expanded === employee.id && (
                       <tr key={`${employee.id}-detail`}>
                         <td colSpan={9} className="border-b p-0" style={{ borderColor: T.border }}>
-                          <div className="px-4 py-4" style={{ background: T.sidebar }}>
+                          <div className="px-5 py-4" style={{ background: T.surfaceAlt }}>
                             <dl className="grid gap-4 sm:grid-cols-3">
                               <div>
-                                <dt className="text-xs" style={{ color: T.muted }}>Phone</dt>
-                                <dd className="text-sm" style={{ color: T.text }}>{employee.phone ?? "—"}</dd>
+                                <dt className="crm-caption" style={{ color: T.muted, fontWeight: 500 }}>Phone</dt>
+                                <dd className="crm-body mt-0.5" style={{ color: T.text }}>{employee.phone ?? "\u2014"}</dd>
                               </div>
                               <div>
-                                <dt className="text-xs" style={{ color: T.muted }}>Joined</dt>
-                                <dd className="text-sm" style={{ color: T.text }}>{formatWhen(employee.createdAt)}</dd>
+                                <dt className="crm-caption" style={{ color: T.muted, fontWeight: 500 }}>Joined</dt>
+                                <dd className="crm-body mt-0.5" style={{ color: T.text }}>{formatWhen(employee.createdAt)}</dd>
                               </div>
                               <div>
-                                <dt className="text-xs" style={{ color: T.muted }}>Invite status</dt>
-                                <dd className="text-sm" style={{ color: T.text }}>
+                                <dt className="crm-caption" style={{ color: T.muted, fontWeight: 500 }}>Invite status</dt>
+                                <dd className="crm-body mt-0.5" style={{ color: T.text }}>
                                   {employee.status === "pending"
                                     ? `Sent ${formatWhen(employee.inviteSentAt)}${employee.inviteExpired ? " (expired)" : ""}`
                                     : employee.firstLoginAt
                                     ? `First login ${formatWhen(employee.firstLoginAt)}`
-                                    : "—"}
+                                    : "\u2014"}
                                 </dd>
                               </div>
                             </dl>

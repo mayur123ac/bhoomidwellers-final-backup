@@ -66,27 +66,16 @@ export async function POST(req: NextRequest) {
     const logoutTime = body.logoutTime ?? "20:00";
     const flexible = body.flexible ?? false;
 
-    // Check if a row exists. organization_settings may have duplicates (no UNIQUE
-    // constraint), so we UPDATE the first match or INSERT if none exists.
-    const existing = await query(
-      `SELECT id FROM organization_settings WHERE organization_id = $1 ORDER BY id LIMIT 1`,
-      [orgId]
+    await query(
+      `INSERT INTO organization_settings (organization_id, shift_start, shift_end, flexible, updated_at)
+       VALUES ($1, $2, $3, $4, NOW())
+       ON CONFLICT (organization_id)
+       DO UPDATE SET shift_start = EXCLUDED.shift_start,
+                     shift_end   = EXCLUDED.shift_end,
+                     flexible    = EXCLUDED.flexible,
+                     updated_at  = NOW()`,
+      [orgId, loginTime, logoutTime, flexible]
     );
-
-    if (existing.length > 0) {
-      await query(
-        `UPDATE organization_settings
-            SET shift_start = $1, shift_end = $2, flexible = $3, updated_at = NOW()
-          WHERE id = $4`,
-        [loginTime, logoutTime, flexible, existing[0].id]
-      );
-    } else {
-      await query(
-        `INSERT INTO organization_settings (organization_id, shift_start, shift_end, flexible, updated_at)
-         VALUES ($1, $2, $3, $4, NOW())`,
-        [orgId, loginTime, logoutTime, flexible]
-      );
-    }
 
     return NextResponse.json({ success: true });
   } catch (err: any) {

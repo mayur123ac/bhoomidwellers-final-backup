@@ -141,13 +141,13 @@ export default function AppHeader({
       }}
     >
       {/* ── Left: brand → context → role ── */}
-      <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
+      <div className="flex items-center gap-4 sm:gap-4 min-w-0 flex-1">
 
         {/* 1. Mobile Logo: Shows ONLY on small screens. Capped width prevents crushing right-side controls. */}
         <img
           src="/assets/logobrowser_trans.png"
           alt="Bhoomi Dwellers"
-          className="block sm:hidden h-7 sm:h-8 w-auto max-w-[110px] object-contain flex-shrink-0 transition-opacity duration-200 hover:opacity-80"
+          className="block sm:hidden h-6 sm:h-7 w-auto max-w-[100px] object-contain flex-shrink-0 transition-opacity duration-200 hover:opacity-80"
         />
 
         {/* 2. Desktop Logo: Shows ONLY on screens 'sm' and larger */}

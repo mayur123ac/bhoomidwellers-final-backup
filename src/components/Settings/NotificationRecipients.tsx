@@ -362,7 +362,7 @@ export default function NotificationRecipients({
         description="Choose every address that should receive CRM email. Both can be on at once."
         footer={
           <div className="flex w-full flex-wrap items-center justify-between gap-3">
-            <span className="text-xs" style={{ color: T.muted }} aria-live="polite">
+            <span className="crm-caption" style={{ color: T.muted, fontWeight: 400 }} aria-live="polite">
               {dirty ? "You have unsaved changes." : "All changes saved."}
             </span>
             <div className="flex gap-2">
@@ -393,13 +393,13 @@ export default function NotificationRecipients({
           </InfoBanner>
         )}
 
-        <p className="mb-4 text-sm" style={{ color: T.muted }}>
+        <p className="mb-4 crm-body" style={{ color: T.muted }}>
           Receive CRM notifications on:
         </p>
 
         {/* ── Current account email ── */}
         <div
-          className="mb-3 rounded-lg border p-4"
+          className="mb-3 rounded-[14px] border p-4"
           style={{
             borderColor: draft.sendCurrentEmail ? T.teal : T.border,
             background: draft.sendCurrentEmail ? T.accentSoft : "transparent",
@@ -412,19 +412,19 @@ export default function NotificationRecipients({
             label="Current account email"
           />
           <div className="mt-1 flex flex-wrap items-center gap-2 pl-7">
-            <span className="text-sm font-medium break-all" style={{ color: T.text }}>
+            <span className="crm-body font-medium break-all" style={{ color: T.text }}>
               {state.currentEmail ?? "Not set"}
             </span>
             <StatusBadge status="success">Verified</StatusBadge>
           </div>
-          <p className="mt-1 pl-7 text-xs" style={{ color: T.muted }}>
+          <p className="mt-1 pl-7 crm-secondary" style={{ color: T.muted }}>
             The address you sign in with. Change it from the Profile section.
           </p>
         </div>
 
         {/* ── Alternative email — an ordinary editable field ── */}
         <div
-          className="mb-4 rounded-lg border p-4"
+          className="mb-4 rounded-[14px] border p-4"
           style={{
             borderColor: draft.sendAlternativeEmail ? T.teal : T.border,
             background: draft.sendAlternativeEmail ? T.accentSoft : "transparent",
@@ -478,7 +478,7 @@ export default function NotificationRecipients({
                 !dirty &&
                 typed.toLowerCase() === (state.alternativeEmail ?? "").toLowerCase() &&
                 v.verifiedAt && (
-                  <span className="text-xs" style={{ color: T.muted }}>
+                  <span className="crm-caption" style={{ color: T.muted, fontWeight: 400 }}>
                     Last verified on{" "}
                     {new Date(v.verifiedAt).toLocaleDateString(undefined, {
                       day: "2-digit",
@@ -490,7 +490,7 @@ export default function NotificationRecipients({
             </div>
 
             {!dirty && v.status === "failed" && v.failureReason && (
-              <p className="mt-2 text-xs" style={{ color: T.dangerText }}>
+              <p className="mt-2 crm-caption" style={{ color: T.dangerText, fontWeight: 400 }}>
                 {FAILURE_TEXT[v.failureReason] ?? "The last verification attempt did not succeed."}{" "}
                 Save again to start a new verification.
               </p>
@@ -498,7 +498,7 @@ export default function NotificationRecipients({
 
             {!dirty && v.pendingEmail && v.status !== "failed" && (
               <div className="mt-2 flex flex-wrap items-center gap-2">
-                <span className="text-xs" style={{ color: T.warningText }}>
+                <span className="crm-caption" style={{ color: T.warningText, fontWeight: 400 }}>
                   {v.pendingEmail} is waiting to be verified.
                 </span>
                 <Button variant="ghost" onClick={() => setVerifyFor(v.pendingEmail as string)}>
@@ -507,7 +507,7 @@ export default function NotificationRecipients({
               </div>
             )}
 
-            <p className="mt-2 text-xs" style={{ color: T.muted }}>
+            <p className="mt-2 crm-caption" style={{ color: T.muted, fontWeight: 400 }}>
               Only verified alternative email addresses can receive CRM notifications.
             </p>
           </div>
@@ -515,24 +515,24 @@ export default function NotificationRecipients({
 
         {/* ── Delivery preview ── */}
         <div
-          className="rounded-lg border p-4"
+          className="rounded-[14px] border p-4"
           style={{
             borderColor: preview.addresses.length === 0 ? T.warning : T.border,
-            background: preview.addresses.length === 0 ? T.warningSoft : T.sidebar,
+            background: preview.addresses.length === 0 ? T.warningSoft : T.surfaceAlt,
           }}
         >
-          <h3 className="mb-2 text-sm font-semibold" style={{ color: T.text }}>
+          <h3 className="mb-2 crm-label" style={{ color: T.text }}>
             Delivery preview
           </h3>
 
           {preview.addresses.length === 0 ? (
-            <p className="text-sm font-medium" style={{ color: T.warningText }}>
+            <p className="crm-body font-medium" style={{ color: T.warningText }}>
               ⚠ Email notifications are disabled. Nothing will be sent to you — including security
               alerts such as password changes and new-device sign-ins.
             </p>
           ) : (
             <>
-              <p className="text-sm" style={{ color: T.text }}>
+              <p className="crm-body" style={{ color: T.text }}>
                 ✓{" "}
                 {preview.addresses.length === 1
                   ? "Notifications will only be sent to:"
@@ -542,7 +542,7 @@ export default function NotificationRecipients({
                 {preview.addresses.map((address) => (
                   <li
                     key={address}
-                    className="rounded-full px-3 py-1 text-xs font-medium break-all"
+                    className="rounded-full px-3 py-1 crm-caption font-medium break-all"
                     style={{ background: T.accentSoft, color: T.text }}
                   >
                     {address}
@@ -555,7 +555,7 @@ export default function NotificationRecipients({
           {preview.notes.length > 0 && (
             <ul className="mt-3 space-y-1">
               {preview.notes.map((note) => (
-                <li key={note} className="text-xs" style={{ color: T.warningText }}>
+                <li key={note} className="crm-caption" style={{ color: T.warningText, fontWeight: 400 }}>
                   • {note}
                 </li>
               ))}
@@ -565,14 +565,14 @@ export default function NotificationRecipients({
 
         {/* ── Fallback ── */}
         <div
-          className="mt-4 flex items-start justify-between gap-4 rounded-lg border p-4"
+          className="mt-4 flex items-start justify-between gap-4 rounded-[14px] border p-4"
           style={{ borderColor: T.border }}
         >
           <div>
-            <p className="text-sm font-medium" style={{ color: T.text }}>
+            <p className="crm-body font-medium" style={{ color: T.text }}>
               Automatic fallback
             </p>
-            <p className="mt-1 text-xs" style={{ color: T.muted }}>
+            <p className="mt-1 crm-secondary leading-relaxed" style={{ color: T.muted }}>
               If delivery to the account email fails, notifications are sent automatically to the
               verified alternative address — even when the alternative is switched off above. This
               needs a verified alternative address to do anything.
@@ -607,7 +607,7 @@ export default function NotificationRecipients({
           This includes security alerts. You will not be told about password changes, sign-ins from
           new devices, or failed login attempts on your account.
         </InfoBanner>
-        <p className="text-sm" style={{ color: T.muted }}>
+        <p className="crm-secondary" style={{ color: T.muted }}>
           In-app notifications are unaffected — this only turns off email.
         </p>
       </Modal>
@@ -801,7 +801,7 @@ function VerificationModal({
           <p className="text-base font-semibold" style={{ color: T.successText }} role="status">
             Alternative email verified and saved successfully.
           </p>
-          <p className="text-sm break-all" style={{ color: T.muted }}>
+          <p className="crm-body break-all" style={{ color: T.muted }}>
             {address} is now active and will receive CRM notifications.
           </p>
         </div>
@@ -828,21 +828,21 @@ function VerificationModal({
           </>
         }
       >
-        <p className="mb-3 text-sm" style={{ color: T.text }}>
+        <p className="mb-3 crm-body" style={{ color: T.text }}>
           To protect your account, we&apos;ll send a 6-digit verification code to:
         </p>
         <p
-          className="mb-4 rounded-lg border px-3 py-2 text-sm font-semibold break-all"
+          className="mb-4 rounded-[12px] border px-3 py-2.5 crm-body font-semibold break-all"
           style={{ borderColor: T.border, background: T.neutralSoft, color: T.text }}
         >
           {address}
         </p>
-        <p className="mb-3 text-sm" style={{ color: T.muted }}>
+        <p className="mb-3 crm-secondary" style={{ color: T.muted }}>
           This email will not become active until the code is verified.
         </p>
 
         {error && (
-          <p className="mb-3 text-sm" style={{ color: T.dangerText }} role="alert">
+          <p className="mb-3 crm-body" style={{ color: T.dangerText }} role="alert">
             {error}
           </p>
         )}
@@ -873,10 +873,10 @@ function VerificationModal({
         </>
       }
     >
-      <p className="mb-1 text-sm" style={{ color: T.text }}>
+      <p className="mb-1 crm-body" style={{ color: T.text }}>
         We&apos;ve sent a 6-digit verification code to
       </p>
-      <p className="mb-4 text-sm font-semibold break-all" style={{ color: T.text }}>
+      <p className="mb-4 crm-body font-semibold break-all" style={{ color: T.text }}>
         {address}
       </p>
 
@@ -893,7 +893,7 @@ function VerificationModal({
       </Field>
 
       {state.attemptsUsed > 0 && state.attemptsRemaining > 0 && (
-        <p className="mb-3 text-xs" style={{ color: T.warningText }}>
+        <p className="mb-3 crm-caption" style={{ color: T.warningText, fontWeight: 400 }}>
           {state.attemptsRemaining} attempt{state.attemptsRemaining === 1 ? "" : "s"} remaining on
           this code.
         </p>
@@ -906,7 +906,7 @@ function VerificationModal({
         <Button variant="ghost" onClick={onChangeEmail} disabled={busy}>
           Change Email
         </Button>
-        <span className="text-xs" style={{ color: T.muted }}>
+        <span className="crm-caption" style={{ color: T.muted, fontWeight: 400 }}>
           {state.otpsRemainingThisHour} of 5 codes left this hour
         </span>
       </div>

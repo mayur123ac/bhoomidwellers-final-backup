@@ -398,14 +398,12 @@ export default function SettingsShell({ children }: { children: React.ReactNode 
                   <Link
                     href={item.href}
                     aria-current={active ? "page" : undefined}
-                    className={`flex min-h-[42px] items-center gap-2.5 rounded-lg px-3 text-sm transition-colors ${active ? "" : "st-hover-surface"
+                    className={`flex min-h-[40px] items-center gap-2.5 rounded-[10px] px-3 text-[13px] tracking-tight transition-all duration-200 ${active ? "" : "st-hover-surface"
                       }`}
                     style={{
                       background: active ? T.accentSoft : "transparent",
                       color: active ? T.teal : T.text,
                       fontWeight: active ? 600 : 400,
-                      // Same left indicator the global rail uses for its active
-                      // item, at panel scale.
                       boxShadow: active ? `inset 3px 0 0 ${T.teal}` : undefined,
                     }}
                   >
@@ -416,7 +414,7 @@ export default function SettingsShell({ children }: { children: React.ReactNode 
                     <span className="flex-1 truncate">{item.label}</span>
                     {item.status === "planned" && (
                       <span
-                        className="flex-shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide"
+                        className="flex-shrink-0 rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider"
                         style={{ background: T.neutralSoft, color: T.neutralText }}
                       >
                         Soon
@@ -433,7 +431,7 @@ export default function SettingsShell({ children }: { children: React.ReactNode 
   );
 
   const horizontalLocalNav = (
-    <nav className="flex items-center gap-2 overflow-x-auto pb-3 custom-scrollbar-light w-full" aria-label="Settings sections">
+    <nav className="flex items-center gap-1.5 overflow-x-auto pb-3 custom-scrollbar-light w-full" aria-label="Settings sections">
       {groups.flatMap(g => g.items).map(item => {
         const active = pathname === item.href;
         const Icon = item.icon;
@@ -442,7 +440,7 @@ export default function SettingsShell({ children }: { children: React.ReactNode 
             key={item.href}
             href={item.href}
             aria-current={active ? "page" : undefined}
-            className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm whitespace-nowrap transition-colors flex-shrink-0 border border-transparent ${active ? "" : "st-hover-surface hover:border-gray-200 dark:hover:border-white/10"
+            className={`flex items-center gap-2 rounded-[10px] px-3.5 py-2 text-[13px] tracking-tight whitespace-nowrap transition-all duration-200 flex-shrink-0 border border-transparent ${active ? "" : "st-hover-surface hover:border-gray-200 dark:hover:border-white/10"
               }`}
             style={{
               background: active ? T.accentSoft : "transparent",
@@ -451,10 +449,10 @@ export default function SettingsShell({ children }: { children: React.ReactNode 
               boxShadow: active ? `inset 0 0 0 1px ${T.teal}` : undefined,
             }}
           >
-            <Icon className="h-4 w-4" style={{ color: active ? T.teal : T.muted }} />
+            <Icon className="h-3.5 w-3.5" style={{ color: active ? T.teal : T.muted }} />
             {item.label}
             {item.status === "planned" && (
-              <span className="ml-1 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide" style={{ background: T.neutralSoft, color: T.neutralText }}>
+              <span className="ml-1 rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider" style={{ background: T.neutralSoft, color: T.neutralText }}>
                 Soon
               </span>
             )}
@@ -641,11 +639,11 @@ export default function SettingsShell({ children }: { children: React.ReactNode 
                 {/* Local nav — sections *within* Settings, not application nav. */}
                 {!isSalesManager && (
                   <aside
-                    className="hidden w-60 flex-shrink-0 self-start rounded-xl border lg:block"
+                    className="hidden w-60 flex-shrink-0 self-start rounded-[18px] border lg:block"
                     style={{
                       background: T.surface,
                       borderColor: T.border,
-                      boxShadow: isDark ? "none" : "0 1px 3px rgba(16,24,40,0.06)",
+                      boxShadow: isDark ? "none" : "0 2px 12px rgba(0,0,0,0.03)",
                       position: "sticky",
                       top: 0,
                       maxHeight: "100vh",
@@ -668,16 +666,16 @@ export default function SettingsShell({ children }: { children: React.ReactNode 
                     <div className="lg:hidden">
                       <button
                         onClick={() => setDrawerOpen(true)}
-                        className="flex items-center justify-between w-full p-3 rounded-xl border transition-colors"
-                        style={{ borderColor: T.border, background: T.surface }}
+                        className="flex items-center justify-between w-full px-4 py-3 rounded-[14px] border transition-all duration-200"
+                        style={{ borderColor: T.border, background: T.surface, boxShadow: isDark ? "none" : "0 2px 8px rgba(0,0,0,0.04)" }}
                       >
-                        <div className="flex items-center gap-2">
-                          {currentSection && <currentSection.icon className="w-4 h-4" style={{ color: T.teal }} />}
-                          <span className="font-semibold text-sm" style={{ color: T.text }}>
+                        <div className="flex items-center gap-2.5">
+                          {currentSection && <currentSection.icon className="w-3.5 h-3.5" style={{ color: T.teal }} />}
+                          <span className="font-semibold text-[13px] tracking-tight" style={{ color: T.text }}>
                             {currentSection?.label || "Settings"}
                           </span>
                         </div>
-                        <FaSlidersH className="w-4 h-4" style={{ color: T.muted }} />
+                        <FaSlidersH className="w-3.5 h-3.5" style={{ color: T.muted }} />
                       </button>
                     </div>
 
@@ -697,44 +695,44 @@ export default function SettingsShell({ children }: { children: React.ReactNode 
           {/* ── Local-nav drawer (narrow screens) ── */}
           {drawerOpen && (
             <div
-              className="fixed inset-0 z-[60] bg-black/50 lg:hidden"
+              className="fixed inset-0 z-[60] lg:hidden"
+              style={{ background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)" }}
               onMouseDown={(e) => {
                 if (e.target === e.currentTarget) setDrawerOpen(false);
               }}
             >
               <div
-                className="ml-auto h-full w-72 overflow-y-auto custom-scrollbar shadow-xl"
+                className="ml-auto h-full w-72 overflow-y-auto custom-scrollbar shadow-[0_20px_50px_rgba(0,0,0,0.2)]"
                 style={{ background: T.surface }}
                 role="dialog"
                 aria-label="Settings sections"
               >
                 <div
-                  className="flex items-center justify-between border-b px-4 py-3"
+                  className="flex items-center justify-between border-b px-4 py-3.5"
                   style={{ borderColor: T.border }}
                 >
-                  <span className="text-sm font-semibold" style={{ color: T.text }}>
+                  <span className="crm-label" style={{ color: T.text }}>
                     Settings
                   </span>
                   <button
                     type="button"
                     onClick={() => setDrawerOpen(false)}
                     aria-label="Close settings sections"
-                    className="flex h-11 w-11 items-center justify-center rounded-lg"
+                    className="flex h-9 w-9 items-center justify-center rounded-full st-hover-surface transition-colors"
                     style={{ color: T.muted }}
                   >
-                    <FaTimes />
+                    <FaTimes className="w-3.5 h-3.5" />
                   </button>
                 </div>
                 {localNav}
-                {/* Mobile: Back to Dashboard link since the global rail is hidden */}
                 <div className="md:hidden px-4 py-3 border-t" style={{ borderColor: T.border }}>
                   <Link
                     href={isSalesManager ? "/dashboard/sales" : "/dashboard"}
-                    className="flex items-center gap-2 text-sm font-semibold rounded-lg px-3 py-2.5 transition-colors"
+                    className="flex items-center gap-2 text-[13px] font-semibold tracking-tight rounded-[10px] px-3 py-2.5 transition-colors"
                     style={{ color: T.teal }}
                     onClick={() => setDrawerOpen(false)}
                   >
-                    ← Back to Dashboard
+                    \u2190 Back to Dashboard
                   </Link>
                 </div>
               </div>

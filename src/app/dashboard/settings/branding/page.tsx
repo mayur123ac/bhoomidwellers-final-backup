@@ -144,25 +144,6 @@ export default function BrandingPage() {
 
   const displayed = preview ?? currentLogo;
 
-  // Tab button style helper
-  function tabStyle(active: boolean) {
-    return {
-      padding: "8px 20px",
-      fontSize: 14,
-      fontWeight: active ? 600 : 400,
-      borderTop: "none",
-      borderLeft: "none",
-      borderRight: "none",
-      borderBottomStyle: "solid" as const,
-      borderBottomWidth: 2,
-      borderBottomColor: active ? T.teal : "transparent",
-      color: active ? T.teal : T.muted,
-      background: "none",
-      cursor: "pointer",
-      transition: "color 0.15s, border-bottom-color 0.15s",
-    };
-  }
-
   return (
     <>
       <PageHeader
@@ -170,21 +151,22 @@ export default function BrandingPage() {
         subtitle="Customize your organization's visual identity on the Client Enquiry Form."
       />
 
-      {/* Tab bar */}
-      <div
-        style={{
-          display: "flex",
-          gap: 0,
-          borderBottom: `1px solid ${T.border}`,
-          marginBottom: 24,
-        }}
-      >
-        <button style={tabStyle(tab === "logo")} onClick={() => setTab("logo")}>
-          Logo
-        </button>
-        <button style={tabStyle(tab === "theme")} onClick={() => setTab("theme")}>
-          Enquiry Form Theme
-        </button>
+      {/* Segmented control tab bar */}
+      <div className="mb-6 flex gap-1 rounded-[12px] p-1" style={{ background: T.neutralSoft }}>
+        {([["logo", "Logo"], ["theme", "Enquiry Form Theme"]] as const).map(([id, label]) => (
+          <button
+            key={id}
+            onClick={() => setTab(id)}
+            className="flex-1 rounded-[10px] px-4 py-2 text-[13px] font-medium tracking-tight transition-all duration-200 cursor-pointer"
+            style={{
+              color: tab === id ? T.text : T.muted,
+              background: tab === id ? T.surface : "transparent",
+              boxShadow: tab === id ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
+            }}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       {/* ── Logo tab ── */}
@@ -205,7 +187,7 @@ export default function BrandingPage() {
           }
         >
           <div
-            className="mb-5 flex items-center justify-center rounded-lg border"
+            className="mb-5 flex items-center justify-center rounded-[14px] border"
             style={{
               width: 240,
               height: 96,
@@ -220,11 +202,11 @@ export default function BrandingPage() {
                 style={{ maxWidth: 220, maxHeight: 80, objectFit: "contain" }}
               />
             ) : loading ? (
-              <span className="text-sm" style={{ color: T.muted }}>
-                Loading…
+              <span className="crm-secondary" style={{ color: T.muted }}>
+                Loading\u2026
               </span>
             ) : (
-              <span className="text-sm" style={{ color: T.muted }}>
+              <span className="crm-secondary" style={{ color: T.muted }}>
                 No logo uploaded
               </span>
             )}
@@ -239,18 +221,18 @@ export default function BrandingPage() {
               type="file"
               accept="image/*"
               onChange={onFileChange}
-              className="block w-full text-sm"
+              className="block w-full crm-body"
               style={{ color: T.text }}
             />
             {file && (
-              <p className="mt-1 text-xs" style={{ color: T.muted }}>
+              <p className="mt-1 crm-caption" style={{ color: T.muted, fontWeight: 400 }}>
                 Selected: {file.name} ({(file.size / 1024).toFixed(1)} KB)
               </p>
             )}
           </Field>
 
           {uploading && (
-            <p className="mt-3 animate-pulse text-sm" style={{ color: T.teal }}>
+            <p className="mt-3 animate-pulse crm-body" style={{ color: T.teal }}>
               Uploading…
             </p>
           )}
@@ -273,110 +255,97 @@ export default function BrandingPage() {
           }
         >
           {themeLoading ? (
-            <p className="text-sm" style={{ color: T.muted }}>
+            <p className="crm-body" style={{ color: T.muted }}>
               Loading…
             </p>
           ) : (
             <>
               {/* Color rows */}
-              {[
-                {
-                  label: "Primary Color",
-                  desc: "Section header backgrounds and selected button fill.",
-                  value: primaryColor,
-                  set: setPrimaryColor,
-                },
-                {
-                  label: "Secondary Color",
-                  desc: "Accent text, icons, focus rings, and selected button ring.",
-                  value: secondaryColor,
-                  set: setSecondaryColor,
-                },
-                {
-                  label: "Text Color",
-                  desc: "Form title and main heading color.",
-                  value: textColor,
-                  set: setTextColor,
-                },
-              ].map(({ label, desc, value, set }) => (
-                <div
-                  key={label}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 16,
-                    marginBottom: 20,
-                    paddingBottom: 20,
-                    borderBottom: `1px solid ${T.border}`,
-                  }}
-                >
-                  <input
-                    type="color"
-                    value={value}
-                    onChange={(e) => set(e.target.value)}
-                    style={{
-                      width: 48,
-                      height: 48,
-                      borderRadius: 8,
-                      border: `1px solid ${T.border}`,
-                      cursor: "pointer",
-                      padding: 2,
-                      background: "none",
-                      flexShrink: 0,
-                    }}
-                  />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: T.text, marginBottom: 2 }}>
-                      {label}
+              <div className="space-y-0">
+                {[
+                  {
+                    label: "Primary Color",
+                    desc: "Section header backgrounds and selected button fill.",
+                    value: primaryColor,
+                    set: setPrimaryColor,
+                  },
+                  {
+                    label: "Secondary Color",
+                    desc: "Accent text, icons, focus rings, and selected button ring.",
+                    value: secondaryColor,
+                    set: setSecondaryColor,
+                  },
+                  {
+                    label: "Text Color",
+                    desc: "Form title and main heading color.",
+                    value: textColor,
+                    set: setTextColor,
+                  },
+                ].map(({ label, desc, value, set }) => (
+                  <div
+                    key={label}
+                    className="flex items-center gap-4 py-4 border-b last:border-b-0"
+                    style={{ borderColor: T.border }}
+                  >
+                    <input
+                      type="color"
+                      value={value}
+                      onChange={(e) => set(e.target.value)}
+                      className="flex-shrink-0 cursor-pointer rounded-[10px] border p-0.5"
+                      style={{
+                        width: 44,
+                        height: 44,
+                        borderColor: T.border,
+                        background: "none",
+                      }}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="crm-body font-semibold" style={{ color: T.text }}>
+                        {label}
+                      </div>
+                      <div className="crm-caption mt-0.5" style={{ color: T.muted, fontWeight: 400 }}>{desc}</div>
                     </div>
-                    <div style={{ fontSize: 12, color: T.muted }}>{desc}</div>
+                    <input
+                      type="text"
+                      value={value}
+                      maxLength={7}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (/^#[0-9a-fA-F]{0,6}$/.test(v)) set(v);
+                      }}
+                      className="rounded-[8px] border px-2.5 py-1.5 text-[13px] font-mono tracking-tight st-input"
+                      style={{
+                        width: 88,
+                        borderColor: T.border,
+                        color: T.text,
+                        background: T.surfaceAlt,
+                      }}
+                    />
                   </div>
-                  <input
-                    type="text"
-                    value={value}
-                    maxLength={7}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      if (/^#[0-9a-fA-F]{0,6}$/.test(v)) set(v);
-                    }}
-                    style={{
-                      width: 90,
-                      padding: "6px 10px",
-                      fontSize: 13,
-                      fontFamily: "monospace",
-                      border: `1px solid ${T.border}`,
-                      borderRadius: 6,
-                      color: T.text,
-                      background: T.surfaceAlt,
-                    }}
-                  />
-                </div>
-              ))}
+                ))}
+              </div>
 
               {/* Live preview */}
-              <div style={{ marginTop: 8 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: T.muted, marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+              <div className="mt-6">
+                <p className="crm-eyebrow mb-3" style={{ color: T.muted }}>
                   Live Preview
-                </div>
+                </p>
                 <div
+                  className="overflow-hidden rounded-[16px] border"
                   style={{
-                    border: `1px solid ${T.border}`,
-                    borderRadius: 16,
-                    overflow: "hidden",
+                    borderColor: T.border,
                     background: "#fff",
                     maxWidth: 480,
                   }}
                 >
-                  {/* Form header preview */}
-                  <div style={{ padding: "20px 24px", background: "#fff" }}>
+                  <div className="px-6 py-5" style={{ background: "#fff" }}>
                     <div style={{ fontSize: 22, fontWeight: 300, letterSpacing: "0.03em", color: textColor }}>
                       Client Enquiry Form
                     </div>
                     <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.15em", marginTop: 4, fontWeight: 600, color: secondaryColor }}>
-                      Let's find your perfect home
+                      Let&#39;s find your perfect home
                     </div>
                   </div>
-                  {/* Section header preview */}
                   <div style={{ background: primaryColor, padding: "10px 20px", display: "flex", alignItems: "center", gap: 10 }}>
                     <svg width="13" height="13" viewBox="0 0 24 24" fill={secondaryColor}>
                       <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z" />
@@ -385,9 +354,9 @@ export default function BrandingPage() {
                       1. Personal Details
                     </span>
                   </div>
-                  <div style={{ padding: "12px 20px" }}>
-                    <div style={{ background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 10, padding: "10px 14px", fontSize: 14, color: "#6b7280" }}>
-                      Full name…
+                  <div className="p-4">
+                    <div className="rounded-[10px] border px-3.5 py-2.5 text-sm" style={{ background: "#f9fafb", borderColor: "#e5e7eb", color: "#6b7280" }}>
+                      Full name\u2026
                     </div>
                   </div>
                 </div>

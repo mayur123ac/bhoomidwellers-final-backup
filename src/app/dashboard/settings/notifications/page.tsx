@@ -73,7 +73,7 @@ export default function NotificationsPage() {
         subtitle="Which system emails you receive, and where they are delivered."
       />
 
-      <div className="mb-5 flex gap-1 border-b" style={{ borderColor: T.border }} role="tablist">
+      <div className="mb-6 flex gap-1 rounded-[12px] p-1" style={{ background: T.neutralSoft }} role="tablist">
         {TABS.map((entry) => (
           <button
             key={entry.id}
@@ -82,11 +82,11 @@ export default function NotificationsPage() {
             aria-controls={`notif-tab-${entry.id}`}
             id={`notif-tabbtn-${entry.id}`}
             onClick={() => setTab(entry.id)}
-            className="min-h-[44px] px-4 text-sm font-medium transition-colors"
+            className="min-h-[36px] flex-1 rounded-[10px] px-4 text-[13px] font-medium tracking-tight transition-all duration-200"
             style={{
-              color: tab === entry.id ? T.teal : T.muted,
-              borderBottom: `2px solid ${tab === entry.id ? T.teal : "transparent"}`,
-              marginBottom: "-1px",
+              color: tab === entry.id ? T.text : T.muted,
+              background: tab === entry.id ? T.surface : "transparent",
+              boxShadow: tab === entry.id ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
             }}
           >
             {entry.label}
@@ -120,7 +120,7 @@ export default function NotificationsPage() {
             {/* The spec marks SMS as future. There is no SMS gateway configured, so
                 this tab states that rather than rendering toggles that store a
                 preference nothing will ever read. */}
-            <p className="text-sm" style={{ color: T.muted }}>
+            <p className="crm-body leading-relaxed" style={{ color: T.muted }}>
               SMS notifications are not available. No SMS gateway is connected to this CRM — the
               WhatsApp and voice integrations do not carry transactional SMS. This tab will gain
               controls when a provider is configured.
@@ -206,7 +206,7 @@ function InAppTab({ onError }: { onError: (message: string) => void }) {
   if (!prefs) {
     return (
       <Card>
-        <p className="text-sm" style={{ color: T.danger }}>
+        <p className="crm-body" style={{ color: T.danger }}>
           Could not load in-app preferences.
         </p>
       </Card>

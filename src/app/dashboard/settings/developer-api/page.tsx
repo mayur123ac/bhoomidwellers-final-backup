@@ -222,43 +222,43 @@ export default function DeveloperApiPage() {
           />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[860px] border-collapse text-sm">
+            <table className="w-full min-w-[860px] border-collapse">
               <thead>
-                <tr style={{ color: T.muted }} className="text-left">
-                  <th className="pb-3 pr-4 font-medium">Name</th>
-                  <th className="pb-3 pr-4 font-medium">Key</th>
-                  <th className="pb-3 pr-4 font-medium">Scopes</th>
-                  <th className="pb-3 pr-4 font-medium">Last used</th>
-                  <th className="pb-3 pr-4 font-medium">24h</th>
-                  <th className="pb-3 pr-4 font-medium">Status</th>
-                  <th className="pb-3 font-medium text-right">Actions</th>
+                <tr className="text-left">
+                  <th className="pb-3 pr-4 crm-caption" style={{ color: T.muted, fontWeight: 600 }}>Name</th>
+                  <th className="pb-3 pr-4 crm-caption" style={{ color: T.muted, fontWeight: 600 }}>Key</th>
+                  <th className="pb-3 pr-4 crm-caption" style={{ color: T.muted, fontWeight: 600 }}>Scopes</th>
+                  <th className="pb-3 pr-4 crm-caption" style={{ color: T.muted, fontWeight: 600 }}>Last used</th>
+                  <th className="pb-3 pr-4 crm-caption" style={{ color: T.muted, fontWeight: 600 }}>24h</th>
+                  <th className="pb-3 pr-4 crm-caption" style={{ color: T.muted, fontWeight: 600 }}>Status</th>
+                  <th className="pb-3 crm-caption text-right" style={{ color: T.muted, fontWeight: 600 }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {visibleKeys.map((k) => {
                   const state = keyState(k);
                   return (
-                    <tr key={k.id} className="border-t" style={{ borderColor: T.border }}>
-                      <td className="py-3 pr-4">
-                        <div className="font-medium" style={{ color: T.text }}>{k.name}</div>
-                        <div className="text-xs" style={{ color: T.muted }}>
+                    <tr key={k.id} className="border-t st-hover-surface transition-colors" style={{ borderColor: T.border }}>
+                      <td className="py-3.5 pr-4">
+                        <div className="crm-body font-medium" style={{ color: T.text }}>{k.name}</div>
+                        <div className="crm-caption mt-0.5" style={{ color: T.muted, fontWeight: 400 }}>
                           by {k.created_by_name ?? "unknown"} · {formatDate(k.created_at)}
                         </div>
                       </td>
-                      <td className="py-3 pr-4">
+                      <td className="py-3.5 pr-4">
                         <code
-                          className="rounded px-1.5 py-0.5 text-xs"
+                          className="rounded-[6px] px-1.5 py-0.5 text-xs"
                           style={{ background: T.neutralSoft, color: T.text }}
                         >
                           {k.key_prefix}…
                         </code>
                       </td>
-                      <td className="py-3 pr-4">
+                      <td className="py-3.5 pr-4">
                         <div className="flex flex-wrap gap-1">
                           {k.scopes.map((s) => (
                             <span
                               key={s}
-                              className="rounded px-1.5 py-0.5 text-[11px]"
+                              className="rounded-[6px] px-1.5 py-0.5 text-[11px]"
                               style={{ background: T.accentSoft, color: T.text }}
                             >
                               {s}
@@ -266,18 +266,18 @@ export default function DeveloperApiPage() {
                           ))}
                         </div>
                       </td>
-                      <td className="py-3 pr-4" style={{ color: T.muted }}>
+                      <td className="py-3.5 pr-4" style={{ color: T.muted }}>
                         {k.last_used_at ? (
                           <>
-                            <div style={{ color: T.text }}>{relativeDays(k.last_used_at)}</div>
-                            <div className="text-xs">{k.last_used_ip ?? ""}</div>
+                            <div className="crm-body" style={{ color: T.text }}>{relativeDays(k.last_used_at)}</div>
+                            <div className="crm-caption" style={{ fontWeight: 400 }}>{k.last_used_ip ?? ""}</div>
                           </>
                         ) : (
-                          "never"
+                          <span className="crm-secondary">never</span>
                         )}
                       </td>
-                      <td className="py-3 pr-4" style={{ color: T.text }}>{k.calls_24h}</td>
-                      <td className="py-3 pr-4">
+                      <td className="py-3.5 pr-4 crm-body tabular-nums" style={{ color: T.text }}>{k.calls_24h}</td>
+                      <td className="py-3.5 pr-4">
                         {state === "active" && <StatusBadge status="active">Active</StatusBadge>}
                         {state === "expired" && <StatusBadge status="pending">Expired</StatusBadge>}
                         {state === "revoked" && (
@@ -286,7 +286,7 @@ export default function DeveloperApiPage() {
                           </StatusBadge>
                         )}
                       </td>
-                      <td className="py-3 text-right">
+                      <td className="py-3.5 text-right">
                         {state !== "revoked" ? (
                           <div className="flex justify-end gap-1">
                             <Button variant="ghost" onClick={() => setEditing(k)}>Edit</Button>
@@ -296,7 +296,7 @@ export default function DeveloperApiPage() {
                             </Button>
                           </div>
                         ) : (
-                          <span className="text-xs" style={{ color: T.muted }}>
+                          <span className="crm-caption" style={{ color: T.muted, fontWeight: 400 }}>
                             {formatDate(k.revoked_at)}
                           </span>
                         )}
@@ -417,7 +417,7 @@ function UsageCard({
       description="Requests recorded against the /api/v1 surface."
     >
       <div className="mb-5 flex flex-wrap items-center gap-3">
-        <label className="text-sm" style={{ color: T.muted }} htmlFor="usage-window">
+        <label className="crm-body" style={{ color: T.muted }} htmlFor="usage-window">
           Window
         </label>
         <div className="w-40">
@@ -477,37 +477,37 @@ function UsageCard({
               </div>
             ))}
           </div>
-          <p className="mt-2 text-xs" style={{ color: T.muted }}>
+          <p className="mt-2 crm-caption" style={{ color: T.muted, fontWeight: 400 }}>
             Teal is successful requests, red is 4xx/5xx. Hover a bar for the day&apos;s figures.
           </p>
 
           {usage.endpoints.length > 0 && (
             <div className="mt-6 overflow-x-auto">
-              <table className="w-full min-w-[520px] border-collapse text-sm">
+              <table className="w-full min-w-[520px] border-collapse">
                 <thead>
-                  <tr style={{ color: T.muted }} className="text-left">
-                    <th className="pb-2 pr-4 font-medium">Endpoint</th>
-                    <th className="pb-2 pr-4 font-medium text-right">Requests</th>
-                    <th className="pb-2 pr-4 font-medium text-right">Errors</th>
-                    <th className="pb-2 font-medium text-right">Mean</th>
+                  <tr className="text-left">
+                    <th className="pb-2.5 pr-4 crm-caption" style={{ color: T.muted, fontWeight: 600 }}>Endpoint</th>
+                    <th className="pb-2.5 pr-4 crm-caption text-right" style={{ color: T.muted, fontWeight: 600 }}>Requests</th>
+                    <th className="pb-2.5 pr-4 crm-caption text-right" style={{ color: T.muted, fontWeight: 600 }}>Errors</th>
+                    <th className="pb-2.5 crm-caption text-right" style={{ color: T.muted, fontWeight: 600 }}>Mean</th>
                   </tr>
                 </thead>
                 <tbody>
                   {usage.endpoints.map((e) => (
-                    <tr key={e.endpoint} className="border-t" style={{ borderColor: T.border }}>
-                      <td className="py-2 pr-4">
+                    <tr key={e.endpoint} className="border-t st-hover-surface transition-colors" style={{ borderColor: T.border }}>
+                      <td className="py-2.5 pr-4">
                         <code className="text-xs" style={{ color: T.text }}>{e.endpoint}</code>
                       </td>
-                      <td className="py-2 pr-4 text-right" style={{ color: T.text }}>
+                      <td className="py-2.5 pr-4 text-right crm-body tabular-nums" style={{ color: T.text }}>
                         {e.requests.toLocaleString()}
                       </td>
                       <td
-                        className="py-2 pr-4 text-right"
+                        className="py-2.5 pr-4 text-right crm-body tabular-nums"
                         style={{ color: e.errors > 0 ? T.danger : T.muted }}
                       >
                         {e.errors}
                       </td>
-                      <td className="py-2 text-right" style={{ color: T.muted }}>
+                      <td className="py-2.5 text-right crm-secondary" style={{ color: T.muted }}>
                         {e.avgMs != null ? `${e.avgMs} ms` : "—"}
                       </td>
                     </tr>
@@ -537,10 +537,10 @@ function Stat({
   tone?: "default" | "danger";
 }) {
   return (
-    <div className="rounded-lg border px-4 py-3" style={{ borderColor: T.border }}>
-      <div className="text-xs" style={{ color: T.muted }}>{label}</div>
+    <div className="rounded-[14px] border px-4 py-3.5" style={{ borderColor: T.border, background: T.surfaceAlt }}>
+      <div className="crm-caption" style={{ color: T.muted, fontWeight: 500 }}>{label}</div>
       <div
-        className="mt-1 text-xl font-semibold"
+        className="mt-1 text-[22px] font-semibold tracking-tight tabular-nums"
         style={{ color: tone === "danger" ? T.danger : T.text }}
       >
         {value}
@@ -698,7 +698,7 @@ function KeyFormModal({
           onChange={(e) => setIpList(e.target.value)}
           rows={3}
           spellCheck={false}
-          className="w-full rounded-lg border px-3 py-2.5 font-mono text-sm outline-none transition-colors focus:ring-2"
+          className="w-full rounded-[10px] border px-3 py-2.5 font-mono text-[14px] leading-5 tracking-tight outline-none st-input st-transition focus:ring-2"
           // The cast covers `--tw-ring-color`, a CSS custom property that
           // React.CSSProperties has no index signature for. Same technique as
           // inputStyle() in components/Settings/ui.tsx.
@@ -777,7 +777,7 @@ function RevealModal({
       </InfoBanner>
 
       <div
-        className="mb-4 flex items-center gap-3 rounded-lg border p-3"
+        className="mb-4 flex items-center gap-3 rounded-[12px] border p-3"
         style={{ borderColor: T.border, background: T.neutralSoft }}
       >
         <code
@@ -854,7 +854,7 @@ function RotateModal({
         </>
       }
     >
-      <p className="mb-4 text-sm" style={{ color: T.muted }}>
+      <p className="mb-4 crm-secondary leading-relaxed" style={{ color: T.muted }}>
         The replacement keeps this key&apos;s scopes, rate limit, IP allow-list and expiry. Anything
         still calling with the old secret will start failing — its traffic stays visible in Usage,
         so you can tell whether something was missed.
@@ -1040,10 +1040,10 @@ function TestConsole() {
             >
               {result.status === 0 ? "Network error" : `HTTP ${result.status}`}
             </StatusBadge>
-            <span className="text-xs" style={{ color: T.muted }}>{result.ms} ms</span>
+            <span className="crm-caption tabular-nums" style={{ color: T.muted, fontWeight: 400 }}>{result.ms} ms</span>
           </div>
           <pre
-            className="max-h-80 overflow-auto rounded-lg border p-3 text-xs"
+            className="max-h-80 overflow-auto rounded-[12px] border p-3 text-xs"
             style={{ borderColor: T.border, background: T.neutralSoft, color: T.text }}
           >
             {result.body}
@@ -1070,27 +1070,27 @@ const ENDPOINT_DOCS: { method: string; path: string; scope: string; params: stri
 function DocsCard({ scopes }: { scopes: ScopeDef[] }) {
   return (
     <Card title="API reference" description="Everything a key can reach.">
-      <h3 className="mb-2 text-sm font-semibold" style={{ color: T.text }}>Authentication</h3>
-      <p className="mb-3 text-sm" style={{ color: T.muted }}>
+      <h3 className="mb-2 crm-label" style={{ color: T.text }}>Authentication</h3>
+      <p className="mb-3 crm-secondary leading-relaxed" style={{ color: T.muted }}>
         Send the key as a bearer token. An <code>X-API-Key</code> header is also accepted, for tools
         that cannot set <code>Authorization</code>.
       </p>
       <pre
-        className="mb-6 overflow-x-auto rounded-lg border p-3 text-xs"
+        className="mb-6 overflow-x-auto rounded-[12px] border p-3 text-xs"
         style={{ borderColor: T.border, background: T.neutralSoft, color: T.text }}
       >
 {`curl -H "Authorization: Bearer bk_live_…" \\
      "https://your-crm-host/api/v1/leads?limit=10"`}
       </pre>
 
-      <h3 className="mb-2 text-sm font-semibold" style={{ color: T.text }}>Endpoints</h3>
+      <h3 className="mb-2 crm-label" style={{ color: T.text }}>Endpoints</h3>
       <div className="mb-6 overflow-x-auto">
-        <table className="w-full min-w-[620px] border-collapse text-sm">
+        <table className="w-full min-w-[620px] border-collapse">
           <thead>
-            <tr style={{ color: T.muted }} className="text-left">
-              <th className="pb-2 pr-4 font-medium">Endpoint</th>
-              <th className="pb-2 pr-4 font-medium">Scope</th>
-              <th className="pb-2 font-medium">Query parameters</th>
+            <tr className="text-left">
+              <th className="pb-2.5 pr-4 crm-caption" style={{ color: T.muted, fontWeight: 600 }}>Endpoint</th>
+              <th className="pb-2.5 pr-4 crm-caption" style={{ color: T.muted, fontWeight: 600 }}>Scope</th>
+              <th className="pb-2.5 crm-caption" style={{ color: T.muted, fontWeight: 600 }}>Query parameters</th>
             </tr>
           </thead>
           <tbody>
@@ -1104,15 +1104,15 @@ function DocsCard({ scopes }: { scopes: ScopeDef[] }) {
                 <td className="py-2 pr-4">
                   <code className="text-xs" style={{ color: T.muted }}>{e.scope}</code>
                 </td>
-                <td className="py-2 text-xs" style={{ color: T.muted }}>{e.params}</td>
+                <td className="py-2 crm-secondary" style={{ color: T.muted }}>{e.params}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
 
-      <h3 className="mb-2 text-sm font-semibold" style={{ color: T.text }}>Scopes</h3>
-      <ul className="mb-6 space-y-1 text-sm" style={{ color: T.muted }}>
+      <h3 className="mb-2 crm-label" style={{ color: T.text }}>Scopes</h3>
+      <ul className="mb-6 space-y-1 crm-secondary" style={{ color: T.muted }}>
         {scopes.map((s) => (
           <li key={s.value}>
             <code style={{ color: T.text }}>{s.value}</code> — {s.description}
@@ -1120,8 +1120,8 @@ function DocsCard({ scopes }: { scopes: ScopeDef[] }) {
         ))}
       </ul>
 
-      <h3 className="mb-2 text-sm font-semibold" style={{ color: T.text }}>Responses</h3>
-      <p className="mb-3 text-sm" style={{ color: T.muted }}>
+      <h3 className="mb-2 crm-label" style={{ color: T.text }}>Responses</h3>
+      <p className="mb-3 crm-secondary leading-relaxed" style={{ color: T.muted }}>
         Success returns <code>{"{ data, meta }"}</code>. Failure returns{" "}
         <code>{"{ error: { code, message } }"}</code> with a matching HTTP status. Error codes:{" "}
         <code>MISSING_KEY</code>, <code>MALFORMED_KEY</code>, <code>UNKNOWN_KEY</code>,{" "}
@@ -1129,7 +1129,7 @@ function DocsCard({ scopes }: { scopes: ScopeDef[] }) {
         <code>INSUFFICIENT_SCOPE</code>, <code>RATE_LIMITED</code>, <code>MISSING_PARAMETER</code>,{" "}
         <code>INTERNAL_ERROR</code>.
       </p>
-      <p className="text-sm" style={{ color: T.muted }}>
+      <p className="crm-secondary leading-relaxed" style={{ color: T.muted }}>
         A <code>429</code> carries a <code>Retry-After</code> header in seconds. Every response
         carries <code>X-RateLimit-Limit</code>.
       </p>

@@ -147,7 +147,7 @@ function NotificationRow({
     >
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <p className="text-sm font-medium" style={{ color: T.text }}>
+          <p className="crm-body font-medium" style={{ color: T.text }}>
             {definition.label}
           </p>
 
@@ -175,7 +175,7 @@ function NotificationRow({
           )}
         </div>
 
-        <p className="mt-0.5 text-xs leading-relaxed" style={{ color: T.muted }}>
+        <p className="mt-0.5 crm-secondary leading-relaxed" style={{ color: T.muted }}>
           {definition.description}
         </p>
       </div>
@@ -214,7 +214,7 @@ function GroupCard({
 
   return (
     <section
-      className="mb-4 rounded-xl border"
+      className="mb-4 rounded-[18px] border"
       style={{ background: T.surface, borderColor: T.border }}
     >
       <header className="border-b px-4 py-3.5 sm:px-6" style={{ borderColor: T.border }}>
@@ -240,10 +240,10 @@ function GroupCard({
               ▶
             </span>
             <span className="min-w-0">
-              <span className="block text-base font-semibold" style={{ color: T.text }}>
+              <span className="block crm-section" style={{ color: T.text }}>
                 {group.label}
               </span>
-              <span className="mt-0.5 block text-xs" style={{ color: T.muted }}>
+              <span className="mt-0.5 block crm-secondary" style={{ color: T.muted }}>
                 {group.description}
               </span>
             </span>
@@ -251,7 +251,7 @@ function GroupCard({
 
           <div className="flex flex-shrink-0 items-center gap-2">
             <span
-              className="rounded-full px-2.5 py-1 text-xs font-semibold tabular-nums"
+              className="rounded-full px-2.5 py-1 crm-caption tabular-nums"
               style={{ background: T.neutralSoft, color: T.neutralText }}
               // Screen readers get the meaning; sighted users get the shorthand.
               aria-label={`${onCount} of ${visibleKeys.length} enabled`}
@@ -263,7 +263,7 @@ function GroupCard({
               type="button"
               onClick={() => onBulk(visibleKeys, true)}
               disabled={onCount === visibleKeys.length}
-              className="min-h-[36px] rounded-md border px-2.5 text-xs font-semibold transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40 focus:outline-none focus-visible:ring-2"
+              className="min-h-[36px] rounded-[10px] border px-2.5 crm-caption transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40 focus:outline-none focus-visible:ring-2"
               style={{ borderColor: T.border, color: T.teal, ...focusRing() }}
             >
               Enable all
@@ -272,7 +272,7 @@ function GroupCard({
               type="button"
               onClick={() => onBulk(visibleKeys, false)}
               disabled={onCount === 0}
-              className="min-h-[36px] rounded-md border px-2.5 text-xs font-semibold transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40 focus:outline-none focus-visible:ring-2"
+              className="min-h-[36px] rounded-[10px] border px-2.5 crm-caption transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40 focus:outline-none focus-visible:ring-2"
               style={{ borderColor: T.border, color: T.muted, ...focusRing() }}
             >
               Disable all
@@ -316,18 +316,18 @@ function PreviewCard({
     <Card title="Notification preview" description="What this adds up to, as you change it.">
       <div className="grid gap-6 sm:grid-cols-2">
         <div>
-          <p className="mb-2 text-sm font-semibold" style={{ color: T.text }}>
+          <p className="mb-2 crm-label" style={{ color: T.text }}>
             You will receive
           </p>
 
           {summary.length === 0 ? (
-            <p className="text-sm" style={{ color: T.muted }}>
+            <p className="crm-secondary" style={{ color: T.muted }}>
               Nothing. Every notification is switched off.
             </p>
           ) : (
             <ul className="space-y-1.5">
               {summary.map((item) => (
-                <li key={item} className="flex items-start gap-2 text-sm" style={{ color: T.text }}>
+                <li key={item} className="flex items-start gap-2 crm-body" style={{ color: T.text }}>
                   <span aria-hidden style={{ color: T.teal }}>
                     •
                   </span>
@@ -339,12 +339,12 @@ function PreviewCard({
         </div>
 
         <div>
-          <p className="mb-2 text-sm font-semibold" style={{ color: T.text }}>
+          <p className="mb-2 crm-label" style={{ color: T.text }}>
             Emails will be delivered to
           </p>
 
           {delivery.addresses.length === 0 ? (
-            <p className="text-sm" style={{ color: T.muted }}>
+            <p className="crm-secondary" style={{ color: T.muted }}>
               No delivery address is switched on, so nothing will be sent wherever these switches
               are set. Change that in Delivery above.
             </p>
@@ -353,7 +353,7 @@ function PreviewCard({
               {delivery.addresses.map((address) => (
                 <li
                   key={address}
-                  className="flex items-start gap-2 break-all text-sm"
+                  className="flex items-start gap-2 break-all crm-body"
                   style={{ color: T.text }}
                 >
                   <span aria-hidden style={{ color: T.success }}>
@@ -368,7 +368,7 @@ function PreviewCard({
           {delivery.notes.length > 0 && (
             <ul className="mt-3 space-y-1">
               {delivery.notes.map((note) => (
-                <li key={note} className="text-xs leading-relaxed" style={{ color: T.warningText }}>
+                <li key={note} className="crm-caption leading-relaxed" style={{ color: T.warningText, fontWeight: 400 }}>
                   {note}
                 </li>
               ))}
@@ -376,7 +376,7 @@ function PreviewCard({
           )}
 
           {!deliveryConfigured && (
-            <p className="mt-3 text-xs leading-relaxed" style={{ color: T.muted }}>
+            <p className="mt-3 crm-caption leading-relaxed" style={{ color: T.muted, fontWeight: 400 }}>
               No mail transport is configured on this deployment, so these preferences are stored
               but nothing is being sent yet.
             </p>
@@ -668,7 +668,7 @@ export default function NotificationCenter({
   if (loadError || !data) {
     return (
       <Card>
-        <p className="text-sm" style={{ color: T.danger }}>
+        <p className="crm-body" style={{ color: T.danger }}>
           Could not load notification preferences. {loadError}
         </p>
         <div className="mt-4">
@@ -714,7 +714,7 @@ export default function NotificationCenter({
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search notifications — try “password”"
               aria-label="Search notifications"
-              className="min-h-[44px] w-full rounded-lg border pl-9 pr-3 text-sm focus:outline-none focus:ring-2"
+              className="min-h-[44px] w-full rounded-[10px] border pl-9 pr-3 text-[14px] leading-5 tracking-tight st-input st-transition focus:outline-none focus:ring-2"
               style={{
                 background: T.surface,
                 borderColor: T.border,
@@ -736,7 +736,7 @@ export default function NotificationCenter({
 
         {/* aria-live so the result count reaches a screen reader, which cannot
             see the list shrink. */}
-        <p className="mt-3 text-xs" style={{ color: T.muted }} aria-live="polite">
+        <p className="mt-3 crm-caption" style={{ color: T.muted, fontWeight: 400 }} aria-live="polite">
           {terms.length === 0
             ? `${allVisibleKeys.length} notifications across ${filtered.length} groups. Press / to search, Ctrl+S to save.`
             : matchCount === 0
@@ -748,7 +748,7 @@ export default function NotificationCenter({
       {/* ── Groups ── */}
       {filtered.length === 0 ? (
         <Card>
-          <p className="text-sm" style={{ color: T.muted }}>
+          <p className="crm-body" style={{ color: T.muted }}>
             Nothing matches that search. Clear the box to see every notification.
           </p>
         </Card>
@@ -784,7 +784,7 @@ export default function NotificationCenter({
           top of the last card for the entire time someone is reading. */}
       {dirtyKeys.length > 0 && (
         <div
-          className="sticky bottom-0 z-20 -mx-4 mt-6 flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3 sm:mx-0 sm:rounded-xl sm:border sm:px-6"
+          className="sticky bottom-0 z-20 -mx-4 mt-6 flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3 sm:mx-0 sm:rounded-[18px] sm:border sm:px-6"
           style={{
             background: T.surface,
             borderColor: T.border,

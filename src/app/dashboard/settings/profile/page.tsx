@@ -208,16 +208,16 @@ function ProfilePictureUpload({
       </div>
 
       <div className="flex-1">
-        <p className="text-sm font-medium" style={{ color: T.text }}>
+        <p className="crm-body font-medium" style={{ color: T.text }}>
           Profile Picture
         </p>
-        <p className="mt-0.5 text-xs" style={{ color: T.muted }}>
+        <p className="mt-0.5 crm-secondary" style={{ color: T.muted }}>
           Supports JPG, GIF, or PNG under 5MB
         </p>
 
         {preview ? (
           <div className="mt-4">
-            <label htmlFor="avatar-zoom" className="mb-1 block text-xs" style={{ color: T.muted }}>
+            <label htmlFor="avatar-zoom" className="mb-1 block crm-caption" style={{ color: T.muted }}>
               Scale
             </label>
             <input
@@ -539,7 +539,7 @@ export default function ProfilePage() {
       <>
         <PageHeader title="Profile" />
         <Card>
-          <p className="text-sm" style={{ color: T.danger }}>
+          <p className="crm-body" style={{ color: T.danger }}>
             Could not load your profile. Try reloading the page.
           </p>
         </Card>

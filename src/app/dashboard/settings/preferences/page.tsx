@@ -114,7 +114,7 @@ export default function PreferencesPage() {
       <>
         <PageHeader title="Preferences" />
         <Card>
-          <p className="text-sm" style={{ color: T.danger }}>
+          <p className="crm-body" style={{ color: T.danger }}>
             Could not load your preferences.
           </p>
         </Card>
@@ -205,7 +205,7 @@ export default function PreferencesPage() {
           </div>
 
           {widgetsOpen && (
-            <div className="mt-5 border-t pt-4" style={{ borderColor: T.border }}>
+            <div className="mt-5 border-t pt-5" style={{ borderColor: T.border }}>
               <div className="grid gap-x-6 sm:grid-cols-2">
                 {catalogue.widgets.map((widget: { id: string; label: string }) => (
                   <Checkbox

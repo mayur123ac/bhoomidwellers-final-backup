@@ -323,6 +323,10 @@ export default function EmployeesPage() {
   const [cpError, setCpError] = useState("");
   const [cpLoading, setCpLoading] = useState(false);
   const [selectedManageUserId, setSelectedManageUserId] = useState("");
+
+  // Delete-employee confirmation modal state
+  const [deleteConfirm, setDeleteConfirm] = useState<{ userId: string; userName: string } | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const topbarRef = useRef<HTMLDivElement>(null);
   // 👇 1. CLEAN NOTIFICATION STATES 👇
   const [isNotifOpen, setIsNotifOpen] = useState(false);
@@ -667,11 +671,17 @@ export default function EmployeesPage() {
     if (r.ok) fetchEmployees();
   };
 
-  const handleDeleteEmployee = async (userId: string, userName: string) => {
-    if (!window.confirm(`Delete ${userName}? Cannot be undone.`)) return;
-    const r = await fetch("/api/employees", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId }) });
-    if (r.ok) { if (selectedManageUserId === userId) setSelectedManageUserId(""); fetchEmployees(); }
-    else { const d = await r.json(); alert(`Error: ${d.message}`); }
+  const handleDeleteEmployee = (userId: string, userName: string) => {
+    setDeleteConfirm({ userId, userName });
+  };
+  const confirmDeleteEmployee = async () => {
+    if (!deleteConfirm) return;
+    setDeleteLoading(true);
+    try {
+      const r = await fetch("/api/employees", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: deleteConfirm.userId }) });
+      if (r.ok) { if (selectedManageUserId === deleteConfirm.userId) setSelectedManageUserId(""); fetchEmployees(); setDeleteConfirm(null); }
+      else { const d = await r.json(); alert(`Error: ${d.message}`); }
+    } finally { setDeleteLoading(false); }
   };
 
   const handleEditStart = (emp: EmployeeType) => { setEditingId(emp._id); setEditError(""); setEditForm({ name: emp.name, email: emp.email, role: emp.role }); };
@@ -1258,177 +1268,187 @@ export default function EmployeesPage() {
         ) : activeSection === "employees" ? (
 
           /* ════════════ EMPLOYEE SECTION ════════════ */
-          <main className={`flex-1 overflow-y-auto p-4 transition-colors duration-300 ${t.mainBg} ${t.scroll}`}>
-            <div className="max-w-7xl mx-auto">
-              <h1 className={`text-xl font-bold mb-6 ${t.text}`}>Master Configurations</h1>
+          <main className={`flex-1 overflow-y-auto px-4 sm:px-8 py-8 transition-colors duration-300 ${isDark ? "bg-[#000000]" : "bg-[#F2F2F7]"} custom-scrollbar font-sans antialiased`}>
+            <div className="max-w-[1400px] mx-auto">
+              <h1 className={`text-2xl sm:text-3xl font-bold tracking-tight mb-6 ${isDark ? "text-white" : "text-black"}`}>
+                Master Configurations
+              </h1>
 
               {/* Tab pills */}
-              <div className="flex flex-wrap gap-2 mb-8">
-                <button className="flex items-center gap-2 bg-[#9E217B] text-white px-5 py-2 rounded-lg border border-[#b8268f] shadow-lg shadow-[#9E217B]/20 font-semibold">
-                  <FaUserTie /> Employees
+              <div className="flex flex-wrap gap-3 mb-8">
+                <button className={`flex items-center gap-2 px-5 py-2 rounded-full text-[13px] font-semibold tracking-wide transition-all shadow-[0_2px_8px_rgba(0,122,255,0.24)] hover:shadow-[0_4px_12px_rgba(0,122,255,0.36)] active:scale-95 ${isDark ? "bg-[#9E217B] text-white" : "bg-[#9E217B] text-white"
+                  }`}>
+                  <FaUserTie className="text-[14px]" /> Employees
                 </button>
               </div>
 
               {/* ── Add Custom Role ── */}
-              <div
-                className={`rounded-2xl p-6 mb-6 ${t.panel}`}
-                style={{
-                  border: isDark ? "1px solid rgba(158,33,123,0.12)" : "1px solid rgba(0,0,0,0.08)",
-                  background: isDark ? "rgba(17,17,24,0.8)" : "#ffffff",
-                  boxShadow: isDark
-                    ? "0 4px 24px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.03)"
-                    : "0 2px 16px rgba(0,0,0,0.06), 0 1px 4px rgba(0,0,0,0.04)",
-                }}
-              >
-                <h2 className={`text-base font-bold mb-4 flex items-center gap-2 ${t.text}`}>
-                  <div className={`w-1 h-5 ${t.dividerBar} rounded-full`} />
+              <div className={`rounded-[24px] p-6 sm:p-8 mb-6 transition-all ${isDark ? "bg-[#1C1C1E] border border-white/5 shadow-sm" : "bg-white border border-black/5 shadow-[0_4px_24px_rgba(0,0,0,0.04)]"
+                }`}>
+                <h2 className={`text-[15px] font-semibold tracking-tight mb-5 flex items-center gap-2 ${isDark ? "text-white" : "text-black"}`}>
                   Add a Custom System Role
                 </h2>
-                <div className="flex flex-wrap items-end gap-4">
-                  <div className="flex-1 min-w-[260px] max-w-md">
-                    <label className={`block text-xs mb-1.5 font-medium ${t.textMuted}`}>Role Name</label>
-                    <input type="text" value={newRoleInput} onChange={e => setNewRoleInput(e.target.value)}
-                      className={t.inp} placeholder="e.g. Marketing Lead" />
+                <div className="flex flex-col sm:flex-row items-end gap-4">
+                  <div className="flex-1 min-w-[260px] max-w-md w-full">
+                    <label className={`block text-[11px] font-semibold uppercase tracking-wider mb-2 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
+                      Role Name
+                    </label>
+                    <input
+                      type="text"
+                      value={newRoleInput}
+                      onChange={e => setNewRoleInput(e.target.value)}
+                      placeholder="e.g. Marketing Lead"
+                      className={`w-full px-4 py-2.5 rounded-[12px] text-[14px] font-medium tracking-tight outline-none transition-all focus:ring-2 focus:ring-[#007AFF]/50 ${isDark ? "bg-[#2C2C2E] border border-[#38383A] text-white placeholder-[#8E8E93]" : "bg-[#F2F2F7] border border-[#E5E5EA] text-black placeholder-[#8E8E93]"
+                        }`}
+                    />
                   </div>
-                  <button onClick={handleAddNewRole}
-                    className={`text-sm font-semibold py-2.5 px-5 rounded-lg border transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap
-                      ${isDark ? "bg-[#1a1a1a] hover:bg-[#252525] text-white border-[#333] hover:border-[#9E217B]/50" : "bg-white hover:bg-pink-50 text-[#1A1A1A] border-indigo-300 hover:border-[#9E217B]/60"}`}>
-                    <FaPlus className="text-[#9E217B] text-xs" /> Add to Dropdown
+                  <button
+                    onClick={handleAddNewRole}
+                    className={`text-[13px] font-semibold py-2.5 px-6 rounded-full transition-all cursor-pointer flex items-center justify-center gap-2 whitespace-nowrap active:scale-95 w-full sm:w-auto ${isDark ? "bg-[#2C2C2E] hover:bg-[#3A3A3C] text-[#9E217B]" : "bg-[#F2F2F7] hover:bg-[#E5E5EA] text-[#9E217B]"
+                      }`}
+                  >
+                    <FaPlus className="text-[12px]" /> Add to Dropdown
                   </button>
                 </div>
               </div>
 
               {/* ── Create Employee Form ── */}
-              <div
-                className={`rounded-2xl p-6 mb-6 ${t.panel}`}
-                style={{
-                  border: isDark ? "1px solid rgba(158,33,123,0.12)" : "1px solid rgba(0,0,0,0.08)",
-                  background: isDark ? "rgba(17,17,24,0.8)" : "#ffffff",
-                  boxShadow: isDark
-                    ? "0 4px 24px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.03)"
-                    : "0 2px 16px rgba(0,0,0,0.06), 0 1px 4px rgba(0,0,0,0.04)",
-                }}
-              >
-                <h2 className={`text-base font-bold mb-5 flex items-center gap-2 ${t.text}`}>
-                  <div className={`w-1 h-5 ${t.dividerBar} rounded-full`} />
+              <div className={`rounded-[24px] p-6 sm:p-8 mb-6 transition-all ${isDark ? "bg-[#1C1C1E] border border-white/5 shadow-sm" : "bg-white border border-black/5 shadow-[0_4px_24px_rgba(0,0,0,0.04)]"
+                }`}>
+                <h2 className={`text-[15px] font-semibold tracking-tight mb-6 flex items-center gap-2 ${isDark ? "text-white" : "text-black"}`}>
                   Create & Assign Role to Employee
                 </h2>
+
                 {justCreated && (
-                  <div
-                    className={`mb-5 rounded-lg p-4 text-sm ${t.text}`}
-                    style={{ border: "1px solid rgba(16,185,129,0.4)", background: isDark ? "rgba(16,185,129,0.08)" : "rgba(16,185,129,0.06)" }}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="space-y-1">
-                        <p className="font-semibold">Employee created</p>
-                        <p className={t.textMuted}>
-                          {justCreated.name} &middot; {justCreated.email} &middot; {justCreated.role}
+                  <div className={`mb-6 rounded-[16px] p-5 flex items-start justify-between gap-4 ${isDark ? "bg-[rgba(50,215,75,0.15)] border border-[rgba(50,215,75,0.2)]" : "bg-[#EBF9EE] border border-[#C6F0D4]"
+                    }`}>
+                    <div className="space-y-1.5">
+                      <p className={`text-[15px] font-semibold tracking-tight flex items-center gap-2 ${isDark ? "text-[#32D74B]" : "text-[#34C759]"}`}>
+                        <FaCheckCircle /> Employee created successfully
+                      </p>
+                      <p className={`text-[13px] font-medium ${isDark ? "text-white" : "text-black"}`}>
+                        {justCreated.name} &middot; {justCreated.email} &middot; {justCreated.role}
+                      </p>
+                      <p className={`font-mono text-[12px] ${isDark ? "text-[#EBEBF5]/60" : "text-[#8E8E93]"}`}>
+                        Organization: {justCreated.organization_id ?? "—"}
+                      </p>
+                      {justCreated.password && (
+                        <p className={`font-mono text-[12px] mt-2 ${isDark ? "text-[#EBEBF5]/80" : "text-[#333333]"}`}>
+                          Password: <span className={`font-bold ${isDark ? "text-white" : "text-black"}`}>{justCreated.password}</span>
                         </p>
-                        <p className={`font-mono text-xs ${t.textMuted}`}>
-                          Organization: {justCreated.organization_id ?? "—"}
-                        </p>
-                        {justCreated.password && (
-                          <p className="font-mono text-xs">
-                            Password: <span className="font-semibold">{justCreated.password}</span>
-                          </p>
-                        )}
-                        <p className={`text-xs ${t.textMuted}`}>
-                          Shown once. Share it with the employee now — it is not stored in this screen
-                          and cannot be retrieved again from here.
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setJustCreated(null)}
-                        className={`text-xs underline shrink-0 ${t.textMuted}`}
-                      >
-                        Dismiss
-                      </button>
+                      )}
+                      <p className={`text-[11px] leading-relaxed mt-2 ${isDark ? "text-[#EBEBF5]/60" : "text-[#8E8E93]"}`}>
+                        Shown once. Share it with the employee now — it is not stored in this screen and cannot be retrieved again from here.
+                      </p>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => setJustCreated(null)}
+                      className={`p-1.5 rounded-full transition-colors shrink-0 ${isDark ? "bg-white/10 text-white hover:bg-white/20" : "bg-black/5 text-black hover:bg-black/10"}`}
+                    >
+                      <FaTimes className="text-[12px]" />
+                    </button>
                   </div>
                 )}
-                <form onSubmit={handleAddEmployee} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
-                  <div>
-                    <label className={`block text-xs mb-1.5 font-medium ${t.textMuted}`}>Full Name</label>
-                    <input type="text" value={empName} onChange={e => setEmpName(e.target.value)} required className={t.inp} placeholder="e.g. John Doe" />
-                  </div>
-                  <div>
-                    <label className={`block text-xs mb-1.5 font-medium ${t.textMuted}`}>Email</label>
-                    <input type="email" value={email} onChange={e => setEmail(e.target.value)} required className={t.inp} placeholder="email@company.com" />
-                  </div>
-                  <div>
-                    <label className={`block text-xs mb-1.5 font-medium ${t.textMuted}`}>Password</label>
-                    <input type="text" value={password} onChange={e => setPassword(e.target.value)} required className={t.inp} placeholder="Set password" />
 
-                    {/* Password Policy Real-time UI Check */}
-                    <div className="text-[10px] mt-2 space-y-1 bg-black/5 p-2 rounded-lg border border-gray-200 dark:border-gray-800 dark:bg-white/5">
-                      <p className={passwordRules.length ? "text-green-500 font-semibold" : "text-red-500"}>
-                        {passwordRules.length ? "✅" : "❌"} Minimum 8 characters
+                <form onSubmit={handleAddEmployee} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 items-start">
+                  <div>
+                    <label className={`block text-[11px] font-semibold uppercase tracking-wider mb-2 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>Full Name</label>
+                    <input type="text" value={empName} onChange={e => setEmpName(e.target.value)} required placeholder="e.g. John Doe"
+                      className={`w-full px-4 py-2.5 rounded-[12px] text-[14px] font-medium tracking-tight outline-none transition-all focus:ring-2 focus:ring-[#007AFF]/50 ${isDark ? "bg-[#2C2C2E] border border-[#38383A] text-white placeholder-[#8E8E93]" : "bg-[#F2F2F7] border border-[#E5E5EA] text-black placeholder-[#8E8E93]"
+                        }`}
+                    />
+                  </div>
+                  <div>
+                    <label className={`block text-[11px] font-semibold uppercase tracking-wider mb-2 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>Email</label>
+                    <input type="email" value={email} onChange={e => setEmail(e.target.value)} required placeholder="email@company.com"
+                      className={`w-full px-4 py-2.5 rounded-[12px] text-[14px] font-medium tracking-tight outline-none transition-all focus:ring-2 focus:ring-[#007AFF]/50 ${isDark ? "bg-[#2C2C2E] border border-[#38383A] text-white placeholder-[#8E8E93]" : "bg-[#F2F2F7] border border-[#E5E5EA] text-black placeholder-[#8E8E93]"
+                        }`}
+                    />
+                  </div>
+                  <div>
+                    <label className={`block text-[11px] font-semibold uppercase tracking-wider mb-2 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>Password</label>
+                    <input type="text" value={password} onChange={e => setPassword(e.target.value)} required placeholder="Set password"
+                      className={`w-full px-4 py-2.5 rounded-[12px] text-[14px] font-medium tracking-tight outline-none transition-all focus:ring-2 focus:ring-[#007AFF]/50 ${isDark ? "bg-[#2C2C2E] border border-[#38383A] text-white placeholder-[#8E8E93]" : "bg-[#F2F2F7] border border-[#E5E5EA] text-black placeholder-[#8E8E93]"
+                        }`}
+                    />
+
+                    {/* Password Policy Real-time UI Check (Apple Hint Style) */}
+                    <div className={`mt-2 rounded-[12px] p-3 space-y-1.5 ${isDark ? "bg-[#2C2C2E]/50" : "bg-[#F2F2F7]/50"}`}>
+                      <p className={`text-[11px] font-medium flex items-center gap-1.5 tracking-tight ${passwordRules.length ? (isDark ? "text-[#32D74B]" : "text-[#34C759]") : (isDark ? "text-[#FF453A]" : "text-[#FF3B30]")}`}>
+                        {passwordRules.length ? <FaCheckCircle /> : <FaTimesCircle />} Minimum 8 characters
                       </p>
-                      <p className={passwordRules.upper ? "text-green-500 font-semibold" : "text-red-500"}>
-                        {passwordRules.upper ? "✅" : "❌"} At least 1 uppercase letter
+                      <p className={`text-[11px] font-medium flex items-center gap-1.5 tracking-tight ${passwordRules.upper ? (isDark ? "text-[#32D74B]" : "text-[#34C759]") : (isDark ? "text-[#FF453A]" : "text-[#FF3B30]")}`}>
+                        {passwordRules.upper ? <FaCheckCircle /> : <FaTimesCircle />} 1 uppercase letter
                       </p>
-                      <p className={passwordRules.lower ? "text-green-500 font-semibold" : "text-red-500"}>
-                        {passwordRules.lower ? "✅" : "❌"} At least 1 lowercase letter
+                      <p className={`text-[11px] font-medium flex items-center gap-1.5 tracking-tight ${passwordRules.lower ? (isDark ? "text-[#32D74B]" : "text-[#34C759]") : (isDark ? "text-[#FF453A]" : "text-[#FF3B30]")}`}>
+                        {passwordRules.lower ? <FaCheckCircle /> : <FaTimesCircle />} 1 lowercase letter
                       </p>
-                      <p className={passwordRules.number ? "text-green-500 font-semibold" : "text-red-500"}>
-                        {passwordRules.number ? "✅" : "❌"} At least 1 number
+                      <p className={`text-[11px] font-medium flex items-center gap-1.5 tracking-tight ${passwordRules.number ? (isDark ? "text-[#32D74B]" : "text-[#34C759]") : (isDark ? "text-[#FF453A]" : "text-[#FF3B30]")}`}>
+                        {passwordRules.number ? <FaCheckCircle /> : <FaTimesCircle />} 1 number
                       </p>
-                      <p className={passwordRules.special ? "text-green-500 font-semibold" : "text-red-500"}>
-                        {passwordRules.special ? "✅" : "❌"} At least 1 special character
+                      <p className={`text-[11px] font-medium flex items-center gap-1.5 tracking-tight ${passwordRules.special ? (isDark ? "text-[#32D74B]" : "text-[#34C759]") : (isDark ? "text-[#FF453A]" : "text-[#FF3B30]")}`}>
+                        {passwordRules.special ? <FaCheckCircle /> : <FaTimesCircle />} 1 special character
                       </p>
                     </div>
                   </div>
                   <div>
-                    <label className={`block text-xs mb-1.5 font-medium ${t.textMuted}`}>Assign Role</label>
-                    <select value={role} onChange={e => setRole(e.target.value)} required className={t.sel}>
-                      <option value="" disabled>-- Choose Role --</option>
-                      {dbRoles.map(r => <option key={r._id} value={r.name}>{r.name}</option>)}
-                    </select>
+                    <label className={`block text-[11px] font-semibold uppercase tracking-wider mb-2 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>Assign Role</label>
+                    <div className="relative">
+                      <select value={role} onChange={e => setRole(e.target.value)} required
+                        className={`appearance-none w-full px-4 py-2.5 rounded-[12px] text-[14px] font-medium tracking-tight outline-none transition-all focus:ring-2 focus:ring-[#007AFF]/50 cursor-pointer ${isDark ? "bg-[#2C2C2E] border border-[#38383A] text-white" : "bg-[#F2F2F7] border border-[#E5E5EA] text-black"
+                          }`}
+                      >
+                        <option value="" disabled>-- Choose Role --</option>
+                        {dbRoles.map(r => <option key={r._id} value={r.name}>{r.name}</option>)}
+                      </select>
+                      <div className={`absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>▼</div>
+                    </div>
                   </div>
-                  <div className="sm:col-span-2 lg:col-span-4 flex justify-end mt-2">
+
+                  <div className="sm:col-span-2 lg:col-span-4 flex justify-end mt-4">
                     <button type="submit"
-                      className="bg-[#9E217B] hover:bg-[#b8268f] text-white font-bold py-2.5 px-8 rounded-lg transition-all cursor-pointer shadow-lg shadow-[#9E217B]/20 flex items-center gap-2">
-                      <FaPlus className="text-xs" /> Add Employee
+                      className={`py-2.5 px-8 cursor-pointer rounded-full text-[14px] font-semibold tracking-wide transition-all shadow-[0_2px_8px_rgba(0,122,255,0.24)] hover:shadow-[0_4px_12px_rgba(0,122,255,0.36)] active:scale-95 flex items-center gap-2 ${isDark ? "bg-[#9E217B] text-white" : "bg-[#9E217B] text-white"
+                        }`}
+                    >
+                      <FaPlus className="text-[12px]" /> Add Employee
                     </button>
                   </div>
                 </form>
               </div>
 
               {/* ── Account Activation Management ── */}
-              <div
-                className={`rounded-2xl p-6 mb-6 ${t.panel}`}
-                style={{
-                  border: isDark ? "1px solid rgba(158,33,123,0.12)" : "1px solid rgba(0,0,0,0.08)",
-                  background: isDark ? "rgba(17,17,24,0.8)" : "#ffffff",
-                  boxShadow: isDark
-                    ? "0 4px 24px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.03)"
-                    : "0 2px 16px rgba(0,0,0,0.06), 0 1px 4px rgba(0,0,0,0.04)",
-                }}
-              >
-                <h2 className={`text-base font-bold mb-5 flex items-center gap-2 ${t.text}`}>
-                  <div className={`w-1 h-5 ${t.dividerBar} rounded-full`} />
+              <div className={`rounded-[24px] p-6 sm:p-8 mb-6 transition-all ${isDark ? "bg-[#1C1C1E] border border-white/5 shadow-sm" : "bg-white border border-black/5 shadow-[0_4px_24px_rgba(0,0,0,0.04)]"
+                }`}>
+                <h2 className={`text-[15px] font-semibold tracking-tight mb-5 flex items-center gap-2 ${isDark ? "text-white" : "text-black"}`}>
                   Account Activation Management
                 </h2>
-                <div className="flex flex-col md:flex-row items-end gap-5">
+                <div className="flex flex-col md:flex-row items-end gap-4">
                   <div className="flex-1 w-full max-w-md">
-                    <label className={`block text-xs mb-1.5 font-medium ${t.textMuted}`}>Select Employee</label>
-                    <select value={selectedManageUserId} onChange={e => setSelectedManageUserId(e.target.value)} className={t.sel}>
-                      <option value="" disabled>-- Select user to manage --</option>
-                      {employees.map(emp => (
-                        <option key={emp._id} value={emp._id}>{emp.email} ({emp.role})</option>
-                      ))}
-                    </select>
+                    <label className={`block text-[11px] font-semibold uppercase tracking-wider mb-2 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>Select Employee</label>
+                    <div className="relative">
+                      <select value={selectedManageUserId} onChange={e => setSelectedManageUserId(e.target.value)}
+                        className={`appearance-none w-full px-4 py-2.5 rounded-[12px] text-[14px] font-medium tracking-tight outline-none transition-all focus:ring-2 focus:ring-[#007AFF]/50 cursor-pointer ${isDark ? "bg-[#2C2C2E] border border-[#38383A] text-white" : "bg-[#F2F2F7] border border-[#E5E5EA] text-black"
+                          }`}
+                      >
+                        <option value="" disabled>-- Select user to manage --</option>
+                        {employees.map(emp => (
+                          <option key={emp._id} value={emp._id}>{emp.email} ({emp.role})</option>
+                        ))}
+                      </select>
+                      <div className={`absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>▼</div>
+                    </div>
                   </div>
+
                   {selectedManageUser ? (
                     <button
                       onClick={() => handleToggleStatus(selectedManageUser._id, selectedManageUser.isActive)}
                       disabled={selectedManageUser.email === ADMIN_EMAIL}
-                      className={`py-2.5 px-6 rounded-lg font-bold text-sm transition-colors cursor-pointer ${selectedManageUser.email === ADMIN_EMAIL
-                        ? isDark ? "bg-[#222] border border-[#333] text-gray-600 cursor-not-allowed" : "bg-[#F1F5F9] border border-indigo-200 text-[#9CA3AF] cursor-not-allowed"
+                      className={`py-2.5 px-6 rounded-full font-semibold text-[13px] tracking-wide transition-all active:scale-95 w-full sm:w-auto ${selectedManageUser.email === ADMIN_EMAIL
+                        ? isDark ? "bg-[#2C2C2E] text-[#8E8E93] cursor-not-allowed" : "bg-[#F2F2F7] text-[#8E8E93] cursor-not-allowed"
                         : selectedManageUser.isActive
-                          ? "bg-red-600 hover:bg-red-700 text-white border border-red-500"
-                          : "bg-green-600 hover:bg-green-700 text-white border border-green-500"
+                          ? isDark ? "bg-[#FF453A] text-white hover:bg-[#FF3B30] shadow-[0_2px_8px_rgba(255,69,58,0.24)]" : "bg-[#FF3B30] text-white hover:bg-[#D70015] shadow-[0_2px_8px_rgba(255,59,48,0.24)]"
+                          : isDark ? "bg-[#32D74B] text-white hover:bg-[#34C759] shadow-[0_2px_8px_rgba(50,215,75,0.24)]" : "bg-[#34C759] text-white hover:bg-[#248A3D] shadow-[0_2px_8px_rgba(52,199,89,0.24)]"
                         }`}
                     >
                       {selectedManageUser.email === ADMIN_EMAIL
@@ -1436,58 +1456,85 @@ export default function EmployeesPage() {
                         : selectedManageUser.isActive ? "Deactivate Account" : "Activate Account"}
                     </button>
                   ) : (
-                    <button disabled className={`py-2.5 px-6 rounded-lg font-bold text-sm cursor-not-allowed border ${isDark ? "bg-[#222] border-[#333] text-gray-500" : "bg-[#F1F5F9] border-indigo-200 text-[#9CA3AF]"}`}>Select User</button>
+                    <button disabled className={`py-2.5 px-6 rounded-full font-semibold text-[13px] tracking-wide cursor-not-allowed w-full sm:w-auto ${isDark ? "bg-[#2C2C2E] text-[#8E8E93]" : "bg-[#F2F2F7] text-[#8E8E93]"
+                      }`}>
+                      Select User
+                    </button>
                   )}
                 </div>
               </div>
 
               {/* ── Employee Table ── */}
-              <div className={`rounded-2xl border border-gray-600 overflow-hidden shadow-sm ${t.panel}`}
-                style={{
-                  border: isDark ? "1px solid rgba(158,33,123,0.12)" : "1px solid rgba(0,0,0,0.08)",
-                  background: isDark ? "rgba(17,17,24,0.8)" : "#ffffff",
-                  boxShadow: isDark
-                    ? "0 4px 24px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.03)"
-                    : "0 2px 16px rgba(0,0,0,0.06), 0 1px 4px rgba(0,0,0,0.04)",
-                }}>
-                <div className={`p-5 border-b border-gray-600 flex items-center justify-between ${t.panelHead}`}>
-                  <h2 className={`text-base font-bold flex items-center gap-2 ${t.text}`}>
-                    <FaUsers className="text-[#9E217B]" /> Registered Employees Database
+              <div className={`rounded-[24px] overflow-hidden border transition-all ${isDark ? "bg-[#1C1C1E] border-white/10 shadow-sm" : "bg-white border-black/5 shadow-[0_4px_24px_rgba(0,0,0,0.04)]"
+                }`}>
+                <div className={`p-5 flex items-center justify-between border-b ${isDark ? "bg-[#2C2C2E]/30 border-[#38383A]" : "bg-[#F9F9F9] border-[#E5E5EA]"}`}>
+                  <h2 className={`text-[15px] font-semibold tracking-tight flex items-center gap-2 ${isDark ? "text-white" : "text-black"}`}>
+                    <FaUsers className={isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"} /> Registered Employees
                   </h2>
-                  <span className={`text-[10px] px-3 py-1 rounded-full border ${t.textFaint} ${t.pillBg} ${t.pillBorder}`}>{employees.length} employees</span>
+                  <span className={`text-[11px] font-bold uppercase tracking-wider px-3 py-1 rounded-full ${isDark ? "bg-[#2C2C2E] text-[#8E8E93]" : "bg-[#F2F2F7] text-[#8E8E93]"
+                    }`}>
+                    {employees.length} employees
+                  </span>
                 </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
-                    <thead className={`text-xs uppercase ${t.tableHead} ${t.tableHeadBdr}`}>
+
+                <div className="overflow-x-auto custom-scrollbar">
+                  <table className="w-full text-left whitespace-nowrap">
+                    <thead className={`text-[11px] font-semibold uppercase tracking-wider border-b ${isDark ? "bg-[#1C1C1E] text-[#8E8E93] border-[#38383A]" : "bg-white text-[#8E8E93] border-[#E5E5EA]"
+                      }`}>
                       <tr>
                         {["Name", "Email", "Change Pwd", "Assigned Role", "Status", "Actions"].map(h => (
-                          <th key={h} className={`px-6 py-4 font-semibold ${t.tableHeadText} ${h === "Status" || h === "Actions" || h === "Change Pwd" ? "text-center" : ""}`}>{h}</th>
+                          <th key={h} className={`px-5 py-3.5 ${h === "Status" || h === "Actions" || h === "Change Pwd" ? "text-center" : ""}`}>
+                            {h}
+                          </th>
                         ))}
                       </tr>
                     </thead>
-                    <tbody className={`divide-y ${t.tableDivide}`}>
+                    <tbody className={`divide-y ${isDark ? "divide-[#38383A]" : "divide-[#E5E5EA]"}`}>
                       {employees.map(emp => {
                         const isRevealed = revealedPasswords[emp._id] || false;
                         const isEditing = editingId === emp._id;
                         const isAdminUser = emp.email === ADMIN_EMAIL;
                         return (
-                          <tr key={emp._id} className={`transition-colors group ${isEditing ? t.editRow : isAdminUser ? t.adminRow : t.tableRow}`}>
+                          <tr key={emp._id} className={`transition-colors group ${isEditing
+                            ? (isDark ? "bg-[#2C2C2E]/40" : "bg-[#F2F2F7]/50")
+                            : isAdminUser
+                              ? (isDark ? "bg-[#0A84FF]/5" : "bg-[#E5F1FF]/50")
+                              : (isDark ? "hover:bg-white/[0.02]" : "hover:bg-black/[0.02]")
+                            }`}>
                             {/* Name */}
-                            <td className={`px-5 py-3.5 font-medium ${t.text}`}>
-                              {isEditing
-                                ? <input value={editForm.name || ""} onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))} className={t.editInp} />
-                                : <div className="flex items-center gap-2">
+                            <td className={`px-5 py-3.5 font-medium tracking-tight text-[13px] ${isDark ? "text-white" : "text-black"}`}>
+                              {isEditing ? (
+                                <input
+                                  value={editForm.name || ""}
+                                  onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))}
+                                  className={`w-full px-3 py-1.5 rounded-lg text-[13px] outline-none border focus:ring-2 focus:ring-[#007AFF]/50 ${isDark ? "bg-[#1C1C1E] border-[#38383A] text-white" : "bg-white border-[#E5E5EA] text-black"
+                                    }`}
+                                />
+                              ) : (
+                                <div className="flex items-center gap-2">
                                   {emp.name}
-                                  {isAdminUser && <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase border ${isDark ? "text-[#d946a8] bg-[#9E217B]/10 border-[#9E217B]/30" : "text-[#9E217B] bg-[#9E217B]/10 border-[#9E217B]/30"}`}>Protected</span>}
+                                  {isAdminUser && (
+                                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider ${isDark ? "text-[#0A84FF] bg-[#0A84FF]/15" : "text-[#007AFF] bg-[#E5F1FF]"
+                                      }`}>
+                                      Protected
+                                    </span>
+                                  )}
                                 </div>
-                              }
+                              )}
                             </td>
                             {/* Email */}
-                            <td className={`px-5 py-3.5 ${t.textLight}`}>
-                              {isEditing
-                                ? <input type="email" value={editForm.email || ""} onChange={e => setEditForm(p => ({ ...p, email: e.target.value }))} className={t.editInp} />
-                                : emp.email
-                              }
+                            <td className={`px-5 py-3.5 text-[13px] tracking-tight ${isDark ? "text-[#EBEBF5]/80" : "text-[#333333]"}`}>
+                              {isEditing ? (
+                                <input
+                                  type="email"
+                                  value={editForm.email || ""}
+                                  onChange={e => setEditForm(p => ({ ...p, email: e.target.value }))}
+                                  className={`w-full px-3 py-1.5 rounded-lg text-[13px] outline-none border focus:ring-2 focus:ring-[#007AFF]/50 ${isDark ? "bg-[#1C1C1E] border-[#38383A] text-white" : "bg-white border-[#E5E5EA] text-black"
+                                    }`}
+                                />
+                              ) : (
+                                emp.email
+                              )}
                             </td>
                             {/* Change Password */}
                             <td className="px-5 py-3.5 text-center">
@@ -1495,56 +1542,83 @@ export default function EmployeesPage() {
                                 <button
                                   onClick={() => openChangePwModal(emp)}
                                   title="Change password"
-                                  className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-colors cursor-pointer ${isDark ? "border-[#333] text-gray-400 hover:text-[#d946a8] hover:border-[#9E217B]/40 hover:bg-[#9E217B]/10" : "border-gray-200 text-gray-400 hover:text-[#9E217B] hover:border-[#9E217B]/30 hover:bg-[#9E217B]/5"}`}>
+                                  className={`inline-flex items-center justify-center gap-1.5 text-[11px] font-semibold px-3 py-1.5 rounded-full transition-colors cursor-pointer ${isDark
+                                    ? "bg-[#2C2C2E] text-[#9E217B] hover:bg-[#3A3A3C] hover:text-white"
+                                    : "bg-[#F2F2F7] text-[#9E217B] hover:bg-[#E5E5EA] hover:text-black"
+                                    }`}
+                                >
                                   <FaLock className="text-[10px]" /> Change
                                 </button>
                               )}
                             </td>
                             {/* Role */}
                             <td className="px-5 py-3.5">
-                              {isEditing
-                                ? <select value={editForm.role || ""} onChange={e => setEditForm(p => ({ ...p, role: e.target.value }))} className={t.editSel}>
+                              {isEditing ? (
+                                <select
+                                  value={editForm.role || ""}
+                                  onChange={e => setEditForm(p => ({ ...p, role: e.target.value }))}
+                                  className={`w-full px-3 py-1.5 rounded-lg text-[13px] outline-none border focus:ring-2 focus:ring-[#007AFF]/50 ${isDark ? "bg-[#1C1C1E] border-[#38383A] text-white" : "bg-white border-[#E5E5EA] text-black"
+                                    }`}
+                                >
                                   {dbRoles.map(r => <option key={r._id} value={r.name}>{r.name}</option>)}
                                 </select>
-                                : <span className={`font-semibold capitalize ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>{emp.role}</span>
-                              }
+                              ) : (
+                                <span className={`font-semibold tracking-tight text-[13px] capitalize ${isDark ? "text-white" : "text-black"}`}>
+                                  {emp.role.replace("_", " ")}
+                                </span>
+                              )}
                             </td>
                             {/* Status */}
                             <td className="px-5 py-3.5 text-center">
-                              <span className={`border px-3 py-1 rounded text-xs font-bold uppercase tracking-widest inline-block w-[80px] ${emp.isActive ? "border-green-500/30 text-green-500 bg-green-500/10" : "border-red-500/30 text-red-500 bg-red-500/10"}`}>
+                              <span className={`px-2.5 py-1 rounded-[6px] text-[10px] font-bold uppercase tracking-wider inline-block w-[80px] ${emp.isActive
+                                ? (isDark ? "text-[#32D74B] bg-[#32D74B]/15" : "text-[#34C759] bg-[#EBF9EE]")
+                                : (isDark ? "text-[#FF453A] bg-[#FF453A]/15" : "text-[#FF3B30] bg-[#FFECEB]")
+                                }`}>
                                 {emp.isActive ? "Active" : "Inactive"}
                               </span>
                             </td>
                             {/* Actions */}
                             <td className="px-5 py-3.5">
                               {isEditing ? (
-                                <div className="flex flex-col items-center gap-1.5">
+                                <div className="flex flex-col items-center gap-2">
                                   <div className="flex gap-2">
-                                    <button onClick={() => handleEditSave(emp._id)} disabled={editSaving}
-                                      className="bg-[#9E217B] hover:bg-[#b8268f] disabled:opacity-50 text-white text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer transition-colors">
+                                    <button
+                                      onClick={() => handleEditSave(emp._id)}
+                                      disabled={editSaving}
+                                      className={`text-[11px] font-bold px-3 py-1.5 rounded-md cursor-pointer transition-colors ${isDark ? "bg-[#0A84FF] hover:bg-[#007AFF] text-white" : "bg-[#007AFF] hover:bg-[#005bb5] text-white"
+                                        } disabled:opacity-50`}
+                                    >
                                       {editSaving ? "Saving..." : "Save"}
                                     </button>
-                                    <button onClick={handleEditCancel}
-                                      className={`text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer border ${isDark ? "bg-[#2a2a2a] hover:bg-[#333] text-gray-300 border-[#333]" : "bg-[#F1F5F9] hover:bg-[#E5E7EB] text-[#374151] border-indigo-200"}`}>
+                                    <button
+                                      onClick={handleEditCancel}
+                                      className={`text-[11px] font-bold px-3 py-1.5 rounded-md cursor-pointer transition-colors ${isDark ? "bg-[#2C2C2E] hover:bg-[#3A3A3C] text-white" : "bg-[#F2F2F7] hover:bg-[#E5E5EA] text-black"
+                                        }`}
+                                    >
                                       Cancel
                                     </button>
                                   </div>
-                                  {editError && <span className="text-red-400 text-[10px] font-semibold text-center max-w-[140px]">{editError}</span>}
+                                  {editError && <span className="text-[#FF453A] text-[10px] font-medium text-center max-w-[140px]">{editError}</span>}
                                 </div>
                               ) : isAdminUser ? (
                                 <div className="flex items-center justify-center">
-                                  <span className={`text-[10px] italic ${t.textLight2}`}>Protected</span>
+                                  <span className={`text-[11px] font-medium ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>—</span>
                                 </div>
                               ) : (
-                                <div className="flex items-center justify-center gap-1">
-                                  <button onClick={() => handleEditStart(emp)}
-                                    className={`p-2 rounded-lg transition-colors cursor-pointer ${t.textMuted} hover:text-[#d946a8] hover:bg-[#9E217B]/10`}>
-                                    <FaUserEdit />
+                                <div className="flex items-center justify-center gap-1.5">
+                                  <button
+                                    onClick={() => handleEditStart(emp)}
+                                    className={`p-2 rounded-full transition-colors cursor-pointer ${isDark ? "text-[#8E8E93] hover:text-white hover:bg-white/10" : "text-[#8E8E93] hover:text-black hover:bg-black/5"
+                                      }`}
+                                  >
+                                    <FaUserEdit className="text-[14px]" />
                                   </button>
-                                  {/* Transfer Leads button removed (P0-4) */}
-                                  <button onClick={() => handleDeleteEmployee(emp._id, emp.name)}
-                                    className={`p-2 rounded-lg transition-colors cursor-pointer ${t.textLight2} hover:text-red-500 hover:bg-red-500/10`}>
-                                    <FaTrash />
+                                  <button
+                                    onClick={() => handleDeleteEmployee(emp._id, emp.name)}
+                                    className={`p-2 rounded-full transition-colors cursor-pointer ${isDark ? "text-[#8E8E93] hover:text-[#FF453A] hover:bg-[#FF453A]/15" : "text-[#8E8E93] hover:text-[#FF3B30] hover:bg-[#FFECEB]"
+                                      }`}
+                                  >
+                                    <FaTrash className="text-[13px]" />
                                   </button>
                                 </div>
                               )}
@@ -1553,7 +1627,11 @@ export default function EmployeesPage() {
                         );
                       })}
                       {employees.length === 0 && (
-                        <tr><td colSpan={6} className={`px-6 py-8 text-center ${t.textMuted}`}>No employees found.</td></tr>
+                        <tr>
+                          <td colSpan={6} className={`px-6 py-12 text-center text-[13px] font-medium ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
+                            No employees found.
+                          </td>
+                        </tr>
                       )}
                     </tbody>
                   </table>
@@ -2180,6 +2258,70 @@ export default function EmployeesPage() {
           </div>
         </div>
       )}
+
+      {/* ── Delete Employee Confirmation Modal ── */}
+      <AnimatePresence>
+        {deleteConfirm && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)" }}
+            onKeyDown={(e) => { if (e.key === "Escape") setDeleteConfirm(null); }}
+          >
+            <motion.div
+              initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.92, opacity: 0 }}
+              transition={{ duration: 0.18 }}
+              tabIndex={-1}
+              ref={(el) => el?.focus()}
+              onKeyDown={(e) => { if (e.key === "Escape") setDeleteConfirm(null); }}
+              style={{
+                background: isDark ? "#1e1e2e" : "#fff",
+                border: isDark ? "1px solid #333" : "1px solid #e0e0e0",
+                borderRadius: 16, padding: "32px 28px 24px", width: "100%", maxWidth: 420,
+                boxShadow: "0 20px 60px rgba(0,0,0,0.3)", outline: "none",
+                display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
+              }}
+            >
+              <div style={{
+                width: 52, height: 52, borderRadius: "50%",
+                background: "rgba(249,18,154,0.12)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 4,
+              }}>
+                <FaTrash style={{ fontSize: 22, color: "#F9129A" }} />
+              </div>
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: isDark ? "#fff" : "#1a1a2e", textAlign: "center" }}>
+                Delete Employee?
+              </h3>
+              <p style={{ margin: "8px 0 16px", fontSize: 14, color: isDark ? "#aaa" : "#666", textAlign: "center", lineHeight: 1.5 }}>
+                Are you sure you want to delete <strong style={{ color: isDark ? "#fff" : "#1a1a2e" }}>{deleteConfirm.userName}</strong>? This action cannot be undone.
+              </p>
+              <div style={{ display: "flex", gap: 12, width: "100%", marginTop: 4 }}>
+                <button
+                  onClick={() => setDeleteConfirm(null)}
+                  disabled={deleteLoading}
+                  style={{
+                    flex: 1, padding: "10px 0", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: "pointer",
+                    background: isDark ? "#2a2a3e" : "#f3f3f3", color: isDark ? "#ccc" : "#555",
+                    border: isDark ? "1px solid #444" : "1px solid #ddd", transition: "background 0.15s",
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDeleteEmployee}
+                  disabled={deleteLoading}
+                  style={{
+                    flex: 1, padding: "10px 0", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: deleteLoading ? "not-allowed" : "pointer",
+                    background: "#F9129A", color: "#fff", border: "none", transition: "opacity 0.15s",
+                    opacity: deleteLoading ? 0.7 : 1,
+                  }}
+                >
+                  {deleteLoading ? "Deleting…" : "Delete Employee"}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <LogoutConfirmDialog
         open={showLogoutConfirm}
