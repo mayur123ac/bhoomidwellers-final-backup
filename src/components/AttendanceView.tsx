@@ -281,7 +281,7 @@ export default function AttendanceView({
       {/* ── Compact Apple-Style Header ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-3 border-gray-200 dark:border-white/10">
         <div className="flex flex-col gap-0.5">
-          <h1 className={`text-xl sm:text-[22px] font-semibold tracking-tight ${isDark ? "text-white" : "text-black"}`}>
+          <h1 className={`text-base sm:text-xl font-black tracking-tight ${t.accentText}`}>
             My Attendance
           </h1>
           <p className={`text-[12px] sm:text-[13px] font-medium ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>

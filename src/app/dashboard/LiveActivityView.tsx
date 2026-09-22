@@ -333,7 +333,7 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
   const isFutureDate = selectedDate > todayStr;
 
   return (
-    <div className={`p-4 sm:p-6 w-full h-full flex flex-col font-sans antialiased relative overflow-x-hidden ${isDark ? "bg-[#000000]" : "bg-[#F2F2F7]"}`}>
+    <div className={`flex flex-col h-full overflow-hidden p-4 sm:p-8 font-sans antialiased overflow-x-hidden ${isDark ? "bg-[#000000]" : "bg-[#F2F2F7]"}`}>
 
       {/* SMART ALERTS PANEL (Floating Top Center) */}
       <AnimatePresence>
@@ -445,7 +445,7 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
       ) : (
         <>
           <div className="flex flex-col gap-1 mb-6">
-            <span className={`text-[22px] font-semibold tracking-tight ${isDark ? "text-white" : "text-black"}`}>Live Activity Overview</span>
+            <span className={`text-base sm:text-xl font-black tracking-tight ${theme.accentText}`}>Live Activity Overview</span>
             <span className={`text-[13px] font-medium ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>Real-time tracking of team attendance and engagement.</span>
           </div>
 

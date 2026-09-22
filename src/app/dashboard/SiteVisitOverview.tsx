@@ -762,16 +762,16 @@ export default function SiteVisitOverview({
       />
 
       <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
-        <div className="p-4 sm:p-4 md:p-4 max-w-[1400px] mx-auto space-y-5 md:space-y-6">
+        <div className="p-4 sm:p-4 md:p-6 max-w-[1400px] mx-auto space-y-5 md:space-y-6">
 
           {/* Page Header */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <div className="flex items-center gap-2.5 md:gap-3 mb-1.5 md:mb-1">
+              <div className="flex items-center gap-2.5 md:gap-3 mb-1.5 md:mb-3">
                 <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg md:rounded-xl flex items-center justify-center" style={{ background: "linear-gradient(135deg,rgba(158,33,123,0.2),rgba(217,70,168,0.1))", border: "1px solid rgba(158,33,123,0.3)" }}>
                   <FaCalendarAlt className="text-base md:text-lg" style={{ color: "#d946a8" }} />
                 </div>
-                <h1 className="text-lg md:text-xl font-black" style={{ color: isDark ? "#fff" : "#1A1A1A" }}>Site Visit Overview</h1>
+                <h1 className={`text-base sm:text-xl font-black tracking-tight ${theme.accentText}`}>Site Visit Overview</h1>
               </div>
               <p className="text-[11px] md:text-sm ml-1" style={{ color: isDark ? "rgba(255,255,255,0.4)" : "#6B7280" }}>View and manage all scheduled site visits across the organization.</p>
             </div>

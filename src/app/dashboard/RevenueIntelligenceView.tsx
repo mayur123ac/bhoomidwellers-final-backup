@@ -21,6 +21,7 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowDown,
   ArrowUp,
@@ -29,6 +30,7 @@ import {
   Building2,
   CalendarClock,
   Check,
+  ChevronDownIcon,
   ChevronLeft,
   ChevronRight,
   Download,
@@ -48,11 +50,6 @@ import {
 } from "lucide-react";
 
 import RevenueChatDock from "@/components/RevenueChatDock";
-// The full booking workspace the Sales panel shows — Booking Summary / Payment
-// History / Documents / Timeline / CRM Details, with its own "Edit Booking Form"
-// button that opens BookingFormModal internally. Mounting this rather than the
-// edit form directly means the drawer lands on the view, and editing stays one
-// click further in, exactly as it is in Sales.
 import ClosedLeadBookingView from "@/components/ClosedLeadBookingView";
 import { CRMContextManager } from "@/lib/admin-ai/contextManager";
 
@@ -60,19 +57,14 @@ import { CRMContextManager } from "@/lib/admin-ai/contextManager";
 const DASHBOARD_ENDPOINT = "/api/revenue-intelligence";
 const paymentSummaryUrl = (bookingId: number | string) => `/api/booking-applications/${bookingId}/payment-summary`;
 const receiptsUrl = (bookingId: number | string) => `/api/booking-applications/${bookingId}/receipts`;
-// Full booking application — the same record the Sales and Reception panels render,
-// fetched by booking id so this works even when the row has no linked lead.
 const bookingApplicationUrl = (bookingId: number | string) => `/api/booking-applications/${bookingId}`;
-// Flat, not scoped by lead id in the path: the real endpoint is /api/followups.
-// GET accepts an optional ?lead_id= filter (see the route's own note — an index
-// scan rather than a full read of the follow_ups table); POST takes the bare path.
 const followupsUrl = () => `/api/followups`;
 
-const ACCENT = "#9E217B";
+const ACCENT = "#007AFF"; // Apple Blue
+const ACCENT_DARK = "#0A84FF";
 const PAGE_SIZE = 25;
 const REFRESH_MS = 60_000;
 
-/** Same gate as the milestones and TDS routes — money in is not a sales-manager action. */
 const canRecordMoney = (role?: string) => {
   const clean = (role || "").trim().toLowerCase();
   return clean === "admin" || clean === "site_head" || clean === "site head";
@@ -85,7 +77,6 @@ const PAYMENT_MODES = ["Cheque", "NEFT", "RTGS", "UPI", "Cash", "Demand Draft"];
 type Props = {
   isDark: boolean;
   theme: any;
-  /** Needed to attribute receipts and follow-ups. Without it the "+" button hides. */
   user?: { name: string; role: string };
 };
 
@@ -105,7 +96,6 @@ type Row = {
   sanctionedAmount: number;
   sanctionedDate: string | null;
   disbursement: number;
-
   registrationAmount: number;
   balance: number;
   salesManager: string;
@@ -130,9 +120,6 @@ type SortKey =
   | "statusText"
   | "sanctionedDate";
 
-
-// Mirrors what /api/followups returns. The id arrives as `_id` (the route aliases
-// id::text AS "_id" on GET and returns the same key on POST) — there is no `id`.
 type Followup = {
   _id: number | string;
   leadId: string;
@@ -200,7 +187,6 @@ function readStatus(raw: string): { text: string; tone: StatusTone } {
   if (/process|progress|in proc/.test(s)) return { text: "In process", tone: "processing" };
   if (/reject|declin/.test(s)) return { text: "Rejected", tone: "idle" };
 
-  // Unrecognised phrasing shows verbatim rather than being silently bucketed.
   return { text: raw.trim(), tone: "processing" };
 }
 
@@ -229,20 +215,15 @@ function bankerOf(record: any) {
 function mapRecords(records: any[]): Row[] {
   return records.map((record, index) => {
     const { name, note } = splitName(record.customer_name);
-
     const status = readStatus(
-
       record.sanction_registration_status ||
       record.registration_status ||
       record.sanction_status ||
       record.loan_status ||
-
-
       ""
     );
 
     const agreementValue = toNumber(record.agreement_value_number ?? record.agreement_value);
-    // OCR is the buyer's own contribution actually received — a ledger sum, never a typed column.
     const ocrReceived = toNumber(record.ocr_received ?? record.actual_own_contribution ?? record.ocr_amount);
     const sanctionedAmount = toNumber(record.sanction_amount ?? record.sanctioned_amount ?? record.loan_sanctioned_amount);
     const disbursement = toNumber(record.disbursement_amount ?? record.total_loan_disbursed ?? record.total_disbursed);
@@ -264,10 +245,7 @@ function mapRecords(records: any[]): Row[] {
       sanctionedDate: record.sanction_date || null,
       disbursement,
       registrationAmount,
-      balance:
-        explicitBalance !== null && explicitBalance !== undefined
-          ? toNumber(explicitBalance)
-          : Math.max(0, agreementValue - ocrReceived - disbursement),
+      balance: explicitBalance !== null && explicitBalance !== undefined ? toNumber(explicitBalance) : Math.max(0, agreementValue - ocrReceived - disbursement),
       salesManager: record.sales_manager || "Unassigned",
       flatNo: flatOf(record),
       bankerDetails: bankerOf(record),
@@ -283,35 +261,28 @@ function mapRecords(records: any[]): Row[] {
 function toneClasses(tone: StatusTone, isDark: boolean) {
   const map: Record<StatusTone, string> = {
     done: isDark
-      ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/30"
-      : "bg-emerald-50 text-emerald-700 border-emerald-200",
-    partial: isDark ? "bg-cyan-500/10 text-cyan-300 border-cyan-500/30" : "bg-cyan-50 text-cyan-700 border-cyan-200",
+      ? "bg-[#32D74B]/15 text-[#32D74B]"
+      : "bg-[#EBF9EE] text-[#34C759]",
+    partial: isDark
+      ? "bg-[#64D2FF]/15 text-[#64D2FF]"
+      : "bg-[#E5F5FF] text-[#00AEEF]",
     processing: isDark
-      ? "bg-amber-500/10 text-amber-300 border-amber-500/30"
-      : "bg-amber-50 text-amber-700 border-amber-200",
-    idle: isDark ? "bg-white/5 text-gray-400 border-white/10" : "bg-slate-50 text-slate-500 border-slate-200",
+      ? "bg-[#FF9F0A]/15 text-[#FF9F0A]"
+      : "bg-[#FFF4E5] text-[#FF9500]",
+    idle: isDark ? "bg-[#2C2C2E] text-[#8E8E93]" : "bg-[#F2F2F7] text-[#8E8E93]",
   };
   return map[tone];
 }
 
 function StatusChip({ row, isDark }: { row: Row; isDark: boolean }) {
-  const dot =
-    row.statusTone === "done"
-      ? "bg-emerald-500"
-      : row.statusTone === "partial"
-        ? "bg-cyan-500"
-        : row.statusTone === "processing"
-          ? "bg-amber-500"
-          : "bg-slate-400";
   return (
     <span
-      className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full border text-[10px] font-bold leading-none whitespace-nowrap ${toneClasses(
+      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[6px] text-[10px] font-semibold tracking-wide leading-none whitespace-nowrap ${toneClasses(
         row.statusTone,
         isDark
       )}`}
       title={row.statusText}
     >
-      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${dot}`} />
       {row.statusText}
     </span>
   );
@@ -502,193 +473,149 @@ export default function RevenueIntelligenceView({ isDark, theme, user }: Props) 
     URL.revokeObjectURL(url);
   };
 
-  /* ── shared classes ── */
-  const ghostBtn = `h-9 px-3 rounded-lg text-xs font-bold inline-flex items-center gap-2 border transition-colors ${isDark ? "border-white/10 text-gray-200 hover:bg-white/[0.07]" : "border-slate-200 text-slate-700 hover:bg-slate-50"
-    }`;
-  const controlCls = `h-9 rounded-lg px-2.5 text-xs font-semibold outline-none border transition-colors ${isDark ? "border-white/10 bg-white/[0.04] text-gray-100" : "border-slate-200 bg-white text-slate-700"
-    }`;
-  const thCls = `px-3 py-2.5 text-[10px] font-black uppercase tracking-[0.07em] whitespace-nowrap ${theme.text}`;
-
   if (isLoading) {
     return (
-      <div className={`h-full overflow-y-auto p-4 md:p-6 space-y-4 ${theme.mainBg}`}>
-        <div className={`h-10 w-80 rounded-lg animate-pulse ${isDark ? "bg-white/[0.07]" : "bg-slate-200"}`} />
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div
-              key={i}
-              className={`h-20 rounded-xl animate-pulse ${isDark ? "bg-white/[0.05]" : "bg-slate-200"}`}
-              style={{ animationDelay: `${i * 70}ms` }}
-            />
-          ))}
+      <div className={`h-full flex items-center justify-center font-sans antialiased ${isDark ? "bg-[#000000]" : "bg-[#F2F2F7]"}`}>
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-8 h-8 rounded-full border-[3px] border-[#8E8E93] border-t-transparent animate-spin" />
+          <p className="text-[15px] font-medium text-[#8E8E93]">Loading revenue intelligence...</p>
         </div>
-        <div className={`h-96 rounded-2xl animate-pulse ${isDark ? "bg-white/[0.04]" : "bg-slate-100"}`} />
       </div>
     );
   }
 
   return (
-    <div className={`h-full overflow-y-auto custom-scrollbar ${theme.mainBg}`}>
-      {/* ═══ command bar ═══ */}
-      <div
-        className={`sticky top-0 z-20 px-3 sm:px-4 md:px-6 py-2 sm:py-3 border-b ${isDark ? "border-white/10 bg-black/40" : "border-slate-200 bg-white/75"
-          }`}
-        style={{ backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)" }}
-      >
-        <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-2 sm:gap-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5 sm:gap-2">
-              <h1 className={`text-base sm:text-lg font-black tracking-tight ${theme.accentText}`}>Revenue Intelligence</h1>
-              <button
-                onClick={() => setShowInfo(true)}
-                className={`w-5 h-5 sm:w-6 sm:h-6 rounded-full border inline-flex items-center justify-center transition-colors ${isDark
-                  ? "border-white/15 text-gray-300 hover:bg-white/10"
-                  : "border-slate-300 text-slate-500 hover:bg-slate-100"
-                  }`}
-                aria-label="How this panel works"
-                title="How this panel works"
-              >
-                <Info className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-              </button>
-              <span
-                className={`text-[8px] sm:text-[9px] font-black px-1.5 sm:px-2 py-0.5 rounded-full border inline-flex items-center gap-1 sm:gap-1.5 ${toneClasses(
-                  "done",
-                  isDark
-                )}`}
-              >
-                <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                LIVE
-              </span>
+    <div className={`h-full overflow-y-auto custom-scrollbar font-sans antialiased ${isDark ? "bg-[#000000]" : "bg-[#F2F2F7]"}`}>
+      {/* ═══ Apple-Style Compact Header ═══ */}
+      <div className={`sticky top-0 z-20 flex-shrink-0 pt-5 pb-4 px-6 sm:px-10 border-b ${isDark ? "border-white/10 bg-[#1C1C1E]/80 backdrop-blur-xl" : "border-[#E5E5EA] bg-white/80 backdrop-blur-xl"}`}>
+        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+          <div className="flex items-center gap-4 min-w-0">
+            <div className="flex flex-col gap-0.5">
+              <div className="flex items-center gap-2">
+                <h1 className={`text-base sm:text-xl font-black tracking-tight ${theme.accentText}`}>
+                  Revenue Intelligence
+                </h1>
+                <span className={`px-2 py-0.5 rounded-[6px] text-[10px] font-bold tracking-wide flex items-center gap-1.5 ${isDark ? "bg-[#32D74B]/15 text-[#32D74B]" : "bg-[#EBF9EE] text-[#34C759]"}`}>
+                  <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" /> LIVE
+                </span>
+              </div>
+              <p className={`text-[12px] sm:text-[13px] font-medium tracking-tight flex items-center gap-1.5 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
+                Cash basis · Refreshed {relativeTime(updatedAt) || "now"}
+                <button
+                  onClick={() => setShowInfo(true)}
+                  className={`ml-1 p-0.5 rounded-full transition-colors ${isDark ? "hover:bg-white/10 text-[#8E8E93]" : "hover:bg-black/5 text-[#8E8E93]"}`}
+                  title="How this panel works"
+                >
+                  <Info className="w-3.5 h-3.5" />
+                </button>
+              </p>
             </div>
-            <p className={`text-[9px] sm:text-[11px] mt-0.5 ${theme.textMuted}`}>
-              Cash basis — a receipt counts once it has a date · refreshed {relativeTime(updatedAt) || "now"}
-            </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <div className="relative">
-              <Search className={`w-3 h-3 sm:w-3.5 sm:h-3.5 absolute left-2 sm:left-3 top-1/2 -translate-y-1/2 ${theme.textMuted}`} />
+              <Search className={`w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`} />
               <input
                 value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(1);
-                }}
-                placeholder="Customer, flat, banker…"
-                className={`${controlCls} pl-7 sm:pl-9 pr-2 sm:pr-3 py-1.5 sm:py-2 text-xs sm:text-sm w-full sm:w-60 font-normal`}
+                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                placeholder="Search bookings..."
+                className={`pl-9 pr-4 py-1.5 w-full sm:w-[220px] rounded-full text-[13px] font-medium tracking-tight outline-none transition-colors ${isDark ? "bg-[#2C2C2E] text-white placeholder-[#8E8E93]" : "bg-[#E5E5EA] text-black placeholder-[#8E8E93]"
+                  }`}
               />
             </div>
 
-            <select
-              value={manager}
-              onChange={(e) => {
-                setManager(e.target.value);
-                setPage(1);
-              }}
-              className={`${controlCls} py-1.5 sm:py-2 text-[10px] sm:text-sm`}
-              aria-label="Sales manager"
-            >
-              <option value="">All managers</option>
-              {managers.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
+            <div className="relative">
+              <select
+                value={manager}
+                onChange={(e) => { setManager(e.target.value); setPage(1); }}
+                className={`appearance-none outline-none cursor-pointer pl-3.5 pr-8 py-1.5 rounded-full text-[13px] font-medium tracking-tight transition-colors ${isDark ? "bg-[#2C2C2E] text-white hover:bg-[#3A3A3C]" : "bg-[#E5E5EA] text-black hover:bg-[#D1D1D6]"
+                  }`}
+              >
+                <option value="">All Managers</option>
+                {managers.map((m) => <option key={m} value={m}>{m}</option>)}
+              </select>
+              <ChevronDownIcon className={`absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`} />
+            </div>
 
-            <select
-              value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value as any);
-                setPage(1);
-              }}
-              className={`${controlCls} py-1.5 sm:py-2 text-[10px] sm:text-sm`}
-              aria-label="Status"
-            >
-              <option value="">All statuses</option>
-              <option value="done">Done</option>
-              <option value="partial">Registered · disbursement pending</option>
-              <option value="processing">In process</option>
-              <option value="idle">Not started</option>
-            </select>
+            <div className="relative">
+              <select
+                value={statusFilter}
+                onChange={(e) => { setStatusFilter(e.target.value as any); setPage(1); }}
+                className={`appearance-none outline-none cursor-pointer pl-3.5 pr-8 py-1.5 rounded-full text-[13px] font-medium tracking-tight transition-colors ${isDark ? "bg-[#2C2C2E] text-white hover:bg-[#3A3A3C]" : "bg-[#E5E5EA] text-black hover:bg-[#D1D1D6]"
+                  }`}
+              >
+                <option value="">All Statuses</option>
+                <option value="done">Done</option>
+                <option value="partial">Registered · disb. pending</option>
+                <option value="processing">In process</option>
+                <option value="idle">Not started</option>
+              </select>
+              <ChevronDownIcon className={`absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`} />
+            </div>
 
-            <button onClick={exportCsv} className={`${ghostBtn} py-1.5 sm:py-2 px-2 sm:px-3 text-[10px] sm:text-sm`} title="Download the rows currently shown">
-              <Download className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-              CSV
+            <button onClick={exportCsv} className={`p-1.5 rounded-full transition-colors flex items-center justify-center ${isDark ? "bg-[#2C2C2E] text-white hover:bg-[#3A3A3C]" : "bg-[#E5E5EA] text-black hover:bg-[#D1D1D6]"}`} title="Download CSV">
+              <Download className="w-4 h-4" />
             </button>
-
-            <button
-              onClick={() => load(true)}
-              disabled={isRefreshing}
-              className={`h-8 w-8 sm:h-9 sm:w-9 rounded-md sm:rounded-lg flex-shrink-0 inline-flex items-center justify-center border ${isDark ? "border-white/10 hover:bg-white/[0.07]" : "border-slate-200 hover:bg-slate-50"
-                }`}
-              aria-label="Refresh now"
-              title="Refresh now"
-            >
-              <RefreshCcw className={`w-3 h-3 sm:w-3.5 sm:h-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
+            <button onClick={() => load(true)} disabled={isRefreshing} className={`p-1.5 rounded-full transition-colors flex items-center justify-center ${isDark ? "bg-[#2C2C2E] text-white hover:bg-[#3A3A3C]" : "bg-[#E5E5EA] text-black hover:bg-[#D1D1D6]"}`} title="Refresh">
+              <RefreshCcw className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`} />
             </button>
           </div>
         </div>
       </div>
 
-      <div className="p-2 sm:p-4 md:p-6 space-y-3 sm:space-y-4">
-        {showInfo && <HowItWorks onClose={() => setShowInfo(false)} theme={theme} isDark={isDark} />}
+      <div className="px-6 sm:px-10 py-6 space-y-6 max-w-[1600px] mx-auto">
         {error && (
-          <div className={`rounded-xl border p-3 sm:p-4 ${toneClasses("idle", isDark)}`}>
-            <p className={`text-xs sm:text-sm font-bold ${theme.text}`}>Revenue intelligence could not load</p>
-            <p className={`text-[10px] sm:text-xs mt-0.5 ${theme.textMuted}`}>{error}</p>
-            <button onClick={() => load()} className={`${ghostBtn} mt-2 sm:mt-3 text-[10px] sm:text-sm`}>
+          <div className={`rounded-[16px] p-4 flex items-center justify-between ${isDark ? "bg-[#FF453A]/15 border border-[#FF453A]/30" : "bg-[#FFECEB] border border-[#FF3B30]/30"}`}>
+            <div>
+              <p className={`text-[14px] font-semibold tracking-tight ${isDark ? "text-[#FF453A]" : "text-[#FF3B30]"}`}>Revenue intelligence could not load</p>
+              <p className={`text-[12px] mt-0.5 ${isDark ? "text-[#FF453A]/80" : "text-[#FF3B30]/80"}`}>{error}</p>
+            </div>
+            <button onClick={() => load()} className={`px-4 py-1.5 rounded-full text-[12px] font-semibold tracking-wide transition-colors ${isDark ? "bg-[#FF453A] text-white" : "bg-[#FF3B30] text-white"}`}>
               Try again
             </button>
           </div>
         )}
 
-        {/* ═══ money strip ═══ */}
-        <section className="grid grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-3">
+        {/* ═══ Apple-Style KPI Cards ═══ */}
+        <section className="grid grid-cols-2 lg:grid-cols-5 gap-4">
           {[
-            {
-              label: "Booking in hand",
-              value: compact(totals.av),
-              sub: `${filtered.length} booking${filtered.length === 1 ? "" : "s"}`,
-              icon: Building2,
-            },
-            { label: "OCR received", value: compact(totals.ocr), sub: "Buyer's own contribution", icon: HandCoins },
-            { label: "Loan disbursed", value: compact(totals.disb), sub: "Completed tranches only", icon: Landmark },
-            {
-              label: "Collected to date",
-              value: compact(totals.collected),
-              sub: `${totals.pct}% of agreement value`,
-              icon: Banknote,
-            },
-            { label: "Balance receivable", value: compact(totals.balance), sub: "AV − OCR − disbursed", icon: Wallet },
+            { label: "Booking in hand", value: compact(totals.av), sub: `${filtered.length} booking${filtered.length === 1 ? "" : "s"}`, icon: Building2, color: isDark ? "text-[#0A84FF]" : "text-[#007AFF]", bg: isDark ? "bg-[#0A84FF]/15" : "bg-[#E5F1FF]" },
+            { label: "OCR received", value: compact(totals.ocr), sub: "Buyer's contribution", icon: HandCoins, color: isDark ? "text-[#32D74B]" : "text-[#34C759]", bg: isDark ? "bg-[#32D74B]/15" : "bg-[#EBF9EE]" },
+            { label: "Loan disbursed", value: compact(totals.disb), sub: "Completed tranches", icon: Landmark, color: isDark ? "text-[#BF5AF2]" : "text-[#AF52DE]", bg: isDark ? "bg-[#BF5AF2]/15" : "bg-[#F7EBFC]" },
+            { label: "Collected to date", value: compact(totals.collected), sub: `${totals.pct}% of agreement value`, icon: Banknote, color: isDark ? "text-[#FF9F0A]" : "text-[#FF9500]", bg: isDark ? "bg-[#FF9F0A]/15" : "bg-[#FFF4E5]" },
+            { label: "Balance receivable", value: compact(totals.balance), sub: "AV − OCR − disbursed", icon: Wallet, color: isDark ? "text-[#FF453A]" : "text-[#FF3B30]", bg: isDark ? "bg-[#FF453A]/15" : "bg-[#FFECEB]" },
           ].map((tile) => (
-            <div
-              key={tile.label}
-              className={`rounded-lg sm:rounded-xl border p-2.5 sm:p-3.5 ${isDark ? "border-white/10 bg-white/[0.03]" : "border-slate-200 bg-white"
-                }`}
-              style={theme.cardGlass || undefined}
-            >
-              <div className="flex items-center gap-1.5 sm:gap-2">
-                <tile.icon className="w-3 h-3 sm:w-3.5 sm:h-3.5 flex-shrink-0" style={{ color: ACCENT }} />
-                <p className={`text-[8px] sm:text-[10px] font-black uppercase tracking-[0.07em] truncate ${theme.textMuted}`}>{tile.label}</p>
+            <div key={tile.label} className={`rounded-[20px] sm:rounded-[24px] p-4 sm:p-5 flex flex-col justify-between h-[115px] sm:h-[120px] md:h-[130px] transition-transform hover:scale-[1.02] ${isDark ? "bg-[#1C1C1E] shadow-sm border border-white/5" : "bg-white shadow-[0_4px_24px_rgba(0,0,0,0.04)] border border-black/5"}`}>
+              <div className="flex items-center gap-2.5 sm:gap-3">
+                <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-[8px] sm:rounded-[10px] flex items-center justify-center flex-shrink-0 ${tile.bg}`}>
+                  <tile.icon className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${tile.color}`} />
+                </div>
+                <p className={`text-[10px] sm:text-[11px] uppercase font-bold tracking-wider ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
+                  {tile.label}
+                </p>
               </div>
-              <p className={`text-lg sm:text-xl font-black mt-1 sm:mt-1.5 tabular-nums ${theme.text}`}>{tile.value}</p>
-              <p className={`text-[8px] sm:text-[10px] mt-0.5 truncate ${theme.textMuted}`}>{tile.sub}</p>
+              <div className="mt-auto">
+                <p className={`text-[20px] sm:text-[22px] md:text-[24px] font-bold tracking-tight truncate ${isDark ? "text-white" : "text-black"}`}>
+                  {tile.value}
+                </p>
+                <p className={`text-[10px] sm:text-[11px] font-medium mt-0.5 truncate ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
+                  {tile.sub}
+                </p>
+              </div>
             </div>
           ))}
         </section>
 
-        {/* ═══ the table ═══ */}
-        <section className={`rounded-xl sm:rounded-2xl border overflow-hidden ${theme.tableWrap}`} style={theme.tableGlass}>
+        {/* ═══ Apple-Style Table ═══ */}
+        <section className={`rounded-[24px] overflow-hidden border shadow-sm ${isDark ? "bg-[#1C1C1E] border-white/10" : "bg-white border-black/5 shadow-[0_4px_24px_rgba(0,0,0,0.04)]"}`}>
           <div className="overflow-x-auto custom-scrollbar">
-            <table className="w-full text-[10px] sm:text-sm">
-              <thead className={`sticky top-0 z-10 text-[9px] sm:text-xs uppercase ${theme.tableHead}`}>
+            <table className="w-full text-left whitespace-nowrap">
+              <thead className={`sticky top-0 z-10 backdrop-blur-xl ${isDark ? "bg-[#1C1C1E]/80 border-b border-[#38383A]" : "bg-[#F9F9F9]/80 border-b border-[#E5E5EA]"}`}>
                 <tr>
                   {(
                     [
                       ["srNo", "#", "left"],
                       ["customerName", "Customer name", "left"],
-
                       ["agreementValue", "AV", "right"],
                       ["ocrReceived", "OCR received", "right"],
                       ["sanctionedAmount", "Sanctioned amt.", "right"],
@@ -702,160 +629,103 @@ export default function RevenueIntelligenceView({ isDark, theme, user }: Props) 
                       ["sanctionedDate" as SortKey, "Sanction date", "left"],
                     ] as Array<[SortKey | null, string, "left" | "right"]>
                   ).map(([key, label, align]) => (
-                    <th key={label} className={`px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap ${thCls} ${align === "right" ? "text-right" : "text-left"}`}>
+                    <th key={label} className={`px-4 py-3.5 text-[11px] font-semibold uppercase tracking-wider ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"} ${align === "right" ? "text-right" : "text-left"}`}>
                       {key ? (
                         <button
                           onClick={() => toggleSort(key)}
-                          className={`inline-flex items-center gap-1 hover:opacity-70 transition-opacity ${align === "right" ? "flex-row-reverse" : ""
-                            }`}
+                          className={`inline-flex items-center gap-1 hover:text-black dark:hover:text-white transition-colors ${align === "right" ? "flex-row-reverse" : ""}`}
                         >
                           {label}
-                          {sort.key === key &&
-                            (sort.dir === "asc" ? (
-                              <ArrowUp className="w-2.5 h-2.5 sm:w-3 sm:h-3 flex-shrink-0" style={{ color: ACCENT }} />
-                            ) : (
-                              <ArrowDown className="w-2.5 h-2.5 sm:w-3 sm:h-3 flex-shrink-0" style={{ color: ACCENT }} />
-                            ))}
+                          {sort.key === key && (
+                            sort.dir === "asc" ? <ArrowUp className={`w-3 h-3 ${isDark ? "text-white" : "text-black"}`} /> : <ArrowDown className={`w-3 h-3 ${isDark ? "text-white" : "text-black"}`} />
+                          )}
                         </button>
                       ) : (
                         label
                       )}
                     </th>
                   ))}
-                  <th className={`px-2 sm:px-3 py-2 sm:py-3 ${thCls} text-right`}>
+                  <th className={`px-4 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-right ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
                     <span className="sr-only">Open</span>
                   </th>
                 </tr>
               </thead>
 
-              <tbody>
+              <tbody className={`divide-y ${isDark ? "divide-[#38383A]" : "divide-[#E5E5EA]"}`}>
                 {paged.length === 0 ? (
                   <tr>
-                    <td colSpan={14} className="px-3 sm:px-4 py-10 sm:py-16 text-center">
-                      <Search className={`w-6 h-6 sm:w-8 sm:h-8 mx-auto mb-2 sm:mb-3 opacity-25 ${theme.textMuted}`} />
-                      <p className={`text-xs sm:text-sm font-bold ${theme.text}`}>No bookings here</p>
-                      <p className={`text-[10px] sm:text-xs mt-1 max-w-xs mx-auto whitespace-normal ${theme.textMuted}`}>
-                        {search || manager || statusFilter
-                          ? "Widen the filters to see more."
-                          : "Confirmed bookings appear as soon as a lead is marked closing."}
+                    <td colSpan={14} className="px-4 py-16 text-center">
+                      <Search className={`w-8 h-8 mx-auto mb-3 opacity-20 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`} />
+                      <p className={`text-[14px] font-semibold tracking-tight ${isDark ? "text-white" : "text-black"}`}>No bookings found</p>
+                      <p className={`text-[12px] mt-1 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
+                        {search || manager || statusFilter ? "Widen the filters to see more." : "Confirmed bookings appear once a lead is closing."}
                       </p>
                     </td>
                   </tr>
                 ) : (
                   paged.map((row) => {
                     const collected = row.ocrReceived + row.disbursement;
-                    const pct =
-                      row.agreementValue > 0 ? Math.min(100, Math.round((collected / row.agreementValue) * 100)) : 0;
-                    const ocrPct =
-                      row.ownContributionRequired > 0
-                        ? Math.min(100, Math.round((row.ocrReceived / row.ownContributionRequired) * 100))
-                        : null;
+                    const pct = row.agreementValue > 0 ? Math.min(100, Math.round((collected / row.agreementValue) * 100)) : 0;
+                    const ocrPct = row.ownContributionRequired > 0 ? Math.min(100, Math.round((row.ocrReceived / row.ownContributionRequired) * 100)) : null;
 
                     return (
                       <tr
                         key={row.id}
                         onClick={() => setOpenRow(row)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") setOpenRow(row);
-                        }}
+                        onKeyDown={(e) => { if (e.key === "Enter") setOpenRow(row); }}
                         tabIndex={0}
-                        className={`cursor-pointer group outline-none ${theme.tableRow} focus-visible:ring-2 focus-visible:ring-inset`}
-                        style={{ ["--tw-ring-color" as any]: `${ACCENT}66` }}
-                        title="Open case and add a follow-up"
+                        className={`cursor-pointer group outline-none transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.02]`}
                       >
-                        <td className={`px-2 sm:px-3 py-2 sm:py-3 tabular-nums font-bold ${theme.textMuted}`}>{row.srNo}</td>
-
-                        <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap">
-                          <p className={`font-bold leading-tight ${theme.text}`}>{row.customerName}</p>
-                          {row.customerNote && (
-                            <p className={`text-[9px] sm:text-[11px] mt-0.5 italic ${theme.textMuted} truncate max-w-[120px] sm:max-w-xs`}>{row.customerNote}</p>
-                          )}
+                        <td className={`px-4 py-3.5 tabular-nums text-[13px] font-medium ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>{row.srNo}</td>
+                        <td className="px-4 py-3.5 whitespace-nowrap">
+                          <p className={`text-[13px] font-semibold tracking-tight leading-tight ${isDark ? "text-white" : "text-black"}`}>{row.customerName}</p>
+                          {row.customerNote && <p className={`text-[11px] mt-0.5 tracking-tight truncate max-w-[200px] ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>{row.customerNote}</p>}
                         </td>
-
-                        <td className={`px-2 sm:px-3 py-2 sm:py-3 text-right tabular-nums whitespace-nowrap ${theme.text}`}>
-                          {inr(row.agreementValue)}
-                        </td>
-
-                        {/* OCR — figure plus the receipt-entry affordance */}
-                        <td className="px-2 sm:px-3 py-2 sm:py-3 text-right whitespace-nowrap">
-                          <div className="inline-flex items-center justify-end gap-1.5 sm:gap-2">
+                        <td className={`px-4 py-3.5 text-right tabular-nums text-[13px] font-medium whitespace-nowrap ${isDark ? "text-white" : "text-black"}`}>{inr(row.agreementValue)}</td>
+                        <td className="px-4 py-3.5 text-right whitespace-nowrap group/ocr">
+                          <div className="inline-flex items-center justify-end gap-2">
                             <span className="text-right">
-                              <span className="block tabular-nums font-bold text-cyan-500">{inr(row.ocrReceived)}</span>
-                              {ocrPct !== null && (
-                                <span className={`block text-[8px] sm:text-[9px] font-bold tabular-nums ${theme.textMuted}`}>
-                                  {ocrPct}% of own share
-                                </span>
-                              )}
+                              <span className={`block tabular-nums text-[13px] font-semibold ${isDark ? "text-[#32D74B]" : "text-[#34C759]"}`}>{inr(row.ocrReceived)}</span>
+                              {ocrPct !== null && <span className={`block text-[10px] font-medium tabular-nums ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>{ocrPct}% of share</span>}
                             </span>
                             {mayRecord && row.bookingId && (
                               <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setOcrRow(row);
-                                }}
-                                className={`w-5 h-5 sm:w-6 sm:h-6 rounded-md border inline-flex items-center justify-center flex-shrink-0 transition-colors ${isDark
-                                  ? "border-white/15 text-gray-300 hover:bg-white/10"
-                                  : "border-slate-300 text-slate-500 hover:bg-slate-100"
+                                onClick={(e) => { e.stopPropagation(); setOcrRow(row); }}
+                                className={`w-6 h-6 rounded-full flex items-center justify-center transition-colors opacity-0 group-hover/ocr:opacity-100 focus:opacity-100 ${isDark ? "bg-[#32D74B]/15 text-[#32D74B] hover:bg-[#32D74B] hover:text-white" : "bg-[#EBF9EE] text-[#34C759] hover:bg-[#34C759] hover:text-white"
                                   }`}
-                                aria-label={`Record an OCR receipt for ${row.customerName}`}
-                                title="Record an OCR receipt"
+                                title="Record OCR receipt"
                               >
-                                <Plus className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                                <Plus className="w-3.5 h-3.5" />
                               </button>
                             )}
                           </div>
                         </td>
-
-                        <td className="px-2 sm:px-3 py-2 sm:py-3 text-right whitespace-nowrap">
-                          <p className="tabular-nums font-bold text-indigo-500">{inr(row.sanctionedAmount)}</p>
-                          {row.sanctionedDate && (
-                            <p className={`text-[8px] sm:text-[9px] mt-0.5 font-bold tabular-nums ${theme.textMuted}`}>
-                              {shortDate(row.sanctionedDate)}
-                            </p>
-                          )}
+                        <td className="px-4 py-3.5 text-right whitespace-nowrap">
+                          <p className={`tabular-nums text-[13px] font-semibold ${isDark ? "text-[#0A84FF]" : "text-[#007AFF]"}`}>{inr(row.sanctionedAmount)}</p>
+                          {row.sanctionedDate && <p className={`text-[10px] mt-0.5 font-medium tabular-nums ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>{shortDate(row.sanctionedDate)}</p>}
                         </td>
-
-                        <td className="px-2 sm:px-3 py-2 sm:py-3 text-right whitespace-nowrap">
-                          <p className="tabular-nums font-bold text-emerald-500">{inr(row.disbursement)}</p>
+                        <td className="px-4 py-3.5 text-right whitespace-nowrap">
+                          <p className={`tabular-nums text-[13px] font-semibold ${isDark ? "text-[#BF5AF2]" : "text-[#AF52DE]"}`}>{inr(row.disbursement)}</p>
                           {row.agreementValue > 0 && (
-                            <div className="mt-1 flex items-center justify-end gap-1 sm:gap-1.5">
-                              <span
-                                className={`h-1 w-10 sm:w-14 rounded-full overflow-hidden ${isDark ? "bg-white/10" : "bg-slate-200"
-                                  }`}
-                              >
-                                <span
-                                  className="block h-full rounded-full transition-all"
-                                  style={{ width: `${pct}%`, background: pct >= 100 ? "#10b981" : ACCENT }}
-                                />
+                            <div className="mt-1 flex items-center justify-end gap-1.5">
+                              <span className={`h-1 w-12 rounded-full overflow-hidden ${isDark ? "bg-[#38383A]" : "bg-[#E5E5EA]"}`}>
+                                <span className={`block h-full rounded-full transition-all ${pct >= 100 ? (isDark ? "bg-[#32D74B]" : "bg-[#34C759]") : (isDark ? "bg-[#BF5AF2]" : "bg-[#AF52DE]")}`} style={{ width: `${pct}%` }} />
                               </span>
-                              <span className={`text-[8px] sm:text-[9px] font-bold tabular-nums ${theme.textMuted}`}>{pct}%</span>
+                              <span className={`text-[10px] font-medium tabular-nums ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>{pct}%</span>
                             </div>
                           )}
                         </td>
-
-                        <td className="px-2 sm:px-3 py-2 sm:py-3 text-right tabular-nums font-bold whitespace-nowrap text-violet-500">
-                          {inr(row.registrationAmount)}
-                        </td>
-
-                        <td className="px-2 sm:px-3 py-2 sm:py-3 text-right tabular-nums font-bold text-amber-500 whitespace-nowrap">
-                          {inr(row.balance)}
-                        </td>
-
-                        <td className={`px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap ${theme.text}`}>{row.salesManager}</td>
-                        <td className={`px-2 sm:px-3 py-2 sm:py-3 font-semibold whitespace-nowrap ${theme.text}`}>{row.flatNo}</td>
-                        <td className={`px-2 sm:px-3 py-2 sm:py-3 text-[9px] sm:text-xs max-w-[120px] sm:max-w-[180px] truncate ${theme.textMuted}`} title={row.bankerDetails}>
-                          {row.bankerDetails}
-                        </td>
-                        <td className="px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap">
+                        <td className={`px-4 py-3.5 text-right tabular-nums text-[13px] font-semibold whitespace-nowrap ${isDark ? "text-[#FF9F0A]" : "text-[#FF9500]"}`}>{inr(row.registrationAmount)}</td>
+                        <td className={`px-4 py-3.5 text-right tabular-nums text-[13px] font-semibold whitespace-nowrap ${isDark ? "text-[#FF453A]" : "text-[#FF3B30]"}`}>{inr(row.balance)}</td>
+                        <td className={`px-4 py-3.5 whitespace-nowrap text-[13px] font-medium tracking-tight ${isDark ? "text-white" : "text-black"}`}>{row.salesManager}</td>
+                        <td className={`px-4 py-3.5 whitespace-nowrap text-[13px] font-medium tracking-tight ${isDark ? "text-white" : "text-black"}`}>{row.flatNo}</td>
+                        <td className={`px-4 py-3.5 text-[12px] font-medium tracking-tight max-w-[160px] truncate ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`} title={row.bankerDetails}>{row.bankerDetails}</td>
+                        <td className="px-4 py-3.5 whitespace-nowrap">
                           <StatusChip row={row} isDark={isDark} />
                         </td>
-                        <td className={`px-2 sm:px-3 py-2 sm:py-3 whitespace-nowrap text-[9px] sm:text-xs ${theme.textMuted}`}>
-                          {shortDate(row.sanctionedDate)}
-                        </td>
-                        <td className="px-2 sm:px-3 py-2 sm:py-3 text-right">
-                          <ArrowUpRight
-                            className={`w-3 h-3 sm:w-4 sm:h-4 inline-block opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity ${theme.textMuted}`}
-                          />
+                        <td className={`px-4 py-3.5 whitespace-nowrap text-[12px] font-medium ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>{shortDate(row.sanctionedDate)}</td>
+                        <td className="px-4 py-3.5 text-right">
+                          <ArrowUpRight className={`w-4 h-4 inline-block opacity-0 group-hover:opacity-100 transition-opacity ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`} />
                         </td>
                       </tr>
                     );
@@ -864,20 +734,17 @@ export default function RevenueIntelligenceView({ isDark, theme, user }: Props) 
               </tbody>
 
               {filtered.length > 0 && (
-                <tfoot className={`border-t-2 ${isDark ? "border-white/15" : "border-slate-300"}`}>
-                  <tr className={isDark ? "bg-white/[0.03]" : "bg-slate-50/80"}>
-                    <td
-                      colSpan={2}
-                      className={`px-2 sm:px-3 py-2 sm:py-3 text-[9px] sm:text-[10px] font-black uppercase tracking-[0.07em] whitespace-nowrap ${theme.textMuted}`}
-                    >
+                <tfoot className={`border-t border-b-0 ${isDark ? "border-[#38383A] bg-[#2C2C2E]/50" : "border-[#E5E5EA] bg-[#F2F2F7]/50"}`}>
+                  <tr>
+                    <td colSpan={2} className={`px-4 py-3 text-[11px] font-semibold uppercase tracking-wider whitespace-nowrap ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
                       Total · {filtered.length} booking{filtered.length === 1 ? "" : "s"}
                     </td>
-                    <td className={`px-2 sm:px-3 py-2 sm:py-3 text-right tabular-nums font-black ${theme.text}`}>{inr(totals.av)}</td>
-                    <td className="px-2 sm:px-3 py-2 sm:py-3 text-right tabular-nums font-black text-cyan-500">{inr(totals.ocr)}</td>
-                    <td className="px-2 sm:px-3 py-2 sm:py-3 text-right tabular-nums font-black text-indigo-500">{inr(totals.sanctioned)}</td>
-                    <td className="px-2 sm:px-3 py-2 sm:py-3 text-right tabular-nums font-black text-emerald-500">{inr(totals.disb)}</td>
-                    <td className="px-2 sm:px-3 py-2 sm:py-3 text-right tabular-nums font-black text-violet-500">{inr(totals.registration)}</td>
-                    <td className="px-2 sm:px-3 py-2 sm:py-3 text-right tabular-nums font-black text-amber-500">{inr(totals.balance)}</td>
+                    <td className={`px-4 py-3 text-right tabular-nums text-[13px] font-bold ${isDark ? "text-white" : "text-black"}`}>{inr(totals.av)}</td>
+                    <td className={`px-4 py-3 text-right tabular-nums text-[13px] font-bold ${isDark ? "text-[#32D74B]" : "text-[#34C759]"}`}>{inr(totals.ocr)}</td>
+                    <td className={`px-4 py-3 text-right tabular-nums text-[13px] font-bold ${isDark ? "text-[#0A84FF]" : "text-[#007AFF]"}`}>{inr(totals.sanctioned)}</td>
+                    <td className={`px-4 py-3 text-right tabular-nums text-[13px] font-bold ${isDark ? "text-[#BF5AF2]" : "text-[#AF52DE]"}`}>{inr(totals.disb)}</td>
+                    <td className={`px-4 py-3 text-right tabular-nums text-[13px] font-bold ${isDark ? "text-[#FF9F0A]" : "text-[#FF9500]"}`}>{inr(totals.registration)}</td>
+                    <td className={`px-4 py-3 text-right tabular-nums text-[13px] font-bold ${isDark ? "text-[#FF453A]" : "text-[#FF3B30]"}`}>{inr(totals.balance)}</td>
                     <td colSpan={6} />
                   </tr>
                 </tfoot>
@@ -885,29 +752,26 @@ export default function RevenueIntelligenceView({ isDark, theme, user }: Props) 
             </table>
           </div>
 
+          {/* Pagination */}
           {sorted.length > PAGE_SIZE && (
-            <div className={`flex items-center justify-between gap-2 sm:gap-3 p-2 sm:p-3.5 border-t ${theme.tableBorder}`}>
-              <p className={`text-[10px] sm:text-[11px] font-semibold ${theme.textMuted}`}>
+            <div className={`flex items-center justify-between px-5 py-3 border-t ${isDark ? "border-[#38383A] bg-[#1C1C1E]" : "border-[#E5E5EA] bg-white"}`}>
+              <p className={`text-[12px] font-medium tracking-tight ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
                 Page {Math.min(page, totalPages)} of {totalPages}
               </p>
-              <div className="flex items-center gap-1.5 sm:gap-2">
+              <div className="flex items-center gap-2">
                 <button
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={page <= 1}
-                  className={`h-7 w-7 sm:h-8 sm:w-8 rounded-md sm:rounded-lg border inline-flex items-center justify-center disabled:opacity-30 ${isDark ? "border-white/10 hover:bg-white/[0.07]" : "border-slate-200 hover:bg-slate-50"
-                    }`}
-                  aria-label="Previous page"
+                  className={`w-7 h-7 rounded-full inline-flex items-center justify-center transition-colors disabled:opacity-30 ${isDark ? "bg-[#2C2C2E] hover:bg-[#3A3A3C] text-white" : "bg-[#F2F2F7] hover:bg-[#E5E5EA] text-black"}`}
                 >
-                  <ChevronLeft className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                  <ChevronLeft className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={page >= totalPages}
-                  className={`h-7 w-7 sm:h-8 sm:w-8 rounded-md sm:rounded-lg border inline-flex items-center justify-center disabled:opacity-30 ${isDark ? "border-white/10 hover:bg-white/[0.07]" : "border-slate-200 hover:bg-slate-50"
-                    }`}
-                  aria-label="Next page"
+                  className={`w-7 h-7 rounded-full inline-flex items-center justify-center transition-colors disabled:opacity-30 ${isDark ? "bg-[#2C2C2E] hover:bg-[#3A3A3C] text-white" : "bg-[#F2F2F7] hover:bg-[#E5E5EA] text-black"}`}
                 >
-                  <ChevronRight className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                  <ChevronRight className="w-4 h-4" />
                 </button>
               </div>
             </div>
@@ -920,53 +784,36 @@ export default function RevenueIntelligenceView({ isDark, theme, user }: Props) 
           row={ocrRow}
           user={user}
           onClose={() => setOcrRow(null)}
-          onSaved={() => {
-            setOcrRow(null);
-            load(true);
-          }}
+          onSaved={() => { setOcrRow(null); load(true); }}
           theme={theme}
           isDark={isDark}
         />
       )}
-      {openRow && (
-        <CaseDrawer
-          row={openRow}
-          user={user}
-          mayRecord={mayRecord}
-          onRecordOcr={() => setOcrRow(openRow)}
-          // Editing the booking changes agreement value, loan and registration —
-          // every figure this table sums — so a save refetches rather than leaving
-          // the row showing what it was before.
-          onSaved={() => load(true)}
-          onClose={() => setOpenRow(null)}
-          theme={theme}
-          isDark={isDark}
-        />
-      )}
-      {showInfo && <HowItWorks onClose={() => setShowInfo(false)} theme={theme} isDark={isDark} />}
+      <AnimatePresence>
+        {openRow && (
+          <CaseDrawer
+            row={openRow}
+            user={user}
+            mayRecord={mayRecord}
+            onRecordOcr={() => setOcrRow(openRow)}
+            onSaved={() => load(true)}
+            onClose={() => setOpenRow(null)}
+            theme={theme}
+            isDark={isDark}
+          />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {showInfo && <HowItWorks onClose={() => setShowInfo(false)} theme={theme} isDark={isDark} />}
+      </AnimatePresence>
     </div>
   );
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   OCR receipt entry — appends a ledger credit, never edits a total
+   OCR receipt entry
    ══════════════════════════════════════════════════════════════════════ */
-
-function OcrReceiptModal({
-  row,
-  user,
-  onClose,
-  onSaved,
-  theme,
-  isDark,
-}: {
-  row: Row;
-  user: { name: string; role: string };
-  onClose: () => void;
-  onSaved: () => void;
-  theme: any;
-  isDark: boolean;
-}) {
+function OcrReceiptModal({ row, user, onClose, onSaved, isDark }: any) {
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(todayIso());
   const [mode, setMode] = useState(PAYMENT_MODES[0]);
@@ -977,9 +824,7 @@ function OcrReceiptModal({
   const amountRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKey);
     amountRef.current?.focus();
     return () => window.removeEventListener("keydown", onKey);
@@ -1018,130 +863,103 @@ function OcrReceiptModal({
     }
   };
 
-  const labelCls = `text-[10px] font-bold uppercase tracking-[0.07em] block mb-1 ${theme.textMuted}`;
-  const fieldCls = `w-full rounded-lg px-3 py-2 text-sm outline-none border transition-colors ${isDark ? "border-white/10 bg-white/[0.04] text-gray-100" : "border-slate-200 bg-white text-slate-800"
-    }`;
-
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" role="dialog" aria-modal="true">
-      <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.6)" }} onClick={onClose} />
-      <div
-        className={`relative w-full max-w-md rounded-2xl border overflow-hidden ${isDark ? "border-white/10 bg-[#0d0d12]" : "border-slate-200 bg-white"
-          }`}
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" role="dialog">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 10 }}
+        transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
+        className={`relative w-full max-w-md rounded-[24px] overflow-hidden shadow-[0_24px_48px_rgba(0,0,0,0.2)] ${isDark ? "bg-[#1C1C1E] border border-white/10" : "bg-white border border-black/5"}`}
       >
-        <header className={`px-5 py-4 border-b flex items-start justify-between gap-3 ${theme.tableBorder}`}>
+        <header className={`px-6 py-5 border-b flex items-start justify-between gap-3 ${isDark ? "border-[#38383A]" : "border-[#E5E5EA]"}`}>
           <div className="min-w-0">
-            <h2 className={`text-sm font-black ${theme.text}`}>Record an OCR receipt</h2>
-            <p className={`text-[11px] mt-0.5 truncate ${theme.textMuted}`}>
+            <h2 className={`text-[17px] font-semibold tracking-tight ${isDark ? "text-white" : "text-black"}`}>Record OCR Receipt</h2>
+            <p className={`text-[13px] mt-1 tracking-tight truncate ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
               {row.customerName} · {row.flatNo} · {row.bookingNumber}
             </p>
           </div>
-          <button
-            onClick={onClose}
-            className={`p-1.5 rounded-lg flex-shrink-0 ${isDark ? "hover:bg-white/10 text-gray-300" : "hover:bg-slate-100 text-slate-500"
-              }`}
-            aria-label="Close"
-          >
-            <X className="w-4 h-4" />
+          <button onClick={onClose} className={`p-1.5 rounded-full transition-colors ${isDark ? "hover:bg-white/10 text-[#8E8E93]" : "hover:bg-black/5 text-[#8E8E93]"}`}>
+            <X className="w-5 h-5" />
           </button>
         </header>
 
-        <div className="px-5 py-4 space-y-3">
-          {/* Context so the figure being typed can be sanity-checked in place */}
-          <div
-            className={`rounded-xl border divide-y text-xs ${isDark ? "border-white/10 divide-white/[0.07]" : "border-slate-200 divide-slate-100"
-              }`}
-          >
-            {[
-              ["Own contribution required", inr(row.ownContributionRequired)],
-              ["Received so far", inr(row.ocrReceived)],
-              ["Still due from buyer", inr(pendingOwn)],
-            ].map(([label, val]) => (
-              <div key={label} className="flex items-center justify-between gap-3 px-3 py-2">
-                <span className={theme.textMuted}>{label}</span>
-                <span className={`font-semibold tabular-nums ${theme.text}`}>{val}</span>
-              </div>
-            ))}
+        <div className="px-6 py-5 space-y-4">
+          <div className={`rounded-[14px] border px-4 py-3 space-y-2 ${isDark ? "bg-[#2C2C2E] border-[#38383A]" : "bg-[#F2F2F7] border-[#E5E5EA]"}`}>
+            <div className="flex items-center justify-between">
+              <span className={`text-[12px] font-medium ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>Own share required</span>
+              <span className={`text-[13px] font-semibold tabular-nums ${isDark ? "text-white" : "text-black"}`}>{inr(row.ownContributionRequired)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className={`text-[12px] font-medium ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>Received so far</span>
+              <span className={`text-[13px] font-semibold tabular-nums ${isDark ? "text-white" : "text-black"}`}>{inr(row.ocrReceived)}</span>
+            </div>
+            <div className={`h-[1px] w-full ${isDark ? "bg-white/10" : "bg-black/5"}`} />
+            <div className="flex items-center justify-between">
+              <span className={`text-[12px] font-medium ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>Still due</span>
+              <span className={`text-[13px] font-semibold tabular-nums ${isDark ? "text-white" : "text-black"}`}>{inr(pendingOwn)}</span>
+            </div>
           </div>
 
           <div>
-            <label className={labelCls}>Amount received *</label>
+            <label className={`block text-[11px] font-semibold uppercase tracking-wider mb-2 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>Amount received *</label>
             <input
               ref={amountRef}
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") save();
-              }}
+              onKeyDown={(e) => { if (e.key === "Enter") save(); }}
               inputMode="numeric"
               placeholder="2,50,000"
-              className={fieldCls}
+              className={`w-full px-4 py-2.5 rounded-[12px] text-[14px] font-medium tracking-tight outline-none transition-all focus:ring-2 focus:ring-[${ACCENT}]/50 ${isDark ? "bg-[#2C2C2E] border border-[#38383A] text-white" : "bg-[#F2F2F7] border border-[#E5E5EA] text-black"}`}
             />
-            {value > 0 && (
-              <p className={`text-[11px] mt-1 tabular-nums ${theme.textMuted}`}>{inr(value)}</p>
-            )}
+            {value > 0 && <p className={`text-[12px] mt-1.5 font-medium tabular-nums ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>{inr(value)}</p>}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className={labelCls}>Received on *</label>
-              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} max={todayIso()} className={fieldCls} />
+              <label className={`block text-[11px] font-semibold uppercase tracking-wider mb-2 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>Received on *</label>
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} max={todayIso()} className={`w-full px-4 py-2.5 rounded-[12px] text-[14px] font-medium tracking-tight outline-none transition-all focus:ring-2 focus:ring-[${ACCENT}]/50 ${isDark ? "bg-[#2C2C2E] border border-[#38383A] text-white" : "bg-[#F2F2F7] border border-[#E5E5EA] text-black"}`} />
             </div>
             <div>
-              <label className={labelCls}>Mode</label>
-              <select value={mode} onChange={(e) => setMode(e.target.value)} className={fieldCls}>
-                {PAYMENT_MODES.map((m) => (
-                  <option key={m} value={m}>
-                    {m}
-                  </option>
-                ))}
-              </select>
+              <label className={`block text-[11px] font-semibold uppercase tracking-wider mb-2 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>Mode</label>
+              <div className="relative">
+                <select value={mode} onChange={(e) => setMode(e.target.value)} className={`appearance-none w-full px-4 py-2.5 rounded-[12px] text-[14px] font-medium tracking-tight outline-none transition-all focus:ring-2 focus:ring-[${ACCENT}]/50 ${isDark ? "bg-[#2C2C2E] border border-[#38383A] text-white" : "bg-[#F2F2F7] border border-[#E5E5EA] text-black"}`}>
+                  {PAYMENT_MODES.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+                <div className={`absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>▼</div>
+              </div>
             </div>
           </div>
 
           <div>
-            <label className={labelCls}>Reference no.</label>
-            <input
-              value={reference}
-              onChange={(e) => setReference(e.target.value)}
-              placeholder="Cheque or UTR number"
-              className={fieldCls}
-            />
+            <label className={`block text-[11px] font-semibold uppercase tracking-wider mb-2 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>Reference no.</label>
+            <input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Cheque or UTR number" className={`w-full px-4 py-2.5 rounded-[12px] text-[14px] font-medium tracking-tight outline-none transition-all focus:ring-2 focus:ring-[${ACCENT}]/50 ${isDark ? "bg-[#2C2C2E] border border-[#38383A] text-white" : "bg-[#F2F2F7] border border-[#E5E5EA] text-black"}`} />
           </div>
 
           <div>
-            <label className={labelCls}>Remarks</label>
-            <input value={remarks} onChange={(e) => setRemarks(e.target.value)} className={fieldCls} />
+            <label className={`block text-[11px] font-semibold uppercase tracking-wider mb-2 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>Remarks</label>
+            <input value={remarks} onChange={(e) => setRemarks(e.target.value)} className={`w-full px-4 py-2.5 rounded-[12px] text-[14px] font-medium tracking-tight outline-none transition-all focus:ring-2 focus:ring-[${ACCENT}]/50 ${isDark ? "bg-[#2C2C2E] border border-[#38383A] text-white" : "bg-[#F2F2F7] border border-[#E5E5EA] text-black"}`} />
           </div>
 
-          {exceedsOwnShare && (
-            <p className="text-[11px] font-semibold text-amber-500">
-              This is more than the {inr(pendingOwn)} still due from the buyer. Save it only if the extra is genuinely a
-              customer payment.
-            </p>
-          )}
-          {error && <p className="text-[11px] font-semibold text-rose-500">{error}</p>}
-          <p className={`text-[10px] ${theme.textMuted}`}>
-            Saved as a dated ledger receipt against this booking. Corrections are made by reversing the entry, not by
-            editing it.
-          </p>
+          {exceedsOwnShare && <p className={`text-[12px] font-medium leading-snug ${isDark ? "text-[#FF9F0A]" : "text-[#FF9500]"}`}>This is more than the {inr(pendingOwn)} still due from the buyer. Save it only if the extra is genuinely a customer payment.</p>}
+          {error && <p className={`text-[12px] font-medium ${isDark ? "text-[#FF453A]" : "text-[#FF3B30]"}`}>{error}</p>}
         </div>
 
-        <footer className={`px-5 py-3.5 border-t flex items-center justify-end gap-2 ${theme.tableBorder}`}>
-          <button onClick={onClose} className={`h-9 px-3 rounded-lg text-xs font-bold ${theme.textMuted}`}>
+        <footer className={`px-6 py-4 border-t flex items-center justify-end gap-3 ${isDark ? "border-[#38383A] bg-[#2C2C2E]/20" : "border-[#E5E5EA] bg-[#F9F9F9]"}`}>
+          <button onClick={onClose} className={`px-4 py-2.5 rounded-full text-[13px] font-semibold tracking-wide transition-colors ${isDark ? "bg-[#2C2C2E] text-white hover:bg-[#3A3A3C]" : "bg-[#F2F2F7] text-black hover:bg-[#E5E5EA]"}`}>
             Cancel
           </button>
           <button
             onClick={save}
             disabled={value <= 0 || !date || saving}
-            className="h-9 px-4 rounded-lg text-xs font-black text-white inline-flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ background: ACCENT }}
+            className={`px-5 py-2.5 rounded-full text-[13px] font-semibold tracking-wide text-white inline-flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${isDark ? `bg-[${ACCENT_DARK}]` : `bg-[${ACCENT}]`}`}
           >
-            <Check className="w-3.5 h-3.5" />
-            {saving ? "Saving…" : "Save receipt"}
+            <Check className="w-4 h-4" />
+            {saving ? "Saving…" : "Save Receipt"}
           </button>
         </footer>
-      </div>
+      </motion.div>
     </div>
   );
 }
@@ -1149,43 +967,18 @@ function OcrReceiptModal({
 /* ══════════════════════════════════════════════════════════════════════
    Case drawer — detail, receipt history, follow-up thread
    ══════════════════════════════════════════════════════════════════════ */
-
-function CaseDrawer({
-  row,
-  user,
-  mayRecord,
-  onRecordOcr,
-  onSaved,
-  onClose,
-  theme,
-  isDark,
-}: {
-  row: Row;
-  user?: { name: string; role: string };
-  mayRecord: boolean;
-  onRecordOcr: () => void;
-  onSaved?: () => void;
-  onClose: () => void;
-  theme: any;
-  isDark: boolean;
-}) {
+function CaseDrawer({ row, user, mayRecord, onRecordOcr, onSaved, onClose, isDark }: any) {
   const [summary, setSummary] = useState<any>(null);
   const [loadingSummary, setLoadingSummary] = useState(true);
-
   const [followups, setFollowups] = useState<Followup[]>([]);
   const [loadingThread, setLoadingThread] = useState(true);
   const [threadError, setThreadError] = useState("");
-
   const [note, setNote] = useState("");
   const [nextDate, setNextDate] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [justSaved, setJustSaved] = useState(false);
   const noteRef = useRef<HTMLTextAreaElement>(null);
-
-  /* Booking application, loaded on demand. Keyed off bookingId rather than leadId
-     so it opens for every case in the table — including the ones whose lead link
-     is missing, which are exactly the cases someone needs to look up by hand. */
   const [bookingOpen, setBookingOpen] = useState(false);
   const [booking, setBooking] = useState<any>(null);
   const [loadingBooking, setLoadingBooking] = useState(false);
@@ -1194,17 +987,12 @@ function CaseDrawer({
   const leadId = row.leadId;
   const bookingId = row.bookingId;
 
-  useEffect(() => {
-    noteRef.current?.focus();
-  }, []);
+  useEffect(() => { noteRef.current?.focus(); }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      // The booking form stacks above the drawer, so Escape dismisses the top
-      // layer first rather than closing both at once.
-      if (bookingOpen) setBookingOpen(false);
-      else onClose();
+      if (bookingOpen) setBookingOpen(false); else onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -1229,23 +1017,15 @@ function CaseDrawer({
   const openBookingForm = () => {
     if (!bookingId) return;
     setBookingOpen(true);
-    // Fetched once per drawer; reopening shows what is already in hand.
     if (booking || loadingBooking) return;
     fetchBooking();
   };
 
-  /* Receipt history comes from the payment-summary route, which already
-     returns the own-contribution breakdown straight off the ledger. */
   useEffect(() => {
-    if (!bookingId) {
-      setLoadingSummary(false);
-      return;
-    }
+    if (!bookingId) { setLoadingSummary(false); return; }
     fetch(paymentSummaryUrl(bookingId), { cache: "no-store" })
       .then((r) => r.json())
-      .then((d) => {
-        if (d.success) setSummary(d.data);
-      })
+      .then((d) => { if (d.success) setSummary(d.data); })
       .catch(() => { })
       .finally(() => setLoadingSummary(false));
   }, [bookingId]);
@@ -1259,18 +1039,10 @@ function CaseDrawer({
     setLoadingThread(true);
     setThreadError("");
     try {
-      const res = await fetch(
-        `${followupsUrl()}?lead_id=${encodeURIComponent(String(leadId))}`,
-        { cache: "no-store" }
-      );
+      const res = await fetch(`${followupsUrl()}?lead_id=${encodeURIComponent(String(leadId))}`, { cache: "no-store" });
       const json = await res.json();
       if (!res.ok || !json.success) throw new Error(json.message || "Follow-ups could not load.");
-      // Filtered again here rather than trusted: ?lead_id= narrows the query, but
-      // this panel must never show another lead's thread if the param is ever
-      // dropped or the endpoint reverts to returning the whole table.
-      const mine = (json.data || []).filter(
-        (f: Followup) => String(f.leadId) === String(leadId)
-      );
+      const mine = (json.data || []).filter((f: Followup) => String(f.leadId) === String(leadId));
       setFollowups(mine);
     } catch (err: any) {
       setThreadError(err.message || "Follow-ups could not load.");
@@ -1279,9 +1051,7 @@ function CaseDrawer({
     }
   }, [leadId]);
 
-  useEffect(() => {
-    loadThread();
-  }, [loadThread]);
+  useEffect(() => { loadThread(); }, [loadThread]);
 
   const saveFollowup = async () => {
     if (!note.trim() || !leadId || saving) return;
@@ -1331,10 +1101,6 @@ function CaseDrawer({
     ["Registration", shortDate(row.raw?.actual_registration_date || row.raw?.expected_registration_date)],
   ];
 
-  /* The lead BookingFormModal needs, rebuilt from the booking's own lead_* columns
-     rather than from row.leadId. Same value in practice, but it comes from the
-     record being edited, so the form still opens if the revenue row's lead link is
-     ever missing — and it carries the name/phone/address the form prefills from. */
   const bookingLead = booking
     ? {
       id: booking.lead_id ?? leadId,
@@ -1352,112 +1118,87 @@ function CaseDrawer({
     }
     : null;
 
-  const labelCls = `text-[10px] font-bold uppercase tracking-[0.07em] ${theme.textMuted}`;
-  const fieldCls = `w-full rounded-lg px-3 py-2 text-sm outline-none border transition-colors ${isDark ? "border-white/10 bg-white/[0.04] text-gray-100" : "border-slate-200 bg-white text-slate-800"
-    }`;
-
   return (
-    <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true" aria-label="Case detail">
-      <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.55)" }} onClick={onClose} />
+    <div className="fixed inset-0 z-[50] flex justify-end" role="dialog">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
 
-      <aside
-        className={`relative h-full w-full sm:max-w-[540px] flex flex-col border-l overflow-hidden ${isDark ? "border-white/10 bg-[#0d0d12]" : "border-slate-200 bg-white"
-          }`}
-        style={{ animation: "bdSlideIn 220ms cubic-bezier(0.22, 1, 0.36, 1)" }}
+      <motion.aside
+        initial={{ x: "100%" }}
+        animate={{ x: 0 }}
+        exit={{ x: "100%" }}
+        transition={{ duration: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
+        className={`relative h-full w-full sm:max-w-[420px] flex flex-col border-l shadow-2xl ${isDark ? "border-white/10 bg-[#1C1C1E]" : "border-black/5 bg-white"}`}
       >
-        <style>{`
-          @keyframes bdSlideIn { from { transform: translateX(24px); opacity: 0.4 } to { transform: translateX(0); opacity: 1 } }
-          @media (prefers-reduced-motion: reduce) { aside { animation: none !important } }
-        `}</style>
-
-        <header className={`px-5 py-4 border-b flex items-start justify-between gap-3 ${theme.tableBorder}`}>
+        <header className={`px-6 py-5 border-b flex items-start justify-between gap-4 ${isDark ? "border-[#38383A] bg-[#2C2C2E]/20" : "border-[#E5E5EA] bg-[#F9F9F9]"}`}>
           <div className="min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h2 className={`text-base font-black leading-tight ${theme.text}`}>{row.customerName}</h2>
+            <div className="flex items-center gap-3 flex-wrap">
+              <h2 className={`text-[18px] font-semibold tracking-tight leading-tight ${isDark ? "text-white" : "text-black"}`}>{row.customerName}</h2>
               <StatusChip row={row} isDark={isDark} />
             </div>
-            <p className={`text-[11px] mt-1 ${theme.textMuted}`}>
+            <p className={`text-[13px] font-medium tracking-tight mt-1.5 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
               {row.flatNo} · {row.bookingNumber} · {row.salesManager}
             </p>
-            {row.customerNote && <p className={`text-[11px] mt-1 italic ${theme.textMuted}`}>{row.customerNote}</p>}
+            {row.customerNote && <p className={`text-[12px] mt-1.5 italic ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>{row.customerNote}</p>}
             {bookingId && (
               <button
                 onClick={openBookingForm}
                 disabled={loadingBooking}
-                className={`mt-2 text-[10px] font-black px-2.5 py-1 rounded-full inline-flex items-center gap-1.5 border transition-colors ${isDark
-                  ? "border-white/15 text-gray-200 hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed"
-                  : "border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                className={`mt-3 text-[12px] font-semibold tracking-wide px-3.5 py-1.5 rounded-full inline-flex items-center gap-2 transition-colors ${isDark
+                  ? "bg-[#2C2C2E] text-white hover:bg-[#3A3A3C] disabled:opacity-50"
+                  : "bg-[#F2F2F7] text-black hover:bg-[#E5E5EA] disabled:opacity-50"
                   }`}
               >
-                {loadingBooking ? (
-                  <Loader className="w-3 h-3 animate-spin" />
-                ) : (
-                  <FileText className="w-3 h-3" />
-                )}
-                {loadingBooking ? "Loading…" : "View booking form"}
+                {loadingBooking ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
+                {loadingBooking ? "Loading…" : "View Booking Form"}
               </button>
             )}
           </div>
-          <button
-            onClick={onClose}
-            className={`p-1.5 rounded-lg flex-shrink-0 ${isDark ? "hover:bg-white/10 text-gray-300" : "hover:bg-slate-100 text-slate-500"
-              }`}
-            aria-label="Close"
-          >
+          <button onClick={onClose} className={`p-2 rounded-full transition-colors shrink-0 ${isDark ? "bg-[#2C2C2E] hover:bg-[#3A3A3C] text-[#8E8E93]" : "bg-[#F2F2F7] hover:bg-[#E5E5EA] text-[#8E8E93]"}`}>
             <X className="w-4 h-4" />
           </button>
         </header>
 
-        <div className="flex-1 overflow-y-auto custom-scrollbar px-5 py-4 space-y-5">
+        <div className="flex-1 overflow-y-auto custom-scrollbar px-6 py-5 space-y-8">
           <section>
-            <p className={`${labelCls} mb-2.5`}>Case detail</p>
-            <div
-              className={`rounded-xl border divide-y ${isDark ? "border-white/10 divide-white/[0.07]" : "border-slate-200 divide-slate-100"
-                }`}
-            >
-              {detailRows.map(([label, value]) => (
-                <div key={label} className="flex items-center justify-between gap-3 px-3 py-2">
-                  <span className={`text-[11px] ${theme.textMuted}`}>{label}</span>
-                  <span className={`text-xs font-semibold text-right tabular-nums ${theme.text}`}>{value}</span>
+            <p className={`text-[11px] font-semibold uppercase tracking-wider mb-3 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>Case Detail</p>
+            <div className={`rounded-[14px] overflow-hidden border ${isDark ? "border-[#38383A] bg-[#2C2C2E]" : "border-[#E5E5EA] bg-[#F2F2F7]"}`}>
+              {detailRows.map(([label, value], i) => (
+                <div key={label} className={`flex items-center justify-between gap-3 px-4 py-3 ${i !== detailRows.length - 1 ? (isDark ? "border-b border-[#38383A]" : "border-b border-[#E5E5EA]") : ""}`}>
+                  <span className={`text-[12px] font-medium ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>{label}</span>
+                  <span className={`text-[13px] font-semibold tracking-tight text-right tabular-nums ${isDark ? "text-white" : "text-black"}`}>{value}</span>
                 </div>
               ))}
             </div>
           </section>
 
-          {/* OCR receipt history */}
           <section>
-            <div className="flex items-center justify-between gap-2 mb-2.5">
-              <p className={labelCls}>OCR receipts {ocrBreakdown.length > 0 && `(${ocrBreakdown.length})`}</p>
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <p className={`text-[11px] font-semibold uppercase tracking-wider ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>OCR Receipts {ocrBreakdown.length > 0 && `(${ocrBreakdown.length})`}</p>
               {mayRecord && bookingId && (
                 <button
                   onClick={onRecordOcr}
-                  className="text-[10px] font-black px-2.5 py-1 rounded-full text-white inline-flex items-center gap-1"
-                  style={{ background: ACCENT }}
+                  className={`text-[11px] font-semibold tracking-wide px-3 py-1.5 rounded-full text-white inline-flex items-center gap-1.5 transition-all active:scale-95 ${isDark ? `bg-[${ACCENT_DARK}]` : `bg-[${ACCENT}]`}`}
                 >
-                  <Plus className="w-3 h-3" />
-                  Record receipt
+                  <Plus className="w-3 h-3" /> Record receipt
                 </button>
               )}
             </div>
 
             {loadingSummary ? (
-              <div className={`h-16 rounded-xl animate-pulse ${isDark ? "bg-white/[0.05]" : "bg-slate-100"}`} />
+              <div className={`h-[120px] rounded-[14px] animate-pulse ${isDark ? "bg-[#2C2C2E]" : "bg-[#F2F2F7]"}`} />
             ) : ocrBreakdown.length === 0 ? (
-              <p className={`text-[11px] ${theme.textMuted}`}>
+              <p className={`text-[13px] leading-relaxed ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
                 No customer receipts recorded yet. Each one you record shows here with its date and mode.
               </p>
             ) : (
-              <div
-                className={`rounded-xl border divide-y ${isDark ? "border-white/10 divide-white/[0.07]" : "border-slate-200 divide-slate-100"
-                  }`}
-              >
+              <div className={`rounded-[14px] overflow-hidden border ${isDark ? "border-[#38383A] bg-[#2C2C2E]" : "border-[#E5E5EA] bg-[#F2F2F7]"}`}>
                 {ocrBreakdown.map((line: any, i: number) => (
-                  <div key={i} className="flex items-center justify-between gap-3 px-3 py-2">
+                  <div key={i} className={`flex items-center justify-between gap-3 px-4 py-3 ${i !== ocrBreakdown.length - 1 ? (isDark ? "border-b border-[#38383A]" : "border-b border-[#E5E5EA]") : ""}`}>
                     <span className="min-w-0">
-                      <span className={`block text-xs font-semibold truncate ${theme.text}`}>{line.type}</span>
-                      <span className={`block text-[10px] ${theme.textMuted}`}>{shortDate(line.date)}</span>
+                      <span className={`block text-[13px] font-semibold tracking-tight truncate ${isDark ? "text-white" : "text-black"}`}>{line.type}</span>
+                      <span className={`block text-[11px] font-medium mt-0.5 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>{shortDate(line.date)}</span>
                     </span>
-                    <span className="text-xs font-bold tabular-nums text-cyan-500 flex-shrink-0">
+                    <span className={`text-[13px] font-semibold tabular-nums flex-shrink-0 ${isDark ? "text-[#32D74B]" : "text-[#34C759]"}`}>
                       {inr(line.amount)}
                     </span>
                   </div>
@@ -1466,86 +1207,79 @@ function CaseDrawer({
             )}
           </section>
 
-          {/* Follow-up composer */}
           <section>
-            <div className="flex items-center gap-2 mb-2.5">
-              <MessageSquarePlus className="w-3.5 h-3.5" style={{ color: ACCENT }} />
-              <p className={labelCls}>Add a follow-up</p>
+            <div className="flex items-center gap-2 mb-3">
+              <MessageSquarePlus className={`w-4 h-4 ${isDark ? `text-[${ACCENT_DARK}]` : `text-[${ACCENT}]`}`} />
+              <p className={`text-[11px] font-semibold uppercase tracking-wider ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>Add a Follow-Up</p>
             </div>
 
             <textarea
               ref={noteRef}
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              onKeyDown={(e) => {
-                if ((e.metaKey || e.ctrlKey) && e.key === "Enter") saveFollowup();
-              }}
+              onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") saveFollowup(); }}
               rows={4}
               disabled={!leadId}
-              placeholder="Spoke to the banker — sanction letter expected Friday, registration slot booked for the 12th."
-              className={`${fieldCls} resize-none leading-relaxed disabled:opacity-50`}
+              placeholder="Spoke to the banker — sanction letter expected Friday..."
+              className={`w-full rounded-[14px] px-4 py-3 text-[14px] font-medium tracking-tight outline-none resize-none leading-relaxed transition-all focus:ring-2 focus:ring-[${ACCENT}]/50 border disabled:opacity-50 ${isDark ? "bg-[#2C2C2E] border-[#38383A] text-white placeholder-[#8E8E93]" : "bg-[#F2F2F7] border-[#E5E5EA] text-black placeholder-[#8E8E93]"
+                }`}
             />
 
-            <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2.5 mt-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3 mt-3">
               <div>
-                <label className={`${labelCls} block mb-1`}>Next follow-up</label>
+                <label className={`block text-[11px] font-semibold uppercase tracking-wider mb-1.5 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>Next Date</label>
                 <input
                   type="date"
                   value={nextDate}
                   onChange={(e) => setNextDate(e.target.value)}
                   disabled={!leadId}
-                  className={`${fieldCls} disabled:opacity-50`}
+                  className={`w-full rounded-[10px] px-3 py-2 text-[13px] font-medium tracking-tight outline-none transition-all focus:ring-2 focus:ring-[${ACCENT}]/50 border disabled:opacity-50 ${isDark ? "bg-[#2C2C2E] border-[#38383A] text-white" : "bg-[#F2F2F7] border-[#E5E5EA] text-black"
+                    }`}
                 />
               </div>
               <button
                 onClick={saveFollowup}
                 disabled={!note.trim() || saving || !leadId}
-                className="h-9 self-end px-4 rounded-lg text-xs font-black text-white inline-flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
-                style={{ background: ACCENT }}
+                className={`self-end px-5 py-2 rounded-full text-[13px] font-semibold tracking-wide text-white inline-flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${isDark ? `bg-[${ACCENT_DARK}]` : `bg-[${ACCENT}]`
+                  }`}
               >
-                {justSaved ? <Check className="w-3.5 h-3.5" /> : <Send className="w-3.5 h-3.5" />}
-                {saving ? "Saving…" : justSaved ? "Saved" : "Save follow-up"}
+                {justSaved ? <Check className="w-4 h-4" /> : <Send className="w-4 h-4" />}
+                {saving ? "Saving…" : justSaved ? "Saved" : "Save"}
               </button>
             </div>
-
-            <p className={`text-[10px] mt-1.5 ${theme.textMuted}`}>⌘/Ctrl + Enter saves.</p>
-            {saveError && <p className="text-[11px] mt-1.5 text-rose-500 font-semibold">{saveError}</p>}
+            {saveError && <p className={`text-[12px] mt-2 font-medium ${isDark ? "text-[#FF453A]" : "text-[#FF3B30]"}`}>{saveError}</p>}
           </section>
 
-          <section>
-            <p className={`${labelCls} mb-2.5`}>History {followups.length > 0 && `(${followups.length})`}</p>
+          <section className="pb-6">
+            <p className={`text-[11px] font-semibold uppercase tracking-wider mb-3 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>History {followups.length > 0 && `(${followups.length})`}</p>
 
             {loadingThread ? (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {Array.from({ length: 2 }).map((_, i) => (
-                  <div key={i} className={`h-16 rounded-xl animate-pulse ${isDark ? "bg-white/[0.05]" : "bg-slate-100"}`} />
+                  <div key={i} className={`h-[80px] rounded-[14px] animate-pulse ${isDark ? "bg-[#2C2C2E]" : "bg-[#F2F2F7]"}`} />
                 ))}
               </div>
             ) : threadError ? (
-              <p className={`text-[11px] ${theme.textMuted}`}>{threadError}</p>
+              <p className={`text-[13px] ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>{threadError}</p>
             ) : followups.length === 0 ? (
-              <p className={`text-[11px] ${theme.textMuted}`}>
+              <p className={`text-[13px] leading-relaxed ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
                 Nothing logged yet. The first follow-up you save shows up here with your name against it.
               </p>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {followups.map((f) => (
-                  <article
-                    key={f._id}
-                    className={`rounded-xl border p-3 ${isDark ? "border-white/10 bg-white/[0.03]" : "border-slate-200 bg-slate-50/60"
-                      }`}
-                  >
-                    <div className="flex items-center justify-between gap-2 mb-1.5">
-                      <span className={`inline-flex items-center gap-1.5 text-[11px] font-bold ${theme.text}`}>
-                        <User className="w-3 h-3 opacity-60" />
+                  <article key={f._id} className={`rounded-[14px] p-4 border ${isDark ? "border-[#38383A] bg-[#2C2C2E]/50" : "border-[#E5E5EA] bg-[#F9F9F9]"}`}>
+                    <div className="flex items-center justify-between gap-3 mb-2">
+                      <span className={`inline-flex items-center gap-1.5 text-[12px] font-semibold tracking-tight ${isDark ? "text-white" : "text-black"}`}>
+                        <User className="w-3.5 h-3.5 opacity-70" />
                         {f.salesManagerName || f.createdBy || "Team"}
                       </span>
-                      <span className={`text-[10px] ${theme.textMuted}`}>{shortDate(f.createdAt)}</span>
+                      <span className={`text-[11px] font-medium ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>{shortDate(f.createdAt)}</span>
                     </div>
-                    <p className={`text-xs leading-relaxed whitespace-pre-wrap ${theme.text}`}>{f.message}</p>
+                    <p className={`text-[13px] leading-relaxed whitespace-pre-wrap tracking-tight ${isDark ? "text-[#EBEBF5]/90" : "text-[#333333]"}`}>{f.message}</p>
                     {f.siteVisitDate && (
-                      <p className={`text-[10px] mt-1.5 inline-flex items-center gap-1 ${theme.textMuted}`}>
-                        <CalendarClock className="w-3 h-3" />
+                      <p className={`text-[11px] mt-2 inline-flex items-center gap-1.5 font-medium ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
+                        <CalendarClock className="w-3.5 h-3.5" />
                         Next: {shortDate(f.siteVisitDate)}
                       </p>
                     )}
@@ -1555,81 +1289,71 @@ function CaseDrawer({
             )}
           </section>
         </div>
-      </aside>
+      </motion.aside>
 
-      {/* Booking workspace, stacked above the drawer. ClosedLeadBookingView is an
-          inline panel rather than a modal — it is embedded in a page in Sales — so
-          it needs this overlay shell and its own close control here. */}
-      {bookingOpen && (
-        <div
-          className="fixed inset-0 z-[60] flex items-start justify-center p-2 sm:p-5"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Booking form"
-        >
-          <div
-            className="absolute inset-0"
-            style={{ background: "rgba(0,0,0,0.6)" }}
-            onClick={() => setBookingOpen(false)}
-          />
-          <div
-            className={`relative w-full max-w-6xl max-h-full flex flex-col rounded-2xl border shadow-2xl overflow-hidden ${isDark ? "border-white/10 bg-[#0d0d12]" : "border-slate-200 bg-white"
-              }`}
-          >
-            <div className={`px-4 py-3 border-b flex items-center justify-between gap-3 flex-shrink-0 ${theme.tableBorder}`}>
-              <div className="min-w-0">
-                <p className={`text-sm font-black truncate ${theme.text}`}>Booking form</p>
-                <p className={`text-[11px] ${theme.textMuted}`}>
-                  {row.bookingNumber} · {row.customerName}
-                </p>
+      <AnimatePresence>
+        {bookingOpen && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6" role="dialog" aria-modal="true">
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+              onClick={() => setBookingOpen(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              transition={{ duration: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
+              className={`relative w-full max-w-6xl max-h-[90vh] flex flex-col rounded-[24px] border shadow-[0_24px_48px_rgba(0,0,0,0.2)] overflow-hidden ${isDark ? "border-white/10 bg-[#1C1C1E]" : "border-black/5 bg-white"
+                }`}
+            >
+              <div className={`px-6 py-4 border-b flex items-center justify-between gap-4 flex-shrink-0 ${isDark ? "border-[#38383A] bg-[#2C2C2E]/20" : "border-[#E5E5EA] bg-[#F9F9F9]"}`}>
+                <div className="min-w-0">
+                  <p className={`text-[15px] font-semibold tracking-tight truncate ${isDark ? "text-white" : "text-black"}`}>Booking Form</p>
+                  <p className={`text-[12px] font-medium tracking-tight mt-0.5 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
+                    {row.bookingNumber} · {row.customerName}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setBookingOpen(false)}
+                  className={`p-1.5 rounded-full transition-colors flex-shrink-0 ${isDark ? "bg-[#2C2C2E] hover:bg-[#3A3A3C] text-[#8E8E93]" : "bg-[#F2F2F7] hover:bg-[#E5E5EA] text-[#8E8E93]"}`}
+                >
+                  <X className="w-5 h-5" />
+                </button>
               </div>
-              <button
-                onClick={() => setBookingOpen(false)}
-                className={`p-1.5 rounded-lg flex-shrink-0 ${isDark ? "hover:bg-white/10 text-gray-300" : "hover:bg-slate-100 text-slate-500"
-                  }`}
-                aria-label="Close booking form"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
 
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-4">
-              {loadingBooking ? (
-                <div className="space-y-2">
-                  {Array.from({ length: 5 }).map((_, i) => (
-                    <div key={i} className={`h-16 rounded-xl animate-pulse ${isDark ? "bg-white/[0.05]" : "bg-slate-100"}`} />
-                  ))}
-                </div>
-              ) : bookingError ? (
-                <div className="py-8 text-center">
-                  <p className="text-xs text-red-500">{bookingError}</p>
-                  <button
-                    onClick={fetchBooking}
-                    className="mt-3 text-[11px] font-black px-3 py-1.5 rounded-lg text-white"
-                    style={{ background: ACCENT }}
-                  >
-                    Try again
-                  </button>
-                </div>
-              ) : booking ? (
-                <ClosedLeadBookingView
-                  booking={booking}
-                  // Rebuilt from the booking's own lead_* columns — see bookingLead.
-                  // The nested Edit Booking Form needs lead.id to submit against.
-                  lead={bookingLead}
-                  isDark={isDark}
-                  userRole={(user?.role || "").toLowerCase().replace(/\s+/g, "_") || "sales"}
-                  currentUser={user}
-                  // Fires after an edit, a cancellation, or a cancellation edit.
-                  // Refetch the record so the open view shows the new values, and
-                  // refresh the table behind it — these figures feed its totals.
-                  onRefetch={() => { fetchBooking(); onSaved?.(); }}
-                />
-              ) : null}
-            </div>
+              <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
+                {loadingBooking ? (
+                  <div className="space-y-3">
+                    {Array.from({ length: 4 }).map((_, i) => (
+                      <div key={i} className={`h-[100px] rounded-[16px] animate-pulse ${isDark ? "bg-[#2C2C2E]" : "bg-[#F2F2F7]"}`} />
+                    ))}
+                  </div>
+                ) : bookingError ? (
+                  <div className="py-12 text-center">
+                    <p className={`text-[14px] font-semibold ${isDark ? "text-[#FF453A]" : "text-[#FF3B30]"}`}>{bookingError}</p>
+                    <button
+                      onClick={fetchBooking}
+                      className={`mt-4 text-[13px] font-semibold tracking-wide px-5 py-2.5 rounded-full text-white transition-all active:scale-95 ${isDark ? `bg-[${ACCENT_DARK}]` : `bg-[${ACCENT}]`}`}
+                    >
+                      Try again
+                    </button>
+                  </div>
+                ) : booking ? (
+                  <ClosedLeadBookingView
+                    booking={booking}
+                    lead={bookingLead}
+                    isDark={isDark}
+                    userRole={(user?.role || "").toLowerCase().replace(/\s+/g, "_") || "sales"}
+                    currentUser={user}
+                    onRefetch={() => { fetchBooking(); onSaved?.(); }}
+                  />
+                ) : null}
+              </div>
+            </motion.div>
           </div>
-        </div>
-      )}
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -1637,108 +1361,72 @@ function CaseDrawer({
 /* ══════════════════════════════════════════════════════════════════════
    "How this works"
    ══════════════════════════════════════════════════════════════════════ */
-
-function HowItWorks({ onClose, theme, isDark }: { onClose: () => void; theme: any; isDark: boolean }) {
+function HowItWorks({ onClose, isDark }: any) {
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
   const sections = [
-    {
-      title: "What appears in this table",
-      body: "One row per confirmed booking. A lead shows up only once it has been marked closing and a booking application exists, so live enquiries are deliberately absent.",
-    },
-    {
-      title: "Money arrives in two streams",
-      body: "The buyer pays their own share, and the bank disburses the loan. OCR and Disbursement are those two streams kept separate, because they are chased by different people and arrive on different dates. Together they make Collected to date.",
-    },
-    {
-      title: "OCR received",
-      body: "The buyer's own contribution actually in hand — token, booking amount, instalments, cash component. It is the sum of dated customer receipts on the ledger, not a number anyone types into a total. That is why it can only go up when a receipt is recorded.",
-    },
-    {
-      title: "Recording an OCR receipt",
-      body: "Press the plus on any OCR cell. Amount and date are required, because an undated receipt is not yet collected money and would inflate the figure. The entry is appended to the ledger; a mistake is fixed by reversing it, which keeps the audit trail whole.",
-    },
-    {
-      title: "% of own share",
-      body: "OCR received against the own contribution the buyer is required to bring, which is agreement value plus charges minus the sanctioned loan. It reads 100% when the buyer has paid their full share, even if the loan is still pending.",
-    },
-    {
-      title: "Disbursement",
-      body: "The sum of loan tranches marked completed. Pending and scheduled tranches are earmarked, not received, so they are excluded — which is why this can sit below the sanctioned amount.",
-    },
-    {
-      title: "Balance receivable",
-      body: "Agreement value minus OCR received minus disbursement. Where the ledger view supplies an outstanding balance directly, that figure wins, since it also accounts for reversals.",
-    },
-    {
-      title: "Stamp duty, registration fee and GST",
-      body: "Collected on the government's behalf, so they are never counted as revenue here. They appear in the case drawer for reference and are deliberately kept out of every total on this screen.",
-    },
-    {
-      title: "Sanction / regi. status",
-      body: "Read from the booking's registration and sanction fields and shortened to Done, Registered · disbursement pending, In process, or Not started. Wording that matches no known pattern is shown exactly as typed, so nothing is quietly reclassified.",
-    },
-    {
-      title: "Totals",
-      body: "The footer and the cards above sum whatever is currently filtered, not the whole database. Narrow by manager and the totals narrow with it, which is what makes them useful in a one-manager review.",
-    },
-    {
-      title: "Who can record money",
-      body: "Only Admin and Site Head see the plus button, matching the rule already applied to payment milestones and TDS. Everyone can read the figures and add follow-ups.",
-    },
-    {
-      title: "How fresh this is",
-      body: "The table reloads on its own every minute, and the refresh button forces it immediately. Recording a receipt refreshes it at once so the new figure is visible before you close the row.",
-    },
+    { title: "What appears in this table", body: "One row per confirmed booking. A lead shows up only once it has been marked closing and a booking application exists, so live enquiries are deliberately absent." },
+    { title: "Money arrives in two streams", body: "The buyer pays their own share, and the bank disburses the loan. OCR and Disbursement are those two streams kept separate, because they are chased by different people and arrive on different dates. Together they make Collected to date." },
+    { title: "OCR received", body: "The buyer's own contribution actually in hand — token, booking amount, instalments, cash component. It is the sum of dated customer receipts on the ledger, not a number anyone types into a total. That is why it can only go up when a receipt is recorded." },
+    { title: "Recording an OCR receipt", body: "Press the plus on any OCR cell. Amount and date are required, because an undated receipt is not yet collected money and would inflate the figure. The entry is appended to the ledger; a mistake is fixed by reversing it, which keeps the audit trail whole." },
+    { title: "% of own share", body: "OCR received against the own contribution the buyer is required to bring, which is agreement value plus charges minus the sanctioned loan. It reads 100% when the buyer has paid their full share, even if the loan is still pending." },
+    { title: "Disbursement", body: "The sum of loan tranches marked completed. Pending and scheduled tranches are earmarked, not received, so they are excluded — which is why this can sit below the sanctioned amount." },
+    { title: "Balance receivable", body: "Agreement value minus OCR received minus disbursement. Where the ledger view supplies an outstanding balance directly, that figure wins, since it also accounts for reversals." },
+    { title: "Stamp duty, registration fee and GST", body: "Collected on the government's behalf, so they are never counted as revenue here. They appear in the case drawer for reference and are deliberately kept out of every total on this screen." },
+    { title: "Sanction / regi. status", body: "Read from the booking's registration and sanction fields and shortened to Done, Registered · disbursement pending, In process, or Not started. Wording that matches no known pattern is shown exactly as typed, so nothing is quietly reclassified." },
+    { title: "Totals", body: "The footer and the cards above sum whatever is currently filtered, not the whole database. Narrow by manager and the totals narrow with it, which is what makes them useful in a one-manager review." },
+    { title: "Who can record money", body: "Only Admin and Site Head see the plus button, matching the rule already applied to payment milestones and TDS. Everyone can read the figures and add follow-ups." },
+    { title: "How fresh this is", body: "The table reloads on its own every minute, and the refresh button forces it immediately. Recording a receipt refreshes it at once so the new figure is visible before you close the row." },
   ];
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" role="dialog" aria-modal="true">
-      <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.6)" }} onClick={onClose} />
-      <div
-        className={`relative w-full max-w-lg max-h-[85vh] flex flex-col rounded-2xl border overflow-hidden ${isDark ? "border-white/10 bg-[#0d0d12]" : "border-slate-200 bg-white"
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6" role="dialog">
+      <motion.div
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 10 }}
+        transition={{ duration: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
+        className={`relative w-full max-w-lg max-h-[85vh] flex flex-col rounded-[24px] border shadow-[0_24px_48px_rgba(0,0,0,0.2)] overflow-hidden ${isDark ? "border-white/10 bg-[#1C1C1E]" : "border-black/5 bg-white"
           }`}
       >
-        <header className={`px-5 py-4 border-b flex items-start justify-between gap-3 ${theme.tableBorder}`}>
+        <header className={`px-6 py-5 border-b flex items-start justify-between gap-4 ${isDark ? "border-[#38383A] bg-[#2C2C2E]/20" : "border-[#E5E5EA] bg-[#F9F9F9]"}`}>
           <div>
-            <h2 className={`text-sm font-black uppercase tracking-[0.06em] ${theme.text}`}>How this panel works</h2>
-            <p className={`text-[11px] mt-1 ${theme.textMuted}`}>
+            <h2 className={`text-[16px] font-semibold tracking-tight ${isDark ? "text-white" : "text-black"}`}>How this panel works</h2>
+            <p className={`text-[12px] font-medium tracking-tight mt-1 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
               Every figure is derived from a dated receipt. Here is exactly where each one comes from.
             </p>
           </div>
-          <button
-            onClick={onClose}
-            className={`p-1.5 rounded-lg flex-shrink-0 ${isDark ? "hover:bg-white/10 text-gray-300" : "hover:bg-slate-100 text-slate-500"
-              }`}
-            aria-label="Close"
-          >
+          <button onClick={onClose} className={`p-1.5 rounded-full transition-colors flex-shrink-0 ${isDark ? "bg-[#2C2C2E] hover:bg-[#3A3A3C] text-[#8E8E93]" : "bg-[#F2F2F7] hover:bg-[#E5E5EA] text-[#8E8E93]"}`}>
             <X className="w-4 h-4" />
           </button>
         </header>
 
-        <div className="flex-1 overflow-y-auto custom-scrollbar px-5 py-4 space-y-4">
+        <div className="flex-1 overflow-y-auto custom-scrollbar px-6 py-5 space-y-6">
           {sections.map((s) => (
             <section key={s.title}>
-              <h3 className="text-xs font-black mb-1" style={{ color: ACCENT }}>
+              <h3 className={`text-[13px] font-bold tracking-tight mb-1.5 ${isDark ? `text-[${ACCENT_DARK}]` : `text-[${ACCENT}]`}`}>
                 {s.title}
               </h3>
-              <p className={`text-[12px] leading-relaxed ${theme.textMuted}`}>{s.body}</p>
+              <p className={`text-[13px] leading-relaxed tracking-tight ${isDark ? "text-[#EBEBF5]/90" : "text-[#333333]"}`}>{s.body}</p>
             </section>
           ))}
         </div>
 
-        <footer className={`px-5 py-3.5 border-t ${theme.tableBorder}`}>
-          <button onClick={onClose} className="h-9 w-full rounded-lg text-xs font-black text-white" style={{ background: ACCENT }}>
+        <footer className={`px-6 py-4 border-t ${isDark ? "border-[#38383A] bg-[#1C1C1E]" : "border-[#E5E5EA] bg-white"}`}>
+          <button onClick={onClose} className={`w-full py-3 rounded-full text-[14px] font-semibold tracking-wide text-white transition-all active:scale-95 ${isDark ? `bg-[${ACCENT_DARK}]` : `bg-[${ACCENT}]`}`}>
             Got it
           </button>
         </footer>
-      </div>
+      </motion.div>
     </div>
   );
 }

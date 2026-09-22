@@ -420,7 +420,7 @@ export default function GeoAnalyticsView({
 
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex flex-col gap-0.5">
-            <h1 className={`text-xl sm:text-2xl font-bold tracking-tight ${isDark ? "text-white" : "text-black"}`}>
+            <h1 className={`text-base sm:text-xl font-black tracking-tight ${theme.accentText}`}>
               Geo Analytics
             </h1>
             <p className={`text-[13px] font-medium tracking-tight ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
@@ -461,16 +461,16 @@ export default function GeoAnalyticsView({
           {/* ── Summary Cards (iOS Widget Style) ── */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
             {summaryCards.map(card => (
-              <div key={card.label} className={`rounded-[24px] p-5 flex flex-col justify-between h-[130px] transition-transform hover:scale-[1.02] ${isDark ? "bg-[#1C1C1E] shadow-sm border border-white/5" : "bg-white shadow-[0_4px_24px_rgba(0,0,0,0.04)] border border-black/5"}`}>
-                <div className="flex items-center gap-3">
-                  <div className={`w-9 h-9 rounded-[10px] flex items-center justify-center ${card.bg}`}>
-                    <span className={`text-[16px] ${card.color}`}>{card.icon}</span>
+              <div key={card.label} className={`rounded-[20px] sm:rounded-[24px] p-4 sm:p-5 flex flex-col justify-between h-[110px] sm:h-[120px] md:h-[130px] transition-transform hover:scale-[1.02] ${isDark ? "bg-[#1C1C1E] shadow-sm border border-white/5" : "bg-white shadow-[0_4px_24px_rgba(0,0,0,0.04)] border border-black/5"}`}>
+                <div className="flex items-center gap-2.5 sm:gap-3">
+                  <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-[8px] sm:rounded-[10px] flex items-center justify-center flex-shrink-0 ${card.bg}`}>
+                    <span className={`text-[12px] sm:text-[14px] md:text-[16px] ${card.color}`}>{card.icon}</span>
                   </div>
-                  <p className={`text-[11px] uppercase font-bold tracking-wider ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
+                  <p className={`text-[10px] sm:text-[11px] uppercase font-bold tracking-wider ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
                     {card.label}
                   </p>
                 </div>
-                <p className={`text-2xl sm:text-[26px] font-bold tracking-tight truncate mt-auto ${isDark ? "text-white" : "text-black"}`}>
+                <p className={`text-[20px] sm:text-[22px] md:text-[26px] font-bold tracking-tight truncate mt-auto ${isDark ? "text-white" : "text-black"}`}>
                   {card.value}
                 </p>
               </div>

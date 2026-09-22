@@ -575,13 +575,13 @@ function ChannelPartnerEnquiriesTable({
   }, []);
 
   return (
-    <div className="flex flex-col h-full overflow-hidden p-2">
+    <div className="flex flex-col h-full overflow-hidden gap-4 p-4 sm:p-6 font-sans antialiased">
       {/* ── Header ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 mb-3 px-2 pt-2">
-        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-          <FaHandshake className={`hidden sm:inline-block ${t.accentText}`} />
+        <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
+          <FaHandshake className={`hidden h-8 w-8 sm:inline-block ${t.accentText}`} />
           <div>
-            <h2 className={`text-sm sm:text-base font-bold tracking-tight ${t.text}`}>{title || "Channel Partner Enquiries"}</h2>
+            <h2 className={`text-base sm:text-xl font-black tracking-tight ${t.accentText}`}>{title || "Channel Partner Enquiries"}</h2>
             {subtitle && <p className={`text-[10px] sm:text-[11px] ${t.textFaint}`}>{subtitle}</p>}
           </div>
           {/* Counts are meaningless until the rows are in. Showing "(0) · 0

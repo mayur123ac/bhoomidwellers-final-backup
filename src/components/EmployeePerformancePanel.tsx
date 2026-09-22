@@ -199,7 +199,7 @@ export default function EmployeePerformancePanel({
 
           {/* Left: Title & Overview/Employee Status */}
           <div className="flex items-center gap-4 flex-1 min-w-0">
-            <h1 className={`text-xl sm:text-2xl font-bold tracking-tight shrink-0 ${isDark ? "text-white" : "text-black"}`}>
+            <h1 className={`text-base sm:text-xl font-black tracking-tight ${theme.accentText}`}>
               Performance
             </h1>
 
@@ -446,17 +446,17 @@ function SummaryCard({
 
   return (
     <div
-      className={`relative flex flex-col justify-between rounded-[24px] p-5 h-[160px] transition-transform duration-300 hover:scale-[1.02] ${isDark
-        ? "bg-[#1C1C1E] shadow-sm"
-        : "bg-white shadow-[0_4px_24px_rgba(0,0,0,0.04)]"
+      className={`relative flex flex-col justify-between rounded-[20px] sm:rounded-[24px] p-4 sm:p-5 h-[120px] sm:h-[140px] md:h-[160px] transition-transform duration-300 hover:scale-[1.02] ${isDark
+        ? "bg-[#1C1C1E] shadow-sm border border-white/5"
+        : "bg-white shadow-[0_4px_24px_rgba(0,0,0,0.04)] border border-black/5"
         }`}
     >
-      <div className="flex items-start justify-between">
+      <div className="flex items-start justify-between gap-2">
         <div
-          className="w-10 h-10 rounded-[12px] flex items-center justify-center"
+          className="w-8 h-8 sm:w-10 sm:h-10 rounded-[10px] sm:rounded-[12px] flex items-center justify-center flex-shrink-0"
           style={{ backgroundColor: iconBg }}
         >
-          <Icon className="text-[20px]" style={{ color: accentColor }} />
+          <Icon className="text-[16px] sm:text-[20px]" style={{ color: accentColor }} />
         </div>
 
         {periods && setPeriodValue && periodValue && (
@@ -465,15 +465,15 @@ function SummaryCard({
             <button
               onClick={() => setIsOpen(!isOpen)}
               onBlur={() => setTimeout(() => setIsOpen(false), 200)}
-              className={`flex items-center justify-between gap-1.5 pl-3 pr-2 py-1 rounded-full text-[11px] font-semibold tracking-wide outline-none cursor-pointer transition-colors ${isDark
+              className={`flex items-center justify-between gap-1 sm:gap-1.5 pl-2.5 sm:pl-3 pr-1.5 sm:pr-2 py-1 rounded-full text-[10px] sm:text-[11px] font-semibold tracking-wide outline-none cursor-pointer transition-colors ${isDark
                 ? "bg-[#2C2C2E] text-white hover:bg-[#3A3A3C]"
                 : "bg-[#F2F2F7] text-black hover:bg-[#E5E5EA]"
                 }`}
             >
-              <span className="truncate max-w-[80px]">
+              <span className="truncate max-w-[60px] sm:max-w-[80px]">
                 {periods.find((p) => p.value === periodValue)?.label || "Select"}
               </span>
-              <MdKeyboardArrowDown className={`w-3.5 h-3.5 transition-transform duration-300 flex-shrink-0 ${isOpen ? "rotate-180" : ""} ${isDark ? "text-gray-400" : "text-gray-500"}`} />
+              <MdKeyboardArrowDown className={`w-3 h-3 sm:w-3.5 sm:h-3.5 transition-transform duration-300 flex-shrink-0 ${isOpen ? "rotate-180" : ""} ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`} />
             </button>
 
             {/* Floating Menu Popover */}
@@ -484,9 +484,9 @@ function SummaryCard({
                   animate={{ opacity: 1, scale: 1, y: 0, filter: "blur(0px)" }}
                   exit={{ opacity: 0, scale: 0.95, y: -5, filter: "blur(4px)" }}
                   transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
-                  className={`absolute right-0 top-[calc(100%+6px)] w-[160px] p-1.5 rounded-[14px] shadow-[0_8px_30px_rgba(0,0,0,0.12)] z-50 backdrop-blur-2xl ${isDark
-                    ? "bg-[#1C1C1E]/80 border border-white/10"
-                    : "bg-white/85 border border-black/5"
+                  className={`absolute right-0 top-[calc(100%+6px)] w-[140px] sm:w-[160px] p-1.5 rounded-[14px] shadow-[0_8px_30px_rgba(0,0,0,0.12)] z-50 backdrop-blur-2xl ${isDark
+                    ? "bg-[#1C1C1E]/85 border border-white/10"
+                    : "bg-white/90 border border-black/5"
                     }`}
                 >
                   <div className="max-h-[200px] overflow-y-auto custom-scrollbar">
@@ -494,7 +494,7 @@ function SummaryCard({
                       <div key={p.value}>
                         <div
                           onClick={() => { setPeriodValue(p.value); setIsOpen(false); }}
-                          className={`px-3 py-2 text-[12px] font-medium tracking-tight rounded-[8px] cursor-pointer transition-colors flex items-center justify-between group ${isDark ? "hover:bg-white/10 text-white" : "hover:bg-black/5 text-black"
+                          className={`px-3 py-2 text-[11px] sm:text-[12px] font-medium tracking-tight rounded-[8px] cursor-pointer transition-colors flex items-center justify-between group ${isDark ? "hover:bg-white/10 text-white" : "hover:bg-black/5 text-black"
                             }`}
                         >
                           <span className={periodValue === p.value ? (isDark ? "text-white" : "text-black") : (isDark ? "text-[#8E8E93]" : "text-[#8E8E93]")}>
@@ -522,11 +522,11 @@ function SummaryCard({
           initial={{ opacity: 0, filter: "blur(4px)" }}
           animate={{ opacity: 1, filter: "blur(0px)" }}
           transition={{ duration: 0.3 }}
-          className={`text-[34px] font-bold tracking-[-0.04em] leading-none mb-1.5 ${isDark ? "text-white" : "text-black"}`}
+          className={`text-[24px] sm:text-[28px] md:text-[34px] font-bold tracking-tight sm:tracking-[-0.04em] leading-none mb-1 sm:mb-1.5 ${isDark ? "text-white" : "text-black"}`}
         >
           {fmtNum(value)}
         </motion.p>
-        <span className={`text-[13px] font-medium tracking-tight ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
+        <span className={`text-[10px] sm:text-[11px] md:text-[13px] font-medium tracking-tight ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
           {title}
         </span>
       </div>

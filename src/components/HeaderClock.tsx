@@ -44,14 +44,10 @@ export default function HeaderClock({
     };
   }, []);
 
-  const border = isDark ? "border-white/10" : "border-[#E5E7EB]";
-  const bg = isDark ? "bg-white/[0.04]" : "bg-white";
-  const timeColor = isDark ? "text-gray-100" : "text-[#111827]";
-  const metaColor = isDark ? "text-gray-400" : "text-[#6B7280]";
-
   return (
     <div
-      className={`hidden sm:flex h-9 flex-shrink-0 items-center gap-2 rounded-lg border px-2.5 ${border} ${bg} ${className}`}
+      className={`hidden sm:flex h-[34px] flex-shrink-0 items-center gap-2 rounded-full px-3.5 border transition-colors duration-200 cursor-default ${isDark ? "bg-white/10 border-white/10" : "bg-black/5 border-transparent shadow-[0_1px_2px_rgba(0,0,0,0.02)]"
+        } ${className}`}
       // The full date is not shown at this size, so it lives in the tooltip
       // rather than being unavailable.
       title={now ? `${formatAppDate(now)} · ${APP_TIMEZONE_ABBR}` : undefined}
@@ -61,12 +57,12 @@ export default function HeaderClock({
           header unusable with a screen reader. The value is still readable on
           demand via the label above. */}
       <span
-        className={`font-mono text-[12px] font-semibold leading-none tabular-nums ${timeColor}`}
+        className={`text-[13px] font-semibold tracking-tight tabular-nums ${isDark ? "text-white" : "text-black"}`}
         suppressHydrationWarning
       >
         {now ? formatAppTime(now, true) : "--:--:-- --"}
       </span>
-      <span className={`hidden lg:inline text-[10px] font-medium leading-none ${metaColor}`}>
+      <span className={`hidden lg:inline text-[11px] font-medium tracking-tight ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
         {now ? `${formatAppWeekday(now)} · ${APP_TIMEZONE_ABBR}` : APP_TIMEZONE_ABBR}
       </span>
     </div>

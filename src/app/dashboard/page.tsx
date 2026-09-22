@@ -2144,7 +2144,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
 
       {/* ── Welcome banner ── */}
       <div className={`${theme.card} rounded-2xl sm:rounded-3xl p-5 sm:p-6 mb-6 lg:mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4`} style={theme.cardGlass}>
-        <h2 className={`text-base sm:text-lg font-bold ${theme.text}`}>Welcome back, {user?.name || "Admin"}!</h2>
+        <h2 className={`text-base sm:text-lg font-bold ${theme.accentText}`}>Welcome back, {user?.name || "Admin"}!</h2>
         <p className={`text-xs sm:text-sm ${theme.textMuted}`}>Here is what's happening with your team today.</p>
       </div>
 
@@ -2191,7 +2191,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
       {/* ── Top performers + site visits ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-3 mb-6 lg:mb-8">
         <div className={`lg:col-span-2 ${theme.card} rounded-2xl sm:rounded-3xl p-5 sm:p-6 flex flex-col`} style={theme.cardGlass}>
-          <h2 className={`text-base sm:text-lg font-bold mb-1 flex items-center gap-2 ${theme.text}`}>
+          <h2 className={`text-base sm:text-lg font-bold mb-1 flex items-center gap-2 ${theme.accentText}`}>
             <FaChartPie className="text-[#9E217B]" /> Top Performers
           </h2>
           <p className={`text-xs mb-4 sm:mb-6 ${theme.textFaint}`}>Sales managers ranked by active leads.</p>

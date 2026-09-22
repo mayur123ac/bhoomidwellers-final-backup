@@ -1270,7 +1270,7 @@ export default function EmployeesPage() {
           /* ════════════ EMPLOYEE SECTION ════════════ */
           <main className={`flex-1 overflow-y-auto px-4 sm:px-8 py-8 transition-colors duration-300 ${isDark ? "bg-[#000000]" : "bg-[#F2F2F7]"} custom-scrollbar font-sans antialiased`}>
             <div className="max-w-[1400px] mx-auto">
-              <h1 className={`text-2xl sm:text-3xl font-bold tracking-tight mb-6 ${isDark ? "text-white" : "text-black"}`}>
+              <h1 className={`text-2xl sm:text-2xl font-bold tracking-tight mb-6 ${t.accentText}`}>
                 Master Configurations
               </h1>
 

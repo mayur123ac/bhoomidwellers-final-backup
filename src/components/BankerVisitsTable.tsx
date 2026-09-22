@@ -153,14 +153,14 @@ function BankerVisitsTable({ user, isDark, t, title, subtitle }: Props) {
   const cell = `px-3 py-3 whitespace-nowrap ${t.textMuted}`;
 
   return (
-    <div className="flex flex-col h-full overflow-hidden p-2">
+    <div className="flex flex-col gap-4 overflow-hidden p-4 sm:p-6 font-sans antialiased ">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 mb-3 px-2 pt-2">
-        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-          <FaUniversity className={`hidden sm:inline-block ${t.accentText}`} />
+        <div className="flex items-center gap-1.5 sm:gap-3 flex-wrap">
+          <FaUniversity className={`hidden h-8 w-8 sm:inline-block ${t.accentText}`} />
           <div>
             <h2
-              className={`text-sm sm:text-base font-bold tracking-tight ${t.text}`}
+              className={`text-base sm:text-xl font-black tracking-tight ${t.accentText}`}
             >
               {title || "Bankers Info"}
             </h2>

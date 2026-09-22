@@ -164,7 +164,7 @@ export default function AppHeader({
               className="font-bold truncate min-w-0"
               style={{
                 // Drops to 14px on tiny screens, scales to 17px on desktop
-                fontSize: "clamp(14px, 4vw, 14px)",
+                fontSize: "clamp(14px, 4vw, 16px)",
                 letterSpacing: "-0.41px",
                 lineHeight: "22px",
                 color: isDark ? "#FFFFFF" : "#374151"
