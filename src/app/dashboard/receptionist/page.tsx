@@ -474,11 +474,11 @@ function RpPageHeader({
       <div className="flex items-center gap-3 min-w-0">
         {leading}
         <div className="rp-page-header-titles">
-          <h1 className={`rp-title-lg flex items-center flex-wrap gap-2 ${titleClass}`}>
+          <h1 className={`text-base sm:text-xl font-black tracking-tight flex items-center flex-wrap gap-2 ${titleClass}`}>
             {title}
             {badge}
           </h1>
-          {subtitle && <p className={`rp-secondary ${subtitleClass}`}>{subtitle}</p>}
+          {subtitle && <p className={`text-[10px] sm:text-[11px] ${subtitleClass}`}>{subtitle}</p>}
         </div>
       </div>
       {children && <div className="rp-page-header-actions">{children}</div>}
@@ -1599,7 +1599,7 @@ export default function ReceptionistDashboard() {
   // replaces a useEffect that re-derived the New Lead and Site Visit rules here
   // in the browser — the same two rules the Admin and Sales dashboards each kept
   // their own copy of. See lib/notifications/feed.ts.
-  const notifications = useNotificationFeed({ playSound: true });
+  const notifications = useNotificationFeed();
   const notificationHistory = useMemo(
     () =>
       [...notifications.newLeads, ...notifications.siteVisits].sort(
@@ -2457,7 +2457,7 @@ export default function ReceptionistDashboard() {
         {/* Content inset comes off the spacing scale (20 → 32) instead of the
             old 16/24, which matches the 20px the table toolbars already use and
             stops the page edge from shifting between tabs. */}
-        <main className={`flex-1 overflow-y-auto p-3 sm:p-4 md:p-2 custom-scrollbar relative ${t.mainBg}`}>
+        <main className={`flex-1 overflow-y-auto  custom-scrollbar relative ${t.mainBg}`}>
 
           {/* ────────────────────────────────────────────────────────────
               AI ASSISTANT
@@ -2515,10 +2515,6 @@ export default function ReceptionistDashboard() {
             </div>
           )}
           {/* Header container */}
-
-
-
-
           {/* ── SHARED PAGE HEADER ── */}
           {!["settings", "detail", "assistant", "assigned", "recep-leads", "closed-leads", "attendance", "analytics", "cp-enquiries", "cp-enquiry-records", "banking_info", "site_visits"].includes(activeTab) && (
             <div
@@ -2548,7 +2544,7 @@ export default function ReceptionistDashboard() {
                 <RpPageHeader
                   title={`Hi, ${String(user?.name || "User").split(" ")[0]}`}
                   subtitle="Walk-ins and enquiries logged at the front desk"
-                  titleClass={t.text}
+                  titleClass={t.accentText}
                   subtitleClass={t.textFaint}
                   badge={
                     <span className={`rp-chip capitalize ${isDark ? "text-[#9E217B] bg-white/80 border border-[#9E217B]/40" : "text-[#9E217B] bg-[#9E217B]/10 border border-[#9E217B]/20"}`}>Front Desk</span>
@@ -2646,7 +2642,7 @@ export default function ReceptionistDashboard() {
               OVERVIEW TAB
           ════════════════════════════════════════════════════ */}
           {activeTab === "overview" && (
-            <div className="animate-fadeIn pb-10">
+            <div className="animate-fadeIn pb-10 p-4">
 
               {/* Front Desk Log Container */}
               <div className={`relative flex flex-col w-full rounded-2xl md:rounded-3xl overflow-hidden shadow-[0_8px_30px_rgb(0,0,0,0.2)] border border-gray-300 transition-colors duration-300 ${isDark
@@ -2936,7 +2932,7 @@ export default function ReceptionistDashboard() {
               <RpPageHeader
                 title="Analytics"
                 subtitle="Charts and breakdowns for your enquiries"
-                titleClass={t.text}
+                titleClass={t.accentText}
                 subtitleClass={t.textFaint}
               >
                 <button onClick={refetchAll} className={`w-full sm:w-auto rp-control-label text-white flex items-center justify-center gap-2 px-4 py-3 sm:py-2 rounded-xl sm:rounded-lg shadow-sm cursor-pointer select-none ${t.btnPrimary}`}>
@@ -3658,7 +3654,7 @@ export default function ReceptionistDashboard() {
               <RpPageHeader
                 title="Your Walk-in Enquiries"
                 subtitle="Leads you have personally handled or captured"
-                titleClass={t.text}
+                titleClass={t.accentText}
                 subtitleClass={t.textFaint}
               >
                 <div className="flex flex-col sm:flex-row w-full sm:w-auto gap-2 sm:gap-3 mt-3 sm:mt-0">
@@ -3673,7 +3669,7 @@ export default function ReceptionistDashboard() {
                 </div>
               </RpPageHeader>
 
-              <div className={`rounded-2xl sm:rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.2)] border overflow-hidden flex flex-col   ${t.tableWrap}`} style={t.tableGlass}>
+              <div className={`rounded-2xl sm:rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.2)] border overflow-hidden flex flex-col m-4 sm:m-4 md:m-4   ${t.tableWrap}`} style={t.tableGlass}>
 
                 {/* ── Header Row 1: Icon + Title + Count | Search | Columns | Export | Refresh ── */}
                 <div className={`px-4 sm:px-6 py-3.5 sm:py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 border-b ${t.tableHead} ${isDark ? "border-white/[0.06]" : "border-indigo-300"}`}>
@@ -3681,7 +3677,7 @@ export default function ReceptionistDashboard() {
                     <div className={`p-1.5 sm:p-2 rounded-xl ${isDark ? "bg-[#0A84FF]/10" : "bg-[#007AFF]/10"}`}>
                       <FaTable className={`text-[14px] sm:text-lg ${isDark ? "text-[#0A84FF]" : "text-[#00AEEF]"}`} />
                     </div>
-                    <h3 className={`text-[15px] sm:text-lg font-bold tracking-tight ${t.text}`}>Your Enquiris</h3>
+                    <h3 className={`text-[15px] sm:text-lg font-bold tracking-tight ${t.text}`}>Your Enquiries</h3>
                     <span className={`text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-md tabular-nums tracking-wide ${t.btnClosingBadge}`}>
                       {filteredRecepLeads.length.toLocaleString("en-IN")}
                     </span>
@@ -3922,10 +3918,10 @@ export default function ReceptionistDashboard() {
                   <RpPageHeader
                     title="Your Closed Sales"
                     subtitle="Leads that have reached the Closing stage"
-                    titleClass={t.text}
+                    titleClass={t.accentText}
                     subtitleClass={t.textFaint}
                   >
-                    <div className="flex flex-col sm:flex-row w-full sm:w-auto gap-2 sm:gap-3 mt-3 sm:mt-0">
+                    <div className="flex flex-row sm:flex-row w-full sm:w-auto gap-3 sm:gap-3 mt-3 sm:mt-0">
                       <ToolbarButton
                         onClick={() => downloadCSV(filteredClosedLeads.map((l: any) => ({
                           "Sr. No.": l.sr_no || l.id,
@@ -3940,12 +3936,12 @@ export default function ReceptionistDashboard() {
                         <span className="w-full text-center">Export</span>
                       </ToolbarButton>
                       <ToolbarButton onClick={refetchAll} icon={<FaSyncAlt className="text-[13px] sm:text-[11px]" />} isDark={isDark} title="Refresh leads">
-                        <span className="w-full text-center sm:hidden">Refresh Live Data</span>
+                        <span className="w-full text-center hidden">Refresh Live Data</span>
                       </ToolbarButton>
                     </div>
                   </RpPageHeader>
 
-                  <div className={`rounded-2xl sm:rounded-3xl border overflow-hidden shadow-sm flex flex-col ${t.tableWrap}`} style={t.tableGlass}>
+                  <div className={`rounded-2xl sm:rounded-3xl border overflow-hidden shadow-sm flex m-4 flex-col ${t.tableWrap}`} style={t.tableGlass}>
 
                     {/* ── Header Area ── */}
                     <div className={`px-4 sm:px-6 py-3.5 sm:py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 border-b ${t.tableHead} ${isDark ? "border-white/[0.06]" : "border-indigo-300"}`}>

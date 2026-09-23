@@ -773,7 +773,7 @@ export default function SiteVisitOverview({
                 </div>
                 <h1 className={`text-base sm:text-xl font-black tracking-tight ${theme.accentText}`}>Site Visit Overview</h1>
               </div>
-              <p className="text-[11px] md:text-sm ml-1" style={{ color: isDark ? "rgba(255,255,255,0.4)" : "#6B7280" }}>View and manage all scheduled site visits across the organization.</p>
+              <p className={`text-[10px] sm:text-[11px] ${theme.textFaint}`}>View and manage all scheduled site visits across the organization.</p>
             </div>
 
             <div className="flex items-center gap-2.5 flex-wrap w-full sm:w-auto">

@@ -261,7 +261,7 @@ export default function AttendanceView({
   }, [isMarkedPresent, headerIsMarkedPresent, headerEmployeeId, selectedDate, todayStr, sessions]);
 
   return (
-    <div className={`font-sans antialiased max-w-[1400px] mx-auto space-y-4 sm:space-y-6 ${isDark ? "bg-transparent text-white" : "bg-transparent text-black"}`}>
+    <div className={`font-sans p-4 sm:p-6  antialiased max-w-[1400px] mx-auto space-y-4 sm:space-y-6 ${isDark ? "bg-transparent text-white" : "bg-transparent text-black"}`}>
 
       {/* ── Toast ── */}
       <AnimatePresence>
@@ -284,7 +284,7 @@ export default function AttendanceView({
           <h1 className={`text-base sm:text-xl font-black tracking-tight ${t.accentText}`}>
             My Attendance
           </h1>
-          <p className={`text-[12px] sm:text-[13px] font-medium ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
+          <p className={`text-[10px] sm:text-[11px] ${t.textFaint}`}>
             {adminUser.name} &middot; Personal tracking
           </p>
         </div>

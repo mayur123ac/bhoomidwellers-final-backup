@@ -70,7 +70,7 @@ export function buildTheme(isDark: boolean) {
     navIndicator: isDark ? "bg-[#9E217B] shadow-[0_0_10px_2px_rgba(158,33,123,0.5)]" : "bg-[#9E217B] shadow-[0_0_8px_rgba(158,33,123,0.4)]",
     toggleWrap: isDark ? "bg-[#1C1C2A] border-[#2A2A38] text-yellow-300" : "bg-[#F1F5F9] border-[#9CA3AF] text-[#1A1A1A]",
 
-    accentText: isDark ? "text-[#d4006e]" : "text-[#00AEEF]",
+    accentText: isDark ? "text-[#d4006e]" : "text-[#9E217B]",
     accentBg: isDark ? "bg-[#9E217B]/10 text-[#d4006e] border border-[#9E217B]/30" : "bg-[#00AEEF]/10 text-[#00AEEF] border border-[#00AEEF]/30",
     sectionTitle: isDark ? "text-[#d4006e]" : "text-[#9E217B]",
     sectionBorder: isDark ? "border-[#9E217B]/20" : "border-[#9E217B]/25",
