@@ -2457,7 +2457,7 @@ export default function ReceptionistDashboard() {
         {/* Content inset comes off the spacing scale (20 → 32) instead of the
             old 16/24, which matches the 20px the table toolbars already use and
             stops the page edge from shifting between tabs. */}
-        <main className={`flex-1 overflow-y-auto  custom-scrollbar relative ${t.mainBg}`}>
+        <main className={`flex-1 overflow-y-auto custom-scrollbar relative  gap-4 overflow-hidden p-4 sm:p-6 font-sans antialiased  ${t.mainBg}`}>
 
           {/* ────────────────────────────────────────────────────────────
               AI ASSISTANT
@@ -3651,12 +3651,15 @@ export default function ReceptionistDashboard() {
           ════════════════════════════════════════════════════ */}
           {activeTab === "recep-leads" && (
             <div className="animate-fadeIn pb-10">
+
               <RpPageHeader
+
                 title="Your Walk-in Enquiries"
                 subtitle="Leads you have personally handled or captured"
                 titleClass={t.accentText}
                 subtitleClass={t.textFaint}
               >
+
                 <div className="flex flex-col sm:flex-row w-full sm:w-auto gap-2 sm:gap-3 mt-3 sm:mt-0">
                   <ToolbarButton
                     onClick={() => downloadCSV(filteredRecepLeads.map((l: any) => ({ "Sr. No.": l.sr_no || l.id, "Client Name": l.name, "CP Company": l.cp_company || "N/A", "Budget": l.salesBudget || l.budget || "N/A", "Phone": maskPhone(l.phone), "Alt Phone": maskPhone(l.altPhone), "Date Created": l.date, "Assigned to": l.assignedReceptionist || l.assignedTo || "Unassigned", "Status": l.status || "Assigned" })), "Receptionist_Leads.csv")}

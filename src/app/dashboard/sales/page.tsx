@@ -1029,7 +1029,7 @@ export default function SalesDashboard() {
           </div>
         </AppHeader>
 
-        <main className={`flex-1 overflow-hidden custom-scrollbar ${t.mainBg} ${activeView === "assistant" ? "p-0" : "p-4 sm:p-3 lg:p-3 overflow-y-auto"}`}>
+        <main className={`flex-1 overflow-hidden custom-scrollbar ${t.mainBg} ${activeView === "assistant" ? "p-0" : "flex flex-col h-full overflow-hidden gap-4 p-4 sm:p-6 font-sans antialiased"}`}>
           {(activeView === "sales" || activeView === "overview" || activeView === "forms" || activeView === "detail" || activeView === "closed-leads") ? (
             <SalesManagerView
               managers={managers} allLeads={allLeads} followUps={followUps}
@@ -2147,7 +2147,7 @@ function SalesManagerView({
         {subView === "overview" && (
           <div className="animate-fadeIn space-y-4 sm:space-y-5">
             <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center gap-2">
-              <h1 className={`text-lg sm:text-2xl md:text-2xl font-bold flex items-center flex-wrap gap-2 sm:gap-3 ${t.text}`}>
+              <h1 className={`text-lg sm:text-2xl md:text-2xl font-bold flex items-center flex-wrap gap-2 sm:gap-3 ${t.accentText}`}>
                 Hi, {String(adminUser?.name || "User").split(" ")[0]}
                 <span className={`text-xs sm:text-sm font-medium px-2 py-0.5 sm:px-3 sm:py-1 rounded-full capitalize border ${isDark
                   ? "text-purple-400 border-purple-500/30 bg-purple-500/10"
@@ -2596,7 +2596,7 @@ function SalesManagerView({
           <div className="animate-fadeIn">
             <div className={`flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-6 sm:mb-8 border-b pb-4 sm:pb-6 ${t.tableBorder}`}>
               <div>
-                <h1 className={`text-lg sm:text-2xl font-bold ${t.text}`}>Your Closed Sales</h1>
+                <h1 className={`text-lg sm:text-2xl font-bold ${t.accentText}`}>Your Closed Sales</h1>
                 <p className={`text-xs sm:text-sm mt-0.5 ${t.textFaint}`}>Leads successfully closed</p>
               </div>
               <div className="relative w-full sm:w-auto">

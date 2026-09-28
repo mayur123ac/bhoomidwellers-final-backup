@@ -1379,7 +1379,7 @@ function AdminAtlasDashboardContent() {
           </AppHeader>
         )}
 
-        <main className={`flex-1 overflow-hidden transition-colors duration-300 ${theme.mainBg}`}>
+        <main className={`flex-1 px-2 py-2 overflow-hidden transition-colors duration-300 ${theme.mainBg}`}>
           {activeView === "ai" && <BhoomiAiPanel isDark={isDark} t={theme} user={user} />}
 
           {activeView === "dashboard" && <DashboardOverview refetch={refetch} managers={managers} siteHeads={siteHeads} allLeads={allLeads} isLoading={isLoading} user={user} theme={theme} isDark={isDark} receptionists={receptionists} followUps={followUps} onNavigateToSales={(lead: any) => {
@@ -3796,7 +3796,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
       {/* 1. Sidebar for Managers */}
       {/* MOBILE: 100% width, hidden if a manager is selected. DESKTOP: Always visible, fixed 62 width (approx 250px) */}
       <div
-        className={`border-r flex-col h-full flex-shrink-0 z-20 shadow-xl ${theme.innerBlock} w-full ${selectedManager ? 'hidden' : 'flex'}`}
+        className={`border-none flex-col h-full flex-shrink-0 z-20 ${theme.innerBlock} w-full ${selectedManager ? 'hidden' : 'flex'}`}
       >
         <div className={`p-5 border-b ${theme.tableBorder}`}>
           <div className="relative">
@@ -5383,7 +5383,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
 
       {/* Sidebar for Site Heads */}
       {/* MOBILE: 100% width, hidden if a Site Head is selected. DESKTOP: Always visible, fixed 62 width */}
-      <div className={`border-r flex-col h-full flex-shrink-0 z-20 shadow-xl ${theme.innerBlock} w-full ${selectedSiteHead ? 'hidden' : 'flex'}`}>
+      <div className={`border-none flex-col h-full flex-shrink-0 z-20 ${theme.innerBlock} w-full ${selectedSiteHead ? 'hidden' : 'flex'}`}>
         <div className={`p-5 border-b ${theme.tableBorder}`}>
           <div className="relative">
             <FaSearch className={`absolute left-3 top-1/2 -translate-y-1/2 text-xs ${theme.textFaint}`} />
@@ -6952,7 +6952,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
 
       {/* Sidebar for Receptionists */}
       {/* MOBILE: 100% width, hidden if a Receptionist is selected. DESKTOP: Always visible, fixed 62 width */}
-      <div className={`border-r flex-col h-full flex-shrink-0 z-20 shadow-xl ${theme.innerBlock} w-full ${selectedReceptionist ? 'hidden' : 'flex'}`}>
+      <div className={`border-none flex-col h-full flex-shrink-0 z-20 ${theme.innerBlock} w-full ${selectedReceptionist ? 'hidden' : 'flex'}`}>
         <div className={`p-5 border-b ${theme.tableBorder}`}>
           <div className="relative">
             <FaSearch className={`absolute left-3 top-1/2 -translate-y-1/2 text-xs ${theme.textFaint}`} />

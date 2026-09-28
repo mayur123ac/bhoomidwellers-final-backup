@@ -748,7 +748,7 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
     const deleteTargetBuilding = buildings.find(b => b.key === deleteBuildingKey && b.project_id != null) || null;
 
     return (
-      <div className={`flex flex-col h-full overflow-hidden p-4 sm:p-6 font-sans antialiased ${isDark ? "bg-[#000000]" : "bg-[#F2F2F7]"}`}>
+      <div className={`flex flex-col h-full overflow-hidden p-0 sm:p-0 font-sans antialiased ${isDark ? "bg-[#000000]" : "bg-[#F2F2F7]"}`}>
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6">
           <div className="flex flex-col gap-1">
             <h1 className={`text-xl sm:text-2xl font-black tracking-tight ${t.accentText}`}>Inventory</h1>

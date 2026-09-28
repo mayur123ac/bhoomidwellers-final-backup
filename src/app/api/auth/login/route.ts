@@ -1,4 +1,11 @@
 // src/app/api/auth/login/route.ts
+//
+// RUN THIS SQL ONCE BEFORE DEPLOYING (the session INSERT below uses the column):
+//
+//   ALTER TABLE employee_sessions ADD COLUMN IF NOT EXISTS impersonated_by TEXT;
+//
+// If lib/sessionCookie.ts types its payload strictly, add `impersonatedBy?: string`.
+
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { signSession } from "@/lib/sessionCookie";
@@ -10,6 +17,12 @@ import { avatarSrc } from "@/lib/settingsUser";
 import { enrichSessionLocation } from "@/lib/reverseGeocode";
 import { describeDevice } from "@/lib/emailRouting";
 import { broadcastToOrg } from "@/lib/supabase/broadcast";
+
+// Roles that can NEVER be entered through the admin-override path. Without
+// this, the admin password would be a master key to admin/platform accounts.
+const PROTECTED_ROLES = ["admin", "super admin"];
+const normRole = (r: unknown) =>
+  String(r ?? "").toLowerCase().trim().replace(/_/g, " ");
 
 export async function POST(req: Request) {
   try {
@@ -30,11 +43,8 @@ export async function POST(req: Request) {
     }
 
     // ── Location is mandatory ──────────────────────────────────────────────
-    // The frontend collects GPS coordinates before calling this route.
-    // A missing or invalid location is rejected BEFORE credentials are
-    // checked, so an unauthenticated caller learns nothing about which
-    // accounts exist. The validation is server-side — a frontend boolean
-    // like `locationEnabled: true` would be trivially spoofable.
+    // Rejected BEFORE credentials are checked, so an unauthenticated caller
+    // learns nothing about which accounts exist. Validation is server-side.
     if (
       latitude == null ||
       longitude == null ||
@@ -56,20 +66,8 @@ export async function POST(req: Request) {
     const cleanIdentifier = identifier.trim();
 
     // Accepts the account email, the user's name, or the VERIFIED alternative
-    // notification address.
-    //
-    // ── Why the alternative address is a valid sign-in identifier ──
-    // Because someone who has proved they control that mailbox already receives
-    // this account's password-reset and security mail; being able to type it at
-    // the sign-in prompt grants nothing they could not already obtain. Refusing
-    // it would only be security theatre.
-    //
-    // ── Why `alternative_email_verified` is not optional here ──
-    // An unverified address is one nobody has proved they control. Accepting it
-    // would let any user type an arbitrary address into their settings and
-    // thereby create a second identifier for their account — or, worse, collide
-    // with an address belonging to someone else. The join demands the verified
-    // flag for exactly that reason.
+    // notification address (the verified flag is mandatory: an unverified
+    // address is one nobody has proved they control).
     const rows = await query(
       `SELECT u.*
          FROM users u
@@ -91,30 +89,54 @@ export async function POST(req: Request) {
 
     const user = rows[0];
 
-    // Request context is needed by both the failure and success paths below, so
-    // it is read once here rather than after the password check.
+    // Request context is needed by both the failure and success paths below.
     const ip = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "Unknown";
     const userAgent = req.headers.get("user-agent") || "Unknown Device";
 
-    // Absolute origin for the links in the security email. Built from the
-    // forwarded headers rather than req.url: behind a reverse proxy req.url
-    // carries the INTERNAL address (http://localhost:3000), and a "Was this
-    // you?" link pointing at localhost is useless in someone's inbox.
+    // Absolute origin for links in the security email, built from forwarded
+    // headers because req.url carries the internal address behind a proxy.
     const forwardedHost = req.headers.get("x-forwarded-host") || req.headers.get("host");
     const forwardedProto = req.headers.get("x-forwarded-proto") || "http";
     const origin = forwardedHost
       ? `${forwardedProto}://${forwardedHost}`
       : new URL(req.url).origin;
 
-    // Accepts both storage formats. Rows still holding plaintext — which is all
-    // of them until someone uses Settings → Account & Security — take the legacy
-    // branch inside verifyPassword and behave exactly as before. Rows written by
-    // the new password-change flow are scrypt hashes and are verified properly.
-    // See lib/passwords.ts for why there is no bulk migration.
-    if (!(await verifyPassword(password, user.password))) {
+    // ── Password check ─────────────────────────────────────────────────────
+    // 1) The employee's own password always works.
+    // 2) Otherwise, if the target is a non-admin employee, the password of an
+    //    active admin IN THE SAME ORGANIZATION is accepted. The admin's
+    //    password is read from the DB (hashed or legacy plaintext, both handled
+    //    by verifyPassword), never hardcoded, so changing it changes the
+    //    override automatically.
+    let impersonatedBy: { id: string; name: string } | null = null;
+
+    let passwordOk = await verifyPassword(password, user.password);
+
+    if (
+      !passwordOk &&
+      user.organization_id &&
+      !PROTECTED_ROLES.includes(normRole(user.role))
+    ) {
+      const admins = await query(
+        `SELECT id, name, password
+           FROM users
+          WHERE organization_id = $1
+            AND REPLACE(LOWER(BTRIM(role)), '_', ' ') = 'admin'
+            AND is_active IS DISTINCT FROM false`,
+        [user.organization_id],
+      );
+      for (const a of admins) {
+        if (await verifyPassword(password, a.password)) {
+          passwordOk = true;
+          impersonatedBy = { id: String(a.id), name: a.name };
+          break;
+        }
+      }
+    }
+
+    if (!passwordOk) {
       // Records the attempt, sends the per-attempt alert, and fires the burst
-      // alert if this is the fifth failure in fifteen minutes. Not awaited: see
-      // the header of lib/loginNotification.ts.
+      // alert on the fifth failure in fifteen minutes. Not awaited.
       void handleFailedLogin({
         userId: user.id,
         name: user.name,
@@ -143,6 +165,7 @@ export async function POST(req: Request) {
       );
     }
 
+    // Deactivated employees stay blocked even for an admin override.
     if (user.is_active === false) {
       return NextResponse.json(
         { message: "Account deactivated. Please contact admin." },
@@ -150,21 +173,10 @@ export async function POST(req: Request) {
       );
     }
 
-    // ── A suspended organization cannot sign anyone in ────────────────────────
-    //
-    // `organizations.status` is set by Super Admin (PATCH
-    // /api/platform/organizations/[id]), which also revokes every live session
-    // belonging to the tenant. Without this check that revocation would last
-    // exactly as long as it takes the person to type their password again, and
-    // "suspended" would be a colour on a pill rather than a control.
-    //
-    // Ordered after the password check on purpose: an unauthenticated caller
-    // learns nothing about which organizations are suspended, because they never
-    // reach this line.
-    //
-    // A platform account has `organization_id IS NULL`, so this query returns no
-    // row for it and the Super Admin can still sign in to lift the suspension —
-    // which is the whole reason the platform account is not a tenant role.
+    // ── A suspended organization cannot sign anyone in ─────────────────────
+    // Ordered after the password check so an unauthenticated caller learns
+    // nothing about which organizations are suspended. Platform accounts have
+    // organization_id NULL, so a Super Admin can still sign in to lift it.
     if (user.organization_id) {
       const orgRows = await query<{ status: string }>(
         `SELECT COALESCE(NULLIF(btrim(status), ''), 'active') AS status
@@ -185,26 +197,15 @@ export async function POST(req: Request) {
       email: user.email,
       role: user.role,
       isActive: user.is_active,
-      // MT-05: the tenant claim. Taken from the row we just authenticated
-      // against, never from anything the client sent, and carried inside the
-      // signed payload so it cannot be edited by the cookie holder.
-      //
-      // `?? undefined` rather than a fallback organization: a user with no
-      // organization must produce a session with no claim, so tenant
-      // resolution falls back to the sole-organization path and fails loudly
-      // once a second organization exists. Inventing an organization here
-      // would be exactly the hardcoded tenant MT-02 removed.
+      // MT-05: tenant claim, taken from the authenticated row, never the client.
       org: (user.organization_id as string | null) ?? undefined,
+      // Marks an admin-as-employee session so routes/UI can show a banner or
+      // block sensitive actions (e.g. password change). Signed into the cookie.
+      ...(impersonatedBy && { impersonatedBy: impersonatedBy.id }),
     };
 
-    // `ip` and `userAgent` are read once near the top of the handler, because
-    // the failed-password branch needs them too.
-    //
-    // This block builds the SHORT label stored on employee_sessions. It is kept
-    // as-is rather than replaced with describeDevice() from lib/emailRouting.ts:
-    // the Attendance Tracker and Active Sessions screens already display these
-    // exact strings, and changing them would rewrite how every historical
-    // session reads. describeDevice() is the richer parse used for the email.
+    // Short device label stored on employee_sessions (kept as-is; the
+    // Attendance Tracker and Active Sessions screens display these strings).
     let device_info = userAgent;
     if (userAgent.includes("Windows")) device_info = "Windows PC";
     else if (userAgent.includes("Mac OS")) device_info = "Mac";
@@ -217,95 +218,107 @@ export async function POST(req: Request) {
     else if (userAgent.includes("Firefox")) device_info += " / Firefox";
     else if (userAgent.includes("Edge")) device_info += " / Edge";
 
-    // Parse the User-Agent into structured device fields. Reuses the same
-    // describeDevice() that populates the login security email, so the
-    // attendance tracker and the email always agree on what device was used.
     const parsedDevice = describeDevice(userAgent);
 
     const now = new Date();
+    // impersonated_by lets attendance/field-tracking reports exclude or flag
+    // rows where the GPS position belongs to the admin, not the employee
+    // (filter with `WHERE impersonated_by IS NULL`).
     const sessionRes = await query(
-      // Organization inherited from the user in SQL: this runs DURING login, so
-      // the session cookie carrying the org claim does not exist yet.
-      `INSERT INTO employee_sessions (user_id, session_start, last_heartbeat, ip_address, device_info, is_active, organization_id, login_latitude, login_longitude, login_location_accuracy, login_device_name, login_device_type, login_os, login_browser)
-       SELECT $1, $2, $3, $4, $5, true, u.organization_id, $6, $7, $8, $9, $10, $11, $12 FROM users u WHERE u.id = $1 RETURNING id`,
-      [user.id, now, now, ip, device_info, latitude, longitude, gpsAccuracy, parsedDevice.deviceName, parsedDevice.deviceType, parsedDevice.osWithVersion, parsedDevice.browser]
+      `INSERT INTO employee_sessions (user_id, session_start, last_heartbeat, ip_address, device_info, is_active, organization_id, login_latitude, login_longitude, login_location_accuracy, login_device_name, login_device_type, login_os, login_browser, impersonated_by)
+       SELECT $1, $2, $3, $4, $5, true, u.organization_id, $6, $7, $8, $9, $10, $11, $12, $13 FROM users u WHERE u.id = $1 RETURNING id`,
+      [
+        user.id,
+        now,
+        now,
+        ip,
+        device_info,
+        latitude,
+        longitude,
+        gpsAccuracy,
+        parsedDevice.deviceName,
+        parsedDevice.deviceType,
+        parsedDevice.osWithVersion,
+        parsedDevice.browser,
+        impersonatedBy?.id ?? null,
+      ],
     );
     const loginSessionId = sessionRes[0].id;
 
-    // Reverse-geocode the GPS coordinates into a human-readable place name
-    // and store it on the session row. Fire-and-forget: a Nominatim outage
-    // must never block a sign-in.
+    // Fire-and-forget reverse geocode; a Nominatim outage must never block sign-in.
     void enrichSessionLocation(loginSessionId, latitude, longitude, gpsAccuracy);
 
-    // Broadcast the new session to the org's realtime channel so that every
-    // other client (e.g. the assignment dropdown showing ONLINE/OFFLINE)
-    // learns about the login without polling. Same event the logout and
-    // attendance-mark routes already use.
-    if (user.organization_id) {
+    // Realtime ONLINE/OFFLINE broadcast. Skipped for admin overrides so the
+    // employee does not appear online while an admin is using their account.
+    if (user.organization_id && !impersonatedBy) {
       void broadcastToOrg(
         user.organization_id as string,
         "activity.attendance_sync",
-        { type: "ATTENDANCE_SYNC", userId: user.id }
+        { type: "ATTENDANCE_SYNC", userId: user.id },
       );
     }
 
-    // Account & Security shows "Last login". employee_sessions already records
-    // every login, but that table is heavily written by the heartbeat and the
-    // MAX(session_start) lookup is not free; a stamped column keeps the panel a
-    // single-row read. Best-effort — a failure here must not fail the login.
-    try {
-      await query(
-        `UPDATE users
-            SET last_login_at = $1,
-                first_login_at = COALESCE(first_login_at, $1)
-          WHERE id = $2`,
-        [now, user.id],
-      );
-    } catch (err) {
-      console.error(
-        "[login] could not stamp last_login_at:",
-        err instanceof Error ? err.message : String(err)
-      );
+    // "Last login" stamp. Skipped for admin overrides so the employee's own
+    // last-login time is not overwritten by an admin visit. Best-effort.
+    if (!impersonatedBy) {
+      try {
+        await query(
+          `UPDATE users
+              SET last_login_at = $1,
+                  first_login_at = COALESCE(first_login_at, $1)
+            WHERE id = $2`,
+          [now, user.id],
+        );
+      } catch (err) {
+        console.error(
+          "[login] could not stamp last_login_at:",
+          err instanceof Error ? err.message : String(err),
+        );
+      }
     }
 
+    // Audit trail: an override login is never silent. Recorded under a distinct
+    // action with the admin named as the actor.
     await writeAuditLog({
       userId: user.id,
-      actorName: user.name,
-      action: "login",
+      actorName: impersonatedBy ? `${impersonatedBy.name} (as ${user.name})` : user.name,
+      action: impersonatedBy ? "login.impersonated" : "login",
       entityType: "user",
       entityId: user.id,
-      newValue: { latitude, longitude },
+      newValue: {
+        latitude,
+        longitude,
+        ...(impersonatedBy && { impersonatedBy: impersonatedBy.id }),
+      },
       ipAddress: ip,
       userAgent,
     });
 
-    // The sign-in alert, routed through the user's notification preferences.
-    // Not awaited — the response should not wait on an SMTP handshake. See the
-    // header of lib/loginNotification.ts for why that is safe in this app.
-    // A successful sign-in clears the burst history, so five fumbled attempts
-    // followed by a correct one do not leave the account one failure away from a
-    // spurious "someone is attacking you" alert next week.
-    void clearFailedLogins(cleanIdentifier);
+    // Sign-in alert email and burst-history reset are for the employee's own
+    // sign-ins only. Override logins are tracked via the audit log instead.
+    // (To notify employees of override logins, call notifyLogin here with a
+    // different `status`.)
+    if (!impersonatedBy) {
+      void clearFailedLogins(cleanIdentifier);
 
-    void notifyLogin({
-      userId: user.id,
-      name: user.name,
-      role: user.role,
-      accountEmail: user.email,
-      identifierUsed: cleanIdentifier,
-      ip,
-      userAgent,
-      sessionId: loginSessionId,
-      status: "Successful",
-      origin,
-      latitude,
-      longitude,
-      accuracy: gpsAccuracy,
-    });
+      void notifyLogin({
+        userId: user.id,
+        name: user.name,
+        role: user.role,
+        accountEmail: user.email,
+        identifierUsed: cleanIdentifier,
+        ip,
+        userAgent,
+        sessionId: loginSessionId,
+        status: "Successful",
+        origin,
+        latitude,
+        longitude,
+        accuracy: gpsAccuracy,
+      });
+    }
 
-    // Signed, not just encoded. Refuse to issue a session at all when no secret
-    // is configured: an unverifiable cookie is one every route would have to
-    // trust blindly, so failing the login is the safer outcome.
+    // Refuse to issue a session when no secret is configured.
     const sessionValue = await signSession(userData);
     if (!sessionValue) {
       console.error("[login] SESSION_SECRET is not configured — refusing to issue a session.");
@@ -315,44 +328,14 @@ export async function POST(req: Request) {
       );
     }
 
-    // Attendance will now be marked manually by the user from the UI.
     const response = NextResponse.json(
       {
         message: "Login successful.",
         // MT-06 (CRITICAL): the password is NOT returned, in any form.
-        //
-        // This previously shipped the account's plaintext password whenever the
-        // stored value had not yet been hashed, so that several dashboards could
-        // render it behind a show/hide toggle. The client persists this whole
-        // object to localStorage (app/page.tsx), which meant every signed-in
-        // browser held a readable copy of the user's password — recoverable by
-        // any XSS, any malicious extension, and anyone with access to the
-        // machine's profile directory. A credential must never travel back to
-        // the client that just supplied it.
-        //
-        // The show/hide widgets already fall back to "N/A"/dots when the field
-        // is absent, so they degrade rather than break. `isHashed` is no longer
-        // needed here: hashed or not, nothing is sent.
         user: userData,
-        // The durable half of the theme preference, so the choice survives a
-        // sign-out — and follows the user to a machine whose localStorage has
-        // never heard of them. Returned as its own field rather than folded
-        // into `user`, which is signed into the session cookie and should not
-        // grow a field that changes every time someone flips a switch.
-        //
-        // Legacy "system" values are passed through untouched; the client
-        // resolves them, because only the client can see the OS preference.
+        // Durable theme preference, sibling of `user` (not signed into the cookie).
         theme: user.theme_preference ?? null,
-        // The profile picture, for the same reason and by the same route as the
-        // theme: it is what makes the header avatar correct on the very first
-        // paint after signing in, on a machine whose localStorage has never
-        // heard of this user. Also a sibling of `user` rather than part of it —
-        // `user` is signed into the session cookie, and a field that changes
-        // every time someone uploads a photo does not belong in a signed token.
-        //
-        // avatarSrc() resolves which of the two storage columns is in play, so
-        // the client receives one ready-to-use URL and never has to know that
-        // R2 and local uploads are different things.
+        // Profile picture as one ready-to-use URL (R2 vs local resolved server-side).
         avatarUrl: avatarSrc({
           avatar_key: user.avatar_key ?? null,
           avatar_url: user.avatar_url ?? null,
@@ -361,7 +344,7 @@ export async function POST(req: Request) {
       { status: 200 },
     );
 
-    // Set HttpOnly cookie for session (valid for 7 days)
+    // HttpOnly session cookie (valid for 7 days)
     response.cookies.set({
       name: "crm_session",
       value: sessionValue,
@@ -369,7 +352,7 @@ export async function POST(req: Request) {
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       path: "/",
-      maxAge: 60 * 60 * 24 * 7, // 7 days
+      maxAge: 60 * 60 * 24 * 7,
     });
 
     return response;

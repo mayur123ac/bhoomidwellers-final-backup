@@ -7,7 +7,7 @@ import { useAttendance } from "@/components/AttendanceContext";
 import { motion, AnimatePresence } from "framer-motion";
 import AppleDatePicker from "@/components/AppleDatePicker";
 export type ThemeTokens = Record<string, string | any>;
-
+const istToday = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 export default function AttendanceView({
   adminUser,
   isDark,
@@ -261,7 +261,7 @@ export default function AttendanceView({
   }, [isMarkedPresent, headerIsMarkedPresent, headerEmployeeId, selectedDate, todayStr, sessions]);
 
   return (
-    <div className={`font-sans p-4 sm:p-6  antialiased max-w-[1400px] mx-auto space-y-4 sm:space-y-6 ${isDark ? "bg-transparent text-white" : "bg-transparent text-black"}`}>
+    <div className={`font-sans antialiased w-full min-w-0 max-w-full mx-auto p-0 sm:p-0 lg:p-0 space-y-0 sm:space-y-6 ${isDark ? "bg-transparent text-white" : "bg-transparent text-black"}`}>
 
       {/* ── Toast ── */}
       <AnimatePresence>
@@ -279,7 +279,7 @@ export default function AttendanceView({
       </AnimatePresence>
 
       {/* ── Compact Apple-Style Header ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-3 border-gray-200 dark:border-white/10">
+      <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-3 ${isDark ? "border-white/10" : "border-gray-200"}`}>
         <div className="flex flex-col gap-0.5">
           <h1 className={`text-base sm:text-xl font-black tracking-tight ${t.accentText}`}>
             My Attendance
@@ -289,7 +289,7 @@ export default function AttendanceView({
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
           <AppleDatePicker
             selectedDate={selectedDate}
             onChange={setSelectedDate}
@@ -384,8 +384,7 @@ export default function AttendanceView({
           ].map((card, i) => (
             <div
               key={i}
-              className={`rounded-[16px] p-3.5 sm:p-4  flex flex-col justify-between h-[85px] sm:h-[96px] ${isDark ? "bg-[#1C1C1E] border border-white/5 shadow-sm" : "bg-white border border-black/5 shadow-[0_2px_12px_rgba(0,0,0,0.03)]"
-                }`}
+              className={`min-w-0 rounded-[16px] p-3.5 sm:p-4 flex flex-col justify-between gap-1 min-h-[85px] sm:min-h-[96px] ${isDark ? "bg-[#1C1C1E] border border-white/5 shadow-sm" : "bg-white border border-black/5 shadow-[0_2px_12px_rgba(0,0,0,0.03)]"}`}
             >
               <p className={`text-[10px] sm:text-[11px] font-medium uppercase tracking-wider ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
                 {card.label}
@@ -455,7 +454,7 @@ export default function AttendanceView({
             </div>
           </div>
 
-          <div className="overflow-x-auto custom-scrollbar">
+          <div className="hidden lg:block overflow-x-auto custom-scrollbar">
             <table className="w-full text-left whitespace-nowrap">
               <thead>
                 <tr>
@@ -506,7 +505,7 @@ export default function AttendanceView({
                     const isLast = i === displaySessions.length - 1;
 
                     return (
-                      <tr key={i} className={`transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.02]`}>
+                      <tr key={i} className={`transition-colors ${isDark ? "hover:bg-white/[0.03]" : "hover:bg-black/[0.02]"}`}>
                         <td className={`px-4 py-3 relative ${!isLast ? (isDark ? "border-b border-[#38383A]" : "border-b border-[#E5E5EA]") : ""}`}>
                           {isActive && <div className={`absolute left-0 top-1/2 -translate-y-1/2 h-2/3 w-[3px] rounded-r-full ${isDark ? "bg-[#32D74B]" : "bg-[#34C759]"}`} />}
                           <span className={`font-medium tracking-tight text-[12px] sm:text-[13px] ${isActive ? (isDark ? "text-[#32D74B]" : "text-[#34C759]") : (isDark ? "text-[#8E8E93]" : "text-[#8E8E93]")}`}>
@@ -570,8 +569,80 @@ export default function AttendanceView({
               </tbody>
             </table>
           </div>
-        </div>
 
+        </div>
+        {/* ── Mobile / tablet: cards instead of the table ── */}
+        {isFutureDate || isLoading || displaySessions.length === 0 ? (
+          <div className="lg:hidden py-10 px-4 text-center text-[12px] font-medium text-[#8E8E93]">
+            {isFutureDate
+              ? "Selected date is in the future."
+              : isLoading
+                ? "Loading sessions..."
+                : "No sessions found. Make sure the CRM session tracker is active."}
+          </div>
+        ) : (
+          <div className={`lg:hidden divide-y ${isDark ? "divide-[#38383A]" : "divide-[#E5E5EA]"}`}>
+            {displaySessions.map((s: any, i: number) => {
+              const punct = getPunctualityInfo(s.session_start);
+              const isActive = !!s.session_is_active;
+              const isAlreadyMarked = s.attendance_status?.toLowerCase() === "present";
+              const isCurrentlyMarking = markingId === (s.session_id ?? s.id);
+              const green = isDark ? "text-[#32D74B]" : "text-[#34C759]";
+              const fmt = (v: string) =>
+                new Date(v).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" });
+
+              let tracked = "—";
+              if (i === 0 && s.attendance_working_track != null) {
+                const sec = Number(s.attendance_working_track);
+                tracked = `${String(Math.floor(sec / 3600)).padStart(2, "0")}h ${String(Math.floor((sec % 3600) / 60)).padStart(2, "0")}m`;
+              }
+
+              return (
+                <div key={s.session_id ?? s.id ?? i} className="relative p-4 space-y-3">
+                  {isActive && (
+                    <div className={`absolute left-0 top-4 bottom-4 w-[3px] rounded-r-full ${isDark ? "bg-[#32D74B]" : "bg-[#34C759]"}`} />
+                  )}
+
+                  <div className="flex items-center justify-between gap-2">
+                    <span className={`text-[13px] font-semibold tracking-tight ${isActive ? green : "text-[#8E8E93]"}`}>
+                      {isActive ? "Active" : s.session_end ? "Offline" : "Idle"}
+                    </span>
+                    <span className={`px-2 py-0.5 rounded-md text-[11px] font-semibold tracking-wide ${punct.style}`}>
+                      {punct.label}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                    <Field label="Login" value={fmt(s.session_start)} isDark={isDark} />
+                    <Field
+                      label="Logout"
+                      value={isActive ? "Active Session" : s.session_end ? fmt(s.session_end) : "N/A"}
+                      isDark={isDark}
+                      valueClass={isActive ? green : undefined}
+                    />
+                    <Field label="Logged Time" value={getSessionDuration(s.session_start, s.session_end, isActive)} isDark={isDark} mono />
+                    <Field label="Working Hour" value={tracked} isDark={isDark} mono valueClass={isDark ? "text-[#0A84FF]" : "text-[#007AFF]"} />
+                  </div>
+
+                  <div className="pt-1">
+                    {isAlreadyMarked ? (
+                      <span className={`flex items-center gap-1.5 text-[13px] font-semibold tracking-tight ${green}`}>
+                        <FaCheckCircle className="text-[14px]" /> Confirmed
+                      </span>
+                    ) : (
+                      <AttendanceCheckbox
+                        sessionId={s.session_id ?? s.id}
+                        isMarking={isCurrentlyMarking}
+                        isDark={isDark}
+                        onSubmit={() => handleMarkAttendance(s)}
+                      />
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
         <p className={`text-[11px] text-center font-medium leading-relaxed pb-4 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
           Attendance data is sourced automatically from the CRM session tracker.
           <br className="hidden sm:block" /> The cumulative live timer displays total working time today across all sessions.
@@ -580,7 +651,31 @@ export default function AttendanceView({
     </div>
   );
 }
-
+function Field({
+  label,
+  value,
+  isDark,
+  mono,
+  valueClass,
+}: {
+  label: string;
+  value: string;
+  isDark: boolean;
+  mono?: boolean;
+  valueClass?: string;
+}) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[10px] font-medium uppercase tracking-wider text-[#8E8E93]">{label}</p>
+      <p
+        className={`mt-0.5 text-[13px] font-medium tracking-tight truncate ${mono ? "font-mono" : ""} ${valueClass ?? (isDark ? "text-[#EBEBF5]" : "text-[#333333]")
+          }`}
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
 function AttendanceCheckbox({
   sessionId,
   isMarking,
@@ -599,7 +694,7 @@ function AttendanceCheckbox({
       <label className="flex items-center gap-1.5 cursor-pointer select-none group">
         <div
           onClick={() => !isMarking && setChecked((p) => !p)}
-          className={`w-[18px] h-[18px] rounded-full border-[1.5px] flex items-center justify-center transition-all duration-200 ${checked
+          className={`w-[22px] h-[22px] sm:w-[18px] sm:h-[18px] rounded-full border-[1.5px]flex items-center justify-center transition-all duration-200 ${checked
             ? isDark ? "bg-[#0A84FF] border-[#0A84FF]" : "bg-[#007AFF] border-[#007AFF]"
             : isDark ? "border-[#8E8E93] bg-transparent group-hover:border-[#0A84FF]" : "border-[#C7C7CC] bg-white group-hover:border-[#007AFF]"
             }`}
