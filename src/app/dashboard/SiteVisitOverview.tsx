@@ -462,10 +462,10 @@ function ConfirmDialog({ open, message, onConfirm, onCancel, isDark }: any) {
 
 // ─── Main Component ─────────────────────────────────────────────────────────
 export default function SiteVisitOverview({
-  allLeads, receptionists, managers, siteHeads, adminUser, theme, isDark
+  allLeads, receptionists, managers, siteHeads, adminUser, theme, isDark, className
 }: {
   allLeads: any[]; receptionists: any[]; managers: any[]; siteHeads: any[];
-  adminUser: any; theme: any; isDark: boolean;
+  adminUser: any; theme: any; isDark: boolean; className: string;
 }) {
   const [visits, setVisits] = useState<SiteVisit[]>([]);
   const [isLoading, setIsLoading] = useState(true);

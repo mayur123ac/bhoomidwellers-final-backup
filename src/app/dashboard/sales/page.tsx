@@ -1051,6 +1051,7 @@ export default function SalesDashboard() {
             />
           ) : activeView === "site_visits" ? (
             <SiteVisitOverview
+              className="p-2 sm:p-4 md:p-6 mx-auto space-y-5 md:space-y-6"
               allLeads={myOwnLeads}
               receptionists={receptionists}
               managers={managers}
@@ -2146,7 +2147,7 @@ function SalesManagerView({
         {/* ── OVERVIEW ── */}
         {subView === "overview" && (
           <div className="animate-fadeIn space-y-4 sm:space-y-5">
-            <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center gap-2">
+            <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center gap-2 p">
               <h1 className={`text-lg sm:text-2xl md:text-2xl font-bold flex items-center flex-wrap gap-2 sm:gap-3 ${t.accentText}`}>
                 Hi, {String(adminUser?.name || "User").split(" ")[0]}
                 <span className={`text-xs sm:text-sm font-medium px-2 py-0.5 sm:px-3 sm:py-1 rounded-full capitalize border ${isDark
@@ -2596,7 +2597,7 @@ function SalesManagerView({
           <div className="animate-fadeIn">
             <div className={`flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-6 sm:mb-8 border-b pb-4 sm:pb-6 ${t.tableBorder}`}>
               <div>
-                <h1 className={`text-lg sm:text-2xl font-bold ${t.accentText}`}>Your Closed Sales</h1>
+                <h1 className={`text-xl sm:text-xl font-black tracking-tight ${t.accentText}`}>Your Closed Sales</h1>
                 <p className={`text-xs sm:text-sm mt-0.5 ${t.textFaint}`}>Leads successfully closed</p>
               </div>
               <div className="relative w-full sm:w-auto">
@@ -2612,7 +2613,7 @@ function SalesManagerView({
             <div className={`rounded-2xl border shadow-sm overflow-x-auto flex flex-col ${t.tableWrap}`} style={t.tableGlass}>
               {/* ── Table Header Area ── */}
               <div className={`px-4 sm:px-6 py-4 sm:py-5 border border-gray-400 flex justify-between items-center ${t.tableBorder}`}>
-                <h2 className={`text-base sm:text-lg font-semibold tracking-tight flex items-center gap-3 ${t.text}`}>
+                <h2 className={`text-base sm:text-lg font-semibold tracking-tight flex items-center gap-3 font antialiased ${t.text}`}>
                   Closed Leads
                   <span className={`px-3 py-0.5 rounded-full text-xs font-bold border ${t.btnClosingBadge || (isDark ? "bg-white/10 border-white/5" : "bg-black/5 border-black/5")}`}>
                     {filteredClosedLeads.length}
@@ -3432,7 +3433,7 @@ function SalesManagerView({
                         ) : (
                           <LoanDealView lead={selectedLead} booking={loanDealBooking} loanUpdate={loanDealLatest} isDark={isDark} t={t} />
                         )}
-                        {/* Site Visit History — outside with gap */}
+                        {/* Site Visit History — with gap */}
                         <div className="mt-3">
                           <SiteVisitScheduler
                             lead={selectedLead}

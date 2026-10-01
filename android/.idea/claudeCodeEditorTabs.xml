@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ClaudeCodeEditorTabs">
+    <option name="activeSessionId" value="0262b94e-91e5-44ee-84ed-3d0b628ac905" />
+    <option name="openSessionIds">
+      <list>
+        <option value="18b5768b-0e3c-4f5f-86b8-419d1435f993" />
+        <option value="0262b94e-91e5-44ee-84ed-3d0b628ac905" />
+      </list>
+    </option>
+    <option name="sessionPaths">
+      <map>
+        <entry key="0262b94e-91e5-44ee-84ed-3d0b628ac905" value="/sessions/new" />
+        <entry key="18b5768b-0e3c-4f5f-86b8-419d1435f993" value="/sessions/30b4c9b9-5215-41b5-8985-946c1c995685" />
+      </map>
+    </option>
+    <option name="sessionTitles">
+      <map>
+        <entry key="0262b94e-91e5-44ee-84ed-3d0b628ac905" value="Claude Code" />
+        <entry key="18b5768b-0e3c-4f5f-86b8-419d1435f993" value="Configure release signing for the Android app usin" />
+      </map>
+    </option>
+  </component>
+</project>

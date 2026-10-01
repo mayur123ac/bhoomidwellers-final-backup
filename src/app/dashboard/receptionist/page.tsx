@@ -2457,7 +2457,7 @@ export default function ReceptionistDashboard() {
         {/* Content inset comes off the spacing scale (20 → 32) instead of the
             old 16/24, which matches the 20px the table toolbars already use and
             stops the page edge from shifting between tabs. */}
-        <main className={`flex-1 overflow-y-auto custom-scrollbar relative  gap-4 overflow-hidden p-4 sm:p-6 font-sans antialiased  ${t.mainBg}`}>
+        <main className={`flex-1 overflow-y-auto custom-scrollbar relative gap-4 overflow-hidden p-2 sm:p-6 font-sans antialiased  ${t.mainBg}`}>
 
           {/* ────────────────────────────────────────────────────────────
               AI ASSISTANT
@@ -4192,8 +4192,9 @@ export default function ReceptionistDashboard() {
               SITE VISIT OVERVIEW
           ════════════════════════════════════════════════════ */}
           {activeTab === "site_visits" && (
-            <div className="animate-fadeIn h-[calc(100vh-100px)] lg:h-[calc(100vh-130px)]">
+            <div className="animate-fadeIn h-[calc(100vh-100px)] lg:h-[calc(100vh-130px)] p-4">
               <SiteVisitOverview
+                className=""
                 allLeads={directAssignedLeads}
                 receptionists={[]}
                 managers={[]}

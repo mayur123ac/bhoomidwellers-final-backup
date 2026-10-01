@@ -261,7 +261,7 @@ export default function AttendanceView({
   }, [isMarkedPresent, headerIsMarkedPresent, headerEmployeeId, selectedDate, todayStr, sessions]);
 
   return (
-    <div className={`font-sans antialiased w-full min-w-0 max-w-full mx-auto p-0 sm:p-0 lg:p-0 space-y-0 sm:space-y-6 ${isDark ? "bg-transparent text-white" : "bg-transparent text-black"}`}>
+    <div className={`font-sans antialiased w-full min-w-0 max-w-full mx-auto p-2 sm:p-0 lg:p-0 space-y-0 sm:space-y-6 ${isDark ? "bg-transparent text-white" : "bg-transparent text-black"}`}>
 
       {/* ── Toast ── */}
       <AnimatePresence>

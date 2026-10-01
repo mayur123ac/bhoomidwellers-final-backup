@@ -563,7 +563,7 @@ export default function RevenueIntelligenceView({ isDark, theme, user }: Props) 
         </div>
       </div>
 
-      <div className="px-6 sm:px-10 py-6 space-y-6 max-w-[1600px] mx-auto">
+      <div className="px-4 sm:px-10 py-6 space-y-6 max-w-[1600px] mx-auto">
         {error && (
           <div className={`rounded-[16px] p-4 flex items-center justify-between ${isDark ? "bg-[#FF453A]/15 border border-[#FF453A]/30" : "bg-[#FFECEB] border border-[#FF3B30]/30"}`}>
             <div>

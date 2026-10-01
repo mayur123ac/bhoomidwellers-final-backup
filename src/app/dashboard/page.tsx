@@ -1480,7 +1480,7 @@ function AdminAtlasDashboardContent() {
             />
           )}
 
-          {activeView === "site_visit_overview" && <SiteVisitOverview managers={managers} receptionists={receptionists} allLeads={allLeads} siteHeads={siteHeads} adminUser={user} theme={theme} isDark={isDark} />}
+          {activeView === "site_visit_overview" && <SiteVisitOverview className="" managers={managers} receptionists={receptionists} allLeads={allLeads} siteHeads={siteHeads} adminUser={user} theme={theme} isDark={isDark} />}
 
           {activeView === "receptionist" && (
             <ReceptionistView receptionists={receptionists} allLeads={allLeads} followUps={followUps} isLoading={isLoading} refetch={refetch} appendFollowUp={appendFollowUp} reconcileFollowUp={reconcileFollowUp} removeFollowUp={removeFollowUp} adminUser={user} theme={theme} isDark={isDark} />
