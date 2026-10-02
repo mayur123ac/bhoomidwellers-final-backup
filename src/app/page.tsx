@@ -521,6 +521,17 @@ export default function Login() {
             Create Account
           </Link>
         </p> */}
+
+        {/* Privacy Policy */}
+        <p className={`text-center text-xs ${isDark ? "text-[#555570]" : "text-[#9090A8]"} transition-colors duration-300`}>
+          By signing in you agree to our{" "}
+          <Link
+            href="/privacy-policy"
+            className={`underline underline-offset-2 transition-colors duration-150 ${isDark ? "text-[#7B6FCC] hover:text-[#9F5CFF]" : "text-[#7B2FF7] hover:text-[#9F5CFF]"}`}
+          >
+            Privacy Policy
+          </Link>
+        </p>
       </div>
     </div>
   );
