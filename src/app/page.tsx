@@ -234,6 +234,8 @@ export default function Login() {
           router.replace("/dashboard/sourcing");
         } else if (userRole === "caller") {
           router.replace("/dashboard/caller");
+        } else if (userRole === "hr") {
+          router.replace("/dashboard/hr");
         } else {
           router.replace("/dashboard");
         }

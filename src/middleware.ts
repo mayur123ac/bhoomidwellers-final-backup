@@ -143,6 +143,17 @@ export async function middleware(request: NextRequest) {
       return NextResponse.next();
     }
 
+    // 8. HR
+    // HR users are confined to /dashboard/hr only.
+    // Non-HR users who land on /dashboard/hr are caught by their own role
+    // gate above (they are redirected to their own panel before reaching here).
+    if (role === "hr") {
+      if (!pathname.startsWith("/dashboard/hr")) {
+        return NextResponse.redirect(new URL("/dashboard/hr", request.url));
+      }
+      return NextResponse.next();
+    }
+
     // Fallback: If role is unrecognized, redirect to login to be safe.
     return NextResponse.redirect(new URL("/", request.url));
   } catch (error) {
