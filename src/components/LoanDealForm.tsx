@@ -458,14 +458,15 @@ export default function LoanDealForm({ lead, booking, loanUpdate, user, isDark =
       // Phase-1-3 aligned booking financials (from booking row or superset draft)
       // Not `src?.gst_rate ? ... : "5"` — a saved 0% arrives as the number 0,
       // which is falsy, so reopening a zero-GST deal silently reset it to 5%.
-      gst_rate: String(resolveGstRate(src?.gst_rate)),
+      gst_rate: String(resolveGstRate(draft.gst_rate)),
       stamp_duty_amount: src?.stamp_duty_amount ? String(src.stamp_duty_amount) : "",
       // resolve*, not `||` — a stored 0 is falsy and must not snap back to 5 / 1.
-      stamp_duty_rate: String(resolveStampDutyRate(src?.stamp_duty_rate)),
+      stamp_duty_rate: String(resolveStampDutyRate(draft.stamp_duty_rate)),
+      registration_fee_rate: String(resolveRegistrationFeeRate(draft.registration_fee_rate)),
       stamp_duty_status: src?.stamp_duty_status || "Pending",
       stamp_duty_mode: (src?.stamp_duty_mode as "auto" | "manual") || "auto",
       registration_fee_amount: src?.registration_fee_amount ? String(src.registration_fee_amount) : "",
-      registration_fee_rate: String(resolveRegistrationFeeRate(src?.registration_fee_rate)),
+      // registration_fee_rate: String(resolveRegistrationFeeRate(src?.registration_fee_rate)),
       registration_fee_status: src?.registration_fee_status || "Pending",
       registration_fee_mode: (src?.registration_fee_mode as "auto" | "manual") || "auto",
       legal_charges: src?.legal_charges ? String(src.legal_charges) : "",

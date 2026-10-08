@@ -1881,7 +1881,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                                 // { key: "apartment_name", label: "Apartment Name", placeholder: "Bhoomi Heights" },
                                 { key: "project_name", label: "Project Name", placeholder: "Bhoomi Dwellers" },
                                 { key: "tower", label: "Tower", placeholder: "A" },
-                                { key: "wing", label: "Wing", placeholder: "North" },
+                                { key: "wing", label: "Wing", placeholder: "A wing / B wing" },
                               ].map(({ key, label, placeholder }) => (
                                 <div key={key}>
                                   <label className={labelCls}>{label}</label>
@@ -2201,6 +2201,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                                           onChange={e => set("gst_rate", e.target.value)}
                                           placeholder="5"
                                           aria-label="GST rate percentage"
+
                                           className={`w-16 rounded-md pl-1.5 pr-4 py-0.5 text-xs outline-none border ${isDark ? "bg-[#14141B] border-[#2A2A35] text-white" : "bg-white border-[#9CA3AF] text-[#1A1A1A]"}`}
                                         />
                                         <span className={`absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] pointer-events-none ${textMuted}`}>%</span>
@@ -3150,7 +3151,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                           <div className={`rounded-2xl border p-5 ${isDark ? "bg-[#121218] border-[#9E217B]/30 bg-gradient-to-r from-[#9E217B]/10 to-[#0A0A0F]" : "bg-gradient-to-r from-[#EBF5FB] to-[#F0E5F5] border-[#00AEEF]/30"}`}>
                             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
                               {[
-                                { label: "Lead No.", val: `#${lead?.sr_no || lead?.id}` },
+                                { label: "Sr. No.", val: `#${lead?.sr_no || lead?.id}` },
                                 { label: "Applicant", val: form.primary_name },
                                 { label: "Mobile", val: form.primary_mobile },
                                 { label: "Property", val: `${form.property_type}, Flat ${form.flat_number}` },

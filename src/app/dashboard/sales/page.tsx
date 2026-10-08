@@ -93,6 +93,7 @@ import {
   ToggleSwitch,
   ColumnSelector,
 } from "@/components/Tableui";
+import SalesManagerDashboardSummary from "@/components/sales/SalesManagerDashboardSummary";
 
 const SiteVisitOverview = dynamic(() => import("../../dashboard/SiteVisitOverview"), { ssr: false });
 
@@ -2147,43 +2148,50 @@ function SalesManagerView({
         {/* ── OVERVIEW ── */}
         {subView === "overview" && (
           <div className="animate-fadeIn space-y-4 sm:space-y-5">
-            <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center gap-2 p">
-              <h1 className={`text-lg sm:text-2xl md:text-2xl font-bold flex items-center flex-wrap gap-2 sm:gap-3 ${t.accentText}`}>
+            <div className="flex items-center justify-between gap-3">
+              <h1 className={`text-lg sm:text-2xl font-bold flex items-center flex-wrap gap-2 ${t.accentText}`}>
                 Hi, {String(adminUser?.name || "User").split(" ")[0]}
                 <span className={`text-xs sm:text-sm font-medium px-2 py-0.5 sm:px-3 sm:py-1 rounded-full capitalize border ${isDark
                   ? "text-purple-400 border-purple-500/30 bg-purple-500/10"
-                  : "text-[#9E217B] bg-[#9E217B]/10 border border-[#9E217B]/20"
-                  }`}>{adminUser.role}</span>
+                  : "text-[#9E217B] bg-[#9E217B]/10 border-[#9E217B]/20"
+                  }`}>
+                  {adminUser.role}
+                </span>
               </h1>
+
               <button
-                className={`text-xs sm:text-sm px-1 py-1.5 sm:px-4 sm:py-2 font-semibold flex items-center justify-center w-auto sm:w-24 gap-1.5 sm:gap-2 rounded-md sm:rounded-lg transition-all ${t.btnPrimary}`}
                 onClick={() => refetch()}
+                title="Refresh"
+                className="w-9 h-9 flex items-center justify-center rounded-xl transition-all flex-shrink-0 text-[#9E217B] hover:bg-[#9E217B]/10 dark:text-purple-400 dark:hover:bg-purple-500/10"
               >
-                ↻ Refresh
+                <FaSyncAlt size={20} />
               </button>
             </div>
 
-            {/* ── 5-CARD STATS GRID ── */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-6 gap-2 sm:gap-3">
-              {[
-                { label: "Total Enquiries", value: baseManagerLeads.length, sub: `${activeManagerLeads.length} active`, glow: t.statGlow1, textColor: t.text },
-                { label: "Enquiries Attended", value: enquiriesAttended, sub: `of ${activeManagerLeads.length} total`, glow: t.statGlow1, textColor: isDark ? "text-purple-400" : "text-[#00AEEF]" },
-                { label: "Enquiries Attended This Month", value: enquiriesThisMonth, sub: `in ${MONTH_NAMES[selectedMonth].slice(0, 3)}`, glow: t.statGlow3, textColor: isDark ? "text-blue-400" : "text-[#9E217B]", monthSelect: true },
-                { label: "Closing", value: closingThisMonth > 0 ? closingThisMonth : "—", sub: `${closingLeads.length} total closed`, glow: t.statGlow4, textColor: isDark ? "text-yellow-400" : "text-amber-500", monthSelect: true },
-                { label: "Closing Rate", value: `${closingPct}%`, sub: `${closingLeads.length} of ${activeManagerLeads.length} leads`, glow: t.statGlow5, textColor: isDark ? "text-green-400" : "text-emerald-600" },
-                { label: "Lost Leads", value: lostManagerLeads.length, sub: `${lostRatio}% lost ratio`, glow: "bg-red-500/10", textColor: isDark ? "text-red-300" : "text-red-600" },
-              ].map((stat, i) => (
-                <div key={i} className={`rounded-2xl sm:rounded-4xl px-2.5 py-2 sm:p-4 shadow-sm border relative overflow-hidden transition-all flex flex-col justify-between ${t.card}`} style={t.cardGlass}>
-                  <div className={`absolute -right-4 -top-4 sm:-right-6 sm:-top-6 w-16 h-16 sm:w-24 sm:h-24 rounded-full blur-xl sm:blur-2xl pointer-events-none ${stat.glow}`} />
+            <SalesManagerDashboardSummary />
 
-                  <div className="flex items-start justify-between mb-1 sm:mb-2 gap-1">
-                    <p className={`crm-eyebrow leading-tight ${t.textFaint}`}>
+            {/* ── 5-CARD STATS GRID ── */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
+              {[
+                { label: "Total Enquiries", value: baseManagerLeads.length, sub: `${activeManagerLeads.length} active`, textColor: isDark ? "text-white" : "text-[#0F172A]", showGraph: true },
+                { label: "Enquiries Attended", value: enquiriesAttended, sub: `of ${activeManagerLeads.length} total`, textColor: isDark ? "text-purple-400" : "text-[#00AEEF]" },
+                { label: "Enquiries Attended This Month", value: enquiriesThisMonth, sub: `in ${MONTH_NAMES[selectedMonth].slice(0, 3)}`, textColor: isDark ? "text-blue-400" : "text-[#9E217B]", monthSelect: true },
+                { label: "Closing", value: closingThisMonth > 0 ? closingThisMonth : "—", sub: `${closingLeads.length} total closed`, textColor: isDark ? "text-yellow-400" : "text-[#F59E0B]", monthSelect: true },
+                { label: "Closing Rate", value: `${closingPct}%`, sub: `${closingLeads.length} of ${activeManagerLeads.length} leads`, textColor: isDark ? "text-green-400" : "text-[#10B981]" },
+                { label: "Lost Leads", value: lostManagerLeads.length, sub: `${lostRatio}% lost ratio`, textColor: isDark ? "text-red-400" : "text-[#EF4444]" },
+              ].map((stat, i) => (
+                <div
+                  key={i}
+                  className={`rounded-[1.25rem] sm:rounded-3xl p-4 sm:p-5 shadow-sm border relative overflow-hidden transition-all flex flex-col justify-between ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-[#F4F7FE] border-[#E2E8F0]'}`}
+                >
+                  <div className="flex items-start justify-between mb-4 gap-1">
+                    <p className={`text-[10px] sm:text-[11px] font-bold uppercase tracking-wider ${isDark ? 'text-slate-400' : 'text-[#1E293B]'}`}>
                       {stat.label}
                     </p>
                     {(stat as any).monthSelect && (
                       <select
                         value={selectedMonth} onChange={e => setSelectedMonth(Number(e.target.value))}
-                        className={`text-[8px] sm:text-[10px] rounded px-1 py-0.5 sm:px-1.5 sm:py-1 outline-none cursor-pointer border flex-shrink-0 min-w-[36px] sm:min-w-0 ${t.selectSmall}`}
+                        className={`text-[9px] sm:text-[10px] font-semibold rounded px-1.5 py-0.5 sm:px-2 sm:py-1 outline-none cursor-pointer border flex-shrink-0 min-w-[36px] sm:min-w-0 ${isDark ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-white border-slate-200 text-slate-600'}`}
                       >
                         {MONTH_NAMES.map((m, idx) => <option key={idx} value={idx}>{m.slice(0, 3)}</option>)}
                       </select>
@@ -2191,10 +2199,20 @@ function SalesManagerView({
                   </div>
 
                   <div>
-                    <p className={`text-xl sm:text-2xl font-black ${stat.textColor}`}>
-                      {isLoading ? "…" : stat.value}
-                    </p>
-                    <p className={`text-[9px] sm:text-[10px] mt-0.5 sm:mt-1 leading-tight ${t.textFaint}`}>
+                    <div className="flex items-center gap-3">
+                      <p className={`text-3xl sm:text-4xl font-black ${stat.textColor}`}>
+                        {isLoading ? "…" : stat.value}
+                      </p>
+                      {stat.showGraph && (
+                        <div className="flex items-center justify-center p-1.5 rounded-lg bg-pink-100 dark:bg-[#B01A79]/20">
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-[#B01A79] dark:text-pink-400">
+                            <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline>
+                            <polyline points="16 7 22 7 22 13"></polyline>
+                          </svg>
+                        </div>
+                      )}
+                    </div>
+                    <p className={`text-[11px] sm:text-xs mt-1.5 font-medium ${isDark ? 'text-slate-500' : 'text-[#475569]'}`}>
                       {stat.sub}
                     </p>
                   </div>
@@ -2205,20 +2223,29 @@ function SalesManagerView({
             {!isLoading && <DashboardAnalytics leads={baseManagerLeads} isDark={isDark} t={t} />}
 
             {/* Overview table */}
-            <div className={`rounded-2xl sm:rounded-4xl border shadow-sm overflow-hidden ${t.tableWrap}`} style={t.tableGlass}>
+            <div className={`rounded-[2rem] border shadow-sm overflow-hidden flex flex-col ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-[#FAFAFD] border-slate-200/60'}`}>
+
               {/* ── Toolbar row 1: title + search + actions ── */}
-              <div className={`px-3 sm:px-5 pt-4 pb-2 sm:pb-3 flex flex-wrap items-center justify-between gap-2 sm:gap-3 ${t.tableHead}`}>
-                <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
-                  <FaTable className={`text-[11px] sm:text-sm ${t.accentText}`} />
-                  <h3 className={`font-bold text-[13px] sm:text-[15px] tracking-tight ${t.text}`}>Leads Database</h3>
-                  <span className={`text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md tabular-nums ${t.btnClosingBadge}`}>
-                    {filteredDatabaseLeads.length.toLocaleString("en-IN")}
-                  </span>
+              <div className="px-4 sm:px-6 pt-5 pb-3 flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center gap-3 shrink-0">
+                  <div className="w-10 h-10 rounded-full bg-pink-100 flex items-center justify-center text-[#B01A79] dark:bg-[#B01A79]/20 dark:text-pink-400">
+                    <FaTable size={16} />
+                  </div>
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-2">
+                      <h3 className={`font-bold text-[16px] sm:text-[17px] tracking-tight ${t.text}`}>Leads Database</h3>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-pink-100 text-[#B01A79] dark:bg-[#B01A79]/20 dark:text-pink-400 tabular-nums">
+                        {filteredDatabaseLeads.length.toLocaleString("en-IN")}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <div className="w-full order-last sm:order-none mt-2 sm:mt-0 sm:w-auto sm:flex-1">
+
+                <div className="w-full order-last sm:order-none mt-1 sm:mt-0 sm:w-auto sm:flex-1">
                   <SearchBar value={searchTerm} onChange={setSearchTerm} isDark={isDark} placeholder="Search by Lead No, Name, Budget, Source..." />
                 </div>
-                <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap sm:ml-auto">
+
+                <div className="flex items-center gap-2 flex-wrap sm:ml-auto">
                   <ColumnSelector
                     columns={SM_DB_COLUMNS.map(c => ({ key: c.key, label: c.label, locked: c.locked }))}
                     hidden={hiddenDbCols}
@@ -2247,31 +2274,34 @@ function SalesManagerView({
                       "Site Visit": l.mongoVisitDate || "",
                     })), "SM_Leads_Database.csv")}
                     variant="export"
-                    icon={<FaDownload className="text-[10px] sm:text-[11px]" />}
+                    icon={<FaDownload className="text-[11px]" />}
                     isDark={isDark}
                     title="Export leads as CSV"
                   >
                     <span className="hidden sm:inline">Export</span>
                   </ToolbarButton>
-                  <ToolbarButton onClick={refetch} icon={<FaSyncAlt className="text-[10px] sm:text-[11px]" />} isDark={isDark} title="Refresh leads" />
+                  <ToolbarButton onClick={refetch} icon={<FaSyncAlt className="text-[11px]" />} isDark={isDark} title="Refresh leads" />
                 </div>
               </div>
+
               {/* ── Toolbar row 2: filters ── */}
-              <div className={`px-3 sm:px-5 pb-2.5 sm:pb-3.5 pt-2.5 sm:pt-3.5 flex flex-wrap items-center gap-x-2.5 sm:gap-x-5 gap-y-2 border-b ${isDark ? "border-white/[0.06]" : "border-indigo-300"}`}>
-                <span className="hidden sm:inline crm-eyebrow opacity-40">Filters</span>
+              <div className={`px-4 sm:px-6 pb-4 pt-1 flex flex-wrap items-center gap-x-3 sm:gap-x-4 gap-y-3 border-b ${isDark ? "border-slate-800" : "border-slate-200/60"}`}>
+                <span className={`hidden sm:inline text-[11px] font-bold uppercase tracking-wider ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Filters</span>
+
                 <select
                   value={leadStatusFilter}
                   onChange={e => setLeadStatusFilter(e.target.value as any)}
-                  className={`h-7 sm:h-8 px-1.5 sm:px-2.5 rounded-md sm:rounded-lg text-[10px] sm:text-xs font-bold outline-none border cursor-pointer transition-colors ${isDark ? "bg-[#14141B] border-[#2A2A35] text-white" : "bg-white border-[#9CA3AF] text-[#1A1A1A]"}`}
+                  className={`text-xs font-semibold px-3 py-1.5 rounded-full border outline-none cursor-pointer transition-colors ${isDark ? 'bg-slate-800 border-slate-700 text-slate-200' : 'bg-white border-slate-200 text-slate-700 shadow-sm'}`}
                 >
                   <option value="all">All leads</option>
                   <option value="active">Active only</option>
                   <option value="lost">Lost only</option>
                 </select>
+
                 <select
                   value={columnFilter}
                   onChange={e => setColumnFilter(e.target.value)}
-                  className={`h-7 sm:h-8 px-1.5 sm:px-2.5 rounded-md sm:rounded-lg text-[10px] sm:text-xs font-bold outline-none border cursor-pointer transition-colors ${isDark ? "bg-[#14141B] border-[#2A2A35] text-white" : "bg-white border-[#9CA3AF] text-[#1A1A1A]"}`}
+                  className={`text-xs font-semibold px-3 py-1.5 rounded-full border outline-none cursor-pointer transition-colors ${isDark ? 'bg-slate-800 border-slate-700 text-slate-200' : 'bg-white border-slate-200 text-slate-700 shadow-sm'}`}
                 >
                   <option value="all">Search: all columns</option>
                   <option value="name">Name</option>
@@ -2281,7 +2311,9 @@ function SalesManagerView({
                   <option value="source">Source</option>
                   <option value="status">Status</option>
                 </select>
-                <div className={`w-px h-4 sm:h-5 ${isDark ? "bg-white/10" : "bg-gray-200"}`} />
+
+                <div className={`w-[1px] h-5 ${isDark ? "bg-slate-700" : "bg-slate-300"}`} />
+
                 <ToggleSwitch
                   checked={showLostLeads}
                   onChange={setShowLostLeads}
@@ -2298,104 +2330,123 @@ function SalesManagerView({
                   isDark={isDark}
                 />
               </div>
+
+              {/* ── Data Table ── */}
               <div className="overflow-x-auto w-full custom-scrollbar">
                 <table className="w-full text-left text-xs sm:text-sm whitespace-nowrap">
-                  <thead className={t.tableHead}>
+                  <thead className={isDark ? "bg-slate-900/50" : "bg-slate-50/50"}>
                     <tr>
                       {visibleDbCols.map(col => (
-                        <th key={col.key} className={`px-2.5 sm:px-3 py-2 sm:py-2.5 text-[9px] sm:text-xs font-bold tracking-wider border-b ${t.textHeader} ${t.tableBorder}`}>{col.label}</th>
+                        <th key={col.key} className={`px-3 sm:px-4 py-3 text-[10px] sm:text-[11px] font-bold uppercase tracking-wider border-b ${isDark ? 'border-slate-800 text-slate-400' : 'border-slate-200 text-[#475569]'}`}>
+                          {col.label}
+                        </th>
                       ))}
-                      {isAdmin && <th className={`px-2.5 sm:px-3 py-2 sm:py-2.5 text-[9px] sm:text-xs font-bold tracking-wider border-b ${t.textHeader} ${t.tableBorder}`}>ACTIONS</th>}
+                      {isAdmin && (
+                        <th className={`px-3 sm:px-4 py-3 text-[10px] sm:text-[11px] font-bold uppercase tracking-wider border-b ${isDark ? 'border-slate-800 text-slate-400' : 'border-slate-200 text-[#475569]'}`}>
+                          ACTIONS
+                        </th>
+                      )}
                     </tr>
                   </thead>
-                  <tbody className={`divide-y ${t.tableDivide}`}>
+                  <tbody className={`divide-y ${isDark ? 'divide-slate-800/60' : 'divide-slate-100'}`}>
                     {isLoading
-                      ? <tr><td colSpan={visibleDbCols.length + (isAdmin ? 1 : 0)} className={`text-center py-6 sm:py-8 text-xs sm:text-sm ${t.textMuted}`}>Loading...</td></tr>
+                      ? <tr><td colSpan={visibleDbCols.length + (isAdmin ? 1 : 0)} className={`text-center py-8 text-sm font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Loading...</td></tr>
                       : filteredDatabaseLeads.length === 0
-                        ? <tr><td colSpan={visibleDbCols.length + (isAdmin ? 1 : 0)} className={`text-center py-6 sm:py-8 text-xs sm:text-sm ${t.textMuted}`}>No leads found.</td></tr>
+                        ? <tr><td colSpan={visibleDbCols.length + (isAdmin ? 1 : 0)} className={`text-center py-8 text-sm font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>No leads found.</td></tr>
                         : filteredDatabaseLeads.map((lead: any) => {
                           const isClosed = lead.status === "Closing" || lead.status === "Completed" || lead.status === "Closed" || lead.closingDate;
                           const isLost = !!lead.is_lost_lead;
                           const isNGD = lead.status === "NON GENUINE DEMAND (NGD)" || lead.leadStatus === "NON GENUINE DEMAND (NGD)" || lead.leadInterestStatus === "NON GENUINE DEMAND (NGD)";
                           const isRevisit = lead.lead_classification === "RETURNING_LEAD";
+
                           return (
                             <tr
                               key={lead.id}
-                              className={`group cursor-pointer transition-colors duration-200 ${!isLost && !isNGD && !isRevisit ? (isDark ? "hover:bg-white/[0.045]" : "hover:bg-[#9E217B]/[0.035]") : ""}`}
+                              className={`group cursor-pointer transition-colors duration-200 ${!isLost && !isNGD && !isRevisit ? (isDark ? "hover:bg-slate-800/40" : "hover:bg-slate-50") : ""}`}
                               style={{
                                 ...(isLost ? { opacity: 0.55 } : undefined),
-                                ...(isRevisit && !isLost ? { backgroundColor: isDark ? "rgba(5, 150, 105, 0.08)" : "rgba(5, 150, 105, 0.05)" } : undefined),
-                                ...(isNGD && !isRevisit && !isLost ? { backgroundColor: isDark ? "rgba(234, 88, 12, 0.08)" : "rgba(234, 88, 12, 0.05)" } : undefined),
+                                ...(isRevisit && !isLost ? { backgroundColor: isDark ? "rgba(5, 150, 105, 0.08)" : "rgba(5, 150, 105, 0.04)" } : undefined),
+                                ...(isNGD && !isRevisit && !isLost ? { backgroundColor: isDark ? "rgba(234, 88, 12, 0.08)" : "rgba(234, 88, 12, 0.04)" } : undefined),
                               }}
                               onClick={() => {
                                 setSelectedLead(lead);
                                 setMainView("detail");
                                 setSubView("detail");
                               }}>
-                              <td className={`px-2.5 sm:px-3 py-2 sm:py-2.5 text-[11px] sm:text-sm font-bold ${t.accentText}`}>#{lead.sr_no || lead.id}</td>
-                              <td className={`px-2 py-2.5 sm:px-3 sm:py-3.5 ${t.text}`}>
-                                <div className="flex flex-col gap-0.5">
-                                  <span className="font-bold text-[12px] sm:text-[13px] leading-tight">{lead.name}</span>
-                                  {isRevisit && (
-                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border border-[rgba(5,150,105,0.45)] text-[#059669] bg-[rgba(5,150,105,0.12)] w-fit">
-                                      REVISIT
+                              <td className={`px-3 sm:px-4 py-3 text-[11px] sm:text-sm font-bold ${t.accentText}`}>
+                                #{lead.sr_no || lead.id}
+                              </td>
+                              <td className={`px-3 sm:px-4 py-3 ${t.text}`}>
+                                <div className="flex flex-col gap-1.5">
+                                  <span className="font-bold text-[13px] leading-none">{lead.name}</span>
+                                  <div className="flex items-center gap-1.5">
+                                    {isRevisit && (
+                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border border-[rgba(5,150,105,0.3)] text-[#059669] bg-[rgba(5,150,105,0.1)] w-fit">
+                                        REVISIT
+                                      </span>
+                                    )}
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border border-[rgba(100,116,139,0.25)] text-[#64748B] bg-[rgba(100,116,139,0.06)] w-fit">
+                                      {(lead.visitNumber ?? 1)} {(lead.visitNumber ?? 1) === 1 ? "VISIT" : "VISITS"}
                                     </span>
-                                  )}
-                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border border-[rgba(100,116,139,0.35)] text-[#64748B] bg-[rgba(100,116,139,0.08)] w-fit">
-                                    {(lead.visitNumber ?? 1)} {(lead.visitNumber ?? 1) === 1 ? "VISIT" : "VISITS"}
-                                  </span>
-                                  {isNGD && (
-                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border border-[rgba(234,88,12,0.45)] text-[#EA580C] bg-[rgba(234,88,12,0.12)] w-fit">
-                                      NGD
-                                    </span>
-                                  )}
+                                    {isNGD && (
+                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border border-[rgba(234,88,12,0.3)] text-[#EA580C] bg-[rgba(234,88,12,0.1)] w-fit">
+                                        NGD
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                               </td>
-                              {!hiddenDbCols.has("prop_type") && <td className={`px-2.5 sm:px-4 py-2 sm:py-2.5 text-[11px] sm:text-sm ${t.textMuted}`}>{lead.propType || lead.configuration || "Pending"}</td>}
-                              {!hiddenDbCols.has("budget") && <td className={`px-2.5 sm:px-4 py-2 sm:py-2.5 text-[11px] sm:text-sm font-semibold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{lead.salesBudget}</td>}
-                              {!hiddenDbCols.has("source") && <td className={`px-2.5 sm:px-4 py-2 sm:py-2.5 text-[10px] sm:text-xs ${t.textMuted}`}>{lead.source || "—"}</td>}
-                              {!hiddenDbCols.has("cp_name") && <td className={`px-2.5 sm:px-4 py-2 sm:py-2.5 text-[11px] sm:text-sm ${t.textMuted}`}>{lead.cpName || lead.cp_name || "—"}</td>}
-                              {!hiddenDbCols.has("cp_company") && <td className={`px-2.5 sm:px-4 py-2 sm:py-2.5 text-[11px] sm:text-sm ${t.textMuted}`}>{lead.cpCompany || lead.cp_company || "—"}</td>}
-                              {!hiddenDbCols.has("cp_phone") && <td className={`px-2.5 sm:px-4 py-2 sm:py-2.5 font-mono text-[10px] sm:text-xs ${t.textMuted}`}>{lead.cpPhone || lead.cp_phone || "—"}</td>}
-                              {!hiddenDbCols.has("status") && <td className="px-2.5 sm:px-4 py-2 sm:py-2.5">
-                                <span className={`px-1.5 sm:px-2 py-0.5 rounded-full text-[8px] sm:text-[10px] font-bold uppercase border ${isLost
+                              {!hiddenDbCols.has("prop_type") && <td className={`px-3 sm:px-4 py-3 text-[12px] sm:text-[13px] font-medium ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{lead.propType || lead.configuration || "Pending"}</td>}
+                              {!hiddenDbCols.has("budget") && <td className={`px-3 sm:px-4 py-3 text-[12px] sm:text-[13px] font-bold ${isDark ? "text-emerald-400" : "text-[#039953]"}`}>{lead.salesBudget}</td>}
+                              {!hiddenDbCols.has("source") && <td className={`px-3 sm:px-4 py-3 text-[11px] sm:text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{lead.source || "—"}</td>}
+                              {!hiddenDbCols.has("cp_name") && <td className={`px-3 sm:px-4 py-3 text-[12px] sm:text-[13px] font-medium ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{lead.cpName || lead.cp_name || "—"}</td>}
+                              {!hiddenDbCols.has("cp_company") && <td className={`px-3 sm:px-4 py-3 text-[12px] sm:text-[13px] font-medium ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{lead.cpCompany || lead.cp_company || "—"}</td>}
+                              {!hiddenDbCols.has("cp_phone") && <td className={`px-3 sm:px-4 py-3 font-mono text-[11px] sm:text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{lead.cpPhone || lead.cp_phone || "—"}</td>}
+                              {!hiddenDbCols.has("status") && <td className="px-3 sm:px-4 py-3">
+                                <span className={`px-2 py-1 rounded-full text-[9px] sm:text-[10px] font-bold uppercase tracking-wide border ${isLost
                                   ? t.statusLost
                                   : isNGD
                                     ? t.statusNGD
                                     : getStatusStyle(lead.status)
                                   }`}>{isLost ? "LOST" : isNGD ? "NGD" : isClosed ? "CLOSED" : (lead.status || "Assigned")}</span>
                               </td>}
-                              {!hiddenDbCols.has("lost_status") && <td className="px-2.5 sm:px-4 py-2 sm:py-2.5">
+                              {!hiddenDbCols.has("lost_status") && <td className="px-3 sm:px-4 py-3">
                                 {isLost ? (
-                                  <span className={`px-1.5 sm:px-2 py-0.5 rounded-full text-[8px] sm:text-[10px] font-bold uppercase border inline-flex items-center gap-1 ${t.statusLost}`}>
-                                    <Ghost className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> Lost Lead
+                                  <span className={`px-2 py-1 rounded-full text-[9px] sm:text-[10px] font-bold uppercase border inline-flex items-center gap-1 ${t.statusLost}`}>
+                                    <Ghost className="w-3 h-3" /> Lost Lead
                                   </span>
-                                ) : <span className={`text-[10px] sm:text-xs font-semibold ${t.textMuted}`}>Active</span>}
+                                ) : <span className={`text-[11px] sm:text-xs font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Active</span>}
                               </td>}
-                              {!hiddenDbCols.has("interest") && <td className="px-2.5 sm:px-4 py-2 sm:py-2.5">
+                              {!hiddenDbCols.has("interest") && <td className="px-3 sm:px-4 py-3">
                                 {lead.leadInterestStatus && lead.leadInterestStatus !== "Pending"
                                   ? <InterestBadge status={lead.leadInterestStatus} size="sm" />
-                                  : <span className={`text-[10px] sm:text-xs italic ${t.textFaint}`}>—</span>}
+                                  : <span className={`text-[11px] sm:text-xs italic ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>—</span>}
                               </td>}
-                              {!hiddenDbCols.has("date_created") && <td className={`px-2.5 sm:px-4 py-2 sm:py-2.5 text-[10px] sm:text-xs whitespace-normal min-w-[100px] sm:min-w-[120px] ${t.textFaint}`}>
+                              {!hiddenDbCols.has("date_created") && <td className={`px-3 sm:px-4 py-3 text-[11px] sm:text-xs font-medium whitespace-normal min-w-[100px] sm:min-w-[120px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                                 {formatDate(lead.created_at)}
                               </td>}
-                              {!hiddenDbCols.has("backdated") && <td className={`px-2.5 sm:px-4 py-2 sm:py-2.5 text-[10px] sm:text-xs whitespace-normal min-w-[100px] sm:min-w-[120px] ${t.textFaint}`}>
+                              {!hiddenDbCols.has("backdated") && <td className={`px-3 sm:px-4 py-3 text-[11px] sm:text-xs font-medium whitespace-normal min-w-[100px] sm:min-w-[120px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                                 {lead.auto_date_enabled === false && lead.enquiry_date ? formatDate(lead.enquiry_date).split(",")[0] : "-"}
                               </td>}
-                              {!hiddenDbCols.has("site_visit") && <td className="px-2.5 sm:px-3 py-2 sm:py-2.5">{lead.mongoVisitDate ? <span className="text-orange-400 font-medium whitespace-nowrap text-[10px] sm:text-sm">{formatDate(lead.mongoVisitDate).split(",")[0]}</span> : <span className={`text-[10px] sm:text-xs italic ${t.textFaint}`}>Pending</span>}</td>}
+                              {!hiddenDbCols.has("site_visit") && <td className="px-3 sm:px-4 py-3">
+                                {lead.mongoVisitDate ? (
+                                  <span className="text-[#F49A25] font-semibold whitespace-nowrap text-[11px] sm:text-xs">{formatDate(lead.mongoVisitDate).split(",")[0]}</span>
+                                ) : (
+                                  <span className={`text-[11px] sm:text-xs italic ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>Pending</span>
+                                )}
+                              </td>}
                               {isAdmin && (
-                                <td className="px-2.5 sm:px-3 py-2 sm:py-2.5" onClick={e => e.stopPropagation()}>
+                                <td className="px-3 sm:px-4 py-3" onClick={e => e.stopPropagation()}>
                                   <button
                                     type="button"
                                     onClick={() => openPermanentDeleteDialog(lead)}
                                     title="Delete Permanently"
-                                    className={`w-6 h-6 sm:w-8 sm:h-8 flex items-center justify-center rounded-md sm:rounded-lg transition-colors cursor-pointer ${isDark
-                                      ? "bg-red-900/20 text-red-300 hover:bg-red-600 hover:text-white"
-                                      : "bg-red-50 text-red-600 hover:bg-red-600 hover:text-white"
+                                    className={`w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded-lg transition-colors cursor-pointer ${isDark
+                                      ? "bg-red-900/20 text-red-400 hover:bg-red-600 hover:text-white"
+                                      : "bg-red-50 text-red-500 hover:bg-red-500 hover:text-white"
                                       }`}
                                   >
-                                    <Trash2 className="w-3 h-3 sm:w-4 sm:h-4" />
+                                    <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                                   </button>
                                 </td>
                               )}
@@ -2413,6 +2464,7 @@ function SalesManagerView({
         {/* ── CARDS ── */}
         {subView === "cards" && (
           <div className="animate-fadeIn">
+
 
             <div className={`rounded-xl border p-3 mb-6 ${t.tableWrap}`} style={t.tableGlass}>
               <div className="flex flex-col gap-3">
@@ -2595,7 +2647,7 @@ function SalesManagerView({
         {/* ── CLOSED LEADS ── */}
         {subView === "closed-leads" && (
           <div className="animate-fadeIn">
-            <div className={`flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-6 sm:mb-8 border-b pb-4 sm:pb-6 ${t.tableBorder}`}>
+            <div className={`flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-6 sm:mb-8  ${t.tableBorder}`}>
               <div>
                 <h1 className={`text-xl sm:text-xl font-black tracking-tight ${t.accentText}`}>Your Closed Sales</h1>
                 <p className={`text-xs sm:text-sm mt-0.5 ${t.textFaint}`}>Leads successfully closed</p>
@@ -2610,36 +2662,39 @@ function SalesManagerView({
               </div>
             </div>
 
-            <div className={`rounded-2xl border shadow-sm overflow-x-auto flex flex-col ${t.tableWrap}`} style={t.tableGlass}>
+            <div className={`rounded-[2rem] border shadow-sm flex flex-col overflow-hidden ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-[#FAFAFD] border-slate-200/60'}`}>
+
               {/* ── Table Header Area ── */}
-              <div className={`px-4 sm:px-6 py-4 sm:py-5 border border-gray-400 flex justify-between items-center ${t.tableBorder}`}>
-                <h2 className={`text-base sm:text-lg font-semibold tracking-tight flex items-center gap-3 font antialiased ${t.text}`}>
-                  Closed Leads
-                  <span className={`px-3 py-0.5 rounded-full text-xs font-bold border ${t.btnClosingBadge || (isDark ? "bg-white/10 border-white/5" : "bg-black/5 border-black/5")}`}>
+              <div className={`px-4 sm:px-6 py-5 flex items-center justify-between border-b ${isDark ? 'border-slate-800' : 'border-slate-200/60'}`}>
+                <div className="flex items-center gap-2.5">
+                  <h2 className={`font-bold text-[16px] sm:text-[17px] tracking-tight ${t.text}`}>
+                    Closed Leads
+                  </h2>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#B01A79]/10 text-[#B01A79] dark:bg-purple-900/40 dark:text-purple-300 tabular-nums">
                     {filteredClosedLeads.length}
                   </span>
-                </h2>
+                </div>
               </div>
 
               {/* ── Scrollable Table Wrapper ── */}
               <div className="overflow-x-auto w-full custom-scrollbar">
-                <table className="w-full text-left border-collapse whitespace-nowrap">
-                  <thead>
-                    <tr className={t.tableHead}>
+                <table className="w-full text-left whitespace-nowrap">
+                  <thead className={isDark ? "bg-slate-900/50" : "bg-slate-50/50"}>
+                    <tr>
                       {["Sr.No.", "Client Name", "Budget", "Property", "Source", "Cp Name", "Cp Company", "Cp Number", "Status", "Site Visit", "Closing Date", "Actions"].map(h => (
                         <th
                           key={h}
-                          className={`px-4 sm:px-6 py-3 sm:py-4 crm-eyebrow border-b ${t.textHeader} ${t.tableBorder}`}
+                          className={`px-4 sm:px-6 py-3 text-[10px] sm:text-[11px] font-bold uppercase tracking-wider border-b ${isDark ? 'border-slate-800 text-slate-400' : 'border-slate-200 text-[#475569]'}`}
                         >
                           {h}
                         </th>
                       ))}
                     </tr>
                   </thead>
-                  <tbody className={`${t.tableDivide} divide-y`}>
+                  <tbody className={`divide-y ${isDark ? 'divide-slate-800/60' : 'divide-slate-100'}`}>
                     {isLoading ? (
                       <tr>
-                        <td colSpan={8} className={`p-10 text-center text-sm font-medium ${t.textMuted}`}>
+                        <td colSpan={12} className={`py-10 text-center text-sm font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
                           <div className="flex flex-col items-center justify-center gap-3">
                             <div className="w-5 h-5 rounded-full border-2 border-current border-t-transparent animate-spin opacity-50" />
                             Loading closed leads...
@@ -2648,60 +2703,66 @@ function SalesManagerView({
                       </tr>
                     ) : filteredClosedLeads.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className={`p-16 text-center ${t.textMuted}`}>
-                          <FaHandshake className={`text-5xl mx-auto mb-4 opacity-20 ${t.textFaint}`} />
-                          <p className="text-base font-semibold tracking-tight">No closed leads yet.</p>
-                          <p className={`text-xs mt-1 font-medium ${t.textFaint}`}>Successfully closed deals will appear here.</p>
+                        <td colSpan={12} className={`py-16 text-center ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                          <FaHandshake className="text-5xl mx-auto mb-4 opacity-20" />
+                          <p className="text-[15px] font-semibold tracking-tight text-inherit">No closed leads yet.</p>
+                          <p className="text-xs mt-1 font-medium opacity-70">Successfully closed deals will appear here.</p>
                         </td>
                       </tr>
                     ) : (
                       filteredClosedLeads.map((lead: any) => (
                         <tr
                           key={lead.id}
-                          className={`transition-all duration-200 cursor-pointer group ${t.tableRow}`}
+                          className={`group cursor-pointer transition-colors duration-200 ${isDark ? "hover:bg-slate-800/40" : "hover:bg-slate-50"}`}
                           onClick={() => {
                             setSelectedLead(lead);
                             setMainView("detail");
                             setSubView("detail");
                           }}
                         >
-                          <td className={`px-4 sm:px-6 py-3.5 sm:py-4 font-mono text-xs sm:text-sm font-bold ${t.accentText}`}>
+                          <td className={`px-4 sm:px-6 py-3 sm:py-4 text-[11px] sm:text-sm font-bold ${t.accentText}`}>
                             #{lead.sr_no || lead.id}
                           </td>
-                          <td className={`px-4 sm:px-6 py-3.5 sm:py-4 font-semibold tracking-tight text-[13px] sm:text-sm ${t.text}`}>
+                          <td className={`px-4 sm:px-6 py-3 sm:py-4 font-bold text-[13px] ${t.text}`}>
                             {lead.name}
                           </td>
-                          <td className={`px-4 sm:px-6 py-3.5 sm:py-4 font-semibold text-[13px] sm:text-sm tracking-tight ${isDark ? "text-green-400" : "text-emerald-600"}`}>
+                          <td className={`px-4 sm:px-6 py-3 sm:py-4 font-bold text-[12px] sm:text-[13px] ${isDark ? "text-emerald-400" : "text-[#039953]"}`}>
                             {lead.salesBudget || lead.budget}
                           </td>
-                          <td className={`px-4 sm:px-6 py-3.5 sm:py-4 text-xs sm:text-sm font-medium ${t.textMuted}`}>
+                          <td className={`px-4 sm:px-6 py-3 sm:py-4 text-[12px] sm:text-[13px] font-medium ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
                             {lead.propType || lead.configuration || "N/A"}
                           </td>
-                          <td className={`px-4 sm:px-6 py-3.5 sm:py-4 text-xs sm:text-sm font-medium ${t.textMuted}`}>
+                          <td className={`px-4 sm:px-6 py-3 sm:py-4 text-[11px] sm:text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                             {lead.source || lead.source || "N/A"}
                           </td>
-                          <td className={`px-4 sm:px-6 py-3.5 sm:py-4 text-xs sm:text-sm font-medium ${t.textMuted}`}>
+                          <td className={`px-4 sm:px-6 py-3 sm:py-4 text-[12px] sm:text-[13px] font-medium ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
                             {lead.cpName || lead.cp_name || "N/A"}
                           </td>
-                          <td className={`px-4 sm:px-6 py-3.5 sm:py-4 text-xs sm:text-sm font-medium ${t.textMuted}`}>
+                          <td className={`px-4 sm:px-6 py-3 sm:py-4 text-[12px] sm:text-[13px] font-medium ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
                             {lead.cpCompany || lead.cp_company || "N/A"}
                           </td>
-                          <td className={`px-4 sm:px-6 py-3.5 sm:py-4 text-xs sm:text-sm font-medium ${t.textMuted}`}>
+                          <td className={`px-4 sm:px-6 py-3 sm:py-4 font-mono text-[11px] sm:text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                             {lead.cpPhone || "N/A"}
                           </td>
-                          <td className="px-4 sm:px-6 py-3.5 sm:py-4">
-                            <span className={`px-2.5 py-1 rounded-md text-[10px] sm:crm-eyebrow border flex-shrink-0 ${t.statusClosing}`}>
+                          <td className="px-4 sm:px-6 py-3 sm:py-4">
+                            <span className={`px-2 py-1 rounded-full text-[9px] sm:text-[10px] font-bold uppercase tracking-wide border flex-shrink-0 inline-block ${t.statusClosing}`}>
                               {lead.status}
                             </span>
                           </td>
-                          <td className={`px-4 sm:px-6 py-3.5 sm:py-4 text-xs font-medium ${lead.mongoVisitDate ? "text-orange-500" : t.textFaint}`}>
-                            {lead.mongoVisitDate ? formatDate(lead.mongoVisitDate).split(",")[0] : "—"}
+                          <td className="px-4 sm:px-6 py-3 sm:py-4">
+                            {lead.mongoVisitDate ? (
+                              <span className="text-[#F49A25] font-semibold whitespace-nowrap text-[11px] sm:text-xs">
+                                {formatDate(lead.mongoVisitDate).split(",")[0]}
+                              </span>
+                            ) : (
+                              <span className={`text-[11px] sm:text-xs italic ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>—</span>
+                            )}
                           </td>
-                          <td className={`px-4 sm:px-6 py-3.5 sm:py-4 text-xs font-medium ${t.textFaint}`}>
+                          <td className={`px-4 sm:px-6 py-3 sm:py-4 text-[11px] sm:text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                             {lead.closingDate ? formatDate(lead.closingDate).split(",")[0] : "—"}
                           </td>
-                          <td className="px-4 sm:px-6 py-3.5 sm:py-4">
-                            <span className={`text-[11px] sm:text-xs font-bold px-4 py-2 rounded-lg transition-all shadow-sm active:scale-95 inline-block text-center whitespace-nowrap opacity-90 group-hover:opacity-100 ${t.btnWarning}`}>
+                          <td className="px-4 sm:px-6 py-3 sm:py-4">
+                            <span className={`text-[10px] sm:text-[11px] font-bold px-3 py-1.5 rounded-lg transition-all shadow-sm active:scale-95 inline-block text-center whitespace-nowrap opacity-90 group-hover:opacity-100 ${t.btnWarning}`}>
                               View History
                             </span>
                           </td>

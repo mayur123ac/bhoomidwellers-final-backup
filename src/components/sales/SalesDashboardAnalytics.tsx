@@ -58,50 +58,71 @@ export default function DashboardAnalytics({ leads, isDark, t }: { leads: any[];
 
   const axisColor = isDark ? "#9ca3af" : "#6B7280";
   const gridColor = isDark ? "#2a2a2a" : "#E5E7EB";
-
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 sm:gap-3">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
         {/* Bar chart */}
-        <div className={`rounded-3xl p-3 sm:p-3 shadow-sm border ${t.tableWrap}`} style={t.tableGlass}>
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
+        <div className={`rounded-[2rem] p-5 sm:p-6 shadow-sm border flex flex-col ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-[#FAFAFD] border-slate-200/60'}`}>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
             <div>
-              <h3 className={`font-bold text-sm lg:text-base ${t.text}`}>{barMode === "weekly" ? "Leads This Week" : "Lead Source Distribution"}</h3>
-              {barMode === "weekly" && <p className={`text-xs mt-0.5 font-semibold ${t.accentText}`}>{weeklyTotal} total this week</p>}
+              <h3 className={`text-[17px] sm:text-lg font-bold ${t.text}`}>
+                {barMode === "weekly" ? "Leads This Week" : "Lead Source Distribution"}
+              </h3>
+              {barMode === "weekly" && (
+                <p className={`text-[13px] mt-0.5 font-semibold text-[#B01A79] dark:text-purple-400`}>
+                  {weeklyTotal} total this week
+                </p>
+              )}
             </div>
-            <select value={barMode} onChange={e => setBarMode(e.target.value as any)} className={`rounded-lg px-3 py-1.5 text-xs outline-none cursor-pointer border w-full sm:w-auto ${t.selectSmall}`}>
+            <select
+              value={barMode}
+              onChange={e => setBarMode(e.target.value as any)}
+              className={`text-xs font-semibold px-3 py-1.5 rounded-full border outline-none cursor-pointer w-full sm:w-auto ${isDark ? 'bg-slate-800 border-slate-700 text-slate-200' : 'bg-white border-slate-200 text-slate-700 shadow-sm'}`}
+            >
               <option value="weekly">Total Leads Assigned</option>
               <option value="source">Lead Source Distribution</option>
             </select>
           </div>
-          <ResponsiveContainer width="100%" height={220}>
-            {barMode === "weekly" ? (
-              <BarChart data={weeklyData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
-                <XAxis dataKey="day" tick={{ fill: axisColor, fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: axisColor, fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
-                <RTooltip content={<BarTip />} cursor={{ fill: 'transparent' }} />
-                <Bar dataKey="leads" radius={[6, 6, 0, 0]}>{weeklyData.map((_: any, i: number) => <Cell key={i} fill={BAR_COLORS[i % 7]} />)}</Bar>
-              </BarChart>
-            ) : (
-              <BarChart data={sourceData} layout="vertical" margin={{ top: 0, right: 16, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={gridColor} horizontal={false} />
-                <XAxis type="number" tick={{ fill: axisColor, fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
-                <YAxis type="category" dataKey="source" width={100} tick={{ fill: axisColor, fontSize: 10 }} axisLine={false} tickLine={false} />
-                <RTooltip content={<BarTip />} cursor={{ fill: 'transparent' }} />
-                <Bar dataKey="count" radius={[0, 6, 6, 0]}>{sourceData.map((_: any, i: number) => <Cell key={i} fill={SRC_COLORS[i % 6]} />)}</Bar>
-              </BarChart>
-            )}
-          </ResponsiveContainer>
+
+          <div className="flex-grow">
+            <ResponsiveContainer width="100%" height={220}>
+              {barMode === "weekly" ? (
+                <BarChart data={weeklyData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+                  <XAxis dataKey="day" tick={{ fill: axisColor, fontSize: 11, fontWeight: 500 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fill: axisColor, fontSize: 11, fontWeight: 500 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                  <RTooltip content={<BarTip />} cursor={{ fill: isDark ? '#ffffff10' : '#0000000a' }} />
+                  <Bar dataKey="leads" radius={[6, 6, 0, 0]}>
+                    {weeklyData.map((_: any, i: number) => <Cell key={i} fill={BAR_COLORS[i % 7]} />)}
+                  </Bar>
+                </BarChart>
+              ) : (
+                <BarChart data={sourceData} layout="vertical" margin={{ top: 0, right: 16, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={gridColor} horizontal={false} />
+                  <XAxis type="number" tick={{ fill: axisColor, fontSize: 11, fontWeight: 500 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                  <YAxis type="category" dataKey="source" width={100} tick={{ fill: axisColor, fontSize: 11, fontWeight: 500 }} axisLine={false} tickLine={false} />
+                  <RTooltip content={<BarTip />} cursor={{ fill: isDark ? '#ffffff10' : '#0000000a' }} />
+                  <Bar dataKey="count" radius={[0, 6, 6, 0]}>
+                    {sourceData.map((_: any, i: number) => <Cell key={i} fill={SRC_COLORS[i % 6]} />)}
+                  </Bar>
+                </BarChart>
+              )}
+            </ResponsiveContainer>
+          </div>
         </div>
 
         {/* Pie chart */}
-        <div className={`rounded-4xl p-3 sm:p-3 shadow-sm border ${t.tableWrap}`} style={t.tableGlass}>
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
-            <h3 className={`font-bold text-sm lg:text-base ${t.text}`}>
+        <div className={`rounded-[2rem] p-5 sm:p-6 shadow-sm border flex flex-col ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-[#FAFAFD] border-slate-200/60'}`}>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+            <h3 className={`text-[17px] sm:text-lg font-bold ${t.text}`}>
               {pieMode === "interest" ? "Lead Interest Breakdown" : pieMode === "loan" ? "Loan Status Breakdown" : pieMode === "usetype" ? "Self-Use vs Investment" : pieMode === "loanrequired" ? "Loan Required?" : "Visit Scheduled vs Pending"}
             </h3>
-            <select value={pieMode} onChange={e => setPieMode(e.target.value as any)} className={`rounded-lg px-3 py-1.5 text-xs outline-none cursor-pointer border w-full sm:w-auto ${t.selectSmall}`}>
+            <select
+              value={pieMode}
+              onChange={e => setPieMode(e.target.value as any)}
+              className={`text-xs font-semibold px-3 py-1.5 rounded-full border outline-none cursor-pointer w-full sm:w-auto ${isDark ? 'bg-slate-800 border-slate-700 text-slate-200' : 'bg-white border-slate-200 text-slate-700 shadow-sm'}`}
+            >
               <option value="interest">Lead Interest</option>
               <option value="loan">Loan Status</option>
               <option value="usetype">Self-Use vs Investment</option>
@@ -109,29 +130,44 @@ export default function DashboardAnalytics({ leads, isDark, t }: { leads: any[];
               <option value="visits">Visit Scheduled vs Pending</option>
             </select>
           </div>
-          <div className="flex flex-col sm:flex-row items-center gap-2">
-            <ResponsiveContainer width="100%" height={200} className="sm:w-[55%]">
+
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 flex-grow">
+            <ResponsiveContainer width="100%" height={200} className="sm:w-[50%]">
               <PieChart>
-                <Pie data={pieData} cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={3} dataKey="value">
+                <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={4} dataKey="value" stroke="none">
                   {pieData.map((entry: any, i: number) => <Cell key={i} fill={pieColors[entry.name] ?? "#6b7280"} />)}
                 </Pie>
                 <RTooltip content={<PieTip />} />
               </PieChart>
             </ResponsiveContainer>
-            <div className="flex flex-col gap-2 w-full sm:w-[45%] flex-1">
+
+            <div className="flex flex-col gap-3 w-full sm:w-[50%] mt-4 sm:mt-0 p-2 sm:p-0">
               {pieData.map((entry: any) => {
                 const color = pieColors[entry.name] ?? "#6b7280";
                 const pct = totalLeads > 0 ? Math.round((entry.value / totalLeads) * 100) : 0;
                 return (
                   <div key={entry.name} className="flex items-center justify-between">
-                    <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} /><span className={`text-[11px] sm:text-xs font-medium ${t.textMuted}`}>{entry.name}</span></div>
-                    <div className="flex items-center gap-1.5"><span className={`text-[11px] sm:text-xs font-bold ${t.text}`}>{entry.value}</span><span className={`text-[10px] ${t.textFaint}`}>({pct}%)</span></div>
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+                      <span className={`text-[13px] font-medium ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+                        {entry.name}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-[14px] font-bold ${t.text}`}>
+                        {entry.value}
+                      </span>
+                      <span className={`text-[12px] font-medium w-9 text-right ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                        ({pct}%)
+                      </span>
+                    </div>
                   </div>
                 );
               })}
             </div>
           </div>
         </div>
+
       </div>
     </div>
   );

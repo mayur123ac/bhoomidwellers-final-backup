@@ -252,7 +252,7 @@ export default function SourcingManagerDashboard() {
       <div className={`flex-1 flex flex-col overflow-hidden relative md:ml-[76px]`}>
 
         {/* ── HEADER BLOCK (Cleaned) ── */}
-        <div className={`relative z-15 bg-white/95 ${isChat ? "hidden md:block" : "block"}`}>
+        <div className="fixed top-0 left-0 right-0 z-[110] md:relative md:z-40 w-full md:w-auto">
           <AppHeader
             isDark={isDark}
             context={NAV_ITEMS.find(n => n.id === activeTab)?.title || "Settings"}
@@ -314,7 +314,7 @@ export default function SourcingManagerDashboard() {
         </div>
         {/* ── END HEADER BLOCK ── */}
 
-        <main className={`flex-1 flex flex-col overflow-y-auto ${isChat ? "p-0 pb-0" : "p-0 pb-[calc(env(safe-area-inset-bottom)+84px)]"} md:pb-0 custom-scrollbar relative`}>
+        <main className="flex-1 flex flex-col overflow-y-auto pt-[calc(56px+env(safe-area-inset-top))] md:pt-0 p-0 pb-[calc(env(safe-area-inset-bottom)+84px)] md:pb-0 custom-scrollbar relative w-full">
 
           {/* ════════════════════════════════════════════════════
               DASHBOARD

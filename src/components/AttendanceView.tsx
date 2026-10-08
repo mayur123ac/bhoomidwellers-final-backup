@@ -384,7 +384,7 @@ export default function AttendanceView({
           ].map((card, i) => (
             <div
               key={i}
-              className={`min-w-0 rounded-[16px] p-3.5 sm:p-4 flex flex-col justify-between gap-1 min-h-[85px] sm:min-h-[96px] ${isDark ? "bg-[#1C1C1E] border border-white/5 shadow-sm" : "bg-white border border-black/5 shadow-[0_2px_12px_rgba(0,0,0,0.03)]"}`}
+              className={`min-w-0 rounded-[16px] shadow-sm p-3.5 sm:p-4 flex flex-col justify-between gap-1 min-h-[85px] sm:min-h-[96px] ${isDark ? "bg-[#1C1C1E] border border-white/5 shadow-sm" : "bg-white border border-black/5 shadow-[0_2px_12px_rgba(0,0,0,0.03)]"}`}
             >
               <p className={`text-[10px] sm:text-[11px] font-medium uppercase tracking-wider ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
                 {card.label}
@@ -422,7 +422,7 @@ export default function AttendanceView({
         </AnimatePresence>
 
         {/* ── Attendance List ── */}
-        <div className={`rounded-[18px] overflow-hidden border ${isDark ? "bg-[#1C1C1E] border-white/10 shadow-sm" : "bg-white border-black/5 shadow-[0_2px_16px_rgba(0,0,0,0.03)]"}`}>
+        <div className={`rounded-[18px] shadow-sm overflow-hidden border ${isDark ? "bg-[#1C1C1E] border-white/10 shadow-sm" : "bg-white border-black/5 shadow-[0_2px_16px_rgba(0,0,0,0.03)]"}`}>
 
           <div className={`px-4 py-3 border-b flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${isDark ? "border-[#38383A] bg-[#2C2C2E]/20" : "border-[#E5E5EA] bg-[#F9F9F9]"}`}>
             <h3 className={`text-[13px] sm:text-[14px] font-semibold tracking-tight flex items-center gap-2 ${isDark ? "text-[#9E217B]" : "text-[#9E217B]"}`}>

@@ -11,7 +11,7 @@ import Image from "next/image";
  * Apple standard navigation bar heights adjusted for safe touch areas.
  * Increased base mobile height to 56px to comfortably house 44px touch targets.
  */
-export const APP_HEADER_HEIGHT = "min-h-[calc(56px+env(safe-area-inset-top))] sm:min-h-[calc(64px+env(safe-area-inset-top))}]";
+export const APP_HEADER_HEIGHT = "min-h-[calc(56px+env(safe-area-inset-top))] sm:min-h-[calc(64px+env(safe-area-inset-top))]";
 export const APP_HEADER_PADDING = "px-4 sm:px-6"; // Standard 16px padding on mobile
 
 const appleFontStack = `-apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif`;
