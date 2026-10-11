@@ -7,11 +7,14 @@ import { claimPartnerForSourcingManager, resolvePartnerOwner } from "@/lib/sourc
 import { getServerSession, getSessionUserId } from "@/lib/serverAuth";
 import { normalizeRole } from "@/lib/cpRbac";
 import { isAssignableRole, RECEPTIONIST_ASSIGNABLE_TARGETS } from "@/lib/leadAuth";
+import { isManagerEligible } from "@/lib/walkInQueue";
 import { notifyCpLeadAssigned } from "@/services/whatsapp.service";
 import { jsonCompressed } from "@/lib/apiResponse";
 import { resolvePhones } from "@/lib/phoneAccess";
 import { broadcastToOrg } from "@/lib/supabase/broadcast";
 import { batchGetVisitDepths } from "@/lib/visitChain";
+import { EmailService } from "@/lib/email/EmailService";
+import { isValidRecipient } from "@/lib/email/types";
 
 export const dynamic = "force-dynamic";
 
@@ -152,7 +155,11 @@ export async function GET(req: Request) {
 
     const [rows, countRows] = await Promise.all([
       query(
-        `SELECT w.*
+        `SELECT w.*,
+                (SELECT target_sm_name
+                 FROM walk_in_assignment_queue
+                 WHERE lead_id = w.id AND status = 'pending'
+                 LIMIT 1) AS pending_sm_name
          FROM walkin_enquiries w
          WHERE ${where}
          ORDER BY ${orderBy}
@@ -507,6 +514,30 @@ export async function POST(req: Request) {
         }
       }
 
+      // ── Sequential walk-in queue logic ──────────────────────────────────────
+      // Applies ONLY when a receptionist assigns to an SM/SSM/Site Head
+      // (not to themselves). If the SM already has an unworked receptionist
+      // lead, the new enquiry is queued rather than assigned immediately.
+      const targetRole = assignedToUserRow.rows[0]?.normalized_role ?? "";
+      const isReceptionistToSmPath =
+        sessionRole === "receptionist" &&
+        actorUserId !== null &&
+        assignedToUserId !== null &&
+        assignedToUserId !== actorUserId &&
+        RECEPTIONIST_ASSIGNABLE_TARGETS.has(targetRole);
+
+      let isQueuedAssignment = false;
+
+      if (isReceptionistToSmPath) {
+        // Advisory lock: serialize concurrent receptionist submissions for the same SM.
+        await client.query(
+          `SELECT pg_advisory_xact_lock(hashtext(concat('wiq_', $1::text, '_', $2::text)))`,
+          [orgId, String(assignedToUserId)]
+        );
+        const eligible = await isManagerEligible(client, assignedToUserId, orgId);
+        isQueuedAssignment = !eligible;
+      }
+
       // CRITICAL: do NOT fall back to actorUserId here.
       // assigned_receptionist_user_id must remain NULL whenever assigned_receptionist
       // was not explicitly provided — i.e. when the receptionist assigned the lead to
@@ -546,6 +577,12 @@ export async function POST(req: Request) {
       const routedByPartner =
         !!partnerOwner && partnerOwner.id !== requestedSourcingManagerId;
 
+      // When the enquiry is queued, clear the SM assignment — the lead sits with
+      // no owner until processQueueForManager assigns it after the form submit.
+      const effectiveAssignedTo   = isQueuedAssignment ? null : assignedTo;
+      const effectiveAssignedToId = isQueuedAssignment ? null : assignedToUserId;
+      const effectiveStatus       = isQueuedAssignment ? "Pending Assignment" : (status || "Assigned");
+
       const insertRes = await client.query(
         `INSERT INTO walkin_enquiries (
           name, phone, email, address, occupation, organization,
@@ -560,7 +597,7 @@ export async function POST(req: Request) {
           organization_id,
           lead_classification, returning_from_lead_id,
           assigned_to_user_id, assigned_receptionist_user_id, overseeing_site_head_user_id,
-          budget_unit
+          budget_unit, receptionist_submitted
         )
         VALUES (
           $1,  $2,  $3,  $4,  $5,  $6,
@@ -576,7 +613,7 @@ export async function POST(req: Request) {
           CASE WHEN $29::int IS NULL THEN NULL ELSE $30 END,
           $31,
           $32, $33,
-          $34, $35, $36, $37
+          $34, $35, $36, $37, $38
         )
         RETURNING id`,
         [
@@ -597,9 +634,9 @@ export async function POST(req: Request) {
           cp_company || null,                 // $15
           cp_phone || null,                   // $16
           loan_planned || "Pending",          // $17
-          assignedTo,                         // $18
+          effectiveAssignedTo,                // $18 — null when queued
           effectiveAssignedReceptionist,      // $19 — server-derived, never from body
-          status || "Assigned",               // $20
+          effectiveStatus,                    // $20 — "Pending Assignment" when queued
           is_global_shared || false,          // $21
           overseeing_site_head || null,       // $22
           enquiry_date || new Date().toISOString(), // $23
@@ -620,10 +657,11 @@ export async function POST(req: Request) {
           orgId,                              // $31
           leadClassification,                 // $32
           returningFromLeadId,                // $33
-          assignedToUserId,                   // $34 — integer FK, may be null for unresolved names
+          effectiveAssignedToId,              // $34 — null when queued
           assignedReceptionistUserId,         // $35 — integer FK, may be null
           overseeingSiteHeadUserId,           // $36 — integer FK, may be null
           budget_unit || null,                // $37
+          isReceptionistToSmPath,             // $38 — true for walk-in sequential pipeline
         ]
       );
 
@@ -673,11 +711,23 @@ export async function POST(req: Request) {
       // Always recalculate Sr. No. to maintain strictly chronological gapless order
       await recalculateSrNos(client);
 
+      // Insert into queue when the SM is not yet eligible. The UNIQUE(lead_id)
+      // constraint makes this idempotent in the unlikely event of a retry.
+      if (isQueuedAssignment && assignedToUserId !== null) {
+        await client.query(
+          `INSERT INTO walk_in_assignment_queue
+             (organization_id, lead_id, target_sm_user_id, target_sm_name)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (lead_id) DO NOTHING`,
+          [orgId, newId, assignedToUserId, assignedTo]
+        );
+      }
+
       const finalRes = await client.query(
         "SELECT * FROM walkin_enquiries WHERE id = $1",
         [newId]
       );
-      return { row: finalRes.rows[0], routedByPartner, partnerOwner };
+      return { row: finalRes.rows[0], routedByPartner, partnerOwner, isQueuedAssignment };
     });
 
     // P1-6/FIX-G: receptionist tried to assign to someone other than themselves
@@ -732,6 +782,36 @@ export async function POST(req: Request) {
       notifyCpLeadAssigned({ lead: result.row, loggedBy: actorName });
     }
 
+    // ── Confirmation email: notify the customer their enquiry was received ────
+    // Fires after COMMIT, never awaited. An SMTP failure here cannot fail the
+    // enquiry. The org name is fetched so the email names the actual company
+    // rather than a hard-coded fallback.
+    if (isValidRecipient(result.row?.email)) {
+      (async () => {
+        try {
+          const orgRows = await query(
+            "SELECT name FROM organizations WHERE id = $1",
+            [orgIdForCheck]
+          ) as any[];
+          const orgName: string = orgRows[0]?.name ?? "Bhoomi Dwellers";
+          await EmailService.sendEnquiryConfirmation(
+            result.row.email,
+            {
+              clientName: result.row.name,
+              orgName,
+              assignedTo: result.isQueuedAssignment ? null : (result.row.assigned_to ?? null),
+            },
+            {}
+          );
+        } catch (err) {
+          console.error(
+            "[email] enquiry confirmation failed:",
+            err instanceof Error ? err.message : String(err)
+          );
+        }
+      })();
+    }
+
     return NextResponse.json(
       {
         success: true,
@@ -746,6 +826,11 @@ export async function POST(req: Request) {
         returningFromLeadId,
         returningFromLeadName,
         returningFromAssignedTo,
+        // Sequential queue status: "pending" means the SM was busy and the lead
+        // was queued; "assigned" means it was handed to the SM immediately.
+        assignmentStatus: result.isQueuedAssignment ? "pending" : "assigned",
+        // Only present for pending: the intended manager's name for display.
+        pendingSmName: result.isQueuedAssignment ? assignedTo : null,
       },
       { status: 201 }
     );

@@ -620,6 +620,47 @@ ${d.actionUrl && d.actionLabel ? `\n${d.actionLabel}: ${d.actionUrl}` : ""}`,
    Diagnostics
    ══════════════════════════════════════════════════════════════════════════ */
 
+/* ══════════════════════════════════════════════════════════════════════════
+   Walk-in enquiry confirmation (to the customer)
+   ══════════════════════════════════════════════════════════════════════════ */
+
+export interface EnquiryConfirmationInput {
+  clientName: string;
+  orgName: string;
+  /** Assigned manager's display name. null when queued or self-assigned. */
+  assignedTo: string | null;
+}
+
+export function enquiryConfirmationTemplate(d: EnquiryConfirmationInput): Template {
+  const assigneeNote = d.assignedTo
+    ? p(`${d.assignedTo} from our team has been assigned to assist you and will be in touch shortly.`)
+    : p("Our team will be in touch with you shortly.");
+
+  return build(`Your enquiry has been received — ${d.orgName}`, {
+    preview: `Thank you for visiting ${d.orgName}. Your enquiry has been registered.`,
+    heading: "Enquiry received",
+    bodyHtml: `
+${p(`Hi ${d.clientName},`)}
+${p(`Thank you for visiting ${d.orgName}. Your enquiry has been registered with us.`)}
+${assigneeNote}
+${p("If you have any questions in the meantime, feel free to reply to this email.")}
+`,
+    bodyText: `Hi ${d.clientName},
+
+Thank you for visiting ${d.orgName}. Your enquiry has been registered with us.
+
+${d.assignedTo
+  ? `${d.assignedTo} from our team has been assigned to assist you and will be in touch shortly.`
+  : "Our team will be in touch with you shortly."}
+
+If you have any questions in the meantime, feel free to reply to this email.`,
+  });
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Diagnostics
+   ══════════════════════════════════════════════════════════════════════════ */
+
 /** The "send a test email" message from Settings → Email Senders. */
 export function testEmailTemplate(providerName: string): Template {
   const sender = readSenderConfig();

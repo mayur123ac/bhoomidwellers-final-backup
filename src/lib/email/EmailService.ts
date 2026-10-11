@@ -36,6 +36,7 @@ import { dispatch, verifyProvider } from "./provider";
 import type { EmailError, SendOutcome } from "./types";
 import {
   employeeInvitationTemplate,
+  enquiryConfirmationTemplate,
   failedLoginBurstTemplate,
   loginAlertTemplate,
   otpTemplate,
@@ -45,6 +46,7 @@ import {
   supportReplyTemplate,
   systemNotificationTemplate,
   testEmailTemplate,
+  type EnquiryConfirmationInput,
   type FailedLoginBurstInput,
   type InvitationInput,
   type LoginAlertInput,
@@ -405,6 +407,28 @@ export const EmailService = {
       systemNotificationTemplate(input),
       "email.system_notification_sent",
       context
+    );
+  },
+
+  /* ── Walk-in enquiries ── */
+
+  /**
+   * Confirmation email to the customer immediately after a walk-in enquiry is
+   * registered. Goes directly to the customer's address — there is no CRM user
+   * account to route through. Fire-and-forget at the call site; SMTP failure
+   * must never fail the enquiry.
+   */
+  async sendEnquiryConfirmation(
+    to: string,
+    input: EnquiryConfirmationInput,
+    context: AuditContext = {}
+  ): Promise<DirectSendResult> {
+    return sendDirect(
+      to,
+      enquiryConfirmationTemplate(input),
+      "email.enquiry_confirmation_sent",
+      context,
+      { orgName: input.orgName, assignedTo: input.assignedTo }
     );
   },
 

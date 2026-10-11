@@ -41,7 +41,19 @@ export async function GET(req: Request) {
                      AND es.is_active = true
                 ) THEN 'ONLINE'
                 ELSE 'OFFLINE'
-              END AS presence
+              END AS presence,
+              CASE
+                WHEN EXISTS (
+                  SELECT 1 FROM walkin_enquiries w
+                   WHERE w.assigned_to_user_id = u.id
+                     AND w.organization_id      = $1
+                     AND w.receptionist_submitted   = true
+                     AND w.sales_form_submitted_at  IS NULL
+                     AND w.is_lost_lead             = false
+                     AND w.status NOT IN ('Closing', 'Closed', 'Pending Assignment')
+                ) THEN 'busy'
+                ELSE 'available'
+              END AS "assignmentAvailability"
          FROM users u
         WHERE (LOWER(u.role) LIKE '%site%head%'
                OR LOWER(u.role) = 'site_head')

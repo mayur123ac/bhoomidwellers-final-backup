@@ -788,6 +788,22 @@ export default function ReceptionistDashboard() {
   const combinedAssignees = useMemo(() => {
     return [...salesManagers, ...siteHeads];
   }, [salesManagers, siteHeads]);
+
+  // When the manager list refreshes (presence poll or post-submit), invalidate
+  // any currently selected manager that has since become BUSY, so the receptionist
+  // is forced to pick an available one before re-submitting.
+  useEffect(() => {
+    if (!enquiryForm.assignedTo || enquiryForm.selfAssign) return;
+    const sel = combinedAssignees.find((m: any) => m.name === enquiryForm.assignedTo);
+    if (sel && sel.assignmentAvailability === "busy") {
+      setEnquiryForm(prev => ({ ...prev, assignedTo: "" }));
+      setAssignedToError("The selected manager is now busy with another lead. Please select an available manager.");
+    }
+    // Intentionally omitting enquiryForm from deps — we only want this to fire
+    // when the manager list itself changes, not on every keystroke.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [combinedAssignees]);
+
   const [enquiries, setEnquiries] = useState<any[]>([]);
   const [followUps, setFollowUps] = useState<any[]>([]);
   const [isFetchingEnquiries, setIsFetchingEnquiries] = useState(true);
@@ -1130,7 +1146,10 @@ export default function ReceptionistDashboard() {
       const total: number = json.total ?? (append ? totalCount : dataArray.length);
       const formatted = dataArray.map((item: any) => ({
         ...item,
-        assignedTo: item.assigned_to || "Unassigned",
+        // For queued leads assigned_to is NULL; surface the intended SM name
+        // from the queue so the receptionist can see who the lead is waiting for.
+        assignedTo: item.assigned_to
+          || (item.pending_sm_name ? `Pending — ${item.pending_sm_name}` : "Unassigned"),
         assignedReceptionist: item.assigned_receptionist || null,
         altPhone: item.alt_phone,
         pinCode: item.pin_code,
@@ -1825,7 +1844,17 @@ export default function ReceptionistDashboard() {
     }
     setAssignedToError("");
 
-
+    // Guard: verify the selected manager hasn't become BUSY since the dropdown
+    // was opened. This catches the rare race where another receptionist assigned
+    // the same SM a split second before this submission lands.
+    if (!enquiryForm.selfAssign && enquiryForm.assignedTo) {
+      const sel = combinedAssignees.find((m: any) => m.name === enquiryForm.assignedTo);
+      if (sel && sel.assignmentAvailability === "busy") {
+        setAssignedToError("This manager just became busy. Please select an available manager.");
+        setIsSubmitting(false); isSubmittingRef.current = false;
+        return;
+      }
+    }
 
     const newEntry = {
       name: enquiryForm.fullName,
@@ -1879,9 +1908,24 @@ export default function ReceptionistDashboard() {
         const json = await res.json().catch(() => ({}));
         // Distinct toasts for returning leads vs new ones.
         const isReturning = json?.leadClassification === "RETURNING_LEAD";
+        const isPending   = json?.assignmentStatus === "pending";
         const routeMsg = json?.routedByPartner && json?.routedTo
           ? ` — routed to ${json.routedTo}`
           : "";
+
+        if (isPending) {
+          // Manager became BUSY in the window between frontend load and submit
+          // (race condition — the pre-submit guard ran before the advisory lock).
+          // The lead was queued server-side; inform the receptionist and keep the
+          // form open so they can select a different available manager or accept
+          // that the lead will be assigned automatically once the SM is free.
+          await fetchSalesManagers();
+          setEnquiryForm(prev => ({ ...prev, assignedTo: "" }));
+          setAssignedToError(`${assignTo} just became busy — lead queued. Select another manager or close to let the queue handle it.`);
+          setIsSubmitting(false); isSubmittingRef.current = false;
+          return;
+        }
+
         showToast(
           isReturning
             ? `Revisit Lead! Previously assigned to ${json.returningFromAssignedTo || "unknown"}${routeMsg}`
@@ -1900,6 +1944,7 @@ export default function ReceptionistDashboard() {
           budgetUnit: "lakh", configuration: "", purpose: "", source: "", assignedTo: "", loanPlanned: "", sourceOther: "", referralName: "", budgetNotDisclosed: false, cpDetails: { name: "", company: "", phone: "" }, sourcingManagerId: "", preferredLocation: "", selfAssign: false, enquiryDate: getTodayString()
         });
         refetchAll();
+        fetchSalesManagers();
       } else {
         const err = await res.json().catch(() => null);
         const msg = err?.message || `Server error (${res.status})`;
@@ -1948,15 +1993,29 @@ export default function ReceptionistDashboard() {
   const handleSalesFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedLead) return;
-    const msg = `📝 Detailed Salesform Submitted:\n• Property Type: ${salesForm.propertyType || "N/A"}\n• Location: ${salesForm.location || "N/A"}\n• Budget: ${salesForm.budget || "N/A"}\n• Use Type: ${salesForm.useType || "N/A"}\n• Planning to Purchase: ${salesForm.purchaseDate || "N/A"}\n• Loan Planned: ${salesForm.loanPlanned || "N/A"}\n• Lead Status: ${salesForm.leadStatus || "N/A"}\n• Site Visit Requested: ${salesForm.siteVisit ? formatDate(salesForm.siteVisit) : "No"}`;
-    const nm = { leadId: String(selectedLead.id), salesManagerName: user.name, createdBy: "receptionist", message: msg, siteVisitDate: salesForm.siteVisit || null, createdAt: new Date().toISOString() };
-    const ns = salesForm.siteVisit ? "Visit Scheduled" : selectedLead.status;
     setShowSalesForm(false);
     setSalesForm({ propertyType: "", location: "", budget: "", useType: "", purchaseDate: "", loanPlanned: "", siteVisit: "", leadStatus: "" });
     try {
-      await fetch("/api/followups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(nm) });
-      await fetch(`/api/walkin_enquiries/${selectedLead.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: selectedLead.name, status: ns }) });
+      await fetch("/api/sales-form-submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          leadId: String(selectedLead.id),
+          salesManagerName: user.name,
+          formFields: {
+            propertyType: salesForm.propertyType,
+            location: salesForm.location,
+            budget: salesForm.budget,
+            useType: salesForm.useType,
+            purchaseDate: salesForm.purchaseDate,
+            loanPlanned: salesForm.loanPlanned,
+            leadStatus: salesForm.leadStatus,
+          },
+          siteVisitDate: salesForm.siteVisit || null,
+        }),
+      });
       refetchAll();
+      fetchSalesManagers();
     } catch (e) { console.error(e); }
   };
 
@@ -2941,12 +3000,20 @@ export default function ReceptionistDashboard() {
                 </button>
               </RpPageHeader>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 md:gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
                 {/* Card 1: Room Configurations */}
-                <div className={`rounded-2xl md:rounded-3xl p-5 md:p-6 border flex flex-col ${t.card}`} style={t.cardGlass}>
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
-                    <h2 className={`text-base font-bold ${t.text}`}>Room Configurations</h2>
+                <div className={`rounded-[2rem] p-5 sm:p-6 shadow-sm border flex flex-col ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-[#FAFAFD] border-slate-200/60'}`}>
+                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-2">
+                    <div>
+                      <h2 className={`text-[17px] sm:text-lg font-bold tracking-tight ${t.text}`}>Room Configurations</h2>
+                      <p className={`text-[12px] font-medium mt-1 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                        {chartMode1 === "today" && `Today — ${dateNow.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`}
+                        {chartMode1 === "monthly" && `${MONTH_NAMES[configChartMonth]} ${dateNow.getFullYear()}`}
+                        {chartMode1 === "3months" && "Last 3 Months"}{chartMode1 === "6months" && "Last 6 Months"}
+                        {chartMode1 === "yearly" && `Year ${dateNow.getFullYear()}`}{chartMode1 === "inception" && "All Time"}
+                      </p>
+                    </div>
                     <div className="flex items-center flex-wrap gap-2">
                       <button onClick={() => {
                         let d: any[] = [];
@@ -2955,33 +3022,28 @@ export default function ReceptionistDashboard() {
                         else if (chartMode1 === "inception") d = configInceptionBarData;
                         else d = (chartMode1 === "3months" ? config3MonthBarData : chartMode1 === "6months" ? config6MonthBarData : configYearlyBarData);
                         downloadCSV(d.map(({ color, monthIdx, year, ...r }: any) => r), `Room_Configurations_${chartMode1}.csv`);
-                      }} className={`p-2 sm:p-1.5 border rounded-lg sm:rounded-md ${t.exportBtn}`} title="Export CSV"><FaDownload size={12} /></button>
+                      }} className={`w-8 h-8 flex items-center justify-center rounded-full border transition-colors ${isDark ? 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 shadow-sm'}`} title="Export CSV"><FaDownload size={12} /></button>
                       {chartMode1 === "monthly" && (
-                        <select value={configChartMonth} onChange={e => setConfigChartMonth(Number(e.target.value))} className={`text-xs md:text-[10px] rounded-lg sm:rounded px-2 md:px-1.5 py-1.5 md:py-1 outline-none cursor-pointer border ${t.selectSmall}`}>
+                        <select value={configChartMonth} onChange={e => setConfigChartMonth(Number(e.target.value))} className={`text-xs font-semibold px-3 py-1.5 rounded-full border outline-none cursor-pointer transition-colors ${isDark ? 'bg-slate-800 border-slate-700 text-slate-200' : 'bg-white border-slate-200 text-slate-700 shadow-sm'}`}>
                           {MONTH_NAMES.map((m, idx) => <option key={idx} value={idx}>{m}</option>)}
                         </select>
                       )}
-                      <select value={chartMode1} onChange={e => setChartMode1(e.target.value as any)} className={`text-xs rounded-lg px-2 py-1.5 outline-none cursor-pointer border ${t.selectSmall}`}>
+                      <select value={chartMode1} onChange={e => setChartMode1(e.target.value as any)} className={`text-xs font-semibold px-3 py-1.5 rounded-full border outline-none cursor-pointer transition-colors ${isDark ? 'bg-slate-800 border-slate-700 text-slate-200' : 'bg-white border-slate-200 text-slate-700 shadow-sm'}`}>
                         <option value="today">Today</option><option value="monthly">Monthly</option>
                         <option value="3months">Last 3 Months</option><option value="6months">Last 6 Months</option>
                         <option value="yearly">Yearly</option><option value="inception">Inception</option>
                       </select>
                     </div>
                   </div>
-                  <p className={`text-[11px] md:text-[10px] font-semibold mb-4 ${t.accentText}`}>
-                    {chartMode1 === "today" && `Today — ${dateNow.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`}
-                    {chartMode1 === "monthly" && `${MONTH_NAMES[configChartMonth]} ${dateNow.getFullYear()}`}
-                    {chartMode1 === "3months" && "Last 3 Months"}{chartMode1 === "6months" && "Last 6 Months"}
-                    {chartMode1 === "yearly" && `Year ${dateNow.getFullYear()}`}{chartMode1 === "inception" && "All Time"}
-                  </p>
+
                   {isFetchingEnquiries ? (
-                    <div className={`flex-1 flex items-center justify-center text-sm ${t.textMuted} min-h-[230px]`}>Calculating…</div>
+                    <div className={`flex-1 flex items-center justify-center text-sm font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'} min-h-[230px]`}>Calculating…</div>
                   ) : isConfigChartEmpty ? (
-                    <div className={`w-full h-[230px] mt-2 flex flex-col items-center justify-center rounded-2xl border-2 border-dashed ${isDark ? "border-[#2A2A35]" : "border-gray-200"}`}>
-                      <span className={`text-sm font-medium ${t.textMuted}`}>No data available</span>
+                    <div className={`w-full h-[230px] mt-4 flex flex-col items-center justify-center rounded-[1.5rem] border-2 border-dashed ${isDark ? "border-slate-800" : "border-slate-200/80"}`}>
+                      <span className={`text-sm font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>No data available</span>
                     </div>
                   ) : (
-                    <div className="w-full h-[230px]">
+                    <div className="w-full h-[230px] mt-2">
                       {(() => {
                         let pieData: any[] = [];
                         if (chartMode1 === "today") pieData = configTodayBarData;
@@ -2998,46 +3060,49 @@ export default function ReceptionistDashboard() {
                 </div>
 
                 {/* Card 4: Lead Sources */}
-                <div className={`rounded-2xl md:rounded-3xl p-5 md:p-6 border flex flex-col ${t.card}`} style={t.cardGlass}>
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
-                    <h2 className={`text-base font-bold ${t.text}`}>Lead Sources</h2>
+                <div className={`rounded-[2rem] p-5 sm:p-6 shadow-sm border flex flex-col ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-[#FAFAFD] border-slate-200/60'}`}>
+                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-2">
+                    <div>
+                      <h2 className={`text-[17px] sm:text-lg font-bold tracking-tight ${t.text}`}>Lead Sources</h2>
+                      <p className={`text-[12px] font-medium mt-1 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                        {card4Mode === "today" && `Today — ${dateNow.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`}
+                        {card4Mode === "monthly" && `${MONTH_NAMES[card4Month]} ${dateNow.getFullYear()}`}
+                        {card4Mode === "3months" && "Last 3 Months"}{card4Mode === "6months" && "Last 6 Months"}
+                        {card4Mode === "yearly" && `Year ${dateNow.getFullYear()}`}{card4Mode === "inception" && "All Time"}
+                      </p>
+                    </div>
                     <div className="flex items-center flex-wrap gap-2">
-                      <button onClick={() => downloadCSV(sourceDataFiltered.map(({ color, ...r }: any) => r), `Lead_Sources_${card4Mode}.csv`)} className={`p-2 sm:p-1.5 border rounded-lg sm:rounded-md ${t.exportBtn}`} title="Export CSV"><FaDownload size={12} /></button>
+                      <button onClick={() => downloadCSV(sourceDataFiltered.map(({ color, ...r }: any) => r), `Lead_Sources_${card4Mode}.csv`)} className={`w-8 h-8 flex items-center justify-center rounded-full border transition-colors ${isDark ? 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 shadow-sm'}`} title="Export CSV"><FaDownload size={12} /></button>
                       {card4Mode === "monthly" && (
-                        <select value={card4Month} onChange={e => setCard4Month(Number(e.target.value))} className={`text-xs md:text-[10px] rounded-lg sm:rounded px-2 md:px-1.5 py-1.5 md:py-1 outline-none cursor-pointer border ${t.selectSmall}`}>
+                        <select value={card4Month} onChange={e => setCard4Month(Number(e.target.value))} className={`text-xs font-semibold px-3 py-1.5 rounded-full border outline-none cursor-pointer transition-colors ${isDark ? 'bg-slate-800 border-slate-700 text-slate-200' : 'bg-white border-slate-200 text-slate-700 shadow-sm'}`}>
                           {MONTH_NAMES.map((m, idx) => <option key={idx} value={idx}>{m}</option>)}
                         </select>
                       )}
-                      <select value={card4Mode} onChange={e => setCard4Mode(e.target.value as any)} className={`text-xs rounded-lg px-2 py-1.5 outline-none cursor-pointer border ${t.selectSmall}`}>
+                      <select value={card4Mode} onChange={e => setCard4Mode(e.target.value as any)} className={`text-xs font-semibold px-3 py-1.5 rounded-full border outline-none cursor-pointer transition-colors ${isDark ? 'bg-slate-800 border-slate-700 text-slate-200' : 'bg-white border-slate-200 text-slate-700 shadow-sm'}`}>
                         <option value="today">Today</option><option value="monthly">Monthly</option>
                         <option value="3months">Last 3 Months</option><option value="6months">Last 6 Months</option>
                         <option value="yearly">Yearly</option><option value="inception">Inception</option>
                       </select>
                     </div>
                   </div>
-                  <p className={`text-[11px] md:text-[10px] font-semibold mb-4 ${t.accentText}`}>
-                    {card4Mode === "today" && `Today — ${dateNow.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`}
-                    {card4Mode === "monthly" && `${MONTH_NAMES[card4Month]} ${dateNow.getFullYear()}`}
-                    {card4Mode === "3months" && "Last 3 Months"}{card4Mode === "6months" && "Last 6 Months"}
-                    {card4Mode === "yearly" && `Year ${dateNow.getFullYear()}`}{card4Mode === "inception" && "All Time"}
-                  </p>
+
                   {isFetchingEnquiries ? (
-                    <div className={`flex-1 flex items-center justify-center text-sm ${t.textMuted} min-h-[230px]`}>Calculating…</div>
+                    <div className={`flex-1 flex items-center justify-center text-sm font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'} min-h-[230px]`}>Calculating…</div>
                   ) : sourceDataFiltered.length === 0 ? (
-                    <div className={`w-full h-[230px] flex items-center justify-center rounded-2xl border-2 border-dashed ${isDark ? "border-[#2A2A35]" : "border-gray-200"}`}>
-                      <span className={`text-sm font-medium ${t.textMuted}`}>No data available</span>
+                    <div className={`w-full h-[230px] mt-4 flex items-center justify-center rounded-[1.5rem] border-2 border-dashed ${isDark ? "border-slate-800" : "border-slate-200/80"}`}>
+                      <span className={`text-sm font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>No data available</span>
                     </div>
                   ) : (
-                    <div className="w-full h-[230px]">
+                    <div className="w-full h-[230px] mt-2">
                       <ReceptionistDonutChart data={sourceDataFiltered} legendColor={t.legendColor} tooltip={<CustomTooltip />} />
                     </div>
                   )}
                 </div>
 
                 {/* Card 2: Enquiry Details */}
-                <div className={`rounded-2xl md:rounded-3xl p-5 md:p-6 border flex flex-col gap-4 ${t.card}`} style={t.cardGlass}>
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <h2 className={`text-base font-bold ${isDark ? "text-[#d4006e]" : "text-[#9E217B]"}`}>Enquiry Details</h2>
+                <div className={`rounded-[2rem] p-5 sm:p-6 shadow-sm border flex flex-col gap-4 ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-[#FAFAFD] border-slate-200/60'}`}>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <h2 className={`text-[17px] sm:text-lg font-bold tracking-tight ${t.text}`}>Enquiry Details</h2>
                     <div className="flex items-center flex-wrap gap-2">
                       <button onClick={() => {
                         let f = mergedLeads;
@@ -3047,27 +3112,27 @@ export default function ReceptionistDashboard() {
                         else if (card2Mode === "6months") f = mergedLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= sixMonthsAgo);
                         else if (card2Mode === "yearly") f = mergedLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= yearStart);
                         downloadCSV(f.map((e: any) => ({ "Sr. No.": e.sr_no || e.id, "Client Name": e.name, "Budget": e.salesBudget || "N/A", "Configuration": e.configuration || "N/A", "Purpose": e.purpose || "N/A", "Source": e.source || "N/A", "Date": e.date, "Assigned To": e.assignedTo || "Unassigned" })), `Enquiries_${card2Mode}.csv`);
-                      }} className={`p-2 sm:p-1.5 border rounded-lg sm:rounded-md transition-colors ${isDark ? "border-[#9E217B]/30 text-[#d4006e]" : "border-[#9E217B]/30 text-[#9E217B]"}`} title="Export CSV"><FaDownload size={12} /></button>
-                      <select value={card2Mode} onChange={e => setCard2Mode(e.target.value as any)} className={`text-xs rounded-lg px-2 py-1.5 outline-none cursor-pointer border ${t.selectSmall}`}>
+                      }} className={`w-8 h-8 flex items-center justify-center rounded-full border transition-colors ${isDark ? 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 shadow-sm'}`} title="Export CSV"><FaDownload size={12} /></button>
+                      <select value={card2Mode} onChange={e => setCard2Mode(e.target.value as any)} className={`text-xs font-semibold px-3 py-1.5 rounded-full border outline-none cursor-pointer transition-colors ${isDark ? 'bg-slate-800 border-slate-700 text-slate-200' : 'bg-white border-slate-200 text-slate-700 shadow-sm'}`}>
                         <option value="today">Today</option><option value="monthly">Monthly</option>
                         <option value="3months">Last 3 Months</option><option value="6months">Last 6 Months</option>
                         <option value="yearly">Yearly</option><option value="alltime">Total All Time</option>
                       </select>
                     </div>
                   </div>
-                  <div className={`rounded-2xl p-5 border flex-1 flex flex-col ${isDark ? "bg-[#9E217B]/5 border-[#9E217B]/20" : "bg-[#9E217B]/5 border-[#9E217B]/20"}`}>
+                  <div className={`rounded-3xl p-6 border flex-1 flex flex-col justify-center ${isDark ? "bg-[#B01A79]/10 border-[#B01A79]/20" : "bg-[#B01A79]/5 border-[#B01A79]/10"}`}>
                     <div className="flex items-center justify-between mb-4">
-                      <p className={`crm-eyebrow ${t.textFaint}`}>
+                      <p className={`text-[11px] font-bold uppercase tracking-wider ${isDark ? "text-purple-400" : "text-[#B01A79]"}`}>
                         {card2Mode === "today" && "Today"}{card2Mode === "monthly" && "Monthly"}{card2Mode === "3months" && "Last 3 Months"}
                         {card2Mode === "6months" && "Last 6 Months"}{card2Mode === "yearly" && "Yearly"}{card2Mode === "alltime" && "All Time"}
                       </p>
                       {card2Mode === "monthly" && (
-                        <select value={selectedMonthCard} onChange={e => setSelectedMonthCard(Number(e.target.value))} className={`text-[11px] md:text-[10px] rounded-lg sm:rounded px-2 md:px-1.5 py-1 md:py-0.5 outline-none cursor-pointer border ${t.selectSmall}`}>
+                        <select value={selectedMonthCard} onChange={e => setSelectedMonthCard(Number(e.target.value))} className={`text-[10px] font-semibold rounded-full px-2.5 py-1 outline-none cursor-pointer border ${isDark ? 'bg-purple-900/40 border-purple-800/50 text-purple-300' : 'bg-white border-[#B01A79]/20 text-[#B01A79] shadow-sm'}`}>
                           {MONTH_NAMES.map((m, idx) => <option key={idx} value={idx}>{m}</option>)}
                         </select>
                       )}
                     </div>
-                    <p className={`text-5xl sm:text-6xl md:text-7xl font-black leading-none ${isDark ? "text-[#d4006e]" : "text-[#9E217B]"}`}>
+                    <p className={`text-5xl sm:text-6xl font-black leading-none tracking-tight ${isDark ? "text-purple-400" : "text-[#B01A79]"}`}>
                       {isFetchingEnquiries ? "…" :
                         card2Mode === "today" ? enquiriesToday :
                           card2Mode === "monthly" ? monthlyEnquiriesSelected :
@@ -3076,7 +3141,7 @@ export default function ReceptionistDashboard() {
                                 card2Mode === "yearly" ? enquiriesYear : totalCount
                       }
                     </p>
-                    <p className={`text-[13px] md:text-sm mt-4 font-medium ${isDark ? "text-[#d4006e]" : "text-[#9E217B]"}`}>
+                    <p className={`text-[13px] sm:text-sm mt-3 font-medium ${isDark ? "text-purple-300/80" : "text-[#B01A79]/80"}`}>
                       {card2Mode === "today" && `Enquiries on ${dateNow.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`}
                       {card2Mode === "monthly" && `Enquiries in ${MONTH_NAMES[selectedMonthCard]} ${dateNow.getFullYear()}`}
                       {card2Mode === "3months" && "Enquiries over 3 months"}
@@ -3085,59 +3150,73 @@ export default function ReceptionistDashboard() {
                       {card2Mode === "alltime" && "Total enquiries captured"}
                     </p>
                     {returningLeadsCount > 0 && (
-                      <div className={`mt-3 pt-3 border-t flex items-center gap-2 ${isDark ? "border-green-500/20" : "border-green-200"}`}>
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border border-green-500/40 text-green-400 bg-green-500/10">
+                      <div className={`mt-5 pt-4 border-t flex items-center gap-3 ${isDark ? "border-emerald-500/20" : "border-emerald-200/60"}`}>
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[9px] font-bold uppercase tracking-wider text-emerald-600 bg-emerald-100 dark:text-emerald-400 dark:bg-emerald-900/30">
                           Returning
                         </span>
-                        <span className={`text-sm font-bold ${isDark ? "text-green-400" : "text-green-600"}`}>{returningLeadsCount}</span>
-                        <span className={`text-[11px] ${t.textFaint}`}>returning leads</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`text-[15px] font-bold leading-none ${isDark ? "text-emerald-400" : "text-emerald-600"}`}>{returningLeadsCount}</span>
+                          <span className={`text-[12px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>returning leads</span>
+                        </div>
                       </div>
                     )}
                   </div>
                 </div>
 
                 {/* Card 3: Sales Manager Activity */}
-                <div className={`rounded-2xl md:rounded-3xl p-5 md:p-6 border flex flex-col ${t.card}`} style={t.cardGlass}>
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2">
-                    <h2 className={`text-base font-bold ${t.text}`}>Sales Manager Activity</h2>
+                <div className={`rounded-[2rem] p-5 sm:p-6 shadow-sm border flex flex-col ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-[#FAFAFD] border-slate-200/60'}`}>
+                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-2">
+                    <div>
+                      <h2 className={`text-[17px] sm:text-lg font-bold tracking-tight ${t.text}`}>Sales Manager Activity</h2>
+                      <p className={`text-[12px] font-medium mt-1 flex items-center gap-2 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                        <span>{card3Mode === "today" && `Today — ${dateNow.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`}{card3Mode === "monthly" && `${MONTH_NAMES[card3Month]} ${dateNow.getFullYear()}`}{card3Mode === "3months" && "Last 3 Months"}{card3Mode === "6months" && "Last 6 Months"}{card3Mode === "yearly" && `Year ${dateNow.getFullYear()}`}{card3Mode === "inception" && "All Time"}</span>
+                        <span className="w-1 h-1 rounded-full bg-current opacity-50" />
+                        <span>{managerLeadCountsFiltered.length} managers</span>
+                      </p>
+                    </div>
                     <div className="flex items-center flex-wrap gap-2">
-                      <button onClick={() => downloadCSV(managerLeadCountsFiltered.map(m => ({ "Sales Manager": m.name, "Total Enquiries": m.count })), `SM_Activity_${card3Mode}.csv`)} className={`p-2 sm:p-1.5 border rounded-lg sm:rounded-md ${t.exportBtn}`} title="Export CSV"><FaDownload size={12} /></button>
+                      <button onClick={() => downloadCSV(managerLeadCountsFiltered.map(m => ({ "Sales Manager": m.name, "Total Enquiries": m.count })), `SM_Activity_${card3Mode}.csv`)} className={`w-8 h-8 flex items-center justify-center rounded-full border transition-colors ${isDark ? 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 shadow-sm'}`} title="Export CSV"><FaDownload size={12} /></button>
                       {card3Mode === "monthly" && (
-                        <select value={card3Month} onChange={e => setCard3Month(Number(e.target.value))} className={`text-xs md:text-[10px] rounded-lg sm:rounded px-2 md:px-1.5 py-1.5 md:py-1 outline-none cursor-pointer border ${t.selectSmall}`}>
+                        <select value={card3Month} onChange={e => setCard3Month(Number(e.target.value))} className={`text-xs font-semibold px-3 py-1.5 rounded-full border outline-none cursor-pointer transition-colors ${isDark ? 'bg-slate-800 border-slate-700 text-slate-200' : 'bg-white border-slate-200 text-slate-700 shadow-sm'}`}>
                           {MONTH_NAMES.map((m, idx) => <option key={idx} value={idx}>{m}</option>)}
                         </select>
                       )}
-                      <select value={card3Mode} onChange={e => setCard3Mode(e.target.value as any)} className={`text-xs rounded-lg px-2 py-1.5 outline-none cursor-pointer border ${t.selectSmall}`}>
+                      <select value={card3Mode} onChange={e => setCard3Mode(e.target.value as any)} className={`text-xs font-semibold px-3 py-1.5 rounded-full border outline-none cursor-pointer transition-colors ${isDark ? 'bg-slate-800 border-slate-700 text-slate-200' : 'bg-white border-slate-200 text-slate-700 shadow-sm'}`}>
                         <option value="today">Today</option><option value="monthly">Monthly</option>
                         <option value="3months">Last 3 Months</option><option value="6months">Last 6 Months</option>
                         <option value="yearly">Yearly</option><option value="inception">Inception</option>
                       </select>
                     </div>
                   </div>
-                  <p className={`text-[11px] md:text-[10px] font-semibold mb-3 flex items-center justify-between ${t.accentText}`}>
-                    <span>{card3Mode === "today" && `Today — ${dateNow.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`}{card3Mode === "monthly" && `${MONTH_NAMES[card3Month]} ${dateNow.getFullYear()}`}{card3Mode === "3months" && "Last 3 Months"}{card3Mode === "6months" && "Last 6 Months"}{card3Mode === "yearly" && `Year ${dateNow.getFullYear()}`}{card3Mode === "inception" && "All Time"}</span>
-                    <span className={t.textFaint}>{managerLeadCountsFiltered.length} managers</span>
-                  </p>
-                  <div className="flex-1 overflow-y-auto custom-scrollbar max-h-[250px] pr-2">
-                    <table className="w-full text-sm">
-                      <thead><tr className={`border-b ${t.tableBorder}`}>
-                        <th className={`text-left py-2 px-1 crm-eyebrow ${t.textFaint}`}>Sales Manager</th>
-                        <th className={`text-right py-2 px-1 crm-eyebrow ${t.textFaint}`}>Enquiries</th>
-                      </tr></thead>
-                      <tbody className={`divide-y ${t.tableDivide}`}>
+
+                  <div className="flex-1 overflow-y-auto custom-scrollbar mt-3 max-h-[250px] pr-2">
+                    <table className="w-full text-left whitespace-nowrap">
+                      <thead className={`sticky top-0 z-10 ${isDark ? "bg-slate-950" : "bg-[#FAFAFD]"}`}>
+                        <tr>
+                          <th className={`py-3 px-2 text-[10px] font-bold uppercase tracking-wider border-b ${isDark ? 'border-slate-800 text-slate-500' : 'border-slate-200 text-slate-400'}`}>Sales Manager</th>
+                          <th className={`py-3 px-2 text-[10px] font-bold uppercase tracking-wider border-b text-right ${isDark ? 'border-slate-800 text-slate-500' : 'border-slate-200 text-slate-400'}`}>Enquiries</th>
+                        </tr>
+                      </thead>
+                      <tbody className={`divide-y ${isDark ? 'divide-slate-800/60' : 'divide-slate-100'}`}>
                         {isFetchingEnquiries ? (
-                          <tr><td colSpan={2} className={`text-center py-4 text-xs ${t.textMuted}`}>Loading...</td></tr>
+                          <tr><td colSpan={2} className={`text-center py-6 text-[13px] font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Loading...</td></tr>
                         ) : managerLeadCountsFiltered.length === 0 ? (
-                          <tr><td colSpan={2} className={`text-center py-4 text-xs ${t.textMuted}`}>No data for this period</td></tr>
+                          <tr><td colSpan={2} className={`text-center py-6 text-[13px] font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>No data for this period</td></tr>
                         ) : managerLeadCountsFiltered.map((row: any, i: number) => (
-                          <tr key={i} className={`transition-colors hover:bg-black/5 dark:hover:bg-white/5 ${t.tableRow}`}>
-                            <td className={`py-3 md:py-2.5 px-1 font-semibold text-xs md:text-[13px] ${t.text}`}>
-                              <div className="flex items-center gap-3 md:gap-2">
-                                <div className="w-7 h-7 md:w-6 md:h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white bg-[#9E217B]">{String(row.name).charAt(0).toUpperCase()}</div>
-                                <span className="truncate max-w-[120px] md:max-w-[140px]">{row.name}</span>
+                          <tr key={i} className={`group transition-colors duration-200 ${isDark ? "hover:bg-slate-800/40" : "hover:bg-slate-50"}`}>
+                            <td className="py-3 px-2">
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold text-[#B01A79] bg-[#B01A79]/10 dark:text-purple-300 dark:bg-purple-900/40 shrink-0">
+                                  {String(row.name).charAt(0).toUpperCase()}
+                                </div>
+                                <span className={`font-semibold text-[13px] truncate max-w-[140px] md:max-w-[160px] ${t.text}`}>
+                                  {row.name}
+                                </span>
                               </div>
                             </td>
-                            <td className={`py-3 md:py-2.5 px-1 text-right font-black text-sm ${t.accentText}`}>{row.count}</td>
+                            <td className={`py-3 px-2 text-right font-black text-[15px] ${isDark ? "text-slate-200" : "text-slate-800"}`}>
+                              {row.count}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -3672,18 +3751,20 @@ export default function ReceptionistDashboard() {
                 </div>
               </RpPageHeader>
 
-              <div className={`rounded-2xl sm:rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.2)] border overflow-hidden flex flex-col m-4 sm:m-4 md:m-4   ${t.tableWrap}`} style={t.tableGlass}>
+              <div className={`rounded-[2rem] border shadow-sm overflow-hidden flex flex-col m-4 ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-[#FAFAFD] border-slate-200/60'}`}>
 
                 {/* ── Header Row 1: Icon + Title + Count | Search | Columns | Export | Refresh ── */}
-                <div className={`px-4 sm:px-6 py-3.5 sm:py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 border-b ${t.tableHead} ${isDark ? "border-white/[0.06]" : "border-indigo-300"}`}>
-                  <div className="flex items-center gap-2.5 sm:gap-3 shrink-0 w-full sm:w-auto">
-                    <div className={`p-1.5 sm:p-2 rounded-xl ${isDark ? "bg-[#0A84FF]/10" : "bg-[#007AFF]/10"}`}>
-                      <FaTable className={`text-[14px] sm:text-lg ${isDark ? "text-[#0A84FF]" : "text-[#00AEEF]"}`} />
+                <div className={`px-4 sm:px-6 pt-5 pb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b ${isDark ? "border-slate-800" : "border-slate-200/60"}`}>
+                  <div className="flex items-center gap-3 shrink-0 w-full sm:w-auto">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isDark ? "bg-[#0A84FF]/10 text-[#0A84FF]" : "bg-[#007AFF]/10 text-[#00AEEF]"}`}>
+                      <FaTable size={16} />
                     </div>
-                    <h3 className={`text-[15px] sm:text-lg font-bold tracking-tight ${t.text}`}>Your Enquiries</h3>
-                    <span className={`text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-md tabular-nums tracking-wide ${t.btnClosingBadge}`}>
-                      {filteredRecepLeads.length.toLocaleString("en-IN")}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <h3 className={`text-[16px] sm:text-[17px] font-bold tracking-tight ${t.text}`}>Your Enquiries</h3>
+                      <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full tabular-nums tracking-wide ${isDark ? "bg-[#0A84FF]/10 text-[#0A84FF]" : "bg-[#007AFF]/10 text-[#00AEEF]"}`}>
+                        {filteredRecepLeads.length.toLocaleString("en-IN")}
+                      </span>
+                    </div>
                   </div>
 
                   <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto sm:ml-auto">
@@ -3728,9 +3809,9 @@ export default function ReceptionistDashboard() {
                 </div>
 
                 {/* ── Filters Area ── */}
-                <div className={`px-4 sm:px-6 pb-3 pt-3 flex flex-col sm:flex-row flex-wrap items-start sm:items-center justify-between gap-y-3 gap-x-5 border-b ${t.tableHead} ${isDark ? "border-white/[0.06]" : "border-gray-200"}`}>
+                <div className={`px-4 sm:px-6 py-4 flex flex-col sm:flex-row flex-wrap items-start sm:items-center justify-between gap-y-3 gap-x-5 border-b ${isDark ? "border-slate-800" : "border-slate-200/60"}`}>
                   <div className="flex items-center gap-3 sm:gap-4 flex-wrap w-full sm:w-auto">
-                    <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider opacity-40">Filters</span>
+                    <span className={`text-[10px] sm:text-[11px] font-bold uppercase tracking-wider ${isDark ? "text-slate-500" : "text-slate-400"}`}>Filters</span>
                     <div className="flex items-center gap-3 sm:gap-4">
                       <ToggleSwitch
                         checked={showLostLeads}
@@ -3752,25 +3833,25 @@ export default function ReceptionistDashboard() {
                       />
                     </div>
                   </div>
-                  <span className="text-[10px] sm:text-[11px] font-semibold opacity-50 w-full sm:w-auto text-left sm:text-right">
+                  <span className={`text-[11px] sm:text-[12px] font-medium w-full sm:w-auto text-left sm:text-right ${isDark ? "text-slate-500" : "text-slate-400"}`}>
                     Leads assigned to or handled by you
                   </span>
                 </div>
 
                 {/* ── UX Helper Bar ── */}
-                <div className={`px-4 sm:px-6 py-2 border-b text-[9px] sm:text-[10px] font-bold uppercase tracking-widest ${isDark ? "bg-white/[0.015] border-white/[0.04] text-gray-500" : "bg-gray-50/80 border-gray-100 text-gray-500"}`}>
+                <div className={`px-4 sm:px-6 py-2.5 border-b text-[10px] font-bold uppercase tracking-widest ${isDark ? "bg-slate-900/50 border-slate-800 text-slate-500" : "bg-slate-50/50 border-slate-200/60 text-slate-400"}`}>
                   Click any row to open full lead details
                 </div>
 
                 <DraggableTableContainer isDark={isDark}>
                   <table className="w-full text-left border-collapse whitespace-nowrap">
-                    <thead>
-                      <tr className={isDark ? "bg-[#2C2C2E]/30" : "bg-gray-50/50"}>
+                    <thead className={isDark ? "bg-slate-900/50" : "bg-slate-50/50"}>
+                      <tr>
                         {visibleRecepCols.map(col => (
                           <th
                             key={col.key}
-                            className={`px-3 sm:px-4 py-3 sm:py-3.5 crm-eyebrow border-b ${isDark ? "text-gray-400 border-white/10" : "text-gray-500 border-gray-200/60"} ${col.key === "lead_no" ? `md:sticky md:left-0 md:z-20 ${isDark ? "md:bg-[#252528]" : "md:bg-[#F9FAFB]"}` :
-                              col.key === "client_name" ? `md:sticky md:left-[80px] md:min-w-[172px] md:z-20 ${isDark ? "md:bg-[#252528] md:shadow-[-1px_0_0_rgba(255,255,255,0.08)_inset]" : "md:bg-[#F9FAFB] md:shadow-[-1px_0_0_rgba(0,0,0,0.06)_inset]"}` : ""
+                            className={`px-3 sm:px-5 py-3.5 text-[10px] sm:text-[11px] font-bold uppercase tracking-wider border-b ${isDark ? "text-slate-400 border-slate-800" : "text-[#475569] border-slate-200"} ${col.key === "lead_no" ? `md:sticky md:left-0 md:z-20 ${isDark ? "md:bg-slate-950" : "md:bg-[#FAFAFD]"}` :
+                              col.key === "client_name" ? `md:sticky md:left-[80px] md:min-w-[172px] md:z-20 ${isDark ? "md:bg-slate-950 md:shadow-[-1px_0_0_rgba(255,255,255,0.05)_inset]" : "md:bg-[#FAFAFD] md:shadow-[-1px_0_0_rgba(0,0,0,0.05)_inset]"}` : ""
                               } ${col.key === "status" ? "text-center" : ""}`}
                             style={
                               col.key === "lead_no" ? { minWidth: '80px', maxWidth: '80px' } :
@@ -3782,18 +3863,20 @@ export default function ReceptionistDashboard() {
                         ))}
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100 dark:divide-white/[0.06]">
+                    <tbody className={`divide-y ${isDark ? "divide-slate-800/60" : "divide-slate-100"}`}>
                       {isFetchingDirectLeads ? (
                         <SkeletonRows rows={8} cols={visibleRecepCols.length} isDark={isDark} />
                       ) : filteredRecepLeads.length === 0 ? (
                         <tr>
                           <td colSpan={visibleRecepCols.length}>
-                            <div className="flex flex-col items-center justify-center py-12 sm:py-16 px-4 sm:px-6 text-center">
-                              <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl grid place-items-center mb-3 sm:mb-4 ${isDark ? "bg-white/[0.04] border border-white/10" : "bg-gray-50 border border-gray-200"}`}>
-                                <FaUserTie className="text-xl sm:text-2xl opacity-25" />
+                            <div className="flex flex-col items-center justify-center py-16 px-4 sm:px-6 text-center">
+                              <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${isDark ? "bg-slate-800 text-slate-500" : "bg-slate-100 text-slate-400"}`}>
+                                <FaUserTie className="text-2xl" />
                               </div>
-                              <p className="text-[14px] sm:text-[15px] font-bold mb-1 tracking-tight">No leads found</p>
-                              <p className="text-[12px] sm:text-[13px] opacity-50 mb-2 max-w-[250px] sm:max-w-[300px] leading-relaxed">Self-assign leads when creating new entries and they will appear here.</p>
+                              <p className={`text-[15px] font-bold mb-1 tracking-tight ${t.text}`}>No leads found</p>
+                              <p className={`text-[13px] font-medium max-w-[300px] leading-relaxed ${isDark ? "text-slate-500" : "text-slate-400"}`}>
+                                Self-assign leads when creating new entries and they will appear here.
+                              </p>
                             </div>
                           </td>
                         </tr>
@@ -3802,7 +3885,7 @@ export default function ReceptionistDashboard() {
                         const isNGD = lead.status === "NON GENUINE DEMAND (NGD)" || lead.leadStatus === "NON GENUINE DEMAND (NGD)" || lead.leadInterestStatus === "NON GENUINE DEMAND (NGD)";
                         const isReturning = lead.lead_classification === "RETURNING_LEAD";
                         const rowBgClass = (!isLost && !isNGD && !isReturning)
-                          ? (isDark ? "hover:bg-white/[0.045]" : "hover:bg-[#9E217B]/[0.035]")
+                          ? (isDark ? "hover:bg-slate-800/40" : "hover:bg-slate-50")
                           : "";
 
                         return (
@@ -3812,93 +3895,93 @@ export default function ReceptionistDashboard() {
                             className={`group cursor-pointer transition-colors duration-200 ${rowBgClass}`}
                             style={{
                               ...(isLost ? { opacity: 0.55 } : undefined),
-                              ...(isReturning && !isLost ? { backgroundColor: isDark ? "rgba(5, 150, 105, 0.08)" : "rgba(5, 150, 105, 0.05)" } : undefined),
-                              ...(isNGD && !isReturning && !isLost ? { backgroundColor: isDark ? "rgba(234, 88, 12, 0.08)" : "rgba(234, 88, 12, 0.05)" } : undefined),
+                              ...(isReturning && !isLost ? { backgroundColor: isDark ? "rgba(5, 150, 105, 0.08)" : "rgba(5, 150, 105, 0.04)" } : undefined),
+                              ...(isNGD && !isReturning && !isLost ? { backgroundColor: isDark ? "rgba(234, 88, 12, 0.08)" : "rgba(234, 88, 12, 0.04)" } : undefined),
                             }}
                           >
-                            <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-[11px] sm:text-[12px] font-bold tracking-tight md:sticky md:left-0 md:z-10 transition-colors duration-200 ${isLost || isNGD || isReturning ? "bg-inherit" : (isDark ? "text-[#9E217B] md:bg-[#1C1C1E] md:group-hover:bg-[#232325]" : "text-[#9E217B] md:bg-white md:group-hover:bg-[#FDFDFD]")}`} style={{ minWidth: '80px', maxWidth: '80px' }}>
+                            <td className={`px-3 sm:px-5 py-3.5 sm:py-4 text-[11px] sm:text-[13px] font-bold tracking-tight md:sticky md:left-0 md:z-10 transition-colors duration-200 ${isLost || isNGD || isReturning ? "bg-inherit" : (isDark ? "text-[#9E217B] md:bg-slate-950 md:group-hover:bg-slate-800/40" : "text-[#9E217B] md:bg-[#FAFAFD] md:group-hover:bg-slate-50")}`} style={{ minWidth: '80px', maxWidth: '80px' }}>
                               #{lead.sr_no || lead.id}
                             </td>
 
-                            <td className={`px-3 sm:px-4 py-3.5 sm:py-4 md:sticky md:left-[80px] md:min-w-[172px] md:z-10 transition-colors duration-200 ${isLost || isNGD || isReturning ? "bg-inherit md:shadow-[-1px_0_0_rgba(255,255,255,0.04)_inset]" : (isDark ? "text-gray-100 md:bg-[#1C1C1E] md:group-hover:bg-[#232325] md:shadow-[-1px_0_0_rgba(255,255,255,0.08)_inset]" : "text-gray-900 md:bg-white md:group-hover:bg-[#FDFDFD] md:shadow-[-1px_0_0_rgba(0,0,0,0.06)_inset]")}`} style={{ minWidth: '140px', maxWidth: '140px' }}>
-                              <div className="flex flex-col gap-0.5">
-                                <span className={`font-bold text-[12px] sm:text-[13px] leading-tight truncate ${isDark ? "text-gray-100" : "text-gray-900"}`}>{lead.name}</span>
-                                {isReturning && (
-                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border border-[rgba(5,150,105,0.45)] text-[#059669] bg-[rgba(5,150,105,0.12)] w-fit">
-                                    REVISIT
+                            <td className={`px-3 sm:px-5 py-3.5 sm:py-4 md:sticky md:left-[80px] md:min-w-[172px] md:z-10 transition-colors duration-200 ${isLost || isNGD || isReturning ? "bg-inherit md:shadow-[-1px_0_0_rgba(255,255,255,0.04)_inset]" : (isDark ? "text-slate-200 md:bg-slate-950 md:group-hover:bg-slate-800/40 md:shadow-[-1px_0_0_rgba(255,255,255,0.05)_inset]" : "text-slate-800 md:bg-[#FAFAFD] md:group-hover:bg-slate-50 md:shadow-[-1px_0_0_rgba(0,0,0,0.05)_inset]")}`} style={{ minWidth: '140px', maxWidth: '140px' }}>
+                              <div className="flex flex-col gap-1.5">
+                                <span className={`font-bold text-[13px] leading-none truncate ${t.text}`}>{lead.name}</span>
+                                <div className="flex items-center gap-1.5">
+                                  {isReturning && (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider text-emerald-600 bg-emerald-100 dark:text-emerald-400 dark:bg-emerald-900/30">
+                                      REVISIT
+                                    </span>
+                                  )}
+                                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${isDark ? "bg-slate-800 text-slate-400" : "bg-slate-200 text-slate-600"}`}>
+                                    {(lead.visitNumber ?? 1)} {(lead.visitNumber ?? 1) === 1 ? "VISIT" : "VISITS"}
                                   </span>
-                                )}
-                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border border-[rgba(100,116,139,0.35)] text-[#64748B] bg-[rgba(100,116,139,0.08)] w-fit">
-                                  {(lead.visitNumber ?? 1)} {(lead.visitNumber ?? 1) === 1 ? "VISIT" : "VISITS"}
-                                </span>
-                                {isNGD && !isReturning && (
-                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border border-[rgba(234,88,12,0.45)] text-[#EA580C] bg-[rgba(234,88,12,0.12)] w-fit">
-                                    NGD
-                                  </span>
-                                )}
+                                  {isNGD && !isReturning && (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider text-orange-600 bg-orange-100 dark:text-orange-400 dark:bg-orange-900/30">
+                                      NGD
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </td>
 
-                            {!hiddenRecepCols.has("cp_details") && <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-[12px] sm:text-[13px] ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                            {!hiddenRecepCols.has("cp_details") && <td className={`px-3 sm:px-5 py-3.5 sm:py-4 text-[12px] sm:text-[13px] font-medium ${isDark ? "text-slate-300" : "text-slate-600"}`}>
                               {(lead.cp_company || lead.cpCompany) ? (
-                                <div className="flex flex-col gap-0.5">
+                                <div className="flex flex-col gap-1">
                                   <span className={`font-semibold tracking-tight ${t.text}`}>{lead.cp_company || lead.cpCompany}</span>
                                   {(lead.cp_phone || lead.cpPhone) && (
-                                    <span className="font-mono text-[10px] sm:text-[11px] text-orange-400">{lead.cp_phone || lead.cpPhone}</span>
+                                    <span className="font-mono text-[11px] text-orange-400">{lead.cp_phone || lead.cpPhone}</span>
                                   )}
                                 </div>
                               ) : <span className="text-[11px] opacity-40">—</span>}
                             </td>}
 
-                            {!hiddenRecepCols.has("budget") && <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-[12px] sm:text-[13px] font-bold tabular-nums tracking-tight ${isDark ? "text-[#32D74B]" : "text-[#28CD41]"}`}>
+                            {!hiddenRecepCols.has("budget") && <td className={`px-3 sm:px-5 py-3.5 sm:py-4 text-[12px] sm:text-[13px] font-bold tabular-nums tracking-tight ${isDark ? "text-emerald-400" : "text-[#039953]"}`}>
                               {lead.salesBudget || lead.budget}
                             </td>}
 
-                            {!hiddenRecepCols.has("phone") && <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-[12px] sm:text-[13px] font-mono tracking-tight ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+                            {!hiddenRecepCols.has("phone") && <td className={`px-3 sm:px-5 py-3.5 sm:py-4 text-[12px] sm:text-[13px] font-mono font-medium tracking-tight ${isDark ? "text-slate-400" : "text-slate-500"}`}>
                               {maskPhone(lead.phone)}
                             </td>}
 
-                            {!hiddenRecepCols.has("alt_phone") && <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-[12px] sm:text-[13px] font-mono tracking-tight ${isDark ? "text-gray-500" : "text-gray-400"}`}>
+                            {!hiddenRecepCols.has("alt_phone") && <td className={`px-3 sm:px-5 py-3.5 sm:py-4 text-[12px] sm:text-[13px] font-mono font-medium tracking-tight ${isDark ? "text-slate-500" : "text-slate-400"}`}>
                               {maskPhone(lead.altPhone)}
                             </td>}
 
-                            {!hiddenRecepCols.has("date_created") && <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-[11px] sm:text-[12px] font-medium min-w-[110px] sm:min-w-[120px] ${isDark ? "text-gray-500" : "text-gray-400"}`}>
+                            {!hiddenRecepCols.has("date_created") && <td className={`px-3 sm:px-5 py-3.5 sm:py-4 text-[11px] sm:text-[12px] font-medium min-w-[110px] sm:min-w-[120px] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
                               {lead.date}
                             </td>}
 
-                            {!hiddenRecepCols.has("assigned_to") && <td className="px-3 sm:px-4 py-3.5 sm:py-4">
-                              <span className={`inline-flex items-center px-2 py-1 sm:py-1.5 rounded-md text-[10px] sm:text-[11px] font-bold tracking-wide ${isDark ? "bg-purple-500/10 text-purple-400 border border-purple-500/30" : "bg-[#9E217B]/10 text-[#9E217B] border border-[#9E217B]/30"}`}>
+                            {!hiddenRecepCols.has("assigned_to") && <td className="px-3 sm:px-5 py-3.5 sm:py-4">
+                              <span className={`inline-flex items-center px-2.5 py-1 sm:py-1.5 rounded-full text-[10px] sm:text-[11px] font-bold tracking-wide ${isDark ? "bg-[#B01A79]/10 text-purple-300" : "bg-[#B01A79]/10 text-[#B01A79]"}`}>
                                 {lead.assignedReceptionist || lead.assignedTo || "Unassigned"}
                               </span>
                             </td>}
 
-                            {!hiddenRecepCols.has("site_visits") && <td className="px-3 sm:px-4 py-3.5 sm:py-4">
+                            {!hiddenRecepCols.has("site_visits") && <td className="px-3 sm:px-5 py-3.5 sm:py-4">
                               {lead.mongoVisitDate ? (
-                                <span className="text-orange-500 font-semibold text-[11px] sm:text-[12px] whitespace-nowrap">
+                                <span className="text-[#F49A25] font-semibold text-[12px] whitespace-nowrap">
                                   {formatDate(lead.mongoVisitDate).split(",")[0]}
                                 </span>
                               ) : (
-                                <span className="text-[10px] sm:text-[11px] opacity-40 font-medium">Pending</span>
+                                <span className="text-[11px] opacity-50 font-medium">Pending</span>
                               )}
                             </td>}
 
-                            {!hiddenRecepCols.has("status") && <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-center`}>
+                            {!hiddenRecepCols.has("status") && <td className={`px-3 sm:px-5 py-3.5 sm:py-4 text-center`}>
                               {lead.is_lost_lead ? (
-                                <span className={`inline-flex items-center gap-1.5 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-md text-[9px] sm:text-[10px] font-bold uppercase tracking-wider border ${t.statusLost}`}>
+                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 sm:py-1.5 rounded-full text-[9px] sm:text-[10px] font-bold uppercase tracking-wider border ${t.statusLost}`}>
                                   <Ghost className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> Lost
                                 </span>
                               ) : isNGD ? (
-                                <span className={`inline-flex items-center gap-1.5 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-md text-[9px] sm:text-[10px] font-bold uppercase tracking-wider border ${t.statusNGD}`}>
+                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 sm:py-1.5 rounded-full text-[9px] sm:text-[10px] font-bold uppercase tracking-wider border ${t.statusNGD}`}>
                                   NGD
                                 </span>
                               ) : (
-                                <span className={`inline-flex items-center gap-1.5 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-md text-[9px] sm:text-[10px] font-bold uppercase tracking-wider border ${getStatusStyle(lead.status)}`}>
+                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 sm:py-1.5 rounded-full text-[9px] sm:text-[10px] font-bold uppercase tracking-wider border ${getStatusStyle(lead.status)}`}>
                                   {lead.status || "Assigned"}
                                 </span>
                               )}
                             </td>}
-
-                            {/* Removed the Actions <td> entirely */}
                           </tr>
                         )
                       })}
@@ -3944,40 +4027,41 @@ export default function ReceptionistDashboard() {
                     </div>
                   </RpPageHeader>
 
-                  <div className={`rounded-2xl sm:rounded-3xl border overflow-hidden shadow-sm flex m-4 flex-col ${t.tableWrap}`} style={t.tableGlass}>
+                  <div className={`rounded-[2rem] border shadow-sm overflow-hidden flex flex-col m-4 ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-[#FAFAFD] border-slate-200/60'}`}>
 
                     {/* ── Header Area ── */}
-                    <div className={`px-4 sm:px-6 py-3.5 sm:py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 border-b ${t.tableHead} ${isDark ? "border-white/[0.06]" : "border-indigo-300"}`}>
-                      <div className="flex items-center gap-2.5 sm:gap-3 shrink-0 w-full sm:w-auto">
-                        <div className={`p-1.5 sm:p-2 rounded-xl ${isDark ? "bg-[#0A84FF]/10" : "bg-[#007AFF]/10"}`}>
-                          <FaHandshake className={`text-[14px] sm:text-lg ${isDark ? "text-[#0A84FF]" : "text-[#00AEEF]"}`} />
+                    <div className={`px-4 sm:px-6 pt-5 pb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b ${isDark ? "border-slate-800" : "border-slate-200/60"}`}>
+                      <div className="flex items-center gap-3 shrink-0 w-full sm:w-auto">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isDark ? "bg-[#0A84FF]/10 text-[#0A84FF]" : "bg-[#1E77E4]/10 text-[#1E77E4]"}`}>
+                          <FaHandshake size={16} />
                         </div>
-                        <h3 className={`text-[15px] sm:text-lg font-bold tracking-tight ${t.text}`}>Your Closed Enquiries</h3>
-                        <span className={`text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-md tabular-nums tracking-wide ${t.btnClosingBadge}`}>
-                          {filteredClosedLeads.length.toLocaleString("en-IN")}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <h3 className={`text-[16px] sm:text-[17px] font-bold tracking-tight ${t.text}`}>Your Closed Enquiries</h3>
+                          <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full tabular-nums tracking-wide ${isDark ? "bg-[#0A84FF]/10 text-[#0A84FF]" : "bg-[#1E77E4]/10 text-[#1E77E4]"}`}>
+                            {filteredClosedLeads.length.toLocaleString("en-IN")}
+                          </span>
+                        </div>
                       </div>
 
-                      <div className="w-full sm:max-w-xs sm:ml-auto">
+                      <div className="w-full sm:max-w-xs sm:ml-auto mt-1 sm:mt-0">
                         <SearchBar value={searchClosedLeads} onChange={setSearchClosedLeads} isDark={isDark} placeholder="Search leads..." />
                       </div>
                     </div>
 
-                    {/* ── UX Helper Bar (Explains the new click-to-view interaction) ── */}
-                    <div className={`px-4 sm:px-6 py-2 border-b text-[9px] sm:text-[10px] font-bold uppercase tracking-widest ${isDark ? "bg-white/[0.015] border-white/[0.04] text-gray-500" : "bg-gray-50/80 border-gray-100 text-gray-500"}`}>
+                    {/* ── UX Helper Bar ── */}
+                    <div className={`px-4 sm:px-6 py-2.5 border-b text-[10px] font-bold uppercase tracking-widest ${isDark ? "bg-slate-900/50 border-slate-800 text-slate-500" : "bg-slate-50/50 border-slate-200/60 text-slate-400"}`}>
                       Click any row to view full history
                     </div>
 
                     <DraggableTableContainer isDark={isDark}>
                       <table className="w-full text-left border-collapse whitespace-nowrap">
-                        <thead>
-                          <tr className={isDark ? "bg-[#2C2C2E]/30" : "bg-gray-50/50"}>
-                            {/* Removed "Actions" from array */}
+                        <thead className={isDark ? "bg-slate-900/50" : "bg-slate-50/50"}>
+                          <tr>
                             {["Sr. No.", "Client Name", "Budget", "Property", "Status", "Assigned To", "Site Visit", "Closing Date"].map(h => (
                               <th
                                 key={h}
-                                className={`px-3 sm:px-4 py-3 sm:py-3.5 crm-eyebrow border ${isDark ? "text-gray-400 border-white/10" : "text-gray-500 border-gray-300/60"} ${h === "Sr. No." ? `md:sticky md:left-0 md:z-20 ${isDark ? "md:bg-[#252528]" : "md:bg-[#F9FAFB]"}` :
-                                  h === "Client Name" ? `md:sticky md:left-[80px] sm:md:left-[96px] md:z-20 ${isDark ? "md:bg-[#252528] md:shadow-[-1px_0_0_rgba(255,255,255,0.08)_inset]" : "md:bg-[#F9FAFB] md:shadow-[-1px_0_0_rgba(0,0,0,0.06)_inset]"}` : ""
+                                className={`px-3 sm:px-5 py-3.5 text-[10px] sm:text-[11px] font-bold uppercase tracking-wider border-b ${isDark ? "text-slate-400 border-slate-800" : "text-[#475569] border-slate-200"} ${h === "Sr. No." ? `md:sticky md:left-0 md:z-20 ${isDark ? "md:bg-slate-950" : "md:bg-[#FAFAFD]"}` :
+                                  h === "Client Name" ? `md:sticky md:left-[80px] sm:md:left-[96px] md:z-20 ${isDark ? "md:bg-slate-950 md:shadow-[-1px_0_0_rgba(255,255,255,0.05)_inset]" : "md:bg-[#FAFAFD] md:shadow-[-1px_0_0_rgba(0,0,0,0.05)_inset]"}` : ""
                                   } ${h === "Status" ? "text-center" : ""}`}
                                 style={
                                   h === "Sr. No." ? { minWidth: '80px', maxWidth: '80px' } :
@@ -3989,20 +4073,20 @@ export default function ReceptionistDashboard() {
                             ))}
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-100 dark:divide-white/[0.06]">
+                        <tbody className={`divide-y ${isDark ? "divide-slate-800/60" : "divide-slate-100"}`}>
                           {isFetchingEnquiries ? (
-                            /* colSpan changed from 9 to 8 */
                             <SkeletonRows rows={8} cols={8} isDark={isDark} />
                           ) : filteredClosedLeads.length === 0 ? (
                             <tr>
-                              {/* colSpan changed from 9 to 8 */}
                               <td colSpan={8}>
-                                <div className="flex flex-col items-center justify-center py-12 sm:py-16 px-4 sm:px-6 text-center">
-                                  <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl grid place-items-center mb-3 sm:mb-4 ${isDark ? "bg-white/[0.04] border border-white/10" : "bg-gray-50 border border-gray-300/60"}`}>
-                                    <FaHandshake className="text-xl sm:text-2xl opacity-25" />
+                                <div className="flex flex-col items-center justify-center py-16 px-4 sm:px-6 text-center">
+                                  <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${isDark ? "bg-slate-800 text-slate-500" : "bg-slate-100 text-slate-400"}`}>
+                                    <FaHandshake className="text-2xl" />
                                   </div>
-                                  <p className="text-[14px] sm:text-[15px] font-bold mb-1 tracking-tight">No closed leads yet</p>
-                                  <p className="text-[12px] sm:text-[13px] opacity-50 mb-2 max-w-[250px] sm:max-w-[300px] leading-relaxed">Leads marked as Closing will appear here.</p>
+                                  <p className={`text-[15px] font-bold mb-1 tracking-tight ${t.text}`}>No closed leads yet</p>
+                                  <p className={`text-[13px] font-medium max-w-[300px] leading-relaxed ${isDark ? "text-slate-500" : "text-slate-400"}`}>
+                                    Leads marked as Closing will appear here.
+                                  </p>
                                 </div>
                               </td>
                             </tr>
@@ -4010,44 +4094,52 @@ export default function ReceptionistDashboard() {
                             return (
                               <tr
                                 key={lead.id}
-                                className={`group cursor-pointer transition-colors duration-200 ${isDark ? "hover:bg-white/[0.04]" : "hover:bg-black/[0.02]"}`}
+                                className={`group cursor-pointer transition-colors duration-200 ${isDark ? "hover:bg-slate-800/40" : "hover:bg-slate-50"}`}
                                 onClick={() => { setSelectedClosedLead(lead); setClosedLeadView("detail"); }}
                               >
-                                <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-[11px] sm:text-[12px] font-bold tracking-tight md:sticky md:left-0 md:z-10 transition-colors duration-200 ${isDark ? "text-gray-400 md:bg-[#1C1C1E] md:group-hover:bg-[#232325]" : "text-gray-500 md:bg-white md:group-hover:bg-[#FDFDFD]"}`} style={{ minWidth: '80px', maxWidth: '80px' }}>
+                                <td className={`px-3 sm:px-5 py-3.5 sm:py-4 text-[11px] sm:text-[13px] font-bold tracking-tight md:sticky md:left-0 md:z-10 transition-colors duration-200 ${isDark ? "text-slate-400 md:bg-slate-950 md:group-hover:bg-slate-800/40" : "text-slate-500 md:bg-[#FAFAFD] md:group-hover:bg-slate-50"}`} style={{ minWidth: '80px', maxWidth: '80px' }}>
                                   #{lead.sr_no || lead.id}
                                 </td>
 
-                                <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-[13px] sm:text-[14px] font-semibold tracking-tight md:sticky md:left-[80px] sm:md:left-[96px] md:z-10 transition-colors duration-200 ${isDark ? "text-gray-100 md:bg-[#1C1C1E] md:group-hover:bg-[#232325] md:shadow-[-1px_0_0_rgba(255,255,255,0.08)_inset]" : "text-gray-900 md:bg-white md:group-hover:bg-[#FDFDFD] md:shadow-[-1px_0_0_rgba(0,0,0,0.06)_inset]"}`} style={{ minWidth: '150px', maxWidth: '150px' }}>
-                                  <div className="truncate">{lead.name}</div>
+                                <td className={`px-3 sm:px-5 py-3.5 sm:py-4 md:sticky md:left-[80px] sm:md:left-[96px] md:z-10 transition-colors duration-200 ${isDark ? "md:bg-slate-950 md:group-hover:bg-slate-800/40 md:shadow-[-1px_0_0_rgba(255,255,255,0.05)_inset]" : "md:bg-[#FAFAFD] md:group-hover:bg-slate-50 md:shadow-[-1px_0_0_rgba(0,0,0,0.05)_inset]"}`} style={{ minWidth: '150px', maxWidth: '150px' }}>
+                                  <div className={`text-[13px] sm:text-[14px] font-bold tracking-tight truncate ${t.text}`}>
+                                    {lead.name}
+                                  </div>
                                 </td>
 
-                                <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-[12px] sm:text-[13px] font-bold tabular-nums tracking-tight ${isDark ? "text-[#32D74B]" : "text-[#28CD41]"}`}>
+                                <td className={`px-3 sm:px-5 py-3.5 sm:py-4 text-[12px] sm:text-[13px] font-bold tabular-nums tracking-tight ${isDark ? "text-emerald-400" : "text-[#039953]"}`}>
                                   {lead.salesBudget || lead.budget}
                                 </td>
 
-                                <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-[11px] sm:text-[12px] font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+                                <td className={`px-3 sm:px-5 py-3.5 sm:py-4 text-[12px] sm:text-[13px] font-medium ${isDark ? "text-slate-300" : "text-slate-600"}`}>
                                   {(lead.propType && lead.propType !== "Pending" && lead.propType !== "N/A" ? lead.propType : lead.configuration && lead.configuration !== "Pending" && lead.configuration !== "N/A" ? lead.configuration : "N/A")}
                                 </td>
 
-                                <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-center`}>
-                                  <span className={`inline-flex items-center px-2 py-1 rounded-md text-[9px] sm:text-[10px] font-bold uppercase tracking-wider border shadow-sm ${t.statusClosing}`}>
+                                <td className={`px-3 sm:px-5 py-3.5 sm:py-4 text-center`}>
+                                  <span className={`inline-flex items-center px-2.5 py-1 sm:py-1.5 rounded-full text-[9px] sm:text-[10px] font-bold uppercase tracking-wider border ${t.statusClosing}`}>
                                     {lead.status}
                                   </span>
                                 </td>
 
-                                <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-[11px] sm:text-[12px] font-medium ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                                <td className={`px-3 sm:px-5 py-3.5 sm:py-4 text-[12px] sm:text-[13px] font-medium ${isDark ? "text-slate-400" : "text-slate-600"}`}>
                                   {lead.assignedTo || "Unassigned"}
                                 </td>
 
-                                <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-[11px] sm:text-[12px] font-medium ${lead.mongoVisitDate ? "text-orange-500 font-semibold" : t.textFaint}`}>
-                                  {lead.mongoVisitDate ? formatDate(lead.mongoVisitDate).split(",")[0] : <span className="opacity-40">—</span>}
+                                <td className={`px-3 sm:px-5 py-3.5 sm:py-4 text-[12px] sm:text-[13px] font-medium ${lead.mongoVisitDate ? "text-orange-500 font-semibold" : isDark ? "text-slate-600" : "text-slate-400"}`}>
+                                  {lead.mongoVisitDate ? (
+                                    <span className="whitespace-nowrap">{formatDate(lead.mongoVisitDate).split(",")[0]}</span>
+                                  ) : (
+                                    <span className="opacity-40 italic">—</span>
+                                  )}
                                 </td>
 
-                                <td className={`px-3 sm:px-4 py-3.5 sm:py-4 text-[11px] sm:text-[12px] font-medium ${isDark ? "text-gray-400" : "text-gray-500"}`}>
-                                  {lead.closingDate ? formatDate(lead.closingDate).split(",")[0] : <span className="opacity-40">—</span>}
+                                <td className={`px-3 sm:px-5 py-3.5 sm:py-4 text-[11px] sm:text-[12px] font-medium ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                                  {lead.closingDate ? (
+                                    <span className="whitespace-nowrap">{formatDate(lead.closingDate).split(",")[0]}</span>
+                                  ) : (
+                                    <span className="opacity-40 italic">—</span>
+                                  )}
                                 </td>
-
-                                {/* Removed the 'Actions' Button <td> entirely */}
                               </tr>
                             )
                           })}
@@ -5222,7 +5314,7 @@ export default function ReceptionistDashboard() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => { setEnquiryForm({ ...enquiryForm, selfAssign: false }); setShowManagerDropdown(true); }}
+                          onClick={() => { setEnquiryForm({ ...enquiryForm, selfAssign: false }); fetchSalesManagers(); setShowManagerDropdown(true); }}
                           className={`px-6 py-3 rounded-xl border text-[14px] font-medium transition-all ${!enquiryForm.selfAssign
                             ? "eq-selected-btn shadow-md"
                             : isDark ? "bg-[#242424] border-gray-700 text-gray-300" : "bg-gray-50 border-gray-200 text-gray-700 hover:border-[#18392B]"
@@ -5235,7 +5327,7 @@ export default function ReceptionistDashboard() {
                       {!enquiryForm.selfAssign && (
                         <div className="relative w-full md:w-2/3">
                           <div
-                            onClick={() => setShowManagerDropdown(prev => !prev)}
+                            onClick={() => { if (!showManagerDropdown) fetchSalesManagers(); setShowManagerDropdown(prev => !prev); }}
                             className={`px-4 py-3.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${assignedToError ? "border-red-500 ring-1 ring-red-500" : isDark ? "bg-[#242424] border-gray-700 text-white" : "bg-gray-50 border-gray-200 text-gray-900"
                               }`}
                           >
@@ -5247,11 +5339,17 @@ export default function ReceptionistDashboard() {
                                     const sel = combinedAssignees.find(m => m.name === enquiryForm.assignedTo);
                                     if (!sel) return null;
                                     const isOnline = sel.presence === "ONLINE";
+                                    const isBusy = sel.assignmentAvailability === "busy";
                                     return (
-                                      <span className={`inline-flex items-center gap-1 text-[10px] font-semibold ${isOnline ? "text-emerald-500" : isDark ? "text-gray-500" : "text-gray-400"}`}>
-                                        <span className={`inline-block w-1.5 h-1.5 rounded-full ${isOnline ? "bg-emerald-500" : isDark ? "bg-gray-500" : "bg-gray-400"}`} />
-                                        {isOnline ? "Online" : "Offline"}
-                                      </span>
+                                      <>
+                                        <span className={`inline-flex items-center gap-1 text-[10px] font-semibold ${isOnline ? "text-emerald-500" : isDark ? "text-gray-500" : "text-gray-400"}`}>
+                                          <span className={`inline-block w-1.5 h-1.5 rounded-full ${isOnline ? "bg-emerald-500" : isDark ? "bg-gray-500" : "bg-gray-400"}`} />
+                                          {isOnline ? "Online" : "Offline"}
+                                        </span>
+                                        <span className={`text-[10px] font-bold ${isBusy ? "text-orange-500" : "text-emerald-600"}`}>
+                                          {isBusy ? "BUSY" : "AVAILABLE"}
+                                        </span>
+                                      </>
                                     );
                                   })()}
                                 </>
@@ -5267,15 +5365,37 @@ export default function ReceptionistDashboard() {
                               ) : combinedAssignees.length === 0 ? (
                                 <div className="p-4 text-sm opacity-60">No assignees available</div>
                               ) : (
-                                combinedAssignees.map((m, i) => (
+                                combinedAssignees.map((m, i) => {
+                                  const isBusyItem = m.assignmentAvailability === "busy";
+                                  return (
                                   <div
                                     key={i}
+                                    role="option"
+                                    aria-selected={enquiryForm.assignedTo === m.name}
+                                    aria-disabled={isBusyItem}
+                                    tabIndex={isBusyItem ? -1 : 0}
+                                    title={isBusyItem ? "This manager is busy with an unprocessed lead" : undefined}
                                     onClick={() => {
+                                      if (isBusyItem) return;
                                       setEnquiryForm({ ...enquiryForm, assignedTo: m.name });
                                       setAssignedToError("");
                                       setShowManagerDropdown(false);
                                     }}
-                                    className={`px-4 py-3 cursor-pointer transition-colors border-b last:border-b-0 flex justify-between items-center gap-3 ${isDark ? "border-gray-700 hover:bg-[#333] text-white" : "border-gray-100 hover:bg-gray-50 text-gray-900"} ${enquiryForm.assignedTo === m.name ? "bg-[#18392B]/10 text-[#18392B] font-semibold" : ""}`}
+                                    onKeyDown={(e) => {
+                                      if (isBusyItem) return;
+                                      if (e.key === "Enter" || e.key === " ") {
+                                        e.preventDefault();
+                                        setEnquiryForm({ ...enquiryForm, assignedTo: m.name });
+                                        setAssignedToError("");
+                                        setShowManagerDropdown(false);
+                                      }
+                                    }}
+                                    className={`px-4 py-3 transition-colors border-b last:border-b-0 flex justify-between items-center gap-3
+                                      ${isBusyItem
+                                        ? `cursor-not-allowed select-none ${isDark ? "opacity-45 border-gray-700 text-white" : "opacity-40 border-gray-100 text-gray-900"}`
+                                        : `cursor-pointer ${isDark ? "border-gray-700 hover:bg-[#333] text-white" : "border-gray-100 hover:bg-gray-50 text-gray-900"}`
+                                      }
+                                      ${!isBusyItem && enquiryForm.assignedTo === m.name ? "bg-[#18392B]/10 text-[#18392B] font-semibold" : ""}`}
                                   >
                                     <span>{m.name}</span>
                                     <span className="flex items-center gap-2.5">
@@ -5287,10 +5407,14 @@ export default function ReceptionistDashboard() {
                                           }`} />
                                         {m.presence === "ONLINE" ? "Online" : "Offline"}
                                       </span>
+                                      <span className={`text-[10px] font-bold ${m.assignmentAvailability === "busy" ? "text-orange-500" : "text-emerald-600"}`}>
+                                        {m.assignmentAvailability === "busy" ? "BUSY" : "AVAILABLE"}
+                                      </span>
                                       <span className="text-[11px] opacity-60 uppercase tracking-wider">{String(m.role || "Manager").replace("_", " ")}</span>
                                     </span>
                                   </div>
-                                ))
+                                  );
+                                })
                               )}
                             </div>
                           )}

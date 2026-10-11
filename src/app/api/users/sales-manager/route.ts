@@ -36,9 +36,21 @@ export async function GET() {
                      AND es.is_active = true
                 ) THEN 'ONLINE'
                 ELSE 'OFFLINE'
-              END AS presence
+              END AS presence,
+              CASE
+                WHEN EXISTS (
+                  SELECT 1 FROM walkin_enquiries w
+                   WHERE w.assigned_to_user_id = u.id
+                     AND w.organization_id      = $1
+                     AND w.receptionist_submitted   = true
+                     AND w.sales_form_submitted_at  IS NULL
+                     AND w.is_lost_lead             = false
+                     AND w.status NOT IN ('Closing', 'Closed', 'Pending Assignment')
+                ) THEN 'busy'
+                ELSE 'available'
+              END AS "assignmentAvailability"
          FROM users u
-        WHERE REPLACE(LOWER(TRIM(u.role)), '_', ' ') = 'sales manager'
+        WHERE REPLACE(LOWER(TRIM(u.role)), '_', ' ') IN ('sales manager', 'senior sales manager')
           AND u.is_active = true
           AND u.organization_id = $1
         ORDER BY
