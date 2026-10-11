@@ -16,7 +16,7 @@ import {
 } from "@/lib/passwordReset";
 import { transaction } from "@/lib/db";
 import {
-  createPasswordChangeAuth,
+  createPasswordChangeAuthInTx,
   AUTH_TTL_MINUTES,
 } from "@/lib/passwordChangeAuth";
 
@@ -74,19 +74,20 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ── Consume the OTP ──────────────────────────────────────────────────────
-    await transaction(async (client) => {
+    // ── Consume OTP + create authorization atomically ────────────────────────
+    // Both operations run in one transaction. If auth creation fails (e.g. the
+    // password_change_authorizations table is missing), the OTP consumption is
+    // rolled back and the user can retry with the same code.
+    const orgId = gate.session.org ?? null;
+    const authToken = await transaction(async (client) => {
       await client.query(
         `UPDATE email_change_otps
             SET consumed_at = now()
           WHERE id = $1 AND consumed_at IS NULL AND purpose = $2`,
         [check.row.id, purpose]
       );
+      return createPasswordChangeAuthInTx(client, userId, purpose, orgId);
     });
-
-    // ── Create password-change authorization ─────────────────────────────────
-    const orgId = gate.session.org ?? null;
-    const authToken = await createPasswordChangeAuth(userId, purpose, orgId);
 
     void writeAuditLog({
       userId,

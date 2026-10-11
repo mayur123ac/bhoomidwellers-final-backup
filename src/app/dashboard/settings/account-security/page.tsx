@@ -162,8 +162,11 @@ function PasswordChangeModal({ open, onClose }: { open: boolean; onClose: () => 
         setInfo(null);
       }, res.authExpiresInMinutes * 60 * 1000);
     } catch (err: any) {
-      const body = err;
       setError(err.message);
+      // The api() helper attaches the full response body to err.payload, not
+      // directly to the Error object. attemptsRemaining and restart come from
+      // the server response body, so they must be read from err.payload.
+      const body = err.payload ?? {};
       if (body.attemptsRemaining != null) setAttemptsRemaining(body.attemptsRemaining);
       if (body.restart) {
         // OTP is locked/expired — must restart

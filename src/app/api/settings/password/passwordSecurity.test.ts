@@ -86,7 +86,8 @@ vi.mock("@/lib/passwords", () => ({
 
 vi.mock("@/lib/passwordChangeAuth", () => ({
   AUTH_TTL_MINUTES: 5,
-  createPasswordChangeAuth: vi.fn(async () => "auth-token-abc123"),
+  // verify-otp now uses the in-transaction variant
+  createPasswordChangeAuthInTx: vi.fn(async () => "auth-token-abc123"),
   checkPasswordChangeAuth: vi.fn(async () => mockAuthCheckResult),
   consumeAuthAndChangePassword: vi.fn(async () => mockConsumeResult),
 }));

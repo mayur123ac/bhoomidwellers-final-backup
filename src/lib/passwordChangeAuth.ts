@@ -67,6 +67,41 @@ export async function createPasswordChangeAuth(
   return token;
 }
 
+/**
+ * Same as createPasswordChangeAuth but executed within an existing
+ * transaction client.
+ *
+ * Used by verify-otp/route.ts so OTP consumption and auth creation are atomic:
+ * if the INSERT fails (e.g. table missing), the OTP UPDATE is rolled back and
+ * the user can retry with the same code rather than burning it for nothing.
+ */
+export async function createPasswordChangeAuthInTx(
+  client: import("pg").PoolClient,
+  userId: number,
+  purpose: string,
+  organizationId: string | null
+): Promise<string> {
+  const token = randomBytes(32).toString("hex");
+  const tokenHash = hashToken(token);
+  const expiresAt = new Date(Date.now() + AUTH_TTL_MINUTES * 60 * 1000);
+
+  // Supersede any existing authorization for this user + purpose
+  await client.query(
+    `UPDATE password_change_authorizations SET consumed_at = now()
+      WHERE user_id = $1 AND purpose = $2 AND consumed_at IS NULL`,
+    [userId, purpose]
+  );
+
+  await client.query(
+    `INSERT INTO password_change_authorizations
+       (user_id, purpose, token_hash, expires_at, organization_id)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [userId, purpose, tokenHash, expiresAt, organizationId]
+  );
+
+  return token;
+}
+
 export type AuthCheck =
   | { ok: true; row: { id: number; user_id: number; purpose: string } }
   | { ok: false; reason: "invalid" | "expired" | "consumed" };
