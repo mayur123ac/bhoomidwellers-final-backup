@@ -3442,14 +3442,27 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
   const handleSalesFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!selectedLead) return;
-    const msg = `📝 Detailed Salesform Submitted:\n• Property Type: ${salesForm.propertyType || "N/A"}\n• Location: ${salesForm.location || "N/A"}\n• Budget: ${salesForm.budget || "N/A"}\n• Use Type: ${salesForm.useType || "N/A"}\n• Planning to Purchase: ${salesForm.purchaseDate || "N/A"}\n• Loan Planned: ${salesForm.loanPlanned || "N/A"}\n• Lead Status: ${salesForm.leadStatus || "N/A"}\n• Site Visit Requested: ${salesForm.siteVisit ? formatDate(salesForm.siteVisit) : "No"}`;
-    const nm = { leadId: String(selectedLead.id), salesManagerName: adminUser.name, createdBy: "admin", message: msg, siteVisitDate: salesForm.siteVisit || null, createdAt: new Date().toISOString() };
-    const ns = salesForm.siteVisit ? "Visit Scheduled" : selectedLead.status;
     setShowSalesForm(false);
     setSalesForm({ propertyType: "", location: "", budget: "", useType: "", purchaseDate: "", loanPlanned: "", siteVisit: "", leadStatus: "" });
     try {
-      await fetch("/api/followups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(nm) });
-      await fetch(`/api/walkin_enquiries/${selectedLead.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: selectedLead.name, status: ns }) });
+      await fetch("/api/sales-form-submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          leadId: String(selectedLead.id),
+          salesManagerName: adminUser.name,
+          formFields: {
+            propertyType: salesForm.propertyType,
+            location: salesForm.location,
+            budget: salesForm.budget,
+            useType: salesForm.useType,
+            purchaseDate: salesForm.purchaseDate,
+            loanPlanned: salesForm.loanPlanned,
+            leadStatus: salesForm.leadStatus,
+          },
+          siteVisitDate: salesForm.siteVisit || null,
+        }),
+      });
       refetch();
     } catch { }
   };
@@ -5085,14 +5098,27 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
   const handleSalesFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!selectedLead) return;
-    const msg = `📝 Detailed Salesform Submitted:\n• Property Type: ${salesForm.propertyType || "N/A"}\n• Location: ${salesForm.location || "N/A"}\n• Budget: ${salesForm.budget || "N/A"}\n• Use Type: ${salesForm.useType || "N/A"}\n• Planning to Purchase: ${salesForm.purchaseDate || "N/A"}\n• Loan Planned: ${salesForm.loanPlanned || "N/A"}\n• Lead Status: ${salesForm.leadStatus || "N/A"}\n• Site Visit Requested: ${salesForm.siteVisit ? formatDate(salesForm.siteVisit) : "No"}`;
-    const nm = { leadId: String(selectedLead.id), salesManagerName: adminUser.name, createdBy: "admin", message: msg, siteVisitDate: salesForm.siteVisit || null, createdAt: new Date().toISOString() };
-    const ns = salesForm.siteVisit ? "Visit Scheduled" : selectedLead.status;
     setShowSalesForm(false);
     setSalesForm({ propertyType: "", location: "", budget: "", useType: "", purchaseDate: "", loanPlanned: "", siteVisit: "", leadStatus: "" });
     try {
-      await fetch("/api/followups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(nm) });
-      await fetch(`/api/walkin_enquiries/${selectedLead.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: selectedLead.name, status: ns }) });
+      await fetch("/api/sales-form-submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          leadId: String(selectedLead.id),
+          salesManagerName: adminUser.name,
+          formFields: {
+            propertyType: salesForm.propertyType,
+            location: salesForm.location,
+            budget: salesForm.budget,
+            useType: salesForm.useType,
+            purchaseDate: salesForm.purchaseDate,
+            loanPlanned: salesForm.loanPlanned,
+            leadStatus: salesForm.leadStatus,
+          },
+          siteVisitDate: salesForm.siteVisit || null,
+        }),
+      });
       refetch();
     } catch { }
   };
@@ -6501,14 +6527,27 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
   const handleSalesFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedLead) return;
-    const msg = `📝 Detailed Salesform Submitted:\n• Property Type: ${salesForm.propertyType || "N/A"}\n• Location: ${salesForm.location || "N/A"}\n• Budget: ${salesForm.budget || "N/A"}\n• Use Type: ${salesForm.useType || "N/A"}\n• Planning to Purchase: ${salesForm.purchaseDate || "N/A"}\n• Loan Planned: ${salesForm.loanPlanned || "N/A"}\n• Lead Status: ${salesForm.leadStatus || "N/A"}\n• Site Visit Requested: ${salesForm.siteVisit ? new Date(salesForm.siteVisit).toLocaleString("en-IN") : "No"}`;
-    const nm = { leadId: String(selectedLead.id), salesManagerName: actorName, createdBy: "admin", message: msg, siteVisitDate: salesForm.siteVisit || null, createdAt: new Date().toISOString() };
-    const ns = salesForm.siteVisit ? "Visit Scheduled" : selectedLead.status;
     setShowSalesForm(false);
     setSalesForm({ propertyType: "", location: "", budget: "", useType: "", purchaseDate: "", loanPlanned: "", siteVisit: "", leadStatus: "" });
     try {
-      await fetch("/api/followups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(nm) });
-      await fetch(`/api/walkin_enquiries/${selectedLead.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: selectedLead.name, status: ns }) });
+      await fetch("/api/sales-form-submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          leadId: String(selectedLead.id),
+          salesManagerName: actorName,
+          formFields: {
+            propertyType: salesForm.propertyType,
+            location: salesForm.location,
+            budget: salesForm.budget,
+            useType: salesForm.useType,
+            purchaseDate: salesForm.purchaseDate,
+            loanPlanned: salesForm.loanPlanned,
+            leadStatus: salesForm.leadStatus,
+          },
+          siteVisitDate: salesForm.siteVisit || null,
+        }),
+      });
       refetch();
     } catch { }
   };

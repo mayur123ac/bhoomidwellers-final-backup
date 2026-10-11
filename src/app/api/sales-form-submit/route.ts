@@ -9,6 +9,7 @@ import { NextResponse } from "next/server";
 import { transaction } from "@/lib/db";
 import { getOrganizationId } from "@/lib/tenantContext";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
+import { processQueueForManager } from "@/lib/walkInQueue";
 
 type SalesFormFields = {
   propertyType?: string;
@@ -86,9 +87,15 @@ export async function POST(req: Request) {
       // MT-05: resolved once per transaction, on this client.
       const orgId = await getOrganizationId(client);
       // 🔒 Row-lock the lead so no concurrent write can flip it to Closing/Lost
-      // mid-transaction.
+      // mid-transaction. Also fetch queue-relevant columns for the sequential
+      // assignment trigger.
       const lockCheck = await client.query(
-        `SELECT status, is_lost_lead FROM walkin_enquiries WHERE id = $1 AND organization_id = $2 FOR UPDATE`,
+        `SELECT status, is_lost_lead,
+                receptionist_submitted, sales_form_submitted_at,
+                assigned_to_user_id, assigned_to
+         FROM walkin_enquiries
+         WHERE id = $1 AND organization_id = $2
+         FOR UPDATE`,
         [leadId, orgId]
       );
       const lead = lockCheck.rows[0];
@@ -108,18 +115,21 @@ export async function POST(req: Request) {
       );
 
       // 2️⃣ Normalized columns + status, in the same UPDATE.
+      // Also stamp sales_form_submitted_at on the FIRST submission (COALESCE
+      // makes it immutable — a second form submit keeps the original timestamp).
       const newStatus = visitDate ? "Visit Scheduled" : lead.status;
       await client.query(
         `UPDATE walkin_enquiries
-         SET status = $1,
-             last_activity_at = NOW(),
-             property_type = $2,
-             sales_budget = $3,
-             use_type = $4,
-             planning_purchase = $5,
-             loan_planned_confirmed = $6,
-             lead_interest_status = $7,
-             location = $8
+         SET status                  = $1,
+             last_activity_at        = NOW(),
+             property_type           = $2,
+             sales_budget            = $3,
+             use_type                = $4,
+             planning_purchase       = $5,
+             loan_planned_confirmed  = $6,
+             lead_interest_status    = $7,
+             location                = $8,
+             sales_form_submitted_at = COALESCE(sales_form_submitted_at, NOW())
          WHERE id = $9 AND organization_id = $10`,
         [
           newStatus,
@@ -134,6 +144,25 @@ export async function POST(req: Request) {
           orgId,
         ]
       );
+
+      // 2b️⃣ Sequential queue trigger.
+      // Fires only on the FIRST qualifying submission for a receptionist_submitted
+      // lead. A second submit (e.g. a form re-open) keeps sales_form_submitted_at
+      // unchanged (COALESCE above), so isFirstSubmission stays false and the queue
+      // is NOT advanced a second time — one submission unlocks exactly one lead.
+      const isFirstSubmission = !lead.sales_form_submitted_at;
+      if (
+        isFirstSubmission &&
+        lead.receptionist_submitted &&
+        lead.assigned_to_user_id
+      ) {
+        await processQueueForManager(
+          client,
+          Number(lead.assigned_to_user_id),
+          String(lead.assigned_to ?? ""),
+          orgId
+        );
+      }
 
       // 3️⃣ One site_visits row when a visit is scheduled. No extra follow-up —
       // the row above already records it.

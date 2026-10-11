@@ -585,7 +585,7 @@ export default function RevenueIntelligenceView({ isDark, theme, user }: Props) 
             { label: "Collected to date", value: compact(totals.collected), sub: `${totals.pct}% of agreement value`, icon: Banknote, color: isDark ? "text-[#FF9F0A]" : "text-[#FF9500]", bg: isDark ? "bg-[#FF9F0A]/15" : "bg-[#FFF4E5]" },
             { label: "Balance receivable", value: compact(totals.balance), sub: "AV − OCR − disbursed", icon: Wallet, color: isDark ? "text-[#FF453A]" : "text-[#FF3B30]", bg: isDark ? "bg-[#FF453A]/15" : "bg-[#FFECEB]" },
           ].map((tile) => (
-            <div key={tile.label} className={`rounded-[20px] sm:rounded-[24px] p-4 sm:p-5 flex flex-col justify-between h-[115px] sm:h-[120px] md:h-[130px] transition-transform hover:scale-[1.02] ${isDark ? "bg-[#1C1C1E] shadow-sm border border-white/5" : "bg-white shadow-[0_4px_24px_rgba(0,0,0,0.04)] border border-black/5"}`}>
+            <div key={tile.label} className={`rounded-[20px] shadow-sm sm:rounded-[24px] p-4 sm:p-5 flex flex-col justify-between h-[115px] sm:h-[120px] md:h-[130px] transition-transform hover:scale-[1.02] ${isDark ? "bg-[#1C1C1E] shadow-sm border border-white/5" : "bg-white shadow-[0_4px_24px_rgba(0,0,0,0.04)] border border-black/5"}`}>
               <div className="flex items-center gap-2.5 sm:gap-3">
                 <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-[8px] sm:rounded-[10px] flex items-center justify-center flex-shrink-0 ${tile.bg}`}>
                   <tile.icon className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${tile.color}`} />
@@ -610,7 +610,7 @@ export default function RevenueIntelligenceView({ isDark, theme, user }: Props) 
         <section className={`rounded-[24px] overflow-hidden border shadow-sm ${isDark ? "bg-[#1C1C1E] border-white/10" : "bg-white border-black/5 shadow-[0_4px_24px_rgba(0,0,0,0.04)]"}`}>
           <div className="overflow-x-auto custom-scrollbar">
             <table className="w-full text-left whitespace-nowrap">
-              <thead className={`sticky top-0 z-10 backdrop-blur-xl ${isDark ? "bg-[#1C1C1E]/80 border-b border-[#38383A]" : "bg-[#F9F9F9]/80 border-b border-[#E5E5EA]"}`}>
+              <thead className={`sticky top-0 z-10 backdrop-blur-xl shadow-sm ${isDark ? "bg-[#1C1C1E]/80 border-b border-[#38383A]" : "bg-[#F9F9F9]/80 border-b border-[#E5E5EA]"}`}>
                 <tr>
                   {(
                     [

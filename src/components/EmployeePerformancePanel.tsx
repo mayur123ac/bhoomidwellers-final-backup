@@ -446,7 +446,7 @@ function SummaryCard({
 
   return (
     <div
-      className={`relative flex flex-col justify-between rounded-[20px] sm:rounded-[24px] p-4 sm:p-5 h-[120px] sm:h-[140px] md:h-[160px] transition-transform duration-300 hover:scale-[1.02] ${isDark
+      className={`relative flex flex-col shadow-sm justify-between rounded-[20px] sm:rounded-[24px] p-4 sm:p-5 h-[120px] sm:h-[140px] md:h-[160px] transition-transform duration-300 hover:scale-[1.02] ${isDark
         ? "bg-[#1C1C1E] shadow-sm border border-white/5"
         : "bg-white shadow-[0_4px_24px_rgba(0,0,0,0.04)] border border-black/5"
         }`}
@@ -559,10 +559,10 @@ function BreakdownPanel({
       <div
         className={`rounded-[20px] overflow-hidden ${isDark
           ? "bg-[#1C1C1E] shadow-sm"
-          : "bg-white shadow-[0_4px_20px_rgba(0,0,0,0.03)]"
+          : "bg-white shadow-sm"
           }`}
       >
-        <div className="px-5">
+        <div className="px-5 ">
           {rows.map((row, i) => (
             <div
               key={row.key}

@@ -450,28 +450,28 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-5">
-            <div className={`p-4 rounded-[20px] flex items-center justify-between ${isDark ? "bg-[#1C1C1E] shadow-sm" : "bg-white shadow-[0_2px_12px_rgba(0,0,0,0.03)]"}`}>
+            <div className={`p-4 rounded-[20px] flex items-center justify-between shadow-sm ${isDark ? "bg-[#1C1C1E] shadow-sm" : "bg-white shadow-[0_2px_12px_rgba(0,0,0,0.03)]"}`}>
               <div>
                 <p className={`text-[11px] uppercase font-bold tracking-wider mb-1 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>Online</p>
                 <h3 className={`text-2xl font-bold tracking-tight ${isDark ? "text-white" : "text-black"}`}>{activeCount}</h3>
               </div>
               <FaCircle className={`w-3.5 h-3.5 animate-pulse ${isDark ? "text-[#32D74B]" : "text-[#34C759]"}`} />
             </div>
-            <div className={`p-4 rounded-[20px] flex items-center justify-between ${isDark ? "bg-[#1C1C1E] shadow-sm" : "bg-white shadow-[0_2px_12px_rgba(0,0,0,0.03)]"}`}>
+            <div className={`p-4 rounded-[20px] flex items-center justify-between shadow-sm ${isDark ? "bg-[#1C1C1E] shadow-sm" : "bg-white shadow-[0_2px_12px_rgba(0,0,0,0.03)]"}`}>
               <div>
                 <p className={`text-[11px] uppercase font-bold tracking-wider mb-1 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>Logged In</p>
                 <h3 className={`text-2xl font-bold tracking-tight ${isDark ? "text-white" : "text-black"}`}>{sessions.length}</h3>
               </div>
               <FaUsers className={`w-5 h-5 ${isDark ? "text-[#0A84FF]" : "text-[#007AFF]"}`} />
             </div>
-            <div className={`p-4 rounded-[20px] flex items-center justify-between ${isDark ? "bg-[#1C1C1E] shadow-sm" : "bg-white shadow-[0_2px_12px_rgba(0,0,0,0.03)]"}`}>
+            <div className={`p-4 rounded-[20px] flex items-center justify-between shadow-sm ${isDark ? "bg-[#1C1C1E] shadow-sm" : "bg-white shadow-[0_2px_12px_rgba(0,0,0,0.03)]"}`}>
               <div>
                 <p className={`text-[11px] uppercase font-bold tracking-wider mb-1 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>Idle</p>
                 <h3 className={`text-2xl font-bold tracking-tight ${isDark ? "text-white" : "text-black"}`}>{idleCount}</h3>
               </div>
               <FaWalking className={`w-5 h-5 ${isDark ? "text-[#FF9F0A]" : "text-[#FF9500]"}`} />
             </div>
-            <div className={`p-4 rounded-[20px] flex items-center justify-between ${isDark ? "bg-[#1C1C1E] shadow-sm" : "bg-white shadow-[0_2px_12px_rgba(0,0,0,0.03)]"}`}>
+            <div className={`p-4 rounded-[20px] flex items-center justify-between shadow-sm ${isDark ? "bg-[#1C1C1E] shadow-sm" : "bg-white shadow-[0_2px_12px_rgba(0,0,0,0.03)]"}`}>
               <div>
                 <p className={`text-[11px] uppercase font-bold tracking-wider mb-1 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>Avg Score</p>
                 <h3 className={`text-2xl font-bold tracking-tight ${isDark ? "text-[#BF5AF2]" : "text-[#AF52DE]"}`}>
@@ -502,7 +502,7 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
               <div className="relative">
                 <button
                   onClick={() => setShowHoursConfig(!showHoursConfig)}
-                  className={`px-4 py-2 rounded-full text-[13px] font-semibold tracking-wide flex items-center justify-between gap-2 shadow-[0_2px_8px_rgba(0,0,0,0.04)] transition-colors ${isDark ? "bg-[#2C2C2E] border border-white/5 text-white hover:bg-[#3A3A3C]" : "bg-white border border-black/5 text-black hover:bg-gray-50"
+                  className={`px-4 py-2 rounded-full text-[13px] font-semibold tracking-wide flex items-center justify-between gap-2 shadow-sm transition-colors ${isDark ? "bg-[#2C2C2E] border border-white/5 text-white hover:bg-[#3A3A3C]" : "bg-white border border-black/5 text-black hover:bg-gray-50"
                     }`}
                 >
                   <span className="flex items-center gap-2 truncate">
@@ -564,7 +564,7 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
 
           <div className="flex flex-col lg:flex-row gap-4 h-auto lg:h-[calc(100vh-230px)] overflow-hidden">
             {/* Left Pane - Dense Tracking Grid */}
-            <div className={`flex-1 rounded-[24px] border flex flex-col overflow-hidden shadow-[0_2px_12px_rgba(0,0,0,0.03)] min-h-[350px] ${isDark ? "bg-[#1C1C1E] border-white/5" : "bg-white border-black/5"}`}>
+            <div className={`flex-1 rounded-[24px] border flex flex-col overflow-hidden shadow-sm shadow-[0_2px_12px_rgba(0,0,0,0.03)] min-h-[350px] ${isDark ? "bg-[#1C1C1E] border-white/5" : "bg-white border-black/5"}`}>
               <div className={`overflow-auto flex-1 p-0 custom-scrollbar`}>
                 <table className="w-full text-left border-collapse text-[12px] whitespace-nowrap">
                   <thead className={`sticky top-0 z-10 backdrop-blur-xl ${isDark ? "bg-[#1C1C1E]/80 border-b border-[#38383A]" : "bg-white/80 border-b border-[#E5E5EA]"}`}>
@@ -1017,7 +1017,7 @@ function AppleDatePicker({
       {/* Trigger Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className={`flex items-center gap-2 px-4 py-2 rounded-full text-[13px] font-semibold tracking-wide border transition-colors shadow-[0_2px_8px_rgba(0,0,0,0.04)] ${isDark
+        className={`flex items-center gap-2 px-4 py-2 rounded-full text-[13px] font-semibold tracking-wide border transition-colors shadow-sm ${isDark
           ? "bg-[#2C2C2E] border-white/5 text-white hover:bg-[#3A3A3C]"
           : "bg-white border-black/5 text-black hover:bg-gray-50"
           }`}
