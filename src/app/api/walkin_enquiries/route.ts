@@ -113,7 +113,12 @@ export async function GET(req: Request) {
        set and filtering afterwards would make page 1 another organization's
        rows, and the total would count both builders' leads. */
     const params: any[] = [listOrgId];
-    let where = "organization_id = $1";
+    // Always qualify with the table alias `w`. The LEFT JOIN on
+    // walk_in_assignment_queue introduces a second table that also has
+    // `organization_id`, `status`, and `id`, making unqualified references
+    // ambiguous (SQLSTATE 42702). The COUNT query uses the same `where` string
+    // with `FROM walkin_enquiries w`, so `w.` is valid in both contexts.
+    let where = "w.organization_id = $1";
 
     /* Free-text search. The term is a bound parameter, never interpolated; only
        the COLUMN NAMES come from the code, and only via the SEARCH_FIELDS
@@ -125,11 +130,14 @@ export async function GET(req: Request) {
       const fields = SEARCH_FIELDS[requested] ?? SEARCH_FIELDS.all;
       params.push(`%${q}%`);
       const pattern = `$${params.length}`;
-      const clauses = fields.map((f) => `${f} ILIKE ${pattern}`);
-      // The lead number is numeric, so it is matched as text rather than with
-      // ILIKE against an integer column.
-      clauses.push(`CAST(sr_no AS TEXT) LIKE ${pattern}`);
-      clauses.push(`CAST(id AS TEXT) LIKE ${pattern}`);
+      // All search-field columns belong to walkin_enquiries (w). Qualifying them
+      // prevents the `status ILIKE` clause from being ambiguous with the
+      // walk_in_assignment_queue.status column added by the LEFT JOIN.
+      const clauses = fields.map((f) => `w.${f} ILIKE ${pattern}`);
+      // Lead number and id are numeric; match as text. Both exist in
+      // walk_in_assignment_queue too, so qualify with w.
+      clauses.push(`CAST(w.sr_no AS TEXT) LIKE ${pattern}`);
+      clauses.push(`CAST(w.id AS TEXT) LIKE ${pattern}`);
       where += ` AND (${clauses.join(" OR ")})`;
     }
 
@@ -137,7 +145,20 @@ export async function GET(req: Request) {
     const statusFilter = (searchParams.get("status") ?? "").trim();
     if (statusFilter) {
       params.push(statusFilter);
-      where += ` AND status = $${params.length}`;
+      where += ` AND w.status = $${params.length}`;
+    }
+
+    // ?myLeads=1 — filter to only the leads assigned to the current session's
+    // user. Used by the Sales Manager dashboard so it fetches its own ~50 leads
+    // rather than the full 511-lead set.  The session id is never taken from the
+    // request body or query string — only from the signed session cookie.
+    const myLeads = searchParams.get("myLeads") === "1";
+    if (myLeads) {
+      const sessionUserId = session._id ?? (session as any).id;
+      if (sessionUserId != null && String(sessionUserId).trim() !== "") {
+        params.push(Number(sessionUserId));
+        where += ` AND w.assigned_to_user_id = $${params.length}`;
+      }
     }
 
     /* Sorting. The column comes from SORTABLE_COLUMNS, never from raw input, and
@@ -146,21 +167,32 @@ export async function GET(req: Request) {
     const requestedSort = searchParams.get("sortKey");
     const sortColumn = requestedSort ? SORTABLE_COLUMNS[requestedSort] : undefined;
     const sortDir = searchParams.get("sortDir") === "asc" ? "ASC" : "DESC";
+    // Qualify sort column and tiebreaker with w. — walk_in_assignment_queue also
+    // has `id` and `status`, both of which appear in SORTABLE_COLUMNS.
     const orderBy = sortColumn
-      ? `${sortColumn} ${sortDir} NULLS LAST, id ${sortDir}`
-      : "sr_no DESC NULLS LAST";
+      ? `w.${sortColumn} ${sortDir} NULLS LAST, w.id ${sortDir}`
+      : "w.sr_no DESC NULLS LAST";
 
     const limitParam = `$${params.length + 1}`;
     const offsetParam = `$${params.length + 2}`;
 
+    // ?noCount=1 — skip the COUNT query when the caller fetches all rows in one
+    // shot (e.g. the SM dashboard with limit=10000) and doesn't need a total for
+    // pagination. Saves one Neon round-trip (~82 ms) per request.
+    const skipCount = searchParams.get("noCount") === "1";
+
     const [rows, countRows] = await Promise.all([
       query(
+        // LEFT JOIN instead of a correlated scalar subquery: the planner can
+        // use the partial index idx_walk_in_queue_lead_pending (status='pending')
+        // via a nested-loop index scan rather than a per-row heap fetch.
+        // The UNIQUE(lead_id) constraint guarantees at most one pending row per
+        // lead, so no DISTINCT or LIMIT 1 is needed on the join side.
         `SELECT w.*,
-                (SELECT target_sm_name
-                 FROM walk_in_assignment_queue
-                 WHERE lead_id = w.id AND status = 'pending'
-                 LIMIT 1) AS pending_sm_name
+                q.target_sm_name AS pending_sm_name
          FROM walkin_enquiries w
+         LEFT JOIN walk_in_assignment_queue q
+           ON q.lead_id = w.id AND q.status = 'pending'
          WHERE ${where}
          ORDER BY ${orderBy}
          LIMIT ${limitParam} OFFSET ${offsetParam}`,
@@ -168,9 +200,12 @@ export async function GET(req: Request) {
       ),
       // Counted with the SAME predicate, so `total` describes the filtered set
       // and the pager cannot promise pages that do not exist.
-      query(`SELECT COUNT(*)::int AS total FROM walkin_enquiries WHERE ${where}`, params),
+      // Uses alias `w` to keep the WHERE clause consistent with the main query.
+      // Skipped when the caller passes ?noCount=1 (e.g. bulk fetch dashboards).
+      skipCount
+        ? Promise.resolve([{ total: null }])
+        : query(`SELECT COUNT(*)::int AS total FROM walkin_enquiries w WHERE ${where}`, params),
     ]);
-
 
     const total: number = countRows[0]?.total ?? 0;
 
@@ -186,17 +221,18 @@ export async function GET(req: Request) {
       name: session.name,
       role: session.role,
     };
-    const maskedRows = await resolvePhones(
-      actor,
-      rows,
-      "LEAD_PHONE",
-      listOrgId,
-      ["phone", "alt_phone"]
-    );
 
-    // Attach visitNumber to every row — single batch CTE, no N+1.
+    // These two are independent: resolvePhones makes one policy DB query;
+    // batchGetVisitDepths makes one recursive-CTE DB query. Running them
+    // sequentially added a full extra Neon round trip (~82 ms on a warm pool,
+    // several seconds on a cold-start compute) to every list response.
+    // Promise.all halves that to a single parallel round trip.
     const leadIds = rows.map((r: any) => r.id as number);
-    const visitDepths = await batchGetVisitDepths(leadIds, listOrgId);
+    const [maskedRows, visitDepths] = await Promise.all([
+      resolvePhones(actor, rows, "LEAD_PHONE", listOrgId, ["phone", "alt_phone"]),
+      batchGetVisitDepths(leadIds, listOrgId),
+    ]);
+
     const rowsWithVisits = maskedRows.map((r: any) => {
       return {
         ...r,

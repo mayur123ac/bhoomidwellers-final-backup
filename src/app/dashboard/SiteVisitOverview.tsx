@@ -462,14 +462,17 @@ function ConfirmDialog({ open, message, onConfirm, onCancel, isDark }: any) {
 
 // ─── Main Component ─────────────────────────────────────────────────────────
 export default function SiteVisitOverview({
-  allLeads, receptionists, managers, siteHeads, adminUser, theme, isDark, className
+  allLeads, receptionists, managers, siteHeads, adminUser, theme, isDark, className,
+  initialCalView,
 }: {
   allLeads: any[]; receptionists: any[]; managers: any[]; siteHeads: any[];
   adminUser: any; theme: any; isDark: boolean; className: string;
+  /** Override the default calendar view on mount (e.g. "day" from Today's Priorities). */
+  initialCalView?: "month" | "week" | "day";
 }) {
   const [visits, setVisits] = useState<SiteVisit[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [calView, setCalView] = useState<"month" | "week" | "day">("month");
+  const [calView, setCalView] = useState<"month" | "week" | "day">(initialCalView ?? "month");
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedVisit, setSelectedVisit] = useState<SiteVisit | null>(null);
   const [showDrawer, setShowDrawer] = useState(false);

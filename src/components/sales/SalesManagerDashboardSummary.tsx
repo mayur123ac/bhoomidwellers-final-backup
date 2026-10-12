@@ -28,7 +28,12 @@ interface SalesManagerDashboardSummary {
   };
 }
 
-export default function SalesManagerDashboardSummary() {
+export default function SalesManagerDashboardSummary({
+  onNavigate,
+}: {
+  /** Switch the parent dashboard to a named view (e.g. "site_visits", "closed-leads"). */
+  onNavigate?: (viewId: string) => void;
+}) {
   const { isDark } = useCrmTheme();
   const t = buildTheme(isDark);
 
@@ -129,7 +134,11 @@ export default function SalesManagerDashboardSummary() {
         <div className={`rounded-2xl border flex flex-col flex-grow justify-center ${innerBgClass}`}>
 
           {/* Calls Due */}
-          <div className="flex items-center justify-between p-4 border-b border-inherit">
+          <button
+            type="button"
+            onClick={() => onNavigate?.("calls_due")}
+            className="flex items-center justify-between p-4 border-b border-inherit w-full text-left cursor-pointer transition-colors hover:bg-slate-50 dark:hover:bg-white/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B01A79]/40 rounded-t-2xl"
+          >
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-full flex items-center justify-center bg-pink-100 text-[#B01A79] dark:bg-[#B01A79]/20 dark:text-pink-400">
                 <FaPhoneAlt size={14} />
@@ -145,10 +154,14 @@ export default function SalesManagerDashboardSummary() {
               </span>
               <FaChevronRight size={14} className="text-slate-400" />
             </div>
-          </div>
+          </button>
 
           {/* Visits Today */}
-          <div className="flex items-center justify-between p-4 border-b border-inherit">
+          <button
+            type="button"
+            onClick={() => onNavigate?.("site_visits")}
+            className="flex items-center justify-between p-4 border-b border-inherit w-full text-left cursor-pointer transition-colors hover:bg-slate-50 dark:hover:bg-white/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E77E4]/40 rounded-none"
+          >
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-full flex items-center justify-center bg-blue-100 text-[#1E77E4] dark:bg-blue-500/20 dark:text-blue-400">
                 <FaMapMarkerAlt size={15} />
@@ -161,10 +174,14 @@ export default function SalesManagerDashboardSummary() {
               </span>
               <FaChevronRight size={14} className="text-slate-400" />
             </div>
-          </div>
+          </button>
 
           {/* In Closing */}
-          <div className="flex items-center justify-between p-4">
+          <button
+            type="button"
+            onClick={() => onNavigate?.("closed-leads")}
+            className="flex items-center justify-between p-4 w-full text-left cursor-pointer transition-colors hover:bg-slate-50 dark:hover:bg-white/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F49A25]/40 rounded-b-2xl"
+          >
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-full flex items-center justify-center bg-orange-100 text-[#F49A25] dark:bg-orange-500/20 dark:text-orange-400">
                 <FaHandshake size={16} />
@@ -177,7 +194,7 @@ export default function SalesManagerDashboardSummary() {
               </span>
               <FaChevronRight size={14} className="text-slate-400" />
             </div>
-          </div>
+          </button>
 
         </div>
       </div>

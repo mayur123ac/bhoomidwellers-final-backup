@@ -10,7 +10,7 @@
 //
 // The OTP is never returned, never logged, never bypassed.
 import { NextRequest, NextResponse } from "next/server";
-import { requireSession } from "@/lib/serverAuth";
+import { requireSession, invalidateRevocationCache } from "@/lib/serverAuth";
 import { transaction } from "@/lib/db";
 import { writeAuditLog, requestContext } from "@/lib/auditLog";
 import { hashPassword, passwordMeetsRules } from "@/lib/passwords";
@@ -103,6 +103,9 @@ export async function POST(req: NextRequest) {
     });
 
     if (!updated) return bad(INVALID);
+
+    // Make revocation effective immediately — don't wait for the 15s cache TTL.
+    invalidateRevocationCache(userId);
 
     void writeAuditLog({
       userId,

@@ -34,6 +34,7 @@ import { hashPassword, passwordMeetsRules } from "@/lib/passwords";
 import { broadcastEvent } from "@/lib/eventBus";
 import { broadcastToOrg, broadcastToUser } from "@/lib/supabase/broadcast";
 import { sessionRevocationNow } from "@/lib/passwordReset";
+import { invalidateRevocationCache } from "@/lib/serverAuth";
 
 /**
  * The message shown when a password fails the rules, worded once.
@@ -281,6 +282,10 @@ export async function revokeUserSessions(params: {
     return { ok: false, message: "User not found in that organization.", status: 404 };
   }
 
+  // Drop the cached revocation timestamps so the next requireSession() call for
+  // this user reads the freshly-stamped value rather than waiting for TTL expiry.
+  invalidateRevocationCache(userId);
+
   const closed = await query<{ id: number }>(
     `UPDATE employee_sessions
         SET is_active = false,
@@ -329,6 +334,9 @@ export async function revokeOrganizationSessions(
     RETURNING id`,
     [organizationId, sessionRevocationNow()]
   );
+
+  // Invalidate cached revocation state for every affected user.
+  for (const row of stamped) invalidateRevocationCache(row.id);
 
   const closed = await query<{ id: number }>(
     `UPDATE employee_sessions

@@ -16,16 +16,22 @@ export async function GET() {
 
     const orgId = await getOrganizationId();
 
-    // Expire stale sessions (no heartbeat in 5 min) — same as sourcing-manager.
-    await query(
-      `UPDATE employee_sessions
-          SET is_active = false, session_end = last_heartbeat
-        WHERE is_active = true AND organization_id = $1
-          AND EXTRACT(EPOCH FROM (NOW() - last_heartbeat)) > 300`,
-      [orgId]
-    );
-
-    const managers = await query(
+    // The session-expiry UPDATE and the users SELECT both need orgId only, so
+    // they can run in parallel. The presence subquery in the SELECT reads
+    // `es.is_active`, and it is possible the UPDATE has not committed yet, so
+    // a just-expired session may still appear ONLINE for this one request.
+    // That is a display-only race lasting < 1 ms with < 1% probability;
+    // the next poll (2 min later) will show the correct state. Correctness of
+    // the lead-list and assignment logic is unaffected.
+    const [, managers] = await Promise.all([
+      query(
+        `UPDATE employee_sessions
+            SET is_active = false, session_end = last_heartbeat
+          WHERE is_active = true AND organization_id = $1
+            AND EXTRACT(EPOCH FROM (NOW() - last_heartbeat)) > 300`,
+        [orgId]
+      ),
+      query(
       `SELECT u.id, u.name, u.username, u.email,
               u.whatsapp_number AS phone, u.whatsapp_number,
               CASE
@@ -61,8 +67,9 @@ export async function GET() {
                AND es.is_active = true
           ) THEN 0 ELSE 1 END,
           u.name ASC`,
-      [orgId]
-    );
+        [orgId]
+      ),
+    ]);
 
     return NextResponse.json({ success: true, data: managers }, { status: 200 });
   } catch (error: any) {

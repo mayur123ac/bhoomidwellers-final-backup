@@ -2,6 +2,92 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { verifySession } from "./sessionCookie";
 
+// ── Revocation-check cache ────────────────────────────────────────────────────
+//
+// Every gated API route calls requireSession(), which issues a PK lookup to
+// check whether the session was revoked after a password-reset or force-logout.
+// That lookup is correct but expensive: when 5+ dashboard API calls land
+// simultaneously at startup, all 5 compete for pool connections for this auth
+// query before their business queries can even begin, which is the primary cause
+// of the 800–1,600 ms connection-acquisition times seen in the slow-query log.
+//
+// The revocation timestamps (password_changed_at / sessions_revoked_at) change
+// only on two rare events: the user changes their password, or a Super Admin
+// force-logs them out. A short TTL memo of those two values is safe:
+//
+//   • Password change: the old cookie's `iat` predates the new timestamp and
+//     is refused within at most TTL ms — typically the user just re-logged in
+//     and the old session is idle or already gone.
+//
+//   • Force logout: SSE immediately pushes FORCE_LOGOUT to the target browser,
+//     which leaves the app at once. Any lingering in-flight requests from that
+//     browser complete within TTL ms, which the code comment in requireSession()
+//     already acknowledges ("middleware still lets a page shell render for a
+//     revoked session" — the DB check is belt-and-braces, not the primary gate).
+//
+//   • DB error: existing behaviour is fail-open; cache preserves that.
+//
+// Inflight dedup: when many concurrent requests arrive for the same userId and
+// the cache is cold (e.g. first page load), they all share the same pending
+// Promise rather than each racing to open a pool connection.
+//
+// Call invalidateRevocationCache(userId) from password-change and force-logout
+// routes to make revocation effective immediately rather than after TTL.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const REVOCATION_CACHE_TTL_MS = 15_000; // 15 seconds
+
+interface RevocationEntry {
+  passwordChangedAt: Date | null;
+  sessionsRevokedAt: Date | null;
+  fetchedAt: number;
+}
+
+const revocationCache = new Map<number, RevocationEntry>();
+const revocationInflight = new Map<number, Promise<RevocationEntry | null>>();
+
+/** Drop one user's cached revocation state immediately (call on password-change / force-logout). */
+export function invalidateRevocationCache(userId: number): void {
+  revocationCache.delete(userId);
+  // Leave any inflight promise; it will overwrite the cache with the fresh value.
+}
+
+async function fetchRevocationTimestamps(userId: number): Promise<RevocationEntry | null> {
+  const now = Date.now();
+  const cached = revocationCache.get(userId);
+  if (cached && now - cached.fetchedAt < REVOCATION_CACHE_TTL_MS) return cached;
+
+  // Inflight dedup: concurrent callers for the same userId await the same fetch.
+  const existing = revocationInflight.get(userId);
+  if (existing) return existing;
+
+  const promise = (async (): Promise<RevocationEntry | null> => {
+    try {
+      const { query } = await import("./db");
+      const rows = await query<{
+        password_changed_at: Date | null;
+        sessions_revoked_at: Date | null;
+      }>(
+        "SELECT password_changed_at, sessions_revoked_at FROM users WHERE id = $1 LIMIT 1",
+        [userId]
+      );
+      if (rows.length === 0) return null;
+      const entry: RevocationEntry = {
+        passwordChangedAt: rows[0].password_changed_at,
+        sessionsRevokedAt: rows[0].sessions_revoked_at,
+        fetchedAt: Date.now(),
+      };
+      revocationCache.set(userId, entry);
+      return entry;
+    } finally {
+      revocationInflight.delete(userId);
+    }
+  })();
+
+  revocationInflight.set(userId, promise);
+  return promise;
+}
+
 /**
  * The signed-in user, or null.
  *
@@ -139,20 +225,13 @@ export async function requireSession(): Promise<SessionGate> {
   // dashboard already listens for, so in practice the browser leaves at once.
   if (userId != null) {
     try {
-      const { query } = await import("./db");
-      const rows = await query<{
-        password_changed_at: Date | null;
-        sessions_revoked_at: Date | null;
-      }>(
-        "SELECT password_changed_at, sessions_revoked_at FROM users WHERE id = $1 LIMIT 1",
-        [userId]
-      );
+      const entry = await fetchRevocationTimestamps(userId);
       const { sessionIsRevoked } = await import("./passwordReset");
       if (
-        rows.length > 0 &&
+        entry !== null &&
         sessionIsRevoked(session, {
-          passwordChangedAt: rows[0].password_changed_at,
-          sessionsRevokedAt: rows[0].sessions_revoked_at,
+          passwordChangedAt: entry.passwordChangedAt,
+          sessionsRevokedAt: entry.sessionsRevokedAt,
         })
       ) {
         return deny("Your session was ended. Please sign in again.", "SESSION_REVOKED", 401);

@@ -126,20 +126,51 @@ export async function query<T = any>(
   text: string,
   params?: any[]
 ): Promise<T[]> {
+  const t0 = Date.now();
+  let connectMs = -1;
+  let retried = false;
   let client: PoolClient;
+
   try {
+    const c0 = Date.now();
     client = await getPool().connect();
+    connectMs = Date.now() - c0;
   } catch (err) {
     if (!isTransientConnectError(err)) throw err;
-    console.warn("[DB] connect failed transiently, retrying once:", (err as Error).message);
+    retried = true;
+    const errMsg = (err as Error).message;
+    console.warn(`[DB] connect failed transiently (${Date.now() - t0}ms), retrying once: ${errMsg}`);
     // A short pause: the compute is usually mid-wake, and an immediate retry
     // just races the same cold start again.
     await new Promise((resolve) => setTimeout(resolve, 750));
+    const c0 = Date.now();
     client = await getPool().connect();
+    connectMs = Date.now() - c0;
+    console.warn(`[DB] retry connect succeeded: connect=${connectMs}ms total-before-exec=${Date.now() - t0}ms`);
   }
 
   try {
+    const q0 = Date.now();
     const result = await client.query(text, params);
+    const execMs = Date.now() - q0;
+    const totalMs = Date.now() - t0;
+
+    // Log slow queries. Threshold is 500 ms so the first warm request after
+    // a Neon cold-start (typically 5–15 s of connect + 1 ms of exec) is
+    // always visible, while fast queries are silent.
+    if (totalMs > 500) {
+      // Truncate the query to avoid leaking data values from params. The first
+      // 80 chars of the SQL text are enough to identify the operation.
+      const label = text.replace(/\s+/g, " ").trim().slice(0, 80);
+      const p = getPool();
+      console.warn(
+        `[DB] slow — total=${totalMs}ms connect=${connectMs}ms exec=${execMs}ms` +
+        `${retried ? " (retried)" : ""}` +
+        ` pool(total=${p.totalCount} idle=${p.idleCount} waiting=${p.waitingCount})` +
+        ` — ${label}…`
+      );
+    }
+
     return result.rows as T[];
   } finally {
     client.release();

@@ -297,7 +297,14 @@ export async function GET(req: Request) {
     const gate = await requireSession();
     if (!gate.ok) return gate.response;
 
-    const leadId = new URL(req.url).searchParams.get("lead_id");
+    const sp = new URL(req.url).searchParams;
+    const leadId = sp.get("lead_id");
+    // ?assignedToMe=1 — return only follow-ups for leads assigned to the
+    // current session's user. Used by the Sales Manager dashboard so it
+    // fetches ~40 follow-ups for its ~8 leads rather than all 195 in the org.
+    // The filter uses EXISTS so no JOIN alias is needed and SELECT_COLUMNS
+    // (which ends with `FROM follow_ups`) remains unmodified.
+    const assignedToMe = sp.get("assignedToMe") === "1";
 
     // Both branches are organization-scoped. The second branch is "every
     // follow-up note for every lead" — unscoped it returns the entire table
@@ -308,7 +315,24 @@ export async function GET(req: Request) {
           `${SELECT_COLUMNS} WHERE lead_id = $1 AND organization_id = $2 ORDER BY created_at ASC`,
           [leadId, orgId]
         )
-      : await query(`${SELECT_COLUMNS} WHERE organization_id = $1 ORDER BY created_at ASC`, [orgId]);
+      : assignedToMe
+        ? await query(
+            // gate.userId is the numeric users.id from the session cookie.
+            // The EXISTS subquery uses idx_walkin_enquiries_org_assigned_user_sr_no
+            // (organization_id, assigned_to_user_id, sr_no) to fetch only the
+            // caller's leads, then intersects with follow_ups on lead_id.
+            `${SELECT_COLUMNS}
+             WHERE organization_id = $1
+               AND EXISTS (
+                 SELECT 1 FROM walkin_enquiries w
+                  WHERE w.id = lead_id
+                    AND w.organization_id = $1
+                    AND w.assigned_to_user_id = $2
+               )
+             ORDER BY created_at ASC`,
+            [orgId, gate.userId]
+          )
+        : await query(`${SELECT_COLUMNS} WHERE organization_id = $1 ORDER BY created_at ASC`, [orgId]);
 
     // Compressed: this is the single largest response the app produces.
     return jsonCompressed(req, { success: true, data }, { status: 200 });

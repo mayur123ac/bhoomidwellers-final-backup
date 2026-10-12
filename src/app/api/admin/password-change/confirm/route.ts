@@ -17,7 +17,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { transaction, query } from "@/lib/db";
 import { getOrganizationId } from "@/lib/tenantContext";
-import { requireRoles } from "@/lib/serverAuth";
+import { requireRoles, invalidateRevocationCache } from "@/lib/serverAuth";
 import { writeAuditLog, requestContext } from "@/lib/auditLog";
 import { hashPassword, passwordMeetsRules } from "@/lib/passwords";
 import {
@@ -147,6 +147,9 @@ export async function POST(req: NextRequest) {
     });
 
     if (!updated) return bad(INVALID);
+
+    // Make revocation effective immediately — don't wait for the 15s cache TTL.
+    invalidateRevocationCache(targetUserId);
 
     void writeAuditLog({
       userId: adminId,

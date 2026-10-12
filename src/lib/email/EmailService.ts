@@ -31,7 +31,7 @@
 
 import { writeAuditLog } from "@/lib/auditLog";
 import { sendToUser, type EmailType, type RoutedSendResult } from "@/lib/emailRouting";
-import { activeProvider, isMailConfigured, readSenderConfig } from "./config";
+import { activeProvider, isCustomerEnquiryEmailEnabled, isMailConfigured, readSenderConfig } from "./config";
 import { dispatch, verifyProvider } from "./provider";
 import type { EmailError, SendOutcome } from "./types";
 import {
@@ -417,12 +417,19 @@ export const EmailService = {
    * registered. Goes directly to the customer's address — there is no CRM user
    * account to route through. Fire-and-forget at the call site; SMTP failure
    * must never fail the enquiry.
+   *
+   * Gated by CUSTOMER_ENQUIRY_EMAILS_ENABLED. When false, returns immediately
+   * without opening a transport connection. All other email types are unaffected.
+   * To re-enable: set CUSTOMER_ENQUIRY_EMAILS_ENABLED=true (or remove the var).
    */
   async sendEnquiryConfirmation(
     to: string,
     input: EnquiryConfirmationInput,
     context: AuditContext = {}
   ): Promise<DirectSendResult> {
+    if (!isCustomerEnquiryEmailEnabled()) {
+      return { delivered: false, provider: "disabled" };
+    }
     return sendDirect(
       to,
       enquiryConfirmationTemplate(input),

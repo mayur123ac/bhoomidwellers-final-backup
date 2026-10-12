@@ -206,6 +206,14 @@ const FEED_SQL = `
        LIMIT 1
     ) prev ON TRUE
    WHERE w.organization_id = $1
+     -- $2: integer user ID for non-whole-site roles (SM, receptionist, etc.).
+     -- When NULL (admin / site head / super admin) the filter is a no-op and all
+     -- org leads are returned. When set, only leads assigned to or received by
+     -- that user are fetched — turning a 511-row scan + 5×511 LATERAL subqueries
+     -- into an 8-row scan + 5×8 LATERAL subqueries for a typical Sales Manager.
+     AND ($2::integer IS NULL
+          OR w.assigned_to_user_id = $2
+          OR w.assigned_receptionist_user_id = $2)
    ORDER BY w.id DESC`;
 
 /** Midnight today, in the process's local zone — the same anchor the UI used. */
@@ -323,10 +331,17 @@ export async function buildNotificationFeed(
     siteVisitAlertsEnabled = true,
   } = opts;
 
-  const rows = await query<FeedRow>(FEED_SQL, [organizationId]);
-
   const today = startOfToday(now);
   const wholeSite = seesWholeSite(viewerRole);
+
+  // Whole-site roles (admin, site head, super admin) need every lead so they
+  // can show new leads / follow-up reminders for the entire org. For all other
+  // roles pass the viewer's numeric user ID so the DB returns only their leads,
+  // cutting rows and LATERAL subquery work from 511 down to ~8 for a typical SM.
+  // When userId is null (e.g. session lacks an id claim) fall back to NULL so
+  // the query behaves the same as it did before this optimisation.
+  const userFilter = wholeSite || userId == null ? null : userId;
+  const rows = await query<FeedRow>(FEED_SQL, [organizationId, userFilter]);
 
   const newLeads: CrmNotification[] = [];
   const siteVisits: CrmNotification[] = [];

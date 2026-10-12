@@ -185,6 +185,25 @@ export function isMailConfigured(): boolean {
   return activeProvider() !== "console";
 }
 
+/**
+ * Whether customer-facing enquiry confirmation emails should be sent.
+ *
+ * Controlled by CUSTOMER_ENQUIRY_EMAILS_ENABLED in the environment.
+ * Absent or any value other than "false", "0", or "no" means enabled.
+ *
+ * To disable: set CUSTOMER_ENQUIRY_EMAILS_ENABLED=false (local: .env.local,
+ * production: Vercel environment variables or your host's dashboard).
+ * To re-enable: set it to "true", or remove the variable entirely.
+ *
+ * This flag gates ONLY the walk-in enquiry confirmation sent to the customer.
+ * OTP, password-reset, login-alert, and all other internal emails are unaffected.
+ */
+export function isCustomerEnquiryEmailEnabled(): boolean {
+  const raw = str("CUSTOMER_ENQUIRY_EMAILS_ENABLED").toLowerCase();
+  if (raw === "false" || raw === "0" || raw === "no") return false;
+  return true;
+}
+
 /* ══════════════════════════════════════════════════════════════════════════
    Validation
    ══════════════════════════════════════════════════════════════════════════ */

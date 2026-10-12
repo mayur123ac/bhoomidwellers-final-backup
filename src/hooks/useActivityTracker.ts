@@ -286,9 +286,15 @@ export function useActivityTracker() {
     window.addEventListener("click", handleMeaningfulActivity);
     window.addEventListener("touchstart", handleMeaningfulActivity);
 
-    // Initial and periodic (every 30s) telemetry push
+    // Initial and periodic (every 30s) telemetry push.
+    // Hidden tabs are skipped: a backgrounded tab cannot generate meaningful
+    // activity, and the heartbeat consumes 2 pool connections per cycle. Every
+    // open-but-hidden SM tab was burning those connections every 30 seconds,
+    // competing with the people actually working. The DOM scan (line 219)
+    // already applies the same guard.
     sendTelemetry();
     const interval = setInterval(() => {
+      if (document.hidden) return;
       const isIdle = Date.now() - lastActivityRef.current > 5 * 60 * 1000;
       lastKnownIdleState = isIdle;
       sendTelemetry(isIdle ? "Idle" : currentAction, isIdle);

@@ -94,6 +94,7 @@ import {
   ColumnSelector,
 } from "@/components/Tableui";
 import SalesManagerDashboardSummary from "@/components/sales/SalesManagerDashboardSummary";
+import CallsDueView from "@/components/sales/CallsDueView";
 
 const SiteVisitOverview = dynamic(() => import("../../dashboard/SiteVisitOverview"), { ssr: false });
 
@@ -122,6 +123,7 @@ const SALES_CONTEXT: Record<string, string> = {
   // No rail item of its own: you arrive here from a popover's "See all N …"
   // footer, not from the sidebar.
   notifications: "Notification Center",
+  calls_due: "Calls Due",
 };
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -328,8 +330,14 @@ function useAdminData(onReminderDue?: (r: import("@/lib/followUpSync").ReminderS
          round trips (~250 ms) instead of the slowest one. */
       const [resUsers, resLeads, resFups] = await Promise.all([
         fetch("/api/users/sales-manager"),
-        fetch("/api/walkin_enquiries?limit=10000&offset=0"),
-        fetch("/api/followups"),
+        // myLeads=1  — server-side filter: only this SM's leads (~50 rows vs ~511).
+        // noCount=1  — skips the COUNT(*) query; the SM dashboard never paginates
+        //              so the total field is unused. Saves one Neon round-trip per poll.
+        fetch("/api/walkin_enquiries?limit=10000&offset=0&myLeads=1&noCount=1"),
+        // assignedToMe=1 — fetches only follow-ups for leads assigned to this
+        // SM, reducing the payload from ~195 org-wide rows to ~40 rows.
+        // The admin dashboard still uses the unfiltered form for analytics.
+        fetch("/api/followups?assignedToMe=1"),
       ]);
 
       let smData: any[] = [];
@@ -545,6 +553,9 @@ export default function SalesDashboard() {
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [user, setUser] = useState<any>({ name: "Loading...", role: "Sales Manager", email: "", password: "" });
   const [activeView, setActiveView] = useState("overview");
+  // When navigating to site_visits from Today's Priorities, open in "day" view.
+  // Consumed once by SiteVisitOverview; sidebar clicks leave it undefined.
+  const siteVisitCalViewRef = useRef<"month" | "week" | "day" | undefined>(undefined);
   const [showPassword, setShowPassword] = useState(false);
   // Dismissals now live in the notification feed hook, keyed by notification id
   // rather than lead id — a lead can raise both a follow-up and a site-visit
@@ -785,6 +796,7 @@ export default function SalesDashboard() {
         activeId={activeView === "detail" ? "forms" : activeView}
         onSelect={(item) => {
           if (item.id === "settings") { router.push("/dashboard/settings/profile"); return; }
+          siteVisitCalViewRef.current = undefined;
           setActiveView(item.id);
         }}
         expanded={sidebarExpanded}
@@ -1040,6 +1052,11 @@ export default function SalesDashboard() {
               featurePrefs={featurePrefs}
               pendingLeadOpen={pendingLeadOpen}                              // ← NEW
               onPendingLeadOpenHandled={() => setPendingLeadOpen(null)}
+              navigateFromSummary={(viewId: string) => {
+                if (viewId === "site_visits") siteVisitCalViewRef.current = "day";
+                else siteVisitCalViewRef.current = undefined;
+                setActiveView(viewId);
+              }}
             />
           ) : activeView === "assistant" ? (
             <AssistantView
@@ -1060,6 +1077,8 @@ export default function SalesDashboard() {
               adminUser={user}
               theme={t}
               isDark={isDark}
+              initialCalView={siteVisitCalViewRef.current}
+              key={siteVisitCalViewRef.current ?? "default"}
             />
           ) : activeView === "inventory" ? (
             <InventoryManagementView
@@ -1110,6 +1129,16 @@ export default function SalesDashboard() {
               onOpenLead={openLeadFromNotification}
               onDismiss={(n) => notifications.dismiss(n.id)}
             />
+          ) : activeView === "calls_due" ? (
+            <CallsDueView
+              isDark={isDark}
+              t={t}
+              onBack={() => setActiveView("overview")}
+              onOpenLead={(lead: any) => {
+                setPendingLeadOpen({ id: lead.id });
+                setActiveView("detail");
+              }}
+            />
           ) : (
             <div className={`text-center mt-20 ${t.textMuted}`}>...</div>
           )}
@@ -1123,6 +1152,7 @@ export default function SalesDashboard() {
         activeId={activeView === "detail" ? "forms" : activeView}
         onSelect={(item) => {
           if (item.id === "settings") { router.push("/dashboard/settings/profile"); return; }
+          siteVisitCalViewRef.current = undefined;
           setActiveView(item.id);
         }}
         isDark={isDark}
@@ -1279,6 +1309,7 @@ function SalesManagerView({
   managers, allLeads, followUps, isLoading, adminUser, refetch, appendFollowUp, reconcileFollowUp, removeFollowUp,
   initialView, setMainView, isDark, t, featurePrefs,
   pendingLeadOpen, onPendingLeadOpenHandled,        // ← NEW
+  navigateFromSummary,
 }: any) {
   const canDeleteFollowUps = useFollowUpDeletionPermission(adminUser?.role);
   const [deletingFollowUpId, setDeletingFollowUpId] = useState<string | null>(null);
@@ -2168,7 +2199,7 @@ function SalesManagerView({
               </button>
             </div>
 
-            <SalesManagerDashboardSummary />
+            <SalesManagerDashboardSummary onNavigate={navigateFromSummary ?? setMainView} />
 
             {/* ── 5-CARD STATS GRID ── */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
