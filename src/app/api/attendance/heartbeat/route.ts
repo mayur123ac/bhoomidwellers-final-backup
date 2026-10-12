@@ -28,34 +28,6 @@ export async function POST(req: Request) {
       is_idle = false
     } = body;
 
-    // Force Logout Check: verify if the most recent session has been marked inactive by an admin
-    // The tenant predicate sits in the WHERE clause, ahead of ORDER BY and LIMIT:
-    // filtering after LIMIT 1 would let another tenant's newer row win the pick and
-    // then vanish, reporting "no session" instead of this tenant's real one.
-    const sessionCheck = await query(`
-      SELECT is_active 
-      FROM employee_sessions 
-      WHERE user_id = $1 AND organization_id = $2 AND DATE(session_start) = CURRENT_DATE
-      ORDER BY session_start DESC LIMIT 1
-    `, [userId, orgId]);
-
-    if (sessionCheck.length > 0 && !sessionCheck[0].is_active) {
-      return NextResponse.json({ forceLogout: true }, { status: 401 });
-    }
-
-    // Update the most recent active session for this user (legacy heartbeat)
-    await query(
-      `UPDATE employee_sessions 
-       SET last_heartbeat = $1 
-       WHERE user_id = $2 AND organization_id = $3 AND is_active = true
-       AND id = (
-           SELECT id FROM employee_sessions 
-           WHERE user_id = $2 AND organization_id = $3 AND is_active = true 
-           ORDER BY session_start DESC LIMIT 1
-       )`,
-      [now, userId, orgId]
-    );
-
     // Score weight dictionary
     const actionScores: Record<string, number> = {
       "Opened Lead": 1,
@@ -64,38 +36,112 @@ export async function POST(req: Request) {
       "Sent WhatsApp": 4,
       "Added Site Visit": 10
     };
-    
+
     const scoreBoost = actionScores[current_action] || 0;
 
-    // Upsert live operational state
-    const liveStateResult = await query(`
-      INSERT INTO employee_live_state (
-        user_id, current_module, active_lead_id, active_lead_name, current_action, current_route,
-        last_activity, idle_duration_seconds, productivity_score, is_idle, updated_at,
-        organization_id
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $7,
-                (SELECT organization_id FROM users WHERE id = $1))
-      ON CONFLICT (user_id) DO UPDATE SET
-        current_module = EXCLUDED.current_module,
-        active_lead_id = EXCLUDED.active_lead_id,
-        active_lead_name = EXCLUDED.active_lead_name,
-        current_action = EXCLUDED.current_action,
-        current_route = EXCLUDED.current_route,
-        last_activity = EXCLUDED.last_activity,
-        idle_duration_seconds = CASE 
-          WHEN EXCLUDED.is_idle THEN employee_live_state.idle_duration_seconds + EXTRACT(EPOCH FROM (EXCLUDED.last_activity - employee_live_state.updated_at))
-          ELSE 0 
-        END,
-        productivity_score = GREATEST(0, employee_live_state.productivity_score + $11 - (CASE WHEN EXCLUDED.is_idle THEN 1 ELSE 0 END)),
-        is_idle = EXCLUDED.is_idle,
-        updated_at = EXCLUDED.last_activity
-      RETURNING idle_duration_seconds
+    // ── Single-statement heartbeat ────────────────────────────────────────────
+    //
+    // Previously three separate query() calls, each acquiring its own pool
+    // connection: session check → heartbeat UPDATE → live-state UPSERT.
+    // At 30-second intervals per tab, N users × M tabs meant 3×N×M pool
+    // check-outs every 30 s — the primary cause of the pool(total=10 idle=0
+    // waiting=5) exhaustion observed in production.
+    //
+    // Now a single CTE does all three in one statement, one connection, one
+    // Neon round trip. The three operations are independent writes on different
+    // tables, so combining them changes no observable behaviour.
+    //
+    // session_check: reads is_active from today's latest employee_sessions row.
+    // heartbeat_update: stamps last_heartbeat on the active session row.
+    // live_state: upserts the employee_live_state snapshot.
+    //
+    // The RETURNING clause on live_state gives us idle_duration_seconds for the
+    // alert check, and session_check gives us force_logout.
+    const rows = await query<{
+      force_logout: boolean;
+      idle_duration_seconds: number;
+    }>(`
+      WITH session_check AS (
+        SELECT is_active
+          FROM employee_sessions
+         WHERE user_id = $1
+           AND organization_id = $2
+           AND DATE(session_start) = CURRENT_DATE
+         ORDER BY session_start DESC
+         LIMIT 1
+      ),
+      heartbeat_update AS (
+        UPDATE employee_sessions
+           SET last_heartbeat = $3
+         WHERE user_id = $1
+           AND organization_id = $2
+           AND is_active = true
+           AND id = (
+             SELECT id FROM employee_sessions
+              WHERE user_id = $1
+                AND organization_id = $2
+                AND is_active = true
+              ORDER BY session_start DESC
+              LIMIT 1
+           )
+        RETURNING id
+      ),
+      live_state AS (
+        INSERT INTO employee_live_state (
+          user_id, current_module, active_lead_id, active_lead_name,
+          current_action, current_route, last_activity,
+          idle_duration_seconds, productivity_score, is_idle, updated_at,
+          organization_id
+        ) VALUES (
+          $1, $4, $5, $6, $7, $8, $3,
+          $9, $10, $11, $3,
+          (SELECT organization_id FROM users WHERE id = $1)
+        )
+        ON CONFLICT (user_id) DO UPDATE SET
+          current_module = EXCLUDED.current_module,
+          active_lead_id = EXCLUDED.active_lead_id,
+          active_lead_name = EXCLUDED.active_lead_name,
+          current_action = EXCLUDED.current_action,
+          current_route = EXCLUDED.current_route,
+          last_activity = EXCLUDED.last_activity,
+          idle_duration_seconds = CASE
+            WHEN EXCLUDED.is_idle
+            THEN employee_live_state.idle_duration_seconds
+                 + EXTRACT(EPOCH FROM (EXCLUDED.last_activity - employee_live_state.updated_at))
+            ELSE 0
+          END,
+          productivity_score = GREATEST(0,
+            employee_live_state.productivity_score + $12
+            - (CASE WHEN EXCLUDED.is_idle THEN 1 ELSE 0 END)),
+          is_idle = EXCLUDED.is_idle,
+          updated_at = EXCLUDED.last_activity
+        RETURNING idle_duration_seconds
+      )
+      SELECT
+        COALESCE((SELECT NOT is_active FROM session_check), false) AS force_logout,
+        COALESCE((SELECT idle_duration_seconds FROM live_state), 0) AS idle_duration_seconds
     `, [
-      userId, current_module, active_lead_id, active_lead_name, current_action, current_route,
-      now, 0, scoreBoost, is_idle, scoreBoost
+      userId,           // $1
+      orgId,            // $2
+      now,              // $3
+      current_module,   // $4
+      active_lead_id,   // $5
+      active_lead_name, // $6
+      current_action,   // $7
+      current_route,    // $8
+      0,                // $9  idle_duration_seconds (initial)
+      scoreBoost,       // $10 productivity_score (initial)
+      is_idle,          // $11
+      scoreBoost,       // $12 productivity_score boost
     ]);
 
-    const currentIdleSeconds = liveStateResult[0]?.idle_duration_seconds || 0;
+    const row = rows[0];
+
+    if (row?.force_logout) {
+      return NextResponse.json({ forceLogout: true }, { status: 401 });
+    }
+
+    const currentIdleSeconds = row?.idle_duration_seconds || 0;
     if (currentIdleSeconds > 2700) { // 45 minutes
       const alertPayload = {
         type: "SMART_ALERT",

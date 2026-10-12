@@ -139,7 +139,11 @@ export async function query<T = any>(
     if (!isTransientConnectError(err)) throw err;
     retried = true;
     const errMsg = (err as Error).message;
-    console.warn(`[DB] connect failed transiently (${Date.now() - t0}ms), retrying once: ${errMsg}`);
+    const p = getPool();
+    console.warn(
+      `[DB] connect failed transiently (${Date.now() - t0}ms), retrying once: ${errMsg}` +
+      ` — pool(total=${p.totalCount} idle=${p.idleCount} waiting=${p.waitingCount})`
+    );
     // A short pause: the compute is usually mid-wake, and an immediate retry
     // just races the same cold start again.
     await new Promise((resolve) => setTimeout(resolve, 750));
@@ -204,13 +208,17 @@ export async function recalculateSrNos(client?: PoolClient) {
     const organizationId = await getOrganizationId(client);
     const SETTING_SQL =
       "SELECT lead_number_sorting_enabled FROM organization_settings WHERE organization_id = $1";
-    const settingRows = client
-      ? await client.query(SETTING_SQL, [organizationId])
-      : await getPool().connect().then(async (c) => {
-          const r = await c.query(SETTING_SQL, [organizationId]);
-          c.release();
-          return r;
-        });
+    let settingRows;
+    if (client) {
+      settingRows = await client.query(SETTING_SQL, [organizationId]);
+    } else {
+      const c = await getPool().connect();
+      try {
+        settingRows = await c.query(SETTING_SQL, [organizationId]);
+      } finally {
+        c.release();
+      }
+    }
     backdatedMode = settingRows.rows?.[0]?.lead_number_sorting_enabled === true;
   } catch {
     // If table doesn't have column yet, stay in default mode
@@ -260,8 +268,15 @@ export async function recalculateSrNos(client?: PoolClient) {
   }
 }
 
+// Keepalive: prevent Neon from suspending the compute during active use.
+// Guarded against hot-reload stacking: in `next dev`, module re-evaluation
+// would create a new interval without clearing the old one. Storing the id
+// in a global ensures at most one interval exists at any time.
+const KEEPALIVE_KEY = "__bd_db_keepalive";
 if (typeof window === "undefined") {
-  setInterval(async () => {
+  const g = globalThis as Record<string, any>;
+  if (g[KEEPALIVE_KEY]) clearInterval(g[KEEPALIVE_KEY]);
+  g[KEEPALIVE_KEY] = setInterval(async () => {
     try {
       await query("SELECT 1");
     } catch {}
