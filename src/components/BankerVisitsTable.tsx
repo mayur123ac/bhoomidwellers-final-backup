@@ -41,7 +41,7 @@ const BASE_COLUMNS = [
   "Designation",
   "Reporting Manager",
   "Sales Manager",
-  "Attended By",
+  "Primary Contact",
   "Date",
 ];
 

@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
 import { getOrganizationId } from "@/lib/tenantContext";
-import { getServerSession } from "@/lib/serverAuth";
+import { getServerSession, getSessionUserId } from "@/lib/serverAuth";
 import {
   canViewPartners,
   canCreatePartners,
@@ -206,6 +206,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const actor = (auth.session.name || "system").toString();
+    const registeredByUserId = getSessionUserId(auth.session);
     const canSetCommercials = canSeePartnerCommercials(auth.session.role);
 
     const name = (body.name || "").toString().trim();
@@ -439,7 +440,7 @@ export async function POST(req: NextRequest) {
             bank_account_details, default_commission_rate, status, created_by, updated_by,
             assigned_sourcing_manager_id, assigned_sourcing_manager_at, assigned_sourcing_manager_by,
             assigned_sales_manager_id, assigned_sales_manager_at, assigned_sales_manager_by,
-            organization_id)
+            organization_id, registered_by_user_id)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, COALESCE($14, 'active'), $15, $15,
                  $16,
                  CASE WHEN $16::int IS NULL THEN NULL ELSE now() END,
@@ -447,7 +448,7 @@ export async function POST(req: NextRequest) {
                  $18,
                  CASE WHEN $18::int IS NULL THEN NULL ELSE now() END,
                  CASE WHEN $18::int IS NULL THEN NULL ELSE $15::varchar END,
-                 $17)
+                 $17, $19)
          RETURNING *`,
         [
           name,
@@ -468,6 +469,7 @@ export async function POST(req: NextRequest) {
           assignedSourcingManagerId,
           await getOrganizationId(),
           assignedSalesManagerId,
+          registeredByUserId,
         ]
       );
       return { merged: false, matchedName: null, row: ins.rows[0] };

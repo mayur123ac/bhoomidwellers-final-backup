@@ -56,7 +56,7 @@ const NO_MANAGERS: SourcingManagerRow[] = [];
 
 /** Loading-bar widths per column, near the typical value so columns barely settle. */
 const COLUMN_BAR_WIDTHS: Record<string, number> = {
-  __select: 14, "CP Name": 104, Company: 112, "Owner / Contact": 96, Phone: 84,
+  __select: 14, "CP Name": 104, Company: 112, "Primary Contact": 96, Phone: 84,
   RERA: 96, GST: 108, "Office Address": 160, "Sourcing Manager": 96, Rate: 40,
   Leads: 24, Bookings: 24, Status: 56, "Registered By": 88, "Registered On": 78,
 };
@@ -270,7 +270,7 @@ function ChannelPartnerListView({ user, isDark, t, permissions, title }: Props) 
 
   const columns = [
     ...(canAssign ? ["__select"] : []),
-    "CP Name", "Company", "Owner / Contact", "Phone", "RERA", "GST", "Office Address",
+    "CP Name", "Company", "Primary Contact", "Phone", "RERA", "GST", "Office Address",
     // Who owns the partner relationship. Shown to every role: an Admin needs it to
     // reassign, and a Sourcing Manager browsing the full registry needs to see
     // which partners are already someone else's before offering to take one on.

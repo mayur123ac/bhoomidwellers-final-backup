@@ -88,7 +88,7 @@ const NO_ROWS: EnquiryRowData[] = [];
  */
 const COLUMN_BAR_WIDTHS: Record<string, number> = {
   "Lead No.": 28, "Sr. No.": 44, Created: 78, "CP Name": 104, "CP Company": 112,
-  "CP Phone": 84, "Office Address": 150, "Owner / Contact": 96, GST: 108, RERA: 96,
+  "CP Phone": 84, "Office Address": 150, "Primary Contact": 96, GST: 108, RERA: 96,
   "CP City": 62, "CP Pin": 48, "Client Name": 104, "Client Phone": 84, "Alt Phone": 84,
   "Client Email": 128, "Preferred Location": 108, Budget: 70, Requirement: 96,
   "Sourcing Manager": 96, "Sales M anager": 96, Status: 62,
@@ -537,14 +537,14 @@ function ChannelPartnerEnquiriesTable({
     ? [
       ...(showSerial ? ["Sr. No."] : []),
       "Created", "CP Name", "CP Company", "CP Phone",
-      "Office Address", "Owner / Contact", "GST", "RERA", "CP City", "CP Pin",
+      "Office Address", "Primary Contact", "GST", "RERA", "CP City", "CP Pin",
       "Sourcing Manager", "Sales Manager", "Status",
       ...(showActions ? ["Action"] : []),
     ]
     : [
       ...(showSerial ? ["Sr. No."] : []),
       "Sr. No.", "Created", "CP Name", "CP Company", "CP Phone",
-      "Office Address", "Owner / Contact", "GST", "RERA", "CP City", "CP Pin",
+      "Office Address", "Primary Contact", "GST", "RERA", "CP City", "CP Pin",
       "Client Name", "Client Phone", "Alt Phone", "Client Email",
       "Preferred Location", "Budget", "Requirement", "Sourcing Manager", "Sales Manager", "Status",
       ...(canReassign ? [""] : []),
@@ -828,7 +828,7 @@ function ChannelPartnerEnquiriesTable({
                     ["CP Name", cpField(detail, "partner_name", "cp_name")],
                     ["Company Name", cpField(detail, "partner_company", "cp_company")],
                     ["Phone Number", cpField(detail, "partner_phone", "cp_phone")],
-                    ["Owner / Contact Person", detail.owner_contact_person],
+                    ["Primary Contact", detail.owner_contact_person],
                     ["GST Number", detail.gst_number],
                     ["RERA Number", detail.rera_registration_no],
                     ["Office Address", detail.office_address],

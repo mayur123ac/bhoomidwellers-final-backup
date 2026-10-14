@@ -487,7 +487,7 @@ function AssignedChannelPartnersView({
                       {fieldBlock("Business Profile", [
                         ["CP Name", detail.partner.name],
                         ["Company Name", detail.partner.company_name],
-                        ["Owner / Contact Person", detail.partner.owner_contact_person],
+                        ["Primary Contact", detail.partner.owner_contact_person],
                         ["RERA Number", detail.partner.rera_registration_no],
                         ["GST Number", detail.partner.gst_number],
                         ["PAN Number", detail.partner.pan_number],

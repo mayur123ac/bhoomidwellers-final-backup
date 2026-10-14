@@ -363,7 +363,10 @@ function ConfigCombobox({
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (!open) {
-      if (e.key === "ArrowDown" || e.key === "Enter") { setOpen(true); setHighlighted(0); }
+      if (e.key === "ArrowDown" || e.key === "Enter") {
+        e.preventDefault(); // inside a <form>, a bare Enter would submit it
+        setOpen(true); setHighlighted(0);
+      }
       return;
     }
     if (e.key === "ArrowDown") { e.preventDefault(); setHighlighted(h => Math.min(h + 1, filtered.length - 1)); }
@@ -1908,7 +1911,7 @@ export default function ReceptionistDashboard() {
         const json = await res.json().catch(() => ({}));
         // Distinct toasts for returning leads vs new ones.
         const isReturning = json?.leadClassification === "RETURNING_LEAD";
-        const isPending   = json?.assignmentStatus === "pending";
+        const isPending = json?.assignmentStatus === "pending";
         const routeMsg = json?.routedByPartner && json?.routedTo
           ? ` — routed to ${json.routedTo}`
           : "";
@@ -4315,6 +4318,9 @@ export default function ReceptionistDashboard() {
           style={{ backdropFilter: "blur(12px)" }}
         >
           <div
+            onClick={e => e.stopPropagation()}
+            onMouseDown={e => e.stopPropagation()}
+            onPointerDown={e => e.stopPropagation()}
             className={`eq-form rounded-[24px] w-full max-w-5xl max-h-[95vh] overflow-hidden flex flex-col shadow-2xl transition-colors ${isDark ? "bg-[#121212]" : "bg-[#F9FAFB]"
               }`}
           >
@@ -5031,7 +5037,7 @@ export default function ReceptionistDashboard() {
                         onChange={e => setEnquiryForm({ ...enquiryForm, preferredLocation: e.target.value })}
                         className={`w-full rounded-xl px-4 py-3.5 text-[15px] outline-none transition-all border ${isDark ? "bg-[#242424] border-gray-700 text-white focus:border-[#C5A059]" : "bg-gray-50 border-gray-200 text-gray-900 focus:border-[#18392B] focus:bg-white"
                           } focus:ring-1 focus:ring-[#C5A059]`}
-                        placeholder="e.g. Baner, Wakad"
+                        placeholder="e.g. Dombivali, Kalyan"
                       />
                     </div>
 
@@ -5368,51 +5374,51 @@ export default function ReceptionistDashboard() {
                                 combinedAssignees.map((m, i) => {
                                   const isBusyItem = m.assignmentAvailability === "busy";
                                   return (
-                                  <div
-                                    key={i}
-                                    role="option"
-                                    aria-selected={enquiryForm.assignedTo === m.name}
-                                    aria-disabled={isBusyItem}
-                                    tabIndex={isBusyItem ? -1 : 0}
-                                    title={isBusyItem ? "This manager is busy with an unprocessed lead" : undefined}
-                                    onClick={() => {
-                                      if (isBusyItem) return;
-                                      setEnquiryForm({ ...enquiryForm, assignedTo: m.name });
-                                      setAssignedToError("");
-                                      setShowManagerDropdown(false);
-                                    }}
-                                    onKeyDown={(e) => {
-                                      if (isBusyItem) return;
-                                      if (e.key === "Enter" || e.key === " ") {
-                                        e.preventDefault();
+                                    <div
+                                      key={i}
+                                      role="option"
+                                      aria-selected={enquiryForm.assignedTo === m.name}
+                                      aria-disabled={isBusyItem}
+                                      tabIndex={isBusyItem ? -1 : 0}
+                                      title={isBusyItem ? "This manager is busy with an unprocessed lead" : undefined}
+                                      onClick={() => {
+                                        if (isBusyItem) return;
                                         setEnquiryForm({ ...enquiryForm, assignedTo: m.name });
                                         setAssignedToError("");
                                         setShowManagerDropdown(false);
-                                      }
-                                    }}
-                                    className={`px-4 py-3 transition-colors border-b last:border-b-0 flex justify-between items-center gap-3
+                                      }}
+                                      onKeyDown={(e) => {
+                                        if (isBusyItem) return;
+                                        if (e.key === "Enter" || e.key === " ") {
+                                          e.preventDefault();
+                                          setEnquiryForm({ ...enquiryForm, assignedTo: m.name });
+                                          setAssignedToError("");
+                                          setShowManagerDropdown(false);
+                                        }
+                                      }}
+                                      className={`px-4 py-3 transition-colors border-b last:border-b-0 flex justify-between items-center gap-3
                                       ${isBusyItem
-                                        ? `cursor-not-allowed select-none ${isDark ? "opacity-45 border-gray-700 text-white" : "opacity-40 border-gray-100 text-gray-900"}`
-                                        : `cursor-pointer ${isDark ? "border-gray-700 hover:bg-[#333] text-white" : "border-gray-100 hover:bg-gray-50 text-gray-900"}`
-                                      }
+                                          ? `cursor-not-allowed select-none ${isDark ? "opacity-45 border-gray-700 text-white" : "opacity-40 border-gray-100 text-gray-900"}`
+                                          : `cursor-pointer ${isDark ? "border-gray-700 hover:bg-[#333] text-white" : "border-gray-100 hover:bg-gray-50 text-gray-900"}`
+                                        }
                                       ${!isBusyItem && enquiryForm.assignedTo === m.name ? "bg-[#18392B]/10 text-[#18392B] font-semibold" : ""}`}
-                                  >
-                                    <span>{m.name}</span>
-                                    <span className="flex items-center gap-2.5">
-                                      <span className={`inline-flex items-center gap-1 text-[10px] font-semibold ${m.presence === "ONLINE"
-                                        ? "text-emerald-500"
-                                        : isDark ? "text-gray-500" : "text-gray-400"
-                                        }`}>
-                                        <span className={`inline-block w-1.5 h-1.5 rounded-full ${m.presence === "ONLINE" ? "bg-emerald-500" : isDark ? "bg-gray-500" : "bg-gray-400"
-                                          }`} />
-                                        {m.presence === "ONLINE" ? "Online" : "Offline"}
+                                    >
+                                      <span>{m.name}</span>
+                                      <span className="flex items-center gap-2.5">
+                                        <span className={`inline-flex items-center gap-1 text-[10px] font-semibold ${m.presence === "ONLINE"
+                                          ? "text-emerald-500"
+                                          : isDark ? "text-gray-500" : "text-gray-400"
+                                          }`}>
+                                          <span className={`inline-block w-1.5 h-1.5 rounded-full ${m.presence === "ONLINE" ? "bg-emerald-500" : isDark ? "bg-gray-500" : "bg-gray-400"
+                                            }`} />
+                                          {m.presence === "ONLINE" ? "Online" : "Offline"}
+                                        </span>
+                                        <span className={`text-[10px] font-bold ${m.assignmentAvailability === "busy" ? "text-orange-500" : "text-emerald-600"}`}>
+                                          {m.assignmentAvailability === "busy" ? "BUSY" : "AVAILABLE"}
+                                        </span>
+                                        <span className="text-[11px] opacity-60 uppercase tracking-wider">{String(m.role || "Manager").replace("_", " ")}</span>
                                       </span>
-                                      <span className={`text-[10px] font-bold ${m.assignmentAvailability === "busy" ? "text-orange-500" : "text-emerald-600"}`}>
-                                        {m.assignmentAvailability === "busy" ? "BUSY" : "AVAILABLE"}
-                                      </span>
-                                      <span className="text-[11px] opacity-60 uppercase tracking-wider">{String(m.role || "Manager").replace("_", " ")}</span>
-                                    </span>
-                                  </div>
+                                    </div>
                                   );
                                 })
                               )}

@@ -298,7 +298,7 @@ export default function BankerVisitFormModal({
 
             {/* Attended By (prefilled with logged-in user, editable) */}
             <div>
-              <label className={labelCls}>Attended By</label>
+              <label className={labelCls}>Primary Contact</label>
               <input
                 type="text"
                 value={form.attended_by_name}

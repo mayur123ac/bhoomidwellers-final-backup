@@ -81,7 +81,7 @@ interface Props {
   partner?: ChannelPartner | null; // null/undefined => create
   // `_id` is what the login route stores in the crm_user payload; `id` is accepted
   // too so a caller holding a users-table row can pass it straight through.
-  user: { name: string; role: string; _id?: string | number; id?: string | number };
+  user: { name: string; role: string; _id?: string | number; id?: string | number; email?: string };
   isDark: boolean;
   t: any;
   variant?: "full" | "office_visit";
@@ -121,6 +121,49 @@ export function validateRate(raw: string): string | null {
  *  the enquiry form, so there is no reformat-while-typing fighting the cursor. */
 const cleanPhoneDigits = (raw: string) => raw.replace(/\D/g, "").slice(0, 10);
 
+/** The form as it should look before the operator touches anything. */
+function formFromPartner(partner?: ChannelPartner | null): typeof blankForm {
+  if (!partner) return { ...blankForm };
+  const bank = partner.bank_account_details || {};
+  return {
+    name: partner.name || "",
+    company_name: partner.company_name || "",
+    rera_registration_no: partner.rera_registration_no || "",
+    pan_number: partner.pan_number || "",
+    phone: cleanPhoneDigits(partner.phone || ""),
+    email: partner.email || "",
+    office_address: partner.office_address || "",
+    pin_code: partner.pin_code || "",
+    city: partner.city || "",
+    owner_contact_person: partner.owner_contact_person || "",
+    gst_number: partner.gst_number || "",
+    default_commission_rate: partner.default_commission_rate ?? "",
+    status: partner.status || "active",
+    bank_account_name: bank.account_name || "",
+    bank_account_no: bank.account_no || "",
+    bank_ifsc: bank.ifsc || "",
+    bank_name: bank.bank || "",
+    assigned_sourcing_manager_id:
+      partner.assigned_sourcing_manager_id != null ? String(partner.assigned_sourcing_manager_id) : "",
+    assigned_sales_manager_id:
+      (partner as any).assigned_sales_manager_id != null ? String((partner as any).assigned_sales_manager_id) : "",
+  };
+}
+
+// ── Unsaved drafts ──
+// Module-level, so a draft survives the modal being hidden *or* unmounted by the
+// parent. In memory only: bank details never reach sessionStorage/localStorage, and
+// a page reload discards everything. Keyed by user + variant + partner, so Partner
+// A's edits can never appear on Partner B, and a different login on the same
+// reception PC never sees someone else's draft.
+type CPDraft = { form: typeof blankForm; mergeConfirmed: boolean; smAutoFilled: boolean };
+const draftCache = new Map<string, CPDraft>();
+const draftKeyFor = (userId: unknown, variant: string, partnerId?: number | null) =>
+  `${userId ?? "anon"}:${variant}:${partnerId ?? "new"}`;
+
+/** Call on logout so no draft (incl. bank details) outlives the session. */
+export function clearChannelPartnerDrafts() { draftCache.clear(); }
+
 export default function ChannelPartnerFormModal({
   isOpen, onClose, onSaved, partner, user, isDark, t, variant = "full",
 }: Props) {
@@ -159,6 +202,13 @@ export default function ChannelPartnerFormModal({
   const [pinLooking, setPinLooking] = useState(false);
   /** Set when the manager was chosen by the pincode rather than by hand. */
   const [smAutoFilled, setSmAutoFilled] = useState(false);
+
+  // Which draft `form` currently holds. Persisting is gated on this matching the
+  // current key, so the stale form from a previous session is never written
+  // under a new partner's key in the render before initialization runs.
+  const sessionKey = draftKeyFor(user?._id ?? user?.id, variant, partner?.id);
+  const [draftKey, setDraftKey] = useState<string | null>(null);
+  const [restoredDraft, setRestoredDraft] = useState(false);
 
   const isEdit = !!partner;
   const isOfficeVisit = variant === "office_visit";
@@ -239,11 +289,11 @@ export default function ChannelPartnerFormModal({
     fetch("/api/users/sourcing-manager")
       .then(r => r.json())
       .then(json => { if (json.success && Array.isArray(json.data)) setManagers(json.data); })
-      .catch(() => {});
+      .catch(() => { });
     fetch("/api/users/sales-manager")
       .then(r => r.json())
       .then(json => { if (json.success && Array.isArray(json.data)) setSalesManagers(json.data); })
-      .catch(() => {});
+      .catch(() => { });
   }, [isOpen]);
   usePresenceRefresh(refreshPresence, isOpen);
 
@@ -343,44 +393,51 @@ export default function ChannelPartnerFormModal({
     return () => { cancelled = true; clearTimeout(timer); };
   }, [isOpen, form.pin_code, selfAssigns]);
 
+  // Initialize once per form session: restore an unsaved draft if one exists for
+  // this user/variant/partner, otherwise start from the partner (edit) or blank
+  // (create). Becoming visible again never overwrites a draft.
   useEffect(() => {
     if (!isOpen) return;
     setError(null);
-    setMergeConfirmed(false);
     setPinInfo(null);
-    setSmAutoFilled(false);
-    if (partner) {
-      const bank = partner.bank_account_details || {};
-      setForm({
-        name: partner.name || "",
-        company_name: partner.company_name || "",
-        rera_registration_no: partner.rera_registration_no || "",
-        pan_number: partner.pan_number || "",
-        phone: cleanPhoneDigits(partner.phone || ""),
-        email: partner.email || "",
-        office_address: partner.office_address || "",
-        pin_code: partner.pin_code || "",
-        city: partner.city || "",
-        owner_contact_person: partner.owner_contact_person || "",
-        gst_number: partner.gst_number || "",
-        default_commission_rate: partner.default_commission_rate ?? "",
-        status: partner.status || "active",
-        bank_account_name: bank.account_name || "",
-        bank_account_no: bank.account_no || "",
-        bank_ifsc: bank.ifsc || "",
-        bank_name: bank.bank || "",
-        assigned_sourcing_manager_id:
-          partner.assigned_sourcing_manager_id != null ? String(partner.assigned_sourcing_manager_id) : "",
-        assigned_sales_manager_id:
-          (partner as any).assigned_sales_manager_id != null ? String((partner as any).assigned_sales_manager_id) : "",
-      });
+    const saved = draftCache.get(sessionKey);
+    if (saved) {
+      setForm({ ...saved.form });
+      setMergeConfirmed(saved.mergeConfirmed);
+      setSmAutoFilled(saved.smAutoFilled);
+      setRestoredDraft(true);
     } else {
-      // Pre-owned by the Sourcing Manager doing the registering. Seeded here rather
-      // than only at submit so the required-assignment check is already satisfied
-      // and the pincode lookup's "fill if blank" rule leaves it alone.
-      setForm({ ...blankForm });
+      setForm(formFromPartner(partner));
+      setMergeConfirmed(false);
+      setSmAutoFilled(false);
+      setRestoredDraft(false);
     }
-  }, [isOpen, partner]);
+    setDraftKey(sessionKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, sessionKey]);
+
+  // Persist every change. A form identical to its starting point is not a draft:
+  // dropping it means an untouched edit always reopens with fresh server data.
+  useEffect(() => {
+    if (!isOpen || draftKey !== sessionKey) return;
+    const pristine =
+      !mergeConfirmed && JSON.stringify(form) === JSON.stringify(formFromPartner(partner));
+    if (pristine) draftCache.delete(sessionKey);
+    else draftCache.set(sessionKey, { form, mergeConfirmed, smAutoFilled });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, draftKey, sessionKey, form, mergeConfirmed, smAutoFilled]);
+
+  /** Explicit discard — the only path besides a successful save that drops a draft. */
+  const discardDraft = () => {
+    draftCache.delete(sessionKey);
+    setForm(formFromPartner(partner));
+    setMergeConfirmed(false);
+    setSmAutoFilled(false);
+    setRestoredDraft(false);
+    setDupCheck(null);
+    setPinInfo(null);
+    setError(null);
+  };
 
   const inputCls = `w-full rounded-lg px-3 py-2 text-sm outline-none transition-colors border border-gray-400 ${t.inputInner} ${t.text} ${t.inputFocus}`;
   const selectCls = `${inputCls} cursor-pointer`;
@@ -523,6 +580,10 @@ export default function ChannelPartnerFormModal({
         setError(json.message || "Save failed.");
         return;
       }
+      // Only now, after the server confirmed the save, is the draft dropped.
+      // Every failure path above returns early with the form untouched.
+      draftCache.delete(sessionKey);
+      setDraftKey(null);
       onSaved?.({
         merged: !!json.merged,
         message: json.message || (isEdit ? "Channel partner updated." : "Channel partner registered."),
@@ -791,11 +852,12 @@ export default function ChannelPartnerFormModal({
         <motion.div
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
           className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
-          onClick={onClose}
         >
           <motion.div
             initial={{ scale: 0.96, y: 12 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.96, y: 12 }}
             onClick={e => e.stopPropagation()}
+            onMouseDown={e => e.stopPropagation()}
+            onPointerDown={e => e.stopPropagation()}
             className={`w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl md:rounded-3xl p-6 md:p-8 shadow-[0_20px_50px_rgba(0,0,0,0.2)] border-gray-400 ${isDark
               ? "bg-[#1C1C1E] border-white/50"
               : "bg-white border-gray-200"
@@ -816,10 +878,21 @@ export default function ChannelPartnerFormModal({
                   </p>
                 )}
               </div>
-              <button onClick={onClose} className={`p-1.5 rounded-lg cursor-pointer ${t.textMuted} hover:${t.text}`}>
+              <button type="button" onClick={onClose} className={`p-1.5 rounded-lg cursor-pointer ${t.textMuted} hover:${t.text}`}>
                 <FaTimes />
               </button>
             </div>
+
+            {restoredDraft && (
+              <div className={`mb-4 rounded-lg px-3 py-2 flex items-center justify-between gap-3 text-[11px] ${isDark
+                ? "bg-amber-500/10 border border-amber-500/25 text-amber-300"
+                : "bg-amber-50 border border-amber-200 text-amber-700"}`}>
+                <span>Your unsaved changes were restored.</span>
+                <button type="button" onClick={discardDraft} className="font-bold underline cursor-pointer shrink-0">
+                  Discard &amp; start fresh
+                </button>
+              </div>
+            )}
 
             {!allowed && (
               <div className="mb-4 rounded-lg px-3 py-2 text-xs bg-red-500/10 border border-red-500/30 text-red-500">
@@ -886,7 +959,7 @@ export default function ChannelPartnerFormModal({
                 {/* Column is still owner_contact_person — renaming it would break
                     the CP enquiry table and overview, which read that key. The
                     meaning is now "who received them", i.e. the person on the desk. */}
-                <label className={labelCls}>Attended By</label>
+                <label className={labelCls}>Primary Contact</label>
                 <input type="text" value={form.owner_contact_person} onChange={e => set({ owner_contact_person: e.target.value })}
                   className={inputCls} placeholder="Your name" />
                 <p className={`text-[10px] mt-1 ${t.textFaint}`}>Who received this partner at the front desk.</p>
@@ -943,6 +1016,33 @@ export default function ChannelPartnerFormModal({
               )}
             </div>
 
+            {/* ── Registration Details (office_visit, new registration only) ──
+                Read-only attribution: who is filling this form. The backend
+                independently derives registered_by_user_id from the signed
+                session — these are informational, not inputs. */}
+            {isOfficeVisit && !isEdit && (
+              <div className={`mt-5 rounded-xl p-4 border ${isDark ? "bg-slate-800/60 border-slate-700" : "bg-slate-50 border-slate-200"}`}>
+                <div className="flex items-center gap-2 mb-2">
+                  <FaInfoCircle className={`text-[11px] ${t.accentText}`} />
+                  <p className={`text-xs font-bold ${t.accentText}`}>Registration Details</p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <p className={`text-[10px] font-medium mb-0.5 ${t.textFaint}`}>Registered By</p>
+                    <p className={`text-xs font-semibold ${t.text}`}>{user?.name || "—"}</p>
+                  </div>
+                  <div>
+                    <p className={`text-[10px] font-medium mb-0.5 ${t.textFaint}`}>Employee ID</p>
+                    <p className={`text-xs font-semibold ${t.text}`}>{user?._id ?? user?.id ?? "—"}</p>
+                  </div>
+                  <div>
+                    <p className={`text-[10px] font-medium mb-0.5 ${t.textFaint}`}>Email</p>
+                    <p className={`text-xs font-semibold ${t.text}`}>{user?.email || "—"}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* ── Ownership, last ──
                 Below the profile rather than above it, because the pincode field
                 feeds it: by the time the operator reaches this the manager is
@@ -988,10 +1088,11 @@ export default function ChannelPartnerFormModal({
             )}
 
             <div className="mt-6 flex items-center justify-end gap-3">
-              <button onClick={onClose} className={`px-4 py-2 rounded-lg text-xs font-bold cursor-pointer ${t.textMuted}`}>
+              <button type="button" onClick={onClose} className={`px-4 py-2 rounded-lg text-xs font-bold cursor-pointer ${t.textMuted}`}>
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={handleSubmit}
                 disabled={!canSubmit}
                 className={`px-5 py-2 rounded-lg text-xs font-bold cursor-pointer ${t.btnPrimary} ${!canSubmit ? "opacity-50 cursor-not-allowed" : ""}`}

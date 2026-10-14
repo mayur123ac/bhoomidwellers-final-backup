@@ -49,18 +49,19 @@ export default function SearchableSelect({
   const [highlighted, setHighlighted] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const selected = options.find(o => o.value === value) || null;
 
   const filtered = query.trim()
     ? options.filter(o => {
-        const q = query.toLowerCase();
-        return (
-          o.label.toLowerCase().includes(q) ||
-          (o.sublabel || "").toLowerCase().includes(q) ||
-          (o.keywords || "").toLowerCase().includes(q)
-        );
-      })
+      const q = query.toLowerCase();
+      return (
+        o.label.toLowerCase().includes(q) ||
+        (o.sublabel || "").toLowerCase().includes(q) ||
+        (o.keywords || "").toLowerCase().includes(q)
+      );
+    })
     : options;
 
   // Close on outside click
@@ -109,16 +110,28 @@ export default function SearchableSelect({
   return (
     <div ref={containerRef} className="relative w-full">
       <div
-        className={`w-full flex items-center gap-2 rounded-lg border text-sm transition-colors ${
-          disabled ? "opacity-60 cursor-not-allowed" : "cursor-pointer"
-        } ${
-          open
+        className={`w-full flex items-center gap-2 rounded-lg border text-sm transition-colors ${disabled ? "opacity-60 cursor-not-allowed" : "cursor-pointer"
+          } ${open
             ? isDark ? "border-[#9E217B] bg-[#14141B]" : "border-[#00AEEF] bg-white"
             : `${t.modalInput || t.inputInner}`
-        }`}
-        onClick={() => { if (!disabled) { setOpen(o => !o); setHighlighted(0); } }}
+          }`}
+        onClick={e => {
+          if (disabled) return;
+          // Clicking the text box only opens — onFocus already did that. Toggling here
+          // too would immediately close what focus just opened.
+          if (e.target === inputRef.current) { setOpen(true); return; }
+          // Clicking anywhere else on the box (padding / arrow) toggles.
+          setOpen(o => {
+            const next = !o;
+            if (next) inputRef.current?.focus();
+            else setQuery("");
+            return next;
+          });
+          setHighlighted(0);
+        }}
       >
         <input
+          ref={inputRef}
           type="text"
           value={displayValue}
           placeholder={open ? "Type to search…" : placeholder}
@@ -126,6 +139,8 @@ export default function SearchableSelect({
           onChange={e => { setQuery(e.target.value); setHighlighted(0); if (!open) setOpen(true); }}
           onKeyDown={handleKeyDown}
           onFocus={() => { if (!disabled) { setOpen(true); setHighlighted(0); } }}
+          onBlur={() => { setOpen(false); setQuery(""); }}
+
           autoComplete="off"
           className={`flex-1 p-3 outline-none bg-transparent ${t.text} placeholder:text-gray-400 ${disabled ? "cursor-not-allowed" : ""}`}
           aria-label={ariaLabel}
@@ -141,12 +156,10 @@ export default function SearchableSelect({
             <p className={`text-[10px] ${t.textFaint}`}>{selected.sublabel}</p>
           )}
           {selected.status && (
-            <span className={`inline-flex items-center gap-1 text-[10px] font-semibold ${
-              selected.status === "online" ? "text-emerald-500" : isDark ? "text-gray-500" : "text-gray-400"
-            }`}>
-              <span className={`inline-block w-1.5 h-1.5 rounded-full ${
-                selected.status === "online" ? "bg-emerald-500" : isDark ? "bg-gray-500" : "bg-gray-400"
-              }`} />
+            <span className={`inline-flex items-center gap-1 text-[10px] font-semibold ${selected.status === "online" ? "text-emerald-500" : isDark ? "text-gray-500" : "text-gray-400"
+              }`}>
+              <span className={`inline-block w-1.5 h-1.5 rounded-full ${selected.status === "online" ? "bg-emerald-500" : isDark ? "bg-gray-500" : "bg-gray-400"
+                }`} />
               {selected.status === "online" ? "Online" : "Offline"}
             </span>
           )}
@@ -156,9 +169,8 @@ export default function SearchableSelect({
       {open && (
         <ul
           ref={listRef}
-          className={`absolute z-[220] mt-1 w-full max-h-52 overflow-y-auto custom-scrollbar rounded-lg border shadow-xl text-sm ${
-            isDark ? "bg-[#121218] border-[#2A2A35]" : "bg-white border-[#D1D5DB]"
-          }`}
+          className={`absolute z-[220] mt-1 w-full max-h-52 overflow-y-auto custom-scrollbar rounded-lg border shadow-xl text-sm ${isDark ? "bg-[#121218] border-[#2A2A35]" : "bg-white border-[#D1D5DB]"
+            }`}
           role="listbox"
         >
           {options.length === 0 ? (
@@ -173,30 +185,26 @@ export default function SearchableSelect({
                 aria-selected={value === option.value}
                 onMouseDown={e => { e.preventDefault(); select(option.value); }}
                 onMouseEnter={() => setHighlighted(i)}
-                className={`px-4 py-2.5 cursor-pointer transition-colors ${
-                  i === highlighted
-                    ? isDark ? "bg-[#9E217B]/20" : "bg-[#00AEEF]/10"
-                    : ""
-                }`}
+                className={`px-4 py-2.5 cursor-pointer transition-colors ${i === highlighted
+                  ? isDark ? "bg-[#9E217B]/20" : "bg-[#00AEEF]/10"
+                  : ""
+                  }`}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <p className={`font-medium ${
-                    value === option.value
-                      ? isDark ? "text-[#d4006e]" : "text-[#9E217B]"
-                      : t.text
-                  }`}>
+                  <p className={`font-medium ${value === option.value
+                    ? isDark ? "text-[#d4006e]" : "text-[#9E217B]"
+                    : t.text
+                    }`}>
                     {option.label}
                     {value === option.value && <span className="ml-2 text-xs opacity-60">✓</span>}
                   </p>
                   {option.status && (
-                    <span className={`inline-flex items-center gap-1 text-[10px] font-semibold shrink-0 ${
-                      option.status === "online"
-                        ? "text-emerald-500"
-                        : isDark ? "text-gray-500" : "text-gray-400"
-                    }`}>
-                      <span className={`inline-block w-1.5 h-1.5 rounded-full ${
-                        option.status === "online" ? "bg-emerald-500" : isDark ? "bg-gray-500" : "bg-gray-400"
-                      }`} />
+                    <span className={`inline-flex items-center gap-1 text-[10px] font-semibold shrink-0 ${option.status === "online"
+                      ? "text-emerald-500"
+                      : isDark ? "text-gray-500" : "text-gray-400"
+                      }`}>
+                      <span className={`inline-block w-1.5 h-1.5 rounded-full ${option.status === "online" ? "bg-emerald-500" : isDark ? "bg-gray-500" : "bg-gray-400"
+                        }`} />
                       {option.status === "online" ? "Online" : "Offline"}
                     </span>
                   )}
