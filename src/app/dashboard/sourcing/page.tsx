@@ -503,6 +503,7 @@ export default function SourcingManagerDashboard() {
         </main>
       </div>
 
+
       <ChannelPartnerFormModal
         isOpen={quickAddOpen}
         onClose={() => setQuickAddOpen(false)}

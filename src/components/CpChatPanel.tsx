@@ -346,8 +346,16 @@ const Composer = React.memo(function Composer({
 });
 
 function CpChatPanel({
-  user, isDark, t, isAdmin = false,
-}: { user: any; isDark: boolean; t: any; isAdmin?: boolean }) {
+  user, isDark, t, isAdmin = false, partnerListUrl, onBack, headerLabel,
+}: {
+  user: any; isDark: boolean; t: any; isAdmin?: boolean;
+  /** Override the partner-list URL. Defaults to "/api/channel-partners". */
+  partnerListUrl?: string;
+  /** When set, a Back button is shown in the rail header. */
+  onBack?: () => void;
+  /** Persistent label shown above "Messages" (e.g. manager context). */
+  headerLabel?: string;
+}) {
   const [cpId, setCpId] = useState<number | null>(null);
   const [data, setData] = useState<any>(null);
   /** Thread + About, from /chat. Kept separate from `data` so the Enquiries and
@@ -388,13 +396,27 @@ function CpChatPanel({
   // and only re-renders if the rows actually changed.
   const {
     data: partners, loading: loadingList, error: listErrorValue,
-  } = useCpResource<PartnerRailRow[]>("/api/channel-partners", { initial: NO_PARTNERS });
+  } = useCpResource<PartnerRailRow[]>(partnerListUrl || "/api/channel-partners", { initial: NO_PARTNERS });
   const listError = listErrorValue && partners.length === 0 ? listErrorValue : "";
 
   useEffect(() => {
     try { setSeen(JSON.parse(localStorage.getItem("cpChatSeen") || "{}")); } catch { }
     try { setFavourites(JSON.parse(localStorage.getItem("cpChatFavourites") || "{}")); } catch { }
   }, []);
+
+  // When the partner list URL changes (e.g. switching sourcing managers),
+  // clear the selected conversation so stale data from the previous context
+  // cannot remain on screen.
+  const prevUrlRef = useRef(partnerListUrl);
+  useEffect(() => {
+    if (prevUrlRef.current !== partnerListUrl) {
+      setCpId(null);
+      setData(null);
+      setChat(null);
+      setPending([]);
+      prevUrlRef.current = partnerListUrl;
+    }
+  }, [partnerListUrl]);
 
   const fetchChat = useCallback(async (id: number) => {
     setLoading(true); setError("");
@@ -702,6 +724,18 @@ function CpChatPanel({
       {/* ── 1. Partner Rail (Left Sidebar) ── */}
       <div className={`flex-col w-full lg:w-[320px] flex-shrink-0 border-r ${borderSubtle} ${bgApp} ${cpId ? 'hidden lg:flex' : 'flex'}`}>
         <div className="px-5 pt-6 pb-4">
+          {headerLabel && (
+            <div className="flex items-center gap-2 mb-2">
+              {onBack && (
+                <button onClick={onBack} className={`p-1 -ml-1 rounded-lg transition-colors ${isDark ? "hover:bg-white/10" : "hover:bg-black/5"} ${textSecondary}`}>
+                  <IoChevronBackOutline size={18} />
+                </button>
+              )}
+              <span className={`text-[11px] font-semibold uppercase tracking-wider ${isDark ? "text-[#9E217B]" : "text-[#9E217B]"}`}>
+                {headerLabel}
+              </span>
+            </div>
+          )}
           <div className="flex items-center justify-between mb-4">
             <h2 className={`text-xl font-semibold tracking-tight ${textPrimary}`}>
               Messages

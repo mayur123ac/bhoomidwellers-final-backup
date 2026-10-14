@@ -38,6 +38,7 @@ import LogoutConfirmDialog from "@/components/LogoutConfirmDialog";
 import LoanDealView from "@/components/LoanDealView";
 import ChannelPartnerListView from "@/components/ChannelPartnerListView";
 import CpChatPanel from "@/components/CpChatPanel";
+import AdminCpChatWrapper from "@/components/AdminCpChatWrapper";
 import ChannelPartnerEnquiriesTable from "@/components/ChannelPartnerEnquiriesTable";
 import { useCpEnquiryVisible } from "@/lib/hooks/useCpEnquiryVisible";
 import BankerVisitsTable from "@/components/BankerVisitsTable";
@@ -1413,7 +1414,7 @@ function AdminAtlasDashboardContent() {
           {activeView === "cp_chat" && (
             canViewPartners(userRole) ? (
               <div className="h-full">
-                <CpChatPanel user={user} isDark={isDark} t={theme} isAdmin />
+                <AdminCpChatWrapper user={user} isDark={isDark} t={theme} />
               </div>
             ) : (
               <div className="flex items-center justify-center h-full flex-col gap-2">
