@@ -91,7 +91,7 @@ const COLUMN_BAR_WIDTHS: Record<string, number> = {
   "CP Phone": 84, "Office Address": 150, "Primary Contact": 96, GST: 108, RERA: 96,
   "CP City": 62, "CP Pin": 48, "Client Name": 104, "Client Phone": 84, "Alt Phone": 84,
   "Client Email": 128, "Preferred Location": 108, Budget: 70, Requirement: 96,
-  "Sourcing Manager": 96, "Sales M anager": 96, Status: 62,
+  "Registered By": 96, "Sourcing Manager": 96, "Sales Manager": 96, Status: 62,
 };
 
 const requirementOf = (r: EnquiryRowData) => {
@@ -174,6 +174,7 @@ const EnquiryRow = React.memo(function EnquiryRow({
           <td className={cell}>{requirementOf(r) || dash(t)}</td>
         </>
       )}
+      <td className={cell}>{r.registered_by_name || dash(t)}</td>
       <td className="px-3 py-3 whitespace-nowrap">
         {r.sourcing_manager_name ? (
           <span className={`font-medium ${t.text}`}>{r.sourcing_manager_name}</span>
@@ -411,7 +412,7 @@ function ChannelPartnerEnquiriesTable({
         r.id, r.sr_no, r.client_name, r.partner_name, r.cp_name,
         r.partner_company, r.cp_company, r.owner_contact_person,
         r.gst_number, r.rera_registration_no, r.preferred_location,
-        r.sourcing_manager_name, r.sales_manager_name, r.status, r.budget, r.configuration,
+        r.registered_by_name, r.sourcing_manager_name, r.sales_manager_name, r.status, r.budget, r.configuration,
       ].some(v => String(v ?? "").toLowerCase().includes(q)) ||
       (digits.length >= 3 && [r.client_phone, r.alt_phone, r.partner_phone, r.cp_phone]
         .some(v => String(v ?? "").replace(/\D/g, "").includes(digits)))
@@ -538,15 +539,15 @@ function ChannelPartnerEnquiriesTable({
       ...(showSerial ? ["Sr. No."] : []),
       "Created", "CP Name", "CP Company", "CP Phone",
       "Office Address", "Primary Contact", "GST", "RERA", "CP City", "CP Pin",
-      "Sourcing Manager", "Sales Manager", "Status",
+      "Registered By", "Sourcing Manager", "Sales Manager", "Status",
       ...(showActions ? ["Action"] : []),
     ]
     : [
       ...(showSerial ? ["Sr. No."] : []),
-      "Sr. No.", "Created", "CP Name", "CP Company", "CP Phone",
+      "Lead No.", "Created", "CP Name", "CP Company", "CP Phone",
       "Office Address", "Primary Contact", "GST", "RERA", "CP City", "CP Pin",
       "Client Name", "Client Phone", "Alt Phone", "Client Email",
-      "Preferred Location", "Budget", "Requirement", "Sourcing Manager", "Sales Manager", "Status",
+      "Preferred Location", "Budget", "Requirement", "Registered By", "Sourcing Manager", "Sales Manager", "Status",
       ...(canReassign ? [""] : []),
     ],
     [showSerial, canReassign, standalone, showActions]);
@@ -834,6 +835,7 @@ function ChannelPartnerEnquiriesTable({
                     ["Office Address", detail.office_address],
                     ["CP City", detail.partner_city],
                     ["CP Pin Code", detail.partner_pin_code],
+                    ["Registered By", detail.registered_by_name],
                     ...(standalone ? [["Status", detail.cp_status]] : []),
                   ],
                 },

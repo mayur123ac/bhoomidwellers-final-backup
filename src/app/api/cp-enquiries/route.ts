@@ -101,7 +101,9 @@ const SELECT_SQL_LEAD_PRIMARY = `
     slm.name     AS sales_manager_name,
     slm.username AS sales_manager_username,
     slm.email    AS sales_manager_email,
-    slm.whatsapp_number AS sales_manager_phone
+    slm.whatsapp_number AS sales_manager_phone,
+    cp.registered_by_user_id,
+    reg.name AS registered_by_name
   FROM walkin_enquiries w
   LEFT JOIN channel_partners cp
          ON cp.id = w.channel_partner_id AND cp.organization_id = w.organization_id
@@ -111,6 +113,9 @@ const SELECT_SQL_LEAD_PRIMARY = `
   LEFT JOIN users slm
     ON slm.id = cp.assigned_sales_manager_id
    AND slm.organization_id = w.organization_id
+  LEFT JOIN users reg
+    ON reg.id = cp.registered_by_user_id
+   AND reg.organization_id = w.organization_id
 `;
 
 // ── CP-primary query (Sales Manager) ────────────────────────────────────────
@@ -157,7 +162,9 @@ const SELECT_SQL_CP_PRIMARY = `
     slm.name     AS sales_manager_name,
     slm.username AS sales_manager_username,
     slm.email    AS sales_manager_email,
-    slm.whatsapp_number AS sales_manager_phone
+    slm.whatsapp_number AS sales_manager_phone,
+    cp.registered_by_user_id,
+    reg.name AS registered_by_name
   FROM channel_partners cp
   LEFT JOIN walkin_enquiries w
     ON w.channel_partner_id = cp.id
@@ -169,6 +176,9 @@ const SELECT_SQL_CP_PRIMARY = `
   LEFT JOIN users slm
     ON slm.id = cp.assigned_sales_manager_id
    AND slm.organization_id = cp.organization_id
+  LEFT JOIN users reg
+    ON reg.id = cp.registered_by_user_id
+   AND reg.organization_id = cp.organization_id
 `;
 
 // ── CP-standalone query (Admin / Site Head / Receptionist "CP Enquiry" tab) ──
@@ -199,7 +209,9 @@ const SELECT_SQL_CP_STANDALONE = `
     slm.name     AS sales_manager_name,
     slm.username AS sales_manager_username,
     slm.email    AS sales_manager_email,
-    slm.whatsapp_number AS sales_manager_phone
+    slm.whatsapp_number AS sales_manager_phone,
+    cp.registered_by_user_id,
+    reg.name AS registered_by_name
   FROM channel_partners cp
   LEFT JOIN users sm
     ON sm.id = cp.assigned_sourcing_manager_id
@@ -207,6 +219,9 @@ const SELECT_SQL_CP_STANDALONE = `
   LEFT JOIN users slm
     ON slm.id = cp.assigned_sales_manager_id
    AND slm.organization_id = cp.organization_id
+  LEFT JOIN users reg
+    ON reg.id = cp.registered_by_user_id
+   AND reg.organization_id = cp.organization_id
 `;
 
 export async function GET(req: NextRequest) {
