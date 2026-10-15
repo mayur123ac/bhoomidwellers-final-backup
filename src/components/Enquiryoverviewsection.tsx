@@ -155,6 +155,7 @@ import {
     FaEye,
     FaSyncAlt,
     FaPhoneAlt,
+    FaFilter,
 } from "react-icons/fa";
 import type { BolnaStatusResponse } from "@/types/bolna.types";
 import {
@@ -170,6 +171,7 @@ import {
     SkeletonRows,
     EmptyState,
     Pagination,
+    ColumnFilterDropdown,
     isBlank,
     type MenuItem,
 } from "./Tableui";
@@ -204,6 +206,10 @@ type Column = {
     locked?: boolean;
     defaultHidden?: boolean;
     sortValue?: (l: Lead) => string | number;
+    /** Returns the normalised string used to populate and match filter options.
+     *  Defaults to the string-coerced sortValue when absent.
+     *  Return null / undefined / empty to surface the row as "(Blanks)". */
+    filterValue?: (l: Lead) => string | null | undefined;
     render: (l: Lead, ctx: Ctx) => React.ReactNode;
 };
 
@@ -294,6 +300,7 @@ const COLUMNS: Column[] = [
         minWidth: "min-w-[60px] sm:min-w-[76px]",
         locked: true,
         sortValue: (l) => Number(l.sr_no || l.id) || 0,
+        filterValue: (l) => l.sr_no != null ? `#${l.sr_no}` : l.id != null ? `#${l.id}` : null,
         render: (l, { isDark }) => (
             <span className={`font-bold text-[11px] sm:text-[13px] ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>
                 #{l.sr_no || l.id}
@@ -306,6 +313,7 @@ const COLUMNS: Column[] = [
         minWidth: "min-w-[110px] sm:min-w-[190px]",
         locked: true,
         sortValue: (l) => String(l.name || "").toLowerCase(),
+        filterValue: (l) => isBlank(l.name) ? null : String(l.name).trim(),
         render: (l, { isDark, theme, onNavigateToSales }) => (
             <div className="flex flex-col gap-0.5">
                 <span
@@ -340,6 +348,7 @@ const COLUMNS: Column[] = [
         label: "Contact",
         minWidth: "min-w-[125px] sm:min-w-[180px]",
         sortValue: (l) => String(l.phone || ""),
+        filterValue: (l) => isBlank(l.phone) ? null : String(l.phone).trim(),
         render: (l, { isDark }) => (
             <div className="mobile-contact-cell">
                 <ContactCell phone={l.phone} email={l.email} isDark={isDark} />
@@ -352,6 +361,7 @@ const COLUMNS: Column[] = [
         minWidth: "min-w-[95px] sm:min-w-[115px]",
         defaultHidden: true,
         sortValue: (l) => String(l.alt_phone || ""),
+        filterValue: (l) => isBlank(l.alt_phone) ? null : String(l.alt_phone).trim(),
         render: (l, { theme }) => {
             const v = l.alt_phone;
             if (isBlank(v)) return <span className="text-[11px] sm:text-xs italic opacity-35">—</span>;
@@ -371,6 +381,7 @@ const COLUMNS: Column[] = [
         label: "Property Type",
         minWidth: "min-w-[90px] sm:min-w-[110px]",
         sortValue: (l) => propTypeOf(l).toLowerCase(),
+        filterValue: (l) => { const v = propTypeOf(l); return v === "Pending" ? null : v; },
         render: (l, { theme }) => (
             <span className={`text-xs ${theme.textMuted}`}>{propTypeOf(l)}</span>
         ),
@@ -380,6 +391,7 @@ const COLUMNS: Column[] = [
         label: "Budget",
         align: "right",
         minWidth: "min-w-[75px] sm:min-w-[100px]",
+        filterValue: (l) => { const v = l.salesBudget || l.budget; return isBlank(v) ? null : String(v).trim(); },
         sortValue: (l) => {
             const raw = String(l.salesBudget || l.budget || "");
             const n = parseFloat(raw.replace(/[^0-9.]/g, ""));
@@ -405,6 +417,7 @@ const COLUMNS: Column[] = [
         label: "Source",
         minWidth: "min-w-[90px] sm:min-w-[110px]",
         sortValue: (l) => String(l.source || "").toLowerCase(),
+        filterValue: (l) => isBlank(l.source) ? null : String(l.source).trim(),
         render: (l, { theme }) => (
             <span className={`text-[11px] sm:text-xs ${theme.textMuted}`}>{txt(l.source)}</span>
         ),
@@ -414,6 +427,7 @@ const COLUMNS: Column[] = [
         label: "CP Name",
         minWidth: "min-w-[100px] sm:min-w-[130px]",
         sortValue: (l) => String(l.cpName || l.cp_name || "").toLowerCase(),
+        filterValue: (l) => { const v = l.cpName || l.cp_name; return isBlank(v) ? null : String(v).trim(); },
         render: (l, { theme }) => (
             <span className={`text-[11px] sm:text-xs ${theme.textMuted}`}>{txt(l.cpName || l.cp_name)}</span>
         ),
@@ -423,6 +437,7 @@ const COLUMNS: Column[] = [
         label: "CP Company",
         minWidth: "min-w-[100px] sm:min-w-[120px]",
         sortValue: (l) => String(l.cpCompany || l.cp_company || "").toLowerCase(),
+        filterValue: (l) => { const v = l.cpCompany || l.cp_company; return isBlank(v) ? null : String(v).trim(); },
         render: (l, { theme }) => (
             <span className={`text-[11px] sm:text-xs ${theme.textMuted}`}>{txt(l.cpCompany || l.cp_company)}</span>
         ),
@@ -432,6 +447,7 @@ const COLUMNS: Column[] = [
         label: "CP Phone",
         minWidth: "min-w-[95px] sm:min-w-[115px]",
         sortValue: (l) => String(l.cpPhone || l.cp_phone || ""),
+        filterValue: (l) => { const v = l.cpPhone || l.cp_phone; return isBlank(v) ? null : String(v).trim(); },
         render: (l, { theme }) => {
             const v = l.cpPhone || l.cp_phone;
             if (isBlank(v)) return <span className="text-[11px] sm:text-xs italic opacity-35">—</span>;
@@ -452,6 +468,7 @@ const COLUMNS: Column[] = [
         align: "center",
         minWidth: "min-w-[100px] sm:min-w-[130px]",
         sortValue: (l) => String(l.status || "Assigned").toLowerCase(),
+        filterValue: (l) => String(l.status || "Assigned").trim(),
         render: (l, { isDark }) => <StatusChip status={l.status || "Assigned"} isDark={isDark} />,
     },
     {
@@ -460,6 +477,7 @@ const COLUMNS: Column[] = [
         align: "center",
         minWidth: "min-w-[90px] sm:min-w-[110px]",
         sortValue: (l) => (l.is_lost_lead ? 1 : 0),
+        filterValue: (l) => l.is_lost_lead ? "Lost Lead" : "Active",
         render: (l, { isDark }) => (
             <StatusChip status={l.is_lost_lead ? "Lost Lead" : "Active"} isDark={isDark} size="sm" />
         ),
@@ -470,6 +488,7 @@ const COLUMNS: Column[] = [
         align: "center",
         minWidth: "min-w-[95px] sm:min-w-[115px]",
         sortValue: (l) => String(l.leadInterestStatus || "").toLowerCase(),
+        filterValue: (l) => isBlank(l.leadInterestStatus) || l.leadInterestStatus === "Pending" ? null : String(l.leadInterestStatus).trim(),
         render: (l, { isDark, InterestBadge }) =>
             l.leadInterestStatus && l.leadInterestStatus !== "Pending" ? (
                 <InterestBadge status={l.leadInterestStatus} size="sm" isDark={isDark} />
@@ -482,6 +501,9 @@ const COLUMNS: Column[] = [
         label: "Site Visit",
         minWidth: "min-w-[85px] sm:min-w-[105px]",
         sortValue: (l) => (l.mongoVisitDate ? new Date(l.mongoVisitDate).getTime() : 0),
+        filterValue: (l) => l.mongoVisitDate
+            ? new Date(l.mongoVisitDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+            : null,
         render: (l, { formatDate }) =>
             l.mongoVisitDate ? (
                 <span className="text-orange-500 font-semibold text-[11px] sm:text-xs whitespace-nowrap">
@@ -496,6 +518,9 @@ const COLUMNS: Column[] = [
         label: "Created On",
         minWidth: "min-w-[95px] sm:min-w-[115px]",
         sortValue: (l) => (l.created_at ? new Date(l.created_at).getTime() : 0),
+        filterValue: (l) => l.created_at
+            ? new Date(l.created_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+            : null,
         render: (l, { theme, formatDate }) =>
             l.created_at ? (
                 <span className={`text-[11px] sm:text-xs whitespace-nowrap ${theme.textFaint}`}>
@@ -513,6 +538,10 @@ const COLUMNS: Column[] = [
             l.auto_date_enabled === false && l.enquiry_date
                 ? new Date(l.enquiry_date).getTime()
                 : 0,
+        filterValue: (l) =>
+            l.auto_date_enabled === false && l.enquiry_date
+                ? new Date(l.enquiry_date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+                : null,
         render: (l, { isDark, formatDate }) =>
             l.auto_date_enabled === false && l.enquiry_date ? (
                 <span
@@ -533,6 +562,7 @@ const COLUMNS: Column[] = [
         label: "Assigned To",
         minWidth: "min-w-[110px] sm:min-w-[150px]",
         sortValue: (l) => String(l.assigned_receptionist || l.assigned_to || "").toLowerCase(),
+        filterValue: (l) => { const n = l.assigned_receptionist || l.assigned_to; return isBlank(n) ? null : String(n).trim(); },
         render: (l, { theme, isDark, siteHeads }) => {
             const { name, role } = assignedInfo(l, siteHeads);
             if (!name) return <span className="text-[11px] sm:text-xs italic opacity-35">—</span>;
@@ -835,12 +865,22 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
     const [sortKey, setSortKey] = useState<string | null>("lead_no");
     const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
+    const applySort = (key: string, dir: "asc" | "desc" | null) => {
+        if (dir === null) {
+            // Clicking the active direction again → clear sort
+            if (sortKey === key) { setSortKey(null); }
+        } else {
+            setSortKey(key);
+            setSortDir(dir);
+        }
+    };
+
+    // Kept for backward-compat (unused after header-click refactor but safe to keep)
     const toggleSort = (key: string) => {
         const col = COLUMNS.find((c) => c.key === key);
         if (!col?.sortValue) return;
         if (sortKey !== key) {
             setSortKey(key);
-            // numbers and dates are most useful highest-first; text A→Z
             const numericFirst = ["lead_no", "budget", "created_at", "backdated", "site_visit"];
             setSortDir(numericFirst.includes(key) ? "desc" : "asc");
         } else {
@@ -848,18 +888,83 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
         }
     };
 
+    /* ── column value filters ── */
+    const [columnFilters, setColumnFilters] = useState<Map<string, Set<string>>>(
+        () => new Map()
+    );
+
+    /* Which column's dropdown is open + the anchor button element */
+    const [openFilter, setOpenFilter] = useState<{
+        colKey: string;
+        anchor: HTMLElement;
+    } | null>(null);
+
+    /* Distinct option values per column — built from filteredOverviewLeads
+       so the selector shows values that are actually reachable after upstream
+       filters (global search, lost/active, duplicates). Rebuilt only when
+       filteredOverviewLeads changes, not on every keystroke. */
+    const BLANK = "(Blanks)";
+    const columnOptions = useMemo(() => {
+        const map = new Map<string, string[]>();
+        for (const col of COLUMNS) {
+            if (!col.sortValue && !col.filterValue) continue; // Actions-only columns
+            const seen = new Set<string>();
+            const vals: string[] = [];
+            for (const lead of filteredOverviewLeads as Lead[]) {
+                const raw = col.filterValue
+                    ? col.filterValue(lead)
+                    : col.sortValue
+                        ? String(col.sortValue(lead))
+                        : null;
+                const v = (raw == null || String(raw).trim() === "") ? BLANK : String(raw).trim();
+                if (!seen.has(v)) {
+                    seen.add(v);
+                    vals.push(v);
+                }
+            }
+            // Sort: blanks last, then alphabetical
+            vals.sort((a, b) => {
+                if (a === BLANK) return 1;
+                if (b === BLANK) return -1;
+                return a.localeCompare(b);
+            });
+            map.set(col.key, vals);
+        }
+        return map;
+    }, [filteredOverviewLeads]);
+
+    /* Apply column filters in the pipeline between upstream filters and sort */
+    const columnFilteredLeads = useMemo(() => {
+        if (columnFilters.size === 0) return filteredOverviewLeads as Lead[];
+        return (filteredOverviewLeads as Lead[]).filter((lead) => {
+            for (const [colKey, selected] of columnFilters) {
+                if (selected.size === 0) continue; // empty set = no restriction
+                const col = COLUMNS.find((c) => c.key === colKey);
+                if (!col) continue;
+                const raw = col.filterValue
+                    ? col.filterValue(lead)
+                    : col.sortValue
+                        ? String(col.sortValue(lead))
+                        : null;
+                const v = (raw == null || String(raw).trim() === "") ? BLANK : String(raw).trim();
+                if (!selected.has(v)) return false;
+            }
+            return true;
+        });
+    }, [filteredOverviewLeads, columnFilters]);
+
     const sortedLeads = useMemo(() => {
-        if (!sortKey) return filteredOverviewLeads;
+        if (!sortKey) return columnFilteredLeads;
         const col = COLUMNS.find((c) => c.key === sortKey);
-        if (!col?.sortValue) return filteredOverviewLeads;
+        if (!col?.sortValue) return columnFilteredLeads;
         const dir = sortDir === "asc" ? 1 : -1;
-        return [...filteredOverviewLeads].sort((a, b) => {
+        return [...columnFilteredLeads].sort((a, b) => {
             const va = col.sortValue!(a);
             const vb = col.sortValue!(b);
             if (typeof va === "number" && typeof vb === "number") return (va - vb) * dir;
             return String(va).localeCompare(String(vb)) * dir;
         });
-    }, [filteredOverviewLeads, sortKey, sortDir]);
+    }, [columnFilteredLeads, sortKey, sortDir]);
 
     /* ── pagination ── */
     const [page, setPage] = useState(1);
@@ -867,7 +972,7 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
 
     useEffect(() => {
         setPage(1);
-    }, [overviewSearch, overviewSearchColumn, lostLeadFilter, showLostLeads, showDuplicatesOnly, rowsPerPage]);
+    }, [overviewSearch, overviewSearchColumn, lostLeadFilter, showLostLeads, showDuplicatesOnly, rowsPerPage, columnFilters]);
 
     const pageCount = Math.max(1, Math.ceil(sortedLeads.length / rowsPerPage));
     useEffect(() => {
@@ -904,7 +1009,8 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
         !!overviewSearch ||
         lostLeadFilter !== "all" ||
         showDuplicatesOnly ||
-        !showLostLeads;
+        !showLostLeads ||
+        columnFilters.size > 0;
 
     const clearFilters = () => {
         setOverviewSearch("");
@@ -912,6 +1018,7 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
         setLostLeadFilter("all");
         setShowLostLeads(true);
         setShowDuplicatesOnly(false);
+        setColumnFilters(new Map());
     };
 
     /* Memoised because this object is handed to every cell renderer. Rebuilt
@@ -1209,37 +1316,87 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
                                 )}
                                 {visibleColumns.map((col) => {
                                     const sortable = !!col.sortValue;
+                                    const filterable = !!(col.sortValue || col.filterValue);
                                     const dir = sortKey === col.key ? sortDir : null;
+                                    const hasColFilter =
+                                        columnFilters.has(col.key) &&
+                                        (columnFilters.get(col.key)?.size ?? 0) > 0;
+                                    const isOpen = openFilter?.colKey === col.key;
                                     return (
                                         <th
                                             key={col.key}
-                                            onClick={() => sortable && toggleSort(col.key)}
-                                            title={sortable ? `Sort by ${col.label}` : undefined}
                                             className={`
                         group px-2 py-2 sm:px-3 sm:py-3 whitespace-nowrap border-b
                         text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.05em] sm:tracking-[0.09em]
                         ${col.minWidth}
                         ${isDark ? "border-white/[0.08]" : "border-gray-300"}
-                        ${sortable ? "cursor-pointer select-none" : ""}
-                        ${sortable
-                                                    ? isDark
-                                                        ? "hover:text-white transition-colors"
-                                                        : "hover:text-gray-900 transition-colors"
-                                                    : ""
-                                                }
                         ${col.align === "right" ? "text-right" : col.align === "center" ? "text-center" : "text-left"}
                       `}
                                         >
                                             <span
-                                                className={`inline-flex items-center gap-1 sm:gap-1.5 ${col.align === "right"
-                                                    ? "flex-row-reverse"
-                                                    : col.align === "center"
-                                                        ? "justify-center"
-                                                        : ""
-                                                    }`}
+                                                className={`inline-flex items-center gap-1 sm:gap-1.5 ${
+                                                    col.align === "right"
+                                                        ? "flex-row-reverse"
+                                                        : col.align === "center"
+                                                            ? "justify-center w-full"
+                                                            : ""
+                                                }`}
                                             >
-                                                {col.label}
-                                                {sortable && <SortIcon dir={dir} />}
+                                                {/* Label */}
+                                                <span>{col.label}</span>
+
+                                                {/* Sort indicator (passive — not clickable; sort is via dropdown) */}
+                                                {sortable && dir && <SortIcon dir={dir} />}
+
+                                                {/* Filter/sort icon button */}
+                                                {filterable && (
+                                                    <button
+                                                        type="button"
+                                                        aria-label={`Filter ${col.label}`}
+                                                        aria-haspopup="dialog"
+                                                        aria-expanded={isOpen}
+                                                        title={`Filter / sort ${col.label}`}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            if (isOpen) {
+                                                                setOpenFilter(null);
+                                                            } else {
+                                                                setOpenFilter({
+                                                                    colKey: col.key,
+                                                                    anchor: e.currentTarget,
+                                                                });
+                                                            }
+                                                        }}
+                                                        className={`
+                              relative inline-flex items-center justify-center
+                              w-[18px] h-[18px] rounded-[5px]
+                              transition-all duration-150
+                              focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#d946a8]
+                              ${
+                                isOpen
+                                    ? isDark
+                                        ? "bg-[#9E217B]/30 text-[#e879c4]"
+                                        : "bg-[#9E217B]/15 text-[#9E217B]"
+                                    : hasColFilter
+                                        ? isDark
+                                            ? "bg-[#9E217B]/20 text-[#d946a8]"
+                                            : "bg-[#9E217B]/10 text-[#9E217B]"
+                                        : isDark
+                                            ? "text-gray-500 hover:bg-white/[0.08] hover:text-gray-200 opacity-0 group-hover:opacity-100"
+                                            : "text-gray-400 hover:bg-gray-200/70 hover:text-gray-700 opacity-0 group-hover:opacity-100"
+                              }
+                            `}
+                                                    >
+                                                        <FaFilter className="text-[7px]" />
+                                                        {/* Active filter dot */}
+                                                        {hasColFilter && (
+                                                            <span
+                                                                className="absolute -top-[3px] -right-[3px] w-[6px] h-[6px] rounded-full bg-[#9E217B]"
+                                                                aria-label="Filter active"
+                                                            />
+                                                        )}
+                                                    </button>
+                                                )}
                                             </span>
                                         </th>
                                     );
@@ -1341,6 +1498,36 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
                     />
                 )}
             </div>
+
+            {/* ═══ Column filter dropdown portal ═══
+                Rendered outside the table card so it is never clipped by
+                overflow:hidden on the DraggableTableContainer. */}
+            {openFilter && (
+                <ColumnFilterDropdown
+                    columnLabel={
+                        COLUMNS.find((c) => c.key === openFilter.colKey)?.label ?? openFilter.colKey
+                    }
+                    options={columnOptions.get(openFilter.colKey) ?? []}
+                    applied={columnFilters.get(openFilter.colKey) ?? new Set()}
+                    sortDir={sortKey === openFilter.colKey ? sortDir : null}
+                    onApply={(next) => {
+                        setColumnFilters((prev) => {
+                            const m = new Map(prev);
+                            if (next.size === 0) m.delete(openFilter.colKey);
+                            else m.set(openFilter.colKey, next);
+                            return m;
+                        });
+                    }}
+                    onSort={(dir) => {
+                        const col = COLUMNS.find((c) => c.key === openFilter.colKey);
+                        if (!col?.sortValue) return;
+                        applySort(openFilter.colKey, dir);
+                    }}
+                    onClose={() => setOpenFilter(null)}
+                    isDark={isDark}
+                    anchorEl={openFilter.anchor}
+                />
+            )}
         </div>
     );
 }

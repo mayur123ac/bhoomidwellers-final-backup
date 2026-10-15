@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getOrganizationId } from "@/lib/tenantContext";
-import { requireSession, requireRoles, getSessionUserId } from "@/lib/serverAuth";
+import { requireSession, getSessionUserId } from "@/lib/serverAuth";
 import { batchGetVisitDepths } from "@/lib/visitChain";
+import { resolvePhones } from "@/lib/phoneAccess";
 
 // GET /api/receptionist/leads?name=Receptionist
 export async function GET(req: Request) {
@@ -30,9 +31,17 @@ export async function GET(req: Request) {
     );
 
     // Attach visitNumber — single batch CTE, no N+1.
+    const actor = {
+      _id: gate.session._id ?? (gate.session as any).id,
+      name: gate.session.name,
+      role: gate.session.role,
+    };
     const leadIds = rows.map((r: any) => r.id as number);
-    const visitDepths = await batchGetVisitDepths(leadIds, orgId);
-    const rowsWithVisits = rows.map((r: any) => ({
+    const [securedRows, visitDepths] = await Promise.all([
+      resolvePhones(actor, rows, "LEAD_PHONE", orgId, ["phone", "alt_phone"]),
+      batchGetVisitDepths(leadIds, orgId),
+    ]);
+    const rowsWithVisits = securedRows.map((r: any) => ({
       ...r,
       visitNumber: visitDepths.get(r.id) ?? 1,
     }));

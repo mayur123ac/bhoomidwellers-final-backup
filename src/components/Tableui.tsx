@@ -27,6 +27,9 @@ import {
     FaCalendarCheck,
     FaTimesCircle,
     FaKey,
+    FaFilter,
+    FaSortAlphaDown,
+    FaSortAlphaUp,
 } from "react-icons/fa";
 
 /* ─────────────────────────────────────────────────────────────
@@ -879,3 +882,345 @@ export function Pagination({
 }
 
 export { isBlank };
+
+/* ─────────────────────────────────────────────────────────────
+   13. ColumnFilterDropdown — Excel-style value filter
+   ─────────────────────────────────────────────────────────────
+   Props:
+     columnLabel   — displayed in the dropdown header
+     options       — all distinct values for the column (computed by caller)
+     applied       — currently applied Set<string> (empty = all)
+     sortDir       — current sort direction for this column, or null
+     onApply       — called with new Set<string> when OK is clicked
+     onSort        — called with "asc" | "desc" | null
+     onClose       — called when the dropdown should close
+     isDark        — theme flag
+     anchorEl      — the button element used to position the dropdown
+   ─────────────────────────────────────────────────────────────── */
+export type ColumnFilterOptions = {
+    /** All distinct display values for this column */
+    options: string[];
+    /** Currently applied value filter (empty Set = no filter) */
+    applied: Set<string>;
+    /** Current sort direction for this column */
+    sortDir: "asc" | "desc" | null;
+};
+
+export function ColumnFilterDropdown({
+    columnLabel,
+    options,
+    applied,
+    sortDir,
+    onApply,
+    onSort,
+    onClose,
+    isDark,
+    anchorEl,
+}: {
+    columnLabel: string;
+    options: string[];
+    applied: Set<string>;
+    sortDir: "asc" | "desc" | null;
+    onApply: (next: Set<string>) => void;
+    onSort: (dir: "asc" | "desc" | null) => void;
+    onClose: () => void;
+    isDark: boolean;
+    anchorEl: HTMLElement | null;
+}) {
+    const [search, setSearch] = useState("");
+    const [draft, setDraft] = useState<Set<string>>(() => new Set(applied));
+    const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
+    const dropRef = useRef<HTMLDivElement>(null);
+    const searchRef = useRef<HTMLInputElement>(null);
+
+    // Position the dropdown relative to the anchor element
+    useLayoutEffect(() => {
+        if (!anchorEl) return;
+        const rect = anchorEl.getBoundingClientRect();
+        const DROPDOWN_W = 260;
+        const DROPDOWN_H = 380;
+        let top = rect.bottom + 4;
+        let left = rect.left;
+
+        // Flip up if not enough room below
+        if (top + DROPDOWN_H > window.innerHeight - 8) {
+            top = rect.top - DROPDOWN_H - 4;
+        }
+        // Clamp horizontally
+        if (left + DROPDOWN_W > window.innerWidth - 8) {
+            left = window.innerWidth - DROPDOWN_W - 8;
+        }
+        if (left < 8) left = 8;
+        setCoords({ top, left });
+        // Focus the search input once positioned
+        setTimeout(() => searchRef.current?.focus(), 30);
+    }, [anchorEl]);
+
+    // Close on outside click or Escape
+    useEffect(() => {
+        const onDown = (e: MouseEvent) => {
+            if (!dropRef.current?.contains(e.target as Node) &&
+                !anchorEl?.contains(e.target as Node)) {
+                onClose();
+            }
+        };
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === "Escape") onClose();
+        };
+        const onScroll = () => onClose();
+        document.addEventListener("mousedown", onDown);
+        document.addEventListener("keydown", onKey);
+        window.addEventListener("scroll", onScroll, true);
+        return () => {
+            document.removeEventListener("mousedown", onDown);
+            document.removeEventListener("keydown", onKey);
+            window.removeEventListener("scroll", onScroll, true);
+        };
+    }, [anchorEl, onClose]);
+
+    // Filtered list based on search input
+    const lowerSearch = search.toLowerCase();
+    const BLANK_LABEL = "(Blanks)";
+    const filtered = options.filter((v) =>
+        v.toLowerCase().includes(lowerSearch)
+    );
+
+    const allMatchSelected = filtered.length > 0 && filtered.every((v) => draft.has(v));
+    const someSelected = draft.size > 0;
+
+    const toggleOne = (v: string) => {
+        const next = new Set(draft);
+        next.has(v) ? next.delete(v) : next.add(v);
+        setDraft(next);
+    };
+
+    const selectAllFiltered = () => {
+        const next = new Set(draft);
+        filtered.forEach((v) => next.add(v));
+        setDraft(next);
+    };
+
+    const clearAll = () => setDraft(new Set());
+
+    const handleOk = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        onApply(draft);
+        onClose();
+    };
+
+    const handleCancel = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        onClose();
+    };
+
+    const handleSort = (dir: "asc" | "desc" | null, e: React.MouseEvent) => {
+        e.stopPropagation();
+        onSort(dir);
+        // Don't close — let user still apply filter values
+    };
+
+    if (!coords) return null;
+
+    const panelCls = isDark
+        ? "bg-[#18181f] border-white/10 text-gray-200"
+        : "bg-white border-gray-200 text-gray-800";
+
+    const inputCls = isDark
+        ? "bg-white/[0.05] border-white/10 text-white placeholder:text-gray-500 focus:border-[#9E217B]/60"
+        : "bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-400 focus:border-[#9E217B]/50";
+
+    const rowHover = isDark ? "hover:bg-white/[0.06]" : "hover:bg-gray-50";
+
+    const sortBtnCls = (active: boolean) =>
+        `inline-flex items-center gap-1.5 w-full px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-colors ${
+            active
+                ? isDark
+                    ? "bg-[#9E217B]/20 text-[#e879c4]"
+                    : "bg-[#9E217B]/10 text-[#9E217B]"
+                : isDark
+                    ? "text-gray-300 hover:bg-white/[0.06]"
+                    : "text-gray-600 hover:bg-gray-100"
+        }`;
+
+    return typeof document !== "undefined"
+        ? createPortal(
+            <div
+                ref={dropRef}
+                onClick={(e) => e.stopPropagation()}
+                style={{ top: coords.top, left: coords.left, width: 260, zIndex: 9999 }}
+                className={`fixed shadow-2xl rounded-xl border overflow-hidden animate-[menuIn_150ms_ease-out] ${panelCls}`}
+                role="dialog"
+                aria-label={`Filter ${columnLabel}`}
+            >
+                {/* Header */}
+                <div className={`flex items-center justify-between px-3 py-2 border-b ${
+                    isDark ? "border-white/[0.08] bg-white/[0.02]" : "border-gray-100 bg-gray-50"
+                }`}>
+                    <span className="text-[10px] font-bold uppercase tracking-widest opacity-50">
+                        Filter: {columnLabel}
+                    </span>
+                    <button
+                        onClick={handleCancel}
+                        className={`w-5 h-5 grid place-items-center rounded-md transition-colors ${
+                            isDark ? "text-gray-400 hover:bg-white/10" : "text-gray-400 hover:bg-gray-200"
+                        }`}
+                        aria-label="Close filter"
+                    >
+                        <FaTimes className="text-[9px]" />
+                    </button>
+                </div>
+
+                {/* Sort section */}
+                <div className={`px-2 py-2 border-b ${
+                    isDark ? "border-white/[0.06]" : "border-gray-100"
+                }`}>
+                    <p className="text-[9px] font-bold uppercase tracking-widest opacity-40 px-1 mb-1">
+                        Sort
+                    </p>
+                    <button
+                        className={sortBtnCls(sortDir === "asc")}
+                        onClick={(e) => handleSort(sortDir === "asc" ? null : "asc", e)}
+                    >
+                        <FaSortAlphaDown className="text-[10px] opacity-70" />
+                        Sort A → Z / Smallest first
+                        {sortDir === "asc" && <FaCheck className="ml-auto text-[8px]" />}
+                    </button>
+                    <button
+                        className={sortBtnCls(sortDir === "desc")}
+                        onClick={(e) => handleSort(sortDir === "desc" ? null : "desc", e)}
+                    >
+                        <FaSortAlphaUp className="text-[10px] opacity-70" />
+                        Sort Z → A / Largest first
+                        {sortDir === "desc" && <FaCheck className="ml-auto text-[8px]" />}
+                    </button>
+                </div>
+
+                {/* Search input */}
+                <div className="px-2 pt-2 pb-1">
+                    <div className="relative">
+                        <FaSearch className={`absolute left-2.5 top-1/2 -translate-y-1/2 text-[9px] pointer-events-none ${
+                            isDark ? "text-gray-500" : "text-gray-400"
+                        }`} />
+                        <input
+                            ref={searchRef}
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            onKeyDown={(e) => e.key === "Escape" && (search ? setSearch("") : onClose())}
+                            placeholder="Search values..."
+                            aria-label="Search filter values"
+                            className={`w-full h-7 pl-7 pr-7 rounded-lg text-[11px] font-medium outline-none border transition-all duration-200 focus:shadow-[0_0_0_2px_rgba(158,33,123,0.15)] ${inputCls}`}
+                        />
+                        {search && (
+                            <button
+                                onClick={() => setSearch("")}
+                                className={`absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 grid place-items-center rounded ${
+                                    isDark ? "text-gray-400 hover:text-white" : "text-gray-400 hover:text-gray-700"
+                                }`}
+                            >
+                                <FaTimes className="text-[8px]" />
+                            </button>
+                        )}
+                    </div>
+                </div>
+
+                {/* Select all / clear bar */}
+                <div className={`flex items-center justify-between px-3 py-1 ${
+                    isDark ? "" : ""
+                }`}>
+                    <button
+                        onClick={() => {
+                            if (allMatchSelected) {
+                                const next = new Set(draft);
+                                filtered.forEach((v) => next.delete(v));
+                                setDraft(next);
+                            } else {
+                                selectAllFiltered();
+                            }
+                        }}
+                        className={`text-[10px] font-bold ${
+                            isDark ? "text-[#00AEEF] hover:text-[#7dd3fc]" : "text-[#0284c7] hover:text-[#0369a1]"
+                        }`}
+                    >
+                        {allMatchSelected ? "Deselect all" : "Select all"}
+                    </button>
+                    {someSelected && (
+                        <button
+                            onClick={clearAll}
+                            className={`text-[10px] font-bold ${
+                                isDark ? "text-gray-400 hover:text-gray-200" : "text-gray-400 hover:text-gray-700"
+                            }`}
+                        >
+                            Clear ({draft.size})
+                        </button>
+                    )}
+                </div>
+
+                {/* Checkbox list */}
+                <div className="overflow-y-auto" style={{ maxHeight: 160 }}>
+                    {filtered.length === 0 ? (
+                        <p className="text-[11px] opacity-40 text-center py-4">No values match</p>
+                    ) : (
+                        filtered.map((val) => (
+                            <label
+                                key={val}
+                                className={`flex items-center gap-2 px-3 py-[5px] cursor-pointer select-none transition-colors ${rowHover}`}
+                            >
+                                <span className={`relative shrink-0 w-[15px] h-[15px] rounded-[4px] border-[1.5px] grid place-items-center transition-all ${
+                                    draft.has(val)
+                                        ? "bg-[#9E217B] border-[#9E217B]"
+                                        : isDark
+                                            ? "border-white/20 bg-white/[0.03]"
+                                            : "border-gray-300 bg-white"
+                                }`}>
+                                    <FaCheck className={`text-white text-[7px] transition-all ${
+                                        draft.has(val) ? "opacity-100 scale-100" : "opacity-0 scale-50"
+                                    }`} />
+                                </span>
+                                <input
+                                    type="checkbox"
+                                    className="sr-only"
+                                    checked={draft.has(val)}
+                                    onChange={() => toggleOne(val)}
+                                    aria-label={val}
+                                />
+                                <span className={`text-[11px] font-medium truncate ${
+                                    val === BLANK_LABEL
+                                        ? isDark ? "italic text-gray-500" : "italic text-gray-400"
+                                        : ""
+                                }`}>
+                                    {val}
+                                </span>
+                            </label>
+                        ))
+                    )}
+                </div>
+
+                {/* Footer actions */}
+                <div className={`flex items-center justify-end gap-2 px-3 py-2 border-t ${
+                    isDark ? "border-white/[0.08] bg-white/[0.02]" : "border-gray-100 bg-gray-50"
+                }`}>
+                    <button
+                        onClick={handleCancel}
+                        className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-colors border ${
+                            isDark
+                                ? "border-white/10 text-gray-300 hover:bg-white/[0.07]"
+                                : "border-gray-200 text-gray-600 hover:bg-gray-100"
+                        }`}
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onClick={handleOk}
+                        className="px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-[#9E217B] text-white hover:bg-[#b82b91] transition-colors"
+                    >
+                        OK
+                        {draft.size > 0 && (
+                            <span className="ml-1 opacity-75">({draft.size})</span>
+                        )}
+                    </button>
+                </div>
+            </div>,
+            document.body
+        )
+        : null;
+}

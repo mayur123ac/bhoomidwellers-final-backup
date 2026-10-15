@@ -32,6 +32,8 @@
 // LEAD_PHONE:  ADMIN  OR  assigned employee  OR  POLICY ON  → full phone
 //   Ownership alone grants access regardless of policy — the assigned employee
 //   MUST always see their own lead's phone even if their role toggle is OFF.
+//   Receptionist is stricter: the role policy must not reveal Sales Manager or
+//   other employees' lead phones in the Front Desk Log.
 
 import { query } from "@/lib/db";
 import { normalizeRole } from "@/lib/cpRbac";
@@ -402,11 +404,13 @@ export async function canViewFullPhone(
     typeof actor.name === "string" && actor.name.trim() ? actor.name : null;
 
   // ── LEAD_PHONE: different precedence model ────────────────────────────────
-  // Ownership alone grants access (overrides policy). Policy only governs
-  // employees who are NOT assigned to the lead.
+  // Ownership alone grants access (overrides policy). Receptionists are scoped
+  // to ownership only; other governed roles may still use the role policy for
+  // non-owned rows as configured.
   if (scope === "LEAD_PHONE") {
     // Gate: ownership — assigned employee always sees their own lead's phone.
     if (ownsLeadRecord(roleKey, actorId, actorName, record)) return true;
+    if (roleKey === "receptionist") return false;
     // Non-owner: role policy determines access.
     return getPhonePolicy(organizationId, scope, roleKey);
   }
@@ -443,8 +447,8 @@ export async function resolvePhone(
 /**
  * Apply phone masking to an array of records.
  *
- * Fetches the role policy ONCE per call (not per record), then applies the
- * ownership check per record. For Admin, returns the array unchanged.
+ * Fetches the role policy at most once per call, then applies the ownership
+ * check per record. For Admin, returns the array unchanged.
  *
  * @param actor       current session { _id, name, role }
  * @param records     array of database rows to process
@@ -478,9 +482,16 @@ export async function resolvePhones<T extends Record<string, unknown>>(
     typeof actor.name === "string" && actor.name.trim() ? actor.name : null;
 
   // ── LEAD_PHONE: ownership overrides policy ────────────────────────────────
-  // One policy query for the whole batch. Per-record: if owned → full phone
-  // regardless of policy. If not owned → policy determines.
+  // Per-record: if owned -> full phone regardless of policy. Receptionist
+  // non-owned rows are always masked; other governed roles use one role-policy
+  // query for non-owned rows.
   if (scope === "LEAD_PHONE") {
+    if (roleKey === "receptionist") {
+      return records.map((r) => {
+        const owned = ownsLeadRecord(roleKey, actorId, actorName, r as Record<string, unknown>);
+        return owned ? r : maskFields(r, phoneFields);
+      });
+    }
     const policyAllows = await getPhonePolicy(orgId, scope, roleKey);
     return records.map((r) => {
       const owned = ownsLeadRecord(roleKey, actorId, actorName, r as Record<string, unknown>);

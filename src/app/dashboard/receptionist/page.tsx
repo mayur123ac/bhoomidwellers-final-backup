@@ -998,19 +998,6 @@ export default function ReceptionistDashboard() {
   // Input only ever holds raw digits — the "+91" prefix is rendered separately,
   // so there's no reformatting-while-typing to fight the cursor over.
   const cleanMobileDigits = (raw: string) => raw.replace(/\D/g, "").slice(0, 10);
-  const maskPhone = (phone: any) => {
-    if (!phone || phone === "N/A") return "N/A";
-    const s = String(phone).trim();
-    if (!s || s === "Pending") return s;
-    if (s.length <= 3) return s; // genuine non-phone value
-    if (s.length === 10) {
-      return `${s.slice(0, 2)}••••${s.slice(6)}`;
-    }
-    // Partial/longer numbers: keep first 2 + mask middle + last 1-4 visible.
-    const visibleTail = Math.min(4, Math.max(1, s.length - 3));
-    const maskLen = Math.max(1, s.length - 2 - visibleTail);
-    return `${s.slice(0, 2)}${"•".repeat(maskLen)}${s.slice(-visibleTail)}`;
-  };
   const showToast = (title: string, color = "green") => {
     setToastMsg({ title, color });
     setTimeout(() => setToastMsg(null), 3500);
@@ -1111,7 +1098,7 @@ export default function ReceptionistDashboard() {
       const updated = mergedLeads.find((l: any) => String(l.id) === String(selectedLead.id));
       if (updated) setSelectedLead(updated);
     }
-  }, [enquiries, followUps]);
+  }, [enquiries, directAssignedLeads, followUps, selectedLead?.id]);
 
   // Booking and loan both arrive via fetchLoanDealData now. The separate
   // fetchBookingForLead effect that used to sit here requested
@@ -2756,8 +2743,8 @@ export default function ReceptionistDashboard() {
                         "CP Company": l.cp_company || "",
                         "CP Phone": l.cp_phone || "",
                         "Budget": l.salesBudget || l.budget || "",
-                        "Phone": maskPhone(l.phone),
-                        "Alt. Phone": maskPhone(l.altPhone),
+                        "Phone": l.phone || "",
+                        "Alt. Phone": l.altPhone || "",
                         "Date Created": l.date || "",
                         "Backdated Entry": l.autoDateEnabled === false && l.enquiryDate ? formatDate(l.enquiryDate).split(",")[0] : "",
                         "Sales Manager": l.assignedTo || "",
@@ -2907,7 +2894,7 @@ export default function ReceptionistDashboard() {
                             <td className="px-4 py-3 text-[13px] tabular-nums" onClick={(e) => e.stopPropagation()}>
                               <InlineContactField
                                 label=""
-                                value={user?.role?.toLowerCase() === "receptionist" ? maskPhone(enquiry.phone) : enquiry.phone}
+                                value={enquiry.phone}
                                 fieldType="tel"
                                 isDark={isDark}
                                 theme={t}
@@ -2926,7 +2913,7 @@ export default function ReceptionistDashboard() {
                             <td className="px-4 py-3 text-[13px] tabular-nums" onClick={(e) => e.stopPropagation()}>
                               <InlineContactField
                                 label=""
-                                value={user?.role?.toLowerCase() === "receptionist" ? maskPhone(enquiry.altPhone) : enquiry.altPhone}
+                                value={enquiry.altPhone}
                                 fieldType="tel"
                                 isDark={isDark}
                                 theme={t}
@@ -3267,8 +3254,8 @@ export default function ReceptionistDashboard() {
                     <div>
                       <h3 className={`text-xs sm:text-[13px] md:text-sm font-bold border-b pb-2 sm:pb-3 mb-3 sm:mb-5 uppercase tracking-widest ${t.sectionTitle} ${t.tableBorder}`}>Contact Information</h3>
                       <div className="space-y-3 sm:space-y-5 md:space-y-4">
-                        <InlineContactField label="Phone Number" value={user?.role?.toLowerCase() === "receptionist" ? maskPhone(selectedLead.phone) : selectedLead.phone} fieldType="tel" isDark={isDark} theme={t} canEdit={user?.role?.toLowerCase() === "admin"} mono onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "phone", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, phone: val })); showToast("Contact details updated successfully."); }} />
-                        <InlineContactField label="Alt. Phone" value={user?.role?.toLowerCase() === "receptionist" ? maskPhone(selectedLead.altPhone ?? selectedLead.alt_phone) : (selectedLead.altPhone ?? selectedLead.alt_phone)} fieldType="tel" isDark={isDark} theme={t} canEdit={user?.role?.toLowerCase() === "admin"} mono onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "alt_phone", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, altPhone: val, alt_phone: val })); showToast("Contact details updated successfully."); }} />
+                        <InlineContactField label="Phone Number" value={selectedLead.phone} fieldType="tel" isDark={isDark} theme={t} canEdit={user?.role?.toLowerCase() === "admin"} mono onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "phone", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, phone: val })); showToast("Contact details updated successfully."); }} />
+                        <InlineContactField label="Alt. Phone" value={selectedLead.altPhone ?? selectedLead.alt_phone} fieldType="tel" isDark={isDark} theme={t} canEdit={user?.role?.toLowerCase() === "admin"} mono onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "alt_phone", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, altPhone: val, alt_phone: val })); showToast("Contact details updated successfully."); }} />
                         <InlineContactField label="Email Address" value={selectedLead.email} fieldType="email" isDark={isDark} theme={t} canEdit={user?.role?.toLowerCase() === "admin" || user?.role?.toLowerCase() === "receptionist"} onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "email", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, email: val || "N/A" })); showToast("Contact details updated successfully."); }} />
                         <div className="mt-2 sm:mt-3">
                           <p className={`text-[10px] sm:text-[11px] md:text-xs font-medium mb-1 sm:mb-1.5 ${t.textFaint}`}>Residential Address</p>
@@ -3575,8 +3562,8 @@ export default function ReceptionistDashboard() {
                                 <div>
                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-4 text-[12px] sm:text-[13px]">
                                     <InlineContactField label="Email" value={selectedLead.email} fieldType="email" isDark={isDark} theme={t} canEdit={user?.role?.toLowerCase() === "admin" || user?.role?.toLowerCase() === "receptionist"} onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "email", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, email: val || "N/A" })); showToast("Contact details updated successfully."); }} />
-                                    <InlineContactField label="Phone" value={user?.role?.toLowerCase() === "receptionist" ? maskPhone(selectedLead.phone) : selectedLead.phone} fieldType="tel" isDark={isDark} theme={t} canEdit={user?.role?.toLowerCase() === "admin"} mono onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "phone", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, phone: val })); showToast("Contact details updated successfully."); }} />
-                                    <InlineContactField label="Alt Phone" value={user?.role?.toLowerCase() === "receptionist" ? maskPhone(selectedLead.altPhone ?? selectedLead.alt_phone) : (selectedLead.altPhone ?? selectedLead.alt_phone)} fieldType="tel" isDark={isDark} theme={t} canEdit={user?.role?.toLowerCase() === "admin"} mono onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "alt_phone", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, altPhone: val, alt_phone: val })); showToast("Contact details updated successfully."); }} />
+                                    <InlineContactField label="Phone" value={selectedLead.phone} fieldType="tel" isDark={isDark} theme={t} canEdit={user?.role?.toLowerCase() === "admin"} mono onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "phone", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, phone: val })); showToast("Contact details updated successfully."); }} />
+                                    <InlineContactField label="Alt Phone" value={selectedLead.altPhone ?? selectedLead.alt_phone} fieldType="tel" isDark={isDark} theme={t} canEdit={user?.role?.toLowerCase() === "admin"} mono onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "alt_phone", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, altPhone: val, alt_phone: val })); showToast("Contact details updated successfully."); }} />
                                     <div><p className={`crm-eyebrow mb-1 opacity-70 ${t.textFaint}`}>Lead Interest</p>{selectedLead.leadInterestStatus && selectedLead.leadInterestStatus !== "Pending" ? <InterestBadge status={selectedLead.leadInterestStatus} /> : <p className={`font-semibold ${t.text}`}>Pending</p>}</div>
                                     <div><p className={`crm-eyebrow mb-1 opacity-70 ${t.textFaint}`}>Loan Status</p>{selectedLead.loanStatus && selectedLead.loanStatus !== "N/A" ? <div className="w-fit"><LoanStatusBadge status={selectedLead.loanStatus} /></div> : <p className={`font-semibold ${t.text}`}>N/A</p>}</div>
                                     <div><p className={`crm-eyebrow mb-1 opacity-70 ${t.textFaint}`}>Backdated Entry</p><p className={`font-semibold ${t.text}`}>{selectedLead.auto_date_enabled === false && selectedLead.enquiry_date ? formatDate(selectedLead.enquiry_date).split(",")[0] : "Null"}</p></div>
@@ -3744,7 +3731,7 @@ export default function ReceptionistDashboard() {
 
                 <div className="flex flex-col sm:flex-row w-full sm:w-auto gap-2 sm:gap-3 mt-3 sm:mt-0">
                   <ToolbarButton
-                    onClick={() => downloadCSV(filteredRecepLeads.map((l: any) => ({ "Sr. No.": l.sr_no || l.id, "Client Name": l.name, "CP Company": l.cp_company || "N/A", "Budget": l.salesBudget || l.budget || "N/A", "Phone": maskPhone(l.phone), "Alt Phone": maskPhone(l.altPhone), "Date Created": l.date, "Assigned to": l.assignedReceptionist || l.assignedTo || "Unassigned", "Status": l.status || "Assigned" })), "Receptionist_Leads.csv")}
+                    onClick={() => downloadCSV(filteredRecepLeads.map((l: any) => ({ "Sr. No.": l.sr_no || l.id, "Client Name": l.name, "CP Company": l.cp_company || "N/A", "Budget": l.salesBudget || l.budget || "N/A", "Phone": l.phone || "", "Alt Phone": l.altPhone || "", "Date Created": l.date, "Assigned to": l.assignedReceptionist || l.assignedTo || "Unassigned", "Status": l.status || "Assigned" })), "Receptionist_Leads.csv")}
                     icon={<FaDownload className="text-[13px] sm:text-[11px]" />} variant="export" isDark={isDark} title="Download these leads as CSV">
                     <span className="w-full text-center">Export</span>
                   </ToolbarButton>
@@ -3791,8 +3778,8 @@ export default function ReceptionistDashboard() {
                         "Client Name": l.name,
                         "CP Details": l.cp_company || l.cpCompany || "",
                         "Budget": l.salesBudget || l.budget || "",
-                        "Phone": maskPhone(l.phone),
-                        "Alt. Phone": maskPhone(l.altPhone),
+                        "Phone": l.phone || "",
+                        "Alt. Phone": l.altPhone || "",
                         "Date Created": l.date || "",
                         "Assigned to": l.assignedReceptionist || "",
                         "Site Visits": l.mongoVisitDate || "",
@@ -3943,11 +3930,11 @@ export default function ReceptionistDashboard() {
                             </td>}
 
                             {!hiddenRecepCols.has("phone") && <td className={`px-3 sm:px-5 py-3.5 sm:py-4 text-[12px] sm:text-[13px] font-mono font-medium tracking-tight ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                              {maskPhone(lead.phone)}
+                              {lead.phone || "N/A"}
                             </td>}
 
                             {!hiddenRecepCols.has("alt_phone") && <td className={`px-3 sm:px-5 py-3.5 sm:py-4 text-[12px] sm:text-[13px] font-mono font-medium tracking-tight ${isDark ? "text-slate-500" : "text-slate-400"}`}>
-                              {maskPhone(lead.altPhone)}
+                              {lead.altPhone || "N/A"}
                             </td>}
 
                             {!hiddenRecepCols.has("date_created") && <td className={`px-3 sm:px-5 py-3.5 sm:py-4 text-[11px] sm:text-[12px] font-medium min-w-[110px] sm:min-w-[120px] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
@@ -4198,7 +4185,7 @@ export default function ReceptionistDashboard() {
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-5">
                           {[
                             { label: "Client Name", val: selectedClosedLead.name },
-                            { label: "Phone", val: maskPhone(selectedClosedLead.phone) },
+                            { label: "Phone", val: selectedClosedLead.phone },
                             { label: "Budget", val: selectedClosedLead.salesBudget || selectedClosedLead.budget },
                             { label: "Property", val: selectedClosedLead.propType || selectedClosedLead.configuration || "N/A" },
                             { label: "Use Type", val: selectedClosedLead.useType !== "Pending" ? selectedClosedLead.useType : (selectedClosedLead.purpose || "N/A") },

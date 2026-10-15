@@ -25,6 +25,7 @@ import CpChatPanel from "@/components/CpChatPanel";
 import AssignedChannelPartnersView from "@/components/AssignedChannelPartnersView";
 import ChannelPartnerFormModal from "@/components/ChannelPartnerFormModal";
 import WhatsAppSettingsCard from "@/components/WhatsAppSettingsCard";
+import NewSettingDesign from "@/components/newSettingdesign";
 import UserAvatar from "@/components/UserAvatar";
 import HeaderClock from "@/components/HeaderClock";
 import AppHeader, { HeaderControl, AppLogo } from "@/components/AppHeader";
@@ -475,30 +476,7 @@ export default function SourcingManagerDashboard() {
               SETTINGS
           ════════════════════════════════════════════════════ */}
           {activeTab === "settings" && (
-            <div className="animate-fadeIn max-w-3xl mx-auto px-4 md:px-6 w-full">
-              <h1 className="text-xl md:text-2xl font-semibold tracking-tight mb-6 mt-6">Settings</h1>
-
-              <div className="space-y-4 md:space-y-6">
-                <div className={`rounded-2xl p-5 ${bgCard}`}>
-                  <h3 className="text-[10px] md:text-xs font-semibold tracking-wider mb-4 uppercase">Account Profile</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6">
-                    <div>
-                      <p className={`text-[9px] md:text-[10px] font-medium mb-1 uppercase tracking-wide ${textSecondary}`}>Full Name</p>
-                      <p className="text-sm md:text-base font-medium">{user?.name}</p>
-                    </div>
-                    <div>
-                      <p className={`text-[9px] md:text-[10px] font-medium mb-1 uppercase tracking-wide ${textSecondary}`}>Email</p>
-                      <p className="text-sm md:text-base font-medium">{user?.email || "—"}</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className={`rounded-2xl p-5 ${bgCard}`}>
-                  <h3 className="text-[10px] md:text-xs font-semibold tracking-wider mb-4 uppercase">Communication</h3>
-                  <WhatsAppSettingsCard user={user} setUser={setUser} isDark={isDark} t={NO_THEME_TOKENS} />
-                </div>
-              </div>
-            </div>
+            <NewSettingDesign user={user} setUser={setUser} isDark={isDark} />
           )}
         </main>
       </div>
