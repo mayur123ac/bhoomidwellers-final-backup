@@ -19,6 +19,7 @@ import React, { useCallback, useDeferredValue, useEffect, useMemo, useState } fr
 import { motion, AnimatePresence } from "framer-motion";
 import { FaSearch, FaTimes, FaUserTie, FaExchangeAlt, FaHandshake, FaEllipsisV, FaTrash, FaPen } from "react-icons/fa";
 import SearchableSelect, { SelectOption } from "./SearchableSelect";
+import ColumnFilterDropdown, { FilterableColumnHeader, useColumnFilters, type FilterableColumn } from "@/components/ColumnFilterDropdown";
 import { normalizeRole } from "@/lib/cpRbac";
 import { useCpResource, invalidateCpCache } from "@/lib/hooks/useCpResource";
 import { CpTableSkeletonRows, CpHeaderSkeleton } from "./cp/CpSkeletons";
@@ -99,6 +100,82 @@ const requirementOf = (r: EnquiryRowData) => {
     .map(v => (v && v !== "N/A" && v !== "Pending" ? String(v) : null))
     .filter(Boolean);
   return parts.length ? parts.join(" · ") : null;
+};
+
+// ── Column filter schema ─────────────────────────────────────────────────────
+// Maps each visible column label to a stable key and optional type hint used by
+// the shared ColumnFilterDropdown. "Sr. No." and the blank reassign column are
+// excluded — they are positional / action columns with no meaningful filter.
+
+const FILTERABLE_COLS_FULL: FilterableColumn[] = [
+  { key: "lead_no",              label: "Lead No." },
+  { key: "created_at",           label: "Created",            type: "date" },
+  { key: "cp_name",              label: "CP Name" },
+  { key: "cp_company",           label: "CP Company" },
+  { key: "cp_phone",             label: "CP Phone" },
+  { key: "office_address",       label: "Office Address" },
+  { key: "primary_contact",      label: "Primary Contact" },
+  { key: "gst",                  label: "GST" },
+  { key: "rera",                 label: "RERA" },
+  { key: "cp_city",              label: "CP City" },
+  { key: "cp_pin",               label: "CP Pin" },
+  { key: "client_name",          label: "Client Name" },
+  { key: "client_phone",         label: "Client Phone" },
+  { key: "alt_phone",            label: "Alt Phone" },
+  { key: "client_email",         label: "Client Email" },
+  { key: "preferred_location",   label: "Preferred Location" },
+  { key: "budget",               label: "Budget" },
+  { key: "requirement",          label: "Requirement" },
+  { key: "registered_by",        label: "Registered By" },
+  { key: "sourcing_manager",     label: "Sourcing Manager" },
+  { key: "sales_manager",        label: "Sales Manager" },
+  { key: "status",               label: "Status" },
+];
+
+const FILTERABLE_COLS_STANDALONE: FilterableColumn[] = [
+  { key: "created_at",           label: "Created",            type: "date" },
+  { key: "cp_name",              label: "CP Name" },
+  { key: "cp_company",           label: "CP Company" },
+  { key: "cp_phone",             label: "CP Phone" },
+  { key: "office_address",       label: "Office Address" },
+  { key: "primary_contact",      label: "Primary Contact" },
+  { key: "gst",                  label: "GST" },
+  { key: "rera",                 label: "RERA" },
+  { key: "cp_city",              label: "CP City" },
+  { key: "cp_pin",               label: "CP Pin" },
+  { key: "registered_by",        label: "Registered By" },
+  { key: "sourcing_manager",     label: "Sourcing Manager" },
+  { key: "sales_manager",        label: "Sales Manager" },
+  { key: "status",               label: "Status" },
+];
+
+/** Map a row + column key to the display string shown in the filter dropdown. */
+const getDisplayValue = (row: EnquiryRowData, colKey: string): string => {
+  switch (colKey) {
+    case "lead_no":            return row.sr_no || row.id ? `#${String(row.sr_no || row.id).padStart(3, "0")}` : "";
+    case "created_at":         return fmtDate(row.created_at) || "";
+    case "cp_name":            return cpField(row, "partner_name", "cp_name") || "";
+    case "cp_company":         return cpField(row, "partner_company", "cp_company") || "";
+    case "cp_phone":           return cpField(row, "partner_phone", "cp_phone") || "";
+    case "office_address":     return row.office_address || "";
+    case "primary_contact":    return row.owner_contact_person || "";
+    case "gst":                return row.gst_number || "";
+    case "rera":               return row.rera_registration_no || "";
+    case "cp_city":            return row.partner_city || "";
+    case "cp_pin":             return row.partner_pin_code || "";
+    case "client_name":        return row.client_name || "";
+    case "client_phone":       return row.client_phone || "";
+    case "alt_phone":          return row.alt_phone || "";
+    case "client_email":       return row.email && row.email !== "N/A" ? row.email : "";
+    case "preferred_location": return row.preferred_location || "";
+    case "budget":             return row.budget && row.budget !== "Pending" ? row.budget : "";
+    case "requirement":        return requirementOf(row) || "";
+    case "registered_by":      return row.registered_by_name || "";
+    case "sourcing_manager":   return row.sourcing_manager_name || "";
+    case "sales_manager":      return row.sales_manager_name || "";
+    case "status":             return row.cp_status || row.status || "Active";
+    default:                   return "";
+  }
 };
 
 /**
@@ -271,6 +348,16 @@ function ChannelPartnerEnquiriesTable({
 
   const [search, setSearch] = useState("");
   const [smFilter, setSmFilter] = useState("");
+
+  // ── Column-level Excel-style filter / sort ──────────────────────────────
+  const {
+    colFilters, colSort, openFilterCol, setOpenFilterCol,
+    applyFilter, applySort, clearAllFilters, filterRows, sortRows,
+  } = useColumnFilters();
+  const filterableCols = useMemo(
+    () => standalone ? FILTERABLE_COLS_STANDALONE : FILTERABLE_COLS_FULL,
+    [standalone],
+  );
   const [detail, setDetail] = useState<any>(null);
   const [assignmentHistory, setAssignmentHistory] = useState<any[]>([]);
   const [assignmentHistoryLoading, setAssignmentHistoryLoading] = useState(false);
@@ -418,6 +505,31 @@ function ChannelPartnerEnquiriesTable({
         .some(v => String(v ?? "").replace(/\D/g, "").includes(digits)))
     );
   }, [rows, deferredSearch]);
+
+  // Apply column filters, then column sort, after the existing search filter.
+  const finalVisible = useMemo(() => {
+    let result = filterRows(visible, getDisplayValue);
+    result = sortRows(result, getDisplayValue);
+    return result;
+  }, [visible, filterRows, sortRows]);
+
+  // Pre-compute display-value rows for the dropdown's unique-value extraction.
+  // The dropdown expects `Record<string, unknown>[]` keyed by `column.key`.
+  const displayRows = useMemo(() => {
+    return visible.map(row => {
+      const out: Record<string, unknown> = {};
+      for (const col of filterableCols) {
+        const v = getDisplayValue(row, col.key);
+        out[col.key] = v === "" ? null : v;
+      }
+      return out;
+    });
+  }, [visible, filterableCols]);
+
+  const hasAnyColFilter = useMemo(
+    () => Object.values(colFilters).some(v => v !== null && v !== undefined),
+    [colFilters],
+  );
 
   const flash = (msg: string) => { setNotice(msg); setTimeout(() => setNotice(null), 5000); };
 
@@ -647,19 +759,74 @@ function ChannelPartnerEnquiriesTable({
       {/* ── Table ── */}
       <div className={`flex-1 overflow-auto mx-2 rounded-3xl ${t.card}`}>
         <table className="w-full text-left border-collapse">
-          {/* APPLE UI: Frosted glass sticky header */}
+          {/* APPLE UI: Frosted glass sticky header — with Excel-style column filters */}
           <thead className={`sticky top-0 z-10 backdrop-blur-xl${isDark ? "bg-[#000000]/70 border-b border-white/10" : "bg-white/70 border-b border-black/5"}`}>
             <tr className={`text-[10px] uppercase tracking-wider ${t.textMuted}`}>
-              {columns.map((h, i) => (
-                <th
-                  key={`${h}-${i}`}
-                  className={`px-3 py-3 whitespace-nowrap font-semibold shadow-sm ${isDark
-                    ? "bg-[#1C1C1E] text-white border-b border-white/10"
-                    : "bg-[#F8F9FA] text-gray-900 border-b border-black/5"
+              {columns.map((h, i) => {
+                // Find the matching filterable column definition for this header
+                const fcol = filterableCols.find(c => c.label === h);
+                const thCls = `px-3 py-3 whitespace-nowrap font-semibold shadow-sm ${isDark
+                  ? "bg-[#1C1C1E] text-white border-b border-white/10"
+                  : "bg-[#F8F9FA] text-gray-900 border-b border-black/5"
+                }`;
+
+                // Non-filterable columns (Sr. No., Action, blank reassign header)
+                if (!fcol) {
+                  return <th key={`${h}-${i}`} className={thCls}>{h}</th>;
+                }
+
+                // Filterable column — use the shared FilterableColumnHeader
+                return (
+                  <FilterableColumnHeader
+                    key={fcol.key}
+                    column={fcol}
+                    isFiltered={!!colFilters[fcol.key]}
+                    colSort={colSort}
+                    isOpen={openFilterCol === fcol.key}
+                    onToggle={() => setOpenFilterCol(prev => prev === fcol.key ? null : fcol.key)}
+                    isDark={isDark}
+                    className={`whitespace-nowrap font-semibold shadow-sm ${isDark
+                      ? "bg-[#1C1C1E] border-white/10"
+                      : "bg-[#F8F9FA] border-black/5"
                     }`}
-                >{h}</th>
-              ))}
+                  >
+                    {openFilterCol === fcol.key && (
+                      <ColumnFilterDropdown
+                        column={fcol}
+                        data={displayRows}
+                        activeFilter={colFilters[fcol.key] ?? null}
+                        activeSort={colSort?.key === fcol.key ? colSort : null}
+                        onApply={vals => applyFilter(fcol.key, vals)}
+                        onSort={dir => applySort(fcol.key, dir)}
+                        onClose={() => setOpenFilterCol(null)}
+                        isDark={isDark}
+                      />
+                    )}
+                  </FilterableColumnHeader>
+                );
+              })}
             </tr>
+            {/* Clear-all pill: only visible when at least one column filter is active */}
+            {(hasAnyColFilter || colSort) && (
+              <tr>
+                <td
+                  colSpan={columns.length}
+                  className={`px-3 py-1.5 text-[10px] ${isDark ? "bg-[#1C1C1E] border-b border-white/10" : "bg-[#F8F9FA] border-b border-black/5"}`}
+                >
+                  <button
+                    onClick={clearAllFilters}
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold transition-colors ${
+                      isDark ? "bg-white/10 text-white hover:bg-white/20" : "bg-black/5 text-black hover:bg-black/10"
+                    }`}
+                  >
+                    <FaTimes className="w-2 h-2" /> Clear all column filters
+                  </button>
+                  <span className={`ml-2 ${isDark ? "text-gray-500" : "text-gray-400"}`}>
+                    {finalVisible.length} of {visible.length} rows
+                  </span>
+                </td>
+              </tr>
+            )}
           </thead>
           <tbody>
             {/* Loading, empty and failed are three different answers and each
@@ -693,19 +860,21 @@ function ChannelPartnerEnquiriesTable({
               </tr>
             )}
 
-            {!loading && !(rows.length === 0 && rowsError) && visible.length === 0 && (
+            {!loading && !(rows.length === 0 && rowsError) && finalVisible.length === 0 && (
               <tr>
                 <td colSpan={columns.length} className="px-4 py-16 text-center">
                   <FaUserTie className={`mx-auto mb-3 text-2xl ${t.textFaint}`} />
                   <p className={`text-sm font-semibold tracking-tight mb-1 ${t.text}`}>
-                    {search ? 'No enquiries match your search'
+                    {hasAnyColFilter ? 'No rows match the active column filters'
+                      : search ? 'No enquiries match your search'
                       : role === 'sourcing manager' ? 'Nothing assigned to you yet'
                         : role === 'sales manager' ? 'No Channel Partners assigned to you yet'
                           : smFilter ? 'No enquiries for this filter'
                             : 'No Channel Partner enquiries yet'}
                   </p>
                   <p className={`text-xs ${t.textMuted}`}>
-                    {search ? 'Try a different name, phone or GST.'
+                    {hasAnyColFilter ? 'Try loosening a column filter, or click "Clear all column filters" above.'
+                      : search ? 'Try a different name, phone or GST.'
                       : role === 'sourcing manager'
                         ? 'An enquiry appears here when it is routed to you, or when it comes from a Channel Partner assigned to you. If a partner of yours has brought leads but nothing shows, ask an Admin to confirm the partner is assigned to you.'
                         : role === 'sales manager'
@@ -718,7 +887,7 @@ function ChannelPartnerEnquiriesTable({
               </tr>
             )}
 
-            {!loading && visible.map((r, i) => (
+            {!loading && finalVisible.map((r, i) => (
               <EnquiryRow
                 key={standalone ? `cp-${r.channel_partner_id}` : (r.id ?? `cp-${r.channel_partner_id}-${i}`)}
                 row={r}

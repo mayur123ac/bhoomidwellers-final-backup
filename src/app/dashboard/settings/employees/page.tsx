@@ -21,6 +21,11 @@ import {
   checkRules,
   useToast,
 } from "@/components/Settings/ui";
+import SharedColumnFilterDropdown, {
+  useColumnFilters,
+  type FilterableColumn,
+} from "@/components/ColumnFilterDropdown";
+import { FaFilter, FaSortAlphaDown, FaSortAlphaUp } from "react-icons/fa";
 
 function formatWhen(value: string | null | undefined): string {
   if (!value) return "—";
@@ -511,7 +516,44 @@ export default function EmployeesPage() {
   // cannot act on a row the admin can no longer see.
   useEffect(() => setSelected([]), [filters]);
 
-  const employees: any[] = data?.employees ?? [];
+  const employeesRaw: any[] = data?.employees ?? [];
+
+  /* ── Excel-style column filter / sort ── */
+  const {
+    colFilters, colSort, openFilterCol, setOpenFilterCol,
+    applyFilter, applySort, clearAllFilters, filterRows, sortRows,
+  } = useColumnFilters();
+
+  const empFilterCols: FilterableColumn[] = useMemo(() => [
+    { key: "name", label: "Name" },
+    { key: "email", label: "Email" },
+    { key: "role", label: "Role" },
+    { key: "department", label: "Department" },
+    { key: "manager", label: "Manager" },
+    { key: "status", label: "Status" },
+    { key: "lastActive", label: "Last Active", type: "date" },
+  ], []);
+
+  const getEmpDisplayValue = useCallback((emp: any, colKey: string): string => {
+    switch (colKey) {
+      case "name": return emp.name ?? "";
+      case "email": return emp.email ?? "";
+      case "role": return emp.role ?? "";
+      case "department": return emp.department ?? "";
+      case "manager": return emp.reportingManagerName ?? "";
+      case "status":
+        return emp.status === "active" ? "Active" : emp.status === "pending" ? "Pending" : "Inactive";
+      case "lastActive": return emp.lastActiveAt ? new Date(emp.lastActiveAt).toLocaleDateString() : "";
+      default: return "";
+    }
+  }, []);
+
+  const employees = useMemo(() => {
+    let result = filterRows(employeesRaw, getEmpDisplayValue);
+    result = sortRows(result, getEmpDisplayValue);
+    return result;
+  }, [employeesRaw, filterRows, sortRows, getEmpDisplayValue]);
+
   const allSelected = employees.length > 0 && selected.length === employees.length;
 
   const bulkStatus = async (activate: boolean) => {
@@ -706,6 +748,21 @@ export default function EmployeesPage() {
         </div>
       )}
 
+      {(Object.values(colFilters).some(v => v != null) || colSort) && (
+        <div className="mb-2 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => clearAllFilters()}
+            className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-red-500 hover:bg-gray-50 transition-colors"
+          >
+            Clear column filters
+          </button>
+          <span className="text-xs" style={{ color: T.muted }}>
+            {employees.length} of {employeesRaw.length} shown
+          </span>
+        </div>
+      )}
+
       <Card>
         {loading ? (
           <Skeleton rows={6} />
@@ -725,11 +782,54 @@ export default function EmployeesPage() {
                       style={{ accentColor: T.teal }}
                     />
                   </th>
-                  {["Name", "Email", "Role", "Department", "Manager", "Status", "Last Active", ""].map((h) => (
-                    <th key={h} className="border-b py-3 pr-4 crm-caption" style={{ borderColor: T.border, color: T.muted, fontWeight: 600 }}>
-                      {h}
-                    </th>
-                  ))}
+                  {empFilterCols.map((fc) => {
+                    const isFiltered = colFilters[fc.key] != null;
+                    const isSorted = colSort?.key === fc.key;
+                    const isActive = isFiltered || isSorted;
+                    return (
+                      <th
+                        key={fc.key}
+                        className="border-b py-3 pr-4 crm-caption relative"
+                        style={{ borderColor: T.border, color: T.muted, fontWeight: 600 }}
+                      >
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setOpenFilterCol(prev => prev === fc.key ? null : fc.key); }}
+                          className={`group flex items-center gap-1.5 whitespace-nowrap transition-colors ${
+                            isActive ? "text-[#007AFF]" : "hover:text-slate-700"
+                          }`}
+                          title={`Filter / Sort by ${fc.label}`}
+                        >
+                          {fc.label}
+                          <span
+                            className={`inline-flex items-center justify-center w-4 h-4 rounded transition-colors ${
+                              isActive ? "bg-[#007AFF]/10 text-[#007AFF]" : "text-slate-300 group-hover:text-slate-500"
+                            }`}
+                          >
+                            {isSorted ? (
+                              colSort?.direction === "asc" ? <FaSortAlphaDown className="w-2.5 h-2.5" /> : <FaSortAlphaUp className="w-2.5 h-2.5" />
+                            ) : (
+                              <FaFilter className="w-2 h-2" />
+                            )}
+                          </span>
+                          {isFiltered && <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF] inline-block" />}
+                        </button>
+                        {openFilterCol === fc.key && (
+                          <SharedColumnFilterDropdown
+                            column={fc}
+                            data={employeesRaw.map(e => ({ [fc.key]: getEmpDisplayValue(e, fc.key) }))}
+                            activeFilter={colFilters[fc.key] ?? null}
+                            activeSort={colSort?.key === fc.key ? colSort : null}
+                            onApply={vals => applyFilter(fc.key, vals)}
+                            onSort={dir => applySort(fc.key, dir)}
+                            onClose={() => setOpenFilterCol(null)}
+                            isDark={false}
+                          />
+                        )}
+                      </th>
+                    );
+                  })}
+                  <th className="border-b py-3 pr-4 crm-caption" style={{ borderColor: T.border, color: T.muted, fontWeight: 600 }} />
                 </tr>
               </thead>
               <tbody>

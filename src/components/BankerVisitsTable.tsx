@@ -4,6 +4,7 @@ import React, { useCallback, useDeferredValue, useEffect, useMemo, useState } fr
 import { motion, AnimatePresence } from "framer-motion";
 import { FaSearch, FaTimes, FaUniversity, FaEllipsisV, FaTrash } from "react-icons/fa";
 import { normalizeRole } from "@/lib/cpRbac";
+import ColumnFilterDropdown, { useColumnFilters, FilterableColumnHeader, type FilterableColumn } from "@/components/ColumnFilterDropdown";
 
 interface Props {
   user: { name: string; role: string; _id?: string };
@@ -45,6 +46,18 @@ const BASE_COLUMNS = [
   "Date",
 ];
 
+const FILTERABLE_COLS: FilterableColumn[] = [
+  { key: "banker_name", label: "Banker Name" },
+  { key: "contact_number", label: "Contact Number" },
+  { key: "bank_name", label: "Bank Name" },
+  { key: "branch_name", label: "Branch Name" },
+  { key: "designation", label: "Designation" },
+  { key: "reporting_manager", label: "Reporting Manager" },
+  { key: "sales_manager_name", label: "Sales Manager" },
+  { key: "attended_by_name", label: "Primary Contact" },
+  { key: "created_at", label: "Date", type: "date" },
+];
+
 function BankerVisitsTable({ user, isDark, t, title, subtitle }: Props) {
   const role = normalizeRole(user?.role);
   const isAdmin = role === "admin";
@@ -65,6 +78,18 @@ function BankerVisitsTable({ user, isDark, t, title, subtitle }: Props) {
     () => (isAdmin ? [...BASE_COLUMNS, "Action"] : BASE_COLUMNS),
     [isAdmin]
   );
+
+  // ── Column filter/sort ──
+  const {
+    colFilters, colSort, openFilterCol, setOpenFilterCol,
+    applyFilter, applySort, clearAllFilters, filterRows, sortRows,
+  } = useColumnFilters();
+
+  const getDisplayValue = useCallback((row: BankerVisitRow, colKey: string): string => {
+    if (colKey === "created_at") return fmtDate(row.created_at) || "";
+    const v = row[colKey];
+    return v == null ? "" : String(v);
+  }, []);
 
   // Close kebab menu on outside click
   useEffect(() => {
@@ -125,25 +150,37 @@ function BankerVisitsTable({ user, isDark, t, title, subtitle }: Props) {
   const deferredSearch = useDeferredValue(search);
   const visible = useMemo(() => {
     const q = deferredSearch.trim().toLowerCase();
-    if (!q) return rows;
-    const digits = q.replace(/\D/g, "");
-    return rows.filter(
-      (r) =>
-        [
-          r.banker_name,
-          r.bank_name,
-          r.branch_name,
-          r.designation,
-          r.reporting_manager,
-          r.sales_manager_name,
-          r.attended_by_name,
-        ].some((v) => String(v ?? "").toLowerCase().includes(q)) ||
-        (digits.length >= 3 &&
-          String(r.contact_number ?? "")
-            .replace(/\D/g, "")
-            .includes(digits))
-    );
-  }, [rows, deferredSearch]);
+    let result = rows;
+    if (q) {
+      const digits = q.replace(/\D/g, "");
+      result = result.filter(
+        (r) =>
+          [
+            r.banker_name,
+            r.bank_name,
+            r.branch_name,
+            r.designation,
+            r.reporting_manager,
+            r.sales_manager_name,
+            r.attended_by_name,
+          ].some((v) => String(v ?? "").toLowerCase().includes(q)) ||
+          (digits.length >= 3 &&
+            String(r.contact_number ?? "")
+              .replace(/\D/g, "")
+              .includes(digits))
+      );
+    }
+    // Apply column filters + sort
+    result = filterRows(result, getDisplayValue);
+    result = sortRows(result, getDisplayValue);
+    return result;
+  }, [rows, deferredSearch, filterRows, sortRows, getDisplayValue]);
+
+  /** Flat display-value map for the dropdown to extract unique values from */
+  const colFilterData = useMemo(
+    () => rows.map(r => Object.fromEntries(FILTERABLE_COLS.map(c => [c.key, getDisplayValue(r, c.key)]))),
+    [rows, getDisplayValue],
+  );
 
   const inputCls = `rounded-xl px-3 py-2 text-xs outline-none transition-all ${isDark
     ? "bg-[#1C1C1E] text-white placeholder-gray-500 focus:bg-[#2C2C2E] border border-white/5"
@@ -213,14 +250,37 @@ function BankerVisitsTable({ user, isDark, t, title, subtitle }: Props) {
             <tr
               className={`text-[10px] uppercase tracking-wider border-b border-gray-400 ${t.textMuted}`}
             >
-              {columns.map((h) => (
-                <th
-                  key={h}
-                  className="px-3 py-3 whitespace-nowrap font-semibold"
-                >
-                  {h}
-                </th>
-              ))}
+              {/* Sr. No. — static */}
+              <th className="px-3 py-3 whitespace-nowrap font-semibold">Sr. No.</th>
+              {FILTERABLE_COLS.map((col) => {
+                const isFiltered = !!colFilters[col.key];
+                return (
+                  <FilterableColumnHeader
+                    key={col.key}
+                    column={col}
+                    isFiltered={isFiltered}
+                    colSort={colSort}
+                    isOpen={openFilterCol === col.key}
+                    onToggle={() => setOpenFilterCol(prev => prev === col.key ? null : col.key)}
+                    isDark={isDark}
+                    className="px-3 py-3 whitespace-nowrap font-semibold"
+                  >
+                    {openFilterCol === col.key && (
+                      <ColumnFilterDropdown
+                        column={col}
+                        data={colFilterData}
+                        activeFilter={colFilters[col.key] ?? null}
+                        activeSort={colSort?.key === col.key ? colSort : null}
+                        onApply={(vals) => applyFilter(col.key, vals)}
+                        onSort={(dir) => applySort(col.key, dir)}
+                        onClose={() => setOpenFilterCol(null)}
+                        isDark={isDark}
+                      />
+                    )}
+                  </FilterableColumnHeader>
+                );
+              })}
+              {isAdmin && <th className="px-3 py-3 whitespace-nowrap font-semibold">Action</th>}
             </tr>
           </thead>
           <tbody>

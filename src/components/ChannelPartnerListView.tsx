@@ -16,8 +16,9 @@
 // visibility never see it: for them a missing rate is not actionable.
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { FaPlus, FaSearch, FaPen, FaTrash, FaExclamationTriangle, FaUserTie, FaTimes, FaUserCheck } from "react-icons/fa";
+import { FaPlus, FaSearch, FaPen, FaTrash, FaExclamationTriangle, FaUserTie, FaTimes, FaUserCheck, FaFilter, FaSortAlphaDown, FaSortAlphaUp } from "react-icons/fa";
 import ChannelPartnerFormModal, { ChannelPartner } from "./ChannelPartnerFormModal";
+import SharedColumnFilterDropdown, { useColumnFilters, FilterableColumnHeader, type FilterableColumn } from "@/components/ColumnFilterDropdown";
 import ChannelPartnerDetailView from "./ChannelPartnerDetailView";
 import SearchableSelect, { SelectOption } from "./SearchableSelect";
 import { cpPermissionsFor, CpPermissions } from "@/lib/cpRbac";
@@ -165,7 +166,7 @@ function ChannelPartnerListView({ user, isDark, t, permissions, title }: Props) 
   // round trip per keystroke would be slower than filtering in place. Deferred
   // so the character lands in the box before the table is rebuilt behind it.
   const deferredSearch = useDeferredValue(search);
-  const visible = useMemo(() => {
+  const searchFiltered = useMemo(() => {
     const q = deferredSearch.trim().toLowerCase();
     if (!q) return partners;
     return partners.filter(p =>
@@ -177,6 +178,78 @@ function ChannelPartnerListView({ user, isDark, t, permissions, title }: Props) 
       (p.phone || "").replace(/\D/g, "").includes(q.replace(/\D/g, "") || " ")
     );
   }, [partners, deferredSearch]);
+
+  // ── Excel-style column filter / sort ──
+  const {
+    colFilters, colSort, openFilterCol, setOpenFilterCol,
+    applyFilter, applySort, filterRows, sortRows,
+  } = useColumnFilters();
+
+  const filterableCols: FilterableColumn[] = useMemo(() => {
+    const cols: FilterableColumn[] = [
+      { key: "cp_name", label: "CP Name" },
+      { key: "company", label: "Company" },
+      { key: "primary_contact", label: "Primary Contact" },
+      { key: "phone", label: "Phone" },
+      { key: "rera", label: "RERA" },
+      { key: "gst", label: "GST" },
+      { key: "office_address", label: "Office Address" },
+      { key: "sourcing_manager", label: "Sourcing Manager" },
+      ...(canSeeCommercials ? [{ key: "rate", label: "Rate" }] : []),
+      { key: "leads", label: "Leads", type: "number" as const },
+      { key: "bookings", label: "Bookings", type: "number" as const },
+      { key: "status", label: "Status" },
+      { key: "registered_by", label: "Registered By" },
+      { key: "registered_on", label: "Registered On", type: "date" as const },
+    ];
+    return cols;
+  }, [canSeeCommercials]);
+
+  /** Map a partner row + column key to the plain display string used for filtering/sorting. */
+  const getDisplayValue = useCallback((p: ChannelPartner, colKey: string): string => {
+    switch (colKey) {
+      case "cp_name": return p.name || "";
+      case "company": return p.company_name || "";
+      case "primary_contact": return p.owner_contact_person || "";
+      case "phone": return p.phone || "";
+      case "rera": return p.rera_registration_no || "";
+      case "gst": return p.gst_number || "";
+      case "office_address": return p.office_address || "";
+      case "sourcing_manager": return p.assigned_sourcing_manager_name || "Unassigned";
+      case "rate": {
+        const r = p.default_commission_rate;
+        return r === null || r === undefined ? "Not set" : `${r}%`;
+      }
+      case "leads": return String(p.lead_count ?? 0);
+      case "bookings": return String(p.booking_count ?? 0);
+      case "status": return p.status === "active" ? "Active" : "Inactive";
+      case "registered_by": return p.created_by || "Auto (lead intake)";
+      case "registered_on": return fmtDate(p.created_at) || "";
+      default: return "";
+    }
+  }, []);
+
+  const visible = useMemo(() => {
+    let result = filterRows(searchFiltered, getDisplayValue);
+    result = sortRows(result, getDisplayValue);
+    return result;
+  }, [searchFiltered, filterRows, sortRows, getDisplayValue]);
+
+  /** Build data records for the dropdown's distinct-value extraction. */
+  const filterDropdownData = useMemo(
+    () => searchFiltered.map(p => {
+      const rec: Record<string, string> = {};
+      filterableCols.forEach(c => { rec[c.key] = getDisplayValue(p, c.key); });
+      return rec;
+    }),
+    [searchFiltered, filterableCols, getDisplayValue],
+  );
+
+  /** Look up FilterableColumn def by key for rendering the dropdown. */
+  const filterableColMap = useMemo(
+    () => new Map(filterableCols.map(c => [c.key, c])),
+    [filterableCols],
+  );
 
   const openAdd = () => { setEditing(null); setModalOpen(true); };
   const openEdit = (p: ChannelPartner) => { setEditing(p); setModalOpen(true); };
@@ -419,19 +492,87 @@ function ChannelPartnerListView({ user, isDark, t, permissions, title }: Props) 
         <table className="w-full text-left border-collapse">
           <thead className={`sticky top-0 z-10 border-b border-gray-600 ${t.tableHead || (isDark ? "bg-[#1a1a1a]" : "bg-slate-50")}`}>
             <tr className={`text-[11px] uppercase ${t.textMuted}`}>
-              {columns.map((h, i) => (
-                <th key={`${h}-${i}`} className="px-4 py-3 whitespace-nowrap font-bold">
-                  {h === "__select" ? (
-                    <input
-                      type="checkbox"
-                      checked={allVisibleSelected}
-                      onChange={toggleAllVisible}
-                      className="cursor-pointer accent-[#9E217B]"
-                      aria-label="Select all visible partners"
-                    />
-                  ) : h}
-                </th>
-              ))}
+              {columns.map((h, i) => {
+                // Non-filterable columns: checkbox and actions
+                if (h === "__select") {
+                  return (
+                    <th key="__select" className="px-4 py-3 whitespace-nowrap font-bold">
+                      <input
+                        type="checkbox"
+                        checked={allVisibleSelected}
+                        onChange={toggleAllVisible}
+                        className="cursor-pointer accent-[#9E217B]"
+                        aria-label="Select all visible partners"
+                      />
+                    </th>
+                  );
+                }
+                if (h === "") {
+                  return <th key={`actions-${i}`} className="px-4 py-3 whitespace-nowrap font-bold" />;
+                }
+
+                // Map display header to filterable column key
+                const colKeyMap: Record<string, string> = {
+                  "CP Name": "cp_name", "Company": "company", "Primary Contact": "primary_contact",
+                  "Phone": "phone", "RERA": "rera", "GST": "gst", "Office Address": "office_address",
+                  "Sourcing Manager": "sourcing_manager", "Rate": "rate", "Leads": "leads",
+                  "Bookings": "bookings", "Status": "status", "Registered By": "registered_by",
+                  "Registered On": "registered_on",
+                };
+                const colKey = colKeyMap[h];
+                const fcol = colKey ? filterableColMap.get(colKey) : undefined;
+
+                if (!fcol) {
+                  return <th key={`${h}-${i}`} className="px-4 py-3 whitespace-nowrap font-bold">{h}</th>;
+                }
+
+                const isFiltered = !!(colFilters[fcol.key] && colFilters[fcol.key]!.size > 0);
+                const isSorted = colSort?.key === fcol.key;
+                const isActive = isFiltered || isSorted;
+
+                return (
+                  <th key={fcol.key} className="px-4 py-3 whitespace-nowrap font-bold relative">
+                    <button
+                      type="button"
+                      onClick={e => { e.stopPropagation(); setOpenFilterCol(openFilterCol === fcol.key ? null : fcol.key); }}
+                      className={`group flex items-center gap-1.5 whitespace-nowrap transition-colors ${
+                        isActive
+                          ? "text-[#9E217B]"
+                          : isDark ? "text-inherit hover:text-slate-200" : "text-inherit hover:text-slate-700"
+                      }`}
+                      title={`Filter / Sort by ${fcol.label}`}
+                    >
+                      {fcol.label}
+                      <span
+                        className={`inline-flex items-center justify-center w-4 h-4 rounded transition-colors ${
+                          isActive
+                            ? "bg-[#9E217B]/15 text-[#9E217B]"
+                            : isDark ? "text-gray-600 group-hover:text-gray-400" : "text-gray-300 group-hover:text-gray-500"
+                        }`}
+                      >
+                        {isSorted
+                          ? colSort?.direction === "asc" ? <FaSortAlphaDown className="w-2.5 h-2.5" /> : <FaSortAlphaUp className="w-2.5 h-2.5" />
+                          : <FaFilter className="w-2 h-2" />}
+                      </span>
+                      {isFiltered && <span className="w-1.5 h-1.5 rounded-full inline-block bg-[#9E217B]" />}
+                    </button>
+
+                    {openFilterCol === fcol.key && (
+                      <SharedColumnFilterDropdown
+                        column={fcol}
+                        data={filterDropdownData}
+                        activeFilter={colFilters[fcol.key] ?? null}
+                        activeSort={colSort?.key === fcol.key ? colSort : null}
+                        onApply={vals => applyFilter(fcol.key, vals)}
+                        onSort={dir => applySort(fcol.key, dir)}
+                        onClose={() => setOpenFilterCol(null)}
+                        isDark={isDark}
+                        accent="#9E217B"
+                      />
+                    )}
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>

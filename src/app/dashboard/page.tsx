@@ -12,8 +12,11 @@ import {
   FaThLarge, FaClipboardList, FaUsers, FaIdCard,
   FaSearch, FaBell, FaChevronLeft, FaPhoneAlt, FaComments,
   FaCheckCircle, FaCalendarAlt, FaTimes, FaArrowLeft, FaChevronDown,
-  FaFileInvoice, FaFileInvoiceDollar, FaMicrophone, FaWhatsapp, FaTable, FaChartPie, FaEyeSlash, FaUniversity, FaHandshake, FaExchangeAlt, FaBriefcase, FaDownload, FaCog, FaMapMarkerAlt, FaSignal, FaUserClock, FaTrashAlt, FaBoxes, FaUserTie
+  FaFileInvoice, FaFileInvoiceDollar, FaMicrophone, FaWhatsapp, FaTable, FaChartPie, FaEyeSlash, FaUniversity, FaHandshake, FaExchangeAlt, FaBriefcase, FaDownload, FaCog, FaMapMarkerAlt, FaSignal, FaUserClock, FaTrashAlt, FaBoxes, FaUserTie,
+  FaFilter, FaSortAlphaDown, FaSortAlphaUp
 } from "react-icons/fa";
+import SharedColumnFilterDropdown from "@/components/ColumnFilterDropdown";
+import type { FilterableColumn } from "@/components/ColumnFilterDropdown";
 import FollowUpAttachments from "@/components/FollowUpAttachments";
 import { useFollowUpAttachments } from "@/lib/hooks/useFollowUpAttachments";
 import FollowUpComposer from "@/components/FollowUpComposer";
@@ -1604,6 +1607,78 @@ const STAT_LABELS: Record<StatCardFilter, string> = {
   interested: "Interested",
 };
 
+// ── Column filter schemas & helpers for the 3 lead sub-tables ────────────────
+const LEAD_SUBTABLE_COLUMNS: FilterableColumn[] = [
+  { key: "lead_no", label: "Lead No." },
+  { key: "name", label: "Name" },
+  { key: "prop_type", label: "Prop. Type" },
+  { key: "budget", label: "Budget" },
+  { key: "source", label: "Source" },
+  { key: "cp_name", label: "CP Name" },
+  { key: "cp_phone", label: "CP Phone" },
+  { key: "status", label: "Status" },
+  { key: "interest", label: "Interest" },
+  { key: "site_visit", label: "Site Visit", type: "date" },
+  { key: "date_created", label: "Date Created", type: "date" },
+  { key: "backdated", label: "Backdated Entry", type: "date" },
+  { key: "assigned_to", label: "Assigned To" },
+];
+// Note: "REASSIGN" column is an action column, not filterable.
+
+function getLeadSubtableDisplayValue(lead: any, key: string): string {
+  switch (key) {
+    case "lead_no": return String(lead.sr_no || lead.id || "");
+    case "name": return String(lead.name || "");
+    case "prop_type": {
+      const pt = lead.propType;
+      const cfg = lead.configuration;
+      return (pt && pt !== "Pending" && pt !== "N/A") ? pt : (cfg && cfg !== "Pending" && cfg !== "N/A") ? cfg : "Pending";
+    }
+    case "budget": return String(lead.salesBudget || lead.budget || "N/A");
+    case "source": return String(lead.source || "");
+    case "cp_name": return String(lead.cpName || lead.cp_name || "");
+    case "cp_phone": return String(lead.cpPhone || lead.cp_phone || "");
+    case "status": return String(lead.status || "Assigned");
+    case "interest": return String(lead.leadInterestStatus && lead.leadInterestStatus !== "Pending" ? lead.leadInterestStatus : "");
+    case "site_visit": return lead.mongoVisitDate ? formatDate(lead.mongoVisitDate).split(",")[0] : "";
+    case "date_created": return lead.created_at ? formatDate(lead.created_at) : "";
+    case "backdated": return lead.auto_date_enabled === false && lead.enquiry_date ? formatDate(lead.enquiry_date).split(",")[0] : "";
+    case "assigned_to": return String(lead.assigned_receptionist || lead.assigned_to || "");
+    default: return "";
+  }
+}
+
+// ── Column filter schema for Team Performance table ──────────────────────────
+const TEAM_PERF_COLUMNS: FilterableColumn[] = [
+  { key: "sr", label: "Sr", type: "number" },
+  { key: "employee", label: "Employee" },
+  { key: "role", label: "Role" },
+  { key: "total_leads", label: "Total Leads", type: "number" },
+  { key: "followups_today", label: "Follow-ups Today", type: "number" },
+  { key: "whatsapp_today", label: "WhatsApp Today", type: "number" },
+  { key: "pending", label: "Pending", type: "number" },
+  { key: "status_col", label: "Status" },
+];
+
+function getTeamPerfDisplayValue(staff: any, key: string, index: number): string {
+  switch (key) {
+    case "sr": return String(index + 1);
+    case "employee": return String(staff.name || "");
+    case "role": return String(staff.role || "");
+    case "total_leads": return String(staff.totalLeads ?? 0);
+    case "followups_today": return String(staff.followUpsToday ?? 0);
+    case "whatsapp_today": return String(staff.waToday ?? 0);
+    case "pending": return String(staff.remainingToday ?? 0);
+    case "status_col": {
+      const hasNoActivity = staff.totalLeads > 0 && staff.followUpsToday === 0;
+      if (hasNoActivity) return "No activity";
+      if (staff.remainingToday === 0) return "All done";
+      return "In progress";
+    }
+    default: return "";
+  }
+}
+
 function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, theme, isDark, receptionists, followUps, onNavigateToSales, refetch }: any) {
   const isAdmin = (user?.role || "").toLowerCase() === "admin";
   const [visibleCount, setVisibleCount] = useState(20);
@@ -1837,6 +1912,21 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
   const [managerLeadSearch, setManagerLeadSearch] = useState("");
   const [siteHeadLeadSearch, setSiteHeadLeadSearch] = useState("");
   const [recepLeadSearch, setRecepLeadSearch] = useState("");
+
+  // ── Column filter state — Site Head sub-table ────────────────────────────
+  const [shColFilters, setShColFilters] = useState<Record<string, Set<string> | null>>({});
+  const [shColSort, setShColSort] = useState<{ key: string; direction: "asc" | "desc" } | null>(null);
+  const [openShFilterCol, setOpenShFilterCol] = useState<string | null>(null);
+
+  // ── Column filter state — Receptionist sub-table ─────────────────────────
+  const [rcColFilters, setRcColFilters] = useState<Record<string, Set<string> | null>>({});
+  const [rcColSort, setRcColSort] = useState<{ key: string; direction: "asc" | "desc" } | null>(null);
+  const [openRcFilterCol, setOpenRcFilterCol] = useState<string | null>(null);
+
+  // ── Column filter state — Manager sub-table ──────────────────────────────
+  const [mgColFilters, setMgColFilters] = useState<Record<string, Set<string> | null>>({});
+  const [mgColSort, setMgColSort] = useState<{ key: string; direction: "asc" | "desc" } | null>(null);
+  const [openMgFilterCol, setOpenMgFilterCol] = useState<string | null>(null);
 
   // Lost Lead filter states
   const [lostLeadFilter, setLostLeadFilter] = useState<"all" | "active" | "lost">("all");
@@ -2107,6 +2197,78 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
     leads = [...leads].sort((a: any, b: any) => (Number(b.sr_no) || 0) - (Number(a.sr_no) || 0));
     return leads;
   }, [allLeads, deferredOverviewSearch, overviewSearchColumn, lostLeadFilter, showLostLeads, showNGDLeads, deletedLeadIds, showDuplicatesOnly, duplicateIds, statCardFilter]);
+
+  // ── Site Head leads: column-filter → sort pipeline ─────────────────────────
+  const shTextFiltered = useMemo(() => filterLeads(activeSiteHeadLeads, siteHeadLeadSearch), [activeSiteHeadLeads, siteHeadLeadSearch]);
+  const shColFiltered = useMemo(() => {
+    let rows = shTextFiltered;
+    for (const [colKey, allowed] of Object.entries(shColFilters)) {
+      if (!allowed) continue;
+      rows = rows.filter((l: any) => {
+        const v = getLeadSubtableDisplayValue(l, colKey);
+        return allowed.has(v === "" ? "(Blanks)" : v);
+      });
+    }
+    return rows;
+  }, [shTextFiltered, shColFilters]);
+  const shFinalLeads = useMemo(() => {
+    if (!shColSort) return shColFiltered;
+    const { key, direction } = shColSort;
+    return [...shColFiltered].sort((a: any, b: any) => {
+      const av = getLeadSubtableDisplayValue(a, key);
+      const bv = getLeadSubtableDisplayValue(b, key);
+      const cmp = av.localeCompare(bv, undefined, { numeric: true, sensitivity: "base" });
+      return direction === "asc" ? cmp : -cmp;
+    });
+  }, [shColFiltered, shColSort]);
+
+  // ── Receptionist leads: column-filter → sort pipeline ──────────────────────
+  const rcTextFiltered = useMemo(() => filterLeads(recepAllLeads, recepLeadSearch), [recepAllLeads, recepLeadSearch]);
+  const rcColFiltered = useMemo(() => {
+    let rows = rcTextFiltered;
+    for (const [colKey, allowed] of Object.entries(rcColFilters)) {
+      if (!allowed) continue;
+      rows = rows.filter((l: any) => {
+        const v = getLeadSubtableDisplayValue(l, colKey);
+        return allowed.has(v === "" ? "(Blanks)" : v);
+      });
+    }
+    return rows;
+  }, [rcTextFiltered, rcColFilters]);
+  const rcFinalLeads = useMemo(() => {
+    if (!rcColSort) return rcColFiltered;
+    const { key, direction } = rcColSort;
+    return [...rcColFiltered].sort((a: any, b: any) => {
+      const av = getLeadSubtableDisplayValue(a, key);
+      const bv = getLeadSubtableDisplayValue(b, key);
+      const cmp = av.localeCompare(bv, undefined, { numeric: true, sensitivity: "base" });
+      return direction === "asc" ? cmp : -cmp;
+    });
+  }, [rcColFiltered, rcColSort]);
+
+  // ── Manager leads: column-filter → sort pipeline ──────────────────────────
+  const mgTextFiltered = useMemo(() => filterLeads(activeManagerLeads, managerLeadSearch), [activeManagerLeads, managerLeadSearch]);
+  const mgColFiltered = useMemo(() => {
+    let rows = mgTextFiltered;
+    for (const [colKey, allowed] of Object.entries(mgColFilters)) {
+      if (!allowed) continue;
+      rows = rows.filter((l: any) => {
+        const v = getLeadSubtableDisplayValue(l, colKey);
+        return allowed.has(v === "" ? "(Blanks)" : v);
+      });
+    }
+    return rows;
+  }, [mgTextFiltered, mgColFilters]);
+  const mgFinalLeads = useMemo(() => {
+    if (!mgColSort) return mgColFiltered;
+    const { key, direction } = mgColSort;
+    return [...mgColFiltered].sort((a: any, b: any) => {
+      const av = getLeadSubtableDisplayValue(a, key);
+      const bv = getLeadSubtableDisplayValue(b, key);
+      const cmp = av.localeCompare(bv, undefined, { numeric: true, sensitivity: "base" });
+      return direction === "asc" ? cmp : -cmp;
+    });
+  }, [mgColFiltered, mgColSort]);
 
   useEffect(() => {
     CRMContextManager.update({
@@ -2426,7 +2588,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                     <FaDownload size={12} /> Export
                   </button>
                   <span className={`text-[10px] sm:text-xs px-3 py-1 rounded-full whitespace-nowrap ${theme.btnClosingBadge}`}>
-                    {filterLeads(activeSiteHeadLeads, siteHeadLeadSearch).length} leads
+                    {shFinalLeads.length} leads
                   </span>
                 </div>
               </div>
@@ -2436,19 +2598,61 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
               <table className="w-full text-left text-sm min-w-[1200px]">
                 <thead className={`text-[10px] sm:text-xs uppercase whitespace-nowrap ${theme.tableHead} ${theme.textHeader}`}>
                   <tr>
-                    {["LEAD NO.", "NAME", "PROP. TYPE", "BUDGET", "SOURCE", "CP NAME", "CP PHONE", "STATUS", "INTEREST", "SITE VISIT", "DATE CREATED", "BACKDATED ENTRY", "ASSIGNED TO", "REASSIGN"].map(h => (
-                      <th key={h} className="px-3 sm:px-4 py-2.5 sm:py-3">{h}</th>
-                    ))}
+                    {LEAD_SUBTABLE_COLUMNS.map(col => {
+                      const isFiltered = !!shColFilters[col.key];
+                      const isSorted = shColSort?.key === col.key;
+                      const isActive = isFiltered || isSorted;
+                      return (
+                        <th key={col.key} className="px-3 sm:px-4 py-2.5 sm:py-3 relative">
+                          <button
+                            type="button"
+                            onClick={e => { e.stopPropagation(); setOpenShFilterCol(prev => prev === col.key ? null : col.key); }}
+                            className={`group flex items-center gap-1.5 whitespace-nowrap transition-colors ${
+                              isActive
+                                ? isDark ? "text-[#d946a8]" : "text-[#9E217B]"
+                                : isDark ? "text-slate-400 hover:text-slate-200" : "text-[#475569] hover:text-slate-700"
+                            }`}
+                            title={`Filter / Sort by ${col.label}`}
+                          >
+                            {col.label}
+                            <span className={`inline-flex items-center justify-center w-4 h-4 rounded transition-colors ${
+                              isActive
+                                ? isDark ? "bg-[#d946a8]/20 text-[#d946a8]" : "bg-[#9E217B]/10 text-[#9E217B]"
+                                : isDark ? "text-slate-600 group-hover:text-slate-400" : "text-slate-300 group-hover:text-slate-500"
+                            }`}>
+                              {isSorted
+                                ? shColSort?.direction === "asc" ? <FaSortAlphaDown className="w-2.5 h-2.5" /> : <FaSortAlphaUp className="w-2.5 h-2.5" />
+                                : <FaFilter className="w-2 h-2" />}
+                            </span>
+                            {isFiltered && <span className={`w-1.5 h-1.5 rounded-full inline-block ${isDark ? "bg-[#d946a8]" : "bg-[#9E217B]"}`} />}
+                          </button>
+                          {openShFilterCol === col.key && (
+                            <SharedColumnFilterDropdown
+                              column={col}
+                              data={shTextFiltered.map((l: any) => ({ [col.key]: getLeadSubtableDisplayValue(l, col.key) }))}
+                              activeFilter={shColFilters[col.key] ?? null}
+                              activeSort={shColSort?.key === col.key ? shColSort : null}
+                              onApply={vals => setShColFilters(prev => ({ ...prev, [col.key]: vals }))}
+                              onSort={dir => setShColSort(dir ? { key: col.key, direction: dir } : null)}
+                              onClose={() => setOpenShFilterCol(null)}
+                              isDark={isDark}
+                              accent={isDark ? "#d946a8" : "#9E217B"}
+                            />
+                          )}
+                        </th>
+                      );
+                    })}
+                    <th className="px-3 sm:px-4 py-2.5 sm:py-3">REASSIGN</th>
                   </tr>
                 </thead>
                 <tbody className={`divide-y ${theme.tableDivide}`}>
                   {isLoading ? (
                     <tr><td colSpan={14} className={`text-center py-8 text-xs sm:text-sm ${theme.textMuted}`}>Syncing...</td></tr>
-                  ) : filterLeads(activeSiteHeadLeads, siteHeadLeadSearch).length === 0 ? (
+                  ) : shFinalLeads.length === 0 ? (
                     <tr><td colSpan={14} className={`text-center py-8 text-xs sm:text-sm ${theme.textMuted}`}>
                       {siteHeadLeadSearch ? "No leads match your search." : `No leads for ${selectedSiteHeadName}.`}
                     </td></tr>
-                  ) : filterLeads(activeSiteHeadLeads, siteHeadLeadSearch).slice(0, visibleCount).map((lead: any) => {
+                  ) : shFinalLeads.slice(0, visibleCount).map((lead: any) => {
                     let assignedRole = "Site Head";
                     let assignedName = lead.assigned_receptionist || lead.assigned_to || "";
                     if (lead.assigned_receptionist) assignedRole = "Receptionist";
@@ -2525,15 +2729,15 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                 </tbody>
               </table>
 
-              {visibleCount < filterLeads(activeSiteHeadLeads, siteHeadLeadSearch).length && (
+              {visibleCount < shFinalLeads.length && (
                 <div ref={loadMoreRef} className={`flex items-center justify-center gap-3 py-6 ${theme.textMuted}`}>
                   <div className="w-4 h-4 rounded-full border-2 border-[#9E217B] border-t-transparent animate-spin" />
-                  <span className="text-xs font-medium">Loading more… ({visibleCount} of {filterLeads(activeSiteHeadLeads, siteHeadLeadSearch).length})</span>
+                  <span className="text-xs font-medium">Loading more… ({visibleCount} of {shFinalLeads.length})</span>
                 </div>
               )}
-              {visibleCount >= filterLeads(activeSiteHeadLeads, siteHeadLeadSearch).length && activeSiteHeadLeads.length > 20 && (
+              {visibleCount >= shFinalLeads.length && activeSiteHeadLeads.length > 20 && (
                 <div className={`text-center py-3 text-xs font-medium ${theme.textFaint}`}>
-                  ✓ All {filterLeads(activeSiteHeadLeads, siteHeadLeadSearch).length} leads loaded
+                  ✓ All {shFinalLeads.length} leads loaded
                 </div>
               )}
             </div>
@@ -2615,19 +2819,61 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
               <table className="w-full text-left text-sm min-w-[1200px]">
                 <thead className={`text-[10px] sm:text-xs uppercase whitespace-nowrap ${theme.tableHead} ${theme.textHeader}`}>
                   <tr>
-                    {["LEAD NO.", "NAME", "PROP. TYPE", "BUDGET", "SOURCE", "CP NAME", "CP PHONE", "STATUS", "INTEREST", "SITE VISIT", "DATE CREATED", "BACKDATED ENTRY", "ASSIGNED TO", "REASSIGN"].map(h => (
-                      <th key={h} className="px-3 sm:px-4 py-2.5 sm:py-3">{h}</th>
-                    ))}
+                    {LEAD_SUBTABLE_COLUMNS.map(col => {
+                      const isFiltered = !!rcColFilters[col.key];
+                      const isSorted = rcColSort?.key === col.key;
+                      const isActive = isFiltered || isSorted;
+                      return (
+                        <th key={col.key} className="px-3 sm:px-4 py-2.5 sm:py-3 relative">
+                          <button
+                            type="button"
+                            onClick={e => { e.stopPropagation(); setOpenRcFilterCol(prev => prev === col.key ? null : col.key); }}
+                            className={`group flex items-center gap-1.5 whitespace-nowrap transition-colors ${
+                              isActive
+                                ? isDark ? "text-[#00AEEF]" : "text-[#007AFF]"
+                                : isDark ? "text-slate-400 hover:text-slate-200" : "text-[#475569] hover:text-slate-700"
+                            }`}
+                            title={`Filter / Sort by ${col.label}`}
+                          >
+                            {col.label}
+                            <span className={`inline-flex items-center justify-center w-4 h-4 rounded transition-colors ${
+                              isActive
+                                ? isDark ? "bg-[#00AEEF]/20 text-[#00AEEF]" : "bg-[#007AFF]/10 text-[#007AFF]"
+                                : isDark ? "text-slate-600 group-hover:text-slate-400" : "text-slate-300 group-hover:text-slate-500"
+                            }`}>
+                              {isSorted
+                                ? rcColSort?.direction === "asc" ? <FaSortAlphaDown className="w-2.5 h-2.5" /> : <FaSortAlphaUp className="w-2.5 h-2.5" />
+                                : <FaFilter className="w-2 h-2" />}
+                            </span>
+                            {isFiltered && <span className={`w-1.5 h-1.5 rounded-full inline-block ${isDark ? "bg-[#00AEEF]" : "bg-[#007AFF]"}`} />}
+                          </button>
+                          {openRcFilterCol === col.key && (
+                            <SharedColumnFilterDropdown
+                              column={col}
+                              data={rcTextFiltered.map((l: any) => ({ [col.key]: getLeadSubtableDisplayValue(l, col.key) }))}
+                              activeFilter={rcColFilters[col.key] ?? null}
+                              activeSort={rcColSort?.key === col.key ? rcColSort : null}
+                              onApply={vals => setRcColFilters(prev => ({ ...prev, [col.key]: vals }))}
+                              onSort={dir => setRcColSort(dir ? { key: col.key, direction: dir } : null)}
+                              onClose={() => setOpenRcFilterCol(null)}
+                              isDark={isDark}
+                              accent={isDark ? "#00AEEF" : "#007AFF"}
+                            />
+                          )}
+                        </th>
+                      );
+                    })}
+                    <th className="px-3 sm:px-4 py-2.5 sm:py-3">REASSIGN</th>
                   </tr>
                 </thead>
                 <tbody className={`divide-y ${theme.tableDivide}`}>
                   {isLoading ? (
                     <tr><td colSpan={14} className={`text-center py-8 text-xs sm:text-sm ${theme.textMuted}`}>Syncing...</td></tr>
-                  ) : filterLeads(recepAllLeads, recepLeadSearch).length === 0 ? (
+                  ) : rcFinalLeads.length === 0 ? (
                     <tr><td colSpan={14} className={`text-center py-8 text-xs sm:text-sm ${theme.textMuted}`}>
                       {recepLeadSearch ? "No leads match your search." : `No leads for ${selectedReceptionistName}.`}
                     </td></tr>
-                  ) : filterLeads(recepAllLeads, recepLeadSearch).slice(0, visibleCount).map((lead: any) => {
+                  ) : rcFinalLeads.slice(0, visibleCount).map((lead: any) => {
                     let assignedRole = "Receptionist";
                     let assignedName = lead.assigned_receptionist || lead.assigned_to || "";
                     if (lead.assigned_receptionist) assignedRole = "Receptionist";
@@ -2704,15 +2950,15 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                 </tbody>
               </table>
 
-              {visibleCount < filterLeads(recepAllLeads, recepLeadSearch).length && (
+              {visibleCount < rcFinalLeads.length && (
                 <div ref={loadMoreRef} className={`flex items-center justify-center gap-3 py-6 ${theme.textMuted}`}>
                   <div className="w-4 h-4 rounded-full border-2 border-[#9E217B] border-t-transparent animate-spin" />
-                  <span className="text-xs font-medium">Loading more… ({visibleCount} of {filterLeads(recepAllLeads, recepLeadSearch).length})</span>
+                  <span className="text-xs font-medium">Loading more… ({visibleCount} of {rcFinalLeads.length})</span>
                 </div>
               )}
-              {visibleCount >= filterLeads(recepAllLeads, recepLeadSearch).length && recepAllLeads.length > 20 && (
+              {visibleCount >= rcFinalLeads.length && recepAllLeads.length > 20 && (
                 <div className={`text-center py-3 text-xs font-medium ${theme.textFaint}`}>
-                  ✓ All {filterLeads(recepAllLeads, recepLeadSearch).length} leads loaded
+                  ✓ All {rcFinalLeads.length} leads loaded
                 </div>
               )}
             </div>

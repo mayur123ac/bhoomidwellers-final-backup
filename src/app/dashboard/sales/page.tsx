@@ -59,6 +59,7 @@ import ReminderDuePopup from "@/components/ReminderDuePopup";
 import { useOverdueReminders } from "@/hooks/useOverdueReminders";
 import PermanentLeadDeleteDialog from "@/components/PermanentLeadDeleteDialog";
 import LogoutConfirmDialog from "@/components/LogoutConfirmDialog";
+import SharedColumnFilterDropdown, { useColumnFilters, type FilterableColumn } from "@/components/ColumnFilterDropdown";
 import PushNotificationInit from "@/components/PushNotificationInit";
 import LoanDealForm from "@/components/LoanDealForm";
 import LoanDealView from "@/components/LoanDealView";
@@ -1292,190 +1293,9 @@ function LoanStatusBadge({ status }: { status: string }) {
 
 // ── Column Filter Dropdown (Excel-style per-column filter/sort) ──────────────
 
-function useOnClickOutside(ref: React.RefObject<HTMLElement | null>, handler: () => void) {
-  useEffect(() => {
-    const listener = (event: MouseEvent | TouchEvent) => {
-      if (!ref.current || ref.current.contains(event.target as Node)) return;
-      handler();
-    };
-    document.addEventListener('mousedown', listener);
-    document.addEventListener('touchstart', listener);
-    return () => {
-      document.removeEventListener('mousedown', listener);
-      document.removeEventListener('touchstart', listener);
-    };
-  }, [ref, handler]);
-}
+// Column filter dropdown imported from shared component (ColumnFilterDropdown.tsx)
 
-interface ColumnFilterProps {
-  column: { key: string; label: string; type?: 'text' | 'number' | 'date' };
-  data: any[];
-  activeFilter: Set<string> | null;
-  activeSort: { key: string; direction: 'asc' | 'desc' } | null;
-  onApply: (selectedValues: Set<string> | null) => void;
-  onSort: (direction: 'asc' | 'desc' | null) => void;
-  onClose: () => void;
-  isDark: boolean;
-}
-
-const ColumnFilterDropdown: React.FC<ColumnFilterProps> = ({
-  column,
-  data,
-  activeFilter,
-  activeSort,
-  onApply,
-  onSort,
-  onClose,
-  isDark,
-}) => {
-  const ref = useRef<HTMLDivElement>(null);
-  useOnClickOutside(ref, onClose);
-
-  const uniqueValues = useMemo(() => {
-    const values = new Set<string>();
-    data.forEach(row => {
-      const val = row[column.key];
-      values.add(val === null || val === undefined || val === '' ? '(Blanks)' : String(val));
-    });
-    return Array.from(values).sort();
-  }, [data, column.key]);
-
-  const [search, setSearch] = useState('');
-  const [tempSelected, setTempSelected] = useState<Set<string>>(
-    activeFilter ? new Set(activeFilter) : new Set(uniqueValues)
-  );
-
-  const filteredValues = useMemo(() => {
-    if (!search) return uniqueValues;
-    return uniqueValues.filter(v => v.toLowerCase().includes(search.toLowerCase()));
-  }, [uniqueValues, search]);
-
-  const allFilteredSelected = filteredValues.length > 0 && filteredValues.every(v => tempSelected.has(v));
-  const someFilteredSelected = filteredValues.some(v => tempSelected.has(v)) && !allFilteredSelected;
-
-  const toggleSelectAll = () => {
-    const next = new Set(tempSelected);
-    if (allFilteredSelected) {
-      filteredValues.forEach(v => next.delete(v));
-    } else {
-      filteredValues.forEach(v => next.add(v));
-    }
-    setTempSelected(next);
-  };
-
-  const toggleValue = (val: string) => {
-    const next = new Set(tempSelected);
-    next.has(val) ? next.delete(val) : next.add(val);
-    setTempSelected(next);
-  };
-
-  const handleApply = () => {
-    if (tempSelected.size === uniqueValues.length) {
-      onApply(null);
-    } else {
-      onApply(tempSelected);
-    }
-    onClose();
-  };
-
-  const baseText = isDark ? 'text-slate-200' : 'text-slate-700';
-  const baseBg = isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200';
-  const hoverBg = isDark ? 'hover:bg-slate-800' : 'hover:bg-slate-50';
-
-  return (
-    <div
-      ref={ref}
-      className={`absolute top-full left-0 mt-1 w-64 z-50 rounded-lg shadow-xl border overflow-hidden flex flex-col text-sm font-normal normal-case ${baseBg}`}
-      onClick={(e) => e.stopPropagation()}
-    >
-      {/* Sorting Options */}
-      <div className={`p-2 border-b ${isDark ? 'border-slate-800' : 'border-slate-100'}`}>
-        <button
-          onClick={() => { onSort('asc'); onClose(); }}
-          className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-md ${hoverBg} ${baseText} ${activeSort?.direction === 'asc' ? 'font-bold' : ''}`}
-        >
-          <FaSortAlphaDown className={isDark ? "text-slate-400" : "text-slate-500"} />
-          Sort {column.type === 'number' ? 'Smallest to Largest' : column.type === 'date' ? 'Oldest to Newest' : 'A to Z'}
-        </button>
-        <button
-          onClick={() => { onSort('desc'); onClose(); }}
-          className={`w-full flex items-center gap-2 px-3 py-1.5 mt-1 rounded-md ${hoverBg} ${baseText} ${activeSort?.direction === 'desc' ? 'font-bold' : ''}`}
-        >
-          <FaSortAlphaUp className={isDark ? "text-slate-400" : "text-slate-500"} />
-          Sort {column.type === 'number' ? 'Largest to Smallest' : column.type === 'date' ? 'Newest to Oldest' : 'Z to A'}
-        </button>
-        {activeSort && (
-          <button
-            onClick={() => { onSort(null); onClose(); }}
-            className={`w-full text-left px-9 py-1.5 mt-1 text-xs text-red-500 rounded-md ${hoverBg}`}
-          >
-            Clear Sort
-          </button>
-        )}
-      </div>
-
-      {/* Search Input */}
-      <div className="p-2">
-        <div className={`flex items-center px-3 py-1.5 rounded-md border ${isDark ? 'bg-slate-950 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
-          <FaSearch className={`mr-2 text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
-          <input
-            type="text"
-            placeholder="Search..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-transparent outline-none text-xs"
-          />
-        </div>
-      </div>
-
-      {/* Checkbox List */}
-      <div className={`max-h-48 overflow-y-auto px-2 pb-2 custom-scrollbar ${baseText}`}>
-        <label className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer ${hoverBg}`}>
-          <input
-            type="checkbox"
-            checked={allFilteredSelected}
-            ref={input => { if (input) input.indeterminate = someFilteredSelected; }}
-            onChange={toggleSelectAll}
-            className="rounded border-slate-300 text-pink-600 focus:ring-pink-500"
-          />
-          <span className="text-xs font-semibold">(Select All)</span>
-        </label>
-        {filteredValues.map(val => (
-          <label key={val} className={`flex items-center gap-2 px-2 py-1 cursor-pointer rounded-md ${hoverBg}`}>
-            <input
-              type="checkbox"
-              checked={tempSelected.has(val)}
-              onChange={() => toggleValue(val)}
-              className="rounded border-slate-300 text-pink-600 focus:ring-pink-500"
-            />
-            <span className="text-xs truncate">{val}</span>
-          </label>
-        ))}
-        {filteredValues.length === 0 && (
-          <div className={`px-2 py-3 text-center text-xs italic ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-            No matches found
-          </div>
-        )}
-      </div>
-
-      {/* Actions */}
-      <div className={`p-2 border-t flex justify-end gap-2 bg-opacity-50 ${isDark ? 'border-slate-800 bg-slate-800' : 'border-slate-100 bg-slate-50'}`}>
-        <button
-          onClick={onClose}
-          className={`px-3 py-1.5 text-xs font-semibold rounded-md border ${isDark ? 'border-slate-600 text-slate-300 hover:bg-slate-700' : 'border-slate-200 text-slate-600 hover:bg-white'}`}
-        >
-          Cancel
-        </button>
-        <button
-          onClick={handleApply}
-          className="px-3 py-1.5 text-xs font-semibold rounded-md bg-[#B01A79] text-white hover:bg-pink-800"
-        >
-          OK
-        </button>
-      </div>
-    </div>
-  );
-};
+// ColumnFilterDropdown removed — using shared SharedColumnFilterDropdown from @/components/ColumnFilterDropdown
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -2644,7 +2464,7 @@ function SalesManagerView({
                             </button>
 
                             {openDbFilterCol === col.key && (
-                              <ColumnFilterDropdown
+                              <SharedColumnFilterDropdown
                                 column={col}
                                 data={filteredDatabaseLeadsUnsorted.map((l: any) => ({ [col.key]: getLeadValueForCol(l, col.key) }))}
                                 activeFilter={dbColFilters[col.key] ?? null}
@@ -2653,6 +2473,7 @@ function SalesManagerView({
                                 onSort={dir => setDbColSort(dir ? { key: col.key, direction: dir } : null)}
                                 onClose={() => setOpenDbFilterCol(null)}
                                 isDark={isDark}
+                                accent="#B01A79"
                               />
                             )}
                           </th>

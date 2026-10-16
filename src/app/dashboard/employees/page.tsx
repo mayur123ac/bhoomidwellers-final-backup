@@ -30,8 +30,10 @@ import {
   FaCalendarAlt, FaHeart, FaTimesCircle, FaAngleLeft, FaCommentAlt,
   FaMoneyBillWave, FaMapMarkerAlt, FaBullseye, FaSave, FaUniversity, FaBriefcase, FaChartPie,
   FaEye, FaSignal, FaUserClock, FaWhatsapp,
-  FaFileInvoiceDollar, FaBoxes, FaHandshake
+  FaFileInvoiceDollar, FaBoxes, FaHandshake,
+  FaFilter, FaSortAlphaDown, FaSortAlphaUp
 } from "react-icons/fa";
+import SharedColumnFilterDropdown, { useColumnFilters, type FilterableColumn } from "@/components/ColumnFilterDropdown";
 import NotificationsPanel from "@/components/NotificationsPanel";
 import { useCallerSync } from "@/lib/hooks/useCallerSync";
 import CrmUpdatesNotification from "@/components/CrmUpdatesNotification";
@@ -389,6 +391,75 @@ export default function EmployeesPage() {
   // navSearch removed — now handled internally by AdminSidebar
   const [isFetchingManagers, setIsFetchingManagers] = useState(true);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  // ── Column filter / sort — Employees table ──
+  const {
+    colFilters: empColFilters, colSort: empColSort, openFilterCol: empOpenFilterCol,
+    setOpenFilterCol: setEmpOpenFilterCol, applyFilter: empApplyFilter, applySort: empApplySort,
+    filterRows: empFilterRows, sortRows: empSortRows,
+  } = useColumnFilters();
+
+  const empColumns: FilterableColumn[] = [
+    { key: "name", label: "Name" },
+    { key: "email", label: "Email" },
+    { key: "role", label: "Assigned Role" },
+    { key: "status", label: "Status" },
+  ];
+
+  const getEmpDisplayValue = (row: EmployeeType, colKey: string): string => {
+    switch (colKey) {
+      case "name": return row.name ?? "";
+      case "email": return row.email ?? "";
+      case "role": return row.role?.replace("_", " ") ?? "";
+      case "status": return row.isActive ? "Active" : "Inactive";
+      default: return "";
+    }
+  };
+
+  // ── Column filter / sort — Caller Saved Forms table ──
+  const {
+    colFilters: csfColFilters, colSort: csfColSort, openFilterCol: csfOpenFilterCol,
+    setOpenFilterCol: setCsfOpenFilterCol, applyFilter: csfApplyFilter, applySort: csfApplySort,
+    filterRows: csfFilterRows, sortRows: csfSortRows,
+  } = useColumnFilters();
+
+  const csfColumns: FilterableColumn[] = [
+    { key: "name", label: "Name" },
+    { key: "source", label: "Source" },
+    { key: "channel_partner", label: "Channel Partner" },
+    { key: "assign_manager", label: "Assign Manager" },
+    { key: "feedback", label: "Feedback" },
+    { key: "interest_status", label: "Interest" },
+  ];
+
+  const getCallerLeadDisplayValue = (row: any, colKey: string): string => {
+    switch (colKey) {
+      case "name": return row.name ?? "";
+      case "source": return row.source ?? "";
+      case "channel_partner": return row.channel_partner ?? "";
+      case "assign_manager": return row.assign_manager ?? "";
+      case "feedback": return row.feedback ?? "";
+      case "interest_status": return row.interest_status ?? "";
+      default: return "";
+    }
+  };
+
+  // ── Column filter / sort — All Caller Leads table ──
+  const {
+    colFilters: aclColFilters, colSort: aclColSort, openFilterCol: aclOpenFilterCol,
+    setOpenFilterCol: setAclOpenFilterCol, applyFilter: aclApplyFilter, applySort: aclApplySort,
+    filterRows: aclFilterRows, sortRows: aclSortRows,
+  } = useColumnFilters();
+
+  const aclColumns: FilterableColumn[] = [
+    { key: "name", label: "Name" },
+    { key: "source", label: "Source" },
+    { key: "channel_partner", label: "Channel Partner" },
+    { key: "assign_manager", label: "Assign Manager" },
+    { key: "feedback", label: "Feedback" },
+    { key: "interest_status", label: "Interest" },
+    { key: "batch_name", label: "Excel File" },
+  ];
 
   // Transfer Leads state removed (P0-4: bulk transfer endpoint retired).
   const combinedAssignees = useMemo(() => {
@@ -1484,15 +1555,68 @@ export default function EmployeesPage() {
                     <thead className={`text-[11px] font-semibold uppercase tracking-wider border-b ${isDark ? "bg-[#1C1C1E] text-[#8E8E93] border-[#38383A]" : "bg-white text-[#8E8E93] border-[#E5E5EA]"
                       }`}>
                       <tr>
-                        {["Name", "Email", "Change Pwd", "Assigned Role", "Status", "Actions"].map(h => (
-                          <th key={h} className={`px-5 py-3.5 ${h === "Status" || h === "Actions" || h === "Change Pwd" ? "text-center" : ""}`}>
-                            {h}
-                          </th>
-                        ))}
+                        {([
+                          { key: "name", label: "Name", center: false },
+                          { key: "email", label: "Email", center: false },
+                          { key: "_changePwd", label: "Change Pwd", center: true },
+                          { key: "role", label: "Assigned Role", center: false },
+                          { key: "status", label: "Status", center: true },
+                          { key: "_actions", label: "Actions", center: true },
+                        ] as const).map(col => {
+                          const filterCol = empColumns.find(c => c.key === col.key);
+                          if (!filterCol) {
+                            return (
+                              <th key={col.key} className={`px-5 py-3.5 ${col.center ? "text-center" : ""}`}>
+                                {col.label}
+                              </th>
+                            );
+                          }
+                          const isFiltered = !!(empColFilters[col.key]);
+                          const isSorted = empColSort?.key === col.key;
+                          const isActive = isFiltered || isSorted;
+                          return (
+                            <th key={col.key} className={`px-5 py-3.5 relative ${col.center ? "text-center" : ""}`}>
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); setEmpOpenFilterCol(prev => prev === col.key ? null : col.key); }}
+                                className={`group flex items-center gap-1.5 whitespace-nowrap transition-colors ${
+                                  isActive ? "" : isDark ? "text-[#8E8E93] hover:text-gray-200" : "text-[#8E8E93] hover:text-gray-700"
+                                }`}
+                                style={isActive ? { color: "#007AFF" } : undefined}
+                                title={`Filter / Sort by ${col.label}`}
+                              >
+                                {col.label}
+                                <span
+                                  className={`inline-flex items-center justify-center w-4 h-4 rounded transition-colors ${
+                                    isActive ? "" : isDark ? "text-[#48484A] group-hover:text-gray-400" : "text-gray-300 group-hover:text-gray-500"
+                                  }`}
+                                  style={isActive ? { backgroundColor: "#007AFF22", color: "#007AFF" } : undefined}
+                                >
+                                  {isSorted
+                                    ? empColSort?.direction === "asc" ? <FaSortAlphaDown className="w-2.5 h-2.5" /> : <FaSortAlphaUp className="w-2.5 h-2.5" />
+                                    : <FaFilter className="w-2 h-2" />}
+                                </span>
+                                {isFiltered && <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF] inline-block" />}
+                              </button>
+                              {empOpenFilterCol === col.key && (
+                                <SharedColumnFilterDropdown
+                                  column={filterCol}
+                                  data={employees.map(r => ({ [col.key]: getEmpDisplayValue(r, col.key) }))}
+                                  activeFilter={empColFilters[col.key] ?? null}
+                                  activeSort={empColSort?.key === col.key ? empColSort : null}
+                                  onApply={vals => empApplyFilter(col.key, vals)}
+                                  onSort={dir => empApplySort(col.key, dir)}
+                                  onClose={() => setEmpOpenFilterCol(null)}
+                                  isDark={isDark}
+                                />
+                              )}
+                            </th>
+                          );
+                        })}
                       </tr>
                     </thead>
                     <tbody className={`divide-y ${isDark ? "divide-[#38383A]" : "divide-[#E5E5EA]"}`}>
-                      {employees.map(emp => {
+                      {empSortRows(empFilterRows(employees, getEmpDisplayValue), getEmpDisplayValue).map(emp => {
                         const isRevealed = revealedPasswords[emp._id] || false;
                         const isEditing = editingId === emp._id;
                         const isAdminUser = emp.email === ADMIN_EMAIL;
@@ -1968,9 +2092,67 @@ export default function EmployeesPage() {
                         <div className="overflow-x-auto">
                           <table className="w-full text-left text-sm">
                             <thead className={`text-[11px] uppercase ${t.tableHead} ${t.tableHeadText}`}>
-                              <tr>{["#", "Name", "Contact", "Source", "Channel Partner", "Assign Manager", "Feedback", "Interest", "Status", "Site Visit", "Follow-ups", "Saved On", "Action"].map(h => (
-                                <th key={h} className={`px-4 py-3 ${t.tableHeadBdr} whitespace-nowrap ${h === "Action" ? "text-center" : ""}`}>{h}</th>
-                              ))}</tr>
+                              <tr>{([
+                                { key: "_id", label: "#" },
+                                { key: "name", label: "Name" },
+                                { key: "_contact", label: "Contact" },
+                                { key: "source", label: "Source" },
+                                { key: "channel_partner", label: "Channel Partner" },
+                                { key: "assign_manager", label: "Assign Manager" },
+                                { key: "feedback", label: "Feedback" },
+                                { key: "interest_status", label: "Interest" },
+                                { key: "_status", label: "Status" },
+                                { key: "_siteVisit", label: "Site Visit" },
+                                { key: "_followups", label: "Follow-ups" },
+                                { key: "_savedOn", label: "Saved On" },
+                                { key: "_action", label: "Action", center: true },
+                              ] as { key: string; label: string; center?: boolean }[]).map(col => {
+                                const filterCol = csfColumns.find(c => c.key === col.key);
+                                if (!filterCol) {
+                                  return <th key={col.key} className={`px-4 py-3 ${t.tableHeadBdr} whitespace-nowrap ${col.center ? "text-center" : ""}`}>{col.label}</th>;
+                                }
+                                const isFiltered = !!(csfColFilters[col.key]);
+                                const isSorted = csfColSort?.key === col.key;
+                                const isActive = isFiltered || isSorted;
+                                return (
+                                  <th key={col.key} className={`px-4 py-3 ${t.tableHeadBdr} whitespace-nowrap relative`}>
+                                    <button
+                                      type="button"
+                                      onClick={e => { e.stopPropagation(); setCsfOpenFilterCol(prev => prev === col.key ? null : col.key); }}
+                                      className={`group flex items-center gap-1.5 whitespace-nowrap transition-colors ${
+                                        isActive ? "" : isDark ? "text-gray-500 hover:text-gray-200" : "text-[#6B7280] hover:text-gray-700"
+                                      }`}
+                                      style={isActive ? { color: "#007AFF" } : undefined}
+                                      title={`Filter / Sort by ${col.label}`}
+                                    >
+                                      {col.label}
+                                      <span
+                                        className={`inline-flex items-center justify-center w-4 h-4 rounded transition-colors ${
+                                          isActive ? "" : isDark ? "text-[#48484A] group-hover:text-gray-400" : "text-gray-300 group-hover:text-gray-500"
+                                        }`}
+                                        style={isActive ? { backgroundColor: "#007AFF22", color: "#007AFF" } : undefined}
+                                      >
+                                        {isSorted
+                                          ? csfColSort?.direction === "asc" ? <FaSortAlphaDown className="w-2.5 h-2.5" /> : <FaSortAlphaUp className="w-2.5 h-2.5" />
+                                          : <FaFilter className="w-2 h-2" />}
+                                      </span>
+                                      {isFiltered && <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF] inline-block" />}
+                                    </button>
+                                    {csfOpenFilterCol === col.key && (
+                                      <SharedColumnFilterDropdown
+                                        column={filterCol}
+                                        data={callerSavedFormLeads.map((r: any) => ({ [col.key]: getCallerLeadDisplayValue(r, col.key) }))}
+                                        activeFilter={csfColFilters[col.key] ?? null}
+                                        activeSort={csfColSort?.key === col.key ? csfColSort : null}
+                                        onApply={vals => csfApplyFilter(col.key, vals)}
+                                        onSort={dir => csfApplySort(col.key, dir)}
+                                        onClose={() => setCsfOpenFilterCol(null)}
+                                        isDark={isDark}
+                                      />
+                                    )}
+                                  </th>
+                                );
+                              })}</tr>
                             </thead>
                             <tbody className={`divide-y ${t.tableDivide}`}>
                               {callerLoading
@@ -1981,7 +2163,7 @@ export default function EmployeesPage() {
                                     <p className={`font-semibold ${t.textMuted}`}>{selectedCaller.name} hasn't saved any forms yet.</p>
                                     <p className={`text-xs mt-1 ${t.textLight2}`}>Forms appear here once the caller saves a lead from their panel.</p>
                                   </td></tr>
-                                  : callerSavedFormLeads.map((lead: any) => (
+                                  : csfSortRows(csfFilterRows(callerSavedFormLeads, getCallerLeadDisplayValue), getCallerLeadDisplayValue).map((lead: any) => (
                                     <tr key={lead.id} className={`transition-colors group align-middle ${t.tableRow}`}>
                                       <td className={`px-4 py-3 font-mono font-bold ${t.accentText}`}>#{lead.sr_no || lead.id}</td>
                                       <td className={`px-4 py-3 font-semibold whitespace-nowrap ${t.text}`}>{lead.name}</td>
@@ -2052,14 +2234,71 @@ export default function EmployeesPage() {
                       <div className="overflow-x-auto">
                         <table className="w-full text-left text-sm">
                           <thead className={`text-[11px] uppercase ${t.tableHead} ${t.tableHeadText}`}>
-                            <tr>{["#", "Name", "Contact", "Source", "Channel Partner", "Assign Manager", "Feedback", "Interest", "Saved By", "Excel File", "Uploaded On", "Action"].map(h => (
-                              <th key={h} className={`px-4 py-3 ${t.tableHeadBdr} whitespace-nowrap ${h === "Action" ? "text-center" : ""}`}>{h}</th>
-                            ))}</tr>
+                            <tr>{([
+                              { key: "_id", label: "#" },
+                              { key: "name", label: "Name" },
+                              { key: "_contact", label: "Contact" },
+                              { key: "source", label: "Source" },
+                              { key: "channel_partner", label: "Channel Partner" },
+                              { key: "assign_manager", label: "Assign Manager" },
+                              { key: "feedback", label: "Feedback" },
+                              { key: "interest_status", label: "Interest" },
+                              { key: "_savedBy", label: "Saved By" },
+                              { key: "batch_name", label: "Excel File" },
+                              { key: "_uploadedOn", label: "Uploaded On" },
+                              { key: "_action", label: "Action", center: true },
+                            ] as { key: string; label: string; center?: boolean }[]).map(col => {
+                              const filterCol = aclColumns.find(c => c.key === col.key);
+                              if (!filterCol) {
+                                return <th key={col.key} className={`px-4 py-3 ${t.tableHeadBdr} whitespace-nowrap ${col.center ? "text-center" : ""}`}>{col.label}</th>;
+                              }
+                              const isFiltered = !!(aclColFilters[col.key]);
+                              const isSorted = aclColSort?.key === col.key;
+                              const isActive = isFiltered || isSorted;
+                              return (
+                                <th key={col.key} className={`px-4 py-3 ${t.tableHeadBdr} whitespace-nowrap relative`}>
+                                  <button
+                                    type="button"
+                                    onClick={e => { e.stopPropagation(); setAclOpenFilterCol(prev => prev === col.key ? null : col.key); }}
+                                    className={`group flex items-center gap-1.5 whitespace-nowrap transition-colors ${
+                                      isActive ? "" : isDark ? "text-gray-500 hover:text-gray-200" : "text-[#6B7280] hover:text-gray-700"
+                                    }`}
+                                    style={isActive ? { color: "#007AFF" } : undefined}
+                                    title={`Filter / Sort by ${col.label}`}
+                                  >
+                                    {col.label}
+                                    <span
+                                      className={`inline-flex items-center justify-center w-4 h-4 rounded transition-colors ${
+                                        isActive ? "" : isDark ? "text-[#48484A] group-hover:text-gray-400" : "text-gray-300 group-hover:text-gray-500"
+                                      }`}
+                                      style={isActive ? { backgroundColor: "#007AFF22", color: "#007AFF" } : undefined}
+                                    >
+                                      {isSorted
+                                        ? aclColSort?.direction === "asc" ? <FaSortAlphaDown className="w-2.5 h-2.5" /> : <FaSortAlphaUp className="w-2.5 h-2.5" />
+                                        : <FaFilter className="w-2 h-2" />}
+                                    </span>
+                                    {isFiltered && <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF] inline-block" />}
+                                  </button>
+                                  {aclOpenFilterCol === col.key && (
+                                    <SharedColumnFilterDropdown
+                                      column={filterCol}
+                                      data={filteredCallerLeads.map((r: any) => ({ [col.key]: getCallerLeadDisplayValue(r, col.key) }))}
+                                      activeFilter={aclColFilters[col.key] ?? null}
+                                      activeSort={aclColSort?.key === col.key ? aclColSort : null}
+                                      onApply={vals => aclApplyFilter(col.key, vals)}
+                                      onSort={dir => aclApplySort(col.key, dir)}
+                                      onClose={() => setAclOpenFilterCol(null)}
+                                      isDark={isDark}
+                                    />
+                                  )}
+                                </th>
+                              );
+                            })}</tr>
                           </thead>
                           <tbody className={`divide-y ${t.tableDivide}`}>
                             {callerLoading ? <tr><td colSpan={12} className={`px-4 py-8 text-center ${t.textMuted}`}>Loading...</td></tr>
                               : filteredCallerLeads.length === 0 ? <tr><td colSpan={12} className={`px-4 py-8 text-center ${t.textMuted}`}>No caller leads yet.</td></tr>
-                                : filteredCallerLeads.map((lead: any) => (
+                                : aclSortRows(aclFilterRows(filteredCallerLeads, getCallerLeadDisplayValue), getCallerLeadDisplayValue).map((lead: any) => (
                                   <tr key={lead.id} className={`transition-colors group align-middle ${t.tableRow}`}>
                                     <td className={`px-4 py-3 font-mono font-bold ${t.accentText}`}>#{lead.sr_no || lead.id}</td>
                                     <td className={`px-4 py-3 font-semibold whitespace-nowrap ${t.text}`}>{lead.name}</td>

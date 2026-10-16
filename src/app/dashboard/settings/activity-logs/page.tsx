@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Button,
   Card,
@@ -15,6 +15,11 @@ import {
   api,
   useToast,
 } from "@/components/Settings/ui";
+import SharedColumnFilterDropdown, {
+  useColumnFilters,
+  type FilterableColumn,
+} from "@/components/ColumnFilterDropdown";
+import { FaFilter, FaSortAlphaDown, FaSortAlphaUp } from "react-icons/fa";
 
 /** Action groups the filter offers, mapped to the substring the API matches on. */
 const ACTION_FILTERS: { label: string; value: string }[] = [
@@ -99,6 +104,44 @@ export default function ActivityLogsPage() {
     // that now has two pages shows an empty table.
     setFilters((f) => ({ ...f, ...patch, page: patch.page ?? 1 }));
 
+  /* ── Excel-style column filter / sort ── */
+  const {
+    colFilters, colSort, openFilterCol, setOpenFilterCol,
+    applyFilter, applySort, clearAllFilters, filterRows, sortRows,
+  } = useColumnFilters();
+
+  const logFilterCols: FilterableColumn[] = useMemo(() => [
+    { key: "timestamp", label: "Timestamp", type: "date" },
+    { key: "user", label: "User" },
+    { key: "action", label: "Action" },
+    { key: "details", label: "Details" },
+    { key: "ip", label: "IP Address" },
+    { key: "device", label: "Device" },
+  ], []);
+
+  const getLogDisplayValue = useCallback((row: any, colKey: string): string => {
+    switch (colKey) {
+      case "timestamp":
+        return row.timestamp
+          ? new Date(row.timestamp).toLocaleString(undefined, { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" })
+          : "";
+      case "user": return row.actor ?? "";
+      case "action": return row.action ?? "";
+      case "details": return row.details ?? "";
+      case "ip": return row.ipAddress ?? "";
+      case "device": return row.device ?? "";
+      default: return "";
+    }
+  }, []);
+
+  const rawRows: any[] = data?.rows ?? [];
+
+  const filteredRows = useMemo(() => {
+    let result = filterRows(rawRows, getLogDisplayValue);
+    result = sortRows(result, getLogDisplayValue);
+    return result;
+  }, [rawRows, filterRows, sortRows, getLogDisplayValue]);
+
   return (
     <>
       <PageHeader
@@ -165,7 +208,7 @@ export default function ActivityLogsPage() {
       <Card>
         {loading ? (
           <Skeleton rows={6} />
-        ) : !data || data.rows.length === 0 ? (
+        ) : !data || rawRows.length === 0 ? (
           <EmptyState
             title="No activity in this range"
             description="Try widening the date range or clearing the action filter."
@@ -174,19 +217,75 @@ export default function ActivityLogsPage() {
           <>
             {/* Wide table scrolls inside its own container so the page body
                 never scrolls sideways on a phone. */}
+            {(Object.values(colFilters).some(v => v != null) || colSort) && (
+              <div className="mb-2 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => clearAllFilters()}
+                  className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-red-500 hover:bg-gray-50 transition-colors"
+                >
+                  Clear column filters
+                </button>
+                <span className="text-xs" style={{ color: T.muted }}>
+                  {filteredRows.length} of {rawRows.length} shown
+                </span>
+              </div>
+            )}
             <div className="-mx-6 overflow-x-auto px-6">
               <table className="w-full min-w-[720px] border-collapse">
                 <thead>
                   <tr className="text-left">
-                    {["Timestamp", "User", "Action", "Details", "IP Address", "Device"].map((h) => (
-                      <th key={h} className="border-b py-3 pr-4 crm-caption" style={{ borderColor: T.border, color: T.muted, fontWeight: 600 }}>
-                        {h}
-                      </th>
-                    ))}
+                    {logFilterCols.map((fc) => {
+                      const isFiltered = colFilters[fc.key] != null;
+                      const isSorted = colSort?.key === fc.key;
+                      const isActive = isFiltered || isSorted;
+                      return (
+                        <th
+                          key={fc.key}
+                          className="border-b py-3 pr-4 crm-caption relative"
+                          style={{ borderColor: T.border, color: T.muted, fontWeight: 600 }}
+                        >
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setOpenFilterCol(prev => prev === fc.key ? null : fc.key); }}
+                            className={`group flex items-center gap-1.5 whitespace-nowrap transition-colors ${
+                              isActive ? "text-[#007AFF]" : "hover:text-slate-700"
+                            }`}
+                            title={`Filter / Sort by ${fc.label}`}
+                          >
+                            {fc.label}
+                            <span
+                              className={`inline-flex items-center justify-center w-4 h-4 rounded transition-colors ${
+                                isActive ? "bg-[#007AFF]/10 text-[#007AFF]" : "text-slate-300 group-hover:text-slate-500"
+                              }`}
+                            >
+                              {isSorted ? (
+                                colSort?.direction === "asc" ? <FaSortAlphaDown className="w-2.5 h-2.5" /> : <FaSortAlphaUp className="w-2.5 h-2.5" />
+                              ) : (
+                                <FaFilter className="w-2 h-2" />
+                              )}
+                            </span>
+                            {isFiltered && <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF] inline-block" />}
+                          </button>
+                          {openFilterCol === fc.key && (
+                            <SharedColumnFilterDropdown
+                              column={fc}
+                              data={rawRows.map(r => ({ [fc.key]: getLogDisplayValue(r, fc.key) }))}
+                              activeFilter={colFilters[fc.key] ?? null}
+                              activeSort={colSort?.key === fc.key ? colSort : null}
+                              onApply={vals => applyFilter(fc.key, vals)}
+                              onSort={dir => applySort(fc.key, dir)}
+                              onClose={() => setOpenFilterCol(null)}
+                              isDark={false}
+                            />
+                          )}
+                        </th>
+                      );
+                    })}
                   </tr>
                 </thead>
                 <tbody>
-                  {data.rows.map((row: any) => (
+                  {filteredRows.map((row: any) => (
                     <tr key={row.id} className="st-hover-surface transition-colors">
                       <td className="border-b py-3.5 pr-4 whitespace-nowrap crm-secondary" style={{ borderColor: T.border, color: T.muted }}>
                         {new Date(row.timestamp).toLocaleString(undefined, {

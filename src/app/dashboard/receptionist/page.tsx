@@ -496,35 +496,18 @@ function RpPageHeader({
 // COLUMN VISIBILITY — RECEPTIONIST LEADS TABLE
 // ─────────────────────────────────────────────────────────────────────────────
 const RECEP_COLS_KEY = "bd:recep:db:hiddenCols:v1";
-const RECEP_COLUMNS: { key: string; label: string; locked?: boolean; type?: 'text' | 'number' | 'date' }[] = [
-  { key: "lead_no",      label: "Sr. No.",      locked: true, type: 'number' },
-  { key: "client_name", label: "Client Name",  locked: true, type: 'text' },
-  { key: "cp_details",  label: "CP Details",                 type: 'text' },
-  { key: "budget",      label: "Budget",                     type: 'text' },
-  { key: "phone",       label: "Phone",                      type: 'text' },
-  { key: "alt_phone",   label: "Alt. Phone",                 type: 'text' },
-  { key: "date_created",label: "Date Created",               type: 'date' },
-  { key: "assigned_to", label: "Assigned to",                type: 'text' },
-  { key: "site_visits", label: "Site Visits",                type: 'date' },
-  { key: "status",      label: "Status",                     type: 'text' },
+const RECEP_COLUMNS: { key: string; label: string; locked?: boolean }[] = [
+  { key: "lead_no", label: "Sr. No.", locked: true },
+  { key: "client_name", label: "Client Name", locked: true },
+  { key: "cp_details", label: "CP Details" },
+  { key: "budget", label: "Budget" },
+  { key: "phone", label: "Phone" },
+  { key: "alt_phone", label: "Alt. Phone" },
+  { key: "date_created", label: "Date Created" },
+  { key: "assigned_to", label: "Assigned to" },
+  { key: "site_visits", label: "Site Visits" },
+  { key: "status", label: "Status" },
 ];
-
-/** Returns a comparable display value for a receptionist "Your Enquiries" lead by RECEP_COLUMNS key. */
-function getLeadValueForRecepLeads(lead: any, key: string): string {
-  switch (key) {
-    case 'lead_no':      return String(lead.sr_no || lead.id || '');
-    case 'client_name':  return String(lead.name || '');
-    case 'cp_details':   return String(lead.cp_company || lead.cpCompany || '');
-    case 'budget':       return String(lead.salesBudget || lead.budget || '');
-    case 'phone':        return String(lead.phone || '');
-    case 'alt_phone':    return String(lead.altPhone || '');
-    case 'date_created': return String(lead.date || '');
-    case 'assigned_to':  return String(lead.assignedReceptionist || lead.assignedTo || '');
-    case 'site_visits':  return String(lead.mongoVisitDate || '');
-    case 'status':       return lead.is_lost_lead ? 'Lost' : String(lead.status || 'Assigned');
-    default:             return '';
-  }
-}
 
 const ALL_LEADS_COLS_KEY = "bd:recep:all-leads:hiddenCols:v1";
 const ALL_LEADS_COLUMNS: { key: string; label: string; locked?: boolean; type?: 'text' | 'number' | 'date' }[] = [
@@ -1099,12 +1082,6 @@ export default function ReceptionistDashboard() {
     try { localStorage.setItem(RECEP_COLS_KEY, JSON.stringify([...next])); } catch { /* ignore */ }
   };
   const visibleRecepCols = RECEP_COLUMNS.filter(c => c.locked || !hiddenRecepCols.has(c.key));
-  // Per-column filter (column key → Set of accepted display values, or null = no filter)
-  const [rlColFilters, setRlColFilters] = useState<Record<string, Set<string> | null>>({});
-  // Column-level sort (overrides default sort when active)
-  const [rlColSort, setRlColSort] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
-  // Which column's filter popover is open
-  const [openRlFilterCol, setOpenRlFilterCol] = useState<string | null>(null);
   const downloadRecepCSV = (data: any[], filename: string) => {
     if (!data?.length) return;
     const headers = Object.keys(data[0]);
@@ -2339,7 +2316,7 @@ export default function ReceptionistDashboard() {
   const paginatedAssigned = filteredAssigned.slice(0, assignedCardsPage * CARDS_PER_PAGE);
   const hasMoreAssigned = paginatedAssigned.length < filteredAssigned.length;
 
-  const filteredRecepLeadsBase = myAssignedLeads.filter((l: any) => {
+  const filteredRecepLeads = myAssignedLeads.filter((l: any) => {
     let passLost = true;
     if (leadStatusFilter === "lost") passLost = !!l.is_lost_lead;
     else if (leadStatusFilter === "active") passLost = !l.is_lost_lead;
@@ -2357,34 +2334,6 @@ export default function ReceptionistDashboard() {
       (l.phone || "").includes(searchRecepLeads)
     );
   });
-
-  // Apply column-header checkbox filters
-  const filteredRecepLeadsColFiltered = useMemo(() => {
-    let leads = filteredRecepLeadsBase;
-    for (const [colKey, allowedVals] of Object.entries(rlColFilters)) {
-      if (!allowedVals) continue;
-      leads = leads.filter((l: any) => {
-        const displayVal = getLeadValueForRecepLeads(l, colKey);
-        const normalized = displayVal === '' ? '(Blanks)' : displayVal;
-        return allowedVals.has(normalized);
-      });
-    }
-    return leads;
-  }, [filteredRecepLeadsBase, rlColFilters]);
-
-  // Apply column-level sort
-  const filteredRecepLeads = useMemo(() => {
-    if (rlColSort) {
-      const { key, direction } = rlColSort;
-      return [...filteredRecepLeadsColFiltered].sort((a, b) => {
-        const av = getLeadValueForRecepLeads(a, key);
-        const bv = getLeadValueForRecepLeads(b, key);
-        const cmp = av.localeCompare(bv, undefined, { numeric: true, sensitivity: 'base' });
-        return direction === 'asc' ? cmp : -cmp;
-      });
-    }
-    return filteredRecepLeadsColFiltered;
-  }, [filteredRecepLeadsColFiltered, rlColSort]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // CHART DATA
@@ -4125,62 +4074,20 @@ export default function ReceptionistDashboard() {
                   <table className="w-full text-left border-collapse whitespace-nowrap">
                     <thead className={isDark ? "bg-slate-900/50" : "bg-slate-50/50"}>
                       <tr>
-                        {visibleRecepCols.map(col => {
-                          const isFiltered = !!(rlColFilters[col.key]);
-                          const isSorted   = rlColSort?.key === col.key;
-                          const stickyBase = col.key === 'lead_no'
-                            ? `md:sticky md:left-0 md:z-20 ${isDark ? 'md:bg-slate-950' : 'md:bg-[#FAFAFD]'}`
-                            : col.key === 'client_name'
-                              ? `md:sticky md:left-[80px] md:min-w-[172px] md:z-20 ${isDark ? 'md:bg-slate-950 md:shadow-[-1px_0_0_rgba(255,255,255,0.05)_inset]' : 'md:bg-[#FAFAFD] md:shadow-[-1px_0_0_rgba(0,0,0,0.05)_inset]'}`
-                              : '';
-                          return (
-                            <th
-                              key={col.key}
-                              className={`px-3 sm:px-5 py-3.5 text-[10px] sm:text-[11px] font-bold uppercase tracking-wider border-b relative ${isDark ? 'text-slate-400 border-slate-800' : 'text-[#475569] border-slate-200'} ${stickyBase} ${col.key === 'status' ? 'text-center' : ''}`}
-                              style={
-                                col.key === 'lead_no'     ? { minWidth: '80px',  maxWidth: '80px'  } :
-                                col.key === 'client_name' ? { minWidth: '140px', maxWidth: '140px' } : {}
-                              }
-                            >
-                              <button
-                                type="button"
-                                onClick={e => { e.stopPropagation(); setOpenRlFilterCol(prev => prev === col.key ? null : col.key); }}
-                                className={`group flex items-center gap-1.5 whitespace-nowrap transition-colors ${
-                                  isFiltered || isSorted
-                                    ? 'text-[#B01A79]'
-                                    : isDark ? 'text-slate-400 hover:text-slate-200' : 'text-[#475569] hover:text-slate-700'
-                                }`}
-                                title={`Filter / Sort by ${col.label}`}
-                              >
-                                {col.label}
-                                <span className={`inline-flex items-center justify-center w-4 h-4 rounded transition-colors ${
-                                  isFiltered || isSorted
-                                    ? 'bg-[#B01A79]/15 text-[#B01A79]'
-                                    : isDark ? 'text-slate-600 group-hover:text-slate-400' : 'text-slate-300 group-hover:text-slate-500'
-                                }`}>
-                                  {isSorted
-                                    ? (rlColSort?.direction === 'asc' ? <FaSortAlphaDown className="w-2.5 h-2.5" /> : <FaSortAlphaUp className="w-2.5 h-2.5" />)
-                                    : <FaFilter className="w-2 h-2" />
-                                  }
-                                </span>
-                                {isFiltered && <span className="w-1.5 h-1.5 rounded-full bg-[#B01A79] inline-block" />}
-                              </button>
-
-                              {openRlFilterCol === col.key && (
-                                <RcpColumnFilterDropdown
-                                  column={col}
-                                  data={filteredRecepLeadsColFiltered.map((l: any) => ({ [col.key]: getLeadValueForRecepLeads(l, col.key) }))}
-                                  activeFilter={rlColFilters[col.key] ?? null}
-                                  activeSort={rlColSort?.key === col.key ? rlColSort : null}
-                                  onApply={vals => setRlColFilters(prev => ({ ...prev, [col.key]: vals }))}
-                                  onSort={dir => setRlColSort(dir ? { key: col.key, direction: dir } : null)}
-                                  onClose={() => setOpenRlFilterCol(null)}
-                                  isDark={isDark}
-                                />
-                              )}
-                            </th>
-                          );
-                        })}
+                        {visibleRecepCols.map(col => (
+                          <th
+                            key={col.key}
+                            className={`px-3 sm:px-5 py-3.5 text-[10px] sm:text-[11px] font-bold uppercase tracking-wider border-b ${isDark ? "text-slate-400 border-slate-800" : "text-[#475569] border-slate-200"} ${col.key === "lead_no" ? `md:sticky md:left-0 md:z-20 ${isDark ? "md:bg-slate-950" : "md:bg-[#FAFAFD]"}` :
+                              col.key === "client_name" ? `md:sticky md:left-[80px] md:min-w-[172px] md:z-20 ${isDark ? "md:bg-slate-950 md:shadow-[-1px_0_0_rgba(255,255,255,0.05)_inset]" : "md:bg-[#FAFAFD] md:shadow-[-1px_0_0_rgba(0,0,0,0.05)_inset]"}` : ""
+                              } ${col.key === "status" ? "text-center" : ""}`}
+                            style={
+                              col.key === "lead_no" ? { minWidth: '80px', maxWidth: '80px' } :
+                                col.key === "client_name" ? { minWidth: '140px', maxWidth: '140px' } : {}
+                            }
+                          >
+                            {col.label}
+                          </th>
+                        ))}
                       </tr>
                     </thead>
                     <tbody className={`divide-y ${isDark ? "divide-slate-800/60" : "divide-slate-100"}`}>

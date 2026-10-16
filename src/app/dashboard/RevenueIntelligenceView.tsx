@@ -22,6 +22,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import ColumnFilterDropdown, { useColumnFilters, FilterableColumnHeader, type FilterableColumn } from "@/components/ColumnFilterDropdown";
 import {
   ArrowDown,
   ArrowUp,
@@ -309,6 +310,36 @@ export default function RevenueIntelligenceView({ isDark, theme, user }: Props) 
 
   const mayRecord = canRecordMoney(user?.role) && !!user?.name;
 
+  // ── Excel-style column filter/sort ──
+  const REVENUE_FILTER_COLS: FilterableColumn[] = useMemo(() => [
+    { key: "srNo", label: "#", type: "number" },
+    { key: "customerName", label: "Customer name" },
+    { key: "agreementValue", label: "AV", type: "number" },
+    { key: "ocrReceived", label: "OCR received", type: "number" },
+    { key: "sanctionedAmount", label: "Sanctioned amt.", type: "number" },
+    { key: "disbursement", label: "Disbursement", type: "number" },
+    { key: "registrationAmount", label: "Registration amt.", type: "number" },
+    { key: "balance", label: "Balance", type: "number" },
+    { key: "salesManager", label: "Sales manager" },
+    { key: "flatNo", label: "Flat no." },
+    { key: "bankerDetails", label: "Banker details" },
+    { key: "statusText", label: "Sanction / regi. status" },
+    { key: "sanctionedDate", label: "Sanction date", type: "date" },
+  ], []);
+
+  const {
+    colFilters: revColFilters, colSort: revColSort, openFilterCol: revOpenFilterCol,
+    setOpenFilterCol: setRevOpenFilterCol, applyFilter: revApplyFilter,
+    applySort: revApplySort, filterRows: revFilterRows, sortRows: revSortRows,
+  } = useColumnFilters();
+
+  const revGetDisplayValue = useCallback((row: Row, colKey: string): string => {
+    if (colKey === "sanctionedDate") return shortDate(row.sanctionedDate);
+    const v = (row as any)[colKey];
+    if (typeof v === "number") return v === 0 ? "0" : String(v);
+    return v == null ? "" : String(v);
+  }, []);
+
   /* ── load ── */
   const load = useCallback(async (quiet = false) => {
     quiet ? setIsRefreshing(true) : setIsLoading(true);
@@ -362,8 +393,16 @@ export default function RevenueIntelligenceView({ isDark, theme, user }: Props) 
     });
   }, [rows, search, manager, statusFilter]);
 
+  /** Rows after column-level Excel filters have been applied */
+  const colFiltered = useMemo(
+    () => revFilterRows(filtered, revGetDisplayValue),
+    [filtered, revFilterRows, revGetDisplayValue],
+  );
+
   const sorted = useMemo(() => {
-    const copy = [...filtered];
+    // If the Excel column sort is active, use it instead of the header-click sort
+    if (revColSort) return revSortRows([...colFiltered], revGetDisplayValue);
+    const copy = [...colFiltered];
     const { key, dir } = sort;
     copy.sort((a, b) => {
       const av = a[key];
@@ -375,7 +414,7 @@ export default function RevenueIntelligenceView({ isDark, theme, user }: Props) 
       return dir === "asc" ? cmp : -cmp;
     });
     return copy;
-  }, [filtered, sort]);
+  }, [colFiltered, sort, revColSort, revSortRows, revGetDisplayValue]);
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const paged = useMemo(() => {
@@ -384,12 +423,13 @@ export default function RevenueIntelligenceView({ isDark, theme, user }: Props) 
   }, [sorted, page, totalPages]);
 
   const totals = useMemo(() => {
-    const av = filtered.reduce((s, r) => s + r.agreementValue, 0);
-    const ocr = filtered.reduce((s, r) => s + r.ocrReceived, 0);
-    const sanctioned = filtered.reduce((s, r) => s + r.sanctionedAmount, 0);
-    const disb = filtered.reduce((s, r) => s + r.disbursement, 0);
-    const registration = filtered.reduce((s, r) => s + r.registrationAmount, 0);
-    const balance = filtered.reduce((s, r) => s + r.balance, 0);
+    const source = colFiltered;
+    const av = source.reduce((s, r) => s + r.agreementValue, 0);
+    const ocr = source.reduce((s, r) => s + r.ocrReceived, 0);
+    const sanctioned = source.reduce((s, r) => s + r.sanctionedAmount, 0);
+    const disb = source.reduce((s, r) => s + r.disbursement, 0);
+    const registration = source.reduce((s, r) => s + r.registrationAmount, 0);
+    const balance = source.reduce((s, r) => s + r.balance, 0);
     const collected = ocr + disb;
     return {
       av,
@@ -400,9 +440,14 @@ export default function RevenueIntelligenceView({ isDark, theme, user }: Props) 
       balance,
       collected,
       pct: av > 0 ? Math.round((collected / av) * 100) : 0,
-      awaiting: filtered.filter((r) => r.statusTone !== "done").length,
+      awaiting: source.filter((r) => r.statusTone !== "done").length,
     };
-  }, [filtered]);
+  }, [colFiltered]);
+
+  const revColFilterData = useMemo(
+    () => rows.map(r => Object.fromEntries(REVENUE_FILTER_COLS.map(c => [c.key, revGetDisplayValue(r, c.key)]))),
+    [rows, REVENUE_FILTER_COLS, revGetDisplayValue],
+  );
 
   const toggleSort = (key: SortKey) =>
     setSort((prev) => ({ key, dir: prev.key === key && prev.dir === "asc" ? "desc" : "asc" }));
@@ -612,39 +657,37 @@ export default function RevenueIntelligenceView({ isDark, theme, user }: Props) 
             <table className="w-full text-left whitespace-nowrap">
               <thead className={`sticky top-0 z-10 backdrop-blur-xl shadow-sm ${isDark ? "bg-[#1C1C1E]/80 border-b border-[#38383A]" : "bg-[#F9F9F9]/80 border-b border-[#E5E5EA]"}`}>
                 <tr>
-                  {(
-                    [
-                      ["srNo", "#", "left"],
-                      ["customerName", "Customer name", "left"],
-                      ["agreementValue", "AV", "right"],
-                      ["ocrReceived", "OCR received", "right"],
-                      ["sanctionedAmount", "Sanctioned amt.", "right"],
-                      ["disbursement", "Disbursement", "right"],
-                      ["registrationAmount", "Registration amt.", "right"],
-                      ["balance", "Balance", "right"],
-                      ["salesManager", "Sales manager", "left"],
-                      ["flatNo", "Flat no.", "left"],
-                      [null, "Banker details", "left"],
-                      ["statusText", "Sanction / regi. status", "left"],
-                      ["sanctionedDate" as SortKey, "Sanction date", "left"],
-                    ] as Array<[SortKey | null, string, "left" | "right"]>
-                  ).map(([key, label, align]) => (
-                    <th key={label} className={`px-4 py-3.5 text-[11px] font-semibold uppercase tracking-wider ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"} ${align === "right" ? "text-right" : "text-left"}`}>
-                      {key ? (
-                        <button
-                          onClick={() => toggleSort(key)}
-                          className={`inline-flex items-center gap-1 hover:text-black dark:hover:text-white transition-colors ${align === "right" ? "flex-row-reverse" : ""}`}
-                        >
-                          {label}
-                          {sort.key === key && (
-                            sort.dir === "asc" ? <ArrowUp className={`w-3 h-3 ${isDark ? "text-white" : "text-black"}`} /> : <ArrowDown className={`w-3 h-3 ${isDark ? "text-white" : "text-black"}`} />
-                          )}
-                        </button>
-                      ) : (
-                        label
-                      )}
-                    </th>
-                  ))}
+                  {REVENUE_FILTER_COLS.map((col) => {
+                    const align = ["agreementValue","ocrReceived","sanctionedAmount","disbursement","registrationAmount","balance"].includes(col.key) ? "text-right" : "text-left";
+                    const isFiltered = !!revColFilters[col.key];
+                    return (
+                      <FilterableColumnHeader
+                        key={col.key}
+                        column={col}
+                        isFiltered={isFiltered}
+                        colSort={revColSort}
+                        isOpen={revOpenFilterCol === col.key}
+                        onToggle={() => setRevOpenFilterCol(prev => prev === col.key ? null : col.key)}
+                        isDark={isDark}
+                        accent={ACCENT}
+                        className={`px-4 py-3.5 text-[11px] font-semibold uppercase tracking-wider ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"} ${align}`}
+                      >
+                        {revOpenFilterCol === col.key && (
+                          <ColumnFilterDropdown
+                            column={col}
+                            data={revColFilterData}
+                            activeFilter={revColFilters[col.key] ?? null}
+                            activeSort={revColSort?.key === col.key ? revColSort : null}
+                            onApply={(vals) => revApplyFilter(col.key, vals)}
+                            onSort={(dir) => revApplySort(col.key, dir)}
+                            onClose={() => setRevOpenFilterCol(null)}
+                            isDark={isDark}
+                            accent={ACCENT}
+                          />
+                        )}
+                      </FilterableColumnHeader>
+                    );
+                  })}
                   <th className={`px-4 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-right ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
                     <span className="sr-only">Open</span>
                   </th>

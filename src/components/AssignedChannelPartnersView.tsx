@@ -19,11 +19,16 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   FaSearch, FaTimes, FaUserTie, FaHandshake, FaMapMarkerAlt, FaPhone,
   FaClipboardList, FaRegCommentDots, FaWalking, FaFileSignature, FaPlus,
+  FaFilter, FaSortAlphaDown, FaSortAlphaUp,
 } from "react-icons/fa";
 import { useCpResource, invalidateCpCache } from "@/lib/hooks/useCpResource";
 import {
   CpTableSkeletonRows, CpStatCardsSkeleton, CpDrawerSkeleton, SkeletonBar,
 } from "@/components/cp/CpSkeletons";
+import SharedColumnFilterDropdown, {
+  useColumnFilters, FilterableColumnHeader,
+  type FilterableColumn,
+} from "@/components/ColumnFilterDropdown";
 
 interface Props {
   isDark: boolean;
@@ -50,6 +55,10 @@ const fmtDate = (raw: any, withTime = false) => {
 
 /** Values the enquiry form writes as placeholders rather than leaving null. */
 const real = (v: any) => (v && v !== "N/A" && v !== "Pending" ? v : null);
+
+/** Whether a partner row has all four profile fields filled in. */
+const profileComplete = (p: any) =>
+  !!(p.office_address && p.gst_number && p.rera_registration_no && p.owner_contact_person);
 
 /** One partner row, as this table reads it. */
 type PartnerRow = Record<string, any>;
@@ -87,6 +96,12 @@ function AssignedChannelPartnersView({
   // to answer is which partners are actually delivering.
   const [sortBy, setSortBy] = useState<"leads" | "bookings" | "name" | "recent">("leads");
 
+  // ── Excel-style per-column filter / sort ──
+  const {
+    colFilters, colSort, openFilterCol, setOpenFilterCol,
+    applyFilter, applySort, filterRows, sortRows,
+  } = useColumnFilters();
+
   const [detailFor, setDetailFor] = useState<any>(null);
   const [detail, setDetail] = useState<any>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -119,6 +134,52 @@ function AssignedChannelPartnersView({
     return () => { cancelled = true; };
   }, [detailFor]);
 
+  /** Schema for Excel-style column filter dropdowns. */
+  const filterableCols: FilterableColumn[] = useMemo(() => [
+    { key: "name",                     label: "CP Name" },
+    { key: "company_name",             label: "Company" },
+    { key: "owner_contact_person",     label: "Primary Contact" },
+    { key: "phone",                    label: "Phone" },
+    { key: "city",                     label: "City" },
+    { key: "pin_code",                 label: "Pin" },
+    { key: "rera_registration_no",     label: "RERA" },
+    { key: "gst_number",              label: "GST" },
+    { key: "lead_count",              label: "Leads",       type: "number" },
+    { key: "booking_count",           label: "Bookings",    type: "number" },
+    { key: "_profile",                label: "Profile" },
+    { key: "status",                  label: "Status" },
+    { key: "assigned_sourcing_manager_at", label: "Assigned On", type: "date" },
+  ], []);
+
+  /** Map a row + column key to the display string shown in filter dropdowns. */
+  const getDisplayValue = useCallback((row: PartnerRow, colKey: string): string => {
+    switch (colKey) {
+      case "_profile":
+        return profileComplete(row) ? "Complete" : "Incomplete";
+      case "status":
+        return row.status === "active" ? "Active" : "Inactive";
+      case "lead_count":
+        return String(Number(row.lead_count || 0));
+      case "booking_count":
+        return String(Number(row.booking_count || 0));
+      case "assigned_sourcing_manager_at":
+        return fmtDate(row.assigned_sourcing_manager_at) || "";
+      default:
+        return row[colKey] != null ? String(row[colKey]) : "";
+    }
+  }, []);
+
+  /** Rows with display values pre-mapped for the filter dropdown's data prop. */
+  const filterDisplayRows = useMemo(() =>
+    rows.map(r => {
+      const mapped: Record<string, unknown> = {};
+      for (const col of filterableCols) {
+        mapped[col.key] = getDisplayValue(r, col.key);
+      }
+      return mapped;
+    }),
+  [rows, filterableCols, getDisplayValue]);
+
   // Client-side: one manager's partner list is tens of rows, so filtering in
   // place beats a round trip per keystroke. Deferred so the character the
   // operator just typed paints before the list is re-filtered and re-sorted.
@@ -126,18 +187,25 @@ function AssignedChannelPartnersView({
   const visible = useMemo(() => {
     const q = deferredSearch.trim().toLowerCase();
     const digits = q.replace(/\D/g, "");
-    const filtered = !q ? rows : rows.filter(r =>
+    let filtered = !q ? rows : rows.filter(r =>
       [r.name, r.company_name, r.owner_contact_person, r.gst_number,
       r.rera_registration_no, r.city, r.pin_code, r.office_address]
         .some(v => String(v ?? "").toLowerCase().includes(q)) ||
       (digits.length >= 3 && String(r.phone ?? "").replace(/\D/g, "").includes(digits))
     );
 
+    // Apply Excel-style per-column filters (after text search).
+    filtered = filterRows(filtered, getDisplayValue);
+
+    // If a per-column sort is active it takes precedence over the header dropdown;
+    // otherwise fall back to the existing sortBy selector.
+    if (colSort) {
+      return sortRows(filtered, getDisplayValue);
+    }
+
     const byName = (a: any, b: any) => String(a.name || "").localeCompare(String(b.name || ""));
     return [...filtered].sort((a, b) => {
       switch (sortBy) {
-        // Ties broken by name so the order is stable between refreshes rather than
-        // shuffling whenever two partners sit on the same count.
         case "leads":
           return (Number(b.lead_count || 0) - Number(a.lead_count || 0)) || byName(a, b);
         case "bookings":
@@ -149,10 +217,7 @@ function AssignedChannelPartnersView({
           return byName(a, b);
       }
     });
-  }, [rows, deferredSearch, sortBy]);
-
-  const profileComplete = (p: any) =>
-    !!(p.office_address && p.gst_number && p.rera_registration_no && p.owner_contact_person);
+  }, [rows, deferredSearch, sortBy, filterRows, sortRows, colSort, getDisplayValue]);
 
   // Portfolio totals, computed from the unfiltered list so the headline numbers
   // don't change as the operator types in the search box.
@@ -170,9 +235,10 @@ function AssignedChannelPartnersView({
   }, [rows]);
 
   const columns = useMemo(() => [
-    "CP Name", "Company", "Owner / Contact", "Phone", "City", "Pin",
+    "CP Name", "Company", "Primary Contact", "Phone", "City", "Pin",
     "RERA", "GST", "Leads", "Bookings", "Profile", "Status", "Assigned On",
   ], []);
+
   const inputCls = `rounded-xl px-3 py-2 text-xs outline-none transition-all w-[170px] sm:w-56 max-w-full ${isDark
     ? "bg-[#1C1C1E] text-white placeholder-gray-500 border border-[#38383A] focus:bg-[#2C2C2E] focus:border-[#9E217B] focus:ring-2 focus:ring-[#9E217B]/10"
     : "bg-white text-gray-900 placeholder-gray-400 border border-gray-200 focus:bg-white focus:border-[#9E217B] focus:ring-2 focus:ring-[#9E217B]/10"
@@ -319,9 +385,37 @@ function AssignedChannelPartnersView({
             : "bg-white/70 border-b border-black/5"
             }`}>
             <tr className={`text-[10px] uppercase ${t.textMuted}`}>
-              {columns.map((h, i) => (
-                <th key={`${h}-${i}`} className="px-3 py-3 whitespace-nowrap font-bold">{h}</th>
-              ))}
+              {filterableCols.map(col => {
+                const isFiltered = !!colFilters[col.key];
+                const isOpen = openFilterCol === col.key;
+                return (
+                  <FilterableColumnHeader
+                    key={col.key}
+                    column={col}
+                    isFiltered={isFiltered}
+                    colSort={colSort}
+                    isOpen={isOpen}
+                    onToggle={() => setOpenFilterCol(isOpen ? null : col.key)}
+                    isDark={isDark}
+                    accent="#9E217B"
+                    className="relative"
+                  >
+                    {isOpen && (
+                      <SharedColumnFilterDropdown
+                        column={col}
+                        data={filterDisplayRows}
+                        activeFilter={colFilters[col.key] ?? null}
+                        activeSort={colSort?.key === col.key ? colSort : null}
+                        onApply={vals => applyFilter(col.key, vals)}
+                        onSort={dir => applySort(col.key, dir)}
+                        onClose={() => setOpenFilterCol(null)}
+                        isDark={isDark}
+                        accent="#9E217B"
+                      />
+                    )}
+                  </FilterableColumnHeader>
+                );
+              })}
             </tr>
           </thead>
           <tbody>

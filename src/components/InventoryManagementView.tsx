@@ -12,6 +12,7 @@ import {
   FaTrash, FaExclamationTriangle, FaBuilding, FaLock, FaTags, FaHandshake, FaChartBar,
   FaArrowLeft, FaArrowRight, FaExpand, FaCompress,
 } from "react-icons/fa";
+import ColumnFilterDropdown, { useColumnFilters, FilterableColumnHeader, type FilterableColumn } from "@/components/ColumnFilterDropdown";
 import { formatCurrencyDisplay } from "@/lib/currency";
 import AddUnitModal from "./AddUnitModal";
 import BulkGenerateUnitsModal from "./BulkGenerateUnitsModal";
@@ -389,6 +390,29 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [colW, setColW] = useState<Record<string, number>>(() => Object.fromEntries(COLUMNS.map(c => [c.key, c.w])));
 
+  // ── Excel-style column filter/sort ──
+  const INV_FILTER_COLS: FilterableColumn[] = useMemo(() =>
+    COLUMNS.filter(c => c.key !== "linked").map(c => ({
+      key: c.key,
+      label: c.label,
+      type: c.numeric ? "number" as const : "text" as const,
+    })), []);
+
+  const {
+    colFilters: invColFilters, colSort: invColSort, openFilterCol: invOpenFilterCol,
+    setOpenFilterCol: setInvOpenFilterCol, applyFilter: invApplyFilter,
+    applySort: invApplySort, filterRows: invFilterRows, sortRows: invSortRows,
+  } = useColumnFilters();
+
+  const invGetDisplayValue = useCallback((u: InventoryUnit, colKey: string): string => {
+    if (colKey === "status") return sc(u.status).label;
+    if (colKey === "unit_type") return unitTypeLabel(u.unit_type);
+    if (colKey === "carpet_area_sqft") return area(u.carpet_area_sqft);
+    if (colKey === "source") return String(u.source || "").replace("_", " ");
+    const v = (u as any)[colKey];
+    return v == null ? "" : String(v);
+  }, []);
+
   const [addMenu, setAddMenu] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [showBulk, setShowBulk] = useState(false);
@@ -602,9 +626,20 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
     [towerCtx, activeWing],
   );
 
+  const invColFiltered = useMemo(
+    () => invFilterRows(units, invGetDisplayValue),
+    [units, invFilterRows, invGetDisplayValue],
+  );
+
+  const invColFilterData = useMemo(
+    () => units.map(u => Object.fromEntries(INV_FILTER_COLS.map(c => [c.key, invGetDisplayValue(u, c.key)]))),
+    [units, INV_FILTER_COLS, invGetDisplayValue],
+  );
+
   const sorted = useMemo(() => {
+    if (invColSort) return invSortRows([...invColFiltered], invGetDisplayValue);
     const col = COLUMNS.find(c => c.key === sort.key);
-    const arr = [...units];
+    const arr = [...invColFiltered];
     arr.sort((a, b) => {
       let av: any = (a as any)[sort.key], bv: any = (b as any)[sort.key];
       if (sort.key === "status") { av = sc(a.status).label; bv = sc(b.status).label; }
@@ -613,7 +648,7 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
       return sort.dir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
     });
     return arr;
-  }, [units, sort]);
+  }, [invColFiltered, sort, invColSort, invSortRows, invGetDisplayValue]);
 
   const toggleSort = (key: string) => {
     const col = COLUMNS.find(c => c.key === key);
@@ -1145,6 +1180,9 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
                 toggleSort={toggleSort} onResizeStart={onResizeStart} onRowClick={(id: number) => setDrawerId(id)} linkChip={linkChip}
                 canDelete={isAdminUser} onDeleteUnit={(u: InventoryUnit) => setDeleteTarget(u)}
                 isDuplicate={isDuplicate} isDark={isDark}
+                INV_FILTER_COLS={INV_FILTER_COLS} invColFilters={invColFilters} invColSort={invColSort}
+                invOpenFilterCol={invOpenFilterCol} setInvOpenFilterCol={setInvOpenFilterCol}
+                invColFilterData={invColFilterData} invApplyFilter={invApplyFilter} invApplySort={invApplySort}
               />
             ) : (
               <GridView floorsGrouped={floorsGrouped} t={t} onCellClick={(id) => setDrawerId(id)} isDuplicate={isDuplicate} isDark={isDark}
@@ -1224,7 +1262,7 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
 // ═══════════════════════════════════════════════════════════════════════════
 // Table view
 // ═══════════════════════════════════════════════════════════════════════════
-function TableView({ columns, colW, sort, sorted, t, allSelected, selected, toggleAll, toggleOne, toggleSort, onResizeStart, onRowClick, linkChip, canDelete, onDeleteUnit, isDuplicate, isDark }: any) {
+function TableView({ columns, colW, sort, sorted, t, allSelected, selected, toggleAll, toggleOne, toggleSort, onResizeStart, onRowClick, linkChip, canDelete, onDeleteUnit, isDuplicate, isDark, INV_FILTER_COLS, invColFilters, invColSort, invOpenFilterCol, setInvOpenFilterCol, invColFilterData, invApplyFilter, invApplySort }: any) {
   const totalW = 40 + columns.reduce((s: number, c: Column) => s + colW[c.key], 0) + (canDelete ? 56 : 0);
   const sortIcon = (key: string) => sort.key !== key ? <FaSort className="text-[10px] opacity-40" /> : sort.dir === "asc" ? <FaSortUp className="text-[10px]" /> : <FaSortDown className="text-[10px]" />;
 
@@ -1264,25 +1302,62 @@ function TableView({ columns, colW, sort, sorted, t, allSelected, selected, togg
                     }`}
                 />
               </th>
-              {columns.map((c: Column) => (
-                <th
-                  key={c.key}
-                  className={`relative px-4 py-3.5 text-[11px] font-semibold uppercase tracking-wider select-none ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}
-                >
-                  <button
-                    type="button"
-                    onClick={() => toggleSort(c.key)}
-                    className={`flex items-center gap-1.5 transition-colors ${c.sortable ? (isDark ? "cursor-pointer hover:text-white" : "cursor-pointer hover:text-black") : "cursor-default"}`}
+              {columns.map((c: Column) => {
+                const filterCol = INV_FILTER_COLS.find((fc: FilterableColumn) => fc.key === c.key);
+                const isFiltered = !!invColFilters[c.key];
+                if (filterCol && c.key !== "linked") {
+                  return (
+                    <FilterableColumnHeader
+                      key={c.key}
+                      column={filterCol}
+                      isFiltered={isFiltered}
+                      colSort={invColSort}
+                      isOpen={invOpenFilterCol === c.key}
+                      onToggle={() => setInvOpenFilterCol((prev: string | null) => prev === c.key ? null : c.key)}
+                      isDark={isDark}
+                      accent="#007AFF"
+                      className={`relative px-4 py-3.5 text-[11px] font-semibold uppercase tracking-wider select-none ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}
+                    >
+                      {invOpenFilterCol === c.key && (
+                        <ColumnFilterDropdown
+                          column={filterCol}
+                          data={invColFilterData}
+                          activeFilter={invColFilters[c.key] ?? null}
+                          activeSort={invColSort?.key === c.key ? invColSort : null}
+                          onApply={(vals) => invApplyFilter(c.key, vals)}
+                          onSort={(dir) => invApplySort(c.key, dir)}
+                          onClose={() => setInvOpenFilterCol(null)}
+                          isDark={isDark}
+                          accent="#007AFF"
+                        />
+                      )}
+                      <span
+                        onMouseDown={e => onResizeStart(e, c.key)}
+                        className={`absolute top-0 right-0 h-full w-2 cursor-col-resize transition-colors ${isDark ? "hover:bg-white/10" : "hover:bg-black/5"}`}
+                      />
+                    </FilterableColumnHeader>
+                  );
+                }
+                return (
+                  <th
+                    key={c.key}
+                    className={`relative px-4 py-3.5 text-[11px] font-semibold uppercase tracking-wider select-none ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}
                   >
-                    <span className="truncate">{c.label}</span>
-                    {c.sortable && sortIcon(c.key)}
-                  </button>
-                  <span
-                    onMouseDown={e => onResizeStart(e, c.key)}
-                    className={`absolute top-0 right-0 h-full w-2 cursor-col-resize transition-colors ${isDark ? "hover:bg-white/10" : "hover:bg-black/5"}`}
-                  />
-                </th>
-              ))}
+                    <button
+                      type="button"
+                      onClick={() => toggleSort(c.key)}
+                      className={`flex items-center gap-1.5 transition-colors ${c.sortable ? (isDark ? "cursor-pointer hover:text-white" : "cursor-pointer hover:text-black") : "cursor-default"}`}
+                    >
+                      <span className="truncate">{c.label}</span>
+                      {c.sortable && sortIcon(c.key)}
+                    </button>
+                    <span
+                      onMouseDown={e => onResizeStart(e, c.key)}
+                      className={`absolute top-0 right-0 h-full w-2 cursor-col-resize transition-colors ${isDark ? "hover:bg-white/10" : "hover:bg-black/5"}`}
+                    />
+                  </th>
+                );
+              })}
               {canDelete && (
                 <th className={`px-4 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-right ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
                   Actions

@@ -21,6 +21,11 @@ import { MdOutlinePhoneInTalk } from "react-icons/md";
 import CallingButtons from "@/components/CallingButtons";
 import UserAvatar from "@/components/UserAvatar";
 import HeaderClock from "@/components/HeaderClock";
+import ColumnFilterDropdown, {
+  FilterableColumnHeader,
+  useColumnFilters,
+  type FilterableColumn,
+} from "@/components/ColumnFilterDropdown";
 import { APP_HEADER_HEIGHT, APP_HEADER_PADDING } from "@/components/AppHeader";
 import LogoutConfirmDialog from "@/components/LogoutConfirmDialog";
 import PushNotificationInit from "@/components/PushNotificationInit";
@@ -489,6 +494,49 @@ function DashboardSection({ rawLeads, savedLeads, callerName }: { rawLeads: RawL
 function InterestedSection({ leads, onOpenDetail }: { leads: SavedLead[]; onOpenDetail: (lead: SavedLead) => void }) {
   const [search, setSearch] = useState("");
   const filtered = useMemo(() => leads.filter(l => !search || l.name.toLowerCase().includes(search.toLowerCase()) || l.phone.includes(search) || (l.channelPartner || "").toLowerCase().includes(search.toLowerCase()) || (l.assignManager || "").toLowerCase().includes(search.toLowerCase())), [leads, search]);
+
+  // ── Column filter/sort ──
+  const intCF = useColumnFilters();
+  const INT_COLS: FilterableColumn[] = useMemo(() => [
+    { key: "name", label: "Name" },
+    { key: "phone", label: "Phone" },
+    { key: "email", label: "Email" },
+    { key: "budget", label: "Budget" },
+    { key: "location", label: "Location" },
+    { key: "source", label: "Source" },
+    { key: "channelPartner", label: "Channel Partner" },
+    { key: "assignManager", label: "Assign Manager" },
+    { key: "siteVisit", label: "Site Visit", type: "date" },
+    { key: "feedback", label: "Feedback" },
+    { key: "savedOn", label: "Saved On", type: "date" },
+  ], []);
+  const getIntDisplayValue = useCallback((row: SavedLead, colKey: string): string => {
+    switch (colKey) {
+      case "name": return row.name || "";
+      case "phone": return row.phone || "";
+      case "email": return row.email || "";
+      case "budget": return row.budget || "";
+      case "location": return row.location || "";
+      case "source": return row.source || "Unknown";
+      case "channelPartner": return row.channelPartner || "";
+      case "assignManager": return row.assignManager || "";
+      case "siteVisit": return row.siteVisitDate ? formatDate(row.siteVisitDate).split(",")[0] : "Not scheduled";
+      case "feedback": return row.feedback || "";
+      case "savedOn": return formatDate(row.savedAt).split(",")[0];
+      default: return "";
+    }
+  }, []);
+  const filteredFinal = useMemo(() => {
+    const afterCol = intCF.filterRows(filtered, getIntDisplayValue);
+    return intCF.sortRows(afterCol, getIntDisplayValue);
+  }, [filtered, intCF.filterRows, intCF.sortRows, getIntDisplayValue]);
+  const intDropdownData = useMemo(() =>
+    filtered.map(row => {
+      const rec: Record<string, unknown> = {};
+      for (const col of INT_COLS) rec[col.key] = getIntDisplayValue(row, col.key);
+      return rec;
+    }),
+  [filtered, INT_COLS, getIntDisplayValue]);
   return (
     <div className="animate-fadeIn">
       <div className="flex justify-between items-center mb-5">
@@ -502,17 +550,47 @@ function InterestedSection({ leads, onOpenDetail }: { leads: SavedLead[]; onOpen
           <div className="bg-[#111111] rounded-2xl border border-[#222] overflow-hidden shadow-sm">
             <div className="p-4 border-b border-[#222] bg-[#151515] flex justify-between items-center">
               <h3 className="font-bold text-white flex items-center gap-2 text-sm"><FaHeart className="text-green-400 text-xs" />Interested Leads Table</h3>
-              <span className="text-[10px] text-gray-500 bg-[#222] px-2 py-0.5 rounded border border-[#333]">{filtered.length} of {leads.length} shown</span>
+              <span className="text-[10px] text-gray-500 bg-[#222] px-2 py-0.5 rounded border border-[#333]">{filteredFinal.length} of {leads.length} shown</span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm text-gray-400">
                 <thead className="text-[11px] uppercase bg-[#1a1a1a] text-gray-500">
-                  <tr>{["#", "Name", "Phone", "Email", "Budget", "Location", "Source", "Channel Partner", "Assign Manager", "Site Visit", "Feedback", "Saved On", "Action"].map(h => <th key={h} className={`px-4 py-3 border-b border-[#222] whitespace-nowrap ${h === "Action" ? "text-center" : ""}`}>{h}</th>)}</tr>
+                  <tr>
+                    <th className="px-4 py-3 border-b border-[#222] whitespace-nowrap">#</th>
+                    {INT_COLS.map(col => (
+                      <FilterableColumnHeader
+                        key={col.key}
+                        column={col}
+                        isFiltered={!!intCF.colFilters[col.key]}
+                        colSort={intCF.colSort?.key === col.key ? intCF.colSort : null}
+                        isOpen={intCF.openFilterCol === col.key}
+                        onToggle={() => intCF.setOpenFilterCol(intCF.openFilterCol === col.key ? null : col.key)}
+                        isDark={true}
+                        accent="#22c55e"
+                        className="border-b border-[#222] whitespace-nowrap"
+                      >
+                        {intCF.openFilterCol === col.key && (
+                          <ColumnFilterDropdown
+                            column={col}
+                            data={intDropdownData}
+                            activeFilter={intCF.colFilters[col.key] ?? null}
+                            activeSort={intCF.colSort?.key === col.key ? intCF.colSort : null}
+                            onApply={vals => intCF.applyFilter(col.key, vals)}
+                            onSort={dir => intCF.applySort(col.key, dir)}
+                            onClose={() => intCF.setOpenFilterCol(null)}
+                            isDark={true}
+                            accent="#22c55e"
+                          />
+                        )}
+                      </FilterableColumnHeader>
+                    ))}
+                    <th className="px-4 py-3 border-b border-[#222] whitespace-nowrap text-center">Action</th>
+                  </tr>
                 </thead>
                 <tbody className="divide-y divide-[#1a1a1a]">
-                  {filtered.length === 0
+                  {filteredFinal.length === 0
                     ? <tr><td colSpan={13} className="px-4 py-8 text-center text-gray-600">No leads match your search.</td></tr>
-                    : filtered.map((lead, idx) => (
+                    : filteredFinal.map((lead, idx) => (
                       <tr key={lead.id} className="hover:bg-[#1a1a1a] transition-colors group">
                         <td className="px-4 py-3"><span className="font-mono text-green-400 font-bold text-xs">#{String(idx + 1).padStart(2, "0")}</span></td>
                         <td className="px-4 py-3 text-white font-semibold whitespace-nowrap">{lead.name}</td>
@@ -560,6 +638,73 @@ export default function PresalesCallerPanel() {
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // ── Column filter/sort state for the Uploaded Leads table ──
+  const uploadedCF = useColumnFilters();
+  const UPLOADED_COLS: FilterableColumn[] = useMemo(() => [
+    { key: "name", label: "Name" },
+    { key: "phone", label: "Contact No." },
+    { key: "source", label: "Source" },
+    { key: "channelPartner", label: "Channel Partner" },
+    { key: "assignManager", label: "Assign Manager" },
+    { key: "feedback", label: "Feedback" },
+    { key: "dbInterest", label: "Lead Interest" },
+    { key: "dbSavedBy", label: "Saved By" },
+    { key: "statusDisplay", label: "Status" },
+  ], []);
+  const getUploadedDisplayValue = useCallback((row: RawLead, colKey: string): string => {
+    switch (colKey) {
+      case "name": return row.name || "";
+      case "phone": return maskPhone(row.phone);
+      case "source": return row.source || "Unknown";
+      case "channelPartner": return row.channelPartner || "";
+      case "assignManager": return row.assignManager || "";
+      case "feedback": return row.feedback || "";
+      case "dbInterest": return row.dbInterest || "Not saved";
+      case "dbSavedBy": {
+        const sb = row.dbSavedBy || "";
+        return (sb && sb !== "admin" && sb !== "unknown") ? sb : "Not saved yet";
+      }
+      case "statusDisplay": {
+        const lockedByOther = (() => {
+          const savedBy = (row.dbSavedBy || "").toLowerCase().trim();
+          const me = user.name.toLowerCase().trim();
+          if (!savedBy || savedBy === "admin" || savedBy === "unknown") return false;
+          return savedBy !== me && (row.dbStatus === "saved" || row.dbStatus === "not_interested" || !!row.dbInterest);
+        })();
+        if (lockedByOther) return "Locked";
+        if (savedLeads.some(l => l.id === row.id)) return "Saved";
+        return "New";
+      }
+      default: return "";
+    }
+  }, [user.name, savedLeads]);
+
+  // ── Column filter/sort state for the Not Interested table ──
+  const notIntCF = useColumnFilters();
+  const NOTINT_COLS: FilterableColumn[] = useMemo(() => [
+    { key: "name", label: "Name" },
+    { key: "phone", label: "Contact No." },
+    { key: "source", label: "Source" },
+    { key: "channelPartner", label: "Channel Partner" },
+    { key: "assignManager", label: "Assign Manager" },
+    { key: "feedback", label: "Feedback" },
+    { key: "followUps", label: "Follow-ups", type: "number" },
+    { key: "savedOn", label: "Saved On", type: "date" },
+  ], []);
+  const getNotIntDisplayValue = useCallback((row: SavedLead, colKey: string): string => {
+    switch (colKey) {
+      case "name": return row.name || "";
+      case "phone": return maskPhone(row.phone);
+      case "source": return row.source || "Unknown";
+      case "channelPartner": return row.channelPartner || "";
+      case "assignManager": return row.assignManager || "";
+      case "feedback": return row.feedback || "";
+      case "followUps": return String(row.followUps.length);
+      case "savedOn": return formatDate(row.savedAt).split(",")[0];
+      default: return "";
+    }
+  }, []);
   // ── Load user ──
   useEffect(() => {
     const cleanupBackGuard = installLoggedOutBackGuard(() => router.replace("/"));
@@ -902,10 +1047,39 @@ export default function PresalesCallerPanel() {
     return matchSearch && (sourceFilter === "All" || l.source === sourceFilter);
   }), [rawLeads, searchTerm, sourceFilter]);
 
+  // Apply column filters + sort on top of search/source filter
+  const filteredRawFinal = useMemo(() => {
+    const afterColFilter = uploadedCF.filterRows(filteredRaw, getUploadedDisplayValue);
+    return uploadedCF.sortRows(afterColFilter, getUploadedDisplayValue);
+  }, [filteredRaw, uploadedCF.filterRows, uploadedCF.sortRows, getUploadedDisplayValue]);
+
+  // Build data records for the dropdown's unique-value extraction
+  const uploadedDropdownData = useMemo(() =>
+    filteredRaw.map(row => {
+      const rec: Record<string, unknown> = {};
+      for (const col of UPLOADED_COLS) rec[col.key] = getUploadedDisplayValue(row, col.key);
+      return rec;
+    }),
+  [filteredRaw, UPLOADED_COLS, getUploadedDisplayValue]);
+
   const uniqueSources = useMemo(() => ["All", ...Array.from(new Set(rawLeads.map(l => l.source || "Other")))], [rawLeads]);
+  // Not Interested filtered + sorted
+  const notIntLeadsRaw = useMemo(() => savedLeads.filter(l => l.status === "not_interested"), [savedLeads]);
+  const notIntLeadsFinal = useMemo(() => {
+    const afterCol = notIntCF.filterRows(notIntLeadsRaw, getNotIntDisplayValue);
+    return notIntCF.sortRows(afterCol, getNotIntDisplayValue);
+  }, [notIntLeadsRaw, notIntCF.filterRows, notIntCF.sortRows, getNotIntDisplayValue]);
+  const notIntDropdownData = useMemo(() =>
+    notIntLeadsRaw.map(row => {
+      const rec: Record<string, unknown> = {};
+      for (const col of NOTINT_COLS) rec[col.key] = getNotIntDisplayValue(row, col.key);
+      return rec;
+    }),
+  [notIntLeadsRaw, NOTINT_COLS, getNotIntDisplayValue]);
+
   const formLeads = savedLeads.filter(l => l.status !== "not_interested");
   const interestedLeads = savedLeads.filter(l => l.interestStatus === "Interested");
-  const notIntLeads = savedLeads.filter(l => l.status === "not_interested");
+  const notIntLeads = notIntLeadsRaw;
   const handleLogout = () => { cleanupPushOnLogout().catch(() => {}); clearCrmSession(); router.replace("/"); };
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
@@ -1029,7 +1203,7 @@ export default function PresalesCallerPanel() {
               <div className="flex flex-col sm:flex-row gap-3 mb-4">
                 <div className="relative flex-1"><FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-xs" /><input type="text" placeholder="Search by name, phone, ID, manager..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full bg-[#1a1a1a] border border-[#222] rounded-lg pl-9 pr-4 py-2 text-sm text-white focus:border-purple-500 outline-none" /></div>
                 <select value={sourceFilter} onChange={e => setSourceFilter(e.target.value)} className="bg-[#1a1a1a] border border-[#222] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-purple-500 cursor-pointer">{uniqueSources.map(s => <option key={s} value={s}>{s}</option>)}</select>
-                <span className="text-xs text-gray-500 self-center flex-shrink-0">{filteredRaw.length} of {rawLeads.length} leads</span>
+                <span className="text-xs text-gray-500 self-center flex-shrink-0">{filteredRawFinal.length} of {rawLeads.length} leads</span>
               </div>
               <div className="bg-[#111111] rounded-2xl border border-[#222] overflow-hidden shadow-sm">
                 <div className="p-4 border-b border-[#222] bg-[#151515] flex justify-between items-center">
@@ -1048,12 +1222,41 @@ export default function PresalesCallerPanel() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-sm text-gray-400">
                     <thead className="text-[11px] uppercase bg-[#1a1a1a] text-gray-500">
-                      <tr>{["#", "Name", "Contact No.", "Source", "Channel Partner", "Assign Manager", "Feedback", "Lead Interest", "Saved By", "Status"].map(h => <th key={h} className={`px-4 py-3 border-b border-[#222] whitespace-nowrap ${h === "Status" ? "text-center" : ""}`}>{h}</th>)}</tr>
+                      <tr>
+                        <th className="px-4 py-3 border-b border-[#222] whitespace-nowrap">#</th>
+                        {UPLOADED_COLS.map(col => (
+                          <FilterableColumnHeader
+                            key={col.key}
+                            column={col}
+                            isFiltered={!!uploadedCF.colFilters[col.key]}
+                            colSort={uploadedCF.colSort?.key === col.key ? uploadedCF.colSort : null}
+                            isOpen={uploadedCF.openFilterCol === col.key}
+                            onToggle={() => uploadedCF.setOpenFilterCol(uploadedCF.openFilterCol === col.key ? null : col.key)}
+                            isDark={true}
+                            accent="#a855f7"
+                            className={`border-b border-[#222] whitespace-nowrap ${col.key === "statusDisplay" ? "text-center" : ""}`}
+                          >
+                            {uploadedCF.openFilterCol === col.key && (
+                              <ColumnFilterDropdown
+                                column={col}
+                                data={uploadedDropdownData}
+                                activeFilter={uploadedCF.colFilters[col.key] ?? null}
+                                activeSort={uploadedCF.colSort?.key === col.key ? uploadedCF.colSort : null}
+                                onApply={vals => uploadedCF.applyFilter(col.key, vals)}
+                                onSort={dir => uploadedCF.applySort(col.key, dir)}
+                                onClose={() => uploadedCF.setOpenFilterCol(null)}
+                                isDark={true}
+                                accent="#a855f7"
+                              />
+                            )}
+                          </FilterableColumnHeader>
+                        ))}
+                      </tr>
                     </thead>
                     <tbody className="divide-y divide-[#1a1a1a]">
-                      {filteredRaw.length === 0
+                      {filteredRawFinal.length === 0
                         ? <tr><td colSpan={10} className="px-4 py-8 text-center text-gray-600">No leads match your search.</td></tr>
-                        : filteredRaw.map(lead => {
+                        : filteredRawFinal.map(lead => {
                           const savedByMe = isLeadSavedByMe(lead);
                           const lockedByOther = isLeadLockedByOther(lead);
                           const lockedBy = getLockedByName(lead);
@@ -1143,9 +1346,41 @@ export default function PresalesCallerPanel() {
                 ? <div className="border-2 border-dashed border-[#2a2a2a] rounded-2xl p-16 text-center text-gray-600"><FaTimesCircle className="text-5xl mx-auto mb-4 opacity-20" /><p className="font-semibold mb-1">No rejected leads</p><p className="text-sm">Leads marked as Not Interested will appear here.</p></div>
                 : <div className="bg-[#111111] rounded-2xl border border-[#222] overflow-hidden"><div className="overflow-x-auto">
                   <table className="w-full text-left text-sm text-gray-400">
-                    <thead className="text-[11px] uppercase bg-[#1a1a1a] text-gray-500"><tr>{["#", "Name", "Contact No.", "Source", "Channel Partner", "Assign Manager", "Feedback", "Follow-ups", "Saved On", "Actions"].map(h => <th key={h} className={`px-5 py-3 border-b border-[#222] whitespace-nowrap ${h === "Actions" ? "text-center" : ""}`}>{h}</th>)}</tr></thead>
+                    <thead className="text-[11px] uppercase bg-[#1a1a1a] text-gray-500">
+                      <tr>
+                        <th className="px-5 py-3 border-b border-[#222] whitespace-nowrap">#</th>
+                        {NOTINT_COLS.map(col => (
+                          <FilterableColumnHeader
+                            key={col.key}
+                            column={col}
+                            isFiltered={!!notIntCF.colFilters[col.key]}
+                            colSort={notIntCF.colSort?.key === col.key ? notIntCF.colSort : null}
+                            isOpen={notIntCF.openFilterCol === col.key}
+                            onToggle={() => notIntCF.setOpenFilterCol(notIntCF.openFilterCol === col.key ? null : col.key)}
+                            isDark={true}
+                            accent="#ef4444"
+                            className="border-b border-[#222] whitespace-nowrap"
+                          >
+                            {notIntCF.openFilterCol === col.key && (
+                              <ColumnFilterDropdown
+                                column={col}
+                                data={notIntDropdownData}
+                                activeFilter={notIntCF.colFilters[col.key] ?? null}
+                                activeSort={notIntCF.colSort?.key === col.key ? notIntCF.colSort : null}
+                                onApply={vals => notIntCF.applyFilter(col.key, vals)}
+                                onSort={dir => notIntCF.applySort(col.key, dir)}
+                                onClose={() => notIntCF.setOpenFilterCol(null)}
+                                isDark={true}
+                                accent="#ef4444"
+                              />
+                            )}
+                          </FilterableColumnHeader>
+                        ))}
+                        <th className="px-5 py-3 border-b border-[#222] whitespace-nowrap text-center">Actions</th>
+                      </tr>
+                    </thead>
                     <tbody className="divide-y divide-[#1a1a1a]">
-                      {notIntLeads.map(lead => (
+                      {notIntLeadsFinal.map(lead => (
                         <tr key={lead.id} className="hover:bg-[#1a1a1a] transition-colors group">
                           <td className="px-5 py-3 font-mono text-red-400 font-bold">#{lead.sr_no || lead.id}</td>
                           <td className="px-5 py-3 text-white font-semibold">{lead.name}</td>

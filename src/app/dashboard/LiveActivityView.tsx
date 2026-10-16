@@ -8,6 +8,7 @@ import {
   FaCog, FaSave, FaCalendarAlt
 } from "react-icons/fa";
 import { MdChevronLeft, MdChevronRight } from "react-icons/md";
+import ColumnFilterDropdown, { useColumnFilters, FilterableColumnHeader, type FilterableColumn } from "@/components/ColumnFilterDropdown";
 import AttendanceReportButton from "@/components/AttendanceReportButton";
 import { useShiftTiming } from "@/hooks/useShiftTiming";
 import { useRealtimeOrg } from "@/lib/supabase/useRealtimeOrg";
@@ -308,6 +309,59 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
   const activeCount = sessions.filter(s => s.status === 'ACTIVE').length;
   const idleCount = sessions.filter(s => s.status === 'IDLE').length;
 
+  // ── Excel-style column filter/sort ──
+  const LIVE_FILTER_COLS: FilterableColumn[] = useMemo(() => [
+    { key: "status", label: "Status" },
+    { key: "name", label: "Employee" },
+    ...(visibleColumns.activeLead ? [{ key: "active_lead_name", label: "Active Lead" }] : []),
+    ...(visibleColumns.loginDate ? [{ key: "login_date", label: "Login Date", type: "date" as const }] : []),
+    ...(visibleColumns.loginTime ? [{ key: "login_time", label: "Login Time" }] : []),
+    ...(visibleColumns.location ? [{ key: "login_location_name", label: "Location" }] : []),
+    ...(visibleColumns.device ? [{ key: "login_device_name", label: "Device" }] : []),
+    ...(visibleColumns.punctuality ? [{ key: "punctuality", label: "Punctuality" }] : []),
+    ...(visibleColumns.logoutTime ? [{ key: "logout_time", label: "Logout Time" }] : []),
+    ...(visibleColumns.risk ? [{ key: "risk_level", label: "Risk" }] : []),
+  ], [visibleColumns]);
+
+  const {
+    colFilters: liveColFilters, colSort: liveColSort, openFilterCol: liveOpenFilterCol,
+    setOpenFilterCol: setLiveOpenFilterCol, applyFilter: liveApplyFilter,
+    applySort: liveApplySort, filterRows: liveFilterRows, sortRows: liveSortRows,
+  } = useColumnFilters();
+
+  const liveGetDisplayValue = useCallback((s: any, colKey: string): string => {
+    if (colKey === "status") return s.status === 'ACTIVE' ? "Active" : s.status === 'IDLE' ? "Idle" : "Offline";
+    if (colKey === "login_date") return s.session_start ? new Date(s.session_start).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }) : "";
+    if (colKey === "login_time") return s.session_start ? new Date(s.session_start).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' }) : "";
+    if (colKey === "active_lead_name") return s.active_lead_id ? (s.active_lead_name || 'Lead') : "";
+    if (colKey === "punctuality") {
+      if (!s.session_start) return "";
+      const loginHour = new Date(s.session_start).getHours();
+      const loginMin = new Date(s.session_start).getMinutes();
+      const [sh, sm] = (workingHours?.loginTime ?? "09:30").split(":").map(Number);
+      const totalLoginMins = loginHour * 60 + loginMin;
+      const totalStartMins = (sh ?? 9) * 60 + (sm ?? 30);
+      if (totalLoginMins > totalStartMins + 15) return "Late";
+      if (totalLoginMins > totalStartMins) return "Cutting Close";
+      return "On Time";
+    }
+    if (colKey === "logout_time") return s.session_end ? new Date(s.session_end).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' }) : "";
+    if (colKey === "risk_level") return s.risk_level || "low";
+    const v = s[colKey];
+    return v == null ? "" : String(v);
+  }, [workingHours]);
+
+  const filteredSessions = useMemo(() => {
+    let result = liveFilterRows(sessions, liveGetDisplayValue);
+    result = liveSortRows(result, liveGetDisplayValue);
+    return result;
+  }, [sessions, liveFilterRows, liveSortRows, liveGetDisplayValue]);
+
+  const liveColFilterData = useMemo(
+    () => sessions.map(s => Object.fromEntries(LIVE_FILTER_COLS.map(c => [c.key, liveGetDisplayValue(s, c.key)]))),
+    [sessions, LIVE_FILTER_COLS, liveGetDisplayValue],
+  );
+
   const formatDuration = (seconds: number) => {
     if (!seconds) return "0m";
     const h = Math.floor(seconds / 3600);
@@ -569,18 +623,38 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
                 <table className="w-full text-left border-collapse text-[12px] whitespace-nowrap">
                   <thead className={`sticky top-0 z-10 backdrop-blur-xl ${isDark ? "bg-[#1C1C1E]/80 border-b border-[#38383A]" : "bg-white/80 border-b border-[#E5E5EA]"}`}>
                     <tr className="text-[#8E8E93] uppercase tracking-wider font-medium text-[10px]">
-                      <th className="px-4 py-3">Status</th>
-                      <th className="px-4 py-3">Employee</th>
-                      {visibleColumns.activeLead && <th className="px-4 py-3">Active Lead</th>}
-                      {visibleColumns.loginDate && <th className="px-4 py-3">Login Date</th>}
-                      {visibleColumns.loginTime && <th className="px-4 py-3">Login Time</th>}
-                      {visibleColumns.location && <th className="px-4 py-3">Location</th>}
-                      {visibleColumns.device && <th className="px-4 py-3">Device</th>}
-                      {visibleColumns.punctuality && <th className="px-4 py-3">Punctuality</th>}
-                      {visibleColumns.logoutTime && <th className="px-4 py-3">Logout Time</th>}
+                      {LIVE_FILTER_COLS.map((col) => {
+                        const isFiltered = !!liveColFilters[col.key];
+                        return (
+                          <FilterableColumnHeader
+                            key={col.key}
+                            column={col}
+                            isFiltered={isFiltered}
+                            colSort={liveColSort}
+                            isOpen={liveOpenFilterCol === col.key}
+                            onToggle={() => setLiveOpenFilterCol(prev => prev === col.key ? null : col.key)}
+                            isDark={isDark}
+                            accent="#007AFF"
+                            className="px-4 py-3"
+                          >
+                            {liveOpenFilterCol === col.key && (
+                              <ColumnFilterDropdown
+                                column={col}
+                                data={liveColFilterData}
+                                activeFilter={liveColFilters[col.key] ?? null}
+                                activeSort={liveColSort?.key === col.key ? liveColSort : null}
+                                onApply={(vals) => liveApplyFilter(col.key, vals)}
+                                onSort={(dir) => liveApplySort(col.key, dir)}
+                                onClose={() => setLiveOpenFilterCol(null)}
+                                isDark={isDark}
+                                accent="#007AFF"
+                              />
+                            )}
+                          </FilterableColumnHeader>
+                        );
+                      })}
                       {visibleColumns.liveTimer && <th className="px-4 py-3">Live Timer</th>}
                       {visibleColumns.todayWorkingHours && <th className="px-4 py-3">Working Hours</th>}
-                      {visibleColumns.risk && <th className="px-4 py-3">Risk</th>}
                       <th className="px-4 py-3">Attendance</th>
                     </tr>
                   </thead>
@@ -603,7 +677,7 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
                     ) : sessions.length === 0 ? (
                       <tr><td colSpan={14} className={`py-12 text-center text-[13px] font-medium ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>No operational data.</td></tr>
                     ) : (
-                      sessions.map((s, i) => {
+                      filteredSessions.map((s, i) => {
                         const isSelected = selectedUser?.user_id === s.user_id;
                         return (
                           <React.Fragment key={i}>

@@ -19,7 +19,8 @@ import {
   IoStatsChartOutline, IoStatsChart,
   IoRefreshOutline,
 } from "react-icons/io5";
-import { FaCircle } from "react-icons/fa";
+import { FaCircle, FaFilter, FaSortAlphaDown, FaSortAlphaUp } from "react-icons/fa";
+import SharedColumnFilterDropdown, { useColumnFilters, type FilterableColumn } from "@/components/ColumnFilterDropdown";
 import AppHeader, { HeaderControl } from "@/components/AppHeader";
 import HeaderClock from "@/components/HeaderClock";
 import UserAvatar from "@/components/UserAvatar";
@@ -143,6 +144,40 @@ export default function HRDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [trendDays, setTrendDays] = useState<7 | 30>(7);
   const [refreshing, setRefreshing] = useState(false);
+
+  // ── Column filter / sort for Live Workforce table ──
+  const {
+    colFilters: wfColFilters, colSort: wfColSort, openFilterCol: wfOpenFilterCol,
+    setOpenFilterCol: setWfOpenFilterCol, applyFilter: wfApplyFilter, applySort: wfApplySort,
+    filterRows: wfFilterRows, sortRows: wfSortRows,
+  } = useColumnFilters();
+
+  const wfColumns: FilterableColumn[] = [
+    { key: "name", label: "Employee" },
+    { key: "role", label: "Role" },
+    { key: "loginTime", label: "Login Time" },
+    { key: "status", label: "Status" },
+    { key: "currentModule", label: "Current Module" },
+    { key: "activeLead", label: "Active Lead" },
+    { key: "currentAction", label: "Current Action" },
+    { key: "workingHours", label: "Working Time", type: "number" },
+  ];
+
+  const getWfDisplayValue = (row: DashboardData["liveTable"][number], colKey: string): string => {
+    switch (colKey) {
+      case "name": return row.name ?? "";
+      case "role": return row.role ?? "";
+      case "loginTime": return row.loginTime
+        ? new Date(row.loginTime).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })
+        : "";
+      case "status": return row.status ?? "";
+      case "currentModule": return row.currentModule ?? "";
+      case "activeLead": return row.activeLead ?? "";
+      case "currentAction": return row.currentAction ?? "";
+      case "workingHours": return row.workingHours != null ? `${row.workingHours}h` : "";
+      default: return "";
+    }
+  };
 
   // Session guard
   useEffect(() => {
@@ -415,19 +450,62 @@ export default function HRDashboard() {
 
                 {loading ? <ChartSkeleton isDark={isDark} /> : !data ? null : data.liveTable.length === 0 ? (
                   <EmptyState label="No employee session data for today yet." isDark={isDark} />
-                ) : (
+                ) : (() => {
+                  const wfFiltered = wfFilterRows(data.liveTable, getWfDisplayValue);
+                  const wfSorted = wfSortRows(wfFiltered, getWfDisplayValue);
+                  return (
                   <div className={`rounded-3xl overflow-hidden border ${isDark ? "border-[#38383A]" : "border-[#E5E5EA]"}`}>
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead>
                           <tr className={isDark ? "bg-[#1C1C1E] text-[#98989D]" : "bg-[#F5F5F7] text-[#86868B]"}>
-                            {["Employee", "Role", "Login Time", "Status", "Current Module", "Active Lead", "Current Action", "Working Time"].map((h) => (
-                              <th key={h} className="text-left text-[10px] font-bold uppercase tracking-wider px-4 py-3 whitespace-nowrap">{h}</th>
-                            ))}
+                            {wfColumns.map((col) => {
+                              const isFiltered = !!(wfColFilters[col.key]);
+                              const isSorted = wfColSort?.key === col.key;
+                              const isActive = isFiltered || isSorted;
+                              return (
+                                <th key={col.key} className="text-left text-[10px] font-bold uppercase tracking-wider px-4 py-3 whitespace-nowrap relative">
+                                  <button
+                                    type="button"
+                                    onClick={e => { e.stopPropagation(); setWfOpenFilterCol(prev => prev === col.key ? null : col.key); }}
+                                    className={`group flex items-center gap-1.5 whitespace-nowrap transition-colors ${
+                                      isActive ? "" : isDark ? "text-[#98989D] hover:text-gray-200" : "text-[#86868B] hover:text-gray-700"
+                                    }`}
+                                    style={isActive ? { color: "#007AFF" } : undefined}
+                                    title={`Filter / Sort by ${col.label}`}
+                                  >
+                                    {col.label}
+                                    <span
+                                      className={`inline-flex items-center justify-center w-4 h-4 rounded transition-colors ${
+                                        isActive ? "" : isDark ? "text-[#48484A] group-hover:text-gray-400" : "text-gray-300 group-hover:text-gray-500"
+                                      }`}
+                                      style={isActive ? { backgroundColor: "#007AFF22", color: "#007AFF" } : undefined}
+                                    >
+                                      {isSorted
+                                        ? wfColSort?.direction === "asc" ? <FaSortAlphaDown className="w-2.5 h-2.5" /> : <FaSortAlphaUp className="w-2.5 h-2.5" />
+                                        : <FaFilter className="w-2 h-2" />}
+                                    </span>
+                                    {isFiltered && <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF] inline-block" />}
+                                  </button>
+                                  {wfOpenFilterCol === col.key && (
+                                    <SharedColumnFilterDropdown
+                                      column={col}
+                                      data={data.liveTable.map(r => ({ [col.key]: getWfDisplayValue(r, col.key) }))}
+                                      activeFilter={wfColFilters[col.key] ?? null}
+                                      activeSort={wfColSort?.key === col.key ? wfColSort : null}
+                                      onApply={vals => wfApplyFilter(col.key, vals)}
+                                      onSort={dir => wfApplySort(col.key, dir)}
+                                      onClose={() => setWfOpenFilterCol(null)}
+                                      isDark={isDark}
+                                    />
+                                  )}
+                                </th>
+                              );
+                            })}
                           </tr>
                         </thead>
                         <tbody>
-                          {data.liveTable.map((row, i) => (
+                          {wfSorted.map((row, i) => (
                             <tr key={row.userId}
                               className={`border-t transition-colors ${
                                 isDark ? "border-[#2C2C2E] hover:bg-[#1C1C1E]" : "border-[#F5F5F7] hover:bg-gray-50"
@@ -473,7 +551,8 @@ export default function HRDashboard() {
                       </table>
                     </div>
                   </div>
-                )}
+                  );
+                })()}
               </>
             )}
           </div>

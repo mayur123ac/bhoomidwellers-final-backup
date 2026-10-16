@@ -1,9 +1,10 @@
 "use client";
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useShiftTiming } from "@/hooks/useShiftTiming";
 import AttendanceTimerWidget from "@/components/AttendanceTimerWidget";
-import { FaClock, FaCalendarAlt, FaCheckCircle, FaTimesCircle, FaMapMarkerAlt, FaFileExcel, FaTimes, FaCog, FaClipboardList, FaCheck } from "react-icons/fa";
+import { FaClock, FaCalendarAlt, FaCheckCircle, FaTimesCircle, FaMapMarkerAlt, FaFileExcel, FaTimes, FaCog, FaClipboardList, FaCheck, FaFilter, FaSortAlphaDown, FaSortAlphaUp } from "react-icons/fa";
 import { useAttendance } from "@/components/AttendanceContext";
+import ColumnFilterDropdown, { FilterableColumnHeader, useColumnFilters, type FilterableColumn } from "@/components/ColumnFilterDropdown";
 import { motion, AnimatePresence } from "framer-motion";
 import AppleDatePicker from "@/components/AppleDatePicker";
 export type ThemeTokens = Record<string, string | any>;
@@ -37,6 +38,85 @@ export default function AttendanceView({
 
   // Real-time Centralized Shift Timing
   const { timing: workingHours } = useShiftTiming();
+
+  // ── Column filter / sort state ──────────────────────────────────────────────
+  const {
+    colFilters, colSort, openFilterCol, setOpenFilterCol,
+    applyFilter, applySort, clearAllFilters, filterRows, sortRows,
+  } = useColumnFilters();
+
+  const attendanceCols: FilterableColumn[] = [
+    { key: "status", label: "Status" },
+    { key: "employee", label: "Employee" },
+    { key: "loginTime", label: "Login Time" },
+    { key: "punctuality", label: "Punctuality" },
+    { key: "logoutTime", label: "Logout Time" },
+    { key: "loggedTime", label: "Logged Time" },
+    { key: "workingHour", label: "Working Hour" },
+    { key: "attendance", label: "Attendance" },
+  ];
+
+  /** Map a session row + column key to the display string used for filtering / sorting. */
+  const getDisplayValue = useCallback((s: any, colKey: string): string => {
+    const isActive = !!s.session_is_active;
+    switch (colKey) {
+      case "status":
+        return isActive ? "Active" : s.session_end ? "Offline" : "Idle";
+      case "employee":
+        return s.name || adminUser.name || "";
+      case "loginTime":
+        return s.session_start
+          ? new Date(s.session_start).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" })
+          : "";
+      case "punctuality": {
+        if (!s.session_start) return "";
+        if (workingHours.flexible) return "Flexible";
+        const loginDate = new Date(s.session_start);
+        const [cH, cM] = workingHours.loginTime.split(":").map(Number);
+        const expected = new Date(loginDate);
+        expected.setHours(cH, cM, 0, 0);
+        const diff = Math.round((loginDate.getTime() - expected.getTime()) / 60000);
+        if (diff > 2) return `Late`;
+        if (diff < -2) return `Early`;
+        return "On Time";
+      }
+      case "logoutTime":
+        return isActive ? "Active Session" : s.session_end
+          ? new Date(s.session_end).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" })
+          : "N/A";
+      case "loggedTime": {
+        if (!s.session_start) return "";
+        const startMs = new Date(s.session_start).getTime();
+        const endMs = isActive ? now : s.session_end ? new Date(s.session_end).getTime() : startMs;
+        const diff = Math.max(0, Math.floor((endMs - startMs) / 1000));
+        const hh = Math.floor(diff / 3600);
+        const mm = Math.floor((diff % 3600) / 60);
+        const ss = diff % 60;
+        return `${String(hh).padStart(2, "0")}h ${String(mm).padStart(2, "0")}m ${String(ss).padStart(2, "0")}s`;
+      }
+      case "workingHour":
+        if (s.attendance_working_track != null) {
+          const sec = Number(s.attendance_working_track);
+          const h = Math.floor(sec / 3600);
+          const m = Math.floor((sec % 3600) / 60);
+          return `${String(h).padStart(2, "0")}h ${String(m).padStart(2, "0")}m`;
+        }
+        return "—";
+      case "attendance":
+        return s.attendance_status?.toLowerCase() === "present" ? "Confirmed" : "Pending";
+      default:
+        return "";
+    }
+  }, [adminUser.name, workingHours, now]);
+
+  /** Build the flat record array that the dropdown needs for unique-value extraction. */
+  const buildFilterData = useCallback((rows: any[]) => {
+    return rows.map(s => {
+      const rec: Record<string, string> = {};
+      for (const col of attendanceCols) rec[col.key] = getDisplayValue(s, col.key);
+      return rec;
+    });
+  }, [getDisplayValue]);
 
   const showToast = (msg: string, ok: boolean) => {
     setToast({ msg, ok });
@@ -243,6 +323,15 @@ export default function AttendanceView({
         const active = sessions.find((s) => s.session_is_active);
         return active ? [active] : [sessions[sessions.length - 1]];
       })();
+
+  // ── Apply column filters & sort to display sessions ──
+  const filteredSessions = useMemo(() => {
+    let rows = filterRows(displaySessions, getDisplayValue);
+    rows = sortRows(rows, getDisplayValue);
+    return rows;
+  }, [displaySessions, filterRows, sortRows, getDisplayValue]);
+
+  const filterData = useMemo(() => buildFilterData(displaySessions), [displaySessions, buildFilterData]);
 
   useEffect(() => {
     if (selectedDate !== todayStr) return;
@@ -458,10 +547,32 @@ export default function AttendanceView({
             <table className="w-full text-left whitespace-nowrap">
               <thead>
                 <tr>
-                  {["Status", "Employee", "Login Time", "Punctuality", "Logout Time", "Logged Time", "Working Hour", "Attendance"].map((h) => (
-                    <th key={h} className={`px-4 py-2.5 text-[10px] sm:text-[11px] font-medium uppercase tracking-wider ${isDark ? "text-[#8E8E93] border-b border-[#38383A]" : "text-[#8E8E93] border-b border-[#E5E5EA]"}`}>
-                      {h}
-                    </th>
+                  {attendanceCols.map((col) => (
+                    <FilterableColumnHeader
+                      key={col.key}
+                      column={col}
+                      isFiltered={!!colFilters[col.key]}
+                      colSort={colSort}
+                      isOpen={openFilterCol === col.key}
+                      onToggle={() => setOpenFilterCol(openFilterCol === col.key ? null : col.key)}
+                      isDark={isDark}
+                      accent={isDark ? "#0A84FF" : "#007AFF"}
+                      className={`px-4 py-2.5 text-[10px] sm:text-[11px] font-medium uppercase tracking-wider relative ${isDark ? "text-[#8E8E93] border-b border-[#38383A]" : "text-[#8E8E93] border-b border-[#E5E5EA]"}`}
+                    >
+                      {openFilterCol === col.key && (
+                        <ColumnFilterDropdown
+                          column={col}
+                          data={filterData}
+                          activeFilter={colFilters[col.key] ?? null}
+                          activeSort={colSort?.key === col.key ? colSort : null}
+                          onApply={(vals) => applyFilter(col.key, vals)}
+                          onSort={(dir) => applySort(col.key, dir)}
+                          onClose={() => setOpenFilterCol(null)}
+                          isDark={isDark}
+                          accent={isDark ? "#0A84FF" : "#007AFF"}
+                        />
+                      )}
+                    </FilterableColumnHeader>
                   ))}
                 </tr>
               </thead>
@@ -486,7 +597,7 @@ export default function AttendanceView({
                       </div>
                     </td>
                   </tr>
-                ) : displaySessions.length === 0 ? (
+                ) : filteredSessions.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="py-12 text-center">
                       <div className="flex flex-col items-center gap-1.5">
@@ -497,12 +608,12 @@ export default function AttendanceView({
                     </td>
                   </tr>
                 ) : (
-                  displaySessions.map((s: any, i: number) => {
+                  filteredSessions.map((s: any, i: number) => {
                     const punct = getPunctualityInfo(s.session_start);
                     const isActive = !!s.session_is_active;
                     const isAlreadyMarked = s.attendance_status?.toLowerCase() === "present";
                     const isCurrentlyMarking = markingId === (s.session_id ?? s.id);
-                    const isLast = i === displaySessions.length - 1;
+                    const isLast = i === filteredSessions.length - 1;
 
                     return (
                       <tr key={i} className={`transition-colors ${isDark ? "hover:bg-white/[0.03]" : "hover:bg-black/[0.02]"}`}>
@@ -572,7 +683,7 @@ export default function AttendanceView({
 
         </div>
         {/* ── Mobile / tablet: cards instead of the table ── */}
-        {isFutureDate || isLoading || displaySessions.length === 0 ? (
+        {isFutureDate || isLoading || filteredSessions.length === 0 ? (
           <div className="lg:hidden py-10 px-4 text-center text-[12px] font-medium text-[#8E8E93]">
             {isFutureDate
               ? "Selected date is in the future."
@@ -582,7 +693,7 @@ export default function AttendanceView({
           </div>
         ) : (
           <div className={`lg:hidden divide-y ${isDark ? "divide-[#38383A]" : "divide-[#E5E5EA]"}`}>
-            {displaySessions.map((s: any, i: number) => {
+            {filteredSessions.map((s: any, i: number) => {
               const punct = getPunctualityInfo(s.session_start);
               const isActive = !!s.session_is_active;
               const isAlreadyMarked = s.attendance_status?.toLowerCase() === "present";

@@ -1032,14 +1032,13 @@ export function ColumnFilterDropdown({
     const rowHover = isDark ? "hover:bg-white/[0.06]" : "hover:bg-gray-50";
 
     const sortBtnCls = (active: boolean) =>
-        `inline-flex items-center gap-1.5 w-full px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-colors ${
-            active
-                ? isDark
-                    ? "bg-[#9E217B]/20 text-[#e879c4]"
-                    : "bg-[#9E217B]/10 text-[#9E217B]"
-                : isDark
-                    ? "text-gray-300 hover:bg-white/[0.06]"
-                    : "text-gray-600 hover:bg-gray-100"
+        `inline-flex items-center gap-1.5 w-full px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-colors ${active
+            ? isDark
+                ? "bg-[#9E217B]/20 text-[#e879c4]"
+                : "bg-[#9E217B]/10 text-[#9E217B]"
+            : isDark
+                ? "text-gray-300 hover:bg-white/[0.06]"
+                : "text-gray-600 hover:bg-gray-100"
         }`;
 
     return typeof document !== "undefined"
@@ -1053,17 +1052,15 @@ export function ColumnFilterDropdown({
                 aria-label={`Filter ${columnLabel}`}
             >
                 {/* Header */}
-                <div className={`flex items-center justify-between px-3 py-2 border-b ${
-                    isDark ? "border-white/[0.08] bg-white/[0.02]" : "border-gray-100 bg-gray-50"
-                }`}>
+                <div className={`flex items-center justify-between px-3 py-2 border-b ${isDark ? "border-white/[0.08] bg-white/[0.02]" : "border-gray-100 bg-gray-50"
+                    }`}>
                     <span className="text-[10px] font-bold uppercase tracking-widest opacity-50">
                         Filter: {columnLabel}
                     </span>
                     <button
                         onClick={handleCancel}
-                        className={`w-5 h-5 grid place-items-center rounded-md transition-colors ${
-                            isDark ? "text-gray-400 hover:bg-white/10" : "text-gray-400 hover:bg-gray-200"
-                        }`}
+                        className={`w-5 h-5 grid place-items-center rounded-md transition-colors ${isDark ? "text-gray-400 hover:bg-white/10" : "text-gray-400 hover:bg-gray-200"
+                            }`}
                         aria-label="Close filter"
                     >
                         <FaTimes className="text-[9px]" />
@@ -1071,9 +1068,8 @@ export function ColumnFilterDropdown({
                 </div>
 
                 {/* Sort section */}
-                <div className={`px-2 py-2 border-b ${
-                    isDark ? "border-white/[0.06]" : "border-gray-100"
-                }`}>
+                <div className={`px-2 py-2 border-b ${isDark ? "border-white/[0.06]" : "border-gray-100"
+                    }`}>
                     <p className="text-[9px] font-bold uppercase tracking-widest opacity-40 px-1 mb-1">
                         Sort
                     </p>
@@ -1098,9 +1094,8 @@ export function ColumnFilterDropdown({
                 {/* Search input */}
                 <div className="px-2 pt-2 pb-1">
                     <div className="relative">
-                        <FaSearch className={`absolute left-2.5 top-1/2 -translate-y-1/2 text-[9px] pointer-events-none ${
-                            isDark ? "text-gray-500" : "text-gray-400"
-                        }`} />
+                        <FaSearch className={`absolute left-2.5 top-1/2 -translate-y-1/2 text-[9px] pointer-events-none ${isDark ? "text-gray-500" : "text-gray-400"
+                            }`} />
                         <input
                             ref={searchRef}
                             value={search}
@@ -1113,9 +1108,8 @@ export function ColumnFilterDropdown({
                         {search && (
                             <button
                                 onClick={() => setSearch("")}
-                                className={`absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 grid place-items-center rounded ${
-                                    isDark ? "text-gray-400 hover:text-white" : "text-gray-400 hover:text-gray-700"
-                                }`}
+                                className={`absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 grid place-items-center rounded ${isDark ? "text-gray-400 hover:text-white" : "text-gray-400 hover:text-gray-700"
+                                    }`}
                             >
                                 <FaTimes className="text-[8px]" />
                             </button>
@@ -1124,9 +1118,8 @@ export function ColumnFilterDropdown({
                 </div>
 
                 {/* Select all / clear bar */}
-                <div className={`flex items-center justify-between px-3 py-1 ${
-                    isDark ? "" : ""
-                }`}>
+                <div className={`flex items-center justify-between px-3 py-1 ${isDark ? "" : ""
+                    }`}>
                     <button
                         onClick={() => {
                             if (allMatchSelected) {
@@ -1137,18 +1130,16 @@ export function ColumnFilterDropdown({
                                 selectAllFiltered();
                             }
                         }}
-                        className={`text-[10px] font-bold ${
-                            isDark ? "text-[#00AEEF] hover:text-[#7dd3fc]" : "text-[#0284c7] hover:text-[#0369a1]"
-                        }`}
+                        className={`text-[10px] font-bold ${isDark ? "text-[#00AEEF] hover:text-[#7dd3fc]" : "text-[#0284c7] hover:text-[#0369a1]"
+                            }`}
                     >
                         {allMatchSelected ? "Deselect all" : "Select all"}
                     </button>
                     {someSelected && (
                         <button
                             onClick={clearAll}
-                            className={`text-[10px] font-bold ${
-                                isDark ? "text-gray-400 hover:text-gray-200" : "text-gray-400 hover:text-gray-700"
-                            }`}
+                            className={`text-[10px] font-bold ${isDark ? "text-gray-400 hover:text-gray-200" : "text-gray-400 hover:text-gray-700"
+                                }`}
                         >
                             Clear ({draft.size})
                         </button>
@@ -1165,16 +1156,14 @@ export function ColumnFilterDropdown({
                                 key={val}
                                 className={`flex items-center gap-2 px-3 py-[5px] cursor-pointer select-none transition-colors ${rowHover}`}
                             >
-                                <span className={`relative shrink-0 w-[15px] h-[15px] rounded-[4px] border-[1.5px] grid place-items-center transition-all ${
-                                    draft.has(val)
-                                        ? "bg-[#9E217B] border-[#9E217B]"
-                                        : isDark
-                                            ? "border-white/20 bg-white/[0.03]"
-                                            : "border-gray-300 bg-white"
-                                }`}>
-                                    <FaCheck className={`text-white text-[7px] transition-all ${
-                                        draft.has(val) ? "opacity-100 scale-100" : "opacity-0 scale-50"
-                                    }`} />
+                                <span className={`relative shrink-0 w-[15px] h-[15px] rounded-[4px] border-[1.5px] grid place-items-center transition-all ${draft.has(val)
+                                    ? "bg-[#9E217B] border-[#9E217B]"
+                                    : isDark
+                                        ? "border-white/20 bg-white/[0.03]"
+                                        : "border-gray-300 bg-white"
+                                    }`}>
+                                    <FaCheck className={`text-white text-[7px] transition-all ${draft.has(val) ? "opacity-100 scale-100" : "opacity-0 scale-50"
+                                        }`} />
                                 </span>
                                 <input
                                     type="checkbox"
@@ -1183,11 +1172,10 @@ export function ColumnFilterDropdown({
                                     onChange={() => toggleOne(val)}
                                     aria-label={val}
                                 />
-                                <span className={`text-[11px] font-medium truncate ${
-                                    val === BLANK_LABEL
-                                        ? isDark ? "italic text-gray-500" : "italic text-gray-400"
-                                        : ""
-                                }`}>
+                                <span className={`text-[11px] font-medium truncate ${val === BLANK_LABEL
+                                    ? isDark ? "italic text-gray-500" : "italic text-gray-400"
+                                    : ""
+                                    }`}>
                                     {val}
                                 </span>
                             </label>
@@ -1196,16 +1184,14 @@ export function ColumnFilterDropdown({
                 </div>
 
                 {/* Footer actions */}
-                <div className={`flex items-center justify-end gap-2 px-3 py-2 border-t ${
-                    isDark ? "border-white/[0.08] bg-white/[0.02]" : "border-gray-100 bg-gray-50"
-                }`}>
+                <div className={`flex items-center justify-end gap-2 px-3 py-2 border-t ${isDark ? "border-white/[0.08] bg-white/[0.02]" : "border-gray-100 bg-gray-50"
+                    }`}>
                     <button
                         onClick={handleCancel}
-                        className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-colors border ${
-                            isDark
-                                ? "border-white/10 text-gray-300 hover:bg-white/[0.07]"
-                                : "border-gray-200 text-gray-600 hover:bg-gray-100"
-                        }`}
+                        className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-colors border ${isDark
+                            ? "border-white/10 text-gray-300 hover:bg-white/[0.07]"
+                            : "border-gray-200 text-gray-600 hover:bg-gray-100"
+                            }`}
                     >
                         Cancel
                     </button>

@@ -14,6 +14,12 @@ import {
   ColumnSelector,
   SortIcon,
 } from "./Tableui";
+import SharedColumnFilterDropdown, {
+  useColumnFilters,
+  FilterableColumnHeader,
+  type FilterableColumn,
+} from "@/components/ColumnFilterDropdown";
+import { FaFilter, FaSortAlphaDown, FaSortAlphaUp } from "react-icons/fa";
 
 /* ───────── types ───────── */
 
@@ -138,6 +144,38 @@ export default function AdminLeadTable({
     });
   }, [leads, sortKey, sortDir, columns]);
 
+  /* ── Excel-style column filter / sort ── */
+  const {
+    colFilters, colSort, openFilterCol, setOpenFilterCol,
+    applyFilter, applySort, clearAllFilters, filterRows, sortRows,
+  } = useColumnFilters();
+
+  /** Map a lead + column key to a plain display string for filtering/sorting. */
+  const getDisplayValue = (lead: Lead, colKey: string): string => {
+    const col = columns.find(c => c.key === colKey);
+    if (!col) return "";
+    if (col.sortValue) {
+      const v = col.sortValue(lead);
+      return v === null || v === undefined ? "" : String(v);
+    }
+    // Fallback: raw field value
+    const raw = lead[colKey];
+    return raw === null || raw === undefined ? "" : String(raw);
+  };
+
+  /** Build the filterable column schema from the columns prop */
+  const filterableCols: FilterableColumn[] = useMemo(
+    () => columns.map(c => ({ key: c.key, label: c.label, type: "text" as const })),
+    [columns],
+  );
+
+  /** Apply column filters AFTER existing sort, then apply column sort override */
+  const colFiltered = useMemo(() => {
+    let result = filterRows(sorted, getDisplayValue);
+    result = sortRows(result, getDisplayValue);
+    return result;
+  }, [sorted, filterRows, sortRows, columns]);
+
   /* ── ctx ── */
   const ctx: ALTCtx = { theme, isDark, formatDate };
 
@@ -159,8 +197,22 @@ export default function AdminLeadTable({
           isDark={isDark}
         />
         {toolbarExtra}
+        {/* Clear column filters button */}
+        {(Object.values(colFilters).some(v => v !== null && v !== undefined) || colSort) && (
+          <button
+            type="button"
+            onClick={() => clearAllFilters()}
+            className={`text-[10px] sm:text-xs px-2 py-1 rounded-lg border transition-colors ${
+              isDark
+                ? "border-white/10 text-red-400 hover:bg-white/5"
+                : "border-gray-200 text-red-500 hover:bg-gray-50"
+            }`}
+          >
+            Clear column filters
+          </button>
+        )}
         <span className={`text-[10px] sm:text-xs ml-auto ${theme.textFaint}`}>
-          {sorted.length} lead{sorted.length !== 1 ? "s" : ""}
+          {colFiltered.length} lead{colFiltered.length !== 1 ? "s" : ""}
         </span>
       </div>
 
@@ -172,7 +224,7 @@ export default function AdminLeadTable({
         <DraggableScroll isDark={isDark}>
           <table className="w-full text-left border-collapse whitespace-nowrap">
 
-            {/* ── thead: Apple-style — minimal, refined typography ── */}
+            {/* ── thead: Apple-style — minimal, refined typography + Excel column filters ── */}
             <thead>
               <tr
                 className={`
@@ -181,40 +233,80 @@ export default function AdminLeadTable({
                 `}
               >
                 {visibleColumns.map((col) => {
-                  const sortable = !!col.sortValue;
-                  const dir = sortKey === col.key ? sortDir : null;
+                  const filterCol = filterableCols.find(fc => fc.key === col.key)!;
+                  const isFiltered = colFilters[col.key] != null;
+                  const isSorted = colSort?.key === col.key;
+
                   return (
                     <th
                       key={col.key}
-                      onClick={() => sortable && toggleSort(col.key)}
-                      title={sortable ? `Sort by ${col.label}` : undefined}
                       className={`
                         group px-3 py-2.5 sm:px-4 sm:py-3 whitespace-nowrap
                         border-b border-b-[1px]
                         ${col.minWidth || ""}
                         ${isDark ? "border-white/[0.07]" : "border-gray-200/80"}
-                        ${sortable ? "cursor-pointer select-none" : ""}
-                        ${sortable
-                          ? isDark
-                            ? "hover:text-white/90 transition-colors duration-150"
-                            : "hover:text-gray-800 transition-colors duration-150"
-                          : ""
-                        }
                         ${col.align === "right" ? "text-right" : col.align === "center" ? "text-center" : "text-left"}
                       `}
+                      style={{ position: "relative" }}
                     >
-                      <span
-                        className={`inline-flex items-center gap-1 sm:gap-1.5 ${
+                      <button
+                        type="button"
+                        onClick={e => {
+                          e.stopPropagation();
+                          setOpenFilterCol(prev => prev === col.key ? null : col.key);
+                        }}
+                        className={`group flex items-center gap-1.5 whitespace-nowrap transition-colors ${
+                          isFiltered || isSorted
+                            ? "text-[#007AFF]"
+                            : isDark
+                            ? "text-slate-400 hover:text-slate-200"
+                            : "text-[#475569] hover:text-slate-700"
+                        } ${
                           col.align === "right"
-                            ? "flex-row-reverse"
+                            ? "flex-row-reverse ml-auto"
                             : col.align === "center"
-                            ? "justify-center"
+                            ? "justify-center mx-auto"
                             : ""
                         }`}
+                        title={`Filter / Sort by ${col.label}`}
                       >
                         {col.label}
-                        {sortable && <SortIcon dir={dir} />}
-                      </span>
+                        <span
+                          className={`inline-flex items-center justify-center w-4 h-4 rounded transition-colors ${
+                            isFiltered || isSorted
+                              ? "bg-[#007AFF]/10"
+                              : isDark
+                              ? "text-slate-600 group-hover:text-slate-400"
+                              : "text-slate-300 group-hover:text-slate-500"
+                          }`}
+                        >
+                          {isSorted ? (
+                            colSort?.direction === "asc" ? (
+                              <FaSortAlphaDown className="w-2.5 h-2.5" />
+                            ) : (
+                              <FaSortAlphaUp className="w-2.5 h-2.5" />
+                            )
+                          ) : (
+                            <FaFilter className="w-2 h-2" />
+                          )}
+                        </span>
+                        {isFiltered && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF] inline-block" />
+                        )}
+                      </button>
+
+                      {openFilterCol === col.key && (
+                        <SharedColumnFilterDropdown
+                          column={filterCol}
+                          data={sorted.map(l => ({ [col.key]: getDisplayValue(l, col.key) }))}
+                          activeFilter={colFilters[col.key] ?? null}
+                          activeSort={colSort?.key === col.key ? colSort : null}
+                          onApply={vals => applyFilter(col.key, vals)}
+                          onSort={dir => applySort(col.key, dir)}
+                          onClose={() => setOpenFilterCol(null)}
+                          isDark={isDark}
+                        />
+                      )}
                     </th>
                   );
                 })}
@@ -242,7 +334,7 @@ export default function AdminLeadTable({
                     ))}
                   </tr>
                 ))
-              ) : sorted.length === 0 ? (
+              ) : colFiltered.length === 0 ? (
                 <tr>
                   <td
                     colSpan={visibleColumns.length}
@@ -252,7 +344,7 @@ export default function AdminLeadTable({
                   </td>
                 </tr>
               ) : (
-                sorted.map((lead, idx) => {
+                colFiltered.map((lead, idx) => {
                   /*
                    * ── Revisit / Re-entered Lead Detection ──────────────────────
                    * Uses the EXISTING lead_classification field set by the backend

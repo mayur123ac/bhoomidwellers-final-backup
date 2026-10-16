@@ -1094,23 +1094,47 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
                         </h3>
                         <span
                             className={`text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md tabular-nums ${theme.btnClosingBadge}`}
-                            title={
-                                sortedLeads.length !== allLeads.length
-                                    ? `${sortedLeads.length} of ${allLeads.length} leads match the current filters`
-                                    : undefined
-                            }
+                            title={(() => {
+                                const colActive = columnFilters.size > 0;
+                                const upstreamActive = (filteredOverviewLeads as Lead[]).length !== allLeads.length;
+                                if (colActive && upstreamActive)
+                                    return `${sortedLeads.length} of ${(filteredOverviewLeads as Lead[]).length} filtered leads (${allLeads.length} total)`;
+                                if (colActive)
+                                    return `${sortedLeads.length} of ${(filteredOverviewLeads as Lead[]).length} leads match column filters`;
+                                if (upstreamActive)
+                                    return `${(filteredOverviewLeads as Lead[]).length} of ${allLeads.length} leads match the current filters`;
+                                return undefined;
+                            })()}
                         >
                             {sortedLeads.length.toLocaleString("en-IN")}
-                            {sortedLeads.length !== allLeads.length && (
-                                <span className="opacity-50"> / {allLeads.length.toLocaleString("en-IN")}</span>
-                            )}
+                            {(() => {
+                                const colActive = columnFilters.size > 0;
+                                const upstreamFiltered = (filteredOverviewLeads as Lead[]).length;
+                                const total = allLeads.length;
+                                // Column filters active: show "X / upstream-count"
+                                if (colActive && sortedLeads.length !== upstreamFiltered) {
+                                    return (
+                                        <>
+                                            <span className="opacity-50"> / {upstreamFiltered.toLocaleString("en-IN")}</span>
+                                            {upstreamFiltered !== total && (
+                                                <span className="opacity-30"> ({total.toLocaleString("en-IN")})</span>
+                                            )}
+                                        </>
+                                    );
+                                }
+                                // Only upstream filters: show "upstream-count / total"
+                                if (upstreamFiltered !== total) {
+                                    return <span className="opacity-50"> / {total.toLocaleString("en-IN")}</span>;
+                                }
+                                return null;
+                            })()}
                         </span>
                     </div>
 
                     {/* center (drops to new line on mobile to avoid squishing) */}
-                    <div className="w-full order-last sm:order-none mt-2 sm:mt-0 sm:w-auto sm:flex-1 mobile-compact-search">
+                    {/* <div className="w-full order-last sm:order-none mt-2 sm:mt-0 sm:w-auto sm:flex-1 mobile-compact-search">
                         <SearchBar value={overviewSearch} onChange={setOverviewSearch} isDark={isDark} />
-                    </div>
+                    </div> */}
 
                     {/* right */}
                     <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap sm:ml-auto mobile-compact-toolbar">
@@ -1181,7 +1205,7 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
                         <option value="lost">Lost only</option>
                     </select>
 
-                    <select
+                    {/* <select
                         value={overviewSearchColumn}
                         onChange={(e) => setOverviewSearchColumn(e.target.value)}
                         className={`h-7 sm:h-8 px-1.5 sm:px-2.5 rounded-md sm:rounded-lg text-[10px] sm:text-xs font-bold outline-none border cursor-pointer transition-colors ${theme.select}`}
@@ -1200,7 +1224,7 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
                         <option value="interest">Interest</option>
                         <option value="site_visit">Site Visit</option>
                         <option value="assigned_to">Assigned To</option>
-                    </select>
+                    </select> */}
 
                     <div className={`w-px h-4 sm:h-5 ${isDark ? "bg-white/10" : "bg-gray-200"}`} />
 
@@ -1322,30 +1346,30 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
                                         columnFilters.has(col.key) &&
                                         (columnFilters.get(col.key)?.size ?? 0) > 0;
                                     const isOpen = openFilter?.colKey === col.key;
+
                                     return (
                                         <th
                                             key={col.key}
                                             className={`
-                        group px-2 py-2 sm:px-3 sm:py-3 whitespace-nowrap border-b
-                        text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.05em] sm:tracking-[0.09em]
-                        ${col.minWidth}
-                        ${isDark ? "border-white/[0.08]" : "border-gray-300"}
-                        ${col.align === "right" ? "text-right" : col.align === "center" ? "text-center" : "text-left"}
-                      `}
+                group px-2 py-2 sm:px-3 sm:py-3 whitespace-nowrap border-b
+                text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.05em] sm:tracking-[0.09em]
+                ${col.minWidth}
+                ${isDark ? "border-white/[0.08]" : "border-gray-300"}
+                ${col.align === "right" ? "text-right" : col.align === "center" ? "text-center" : "text-left"}
+            `}
                                         >
                                             <span
-                                                className={`inline-flex items-center gap-1 sm:gap-1.5 ${
-                                                    col.align === "right"
-                                                        ? "flex-row-reverse"
-                                                        : col.align === "center"
-                                                            ? "justify-center w-full"
-                                                            : ""
-                                                }`}
+                                                className={`inline-flex items-center gap-1 sm:gap-1.5 ${col.align === "right"
+                                                    ? "flex-row-reverse"
+                                                    : col.align === "center"
+                                                        ? "justify-center w-full"
+                                                        : ""
+                                                    }`}
                                             >
                                                 {/* Label */}
                                                 <span>{col.label}</span>
 
-                                                {/* Sort indicator (passive — not clickable; sort is via dropdown) */}
+                                                {/* Sort indicator */}
                                                 {sortable && dir && <SortIcon dir={dir} />}
 
                                                 {/* Filter/sort icon button */}
@@ -1368,26 +1392,26 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
                                                             }
                                                         }}
                                                         className={`
-                              relative inline-flex items-center justify-center
-                              w-[18px] h-[18px] rounded-[5px]
-                              transition-all duration-150
-                              focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#d946a8]
-                              ${
-                                isOpen
-                                    ? isDark
-                                        ? "bg-[#9E217B]/30 text-[#e879c4]"
-                                        : "bg-[#9E217B]/15 text-[#9E217B]"
-                                    : hasColFilter
-                                        ? isDark
-                                            ? "bg-[#9E217B]/20 text-[#d946a8]"
-                                            : "bg-[#9E217B]/10 text-[#9E217B]"
-                                        : isDark
-                                            ? "text-gray-500 hover:bg-white/[0.08] hover:text-gray-200 opacity-0 group-hover:opacity-100"
-                                            : "text-gray-400 hover:bg-gray-200/70 hover:text-gray-700 opacity-0 group-hover:opacity-100"
-                              }
-                            `}
+                            relative inline-flex items-center justify-center
+                            w-[18px] h-[18px] rounded-[5px]
+                            transition-all duration-150
+                            focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#d946a8]
+                            ${isOpen
+                                                                ? isDark
+                                                                    ? "bg-[#9E217B]/30 text-[#e879c4]"
+                                                                    : "bg-[#9E217B]/20 text-[#7A1A5F]"
+                                                                : hasColFilter
+                                                                    ? isDark
+                                                                        ? "bg-[#9E217B]/20 text-[#d946a8]"
+                                                                        : "bg-[#9E217B]/15 text-[#7A1A5F]"
+                                                                    : isDark
+                                                                        ? "text-gray-400 hover:bg-white/[0.08] hover:text-gray-200" // <-- Removed opacity classes
+                                                                        : "text-gray-700 hover:bg-gray-200/70 hover:text-gray-900" // <-- Removed opacity classes & made base color darker
+                                                            }
+                        `}
                                                     >
                                                         <FaFilter className="text-[7px]" />
+
                                                         {/* Active filter dot */}
                                                         {hasColFilter && (
                                                             <span

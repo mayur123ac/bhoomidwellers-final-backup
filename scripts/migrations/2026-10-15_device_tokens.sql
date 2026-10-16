@@ -31,12 +31,12 @@ CREATE TABLE IF NOT EXISTS device_tokens (
 );
 
 -- Fast lookup: "send push to this user in this org"
-CREATE INDEX idx_device_tokens_user_org
+CREATE INDEX IF NOT EXISTS idx_device_tokens_user_org
   ON device_tokens (user_id, organization_id)
   WHERE invalidated_at IS NULL;
 
 -- Cleanup: find and reap invalidated tokens older than 30 days
-CREATE INDEX idx_device_tokens_invalidated
+CREATE INDEX IF NOT EXISTS idx_device_tokens_invalidated
   ON device_tokens (invalidated_at)
   WHERE invalidated_at IS NOT NULL;
 
