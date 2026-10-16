@@ -14,6 +14,7 @@ import {
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { clearCrmSession, getStoredCrmUser, installLoggedOutBackGuard } from "@/lib/authSession";
+import { cleanupPushOnLogout } from "@/lib/pushNotifications";
 import { formatBudget } from "@/lib/formatBudget";
 import { useCrmTheme } from "@/lib/hooks/useCrmTheme";
 import { motion, AnimatePresence } from "framer-motion";
@@ -24,7 +25,8 @@ import {
   FaFileInvoice, FaHandshake, FaUniversity, FaUsers, FaFileAlt,
   FaClock, FaMicrophone, FaWhatsapp, FaCheckCircle,
   FaUserTie, FaChartPie, FaInfoCircle, FaSyncAlt,
-  FaChevronDown, FaTable, FaUser, FaHome, FaBullhorn
+  FaChevronDown, FaTable, FaUser, FaHome, FaBullhorn,
+  FaFilter, FaSortAlphaDown, FaSortAlphaUp,
 } from "react-icons/fa";
 import { FiUser, FiHelpCircle, FiLogOut, FiChevronRight } from "react-icons/fi";
 import { Ghost, AlertTriangle, Menu } from "lucide-react";
@@ -70,6 +72,7 @@ import HeaderClock from "@/components/HeaderClock";
 import ReceptionistSidebar, { RECEPTIONIST_NAV } from "@/components/receptionist/ReceptionistSidebar";
 import ReceptionistMobileDrawer from "@/components/receptionist/ReceptionistMobileDrawer";
 import LogoutConfirmDialog from "@/components/LogoutConfirmDialog";
+import PushNotificationInit from "@/components/PushNotificationInit";
 import BhoomiAiPanel from "@/components/bhoomi-ai/BhoomiAiPanel";
 import AdminAssistantDock from "@/components/AdminAssistantDock";
 import dynamic from "next/dynamic";
@@ -493,34 +496,218 @@ function RpPageHeader({
 // COLUMN VISIBILITY — RECEPTIONIST LEADS TABLE
 // ─────────────────────────────────────────────────────────────────────────────
 const RECEP_COLS_KEY = "bd:recep:db:hiddenCols:v1";
-const RECEP_COLUMNS: { key: string; label: string; locked?: boolean }[] = [
-  { key: "lead_no", label: "Sr. No.", locked: true },
-  { key: "client_name", label: "Client Name", locked: true },
-  { key: "cp_details", label: "CP Details" },
-  { key: "budget", label: "Budget" },
-  { key: "phone", label: "Phone" },
-  { key: "alt_phone", label: "Alt. Phone" },
-  { key: "date_created", label: "Date Created" },
-  { key: "assigned_to", label: "Assigned to" },
-  { key: "site_visits", label: "Site Visits" },
-  { key: "status", label: "Status" },
+const RECEP_COLUMNS: { key: string; label: string; locked?: boolean; type?: 'text' | 'number' | 'date' }[] = [
+  { key: "lead_no",      label: "Sr. No.",      locked: true, type: 'number' },
+  { key: "client_name", label: "Client Name",  locked: true, type: 'text' },
+  { key: "cp_details",  label: "CP Details",                 type: 'text' },
+  { key: "budget",      label: "Budget",                     type: 'text' },
+  { key: "phone",       label: "Phone",                      type: 'text' },
+  { key: "alt_phone",   label: "Alt. Phone",                 type: 'text' },
+  { key: "date_created",label: "Date Created",               type: 'date' },
+  { key: "assigned_to", label: "Assigned to",                type: 'text' },
+  { key: "site_visits", label: "Site Visits",                type: 'date' },
+  { key: "status",      label: "Status",                     type: 'text' },
 ];
 
+/** Returns a comparable display value for a receptionist "Your Enquiries" lead by RECEP_COLUMNS key. */
+function getLeadValueForRecepLeads(lead: any, key: string): string {
+  switch (key) {
+    case 'lead_no':      return String(lead.sr_no || lead.id || '');
+    case 'client_name':  return String(lead.name || '');
+    case 'cp_details':   return String(lead.cp_company || lead.cpCompany || '');
+    case 'budget':       return String(lead.salesBudget || lead.budget || '');
+    case 'phone':        return String(lead.phone || '');
+    case 'alt_phone':    return String(lead.altPhone || '');
+    case 'date_created': return String(lead.date || '');
+    case 'assigned_to':  return String(lead.assignedReceptionist || lead.assignedTo || '');
+    case 'site_visits':  return String(lead.mongoVisitDate || '');
+    case 'status':       return lead.is_lost_lead ? 'Lost' : String(lead.status || 'Assigned');
+    default:             return '';
+  }
+}
+
 const ALL_LEADS_COLS_KEY = "bd:recep:all-leads:hiddenCols:v1";
-const ALL_LEADS_COLUMNS: { key: string; label: string; locked?: boolean }[] = [
-  { key: "lead_no", label: "Sr. No.", locked: true },
-  { key: "client_name", label: "Client Name", locked: true },
-  { key: "source", label: "Source" },
-  { key: "cp_name", label: "CP Name" },
-  { key: "cp_company", label: "CP Company" },
-  { key: "cp_phone", label: "CP Phone" },
-  { key: "budget", label: "Budget" },
-  { key: "phone", label: "Phone" },
-  { key: "alt_phone", label: "Alt. Phone" },
-  { key: "date_created", label: "Date Created" },
-  { key: "backdated", label: "Backdated Entry" },
-  { key: "sales_manager", label: "Sales Manager" },
+const ALL_LEADS_COLUMNS: { key: string; label: string; locked?: boolean; type?: 'text' | 'number' | 'date' }[] = [
+  { key: "lead_no",      label: "Sr. No.",       locked: true, type: 'number' },
+  { key: "client_name", label: "Client Name",   locked: true, type: 'text' },
+  { key: "source",      label: "Source",                      type: 'text' },
+  { key: "cp_name",     label: "CP Name",                     type: 'text' },
+  { key: "cp_company",  label: "CP Company",                  type: 'text' },
+  { key: "cp_phone",    label: "CP Phone",                    type: 'text' },
+  { key: "budget",      label: "Budget",                      type: 'text' },
+  { key: "phone",       label: "Phone",                       type: 'text' },
+  { key: "alt_phone",   label: "Alt. Phone",                  type: 'text' },
+  { key: "date_created",label: "Date Created",                type: 'date' },
+  { key: "backdated",   label: "Backdated Entry",             type: 'date' },
+  { key: "sales_manager",label: "Sales Manager",              type: 'text' },
 ];
+
+/** Returns a comparable display value for a receptionist lead by ALL_LEADS_COLUMNS key. */
+function getLeadValueForColRecep(lead: any, key: string): string {
+  switch (key) {
+    case 'lead_no':       return String(lead.sr_no || lead.id || '');
+    case 'client_name':   return String(lead.name || '');
+    case 'source':        return String(lead.source || '');
+    case 'cp_name':       return String(lead.cp_name || '');
+    case 'cp_company':    return String(lead.cp_company || '');
+    case 'cp_phone':      return String(lead.cp_phone || '');
+    case 'budget':        return String(lead.salesBudget || lead.budget || '');
+    case 'phone':         return String(lead.phone || '');
+    case 'alt_phone':     return String(lead.altPhone || lead.alt_phone || '');
+    case 'date_created':  return String(lead.date || '');
+    case 'backdated':     return lead.autoDateEnabled === false && lead.enquiryDate ? String(lead.enquiryDate) : '';
+    case 'sales_manager': return String(lead.assignedTo || '');
+    default:              return '';
+  }
+}
+
+// ── Column Filter Dropdown (Excel-style per-column filter/sort) ───────────────
+
+function useOnClickOutsideRecep(ref: React.RefObject<HTMLElement | null>, handler: () => void) {
+  useEffect(() => {
+    const listener = (event: MouseEvent | TouchEvent) => {
+      if (!ref.current || ref.current.contains(event.target as Node)) return;
+      handler();
+    };
+    document.addEventListener('mousedown', listener);
+    document.addEventListener('touchstart', listener);
+    return () => {
+      document.removeEventListener('mousedown', listener);
+      document.removeEventListener('touchstart', listener);
+    };
+  }, [ref, handler]);
+}
+
+interface RcpColumnFilterProps {
+  column: { key: string; label: string; type?: 'text' | 'number' | 'date' };
+  data: any[];
+  activeFilter: Set<string> | null;
+  activeSort: { key: string; direction: 'asc' | 'desc' } | null;
+  onApply: (selectedValues: Set<string> | null) => void;
+  onSort: (direction: 'asc' | 'desc' | null) => void;
+  onClose: () => void;
+  isDark: boolean;
+}
+
+const RcpColumnFilterDropdown: React.FC<RcpColumnFilterProps> = ({
+  column, data, activeFilter, activeSort, onApply, onSort, onClose, isDark,
+}) => {
+  const ref = useRef<HTMLDivElement>(null);
+  useOnClickOutsideRecep(ref, onClose);
+
+  const uniqueValues = useMemo(() => {
+    const values = new Set<string>();
+    data.forEach(row => {
+      const val = row[column.key];
+      values.add(val === null || val === undefined || val === '' ? '(Blanks)' : String(val));
+    });
+    return Array.from(values).sort();
+  }, [data, column.key]);
+
+  const [search, setSearch] = useState('');
+  const [tempSelected, setTempSelected] = useState<Set<string>>(
+    activeFilter ? new Set(activeFilter) : new Set(uniqueValues)
+  );
+
+  const filteredValues = useMemo(() => {
+    if (!search) return uniqueValues;
+    return uniqueValues.filter(v => v.toLowerCase().includes(search.toLowerCase()));
+  }, [uniqueValues, search]);
+
+  const allFilteredSelected = filteredValues.length > 0 && filteredValues.every(v => tempSelected.has(v));
+  const someFilteredSelected = filteredValues.some(v => tempSelected.has(v)) && !allFilteredSelected;
+
+  const toggleSelectAll = () => {
+    const next = new Set(tempSelected);
+    if (allFilteredSelected) { filteredValues.forEach(v => next.delete(v)); }
+    else { filteredValues.forEach(v => next.add(v)); }
+    setTempSelected(next);
+  };
+
+  const toggleValue = (val: string) => {
+    const next = new Set(tempSelected);
+    next.has(val) ? next.delete(val) : next.add(val);
+    setTempSelected(next);
+  };
+
+  const handleApply = () => {
+    onApply(tempSelected.size === uniqueValues.length ? null : tempSelected);
+    onClose();
+  };
+
+  const baseText = isDark ? 'text-gray-200'  : 'text-gray-700';
+  const baseBg   = isDark ? 'bg-[#1C1C1E] border-white/10' : 'bg-white border-gray-200';
+  const hoverBg  = isDark ? 'hover:bg-white/5' : 'hover:bg-gray-50';
+
+  return (
+    <div
+      ref={ref}
+      className={`absolute top-full left-0 mt-1 w-64 z-50 rounded-xl shadow-2xl border overflow-hidden flex flex-col text-sm font-normal normal-case ${baseBg}`}
+      onClick={e => e.stopPropagation()}
+    >
+      <div className={`p-2 border-b ${isDark ? 'border-white/[0.08]' : 'border-gray-100'}`}>
+        <button onClick={() => { onSort('asc'); onClose(); }}
+          className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-lg ${hoverBg} ${baseText} ${activeSort?.direction === 'asc' ? 'font-bold' : ''}`}>
+          <FaSortAlphaDown className={isDark ? 'text-gray-500' : 'text-gray-400'} />
+          Sort {column.type === 'number' ? 'Smallest to Largest' : column.type === 'date' ? 'Oldest to Newest' : 'A to Z'}
+        </button>
+        <button onClick={() => { onSort('desc'); onClose(); }}
+          className={`w-full flex items-center gap-2 px-3 py-1.5 mt-1 rounded-lg ${hoverBg} ${baseText} ${activeSort?.direction === 'desc' ? 'font-bold' : ''}`}>
+          <FaSortAlphaUp className={isDark ? 'text-gray-500' : 'text-gray-400'} />
+          Sort {column.type === 'number' ? 'Largest to Smallest' : column.type === 'date' ? 'Newest to Oldest' : 'Z to A'}
+        </button>
+        {activeSort && (
+          <button onClick={() => { onSort(null); onClose(); }}
+            className={`w-full text-left px-9 py-1.5 mt-1 text-xs text-red-500 rounded-lg ${hoverBg}`}>
+            Clear Sort
+          </button>
+        )}
+      </div>
+
+      <div className="p-2">
+        <div className={`flex items-center px-3 py-1.5 rounded-lg border ${isDark ? 'bg-black/20 border-white/10' : 'bg-gray-50 border-gray-200'}`}>
+          <FaSearch className={`mr-2 text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`} />
+          <input type="text" placeholder="Search..." value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="w-full bg-transparent outline-none text-xs" />
+        </div>
+      </div>
+
+      <div className={`max-h-48 overflow-y-auto px-2 pb-2 ${baseText}`}>
+        <label className={`flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer ${hoverBg}`}>
+          <input type="checkbox" checked={allFilteredSelected}
+            ref={input => { if (input) input.indeterminate = someFilteredSelected; }}
+            onChange={toggleSelectAll}
+            className="rounded border-gray-300 text-[#007AFF] focus:ring-[#007AFF]" />
+          <span className="text-xs font-semibold">(Select All)</span>
+        </label>
+        {filteredValues.map(val => (
+          <label key={val} className={`flex items-center gap-2 px-2 py-1 cursor-pointer rounded-lg ${hoverBg}`}>
+            <input type="checkbox" checked={tempSelected.has(val)} onChange={() => toggleValue(val)}
+              className="rounded border-gray-300 text-[#007AFF] focus:ring-[#007AFF]" />
+            <span className="text-xs truncate">{val}</span>
+          </label>
+        ))}
+        {filteredValues.length === 0 && (
+          <div className={`px-2 py-3 text-center text-xs italic ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>No matches found</div>
+        )}
+      </div>
+
+      <div className={`p-2 border-t flex justify-end gap-2 ${isDark ? 'border-white/[0.08] bg-white/[0.02]' : 'border-gray-100 bg-gray-50'}`}>
+        <button onClick={onClose}
+          className={`px-3 py-1.5 text-xs font-medium rounded-lg border ${isDark ? 'border-white/10 text-gray-300 hover:bg-white/5' : 'border-gray-200 text-gray-600 hover:bg-white'}`}>
+          Cancel
+        </button>
+        <button onClick={handleApply}
+          className={`px-3 py-1.5 text-xs font-medium rounded-lg ${isDark ? 'bg-[#0A84FF] text-white hover:bg-[#0A84FF]/90' : 'bg-[#007AFF] text-white hover:bg-[#0060CC]'}`}>
+          OK
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MAIN DASHBOARD
@@ -912,6 +1099,12 @@ export default function ReceptionistDashboard() {
     try { localStorage.setItem(RECEP_COLS_KEY, JSON.stringify([...next])); } catch { /* ignore */ }
   };
   const visibleRecepCols = RECEP_COLUMNS.filter(c => c.locked || !hiddenRecepCols.has(c.key));
+  // Per-column filter (column key → Set of accepted display values, or null = no filter)
+  const [rlColFilters, setRlColFilters] = useState<Record<string, Set<string> | null>>({});
+  // Column-level sort (overrides default sort when active)
+  const [rlColSort, setRlColSort] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
+  // Which column's filter popover is open
+  const [openRlFilterCol, setOpenRlFilterCol] = useState<string | null>(null);
   const downloadRecepCSV = (data: any[], filename: string) => {
     if (!data?.length) return;
     const headers = Object.keys(data[0]);
@@ -938,6 +1131,12 @@ export default function ReceptionistDashboard() {
     try { localStorage.setItem(ALL_LEADS_COLS_KEY, JSON.stringify([...next])); } catch { /* ignore */ }
   };
   const visibleAllLeadsCols = ALL_LEADS_COLUMNS.filter(c => c.locked || !hiddenAllLeadsCols.has(c.key));
+  // Per-column filter (column key → Set of accepted display values, or null = no filter)
+  const [rcpColFilters, setRcpColFilters] = useState<Record<string, Set<string> | null>>({});
+  // Column-level sort (overrides default sr_no desc sort when active)
+  const [rcpColSort, setRcpColSort] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
+  // Which column's filter popover is open
+  const [openRcpFilterCol, setOpenRcpFilterCol] = useState<string | null>(null);
 
   // Centralized Search Logic
   const applySearch = useCallback((leads: any[], query: string, col: string) => {
@@ -2093,19 +2292,45 @@ export default function ReceptionistDashboard() {
   // handleChatSubmit lived here: a setTimeout, three `userMsg.includes(...)`
   // branches and a default apology. It is gone with the mock it drove.
 
-  const handleLogout = () => { clearCrmSession(); router.replace("/"); };
+  const handleLogout = () => { cleanupPushOnLogout().catch(() => {}); clearCrmSession(); router.replace("/"); };
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   // ─────────────────────────────────────────────────────────────────────────
   // FILTERED SETS
   // ─────────────────────────────────────────────────────────────────────────
-  const receptionistLeads = mergedLeads
-    .filter((e: any) =>
-      (e.name || "").toLowerCase().includes(searchRecep.toLowerCase()) ||
-      String(e.sr_no || e.id).includes(searchRecep) ||
-      (e.phone || "").includes(searchRecep)
-    )
-    .sort((a: any, b: any) => (Number(b.sr_no) || 0) - (Number(a.sr_no) || 0));
+  const receptionistLeadsBase = mergedLeads.filter((e: any) =>
+    (e.name || "").toLowerCase().includes(searchRecep.toLowerCase()) ||
+    String(e.sr_no || e.id).includes(searchRecep) ||
+    (e.phone || "").includes(searchRecep)
+  );
+
+  // Apply column-header checkbox filters
+  const receptionistLeadsFiltered = useMemo(() => {
+    let leads = receptionistLeadsBase;
+    for (const [colKey, allowedVals] of Object.entries(rcpColFilters)) {
+      if (!allowedVals) continue;
+      leads = leads.filter((l: any) => {
+        const displayVal = getLeadValueForColRecep(l, colKey);
+        const normalized = displayVal === '' ? '(Blanks)' : displayVal;
+        return allowedVals.has(normalized);
+      });
+    }
+    return leads;
+  }, [receptionistLeadsBase, rcpColFilters]);
+
+  // Apply column-level sort (falls back to default sr_no desc)
+  const receptionistLeads = useMemo(() => {
+    if (rcpColSort) {
+      const { key, direction } = rcpColSort;
+      return [...receptionistLeadsFiltered].sort((a, b) => {
+        const av = getLeadValueForColRecep(a, key);
+        const bv = getLeadValueForColRecep(b, key);
+        const cmp = av.localeCompare(bv, undefined, { numeric: true, sensitivity: 'base' });
+        return direction === 'asc' ? cmp : -cmp;
+      });
+    }
+    return [...receptionistLeadsFiltered].sort((a: any, b: any) => (Number(b.sr_no) || 0) - (Number(a.sr_no) || 0));
+  }, [receptionistLeadsFiltered, rcpColSort]);
 
   const filteredAssigned = myAssignedLeads.filter((l: any) =>
     (l.name || "").toLowerCase().includes(searchAssigned.toLowerCase()) ||
@@ -2114,7 +2339,7 @@ export default function ReceptionistDashboard() {
   const paginatedAssigned = filteredAssigned.slice(0, assignedCardsPage * CARDS_PER_PAGE);
   const hasMoreAssigned = paginatedAssigned.length < filteredAssigned.length;
 
-  const filteredRecepLeads = myAssignedLeads.filter((l: any) => {
+  const filteredRecepLeadsBase = myAssignedLeads.filter((l: any) => {
     let passLost = true;
     if (leadStatusFilter === "lost") passLost = !!l.is_lost_lead;
     else if (leadStatusFilter === "active") passLost = !l.is_lost_lead;
@@ -2132,6 +2357,34 @@ export default function ReceptionistDashboard() {
       (l.phone || "").includes(searchRecepLeads)
     );
   });
+
+  // Apply column-header checkbox filters
+  const filteredRecepLeadsColFiltered = useMemo(() => {
+    let leads = filteredRecepLeadsBase;
+    for (const [colKey, allowedVals] of Object.entries(rlColFilters)) {
+      if (!allowedVals) continue;
+      leads = leads.filter((l: any) => {
+        const displayVal = getLeadValueForRecepLeads(l, colKey);
+        const normalized = displayVal === '' ? '(Blanks)' : displayVal;
+        return allowedVals.has(normalized);
+      });
+    }
+    return leads;
+  }, [filteredRecepLeadsBase, rlColFilters]);
+
+  // Apply column-level sort
+  const filteredRecepLeads = useMemo(() => {
+    if (rlColSort) {
+      const { key, direction } = rlColSort;
+      return [...filteredRecepLeadsColFiltered].sort((a, b) => {
+        const av = getLeadValueForRecepLeads(a, key);
+        const bv = getLeadValueForRecepLeads(b, key);
+        const cmp = av.localeCompare(bv, undefined, { numeric: true, sensitivity: 'base' });
+        return direction === 'asc' ? cmp : -cmp;
+      });
+    }
+    return filteredRecepLeadsColFiltered;
+  }, [filteredRecepLeadsColFiltered, rlColSort]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // CHART DATA
@@ -2780,27 +3033,62 @@ export default function ReceptionistDashboard() {
                   >
                     <thead>
                       <tr className={`${isDark ? "bg-[#1C1C1E]" : "bg-white"} border-b ${isDark ? "border-white/[0.08]" : "border-black/[0.06]"}`}>
-                        {visibleAllLeadsCols.map(col => (
-                          <th
-                            key={col.key}
-                            className={`px-4 py-3 text-[12px] font-medium capitalize tracking-tight ${isDark ? "text-gray-400" : "text-gray-500"
-                              } ${col.key === "lead_no"
-                                ? `md:sticky md:left-0 md:z-20 ${isDark ? "md:bg-[#1C1C1E]" : "md:bg-white"}`
-                                : col.key === "client_name"
-                                  ? `md:sticky md:left-[88px] md:z-20 ${isDark
-                                    ? "md:bg-[#1C1C1E] md:shadow-[inset_-1px_0_0_0_rgba(255,255,255,0.08)]"
-                                    : "md:bg-white md:shadow-[inset_-1px_0_0_0_rgba(0,0,0,0.06)]"
-                                  }`
-                                  : ""
-                              }`}
-                            style={
-                              col.key === "lead_no" ? { minWidth: '88px', maxWidth: '88px' } :
-                                col.key === "client_name" ? { minWidth: '180px', maxWidth: '180px' } : {}
-                            }
-                          >
-                            {col.label}
-                          </th>
-                        ))}
+                        {visibleAllLeadsCols.map(col => {
+                          const isFiltered = !!(rcpColFilters[col.key]);
+                          const isSorted   = rcpColSort?.key === col.key;
+                          const stickyBase = col.key === 'lead_no'
+                            ? `md:sticky md:left-0 md:z-20 ${isDark ? 'md:bg-[#1C1C1E]' : 'md:bg-white'}`
+                            : col.key === 'client_name'
+                              ? `md:sticky md:left-[88px] md:z-20 ${isDark ? 'md:bg-[#1C1C1E] md:shadow-[inset_-1px_0_0_0_rgba(255,255,255,0.08)]' : 'md:bg-white md:shadow-[inset_-1px_0_0_0_rgba(0,0,0,0.06)]'}`
+                              : '';
+                          return (
+                            <th
+                              key={col.key}
+                              className={`px-4 py-3 text-[12px] font-medium capitalize tracking-tight relative ${isDark ? 'text-gray-400' : 'text-gray-500'} ${stickyBase}`}
+                              style={
+                                col.key === 'lead_no'      ? { minWidth: '88px',  maxWidth: '88px' }  :
+                                col.key === 'client_name'  ? { minWidth: '180px', maxWidth: '180px' } : {}
+                              }
+                            >
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); setOpenRcpFilterCol(prev => prev === col.key ? null : col.key); }}
+                                className={`group flex items-center gap-1.5 whitespace-nowrap transition-colors ${
+                                  isFiltered || isSorted
+                                    ? (isDark ? 'text-[#0A84FF]' : 'text-[#007AFF]')
+                                    : isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700'
+                                }`}
+                                title={`Filter / Sort by ${col.label}`}
+                              >
+                                {col.label}
+                                <span className={`inline-flex items-center justify-center w-4 h-4 rounded transition-colors ${
+                                  isFiltered || isSorted
+                                    ? (isDark ? 'text-[#0A84FF]' : 'text-[#007AFF]')
+                                    : isDark ? 'text-gray-700 group-hover:text-gray-500' : 'text-gray-300 group-hover:text-gray-400'
+                                }`}>
+                                  {isSorted
+                                    ? (rcpColSort?.direction === 'asc' ? <FaSortAlphaDown className="w-2.5 h-2.5" /> : <FaSortAlphaUp className="w-2.5 h-2.5" />)
+                                    : <FaFilter className="w-2 h-2" />
+                                  }
+                                </span>
+                                {isFiltered && <span className={`w-1.5 h-1.5 rounded-full inline-block ${isDark ? 'bg-[#0A84FF]' : 'bg-[#007AFF]'}`} />}
+                              </button>
+
+                              {openRcpFilterCol === col.key && (
+                                <RcpColumnFilterDropdown
+                                  column={col}
+                                  data={receptionistLeadsFiltered.map((l: any) => ({ [col.key]: getLeadValueForColRecep(l, col.key) }))}
+                                  activeFilter={rcpColFilters[col.key] ?? null}
+                                  activeSort={rcpColSort?.key === col.key ? rcpColSort : null}
+                                  onApply={vals => setRcpColFilters(prev => ({ ...prev, [col.key]: vals }))}
+                                  onSort={dir => setRcpColSort(dir ? { key: col.key, direction: dir } : null)}
+                                  onClose={() => setOpenRcpFilterCol(null)}
+                                  isDark={isDark}
+                                />
+                              )}
+                            </th>
+                          );
+                        })}
                       </tr>
                     </thead>
 
@@ -3837,20 +4125,62 @@ export default function ReceptionistDashboard() {
                   <table className="w-full text-left border-collapse whitespace-nowrap">
                     <thead className={isDark ? "bg-slate-900/50" : "bg-slate-50/50"}>
                       <tr>
-                        {visibleRecepCols.map(col => (
-                          <th
-                            key={col.key}
-                            className={`px-3 sm:px-5 py-3.5 text-[10px] sm:text-[11px] font-bold uppercase tracking-wider border-b ${isDark ? "text-slate-400 border-slate-800" : "text-[#475569] border-slate-200"} ${col.key === "lead_no" ? `md:sticky md:left-0 md:z-20 ${isDark ? "md:bg-slate-950" : "md:bg-[#FAFAFD]"}` :
-                              col.key === "client_name" ? `md:sticky md:left-[80px] md:min-w-[172px] md:z-20 ${isDark ? "md:bg-slate-950 md:shadow-[-1px_0_0_rgba(255,255,255,0.05)_inset]" : "md:bg-[#FAFAFD] md:shadow-[-1px_0_0_rgba(0,0,0,0.05)_inset]"}` : ""
-                              } ${col.key === "status" ? "text-center" : ""}`}
-                            style={
-                              col.key === "lead_no" ? { minWidth: '80px', maxWidth: '80px' } :
-                                col.key === "client_name" ? { minWidth: '140px', maxWidth: '140px' } : {}
-                            }
-                          >
-                            {col.label}
-                          </th>
-                        ))}
+                        {visibleRecepCols.map(col => {
+                          const isFiltered = !!(rlColFilters[col.key]);
+                          const isSorted   = rlColSort?.key === col.key;
+                          const stickyBase = col.key === 'lead_no'
+                            ? `md:sticky md:left-0 md:z-20 ${isDark ? 'md:bg-slate-950' : 'md:bg-[#FAFAFD]'}`
+                            : col.key === 'client_name'
+                              ? `md:sticky md:left-[80px] md:min-w-[172px] md:z-20 ${isDark ? 'md:bg-slate-950 md:shadow-[-1px_0_0_rgba(255,255,255,0.05)_inset]' : 'md:bg-[#FAFAFD] md:shadow-[-1px_0_0_rgba(0,0,0,0.05)_inset]'}`
+                              : '';
+                          return (
+                            <th
+                              key={col.key}
+                              className={`px-3 sm:px-5 py-3.5 text-[10px] sm:text-[11px] font-bold uppercase tracking-wider border-b relative ${isDark ? 'text-slate-400 border-slate-800' : 'text-[#475569] border-slate-200'} ${stickyBase} ${col.key === 'status' ? 'text-center' : ''}`}
+                              style={
+                                col.key === 'lead_no'     ? { minWidth: '80px',  maxWidth: '80px'  } :
+                                col.key === 'client_name' ? { minWidth: '140px', maxWidth: '140px' } : {}
+                              }
+                            >
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); setOpenRlFilterCol(prev => prev === col.key ? null : col.key); }}
+                                className={`group flex items-center gap-1.5 whitespace-nowrap transition-colors ${
+                                  isFiltered || isSorted
+                                    ? 'text-[#B01A79]'
+                                    : isDark ? 'text-slate-400 hover:text-slate-200' : 'text-[#475569] hover:text-slate-700'
+                                }`}
+                                title={`Filter / Sort by ${col.label}`}
+                              >
+                                {col.label}
+                                <span className={`inline-flex items-center justify-center w-4 h-4 rounded transition-colors ${
+                                  isFiltered || isSorted
+                                    ? 'bg-[#B01A79]/15 text-[#B01A79]'
+                                    : isDark ? 'text-slate-600 group-hover:text-slate-400' : 'text-slate-300 group-hover:text-slate-500'
+                                }`}>
+                                  {isSorted
+                                    ? (rlColSort?.direction === 'asc' ? <FaSortAlphaDown className="w-2.5 h-2.5" /> : <FaSortAlphaUp className="w-2.5 h-2.5" />)
+                                    : <FaFilter className="w-2 h-2" />
+                                  }
+                                </span>
+                                {isFiltered && <span className="w-1.5 h-1.5 rounded-full bg-[#B01A79] inline-block" />}
+                              </button>
+
+                              {openRlFilterCol === col.key && (
+                                <RcpColumnFilterDropdown
+                                  column={col}
+                                  data={filteredRecepLeadsColFiltered.map((l: any) => ({ [col.key]: getLeadValueForRecepLeads(l, col.key) }))}
+                                  activeFilter={rlColFilters[col.key] ?? null}
+                                  activeSort={rlColSort?.key === col.key ? rlColSort : null}
+                                  onApply={vals => setRlColFilters(prev => ({ ...prev, [col.key]: vals }))}
+                                  onSort={dir => setRlColSort(dir ? { key: col.key, direction: dir } : null)}
+                                  onClose={() => setOpenRlFilterCol(null)}
+                                  isDark={isDark}
+                                />
+                              )}
+                            </th>
+                          );
+                        })}
                       </tr>
                     </thead>
                     <tbody className={`divide-y ${isDark ? "divide-slate-800/60" : "divide-slate-100"}`}>
@@ -5559,6 +5889,7 @@ export default function ReceptionistDashboard() {
         onClose={() => setShowLogoutConfirm(false)}
         onConfirm={handleLogout}
       />
+      <PushNotificationInit user={user} />
     </div>
   );
 }

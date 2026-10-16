@@ -14,6 +14,14 @@ const config: CapacitorConfig = {
     androidScheme: 'https',
   },
 
+  plugins: {
+    PushNotifications: {
+      // Show push notifications when the app is in the foreground
+      // (we handle this ourselves via the pushNotificationReceived listener)
+      presentationOptions: [],
+    },
+  },
+
   android: {
     allowMixedContent: false,
   },

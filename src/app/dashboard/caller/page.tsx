@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import * as XLSX from "xlsx";
 import { clearCrmSession, getStoredCrmUser, installLoggedOutBackGuard } from "@/lib/authSession";
+import { cleanupPushOnLogout } from "@/lib/pushNotifications";
 import { useCallerSync } from "@/lib/hooks/useCallerSync";
 import {
   FaThLarge, FaClipboardList, FaTimesCircle, FaUpload, FaFileExcel,
@@ -22,6 +23,7 @@ import UserAvatar from "@/components/UserAvatar";
 import HeaderClock from "@/components/HeaderClock";
 import { APP_HEADER_HEIGHT, APP_HEADER_PADDING } from "@/components/AppHeader";
 import LogoutConfirmDialog from "@/components/LogoutConfirmDialog";
+import PushNotificationInit from "@/components/PushNotificationInit";
 
 // ─────────────────────────────────────────────
 // TYPES
@@ -904,7 +906,7 @@ export default function PresalesCallerPanel() {
   const formLeads = savedLeads.filter(l => l.status !== "not_interested");
   const interestedLeads = savedLeads.filter(l => l.interestStatus === "Interested");
   const notIntLeads = savedLeads.filter(l => l.status === "not_interested");
-  const handleLogout = () => { clearCrmSession(); router.replace("/"); };
+  const handleLogout = () => { cleanupPushOnLogout().catch(() => {}); clearCrmSession(); router.replace("/"); };
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   const sidebarItems = [
@@ -1186,6 +1188,7 @@ export default function PresalesCallerPanel() {
         onClose={() => setShowLogoutConfirm(false)}
         onConfirm={handleLogout}
       />
+      <PushNotificationInit user={user} />
     </div>
   );
 }

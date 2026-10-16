@@ -12,6 +12,7 @@ import { notifyCpLeadAssigned } from "@/services/whatsapp.service";
 import { jsonCompressed } from "@/lib/apiResponse";
 import { resolvePhones } from "@/lib/phoneAccess";
 import { broadcastToOrg } from "@/lib/supabase/broadcast";
+import { pushNewLead } from "@/lib/fcm/feedPushHandler";
 import { batchGetVisitDepths } from "@/lib/visitChain";
 import { EmailService } from "@/lib/email/EmailService";
 import { isValidRecipient } from "@/lib/email/types";
@@ -801,6 +802,13 @@ export async function POST(req: Request) {
         leadClassification,
         assignedTo: result.row.assigned_to ?? null,
       }).catch(() => {/* fire-and-forget */ });
+
+      // FCM push: notify all users with registered devices in this org
+      pushNewLead(broadcastOrgId, {
+        id: result.row.id,
+        name: result.row.name,
+        srNo: result.row.sr_no ?? null,
+      }).catch(() => {/* fire-and-forget */});
     }
 
     // ── WhatsApp: tell the Sourcing Manager the lead landed on ───────────────

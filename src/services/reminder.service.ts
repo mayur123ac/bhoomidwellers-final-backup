@@ -16,6 +16,10 @@ import {
   type ReminderPayload,
 } from "@/lib/reminderEvents";
 
+// Side-effect import: registers the FCM push handler into dispatchHandlers.
+// Must be imported before dispatchToExternalChannels() is called.
+import "@/lib/fcm/reminderPushHandler";
+
 interface ProcessReport {
   processed: number;
   failed: number;

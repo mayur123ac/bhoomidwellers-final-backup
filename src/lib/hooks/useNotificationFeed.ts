@@ -277,10 +277,14 @@ export function useNotificationFeed(options?: {
         if (!timer) timer = setInterval(fetchFeed, POLL_MS);
       }
     };
+    // Immediate refetch when a push notification arrives in the foreground
+    const onPushRefetch = () => { fetchFeed(); };
     document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("crm:refetch-notifications", onPushRefetch);
     return () => {
       if (timer) clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("crm:refetch-notifications", onPushRefetch);
     };
   }, [fetchFeed]);
 

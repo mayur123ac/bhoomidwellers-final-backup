@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { clearCrmSession, getStoredCrmUser, installLoggedOutBackGuard } from "@/lib/authSession";
+import { cleanupPushOnLogout } from "@/lib/pushNotifications";
 import { useCrmTheme } from "@/lib/hooks/useCrmTheme";
 import { useOrgName } from "@/lib/hooks/useOrgName";
 import { buildTheme } from "@/lib/crmTheme";
@@ -31,6 +32,7 @@ import HeaderClock from "@/components/HeaderClock";
 import AppHeader, { HeaderControl, AppLogo } from "@/components/AppHeader";
 import { APP_HEADER_HEIGHT, APP_HEADER_PADDING } from "@/components/AppHeader";
 import LogoutConfirmDialog from "@/components/LogoutConfirmDialog";
+import PushNotificationInit from "@/components/PushNotificationInit";
 /**
  * The theme object two panels on this page are given.
  *
@@ -118,7 +120,7 @@ export default function SourcingManagerDashboard() {
     return cleanupBackGuard;
   }, [router, fetchPartners]);
 
-  const handleLogout = () => { clearCrmSession(); router.replace("/"); };
+  const handleLogout = () => { cleanupPushOnLogout().catch(() => {}); clearCrmSession(); router.replace("/"); };
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   // ── Stats ──
@@ -502,6 +504,7 @@ export default function SourcingManagerDashboard() {
         onClose={() => setShowLogoutConfirm(false)}
         onConfirm={handleLogout}
       />
+      <PushNotificationInit user={user} />
     </div>
   );
 }

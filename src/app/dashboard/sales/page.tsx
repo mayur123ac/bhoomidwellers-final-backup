@@ -13,6 +13,7 @@ import AttendanceView from "@/components/AttendanceView";
 import dynamic from "next/dynamic";
 
 import { clearCrmSession, getStoredCrmUser, installLoggedOutBackGuard } from "@/lib/authSession";
+import { cleanupPushOnLogout } from "@/lib/pushNotifications";
 import { formatBudget } from "@/lib/formatBudget";
 import { useCpEnquiryVisible } from "@/lib/hooks/useCpEnquiryVisible";
 import { useCrmTheme } from "@/lib/hooks/useCrmTheme";
@@ -33,7 +34,7 @@ import {
   FaCalendarAlt, FaUserCircle, FaMicrophone, FaWhatsapp, FaRobot,
   FaEyeSlash, FaEye, FaSearch, FaUniversity, FaUsers, FaFileAlt, FaCheck,
   FaClock, FaBell, FaHandshake, FaClipboardList, FaBuilding, FaEdit,
-  FaDownload, FaSyncAlt, FaTable,
+  FaDownload, FaSyncAlt, FaTable, FaFilter, FaSortAlphaDown, FaSortAlphaUp,
 } from "react-icons/fa";
 
 import InventoryManagementView from "@/components/InventoryManagementView";
@@ -58,6 +59,7 @@ import ReminderDuePopup from "@/components/ReminderDuePopup";
 import { useOverdueReminders } from "@/hooks/useOverdueReminders";
 import PermanentLeadDeleteDialog from "@/components/PermanentLeadDeleteDialog";
 import LogoutConfirmDialog from "@/components/LogoutConfirmDialog";
+import PushNotificationInit from "@/components/PushNotificationInit";
 import LoanDealForm from "@/components/LoanDealForm";
 import LoanDealView from "@/components/LoanDealView";
 import BolnaCallWidget from "@/components/BolnaCallWidget";
@@ -766,7 +768,7 @@ export default function SalesDashboard() {
     return cleanupBackGuard;
   }, [router]);
 
-  const handleLogout = () => { clearCrmSession(); router.replace("/"); };
+  const handleLogout = () => { cleanupPushOnLogout().catch(() => { }); clearCrmSession(); router.replace("/"); };
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   return (
@@ -1250,6 +1252,7 @@ export default function SalesDashboard() {
         onClose={() => setShowLogoutConfirm(false)}
         onConfirm={handleLogout}
       />
+      <PushNotificationInit user={user} />
     </div>
   );
 }
@@ -1287,23 +1290,233 @@ function LoanStatusBadge({ status }: { status: string }) {
 // SALES MANAGER MODULE
 // ============================================================================
 
+// ── Column Filter Dropdown (Excel-style per-column filter/sort) ──────────────
+
+function useOnClickOutside(ref: React.RefObject<HTMLElement | null>, handler: () => void) {
+  useEffect(() => {
+    const listener = (event: MouseEvent | TouchEvent) => {
+      if (!ref.current || ref.current.contains(event.target as Node)) return;
+      handler();
+    };
+    document.addEventListener('mousedown', listener);
+    document.addEventListener('touchstart', listener);
+    return () => {
+      document.removeEventListener('mousedown', listener);
+      document.removeEventListener('touchstart', listener);
+    };
+  }, [ref, handler]);
+}
+
+interface ColumnFilterProps {
+  column: { key: string; label: string; type?: 'text' | 'number' | 'date' };
+  data: any[];
+  activeFilter: Set<string> | null;
+  activeSort: { key: string; direction: 'asc' | 'desc' } | null;
+  onApply: (selectedValues: Set<string> | null) => void;
+  onSort: (direction: 'asc' | 'desc' | null) => void;
+  onClose: () => void;
+  isDark: boolean;
+}
+
+const ColumnFilterDropdown: React.FC<ColumnFilterProps> = ({
+  column,
+  data,
+  activeFilter,
+  activeSort,
+  onApply,
+  onSort,
+  onClose,
+  isDark,
+}) => {
+  const ref = useRef<HTMLDivElement>(null);
+  useOnClickOutside(ref, onClose);
+
+  const uniqueValues = useMemo(() => {
+    const values = new Set<string>();
+    data.forEach(row => {
+      const val = row[column.key];
+      values.add(val === null || val === undefined || val === '' ? '(Blanks)' : String(val));
+    });
+    return Array.from(values).sort();
+  }, [data, column.key]);
+
+  const [search, setSearch] = useState('');
+  const [tempSelected, setTempSelected] = useState<Set<string>>(
+    activeFilter ? new Set(activeFilter) : new Set(uniqueValues)
+  );
+
+  const filteredValues = useMemo(() => {
+    if (!search) return uniqueValues;
+    return uniqueValues.filter(v => v.toLowerCase().includes(search.toLowerCase()));
+  }, [uniqueValues, search]);
+
+  const allFilteredSelected = filteredValues.length > 0 && filteredValues.every(v => tempSelected.has(v));
+  const someFilteredSelected = filteredValues.some(v => tempSelected.has(v)) && !allFilteredSelected;
+
+  const toggleSelectAll = () => {
+    const next = new Set(tempSelected);
+    if (allFilteredSelected) {
+      filteredValues.forEach(v => next.delete(v));
+    } else {
+      filteredValues.forEach(v => next.add(v));
+    }
+    setTempSelected(next);
+  };
+
+  const toggleValue = (val: string) => {
+    const next = new Set(tempSelected);
+    next.has(val) ? next.delete(val) : next.add(val);
+    setTempSelected(next);
+  };
+
+  const handleApply = () => {
+    if (tempSelected.size === uniqueValues.length) {
+      onApply(null);
+    } else {
+      onApply(tempSelected);
+    }
+    onClose();
+  };
+
+  const baseText = isDark ? 'text-slate-200' : 'text-slate-700';
+  const baseBg = isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200';
+  const hoverBg = isDark ? 'hover:bg-slate-800' : 'hover:bg-slate-50';
+
+  return (
+    <div
+      ref={ref}
+      className={`absolute top-full left-0 mt-1 w-64 z-50 rounded-lg shadow-xl border overflow-hidden flex flex-col text-sm font-normal normal-case ${baseBg}`}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {/* Sorting Options */}
+      <div className={`p-2 border-b ${isDark ? 'border-slate-800' : 'border-slate-100'}`}>
+        <button
+          onClick={() => { onSort('asc'); onClose(); }}
+          className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-md ${hoverBg} ${baseText} ${activeSort?.direction === 'asc' ? 'font-bold' : ''}`}
+        >
+          <FaSortAlphaDown className={isDark ? "text-slate-400" : "text-slate-500"} />
+          Sort {column.type === 'number' ? 'Smallest to Largest' : column.type === 'date' ? 'Oldest to Newest' : 'A to Z'}
+        </button>
+        <button
+          onClick={() => { onSort('desc'); onClose(); }}
+          className={`w-full flex items-center gap-2 px-3 py-1.5 mt-1 rounded-md ${hoverBg} ${baseText} ${activeSort?.direction === 'desc' ? 'font-bold' : ''}`}
+        >
+          <FaSortAlphaUp className={isDark ? "text-slate-400" : "text-slate-500"} />
+          Sort {column.type === 'number' ? 'Largest to Smallest' : column.type === 'date' ? 'Newest to Oldest' : 'Z to A'}
+        </button>
+        {activeSort && (
+          <button
+            onClick={() => { onSort(null); onClose(); }}
+            className={`w-full text-left px-9 py-1.5 mt-1 text-xs text-red-500 rounded-md ${hoverBg}`}
+          >
+            Clear Sort
+          </button>
+        )}
+      </div>
+
+      {/* Search Input */}
+      <div className="p-2">
+        <div className={`flex items-center px-3 py-1.5 rounded-md border ${isDark ? 'bg-slate-950 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
+          <FaSearch className={`mr-2 text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
+          <input
+            type="text"
+            placeholder="Search..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full bg-transparent outline-none text-xs"
+          />
+        </div>
+      </div>
+
+      {/* Checkbox List */}
+      <div className={`max-h-48 overflow-y-auto px-2 pb-2 custom-scrollbar ${baseText}`}>
+        <label className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer ${hoverBg}`}>
+          <input
+            type="checkbox"
+            checked={allFilteredSelected}
+            ref={input => { if (input) input.indeterminate = someFilteredSelected; }}
+            onChange={toggleSelectAll}
+            className="rounded border-slate-300 text-pink-600 focus:ring-pink-500"
+          />
+          <span className="text-xs font-semibold">(Select All)</span>
+        </label>
+        {filteredValues.map(val => (
+          <label key={val} className={`flex items-center gap-2 px-2 py-1 cursor-pointer rounded-md ${hoverBg}`}>
+            <input
+              type="checkbox"
+              checked={tempSelected.has(val)}
+              onChange={() => toggleValue(val)}
+              className="rounded border-slate-300 text-pink-600 focus:ring-pink-500"
+            />
+            <span className="text-xs truncate">{val}</span>
+          </label>
+        ))}
+        {filteredValues.length === 0 && (
+          <div className={`px-2 py-3 text-center text-xs italic ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+            No matches found
+          </div>
+        )}
+      </div>
+
+      {/* Actions */}
+      <div className={`p-2 border-t flex justify-end gap-2 bg-opacity-50 ${isDark ? 'border-slate-800 bg-slate-800' : 'border-slate-100 bg-slate-50'}`}>
+        <button
+          onClick={onClose}
+          className={`px-3 py-1.5 text-xs font-semibold rounded-md border ${isDark ? 'border-slate-600 text-slate-300 hover:bg-slate-700' : 'border-slate-200 text-slate-600 hover:bg-white'}`}
+        >
+          Cancel
+        </button>
+        <button
+          onClick={handleApply}
+          className="px-3 py-1.5 text-xs font-semibold rounded-md bg-[#B01A79] text-white hover:bg-pink-800"
+        >
+          OK
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 const SM_DB_COLS_KEY = "bd:sm:db:hiddenCols:v1";
-const SM_DB_COLUMNS: { key: string; label: string; locked?: boolean; defaultHidden?: boolean }[] = [
-  { key: "lead_no", label: "LEAD NO.", locked: true },
-  { key: "name", label: "NAME", locked: true },
-  { key: "prop_type", label: "PROP. TYPE" },
-  { key: "budget", label: "BUDGET" },
-  { key: "source", label: "SOURCE" },
-  { key: "cp_name", label: "CP NAME" },
-  { key: "cp_company", label: "CP COMPANY" },
-  { key: "cp_phone", label: "CP PHONE" },
-  { key: "status", label: "STATUS" },
-  { key: "lost_status", label: "LOST STATUS" },
-  { key: "interest", label: "INTEREST" },
-  { key: "date_created", label: "DATE CREATED" },
-  { key: "backdated", label: "BACKDATED ENTRY", defaultHidden: true },
-  { key: "site_visit", label: "SITE VISIT" },
+const SM_DB_COLUMNS: { key: string; label: string; locked?: boolean; defaultHidden?: boolean; type?: 'text' | 'number' | 'date' }[] = [
+  { key: "lead_no", label: "LEAD NO.", locked: true, type: 'number' },
+  { key: "name", label: "NAME", locked: true, type: 'text' },
+  { key: "prop_type", label: "PROP. TYPE", type: 'text' },
+  { key: "budget", label: "BUDGET", type: 'text' },
+  { key: "source", label: "SOURCE", type: 'text' },
+  { key: "cp_name", label: "CP NAME", type: 'text' },
+  { key: "cp_company", label: "CP COMPANY", type: 'text' },
+  { key: "cp_phone", label: "CP PHONE", type: 'text' },
+  { key: "status", label: "STATUS", type: 'text' },
+  { key: "lost_status", label: "LOST STATUS", type: 'text' },
+  { key: "interest", label: "INTEREST", type: 'text' },
+  { key: "date_created", label: "DATE CREATED", type: 'date' },
+  { key: "backdated", label: "BACKDATED ENTRY", defaultHidden: true, type: 'date' },
+  { key: "site_visit", label: "SITE VISIT", type: 'date' },
 ];
+
+/** Returns the display value of a lead for a given SM_DB column key. */
+function getLeadValueForCol(lead: any, key: string): string {
+  switch (key) {
+    case 'lead_no':    return String(lead.sr_no || lead.id || '');
+    case 'name':       return String(lead.name || '');
+    case 'prop_type':  return String(lead.propType || lead.configuration || 'Pending');
+    case 'budget':     return String(lead.salesBudget || lead.budget || '');
+    case 'source':     return String(lead.source || '');
+    case 'cp_name':    return String(lead.cpName || lead.cp_name || '');
+    case 'cp_company': return String(lead.cpCompany || lead.cp_company || '');
+    case 'cp_phone':   return String(lead.cpPhone || lead.cp_phone || '');
+    case 'status':     return lead.is_lost_lead ? 'LOST' : String(lead.status || 'Assigned');
+    case 'lost_status': return lead.is_lost_lead ? 'Lost Lead' : 'Active';
+    case 'interest':   return String(lead.leadInterestStatus || '');
+    case 'date_created': return String(lead.created_at || '');
+    case 'backdated':  return lead.auto_date_enabled === false && lead.enquiry_date ? String(lead.enquiry_date) : '';
+    case 'site_visit': return String(lead.mongoVisitDate || '');
+    default:           return '';
+  }
+}
 
 function SalesManagerView({
   managers, allLeads, followUps, isLoading, adminUser, refetch, appendFollowUp, reconcileFollowUp, removeFollowUp,
@@ -1356,6 +1569,12 @@ function SalesManagerView({
   const [showLostLeads, setShowLostLeads] = useState(true);
   const [showNGDLeads, setShowNGDLeads] = useState(true);
   const [columnFilter, setColumnFilter] = useState<string>("all");
+  // Per-column filter (column key → Set of accepted display values, or null = no filter)
+  const [dbColFilters, setDbColFilters] = useState<Record<string, Set<string> | null>>({});
+  // Column-level sort (separate from the global pipeline sort)
+  const [dbColSort, setDbColSort] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
+  // Which column's filter popover is currently open
+  const [openDbFilterCol, setOpenDbFilterCol] = useState<string | null>(null);
   const [hiddenDbCols, setHiddenDbCols] = useState<Set<string>>(
     () => new Set(SM_DB_COLUMNS.filter(c => c.defaultHidden).map(c => c.key))
   );
@@ -1804,32 +2023,55 @@ function SalesManagerView({
 
   const filteredDatabaseLeadsUnsorted = useMemo(() => {
     let leads = baseManagerLeads.filter(passLostFilter);
-    if (!searchTerm.trim()) return leads;
-    const lq = searchTerm.toLowerCase();
-    if (columnFilter === "all") {
-      return leads.filter((l: any) =>
-        [l.id, l.name, l.phone, l.altPhone, l.alt_phone, l.salesBudget,
-        l.budget, l.propType, l.configuration, l.source, l.status,
-        l.leadInterestStatus, l.assigned_to]
-          .map(v => String(v || "")).join(" ").toLowerCase().includes(lq)
-      );
-    }
-    return leads.filter((l: any) => {
-      switch (columnFilter) {
-        case "name": return String(l.name || "").toLowerCase().includes(lq);
-        case "phone": return [l.phone, l.altPhone, l.alt_phone].map(v => String(v || "")).join(" ").toLowerCase().includes(lq);
-        case "budget": return String(l.salesBudget || l.budget || "").toLowerCase().includes(lq);
-        case "propType": return String(l.propType || l.configuration || "").toLowerCase().includes(lq);
-        case "source": return String(l.source || "").toLowerCase().includes(lq);
-        case "status": return String(l.status || "").toLowerCase().includes(lq);
-        default: return true;
+    // Search-bar filter
+    if (searchTerm.trim()) {
+      const lq = searchTerm.toLowerCase();
+      if (columnFilter === "all") {
+        leads = leads.filter((l: any) =>
+          [l.id, l.name, l.phone, l.altPhone, l.alt_phone, l.salesBudget,
+          l.budget, l.propType, l.configuration, l.source, l.status,
+          l.leadInterestStatus, l.assigned_to]
+            .map(v => String(v || "")).join(" ").toLowerCase().includes(lq)
+        );
+      } else {
+        leads = leads.filter((l: any) => {
+          switch (columnFilter) {
+            case "name":     return String(l.name || "").toLowerCase().includes(lq);
+            case "phone":    return [l.phone, l.altPhone, l.alt_phone].map(v => String(v || "")).join(" ").toLowerCase().includes(lq);
+            case "budget":   return String(l.salesBudget || l.budget || "").toLowerCase().includes(lq);
+            case "propType": return String(l.propType || l.configuration || "").toLowerCase().includes(lq);
+            case "source":   return String(l.source || "").toLowerCase().includes(lq);
+            case "status":   return String(l.status || "").toLowerCase().includes(lq);
+            default:         return true;
+          }
+        });
       }
-    });
-  }, [baseManagerLeads, searchTerm, columnFilter, passLostFilter]);
-  const filteredDatabaseLeads = useMemo(
-    () => sortLeads(filteredDatabaseLeadsUnsorted),
-    [filteredDatabaseLeadsUnsorted, sortLeads]
-  );
+    }
+    // Column-header filter (checkbox filter from ColumnFilterDropdown)
+    for (const [colKey, allowedVals] of Object.entries(dbColFilters)) {
+      if (!allowedVals) continue;
+      leads = leads.filter((l: any) => {
+        const displayVal = getLeadValueForCol(l, colKey);
+        const normalized = displayVal === '' ? '(Blanks)' : displayVal;
+        return allowedVals.has(normalized);
+      });
+    }
+    return leads;
+  }, [baseManagerLeads, searchTerm, columnFilter, passLostFilter, dbColFilters]);
+
+  const filteredDatabaseLeads = useMemo(() => {
+    // If a column-level sort is active, use it; otherwise fall back to the global pipeline sort.
+    if (dbColSort) {
+      const { key, direction } = dbColSort;
+      return [...filteredDatabaseLeadsUnsorted].sort((a, b) => {
+        const av = getLeadValueForCol(a, key);
+        const bv = getLeadValueForCol(b, key);
+        const cmp = av.localeCompare(bv, undefined, { numeric: true, sensitivity: 'base' });
+        return direction === 'asc' ? cmp : -cmp;
+      });
+    }
+    return sortLeads(filteredDatabaseLeadsUnsorted);
+  }, [filteredDatabaseLeadsUnsorted, sortLeads, dbColSort]);
 
   const paginatedLeads = filteredLeads.slice(0, cardsPage * CARDS_PER_PAGE);
   const hasMoreCards = paginatedLeads.length < filteredLeads.length;
@@ -2367,11 +2609,55 @@ function SalesManagerView({
                 <table className="w-full text-left text-xs sm:text-sm whitespace-nowrap">
                   <thead className={isDark ? "bg-slate-900/50" : "bg-slate-50/50"}>
                     <tr>
-                      {visibleDbCols.map(col => (
-                        <th key={col.key} className={`px-3 sm:px-4 py-3 text-[10px] sm:text-[11px] font-bold uppercase tracking-wider border-b ${isDark ? 'border-slate-800 text-slate-400' : 'border-slate-200 text-[#475569]'}`}>
-                          {col.label}
-                        </th>
-                      ))}
+                      {visibleDbCols.map(col => {
+                        const isFiltered = !!(dbColFilters[col.key]);
+                        const isSorted = dbColSort?.key === col.key;
+                        return (
+                          <th
+                            key={col.key}
+                            className={`px-3 sm:px-4 py-3 text-[10px] sm:text-[11px] font-bold uppercase tracking-wider border-b relative ${isDark ? 'border-slate-800 text-slate-400' : 'border-slate-200 text-[#475569]'}`}
+                          >
+                            <button
+                              type="button"
+                              onClick={e => { e.stopPropagation(); setOpenDbFilterCol(prev => prev === col.key ? null : col.key); }}
+                              className={`group flex items-center gap-1.5 whitespace-nowrap transition-colors ${
+                                isFiltered || isSorted
+                                  ? 'text-[#B01A79]'
+                                  : isDark ? 'text-slate-400 hover:text-slate-200' : 'text-[#475569] hover:text-slate-700'
+                              }`}
+                              title={`Filter / Sort by ${col.label}`}
+                            >
+                              {col.label}
+                              <span className={`inline-flex items-center justify-center w-4 h-4 rounded transition-colors ${
+                                isFiltered || isSorted
+                                  ? 'bg-[#B01A79]/15 text-[#B01A79]'
+                                  : isDark ? 'text-slate-600 group-hover:text-slate-400' : 'text-slate-300 group-hover:text-slate-500'
+                              }`}>
+                                {isSorted
+                                  ? (dbColSort?.direction === 'asc' ? <FaSortAlphaDown className="w-2.5 h-2.5" /> : <FaSortAlphaUp className="w-2.5 h-2.5" />)
+                                  : <FaFilter className="w-2 h-2" />
+                                }
+                              </span>
+                              {isFiltered && (
+                                <span className="w-1.5 h-1.5 rounded-full bg-[#B01A79] inline-block" />
+                              )}
+                            </button>
+
+                            {openDbFilterCol === col.key && (
+                              <ColumnFilterDropdown
+                                column={col}
+                                data={filteredDatabaseLeadsUnsorted.map((l: any) => ({ [col.key]: getLeadValueForCol(l, col.key) }))}
+                                activeFilter={dbColFilters[col.key] ?? null}
+                                activeSort={dbColSort?.key === col.key ? dbColSort : null}
+                                onApply={vals => setDbColFilters(prev => ({ ...prev, [col.key]: vals }))}
+                                onSort={dir => setDbColSort(dir ? { key: col.key, direction: dir } : null)}
+                                onClose={() => setOpenDbFilterCol(null)}
+                                isDark={isDark}
+                              />
+                            )}
+                          </th>
+                        );
+                      })}
                       {isAdmin && (
                         <th className={`px-3 sm:px-4 py-3 text-[10px] sm:text-[11px] font-bold uppercase tracking-wider border-b ${isDark ? 'border-slate-800 text-slate-400' : 'border-slate-200 text-[#475569]'}`}>
                           ACTIONS

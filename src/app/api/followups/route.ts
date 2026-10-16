@@ -6,6 +6,7 @@ import { jsonCompressed } from "@/lib/apiResponse";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 import { broadcastFollowUp, type FollowUpPayload } from "@/lib/followUpEvents";
 import { broadcastToOrg } from "@/lib/supabase/broadcast";
+import { pushFollowUp } from "@/lib/fcm/feedPushHandler";
 
 /**
  * GET follow-ups.
@@ -380,8 +381,8 @@ export async function POST(req: Request) {
     // it changes the deal itself — /api/loan, /api/sales-form-submit and
     // /api/site-visits all still refuse, and the Salesform/Loan buttons stay
     // hidden behind isLeadLocked in the UI.
-    const leadRows = await query(
-      `SELECT id FROM walkin_enquiries WHERE id = $1 AND organization_id = $2`,
+    const leadRows = await query<{ id: number; name: string; assigned_to: string | null }>(
+      `SELECT id, name, assigned_to FROM walkin_enquiries WHERE id = $1 AND organization_id = $2`,
       [leadId, await getOrganizationId()]
     );
     if (leadRows.length === 0) {
@@ -437,6 +438,18 @@ export async function POST(req: Request) {
     // Fire-and-forget — never delays the HTTP response.
     broadcastFollowUp(orgId, { type: "followup:created", followUp: followUpData });
     broadcastToOrg(orgId, "followup.created", { followUp: followUpData });
+
+    // Push notification to the assigned user (skip if the creator IS the assigned user)
+    const fuLead = leadRows[0];
+    if (fuLead.assigned_to) {
+      const fuSmRows = await query<{ id: number }>(
+        `SELECT id FROM users WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) AND organization_id = $2 AND is_active = true ORDER BY id LIMIT 1`,
+        [fuLead.assigned_to, orgId],
+      );
+      if (fuSmRows.length > 0 && fuSmRows[0].id !== Number(gate.userId)) {
+        pushFollowUp(orgId, fuSmRows[0].id, { id: fuLead.id, name: fuLead.name }, message).catch(() => {});
+      }
+    }
 
     // Return same shape as old MongoDB response
     return NextResponse.json({

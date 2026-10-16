@@ -16,10 +16,12 @@ import { BhoomiAiGlyph } from "@/components/bhoomi-ai/BhoomiAiIcon";
 // FiChevronDown and FiCheck removed (P0-4: transfer modal removed)
 import { FiUser, FiHelpCircle, FiLogOut, FiChevronRight } from "react-icons/fi";
 import { clearCrmSession, getStoredCrmUser, installLoggedOutBackGuard } from "@/lib/authSession";
+import { cleanupPushOnLogout } from "@/lib/pushNotifications";
 import { useOrgName } from "@/lib/hooks/useOrgName";
 import { motion, AnimatePresence } from "framer-motion";
 import * as XLSX from "xlsx";
 import LogoutConfirmDialog from "@/components/LogoutConfirmDialog";
+import PushNotificationInit from "@/components/PushNotificationInit";
 import {
   FaUserTie, FaListUl, FaPlus, FaThLarge, FaCog, FaBell, FaLock, FaIdCard,
   FaClipboardList, FaUsers, FaEyeSlash, FaTrash, FaUserEdit,
@@ -607,7 +609,7 @@ export default function EmployeesPage() {
     if (activeSection === "callers") fetchCallerData();
   }, [activeSection]);
 
-  const handleLogout = () => { clearCrmSession(); router.replace("/"); };
+  const handleLogout = () => { cleanupPushOnLogout().catch(() => {}); clearCrmSession(); router.replace("/"); };
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   // ── Employee API ──
   // ✅ Add error feedback to fetchRoles
@@ -2329,6 +2331,7 @@ export default function EmployeesPage() {
         onClose={() => setShowLogoutConfirm(false)}
         onConfirm={handleLogout}
       />
+      <PushNotificationInit user={user} />
     </div>
   );
 }

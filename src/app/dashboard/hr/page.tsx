@@ -8,6 +8,7 @@ import {
   getStoredCrmUser,
   installLoggedOutBackGuard,
 } from "@/lib/authSession";
+import { cleanupPushOnLogout } from "@/lib/pushNotifications";
 import { useCrmTheme } from "@/lib/hooks/useCrmTheme";
 import { useOrgName } from "@/lib/hooks/useOrgName";
 import {
@@ -23,6 +24,7 @@ import AppHeader, { HeaderControl } from "@/components/AppHeader";
 import HeaderClock from "@/components/HeaderClock";
 import UserAvatar from "@/components/UserAvatar";
 import LogoutConfirmDialog from "@/components/LogoutConfirmDialog";
+import PushNotificationInit from "@/components/PushNotificationInit";
 
 // Recharts dynamic imports (matches admin dashboard pattern for perf)
 const HRCharts = dynamic(() => import("./HRCharts"), { ssr: false });
@@ -187,7 +189,7 @@ export default function HRDashboard() {
 
   useEffect(() => { fetchData(trendDays); }, [trendDays, fetchData]);
 
-  const handleLogout = () => { clearCrmSession(); router.replace("/"); };
+  const handleLogout = () => { cleanupPushOnLogout().catch(() => {}); clearCrmSession(); router.replace("/"); };
 
   // Theme tokens
   const bgApp     = isDark ? "bg-[#000000]"                               : "bg-[#F5F5F7]";
@@ -484,6 +486,7 @@ export default function HRDashboard() {
         onClose={() => setShowLogoutConfirm(false)}
         onConfirm={handleLogout}
       />
+      <PushNotificationInit user={user} />
     </div>
   );
 }

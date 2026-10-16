@@ -4,6 +4,7 @@ import { Fragment } from "react";
 import { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { clearCrmSession, getStoredCrmUser, installLoggedOutBackGuard } from "@/lib/authSession";
+import { cleanupPushOnLogout } from "@/lib/pushNotifications";
 import { useCrmTheme } from "@/lib/hooks/useCrmTheme";
 import { useOrgName } from "@/lib/hooks/useOrgName";
 import { motion, AnimatePresence } from "framer-motion";
@@ -35,6 +36,7 @@ import CrmUpdatesNotification from "@/components/CrmUpdatesNotification";
 import PermanentLeadDeleteDialog from "@/components/PermanentLeadDeleteDialog";
 import BulkDeleteLeadsDialog from "@/components/BulkDeleteLeadsDialog";
 import LogoutConfirmDialog from "@/components/LogoutConfirmDialog";
+import PushNotificationInit from "@/components/PushNotificationInit";
 import LoanDealView from "@/components/LoanDealView";
 import ChannelPartnerListView from "@/components/ChannelPartnerListView";
 import CpChatPanel from "@/components/CpChatPanel";
@@ -969,7 +971,7 @@ function AdminAtlasDashboardContent() {
     return () => clearTimeout(timer);
   }, [activeNotif]);
 
-  const handleLogout = () => { clearCrmSession(); router.replace("/"); };
+  const handleLogout = () => { cleanupPushOnLogout().catch(() => {}); clearCrmSession(); router.replace("/"); };
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   /**
@@ -1547,6 +1549,7 @@ function AdminAtlasDashboardContent() {
         onClose={() => setShowLogoutConfirm(false)}
         onConfirm={handleLogout}
       />
+      <PushNotificationInit user={user} />
     </div>
   );
 }

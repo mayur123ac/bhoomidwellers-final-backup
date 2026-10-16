@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getOrganizationId } from "@/lib/tenantContext";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
+import { pushSiteVisit } from "@/lib/fcm/feedPushHandler";
 
 export async function GET(req: Request) {
   try {
@@ -68,8 +69,8 @@ export async function POST(req: Request) {
     }
 
     // 🔒 Final-state lock guard
-    const leadRows = await query(
-      `SELECT status, is_lost_lead FROM public.walkin_enquiries WHERE id = $1 AND organization_id = $2`,
+    const leadRows = await query<{ status: string; is_lost_lead: boolean; name: string; assigned_to: string | null }>(
+      `SELECT status, is_lost_lead, name, assigned_to FROM public.walkin_enquiries WHERE id = $1 AND organization_id = $2`,
       [lead_id, await getOrganizationId()]
     );
     const lead = leadRows[0];
@@ -112,10 +113,22 @@ export async function POST(req: Request) {
     const newVisit = result[0];
 
     // Log the scheduling as a follow-up
+    const svOrgId = await getOrganizationId();
     await query(
       `INSERT INTO follow_ups (lead_id, message, created_by_name, created_by_id, organization_id) VALUES ($1, $2, $3, $5, $4)`,
-      [lead_id, `Site Visit Scheduled for ${new Date(visit_date).toLocaleString("en-IN")}`, created_by, await getOrganizationId(), gate.userId]
+      [lead_id, `Site Visit Scheduled for ${new Date(visit_date).toLocaleString("en-IN")}`, created_by, svOrgId, gate.userId]
     );
+
+    // Push notification to the assigned sales manager (if any)
+    if (lead.assigned_to) {
+      const smRows = await query<{ id: number }>(
+        `SELECT id FROM users WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) AND organization_id = $2 AND is_active = true ORDER BY id LIMIT 1`,
+        [lead.assigned_to, svOrgId],
+      );
+      if (smRows.length > 0) {
+        pushSiteVisit(svOrgId, smRows[0].id, { id: lead_id, name: lead.name }, visit_date).catch(() => {});
+      }
+    }
 
     return NextResponse.json({ success: true, data: newVisit });
   } catch (err: any) {
