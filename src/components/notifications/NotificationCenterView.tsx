@@ -230,7 +230,7 @@ function tokens(isDark: boolean) {
       badgeNeutral: "bg-[#2C2C2E] text-[#8E8E93]",
     }
     : {
-      text: "text-black",
+      text: "text-[#9E217B]",
       muted: "text-[#8E8E93]",
       card: "bg-white border-black/5",
       divider: "border-[#E5E5EA]",
@@ -272,7 +272,15 @@ export default function NotificationCenterView({
     }),
     [newLeads, siteVisits, followUps],
   );
+  const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
+  useEffect(() => {
+    tabRefs.current[filter]?.scrollIntoView({
+      behavior: "smooth",
+      inline: "center",
+      block: "nearest",
+    });
+  }, [filter]);
   const total = newLeads.length + siteVisits.length + followUps.length;
 
   const visibleKinds: NotificationKind[] =
@@ -290,28 +298,37 @@ export default function NotificationCenterView({
     // BEHIND this element, so it must not paint its own background.
     <div ref={rootRef} className="flex flex-col gap-6 font-sans antialiased max-w-[1200px] mx-auto">
       {/* Header & segmented control */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2">
-        <div className="flex flex-col gap-0.5">
-          <h2 className={`text-xl sm:text-[22px] font-bold tracking-tight flex items-center gap-2 ${t.text}`}>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-4 pb-2">
+        {/* Title block */}
+        <div className="flex flex-col gap-0.5 min-w-0">
+          <h2 className={`text-[20px] sm:text-[22px] font-bold tracking-tight leading-tight ${t.text}`}>
             Notification Center
           </h2>
-          <p className={`text-[13px] font-medium tracking-tight ${t.muted}`}>
+          <p className={`text-[12px] sm:text-[13px] font-medium tracking-tight leading-snug ${t.muted}`}>
             The complete queue. Header popovers show the top three of each.
           </p>
         </div>
 
-        <div className={`flex p-0.5 rounded-[10px] overflow-x-auto custom-scrollbar shrink-0 ${t.segTrack}`}>
+        {/* Segmented filter: full-width on mobile, auto-width on md+ */}
+        <div
+          role="tablist"
+          aria-label="Filter notifications"
+          className={`flex w-full md:w-auto p-0.5 rounded-[10px] overflow-x-auto shrink-0 snap-x [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${t.segTrack}`}
+        >
           {chips.map((c) => (
             <button
               key={c.id}
               type="button"
+              role="tab"
+              aria-selected={filter === c.id}
               onClick={() => setFilter(c.id)}
-              className={`flex-1 min-w-[80px] py-1.5 px-3 text-[12px] font-medium tracking-tight rounded-[8px] transition-all whitespace-nowrap ${filter === c.id
+              className={`flex-1 md:flex-none shrink-0 snap-start min-w-[72px] md:min-w-[80px] py-1.5 px-2.5 sm:px-3 text-[12px] font-medium tracking-tight rounded-[8px] transition-all whitespace-nowrap ${filter === c.id
                 ? `${t.segActive} shadow-[0_1px_2px_rgba(0,0,0,0.12)]`
                 : `${t.segIdle} shadow-none`
                 }`}
             >
-              {c.label} <span className="opacity-60 ml-1">({c.count})</span>
+              {c.label}{" "}
+              <span className="opacity-60 ml-0.5 tabular-nums">({c.count})</span>
             </button>
           ))}
         </div>
@@ -343,7 +360,7 @@ export default function NotificationCenterView({
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.98 }}
                 transition={{ duration: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
-                className={`rounded-[24px] overflow-hidden shadow-[0_4px_24px_rgba(0,0,0,0.04)] border ${t.card}`}
+                className={`rounded-[24px] overflow-hidden shadow-md border ${t.card}`}
               >
                 {/* Section header */}
                 <div className={`px-5 py-4 border-b flex items-center gap-3 ${t.divider}`}>

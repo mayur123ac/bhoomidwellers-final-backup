@@ -27,7 +27,9 @@ const cleanNum = (v: any) => {
 // on_hold is driven by the hold flow (needs an expiry); cancelled comes from a
 // booking cancellation.
 const MANUAL_CREATE_STATUSES = ["available", "blocked", "refuge_area", "unfinished"];
-
+const STANDARD_UNIT_TYPES = ["1 RK", "1BHK", "1.5BHK", "2BHK", "2.5BHK", "3BHK", "3.5BHK", "4BHK", "Penthouse", "Shop", "Office"];
+const MAX_UNIT_TYPE_LEN = 50; // matches inventory_units.unit_type VARCHAR(50)
+const typeKey = (v: string) => v.replace(/\s+/g, "").toLowerCase();
 const SORTABLE = new Set([
   "tower", "wing", "floor", "flat_no", "status", "unit_type",
   "base_price", "carpet_area_sqft", "created_at", "updated_at",
@@ -51,9 +53,9 @@ async function revertExpiredHolds() {
   for (const r of expired) {
     await query(
       // MT-05: the organization is taken from the unit itself, not from a
-       // session — this sweeper runs for expired holds and has no actor. Deriving
-       // it in SQL also makes a history row in a different tenant to its unit
-       // structurally impossible.
+      // session — this sweeper runs for expired holds and has no actor. Deriving
+      // it in SQL also makes a history row in a different tenant to its unit
+      // structurally impossible.
       `INSERT INTO inventory_unit_history (unit_id, old_status, new_status, changed_by, reason, organization_id)
        VALUES ($1, 'on_hold', 'available', 'System', $2,
                (SELECT organization_id FROM inventory_units WHERE id = $1))`,
@@ -170,6 +172,19 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: true, data, total: data.length }, { status: 200 });
     }
 
+    if (searchParams.get("view") === "unit_types") {
+      const rows = await query(
+        `SELECT MIN(REGEXP_REPLACE(TRIM(unit_type), '\\s+', ' ', 'g')) AS unit_type
+           FROM inventory_units
+          WHERE deleted_at IS NULL AND organization_id = $1
+            AND TRIM(COALESCE(unit_type, '')) <> ''
+          GROUP BY LOWER(REGEXP_REPLACE(unit_type, '\\s+', '', 'g'))
+          ORDER BY 1`,
+        [orgId],
+      );
+      return NextResponse.json({ success: true, data: rows }, { status: 200 });
+    }
+
     const vals: any[] = [];
     const push = (v: any) => { vals.push(v); return `$${vals.length}`; };
     // Tenant first, before any caller-supplied filter, so it is $1 and applies to
@@ -187,14 +202,20 @@ export async function GET(req: NextRequest) {
 
     for (const [param, col] of [
       ["tower", "tower"],
-      ["unit_type", "unit_type"],
       ["status", "status"],
     ] as const) {
       const v = searchParams.get(param);
       if (v) where.push(`${col} = ${push(v)}`);
     }
 
+    const customLabel = searchParams.get("custom_status_label");
+    if (customLabel) where.push(`custom_status_label = ${push(customLabel)}`);
+
     // Wing is the one filter where "present but empty" is a real question —
+    const unitTypeParam = searchParams.get("unit_type");
+    if (unitTypeParam && unitTypeParam.trim()) {
+      where.push(`LOWER(REGEXP_REPLACE(unit_type, '\\s+', '', 'g')) = ${push(typeKey(unitTypeParam))}`);
+    }
     // "show me the units that have no wing" — and it is distinct from omitting
     // the parameter, which means "any wing". NULL and '' are the same absence
     // here, matching COALESCE(wing,'') in the unique index.
@@ -310,6 +331,10 @@ export async function POST(req: NextRequest) {
     if (carpet === null)
       return NextResponse.json({ success: false, message: "carpet area (sqft) is required" }, { status: 400 });
 
+    const rawType = String(body.unit_type).trim().replace(/\s+/g, " ");
+    if (rawType.length > MAX_UNIT_TYPE_LEN)
+      return NextResponse.json({ success: false, message: `Unit type must be ${MAX_UNIT_TYPE_LEN} characters or fewer.` }, { status: 400 });
+
     const status = String(body.status || "available").toLowerCase().trim();
     if (!MANUAL_CREATE_STATUSES.includes(status))
       return NextResponse.json(
@@ -344,6 +369,20 @@ export async function POST(req: NextRequest) {
       // unit cannot resolve a price rule and cost sheets refuse it.
       const { projectId, towerId } = await resolveHierarchy(client, project, tower, user_name);
 
+      // Reuse an existing spelling when the value differs only by case/whitespace.
+      let unitType: string = STANDARD_UNIT_TYPES.find(s => typeKey(s) === typeKey(rawType)) ?? "";
+      if (!unitType) {
+        const ex = await client.query(
+          `SELECT REGEXP_REPLACE(TRIM(unit_type), '\\s+', ' ', 'g') AS unit_type
+             FROM inventory_units
+            WHERE organization_id = $1 AND deleted_at IS NULL
+              AND LOWER(REGEXP_REPLACE(unit_type, '\\s+', '', 'g')) = $2
+            GROUP BY 1 ORDER BY COUNT(*) DESC LIMIT 1`,
+          [orgId, typeKey(rawType)],
+        );
+        unitType = ex.rows[0]?.unit_type ?? rawType;
+      }
+
       const ins = await client.query(
         `INSERT INTO inventory_units (
            project_name, tower, wing, unit_type, floor, flat_no,
@@ -355,7 +394,7 @@ export async function POST(req: NextRequest) {
          RETURNING *`,
         [
           project, tower, wing,
-          String(body.unit_type).trim(), floor, flatNo,
+          unitType, floor, flatNo,
           carpet, cleanNum(body.built_up_area_sqft), cleanNum(body.rate_per_sqft),
           cleanNum(body.base_price), body.facing ? String(body.facing).trim() : null,
           status, user_name,

@@ -1,39 +1,26 @@
 "use client";
 
-// NotificationPopover — the header bell's dropdown, under the Rule of Three.
-//
-// A popover shows at most three items and never scrolls. Beyond three it hands
-// the rest to the Notification Center. The server sorts follow-ups by the most
-// neglected first and site visits by the soonest first, so the three you see
-// are the three that matter. The footer says how many there are in total.
-//
-// ── Theming ────────────────────────────────────────────────────────────────
-// Neutral colours (text, borders, hover, footer) come from the `theme` prop, so
-// the popover always matches the APP's light/dark toggle. Tailwind's `dark:`
-// variant is deliberately NOT used: by default it follows the OS setting
-// (prefers-color-scheme), not the app's toggle. With a dark OS and a light app,
-// `dark:text-white` painted white titles on a white card, visible only on hover
-// when the group-hover accent colour kicked in.
-//
-// Accent colours are single mid-tones that read on both light and dark cards,
-// and the badge tint uses an alpha of the accent, so no dark variant is needed.
+// NotificationPopover — header bell dropdown. Rule of Three: max 3 rows, no scroll.
+// Neutral colours come from the `theme` prop (app toggle), never Tailwind `dark:`.
 
 import React from "react";
-import { FaBell, FaCalendarAlt, FaBriefcase, FaTimes, FaCheckCircle } from "react-icons/fa";
+import {
+  FaBell,
+  FaCalendarAlt,
+  FaBriefcase,
+  FaTimes,
+  FaCheck,
+  FaChevronRight,
+} from "react-icons/fa";
 import type { CrmNotification } from "@/lib/hooks/useNotificationFeed";
 import { NOTIFICATION_POPOVER_LIMIT } from "@/lib/hooks/useNotificationFeed";
 
 export interface NotificationPopoverTheme {
-  /** Primary text colour class, e.g. "text-gray-900" / "text-white". */
   text: string;
-  /** Secondary text colour class. */
   textMuted: string;
   textFaint: string;
-  /** Border colour class, e.g. "border-black/5". */
   border: string;
-  /** Row hover background class, e.g. "hover:bg-black/[0.03]". */
   itemHover: string;
-  /** Full-width footer button (colour + hover classes). */
   footer: string;
 }
 
@@ -41,64 +28,63 @@ export interface NotificationPopoverProps {
   title: string;
   caption?: string;
   items: CrmNotification[];
-  /** Total before the cap — what the footer counts. Defaults to items.length. */
   total?: number;
-  /** Footer wording: "See all 12 pending follow-ups". */
   footerNoun: string;
   theme: NotificationPopoverTheme;
   accent: "purple" | "orange" | "green";
-  /** Opens the Lead Detail panel for this notification's lead. */
   onOpenLead: (notification: CrmNotification) => void;
-  /** Per-browser dismissal. Omit to hide the × entirely. */
   onDismiss?: (notification: CrmNotification) => void;
-  /** Footer click: closes the popover and switches to the Notification Center. */
   onSeeAll: () => void;
-  /** Extra line under the title, decorated from the caller's own lead list. */
   renderDetail?: (notification: CrmNotification) => React.ReactNode;
-  /** Right-hand metric, e.g. the "7d" badge or the TODAY pill. */
   renderMetric?: (notification: CrmNotification) => React.ReactNode;
 }
 
 type Accent = NotificationPopoverProps["accent"];
 
-// Icon tile background (solid accent).
-const ACCENT_BG: Record<Accent, string> = {
-  purple: "bg-[#AF52DE]",
-  orange: "bg-[#FF9500]",
-  green: "bg-[#34C759]",
+const ACCENT_TEXT: Record<Accent, string> = {
+  purple: "text-[#AF52DE]",
+  orange: "text-[#FF9500]",
+  green: "text-[#34C759]",
 };
 
-// Count badge: accent text on a 15% tint of the same accent. Works on any card.
-const ACCENT_BADGE: Record<Accent, string> = {
-  purple: "bg-[#AF52DE]/15 text-[#AF52DE]",
-  orange: "bg-[#FF9500]/15 text-[#FF9500]",
-  green: "bg-[#34C759]/15 text-[#34C759]",
+const ACCENT_RING: Record<Accent, string> = {
+  purple: "focus-visible:ring-[#AF52DE]/50",
+  orange: "focus-visible:ring-[#FF9500]/50",
+  green: "focus-visible:ring-[#34C759]/50",
 };
 
-// Title colour on row hover.
-const ACCENT_HOVER_TEXT: Record<Accent, string> = {
-  purple: "group-hover:text-[#AF52DE]",
-  orange: "group-hover:text-[#FF9500]",
-  green: "group-hover:text-[#34C759]",
+// Apple system colours, one per notification kind. Tile = 14% tint, glyph = solid.
+const KIND: Record<string, { color: string; icon: React.ReactNode }> = {
+  site_visit: { color: "#FF9500", icon: <FaCalendarAlt className="text-[13px]" /> },
+  follow_up: { color: "#AF52DE", icon: <FaBell className="text-[13px]" /> },
+  default: { color: "#34C759", icon: <FaBriefcase className="text-[13px]" /> },
 };
 
-function iconFor(kind: CrmNotification["kind"]) {
-  if (kind === "site_visit") return <FaCalendarAlt className="text-[14px]" />;
-  if (kind === "follow_up") return <FaBell className="text-[14px]" />;
-  return <FaBriefcase className="text-[14px]" />;
+function kindOf(kind: CrmNotification["kind"]) {
+  return KIND[kind as string] ?? KIND.default;
 }
 
-/**
- * The zero state. A blank popover reads as broken; saying so answers the
- * question the click was asking.
- */
-export function AllCaughtUp({ theme }: { theme: NotificationPopoverTheme }) {
+/** Zero state — a blank popover reads as broken. */
+export function AllCaughtUp({
+  theme,
+  noun,
+}: {
+  theme: NotificationPopoverTheme;
+  noun?: string;
+}) {
   return (
     <div className="px-6 py-10 flex flex-col items-center justify-center text-center">
-      <FaCheckCircle className="text-[42px] mb-3 text-[#34C759] opacity-80" />
-      <p className={`text-[14px] font-semibold tracking-tight ${theme.text}`}>
+      <div className="w-12 h-12 rounded-full flex items-center justify-center mb-3 bg-[#34C759]/15 text-[#34C759]">
+        <FaCheck className="text-[18px]" />
+      </div>
+      <p className={`text-[15px] font-semibold tracking-[-0.01em] ${theme.text}`}>
         You&apos;re all caught up
       </p>
+      {noun && (
+        <p className={`text-[13px] mt-0.5 tracking-[-0.01em] ${theme.textMuted}`}>
+          No {noun}
+        </p>
+      )}
     </div>
   );
 }
@@ -118,87 +104,93 @@ export default function NotificationPopover({
   renderMetric,
 }: NotificationPopoverProps) {
   const count = total ?? items.length;
-  // The cap. `overflow-hidden` rather than `overflow-y-auto`: with at most three
-  // rows there is nothing to scroll, and a scroll container would let a fourth
-  // row hide behind a scrollbar if this ever regressed.
+  // overflow-hidden, not auto: ≤3 rows means nothing should ever scroll.
   const shown = items.slice(0, NOTIFICATION_POPOVER_LIMIT);
   const hasMore = count > NOTIFICATION_POPOVER_LIMIT;
+  const ring = ACCENT_RING[accent];
 
   return (
     <>
       {/* Header */}
-      <div className={`px-4 py-3 border-b flex items-center justify-between gap-3 ${theme.border}`}>
-        <div className="min-w-0 flex flex-col gap-0.5">
-          <h3 className={`font-semibold text-[14px] tracking-tight truncate ${theme.text}`}>
+      <div className="px-5 pt-4 pb-3 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className={`text-[17px] font-semibold tracking-[-0.022em] leading-tight truncate ${theme.text}`}>
             {title}
           </h3>
           {caption && (
-            <p className={`text-[11px] tracking-tight truncate ${theme.textMuted}`}>{caption}</p>
+            <p className={`text-[12px] mt-0.5 tracking-[-0.01em] truncate ${theme.textMuted}`}>
+              {caption}
+            </p>
           )}
         </div>
         {count > 0 && (
           <span
-            className={`text-[11px] font-bold tracking-wider px-2.5 py-0.5 rounded-full flex-shrink-0 ${ACCENT_BADGE[accent]}`}
+            aria-label={`${count} total`}
+            className="mt-0.5 min-w-[22px] h-[22px] px-2 inline-flex items-center justify-center rounded-full text-[12px] font-semibold tabular-nums flex-shrink-0 bg-[#8E8E93]/15 text-[#8E8E93]"
           >
             {count}
           </span>
         )}
       </div>
 
-      <div className="overflow-hidden">
+      {/* Rows */}
+      <div className="overflow-hidden px-2 pb-2">
         {shown.length === 0 ? (
-          <AllCaughtUp theme={theme} />
+          <AllCaughtUp theme={theme} noun={footerNoun} />
         ) : (
-          shown.map((n) => (
-            <div
-              key={n.id}
-              role="button"
-              tabIndex={0}
-              onClick={() => onOpenLead(n)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  onOpenLead(n);
-                }
-              }}
-              className={`px-4 py-3.5 border-b last:border-b-0 transition-colors cursor-pointer group relative ${theme.border} ${theme.itemHover}`}
-            >
-              {onDismiss && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDismiss(n);
-                  }}
-                  aria-label="Dismiss notification"
-                  className={`absolute top-1/2 -translate-y-1/2 right-3 p-2 rounded-full cursor-pointer opacity-0 group-hover:opacity-100 transition-all ${theme.textMuted} hover:bg-black/5`}
-                >
-                  <FaTimes className="text-[12px]" />
-                </button>
-              )}
-              <div className="flex items-start gap-3.5 pr-8">
-                <div
-                  className={`w-[36px] h-[36px] rounded-[8px] flex items-center justify-center flex-shrink-0 text-white shadow-sm ${ACCENT_BG[accent]}`}
-                >
-                  {iconFor(n.kind)}
-                </div>
-                <div className="flex-1 min-w-0 pt-0.5">
-                  <p
-                    className={`text-[14px] font-semibold tracking-tight truncate transition-colors ${theme.text} ${ACCENT_HOVER_TEXT[accent]}`}
+          <ul className="flex flex-col gap-0.5">
+            {shown.map((n) => {
+              const k = kindOf(n.kind);
+              return (
+                <li key={n.id} className="group relative">
+                  {/* Main action */}
+                  <button
+                    type="button"
+                    onClick={() => onOpenLead(n)}
+                    className={`w-full text-left flex items-center gap-4 px-3 py-2.5 rounded-[12px] cursor-pointer transition-colors duration-150 outline-none focus-visible:ring-2 ${ring} ${theme.itemHover}`}
                   >
-                    {n.title}
-                  </p>
-                  <p className={`text-[12px] mt-0.5 tracking-tight truncate ${theme.textMuted}`}>
-                    {n.subtitle}
-                  </p>
-                  {renderDetail?.(n)}
-                </div>
-                {renderMetric && (
-                  <div className="flex-shrink-0 text-right pt-0.5">{renderMetric(n)}</div>
-                )}
-              </div>
-            </div>
-          ))
+                    <span
+                      className="w-9 h-9 rounded-[10px] flex items-center justify-center flex-shrink-0"
+                      style={{ backgroundColor: `${k.color}24`, color: k.color }}
+                    >
+                      {k.icon}
+                    </span>
+
+                    <span className="flex-1 min-w-0 block">
+                      <span className={`block text-[14px] font-bold tracking-[-0.01em] leading-[1.25] truncate text-[#9E217B]`}>
+                        {n.title}
+                      </span>
+                      <span className={`block text-[13px] mt-px tracking-[-0.01em] leading-[1.3] truncate ${theme.textMuted}`}>
+                        {n.subtitle}
+                      </span>
+                      {renderDetail?.(n)}
+                    </span>
+
+                    {renderMetric && (
+                      <span
+                        className={`flex-shrink-0 text-right transition-opacity duration-150 ${onDismiss ? "group-hover:opacity-0 group-focus-within:opacity-0 [@media(hover:none)]:group-hover:opacity-100" : ""
+                          }`}
+                      >
+                        {renderMetric(n)}
+                      </span>
+                    )}
+                  </button>
+
+                  {/* Dismiss: replaces the metric on hover/focus; always visible on touch */}
+                  {onDismiss && (
+                    <button
+                      type="button"
+                      onClick={() => onDismiss(n)}
+                      aria-label={`Dismiss ${n.title}`}
+                      className={`absolute top-1/2 -translate-y-1/2 right-4 w-6 h-6 rounded-full flex items-center justify-center cursor-pointer outline-none transition-all duration-150 opacity-0 scale-90 group-hover:opacity-100 group-hover:scale-100 focus-visible:opacity-100 focus-visible:scale-100 focus-visible:ring-2 [@media(hover:none)]:hidden bg-[#8E8E93]/20 hover:bg-[#8E8E93]/35 ${theme.textMuted} ${ring}`}
+                    >
+                      <FaTimes className="text-[10px]" />
+                    </button>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
         )}
       </div>
 
@@ -207,9 +199,12 @@ export default function NotificationPopover({
         <button
           type="button"
           onClick={onSeeAll}
-          className={`w-full px-4 py-3.5 text-[13px] font-medium tracking-tight border-t cursor-pointer transition-colors ${theme.border} ${theme.footer}`}
+          className={`w-full px-5 py-3 text-[13px] font-medium tracking-[-0.01em] cursor-pointer transition-colors outline-none focus-visible:ring-2 focus-visible:ring-inset ${ring} flex items-center justify-between ${theme.border} ${theme.itemHover} ${ACCENT_TEXT[accent]}`}
         >
-          See all {count} {footerNoun}
+          <span>
+            See all {count} {footerNoun}
+          </span>
+          <FaChevronRight className="text-[10px] opacity-70" aria-hidden="true" />
         </button>
       )}
     </>

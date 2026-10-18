@@ -21,6 +21,7 @@ import FollowUpAttachments from "@/components/FollowUpAttachments";
 import { useFollowUpAttachments } from "@/lib/hooks/useFollowUpAttachments";
 import FollowUpComposer from "@/components/FollowUpComposer";
 import { BhoomiAiGlyph } from "@/components/bhoomi-ai/BhoomiAiIcon";
+import { getAdminNavItems, getAdminNavGroups, filterNavByRole, type AdminNavEntry } from "@/lib/adminNavConfig";
 import { downloadCSV } from "@/lib/downloadCsv";
 import { formatBudget } from "@/lib/formatBudget";
 import AdminSidebar from "@/components/admin/AdminSidebar";
@@ -141,6 +142,7 @@ const WhatsAppConversationPanel = dynamic(
 );
 const LoanDealForm = dynamic(() => import("@/components/LoanDealForm"), { ssr: false });
 const SalaryTab = dynamic(() => import("@/components/hr/SalaryTab"), { ssr: false });
+const AdminPayrollApprovals = dynamic(() => import("@/components/admin/AdminPayrollApprovals"), { ssr: false });
 
 // ─── SUN/MOON ICONS ───────────────────────────────────────────────────────────
 const SunIcon = () => (
@@ -799,6 +801,16 @@ function AdminAtlasDashboardContent() {
 
   const [notifQueue, setNotifQueue] = useState<CrmNotif[]>([]);
   const [activeNotif, setActiveNotif] = useState<CrmNotif | null>(null);
+  // Ref-tracked timer so the auto-dismiss effect can verify the notification it
+  // was started for is still the one on screen. Prevents a stale timeout (started
+  // for notification A) from accidentally dismissing notification B.
+  const notifTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Mirrors useNotificationFeed's own `initialLoadDone` ref — but for the popup
+  // queue rather than the sound system. False until the first feed delivery has
+  // been written to localStorage as "already seen". Notifications that existed
+  // before the page opened are NOT enqueued as popups; only those that arrive
+  // after this flag flips to true trigger transient toasts.
+  const popupFeedInitialized = useRef(false);
   const [notifCount, setNotifCount] = useState(0);
   const theme = useMemo(() => buildTheme(isDark), [isDark]);
   const { overdueReminders, visible: showOverduePopup, dismissAll: dismissOverduePopup, markComplete: markReminderComplete, pushReminder } = useOverdueReminders();
@@ -917,6 +929,14 @@ function AdminAtlasDashboardContent() {
   // Fed from the same server-built queue as the dropdown, so a toast and the
   // list behind it can no longer disagree about what arrived.
   //
+  // HYDRATION vs LIVE distinction (mirrors useNotificationFeed's sound logic):
+  //   First delivery  → write all IDs to localStorage as "already shown", but
+  //                     do NOT enqueue popups. These existed before the user
+  //                     opened the page and remain accessible through the
+  //                     notification centre / dropdown.
+  //   Later deliveries → only genuinely new IDs (not yet in localStorage)
+  //                      trigger transient popups.
+  //
   // The "already shown" set is namespaced by organization. It used to be one
   // flat `crm_shown_notif_ids` key: sign out of Bhoomi, sign in as Viraj on the
   // same machine, and Viraj's genuinely-new leads were silently suppressed
@@ -935,6 +955,28 @@ function AdminAtlasDashboardContent() {
     } catch { storedIds = []; }
 
     const seenSet = new Set(storedIds);
+
+    if (!popupFeedInitialized.current) {
+      // ── First delivery (hydration): mark everything as seen, no popups ──
+      // These are pre-existing notifications that the notification centre
+      // already displays. Replaying them as a burst of transient popups
+      // makes the first 30+ seconds of the session look like the popup is
+      // stuck.
+      let wrote = false;
+      for (const n of notificationHistory) {
+        if (!seenSet.has(n.id)) { seenSet.add(n.id); wrote = true; }
+      }
+      if (wrote) {
+        try { localStorage.setItem(storageKey, JSON.stringify(Array.from(seenSet))); } catch { }
+      }
+      // The dropdown badge should still reflect the count that the server
+      // considers "unread" — it reads from notificationHistory directly,
+      // not from notifQueue, so this does not hide anything.
+      popupFeedInitialized.current = true;
+      return;
+    }
+
+    // ── Subsequent deliveries: enqueue only genuinely new notifications ──
     const fresh: CrmNotif[] = [];
 
     for (const n of notificationHistory) {
@@ -958,24 +1000,40 @@ function AdminAtlasDashboardContent() {
     }
   }, [notificationHistory, notifications.organizationId]);
 
-  // ── Trigger Popup Display (2 Seconds) ──
+  // ── A. Dequeue: show the next notification when the slot is free ──
+  // Depends on notifQueue length and activeNotif presence (not the full object).
+  // Separated from the auto-dismiss timer so queue changes never reset it.
+  const activeNotifId = activeNotif?.id ?? null;
   useEffect(() => {
-    if (activeNotif || notifQueue.length === 0) return;
-
-    const nextNotif = notifQueue[0];
-    setActiveNotif(nextNotif);
+    if (activeNotifId || notifQueue.length === 0) return;
+    const next = notifQueue[0];
+    setActiveNotif(next);
     setNotifQueue(prev => prev.slice(1));
-  }, [activeNotif, notifQueue]);
+  }, [activeNotifId, notifQueue]);
 
+  // ── B. Auto-dismiss: start a timer when a notification becomes visible ──
+  // Depends on the notification's stable *id*, not the object reference.
+  // SSE-driven queue updates cannot reset this timer because they do not
+  // change activeNotifId.
   useEffect(() => {
-    if (!activeNotif) return;
-    const timer = setTimeout(() => {
-      setActiveNotif(null);
+    if (!activeNotifId) {
+      // Slot is empty — ensure no lingering timer.
+      if (notifTimerRef.current) { clearTimeout(notifTimerRef.current); notifTimerRef.current = null; }
+      return;
+    }
+    // Capture the id that started this timer so the callback can verify
+    // it is still current before dismissing.
+    const startedForId = activeNotifId;
+    notifTimerRef.current = setTimeout(() => {
+      notifTimerRef.current = null;
+      setActiveNotif(prev => (prev?.id === startedForId ? null : prev));
     }, 2000);
-    return () => clearTimeout(timer);
-  }, [activeNotif]);
+    return () => {
+      if (notifTimerRef.current) { clearTimeout(notifTimerRef.current); notifTimerRef.current = null; }
+    };
+  }, [activeNotifId]);
 
-  const handleLogout = () => { cleanupPushOnLogout().catch(() => {}); clearCrmSession(); router.replace("/"); };
+  const handleLogout = () => { cleanupPushOnLogout().catch(() => { }); clearCrmSession(); router.replace("/"); };
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   /**
@@ -1013,130 +1071,20 @@ function AdminAtlasDashboardContent() {
   // Same gate InventoryManagementView uses for its manage actions.
   const isSalesManager = ["admin", "sales manager", "sales_manager"].includes(userRole.trim());
 
-  const menuItems = [
-    { id: "dashboard", icon: FaThLarge, label: "Overview" },
-    { id: "revenue_intelligence", icon: FaFileInvoiceDollar, label: "Revenue Intelligence" },
-    { id: "inventory", icon: FaBoxes, label: "Inventory" },
-    { id: "cp_enquiry", icon: FaHandshake, label: "Active CP Info" },
-    { id: "cp_linked_leads", icon: FaHandshake, label: "CP's Walk-In Enquiries" },
-    // { id: "channel_partners", icon: FaUserTie, label: "Channel Partners" },
-    // { id: "cp_management", icon: FaHandshake, label: "CP Management" },
-    { id: "cp_chat", icon: FaComments, label: "CP Chat" },
-    { id: "banking_info", icon: FaUniversity, label: "Bankers Info" },
-
-    { id: "receptionist", icon: FaClipboardList, label: "Receptionist" },
-    { id: "sales", icon: FaUsers, label: "Sales Managers" },
-    { id: "site_head", icon: FaUniversity, label: "Site Heads" },
-    { id: "live_activity", icon: FaSignal, label: "Attendance Tracker" },
-    { id: "site_visit_overview", icon: FaCalendarAlt, label: "Site Visit Overview" },
-    { id: "attendance", icon: FaUserClock, label: "My Attendance" },
-    { id: "monitoring", icon: FaChartPie, label: "Employee Performance" },
-    { id: "geo", icon: FaMapMarkerAlt, label: "Geo Analytics" },
-    { id: "caller", icon: FaPhoneAlt, label: "Caller Panel" },
-    { id: "employees", icon: FaIdCard, label: "Add Employee" },
-    // Lives on /dashboard/employees?tab=notifications, like Caller Panel and
-    // Add Employee above it. It was present in the employees page's own copy of
-    // this list and missing here, so the Admin rail gained and lost a WhatsApp
-    // Alerts button depending on which route you happened to be on.
-    { id: "notifications", icon: FaWhatsapp, label: "WhatsApp Alerts" },
-    { id: "my-salary", icon: FaMoneyBillWave, label: "My Salary" },
-    // `pinned` entries render in the rail's bottom block, in this order — so
-    // Bhoomi AI keeps the place it has always had and Settings is the final
-    // button. (This used to be position-based: the sidebar pinned whatever item
-    // happened to be last, which made appending anything steal Bhoomi AI's slot.)
-    { id: "ai", icon: BhoomiAiGlyph, label: "Bhoomi AI", pinned: true },
-    { id: "settings", icon: FaCog, label: "Settings", pinned: true },
-
-  ].filter(item => {
-    if (isAdmin) return true;
-
-    // Non-admin roles should only see what's allowed.
-    // Admin only panels:
-    if (item.id === "revenue_intelligence" || item.id === "geo") {
-      return false;
-    }
-
-    // Channel Partners is the full management/registry view with commission
-    // rates, lead counts, and CRUD. Admin-only — Site Head uses CP Enquiry
-    // (standalone table) instead.
-    if (item.id === "channel_partners" && !isAdmin) {
-      return false;
-    }
-
-    // CP Chat is the same conversation the Sourcing Manager sees. It carries
-    // client names and follow-up notes, so it rides on the same read gate as
-    // the partner registry; the API applies that gate independently.
-    if (item.id === "cp_chat" && !canViewPartners(userRole)) {
-      return false;
-    }
-
-    // CP Management is the assignment/reassignment console — Admin only, since
-    // reassigning a Sourcing Manager is an Admin-exclusive right (Part 7).
-    if (item.id === "cp_management" && !isAdmin) {
-      return false;
-    }
-
-    // CP Enquiry (standalone CP records) is always visible for Site Head —
-    // it replaces Channel Partners as the primary CP view for non-admin roles.
-
-    if (isSiteHead && (item.id === "live_activity" || item.id === "settings" || item.id === "ai")) {
-      return true;
-    }
-
-    // Site head cannot see caller, employees, notifications — all three live on
-    // /dashboard/employees, which middleware puts on Site Head's forbidden list.
-    // Offering a button that bounces straight back is worse than not offering it.
-
-
-
-    // Other non-admin roles logic can be added here
-    if (!isAdmin && (item.id === "caller" || item.id === "employees" || item.id === "notifications")) {
-      return false;
-    }
-
-
-    return true;
+  // ── Unified sidebar: shared config consumed by both admin pages ──
+  const menuItems = filterNavByRole(getAdminNavItems(), {
+    isAdmin, isSiteHead, userRole, canViewPartners,
   });
+  const menuGroups = getAdminNavGroups();
 
-  // Headings shown above the first item of each run in the expanded rail.
-  // The two pinned entries (Bhoomi AI, Settings) sit in the bottom block and
-  // carry no heading.
-  const menuGroups: Record<string, string> = {
-    dashboard: "Workspace", revenue_intelligence: "Workspace", inventory: "Workspace",
-    cp_enquiry: "Workspace", cp_linked_leads: "Workspace",
-    // channel_partners: "Workspace",
-    // cp_management: "Workspace", 
-    banking_info: "Workspace", cp_chat: "Workspace",
-    receptionist: "Team", sales: "Team", site_head: "Team", live_activity: "Insights",
-    site_visit_overview: "Insights", attendance: "Insights", monitoring: "Insights", geo: "Insights",
-    caller: "Admin", employees: "Admin", notifications: "Admin"
-  };
-
-  // Bhoomi AI is a VIEW of this page, not a route.
-  //
-  // It used to be `router.push("/dashboard/employees?tab=ai")`, which worked for
-  // an Admin and was a dead click for a Site Head: middleware.ts lists
-  // /dashboard/employees among Site Head's forbidden paths and redirects them
-  // straight back to /dashboard. The button appeared to do nothing at all,
-  // because navigating away and being sent back is indistinguishable from not
-  // navigating. Nothing was broken about the panel — it was never reached.
-  //
-  // Rendering it in place removes the round trip for everyone and removes the
-  // dependency on a route Site Head is not allowed to load. The employees page
-  // keeps its own `?tab=ai` section; this is simply no longer the way in.
-  const handleMenuClick = (itemId: string) => {
-    if (itemId === "employees") {
-      router.push("/dashboard/employees");
-    } else if (itemId === "caller") {
-      router.push("/dashboard/employees?tab=callers");
-    } else if (itemId === "notifications") {
-      // Without this branch the id would fall through to setActiveView() and
-      // this page would render nothing — there is no "notifications" view here.
-      router.push("/dashboard/employees?tab=notifications");
-    } else if (itemId === "settings") {
+  const handleMenuClick = (item: AdminNavEntry) => {
+    if (item.owner === "employees") {
+      router.push(`/dashboard/employees?tab=${item.section || item.id}`);
+    } else if (item.owner === "settings") {
       router.push("/dashboard/settings");
     } else {
-      setActiveView(itemId);
+      // "dashboard" and "local" items render in-place on this page
+      setActiveView(item.id);
       setIsSidebarHovered(false);
     }
   };
@@ -1166,7 +1114,7 @@ function AdminAtlasDashboardContent() {
           groups={menuGroups}
           isHovered={isSidebarHovered}
           onHoverChange={setIsSidebarHovered}
-          onSelect={(item) => { handleMenuClick(item.id); }}
+          onSelect={(item) => { handleMenuClick(item as AdminNavEntry); }}
           orgName={sidebarOrgName}
         />
       )}
@@ -1176,7 +1124,7 @@ function AdminAtlasDashboardContent() {
         open={isMobileSidebarOpen}
         onClose={() => setIsMobileSidebarOpen(false)}
         activeId={activeView}
-        onSelect={(item) => { handleMenuClick(item.id); setIsMobileSidebarOpen(false); }}
+        onSelect={(item) => { handleMenuClick(item as AdminNavEntry); setIsMobileSidebarOpen(false); }}
         isDark={isDark}
         orgName={sidebarOrgName}
         userName={user?.name}
@@ -1387,7 +1335,7 @@ function AdminAtlasDashboardContent() {
           </AppHeader>
         )}
 
-        <main className={`flex-1 px-2 py-2 overflow-hidden transition-colors duration-300 ${theme.mainBg}`}>
+        <main className={`flex-1 px-3 py-3 overflow-y-auto transition-colors duration-300 ${theme.mainBg}`}>
           {activeView === "ai" && <BhoomiAiPanel isDark={isDark} t={theme} user={user} />}
 
           {activeView === "dashboard" && <DashboardOverview refetch={refetch} managers={managers} siteHeads={siteHeads} allLeads={allLeads} isLoading={isLoading} user={user} theme={theme} isDark={isDark} receptionists={receptionists} followUps={followUps} onNavigateToSales={(lead: any) => {
@@ -1503,6 +1451,14 @@ function AdminAtlasDashboardContent() {
           )}
 
           {activeView === "my-salary" && <SalaryTab isDark={isDark} />}
+
+          {activeView === "payroll_approvals" && isAdmin && (
+            <div className="flex flex-col h-full overflow-hidden">
+              <div className="p-4 md:p-8 overflow-y-auto">
+                <AdminPayrollApprovals isDark={isDark} />
+              </div>
+            </div>
+          )}
 
           {activeView === "notification_center" && (
             <div className="flex flex-col h-full overflow-hidden">
@@ -2611,19 +2567,17 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                           <button
                             type="button"
                             onClick={e => { e.stopPropagation(); setOpenShFilterCol(prev => prev === col.key ? null : col.key); }}
-                            className={`group flex items-center gap-1.5 whitespace-nowrap transition-colors ${
-                              isActive
-                                ? isDark ? "text-[#d946a8]" : "text-[#9E217B]"
-                                : isDark ? "text-slate-400 hover:text-slate-200" : "text-[#475569] hover:text-slate-700"
-                            }`}
+                            className={`group flex items-center gap-1.5 whitespace-nowrap transition-colors ${isActive
+                              ? isDark ? "text-[#d946a8]" : "text-[#9E217B]"
+                              : isDark ? "text-slate-400 hover:text-slate-200" : "text-[#475569] hover:text-slate-700"
+                              }`}
                             title={`Filter / Sort by ${col.label}`}
                           >
                             {col.label}
-                            <span className={`inline-flex items-center justify-center w-4 h-4 rounded transition-colors ${
-                              isActive
-                                ? isDark ? "bg-[#d946a8]/20 text-[#d946a8]" : "bg-[#9E217B]/10 text-[#9E217B]"
-                                : isDark ? "text-slate-600 group-hover:text-slate-400" : "text-slate-300 group-hover:text-slate-500"
-                            }`}>
+                            <span className={`inline-flex items-center justify-center w-4 h-4 rounded transition-colors ${isActive
+                              ? isDark ? "bg-[#d946a8]/20 text-[#d946a8]" : "bg-[#9E217B]/10 text-[#9E217B]"
+                              : isDark ? "text-slate-600 group-hover:text-slate-400" : "text-slate-300 group-hover:text-slate-500"
+                              }`}>
                               {isSorted
                                 ? shColSort?.direction === "asc" ? <FaSortAlphaDown className="w-2.5 h-2.5" /> : <FaSortAlphaUp className="w-2.5 h-2.5" />
                                 : <FaFilter className="w-2 h-2" />}
@@ -2832,19 +2786,17 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                           <button
                             type="button"
                             onClick={e => { e.stopPropagation(); setOpenRcFilterCol(prev => prev === col.key ? null : col.key); }}
-                            className={`group flex items-center gap-1.5 whitespace-nowrap transition-colors ${
-                              isActive
-                                ? isDark ? "text-[#00AEEF]" : "text-[#007AFF]"
-                                : isDark ? "text-slate-400 hover:text-slate-200" : "text-[#475569] hover:text-slate-700"
-                            }`}
+                            className={`group flex items-center gap-1.5 whitespace-nowrap transition-colors ${isActive
+                              ? isDark ? "text-[#00AEEF]" : "text-[#007AFF]"
+                              : isDark ? "text-slate-400 hover:text-slate-200" : "text-[#475569] hover:text-slate-700"
+                              }`}
                             title={`Filter / Sort by ${col.label}`}
                           >
                             {col.label}
-                            <span className={`inline-flex items-center justify-center w-4 h-4 rounded transition-colors ${
-                              isActive
-                                ? isDark ? "bg-[#00AEEF]/20 text-[#00AEEF]" : "bg-[#007AFF]/10 text-[#007AFF]"
-                                : isDark ? "text-slate-600 group-hover:text-slate-400" : "text-slate-300 group-hover:text-slate-500"
-                            }`}>
+                            <span className={`inline-flex items-center justify-center w-4 h-4 rounded transition-colors ${isActive
+                              ? isDark ? "bg-[#00AEEF]/20 text-[#00AEEF]" : "bg-[#007AFF]/10 text-[#007AFF]"
+                              : isDark ? "text-slate-600 group-hover:text-slate-400" : "text-slate-300 group-hover:text-slate-500"
+                              }`}>
                               {isSorted
                                 ? rcColSort?.direction === "asc" ? <FaSortAlphaDown className="w-2.5 h-2.5" /> : <FaSortAlphaUp className="w-2.5 h-2.5" />
                                 : <FaFilter className="w-2 h-2" />}

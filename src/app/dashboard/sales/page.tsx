@@ -88,14 +88,14 @@ import {
 } from "@/lib/hooks/useNotificationFeed";
 import NotificationPopover from "@/components/notifications/NotificationPopover";
 import NotificationCenterView from "@/components/notifications/NotificationCenterView";
-const SalaryTab = dynamic(() => import("@/components/hr/SalaryTab"), { ssr: false });
 import BhoomiAiPanel from "@/components/bhoomi-ai/BhoomiAiPanel";
 import { CRMContextManager } from "@/lib/admin-ai/contextManager";
 import {
-  SearchBar,
+  // SearchBar,
   ToolbarButton,
   ToggleSwitch,
   ColumnSelector,
+  SearchBar,
 } from "@/components/Tableui";
 import SalesManagerDashboardSummary from "@/components/sales/SalesManagerDashboardSummary";
 import CallsDueView from "@/components/sales/CallsDueView";
@@ -205,7 +205,7 @@ function buildTheme(isDark: boolean) {
     text: isDark ? "text-white" : "text-[#1e1e1e]",
     textname: isDark ? "text-[#d946a8]" : "text-[#334155]",
     textMuted: isDark ? "text-gray-400" : "text-gray-400",
-    textFaint: isDark ? "text-gray-500" : "text-[#475569]",
+    textFaint: isDark ? "text-gray-500 font-semibold" : "text-[#475569] font-semibold",
     textHeader: isDark ? "text-xs text-gray-500 uppercase" : "text-xs text-[#334155] font-bold uppercase",
 
     // ── Navigation ──
@@ -856,7 +856,7 @@ export default function SalesDashboard() {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: -6, scale: 0.98 }}
                     transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-                    className={`absolute top-12 -right-2 sm:right-0 w-[calc(100vw-24px)] sm:w-80 max-w-[320px] rounded-xl shadow-2xl z-50 overflow-hidden border ${t.dropdown}`} style={t.dropdownGlass}
+                    className={`absolute top-12 -right-2 sm:right-0 w-[calc(100vw-24px)] sm:w-80 max-w-[320px] rounded-xl shadow-2xl z-50 overflow-hidden ${t.dropdown}`} style={t.dropdownGlass}
                   >
                     <NotificationPopover
                       title="Site Visit Reminders"
@@ -905,7 +905,7 @@ export default function SalesDashboard() {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: -6, scale: 0.98 }}
                     transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-                    className={`absolute top-12 -right-2 sm:right-0 w-[calc(100vw-24px)] sm:w-80 max-w-[320px] rounded-xl shadow-2xl z-50 overflow-hidden border ${t.dropdown}`} style={t.dropdownGlass}
+                    className={`absolute top-12 -right-2 sm:right-0 w-[calc(100vw-24px)] sm:w-80 max-w-[320px] rounded-3xl shadow-md z-50 overflow-hidden ${t.dropdown}`} style={t.dropdownGlass}
                   >
                     <NotificationPopover
                       title="Follow-up Reminders"
@@ -1046,7 +1046,7 @@ export default function SalesDashboard() {
           </div>
         </AppHeader>
 
-        <main className={`flex-1 overflow-hidden custom-scrollbar ${t.mainBg} ${activeView === "assistant" ? "p-0" : "flex flex-col h-full overflow-hidden gap-4 p-4 sm:p-6 font-sans antialiased"}`}>
+        <main className={`flex-1 overflow-hidden custom-scrollbar ${t.mainBg} ${activeView === "assistant" ? "p-0" : "flex flex-col h-full overflow-y-auto gap-4 p-4 sm:p-6 font-sans antialiased"}`}>
           {(activeView === "sales" || activeView === "overview" || activeView === "forms" || activeView === "detail" || activeView === "closed-leads") ? (
             <SalesManagerView
               managers={managers} allLeads={allLeads} followUps={followUps}
@@ -1119,8 +1119,6 @@ export default function SalesDashboard() {
               t={t}
               now={now}
             />
-          ) : activeView === "my-salary" ? (
-            <SalaryTab isDark={isDark} />
           ) : activeView === "notifications" ? (
             /* The Notification Center: the COMPLETE queue the popovers cap at
                three. Reached from a "See all N …" footer, which preselects the
@@ -1323,21 +1321,21 @@ const SM_DB_COLUMNS: { key: string; label: string; locked?: boolean; defaultHidd
 /** Returns the display value of a lead for a given SM_DB column key. */
 function getLeadValueForCol(lead: any, key: string): string {
   switch (key) {
-    case 'lead_no':    return String(lead.sr_no || lead.id || '');
-    case 'name':       return String(lead.name || '');
-    case 'prop_type':  return String(lead.propType || lead.configuration || 'Pending');
-    case 'budget':     return String(lead.salesBudget || lead.budget || '');
-    case 'source':     return String(lead.source || '');
-    case 'cp_name':    return String(lead.cpName || lead.cp_name || '');
+    case 'lead_no': return String(lead.sr_no || lead.id || '');
+    case 'name': return String(lead.name || '');
+    case 'prop_type': return String(lead.propType || lead.configuration || 'Pending');
+    case 'budget': return String(lead.salesBudget || lead.budget || '');
+    case 'source': return String(lead.source || '');
+    case 'cp_name': return String(lead.cpName || lead.cp_name || '');
     case 'cp_company': return String(lead.cpCompany || lead.cp_company || '');
-    case 'cp_phone':   return String(lead.cpPhone || lead.cp_phone || '');
-    case 'status':     return lead.is_lost_lead ? 'LOST' : String(lead.status || 'Assigned');
+    case 'cp_phone': return String(lead.cpPhone || lead.cp_phone || '');
+    case 'status': return lead.is_lost_lead ? 'LOST' : String(lead.status || 'Assigned');
     case 'lost_status': return lead.is_lost_lead ? 'Lost Lead' : 'Active';
-    case 'interest':   return String(lead.leadInterestStatus || '');
+    case 'interest': return String(lead.leadInterestStatus || '');
     case 'date_created': return String(lead.created_at || '');
-    case 'backdated':  return lead.auto_date_enabled === false && lead.enquiry_date ? String(lead.enquiry_date) : '';
+    case 'backdated': return lead.auto_date_enabled === false && lead.enquiry_date ? String(lead.enquiry_date) : '';
     case 'site_visit': return String(lead.mongoVisitDate || '');
-    default:           return '';
+    default: return '';
   }
 }
 
@@ -1859,13 +1857,13 @@ function SalesManagerView({
       } else {
         leads = leads.filter((l: any) => {
           switch (columnFilter) {
-            case "name":     return String(l.name || "").toLowerCase().includes(lq);
-            case "phone":    return [l.phone, l.altPhone, l.alt_phone].map(v => String(v || "")).join(" ").toLowerCase().includes(lq);
-            case "budget":   return String(l.salesBudget || l.budget || "").toLowerCase().includes(lq);
+            case "name": return String(l.name || "").toLowerCase().includes(lq);
+            case "phone": return [l.phone, l.altPhone, l.alt_phone].map(v => String(v || "")).join(" ").toLowerCase().includes(lq);
+            case "budget": return String(l.salesBudget || l.budget || "").toLowerCase().includes(lq);
             case "propType": return String(l.propType || l.configuration || "").toLowerCase().includes(lq);
-            case "source":   return String(l.source || "").toLowerCase().includes(lq);
-            case "status":   return String(l.status || "").toLowerCase().includes(lq);
-            default:         return true;
+            case "source": return String(l.source || "").toLowerCase().includes(lq);
+            case "status": return String(l.status || "").toLowerCase().includes(lq);
+            default: return true;
           }
         });
       }
@@ -2443,19 +2441,17 @@ function SalesManagerView({
                             <button
                               type="button"
                               onClick={e => { e.stopPropagation(); setOpenDbFilterCol(prev => prev === col.key ? null : col.key); }}
-                              className={`group flex items-center gap-1.5 whitespace-nowrap transition-colors ${
-                                isFiltered || isSorted
-                                  ? 'text-[#B01A79]'
-                                  : isDark ? 'text-slate-400 hover:text-slate-200' : 'text-[#475569] hover:text-slate-700'
-                              }`}
+                              className={`group flex items-center gap-1.5 whitespace-nowrap transition-colors ${isFiltered || isSorted
+                                ? 'text-[#B01A79]'
+                                : isDark ? 'text-slate-400 hover:text-slate-200' : 'text-[#475569] hover:text-slate-700'
+                                }`}
                               title={`Filter / Sort by ${col.label}`}
                             >
                               {col.label}
-                              <span className={`inline-flex items-center justify-center w-4 h-4 rounded transition-colors ${
-                                isFiltered || isSorted
-                                  ? 'bg-[#B01A79]/15 text-[#B01A79]'
-                                  : isDark ? 'text-slate-600 group-hover:text-slate-400' : 'text-slate-300 group-hover:text-slate-500'
-                              }`}>
+                              <span className={`inline-flex items-center justify-center w-4 h-4 rounded transition-colors ${isFiltered || isSorted
+                                ? 'bg-[#B01A79]/15 text-[#B01A79]'
+                                : isDark ? 'text-slate-600 group-hover:text-slate-400' : 'text-slate-300 group-hover:text-slate-500'
+                                }`}>
                                 {isSorted
                                   ? (dbColSort?.direction === 'asc' ? <FaSortAlphaDown className="w-2.5 h-2.5" /> : <FaSortAlphaUp className="w-2.5 h-2.5" />)
                                   : <FaFilter className="w-2 h-2" />

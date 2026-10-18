@@ -45,7 +45,7 @@ export default function AdminCpChatWrapper({
   }, [managers, deferredSearch]);
 
   // Style tokens matching the CRM Apple UI
-  const bgApp = isDark ? "bg-[#000000]" : "bg-[#F5F5F7]";
+  const bgApp = isDark ? "bg-[#121212]" : "bg-[#F5F5F7]";
   const bgCard = isDark ? "bg-[#1C1C1E]" : "bg-white";
   const borderSubtle = isDark ? "border-[#38383A]" : "border-[#E5E5EA]";
   const textPrimary = isDark ? "text-white" : "text-[#1D1D1F]";

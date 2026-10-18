@@ -21,6 +21,7 @@ import {
   IoCalendarOutline, IoCalendar,
   IoPersonOutline, IoPerson,
   IoWalletOutline, IoWallet,
+  IoChatbubblesOutline, IoChatbubbles,
 } from "react-icons/io5";
 import { FaCircle, FaFilter, FaSortAlphaDown, FaSortAlphaUp } from "react-icons/fa";
 import SharedColumnFilterDropdown, { useColumnFilters, type FilterableColumn } from "@/components/ColumnFilterDropdown";
@@ -35,6 +36,9 @@ const HRCharts = dynamic(() => import("./HRCharts"), { ssr: false });
 const HRHolidays = dynamic(() => import("./HRHolidays"), { ssr: false });
 const HREmployeeDirectory = dynamic(() => import("./HREmployeeDirectory"), { ssr: false });
 const HRPayroll = dynamic(() => import("./HRPayroll"), { ssr: false });
+const HRConnect = dynamic(() => import("./HRConnect"), { ssr: false });
+const HRAnalyticsChat = dynamic(() => import("./HRAnalyticsChat"), { ssr: false });
+const HRAnalyticsDashboard = dynamic(() => import("./HRAnalyticsDashboard"), { ssr: false });
 const SalaryTab = dynamic(() => import("@/components/hr/SalaryTab"), { ssr: false });
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -77,6 +81,7 @@ const NAV_ITEMS = [
   { id: "employees",  icon: IoPersonOutline,     activeIcon: IoPerson,    title: "Employees" },
   { id: "holidays",   icon: IoCalendarOutline,   activeIcon: IoCalendar,  title: "Holidays" },
   { id: "payroll",    icon: IoWalletOutline,     activeIcon: IoWallet,    title: "Payroll" },
+  { id: "connect",   icon: IoChatbubblesOutline, activeIcon: IoChatbubbles, title: "HR Connect" },
   { id: "my-salary", icon: IoWalletOutline,     activeIcon: IoWallet,    title: "My Salary" },
 ];
 
@@ -384,11 +389,9 @@ export default function HRDashboard() {
             )}
 
             {/* ── WORKFORCE OVERVIEW ──────────────────────────────── */}
-            {(activeTab === "overview" || activeTab === "analytics") && (
+            {activeTab === "overview" && (
               <>
-                {activeTab === "overview" && (
-                  <>
-                    <SectionHeader title="Workforce Overview" subtitle="Charts first — real data from existing CRM attendance system" isDark={isDark} />
+                <SectionHeader title="Workforce Overview" subtitle="Charts first — real data from existing CRM attendance system" isDark={isDark} />
 
                     {/* KPI strip */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -446,29 +449,12 @@ export default function HRDashboard() {
                         )}
                       </>
                     )}
-                  </>
-                )}
-
-                {/* ── ATTENDANCE ANALYTICS ───────────────────────── */}
-                {activeTab === "analytics" && (
-                  <>
-                    <SectionHeader title="Attendance Analytics" subtitle="Working hours and attendance breakdown by role" isDark={isDark} />
-                    {loading ? (
-                      <div className="grid md:grid-cols-2 gap-6">
-                        <ChartSkeleton isDark={isDark} />
-                        <ChartSkeleton isDark={isDark} />
-                      </div>
-                    ) : !data ? null : (
-                      <HRCharts
-                        section="analytics"
-                        data={data}
-                        trendDays={trendDays}
-                        isDark={isDark}
-                      />
-                    )}
-                  </>
-                )}
               </>
+            )}
+
+            {/* ── ANALYTICS (Phase 4B — unified dashboard) ───────── */}
+            {activeTab === "analytics" && (
+              <HRAnalyticsDashboard isDark={isDark} />
             )}
 
             {/* ── LIVE WORKFORCE TABLE ───────────────────────────── */}
@@ -607,6 +593,11 @@ export default function HRDashboard() {
             {/* ── PAYROLL (Phase 3) ───────────────────────────── */}
             {activeTab === "payroll" && (
               <HRPayroll isDark={isDark} userRole={user?.role || ""} />
+            )}
+
+            {/* ── HR CONNECT (Phase 4A) ────────────────────────── */}
+            {activeTab === "connect" && (
+              <HRConnect isDark={isDark} />
             )}
 
             {/* ── MY SALARY (Phase 3.5) ──────────────────────── */}

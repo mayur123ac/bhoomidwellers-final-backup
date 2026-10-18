@@ -18,15 +18,18 @@ const STATUS_OPTS: { label: string; value: string }[] = [
   { label: "Refuge Area", value: "refuge_area" },
   { label: "Unfinished", value: "unfinished" },
 ];
-
-const UNIT_TYPE_OPTS = ["1 RK", "1BHK", "1.5BHK", "2BHK", "2.5BHK", "3BHK", "3.5BHK", "4BHK", "Penthouse", "Shop", "Office", "Other"];
+const UNIT_TYPE_OPTS = ["1 RK", "1BHK", "1.5BHK", "2BHK", "2.5BHK", "3BHK", "3.5BHK", "4BHK", "Penthouse", "Shop", "Office"];
+const OTHER = "Other";
+const MAX_CUSTOM_TYPE = 50;
+const typeKey = (v: string) => v.replace(/\s+/g, "").toLowerCase();
 
 type ExistingUnit = { project_name: string; tower: string; wing: string | null; floor: number | string; flat_no: string };
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
-  onCreated?: (unit: any) => void;          // fired after a successful create
+  onCreated?: (unit: any) => void;
+  unitTypes?: string[];   // standard + saved custom types (no "Other")      // fired after a successful create
   user: { name: string; role: string };
   isDark: boolean;
   t: any;
@@ -40,7 +43,7 @@ interface Props {
 // form, and inventory follows it so the two describe a unit the same way.
 // The column still exists (nullable) and older rows keep their values.
 const blankForm = {
-  project_name: "", tower: "", wing: "", unit_type: "",
+  project_name: "", tower: "", wing: "", unit_type: "", custom_type: "",
   floor: "", flat_no: "", carpet_area_sqft: "", built_up_area_sqft: "",
   rate_per_sqft: "", base_price: "", facing: "", status: "available",
 };
@@ -48,7 +51,7 @@ const blankForm = {
 const norm = (v: any) => String(v ?? "").trim().toLowerCase();
 const numOf = (v: any) => Number(String(v ?? "").replace(/[,\s₹]/g, ""));
 
-export default function AddUnitModal({ isOpen, onClose, onCreated, user, isDark, t, existingUnits = [], defaults }: Props) {
+export default function AddUnitModal({ isOpen, onClose, onCreated, user, isDark, t, existingUnits = [], defaults, unitTypes = UNIT_TYPE_OPTS }: Props) {
   const [form, setForm] = useState({ ...blankForm });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -79,12 +82,23 @@ export default function AddUnitModal({ isOpen, onClose, onCreated, user, isDark,
       String(u.floor) === String(Number(form.floor)) &&
       norm(u.flat_no) === norm(form.flat_no),
     );
-
+  const resolveType = () => {
+    if (form.unit_type !== OTHER) return form.unit_type;
+    const c = form.custom_type.trim().replace(/\s+/g, " ");
+    return unitTypes.find(o => typeKey(o) === typeKey(c)) || c;
+  };
   const validate = (): string | null => {
     const required: [keyof typeof blankForm, string][] = [
+
       ["project_name", "Project name"],
       ["tower", "Tower"], ["unit_type", "Unit type"], ["flat_no", "Flat no."],
     ];
+    if (form.unit_type === OTHER) {
+      const c = form.custom_type.trim();
+      if (!c) return "Enter the custom unit type.";
+      if (c.length > MAX_CUSTOM_TYPE) return `Custom unit type must be ${MAX_CUSTOM_TYPE} characters or fewer.`;
+      if (typeKey(c) === "other") return "Enter a specific unit type instead of 'Other'.";
+    }
     for (const [k, label] of required) {
       if (!String(form[k]).trim()) return `${label} is required.`;
     }
@@ -184,11 +198,18 @@ export default function AddUnitModal({ isOpen, onClose, onCreated, user, isDark,
                 <div><label className={labelCls}>Wing</label><input value={form.wing} onChange={e => set({ wing: e.target.value })} className={inputCls} placeholder="Optional" /></div>
                 <div>
                   <label className={labelCls}>Unit Type *</label>
-                  <select value={form.unit_type} onChange={e => set({ unit_type: e.target.value })} className={selectCls}>
+                  <select value={form.unit_type} onChange={e => set({ unit_type: e.target.value, custom_type: "" })} className={selectCls}>
                     <option value="">Select</option>
-                    {UNIT_TYPE_OPTS.map(o => <option key={o} value={o}>{o}</option>)}
+                    {unitTypes.map(o => <option key={o} value={o}>{o}</option>)}
+                    <option value={OTHER}>Other…</option>
                   </select>
                 </div>
+                {form.unit_type === OTHER && (
+                  <div>
+                    <label className={labelCls}>Custom Unit Type *</label>
+                    <input value={form.custom_type} maxLength={MAX_CUSTOM_TYPE} onChange={e => set({ custom_type: e.target.value })} className={inputCls} placeholder="e.g. Studio" />
+                  </div>
+                )}
                 <div><label className={labelCls}>Facing</label><input value={form.facing} onChange={e => set({ facing: e.target.value })} className={inputCls} placeholder="e.g. Garden-facing" /></div>
                 <div><label className={labelCls}>Floor * <span className="opacity-60">(0 = Ground)</span></label><input type="number" value={form.floor} onChange={e => set({ floor: e.target.value })} className={inputCls} placeholder="e.g. 7" /></div>
                 <div><label className={labelCls}>Flat No. *</label><input value={form.flat_no} onChange={e => set({ flat_no: e.target.value })} className={inputCls} placeholder="e.g. 701" /></div>

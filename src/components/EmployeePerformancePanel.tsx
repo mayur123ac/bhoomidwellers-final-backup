@@ -189,7 +189,7 @@ export default function EmployeePerformancePanel({
   // ── Render ──
 
   return (
-    <div className={`h-full flex flex-col overflow-hidden font-sans antialiased transition-colors duration-300 ${isDark ? "bg-[#000000]" : "bg-[#F2F2F7]"}`}>
+    <div className={`h-full flex flex-col overflow-hidden font-sans antialiased transition-colors duration-300 ${isDark ? "bg-[#12121212]" : "bg-[#F2F2F7]"}`}>
 
       {/* ═══ Apple-style Header Area ═══ */}
 
@@ -314,6 +314,7 @@ export default function EmployeePerformancePanel({
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.1, ease: [0.25, 0.1, 0.25, 1] }}
           className="space-y-8 max-w-[1400px] mx-auto"
+
         >
 
           {/* ── Summary Cards (iOS Widget Style) ── */}

@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import BhoomiAiPanel from "@/components/bhoomi-ai/BhoomiAiPanel";
 import { BhoomiAiGlyph } from "@/components/bhoomi-ai/BhoomiAiIcon";
+import { getAdminNavItems, getAdminNavGroups, filterNavByRole, type AdminNavEntry } from "@/lib/adminNavConfig";
 // The canvas colour, imported rather than retyped, so the header and the
 // workspace below it cannot drift to two slightly different darks.
 // FiChevronDown and FiCheck removed (P0-4: transfer modal removed)
@@ -973,52 +974,14 @@ export default function EmployeesPage() {
      header unchanged. The rail is deliberately not included: it is already the
      CRM's dark navy in both states. */
 
-  const menuItems = [
-    { id: "dashboard", icon: FaThLarge, label: "Overview", link: "/dashboard", section: null },
-    // The four Workspace views. They were in /dashboard's copy of this list and
-    // not in this one, so an Admin standing on /dashboard/employees lost Revenue
-    // Intelligence, Inventory, Channel Partners and CP Management from the rail
-    // until they navigated back — the same drift that hid WhatsApp Alerts on
-    // /dashboard. Ids match /dashboard's `activeView` values, so `?tab=` opens
-    // the right view on arrival.
-    { id: "revenue_intelligence", icon: FaFileInvoiceDollar, label: "Revenue Intelligence", link: "/dashboard?tab=revenue_intelligence", section: null },
-    { id: "inventory", icon: FaBoxes, label: "Inventory", link: "/dashboard?tab=inventory", section: null },
-    { id: "channel_partners", icon: FaUserTie, label: "Channel Partners", link: "/dashboard?tab=channel_partners", section: null },
-    { id: "cp_management", icon: FaHandshake, label: "CP Management", link: "/dashboard?tab=cp_management", section: null },
-    { id: "receptionist", icon: FaClipboardList, label: "Receptionist", link: "/dashboard?tab=receptionist", section: null },
-    { id: "sales", icon: FaUsers, label: "Sales Managers", link: "/dashboard?tab=sales", section: null },
-    { id: "site_head", icon: FaUniversity, label: "Site Heads", link: "/dashboard?tab=site_head", section: null },
-    { id: "live_activity", icon: FaSignal, label: "Attendance Tracker", link: "/dashboard?tab=live_activity", section: null },
-    { id: "site_visit_overview", icon: FaCalendarAlt, label: "Site Visit Overview", link: "/dashboard?tab=site_visit_overview", section: null },
-    // ADD THESE THREE — they navigate back to dashboard with the right tab
-    { id: "attendance", icon: FaUserClock, label: "My Attendance", link: "/dashboard?tab=attendance", section: null },
-    { id: "monitoring", icon: FaChartPie, label: "Daily Monitor", link: "/dashboard?tab=monitoring", section: null },
-    { id: "geo", icon: FaMapMarkerAlt, label: "Geo Analytics", link: "/dashboard?tab=geo", section: null },
-    { id: "callers", icon: FaPhoneAlt, label: "Caller Panel", link: "/dashboard/employees", section: "callers" as const },
-    { id: "employees", icon: FaIdCard, label: "Add Employee", link: "/dashboard/employees", section: "employees" as const },
-    { id: "notifications", icon: FaWhatsapp, label: "WhatsApp Alerts", link: "/dashboard/employees", section: "notifications" as const },
-    // `pinned` puts an item in the rail's bottom block, in array order — Bhoomi
-    // AI first, Settings last. Position no longer decides this, so appending a
-    // new item here can no longer steal the pinned slot.
-    { id: "ai", icon: BhoomiAiGlyph, label: "Bhoomi AI", link: "/dashboard/employees", section: "ai" as const, pinned: true },
-    // Settings moved out of the header, where it was a lone gear, into the rail
-    // — the same place and order /dashboard puts it. `section: null` so the
-    // click routes rather than switching an in-page section. Admin-only, which
-    // is the gate the header button carried.
-    ...(user?.role?.toLowerCase() === "admin"
-      ? [{ id: "settings", icon: FaCog, label: "Settings", link: "/dashboard/settings", section: null, pinned: true }]
-      : []),
-  ];
-
-  const menuGroups: Record<string, string> = {
-    dashboard: "Workspace", revenue_intelligence: "Workspace", inventory: "Workspace",
-    // channel_partners: "Workspace",
-    //  cp_management: "Workspace",
-
-    receptionist: "Team", sales: "Team", site_head: "Team", live_activity: "Team",
-    site_visit_overview: "Insights", attendance: "Insights", monitoring: "Insights", geo: "Insights",
-    callers: "Admin", employees: "Admin", notifications: "Admin",
-  };
+  // ── Unified sidebar: shared config consumed by both admin pages ──
+  const empUserRole = (user?.role || "").toLowerCase();
+  const empIsAdmin = empUserRole === "admin";
+  const empIsSiteHead = empUserRole === "site_head" || empUserRole === "site head";
+  const menuItems = filterNavByRole(getAdminNavItems(), {
+    isAdmin: empIsAdmin, isSiteHead: empIsSiteHead, userRole: empUserRole,
+  });
+  const menuGroups = getAdminNavGroups();
 
   if (isAuthorized === null) return <div className="min-h-screen bg-[#0a0a0a]" />;
   const selectedManageUser = employees.find(e => e._id === selectedManageUserId);
@@ -1036,11 +999,14 @@ export default function EmployeesPage() {
         isHovered={isSidebarHovered}
         onHoverChange={setIsSidebarHovered}
         onSelect={(item: any) => {
-          if (item.section) {
-            setActiveSection(item.section);
+          const nav = item as AdminNavEntry;
+          if (nav.owner === "employees" || nav.owner === "local") {
+            setActiveSection((nav.section || nav.id) as typeof activeSection);
+          } else if (nav.owner === "settings") {
+            router.push("/dashboard/settings");
           } else {
-            localStorage.setItem("return_tab", item.id);
-            router.push(item.link);
+            localStorage.setItem("return_tab", nav.id);
+            router.push("/dashboard");
           }
         }}
         orgName={sidebarOrgName}
@@ -1052,11 +1018,14 @@ export default function EmployeesPage() {
         onClose={() => setIsMobileSidebarOpen(false)}
         activeId={activeSection}
         onSelect={(item: any) => {
-          if (item.section) {
-            setActiveSection(item.section);
+          const nav = item as AdminNavEntry;
+          if (nav.owner === "employees" || nav.owner === "local") {
+            setActiveSection((nav.section || nav.id) as typeof activeSection);
+          } else if (nav.owner === "settings") {
+            router.push("/dashboard/settings");
           } else {
-            localStorage.setItem("return_tab", item.id);
-            router.push(item.link);
+            localStorage.setItem("return_tab", nav.id);
+            router.push("/dashboard");
           }
           setIsMobileSidebarOpen(false);
         }}

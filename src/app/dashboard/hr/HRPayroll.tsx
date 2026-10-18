@@ -42,6 +42,10 @@ interface PayrollRecord {
   incentiveTotal: number;
   status: string;
   exceptionReason: string | null;
+  submittedAt: string | null;
+  approvedAt: string | null;
+  rejectedAt: string | null;
+  rejectionReason: string | null;
   adjustments: Adjustment[];
 }
 
@@ -61,11 +65,11 @@ const MONTHS = [
 ];
 
 const STATUS_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  draft:     { bg: "bg-gray-500/15",    text: "text-gray-400",    border: "border-gray-500/30" },
-  exception: { bg: "bg-red-500/15",     text: "text-red-400",     border: "border-red-500/30" },
-  submitted: { bg: "bg-blue-500/15",    text: "text-blue-400",    border: "border-blue-500/30" },
-  approved:  { bg: "bg-emerald-500/15", text: "text-emerald-400", border: "border-emerald-500/30" },
-  rejected:  { bg: "bg-amber-500/15",   text: "text-amber-400",   border: "border-amber-500/30" },
+  draft: { bg: "bg-gray-500/15", text: "text-gray-400", border: "border-gray-500/30" },
+  exception: { bg: "bg-red-500/15", text: "text-red-400", border: "border-red-500/30" },
+  submitted: { bg: "bg-blue-500/15", text: "text-blue-400", border: "border-blue-500/30" },
+  approved: { bg: "bg-emerald-500/15", text: "text-emerald-400", border: "border-emerald-500/30" },
+  rejected: { bg: "bg-amber-500/15", text: "text-amber-400", border: "border-amber-500/30" },
 };
 
 function StatusBadge({ status }: { status: string }) {
@@ -81,12 +85,21 @@ function inr(n: number) {
   return n.toLocaleString("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 });
 }
 
+function PencilIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className || "w-3 h-3"} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+    </svg>
+  );
+}
+
 // ── Main Component ──────────────────────────────────────────────────────────
 export default function HRPayroll({ isDark, userRole }: { isDark: boolean; userRole: string }) {
   const card = isDark ? "bg-[#1C1C1E] border border-[#38383A]" : "bg-white border border-[#E5E5EA] shadow-sm";
   const textSec = isDark ? "text-[#98989D]" : "text-[#86868B]";
   const textPri = isDark ? "text-white" : "text-[#1D1D1F]";
   const inputCls = `w-full rounded-xl px-3 py-2 text-sm border outline-none ${isDark ? "bg-[#2C2C2E] border-[#38383A] text-white" : "bg-white border-[#D1D1D6] text-[#1D1D1F]"}`;
+  const cellInputCls = `w-24 rounded-lg px-2 py-1 text-xs font-mono text-right border outline-none ${isDark ? "bg-[#2C2C2E] border-[#48484A] text-white focus:border-blue-500" : "bg-white border-[#D1D1D6] text-[#1D1D1F] focus:border-blue-500"}`;
   const btnPrimary = `px-4 py-2 rounded-xl text-sm font-semibold transition-colors cursor-pointer ${isDark ? "bg-emerald-600 hover:bg-emerald-500 text-white" : "bg-emerald-600 hover:bg-emerald-700 text-white"}`;
   const btnSecondary = `px-4 py-2 rounded-xl text-sm font-semibold border transition-colors cursor-pointer ${isDark ? "border-[#38383A] text-[#98989D] hover:border-[#58585A]" : "border-[#D1D1D6] text-[#86868B] hover:border-[#AEAEB2]"}`;
   const btnDanger = `px-4 py-2 rounded-xl text-sm font-semibold transition-colors cursor-pointer bg-red-600 hover:bg-red-500 text-white`;
@@ -116,13 +129,206 @@ export default function HRPayroll({ isDark, userRole }: { isDark: boolean; userR
   const [rejectReason, setRejectReason] = useState("");
   const [showRejectForm, setShowRejectForm] = useState(false);
 
-  // Adjustment form
-  const [showAdjForm, setShowAdjForm] = useState<number | null>(null);
-  const [adjType, setAdjType] = useState<"addition" | "deduction">("addition");
-  const [adjCategory, setAdjCategory] = useState("");
-  const [adjDesc, setAdjDesc] = useState("");
-  const [adjAmount, setAdjAmount] = useState("");
-  const [adjSubmitting, setAdjSubmitting] = useState(false);
+  // Individual record submission
+  const [confirmSubmitRecord, setConfirmSubmitRecord] = useState<PayrollRecord | null>(null);
+  const [recordActionLoading, setRecordActionLoading] = useState(false);
+
+  // ── Inline edit state ───────────────────────────────────────────────────
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editBase, setEditBase] = useState(0);
+  const [editAdditions, setEditAdditions] = useState(0);
+  const [editDeductions, setEditDeductions] = useState(0);
+  const [editOverrideNet, setEditOverrideNet] = useState(false);
+  const [editNetValue, setEditNetValue] = useState(0);
+  const [editNetReason, setEditNetReason] = useState("");
+  const [editExceptionReason, setEditExceptionReason] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
+
+  const startEdit = (r: PayrollRecord) => {
+    setEditingId(r.id);
+    setEditBase(r.baseSalary);
+    setEditAdditions(r.totalAdditions);
+    setEditDeductions(r.totalDeductions);
+    setEditOverrideNet(false);
+    setEditNetValue(r.netPayable);
+    setEditNetReason("");
+    setEditExceptionReason("");
+    setEditSaving(false);
+    setError(null);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditOverrideNet(false);
+  };
+
+  const handleSaveEdit = async (record: PayrollRecord) => {
+    // ── Validation ─────────────────────────────────────────────────────
+    if (editBase < 0 || !Number.isFinite(editBase)) {
+      setError("Base salary must be a valid non-negative number."); return;
+    }
+    if (editAdditions < 0 || !Number.isFinite(editAdditions)) {
+      setError("Additions must be a valid non-negative number."); return;
+    }
+    if (editDeductions < 0 || !Number.isFinite(editDeductions)) {
+      setError("Deductions must be a valid non-negative number."); return;
+    }
+    if (record.status === "exception" && editBase > 0 && !editExceptionReason.trim()) {
+      setError("A justification is required for manual base salary override on exception records."); return;
+    }
+    if (editOverrideNet && !editNetReason.trim()) {
+      setError("A reason is required for net payable override."); return;
+    }
+    if (editOverrideNet && (editNetValue < 0 || !Number.isFinite(editNetValue))) {
+      setError("Override net payable must be a valid non-negative number."); return;
+    }
+
+    const computedNet = editBase + editAdditions - editDeductions;
+    const finalNet = editOverrideNet ? editNetValue : computedNet;
+
+    // Check nothing changed
+    const baseChanged = editBase !== record.baseSalary;
+    const addChanged = editAdditions !== record.totalAdditions;
+    const dedChanged = editDeductions !== record.totalDeductions;
+    const netChanged = finalNet !== record.netPayable;
+
+    if (!baseChanged && !addChanged && !dedChanged && !netChanged && !editOverrideNet) {
+      cancelEdit(); return;
+    }
+
+    setEditSaving(true);
+    setError(null);
+
+    try {
+      // ── 1. PATCH record with final values ───────────────────────────
+      const patchBody: Record<string, unknown> = {};
+
+      if (baseChanged) {
+        patchBody.baseSalary = editBase;
+        patchBody.grossSalary = editBase; // gross = base in this payroll system
+      }
+
+      if (addChanged) patchBody.totalAdditions = editAdditions;
+      if (dedChanged) patchBody.totalDeductions = editDeductions;
+      patchBody.netPayable = finalNet;
+
+      // Exception resolution with manual override note
+      if (record.status === "exception" && editBase > 0) {
+        patchBody.resolveException = true;
+        patchBody.exceptionReason = `MANUAL OVERRIDE: ${editExceptionReason.trim()}`;
+      }
+
+      const res = await fetch(`/api/hr/payroll/records/${record.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patchBody),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.message || `HTTP ${res.status}`);
+
+      // ── 2. Create audit adjustment records for changes ──────────────
+      const auditPromises: Promise<Response>[] = [];
+
+      if (addChanged) {
+        const delta = editAdditions - record.totalAdditions;
+        auditPromises.push(
+          fetch(`/api/hr/payroll/records/${record.id}/adjustments`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              type: delta > 0 ? "addition" : "deduction",
+              category: "Manual Adjustment",
+              description: `Inline edit: additions ${inr(record.totalAdditions)} \u2192 ${inr(editAdditions)}`,
+              amount: Math.abs(delta),
+            }),
+          })
+        );
+      }
+
+      if (dedChanged) {
+        const delta = editDeductions - record.totalDeductions;
+        auditPromises.push(
+          fetch(`/api/hr/payroll/records/${record.id}/adjustments`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              type: delta > 0 ? "deduction" : "addition",
+              category: "Manual Adjustment",
+              description: `Inline edit: deductions ${inr(record.totalDeductions)} \u2192 ${inr(editDeductions)}`,
+              amount: Math.abs(delta),
+            }),
+          })
+        );
+      }
+
+      if (editOverrideNet && editNetValue !== computedNet) {
+        const overrideDelta = editNetValue - computedNet;
+        auditPromises.push(
+          fetch(`/api/hr/payroll/records/${record.id}/adjustments`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              type: overrideDelta > 0 ? "addition" : "deduction",
+              category: "Net Override",
+              description: `Net override: ${inr(computedNet)} \u2192 ${inr(editNetValue)}. Reason: ${editNetReason.trim()}`,
+              amount: Math.abs(overrideDelta),
+            }),
+          })
+        );
+      }
+
+      // Fire audit adjustments (non-critical — values already saved by PATCH)
+      if (auditPromises.length > 0) {
+        await Promise.allSettled(auditPromises);
+      }
+
+      // ── 3. Re-PATCH to ensure authoritative values survive adjustment recalculation
+      if (auditPromises.length > 0) {
+        await fetch(`/api/hr/payroll/records/${record.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            totalAdditions: editAdditions,
+            totalDeductions: editDeductions,
+            netPayable: finalNet,
+          }),
+        });
+      }
+
+      setSuccess("Record updated.");
+      setEditingId(null);
+      if (selectedPeriod) await openDetail(selectedPeriod);
+      setTimeout(() => setSuccess(null), 4000);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to save.");
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  // ── Handlers ──────────────────────────────────────────────────────────────
+
+  const handleSubmitRecord = async (record: PayrollRecord) => {
+    setRecordActionLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/hr/payroll/records/${record.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "submit" }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.message || `HTTP ${res.status}`);
+      setSuccess(j.message);
+      setConfirmSubmitRecord(null);
+      if (selectedPeriod) await openDetail(selectedPeriod);
+      setTimeout(() => setSuccess(null), 4000);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to submit.");
+    } finally {
+      setRecordActionLoading(false);
+    }
+  };
 
   // ── Fetch periods ─────────────────────────────────────────────────────────
   const fetchPeriods = useCallback(async () => {
@@ -133,8 +339,8 @@ export default function HRPayroll({ isDark, userRole }: { isDark: boolean; userR
       const j = await res.json();
       if (!res.ok) throw new Error(j.message || `HTTP ${res.status}`);
       setPeriods(j.data?.periods || []);
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to load periods.");
     } finally {
       setLoading(false);
     }
@@ -158,8 +364,8 @@ export default function HRPayroll({ isDark, userRole }: { isDark: boolean; userR
       setShowGenerate(false);
       fetchPeriods();
       setTimeout(() => setSuccess(null), 4000);
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to generate.");
     } finally {
       setGenerating(false);
     }
@@ -171,21 +377,22 @@ export default function HRPayroll({ isDark, userRole }: { isDark: boolean; userR
     setView("detail");
     setDetailLoading(true);
     setError(null);
+    setEditingId(null);
     try {
       const res = await fetch(`/api/hr/payroll/periods/${period.id}`);
       const j = await res.json();
       if (!res.ok) throw new Error(j.message || `HTTP ${res.status}`);
       setSelectedPeriod(j.data.period);
       setRecords(j.data.records || []);
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to load period.");
     } finally {
       setDetailLoading(false);
     }
   };
 
   // ── Period actions ────────────────────────────────────────────────────────
-  const periodAction = async (action: string, extra?: Record<string, any>) => {
+  const periodAction = async (action: string, extra?: Record<string, unknown>) => {
     if (!selectedPeriod) return;
     setActionLoading(true);
     setError(null);
@@ -200,47 +407,13 @@ export default function HRPayroll({ isDark, userRole }: { isDark: boolean; userR
       setSuccess(j.message);
       setShowRejectForm(false);
       setRejectReason("");
-      // Reload
       await openDetail(selectedPeriod);
       fetchPeriods();
       setTimeout(() => setSuccess(null), 4000);
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed.");
     } finally {
       setActionLoading(false);
-    }
-  };
-
-  // ── Add adjustment ────────────────────────────────────────────────────────
-  const handleAddAdjustment = async (recordId: number) => {
-    if (!adjCategory.trim() || !adjAmount || Number(adjAmount) <= 0) {
-      setError("Category and positive amount are required.");
-      return;
-    }
-    setAdjSubmitting(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/hr/payroll/records/${recordId}/adjustments`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: adjType,
-          category: adjCategory.trim(),
-          description: adjDesc.trim() || null,
-          amount: Number(adjAmount),
-        }),
-      });
-      const j = await res.json();
-      if (!res.ok) throw new Error(j.message || `HTTP ${res.status}`);
-      setSuccess(j.message);
-      setShowAdjForm(null);
-      setAdjCategory(""); setAdjDesc(""); setAdjAmount("");
-      if (selectedPeriod) await openDetail(selectedPeriod);
-      setTimeout(() => setSuccess(null), 4000);
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setAdjSubmitting(false);
     }
   };
 
@@ -277,8 +450,8 @@ export default function HRPayroll({ isDark, userRole }: { isDark: boolean; userR
       setPayAmount(""); setPayRef(""); setPayMethod("");
       if (selectedPeriod) await openDetail(selectedPeriod);
       setTimeout(() => setSuccess(null), 4000);
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to record payment.");
     } finally {
       setPaySubmitting(false);
     }
@@ -287,7 +460,7 @@ export default function HRPayroll({ isDark, userRole }: { isDark: boolean; userR
   // ── List View ─────────────────────────────────────────────────────────────
   if (view === "list") {
     return (
-      <div className="space-y-6">
+      <div className="space-y-6 p-4">
         {/* Header */}
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
@@ -367,9 +540,8 @@ export default function HRPayroll({ isDark, userRole }: { isDark: boolean; userR
                     <tr
                       key={p.id}
                       onClick={() => openDetail(p)}
-                      className={`border-t cursor-pointer transition-colors ${
-                        isDark ? "border-[#2C2C2E] hover:bg-[#1C1C1E]" : "border-[#F5F5F7] hover:bg-gray-50"
-                      } ${i % 2 === 0 ? (isDark ? "bg-[#0A0A0A]" : "bg-white") : (isDark ? "bg-[#111]" : "bg-[#FAFAFA]")}`}
+                      className={`border-t cursor-pointer transition-colors ${isDark ? "border-[#2C2C2E] hover:bg-[#1C1C1E]" : "border-[#F5F5F7] hover:bg-gray-50"
+                        } ${i % 2 === 0 ? (isDark ? "bg-[#0A0A0A]" : "bg-white") : (isDark ? "bg-[#111]" : "bg-[#FAFAFA]")}`}
                     >
                       <td className={`px-4 py-3 font-semibold text-xs ${textPri}`}>
                         {MONTHS[p.month - 1]} {p.year}
@@ -379,7 +551,7 @@ export default function HRPayroll({ isDark, userRole }: { isDark: boolean; userR
                       <td className={`px-4 py-3 text-right text-xs font-mono ${textSec}`}>{inr(p.totalGross)}</td>
                       <td className={`px-4 py-3 text-right text-xs font-mono font-semibold ${textPri}`}>{inr(p.totalNet)}</td>
                       <td className={`px-4 py-3 text-right text-xs ${textSec}`}>
-                        {p.generatedAt ? new Date(p.generatedAt).toLocaleDateString("en-IN") : "—"}
+                        {p.generatedAt ? new Date(p.generatedAt).toLocaleDateString("en-IN") : "\u2014"}
                       </td>
                     </tr>
                   ))}
@@ -400,7 +572,7 @@ export default function HRPayroll({ isDark, userRole }: { isDark: boolean; userR
       {/* Back + Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          <button onClick={() => { setView("list"); setSelectedPeriod(null); setRecords([]); }} className={btnSecondary}>
+          <button onClick={() => { setView("list"); setSelectedPeriod(null); setRecords([]); setEditingId(null); }} className={btnSecondary}>
             Back
           </button>
           <div>
@@ -449,7 +621,7 @@ export default function HRPayroll({ isDark, userRole }: { isDark: boolean; userR
               </>
             )}
             {sp.status === "approved" && isAdmin && (
-              <span className={`text-xs font-semibold px-3 py-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/30`}>
+              <span className="text-xs font-semibold px-3 py-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
                 Approved
               </span>
             )}
@@ -552,112 +724,357 @@ export default function HRPayroll({ isDark, userRole }: { isDark: boolean; userR
                 </tr>
               </thead>
               <tbody>
-                {records.map((r, i) => (
-                  <tr
-                    key={r.id}
-                    className={`border-t transition-colors ${
-                      isDark ? "border-[#2C2C2E]" : "border-[#F5F5F7]"
-                    } ${r.status === "exception" ? (isDark ? "bg-red-500/5" : "bg-red-50") : (i % 2 === 0 ? (isDark ? "bg-[#0A0A0A]" : "bg-white") : (isDark ? "bg-[#111]" : "bg-[#FAFAFA]"))}`}
-                  >
-                    <td className="px-4 py-3">
-                      <div>
-                        <p className={`text-xs font-semibold ${textPri}`}>{r.employeeName}</p>
-                        <p className={`text-[10px] ${textSec}`}>ID: {r.userId}</p>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <StatusBadge status={r.status} />
-                      {r.exceptionReason && (
-                        <p className="text-[10px] text-red-400 mt-1 max-w-[150px] truncate" title={r.exceptionReason}>
-                          {r.exceptionReason}
-                        </p>
-                      )}
-                    </td>
-                    <td className={`px-4 py-3 text-right text-xs font-mono ${textSec}`}>{r.workingDays}</td>
-                    <td className={`px-4 py-3 text-right text-xs font-mono ${textSec}`}>{r.presentDays}</td>
-                    <td className={`px-4 py-3 text-right text-xs font-mono ${r.absentDays > 0 ? "text-red-400" : textSec}`}>{r.absentDays}</td>
-                    <td className={`px-4 py-3 text-right text-xs font-mono ${textSec}`}>{inr(r.baseSalary)}</td>
-                    <td className={`px-4 py-3 text-right text-xs font-mono ${r.totalAdditions > 0 ? "text-emerald-400" : textSec}`}>
-                      {r.totalAdditions > 0 ? `+${inr(r.totalAdditions)}` : "—"}
-                    </td>
-                    <td className={`px-4 py-3 text-right text-xs font-mono ${r.totalDeductions > 0 ? "text-red-400" : textSec}`}>
-                      {r.totalDeductions > 0 ? `-${inr(r.totalDeductions)}` : "—"}
-                    </td>
-                    <td className={`px-4 py-3 text-right text-xs font-mono font-semibold ${textPri}`}>{inr(r.netPayable)}</td>
-                    <td className="px-4 py-3 text-center">
-                      <div className="flex gap-1 justify-center flex-wrap">
-                        {(r.status === "draft" || r.status === "exception") && sp?.status !== "submitted" && sp?.status !== "approved" && (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setShowAdjForm(showAdjForm === r.id ? null : r.id); }}
-                            className={`text-[10px] px-2 py-1 rounded-lg font-semibold cursor-pointer ${isDark ? "bg-blue-500/15 text-blue-400 hover:bg-blue-500/25" : "bg-blue-100 text-blue-700 hover:bg-blue-200"}`}
-                          >
-                            + Adjust
-                          </button>
-                        )}
-                        {r.status === "approved" && isAdmin && (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setShowPayForm(showPayForm === r.id ? null : r.id); setPayAmount(String(r.netPayable)); }}
-                            className={`text-[10px] px-2 py-1 rounded-lg font-semibold cursor-pointer ${isDark ? "bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25" : "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"}`}
-                          >
-                            Pay
-                          </button>
-                        )}
-                      </div>
+                {records.map((r, i) => {
+                  const isEditing = editingId === r.id;
+                  const canEdit = (r.status === "draft" || r.status === "exception") && sp?.status !== "submitted" && sp?.status !== "approved";
+                  const isException = r.status === "exception";
+                  const computedNet = isEditing ? editBase + editAdditions - editDeductions : 0;
+                  const isDirty = isEditing && (
+                    editBase !== r.baseSalary ||
+                    editAdditions !== r.totalAdditions ||
+                    editDeductions !== r.totalDeductions ||
+                    editOverrideNet
+                  );
+                  const rowBg = isEditing
+                    ? (isDark ? "bg-blue-500/5" : "bg-blue-50/50")
+                    : r.status === "exception"
+                      ? (isDark ? "bg-red-500/5" : "bg-red-50")
+                      : (i % 2 === 0 ? (isDark ? "bg-[#0A0A0A]" : "bg-white") : (isDark ? "bg-[#111]" : "bg-[#FAFAFA]"));
 
-                      {/* Adjustment form inline */}
-                      {showAdjForm === r.id && (
-                        <div className={`mt-2 p-3 rounded-xl text-left space-y-2 ${card}`} onClick={(e) => e.stopPropagation()}>
-                          <div className="flex gap-2">
-                            <select value={adjType} onChange={(e) => setAdjType(e.target.value as any)} className={`${inputCls} !w-auto`}>
-                              <option value="addition">Addition</option>
-                              <option value="deduction">Deduction</option>
-                            </select>
-                            <input value={adjCategory} onChange={(e) => setAdjCategory(e.target.value)} placeholder="Category" className={inputCls} />
-                          </div>
-                          <input value={adjDesc} onChange={(e) => setAdjDesc(e.target.value)} placeholder="Description (optional)" className={inputCls} />
-                          <input type="number" value={adjAmount} onChange={(e) => setAdjAmount(e.target.value)} placeholder="Amount" className={inputCls} />
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => handleAddAdjustment(r.id)}
-                              disabled={adjSubmitting}
-                              className={`text-xs ${btnPrimary}`}
-                            >
-                              {adjSubmitting ? "..." : "Add"}
-                            </button>
-                            <button onClick={() => setShowAdjForm(null)} className={`text-xs ${btnSecondary}`}>Cancel</button>
-                          </div>
+                  return (
+                    <tr
+                      key={r.id}
+                      className={`border-t transition-colors ${isDark ? "border-[#2C2C2E]" : "border-[#F5F5F7]"} ${rowBg}`}
+                    >
+                      {/* Employee */}
+                      <td className="px-4 py-3">
+                        <div>
+                          <p className={`text-xs font-semibold ${textPri}`}>{r.employeeName}</p>
+                          <p className={`text-[10px] ${textSec}`}>ID: {r.userId}</p>
                         </div>
-                      )}
+                      </td>
 
-                      {/* Payment form inline */}
-                      {showPayForm === r.id && (
-                        <div className={`mt-2 p-3 rounded-xl text-left space-y-2 ${card}`} onClick={(e) => e.stopPropagation()}>
-                          <input type="number" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} placeholder="Amount" className={inputCls} />
-                          <input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} className={inputCls} />
-                          <input value={payRef} onChange={(e) => setPayRef(e.target.value)} placeholder="Reference (optional)" className={inputCls} />
-                          <input value={payMethod} onChange={(e) => setPayMethod(e.target.value)} placeholder="Method (optional)" className={inputCls} />
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => handleRecordPayment(r.id)}
-                              disabled={paySubmitting}
-                              className={`text-xs ${btnPrimary}`}
-                            >
-                              {paySubmitting ? "..." : "Record Payment"}
-                            </button>
-                            <button onClick={() => setShowPayForm(null)} className={`text-xs ${btnSecondary}`}>Cancel</button>
+                      {/* Status */}
+                      <td className="px-4 py-3">
+                        <StatusBadge status={r.status} />
+                        {r.exceptionReason && !isEditing && (
+                          <p className="text-[10px] text-red-400 mt-1 max-w-[200px]" title={r.exceptionReason}>
+                            {r.exceptionReason}
+                          </p>
+                        )}
+                        {r.rejectionReason && r.status === "rejected" && (
+                          <p className="text-[10px] text-amber-400 mt-1 max-w-[200px]" title={r.rejectionReason}>
+                            Rejected: {r.rejectionReason}
+                          </p>
+                        )}
+                        {r.submittedAt && r.status === "submitted" && (
+                          <p className={`text-[10px] mt-1 ${textSec}`}>Pending approval</p>
+                        )}
+                        {r.approvedAt && r.status === "approved" && (
+                          <p className={`text-[10px] mt-1 text-emerald-${isDark ? "400" : "600"}`}>
+                            Approved {new Date(r.approvedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                          </p>
+                        )}
+                        {isEditing && isDirty && (
+                          <p className="text-[10px] text-amber-400 mt-1 font-semibold">Unsaved changes</p>
+                        )}
+                      </td>
+
+                      {/* Working / Present / Absent */}
+                      <td className={`px-4 py-3 text-right text-xs font-mono ${textSec}`}>{r.workingDays}</td>
+                      <td className={`px-4 py-3 text-right text-xs font-mono ${textSec}`}>{r.presentDays}</td>
+                      <td className={`px-4 py-3 text-right text-xs font-mono ${r.absentDays > 0 ? "text-red-400" : textSec}`}>{r.absentDays}</td>
+
+                      {/* ── Base ───────────────────────────────────────── */}
+                      <td className={`px-4 py-3 text-right text-xs font-mono ${textSec}`}>
+                        {isEditing ? (
+                          <div className="flex items-center justify-end gap-1">
+                            <PencilIcon className="w-3 h-3 text-blue-400 shrink-0" />
+                            <input
+                              type="number"
+                              value={editBase}
+                              onChange={(e) => setEditBase(Math.max(0, Number(e.target.value) || 0))}
+                              className={cellInputCls}
+                              min={0}
+                              step={1000}
+                            />
                           </div>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                        ) : (
+                          <span className={canEdit ? "group cursor-pointer" : ""} onClick={canEdit ? (e) => { e.stopPropagation(); startEdit(r); } : undefined}>
+                            {inr(r.baseSalary)}
+                            {canEdit && <PencilIcon className="w-2.5 h-2.5 inline-block ml-1 opacity-30 group-hover:opacity-80 transition-opacity" />}
+                          </span>
+                        )}
+                      </td>
+
+                      {/* ── Additions ──────────────────────────────────── */}
+                      <td className={`px-4 py-3 text-right text-xs font-mono ${isEditing ? "" : (r.totalAdditions > 0 ? "text-emerald-400" : textSec)}`}>
+                        {isEditing ? (
+                          <div>
+                            <div className="flex items-center justify-end gap-1">
+                              <PencilIcon className="w-3 h-3 text-blue-400 shrink-0" />
+                              <input
+                                type="number"
+                                value={editAdditions}
+                                onChange={(e) => setEditAdditions(Math.max(0, Number(e.target.value) || 0))}
+                                className={cellInputCls}
+                                min={0}
+                                step={500}
+                              />
+                            </div>
+                            {r.incentiveTotal > 0 && (
+                              <p className="text-[9px] text-purple-400 mt-0.5 text-right">
+                                incl. {inr(r.incentiveTotal)} incentives
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <span className={canEdit ? "group cursor-pointer" : ""} onClick={canEdit ? (e) => { e.stopPropagation(); startEdit(r); } : undefined}>
+                            {r.totalAdditions > 0 ? `+${inr(r.totalAdditions)}` : "\u2014"}
+                            {canEdit && <PencilIcon className="w-2.5 h-2.5 inline-block ml-1 opacity-30 group-hover:opacity-80 transition-opacity" />}
+                          </span>
+                        )}
+                      </td>
+
+                      {/* ── Deductions ─────────────────────────────────── */}
+                      <td className={`px-4 py-3 text-right text-xs font-mono ${isEditing ? "" : (r.totalDeductions > 0 ? "text-red-400" : textSec)}`}>
+                        {isEditing ? (
+                          <div className="flex items-center justify-end gap-1">
+                            <PencilIcon className="w-3 h-3 text-blue-400 shrink-0" />
+                            <input
+                              type="number"
+                              value={editDeductions}
+                              onChange={(e) => setEditDeductions(Math.max(0, Number(e.target.value) || 0))}
+                              className={cellInputCls}
+                              min={0}
+                              step={500}
+                            />
+                          </div>
+                        ) : (
+                          <span className={canEdit ? "group cursor-pointer" : ""} onClick={canEdit ? (e) => { e.stopPropagation(); startEdit(r); } : undefined}>
+                            {r.totalDeductions > 0 ? `-${inr(r.totalDeductions)}` : "\u2014"}
+                            {canEdit && <PencilIcon className="w-2.5 h-2.5 inline-block ml-1 opacity-30 group-hover:opacity-80 transition-opacity" />}
+                          </span>
+                        )}
+                      </td>
+
+                      {/* ── Net ────────────────────────────────────────── */}
+                      <td className={`px-4 py-3 text-right text-xs font-mono font-semibold ${textPri}`}>
+                        {isEditing ? (
+                          <div className="text-right">
+                            {editOverrideNet ? (
+                              <>
+                                <p className={`line-through text-[10px] ${textSec}`}>{inr(computedNet)}</p>
+                                <p className="text-amber-400 font-bold">{inr(editNetValue)}</p>
+                              </>
+                            ) : (
+                              <p>{inr(computedNet)}</p>
+                            )}
+                          </div>
+                        ) : (
+                          inr(r.netPayable)
+                        )}
+                      </td>
+
+                      {/* ── Actions ────────────────────────────────────── */}
+                      <td className="px-4 py-3 text-center">
+                        {isEditing ? (
+                          <div className="space-y-2">
+                            {/* Exception override reason */}
+                            {isException && editBase > 0 && (
+                              <div className="text-left">
+                                <input
+                                  value={editExceptionReason}
+                                  onChange={(e) => setEditExceptionReason(e.target.value)}
+                                  placeholder="Override reason (required)"
+                                  className={`w-full rounded-lg px-2 py-1 text-[11px] border outline-none ${isDark ? "bg-[#2C2C2E] border-[#48484A] text-white placeholder:text-[#58585A]" : "bg-white border-[#D1D1D6] text-[#1D1D1F] placeholder:text-[#AEAEB2]"}`}
+                                />
+                                <p className={`text-[9px] mt-0.5 ${textSec}`}>One-period override only</p>
+                              </div>
+                            )}
+
+                            {/* Net override controls */}
+                            {!editOverrideNet ? (
+                              <button
+                                onClick={() => { setEditOverrideNet(true); setEditNetValue(computedNet); }}
+                                className={`text-[10px] px-2 py-0.5 rounded font-medium cursor-pointer ${isDark ? "text-amber-400 hover:bg-amber-500/10" : "text-amber-600 hover:bg-amber-50"}`}
+                              >
+                                Override Net
+                              </button>
+                            ) : (
+                              <div className="text-left space-y-1">
+                                <div className="flex items-center gap-1">
+                                  <input
+                                    type="number"
+                                    value={editNetValue}
+                                    onChange={(e) => setEditNetValue(Math.max(0, Number(e.target.value) || 0))}
+                                    className={cellInputCls}
+                                    min={0}
+                                  />
+                                  <button
+                                    onClick={() => { setEditOverrideNet(false); setEditNetReason(""); }}
+                                    className={`text-[10px] cursor-pointer ${isDark ? "text-gray-500 hover:text-gray-300" : "text-gray-400 hover:text-gray-600"}`}
+                                    title="Cancel override"
+                                  >
+                                    undo
+                                  </button>
+                                </div>
+                                <input
+                                  value={editNetReason}
+                                  onChange={(e) => setEditNetReason(e.target.value)}
+                                  placeholder="Override reason (required)"
+                                  className={`w-full rounded-lg px-2 py-1 text-[11px] border outline-none ${isDark ? "bg-[#2C2C2E] border-[#48484A] text-white placeholder:text-[#58585A]" : "bg-white border-[#D1D1D6] text-[#1D1D1F] placeholder:text-[#AEAEB2]"}`}
+                                />
+                              </div>
+                            )}
+
+                            {/* Save / Cancel */}
+                            <div className="flex gap-1 justify-center">
+                              <button
+                                onClick={() => handleSaveEdit(r)}
+                                disabled={editSaving || !isDirty}
+                                className={`text-[10px] px-2 py-1 rounded-lg font-semibold cursor-pointer disabled:opacity-40 ${isDark ? "bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25" : "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"}`}
+                              >
+                                {editSaving ? "Saving..." : "Save"}
+                              </button>
+                              <button
+                                onClick={cancelEdit}
+                                disabled={editSaving}
+                                className={`text-[10px] px-2 py-1 rounded-lg font-semibold cursor-pointer ${isDark ? "bg-gray-500/15 text-gray-400 hover:bg-gray-500/25" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex gap-1 justify-center flex-wrap">
+                            {/* Individual submit */}
+                            {r.status === "draft" && r.baseSalary > 0 && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setConfirmSubmitRecord(r); }}
+                                className={`text-[10px] px-2 py-1 rounded-lg font-semibold cursor-pointer ${isDark ? "bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25" : "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"}`}
+                              >
+                                Submit
+                              </button>
+                            )}
+                            {/* Resubmit after rejection */}
+                            {r.status === "rejected" && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setConfirmSubmitRecord(r); }}
+                                className={`text-[10px] px-2 py-1 rounded-lg font-semibold cursor-pointer ${isDark ? "bg-amber-500/15 text-amber-400 hover:bg-amber-500/25" : "bg-amber-100 text-amber-700 hover:bg-amber-200"}`}
+                              >
+                                Resubmit
+                              </button>
+                            )}
+                            {/* Inline edit trigger */}
+                            {canEdit && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); startEdit(r); }}
+                                className={`text-[10px] px-2 py-1 rounded-lg font-semibold cursor-pointer ${isDark ? "bg-blue-500/15 text-blue-400 hover:bg-blue-500/25" : "bg-blue-100 text-blue-700 hover:bg-blue-200"}`}
+                              >
+                                + Adjust
+                              </button>
+                            )}
+                            {/* Pay button */}
+                            {r.status === "approved" && isAdmin && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setShowPayForm(showPayForm === r.id ? null : r.id); setPayAmount(String(r.netPayable)); }}
+                                className={`text-[10px] px-2 py-1 rounded-lg font-semibold cursor-pointer ${isDark ? "bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25" : "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"}`}
+                              >
+                                Pay
+                              </button>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Payment form inline */}
+                        {showPayForm === r.id && !isEditing && (
+                          <div className={`mt-2 p-3 rounded-xl text-left space-y-2 ${card}`} onClick={(e) => e.stopPropagation()}>
+                            <input type="number" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} placeholder="Amount" className={inputCls} />
+                            <input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} className={inputCls} />
+                            <input value={payRef} onChange={(e) => setPayRef(e.target.value)} placeholder="Reference (optional)" className={inputCls} />
+                            <input value={payMethod} onChange={(e) => setPayMethod(e.target.value)} placeholder="Method (optional)" className={inputCls} />
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleRecordPayment(r.id)}
+                                disabled={paySubmitting}
+                                className={`text-xs ${btnPrimary}`}
+                              >
+                                {paySubmitting ? "..." : "Record Payment"}
+                              </button>
+                              <button onClick={() => setShowPayForm(null)} className={`text-xs ${btnSecondary}`}>Cancel</button>
+                            </div>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         </div>
       )}
 
-      {/* Adjustments detail per record (expandable) */}
+      {/* Confirm individual submission modal */}
+      {confirmSubmitRecord && (
+        <div className="fixed inset-0 z-[500] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className={`w-full max-w-lg rounded-3xl p-6 space-y-4 ${isDark ? "bg-[#1C1C1E] border border-[#38383A]" : "bg-white border border-[#E5E5EA] shadow-2xl"}`}>
+            <h3 className={`text-lg font-black ${textPri}`}>Submit for Admin Approval</h3>
+            <p className={`text-sm ${textSec}`}>
+              You are submitting <strong className={textPri}>{confirmSubmitRecord.employeeName}</strong>&apos;s
+              payroll for {sp ? `${MONTHS[sp.month - 1]} ${sp.year}` : "this period"}.
+            </p>
+
+            <div className={`rounded-xl p-4 space-y-2 ${isDark ? "bg-[#2C2C2E]" : "bg-[#F5F5F7]"}`}>
+              <div className="flex justify-between text-xs">
+                <span className={textSec}>Base Salary</span>
+                <span className={`font-mono ${textPri}`}>{inr(confirmSubmitRecord.baseSalary)}</span>
+              </div>
+              {confirmSubmitRecord.totalAdditions > 0 && (
+                <div className="flex justify-between text-xs">
+                  <span className={textSec}>Additions</span>
+                  <span className="font-mono text-emerald-400">+{inr(confirmSubmitRecord.totalAdditions)}</span>
+                </div>
+              )}
+              {confirmSubmitRecord.totalDeductions > 0 && (
+                <div className="flex justify-between text-xs">
+                  <span className={textSec}>Deductions</span>
+                  <span className="font-mono text-red-400">-{inr(confirmSubmitRecord.totalDeductions)}</span>
+                </div>
+              )}
+              <div className={`flex justify-between text-sm font-bold pt-2 border-t ${isDark ? "border-[#38383A]" : "border-[#D1D1D6]"}`}>
+                <span className={textPri}>Net Payable</span>
+                <span className="font-mono text-emerald-400">{inr(confirmSubmitRecord.netPayable)}</span>
+              </div>
+              <div className="flex justify-between text-xs pt-1">
+                <span className={textSec}>Days</span>
+                <span className={`font-mono ${textSec}`}>
+                  {confirmSubmitRecord.presentDays}P / {confirmSubmitRecord.leaveDays}L / {confirmSubmitRecord.absentDays}A / {confirmSubmitRecord.workingDays}W
+                </span>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => handleSubmitRecord(confirmSubmitRecord)}
+                disabled={recordActionLoading}
+                className={btnPrimary}
+              >
+                {recordActionLoading ? "Submitting..." : "Confirm & Submit"}
+              </button>
+              <button
+                onClick={() => setConfirmSubmitRecord(null)}
+                className={btnSecondary}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Adjustments detail per record */}
       {records.filter((r) => r.adjustments.length > 0).length > 0 && (
         <div className={`rounded-2xl p-5 space-y-4 ${card}`}>
           <h3 className={`text-sm font-bold ${textPri}`}>Adjustments Detail</h3>
@@ -674,7 +1091,7 @@ export default function HRPayroll({ isDark, userRole }: { isDark: boolean; userR
                           {a.type === "addition" ? "+" : "-"}
                         </span>
                         <span className={textPri}>{a.category}</span>
-                        {a.description && <span className={textSec}>— {a.description}</span>}
+                        {a.description && <span className={textSec}>{"\u2014"} {a.description}</span>}
                         {a.source !== "manual" && (
                           <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? "bg-purple-500/15 text-purple-400" : "bg-purple-100 text-purple-700"}`}>
                             {a.source}

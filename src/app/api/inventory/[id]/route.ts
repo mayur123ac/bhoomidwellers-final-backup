@@ -8,8 +8,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
 import { getOrganizationId } from "@/lib/tenantContext";
-import { isAdmin, isLinkedActive, isBookingProtected, bookingProtectedReason, linkDescriptor, softDeleteUnit,
-         UNITS_WITH_BOOKING_STATUS, UNIT_GUARD_COLUMNS } from "@/lib/inventoryDelete";
+import {
+  isAdmin, isLinkedActive, isBookingProtected, bookingProtectedReason, linkDescriptor, softDeleteUnit,
+  UNITS_WITH_BOOKING_STATUS, UNIT_GUARD_COLUMNS
+} from "@/lib/inventoryDelete";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
@@ -26,17 +28,19 @@ const cleanNum = (v: any) => {
 };
 
 const SYNC_ONLY_STATUSES = ["booked", "registered"];
+const STANDARD_UNIT_TYPES = ["1 RK", "1BHK", "1.5BHK", "2BHK", "2.5BHK", "3BHK", "3.5BHK", "4BHK", "Penthouse", "Shop", "Office"];
+const MAX_UNIT_TYPE_LEN = 50;
+const MAX_CUSTOM_LABEL_LEN = 50;
+const typeKey = (v: string) => v.replace(/\s+/g, "").toLowerCase();
 
-
-// Fields a user may PATCH directly. status + hold_expires_at are handled
-// separately below because they carry lifecycle rules.
+// Fields a user may PATCH directly. status + hold_expires_at + unit_type are handled
+// separately below because they carry lifecycle and normalization rules.
 // apartment_name is deliberately not editable — the field is retired. Legacy rows
 // keep whatever they had; nothing new can set it.
 const EDITABLE: Record<string, (v: any) => any> = {
   project_name: v => (v == null ? null : String(v).trim()),
   tower: v => (v == null ? null : String(v).trim()),
   wing: v => (v ? String(v).trim() : null),
-  unit_type: v => (v == null ? null : String(v).trim()),
   floor: v => (v === "" || v == null ? null : Number(v)),
   flat_no: v => (v == null ? null : String(v).trim()),
   carpet_area_sqft: cleanNum,
@@ -110,7 +114,7 @@ export async function PATCH(
 ) {
   const { id } = await params;
   try {
-    const gate = await requireRoles(["admin"]);
+    const gate = await requireRoles(["admin", "sales manager", "sales_manager"]);
     if (!gate.ok) return gate.response;
 
     const body = await req.json();
@@ -124,7 +128,8 @@ export async function PATCH(
       // MT-06: the unit id is a caller-supplied route parameter and this handler
       // deletes. Scoping the lookup means a foreign unit returns notFound instead
       // of being deleted out of another tenant.
-      const existing = await client.query(`SELECT * FROM inventory_units WHERE id = $1 AND organization_id = $2`, [Number(id), await getOrganizationId(client)]);
+      const orgId = await getOrganizationId(client);
+      const existing = await client.query(`SELECT * FROM inventory_units WHERE id = $1 AND organization_id = $2`, [Number(id), orgId]);
       if (!existing.rows.length) return { notFound: true as const };
       const unit = existing.rows[0];
       if (unit.deleted_at) return { error: "This unit has been deleted." };
@@ -135,6 +140,38 @@ export async function PATCH(
 
       for (const [key, coerce] of Object.entries(EDITABLE)) {
         if (key in body) setParts.push(`${key} = ${push(coerce(body[key]))}`);
+      }
+
+      // ── Unit Type update ──
+      if ("unit_type" in body) {
+        if (body.unit_type === null || body.unit_type === undefined) {
+          return { error: "Unit type is required." };
+        }
+        const rawType = String(body.unit_type).trim().replace(/\s+/g, " ");
+        if (!rawType) {
+          return { error: "Unit type cannot be empty." };
+        }
+        if (rawType.length > MAX_UNIT_TYPE_LEN) {
+          return { error: `Unit type must be ${MAX_UNIT_TYPE_LEN} characters or fewer.` };
+        }
+        if (typeKey(rawType) === "other") {
+          return { error: "Enter a specific unit type instead of 'Other'." };
+        }
+
+        let resolvedUnitType: string = STANDARD_UNIT_TYPES.find(s => typeKey(s) === typeKey(rawType)) ?? "";
+        if (!resolvedUnitType) {
+          const ex = await client.query(
+            `SELECT REGEXP_REPLACE(TRIM(unit_type), '\\s+', ' ', 'g') AS unit_type
+               FROM inventory_units
+              WHERE organization_id = $1 AND deleted_at IS NULL
+                AND LOWER(REGEXP_REPLACE(unit_type, '\\s+', '', 'g')) = $2
+              GROUP BY 1 ORDER BY COUNT(*) DESC LIMIT 1`,
+            [orgId, typeKey(rawType)],
+          );
+          resolvedUnitType = ex.rows[0]?.unit_type ?? rawType;
+        }
+
+        setParts.push(`unit_type = ${push(resolvedUnitType)}`);
       }
 
       // ── Status transition ──
@@ -169,6 +206,27 @@ export async function PATCH(
         }
       }
 
+      // ── Custom status label ──
+      let labelChange: { from: string | null; to: string | null } | null = null;
+      if ("custom_status_label" in body) {
+        const raw = body.custom_status_label;
+        if (raw === null || raw === "" || raw === undefined) {
+          // Clear the label
+          if (unit.custom_status_label) {
+            setParts.push(`custom_status_label = NULL`);
+            labelChange = { from: unit.custom_status_label, to: null };
+          }
+        } else {
+          const label = String(raw).trim();
+          if (label.length > MAX_CUSTOM_LABEL_LEN)
+            return { error: `Custom status label must be ${MAX_CUSTOM_LABEL_LEN} characters or fewer.` };
+          if (label !== (unit.custom_status_label || "")) {
+            setParts.push(`custom_status_label = ${push(label)}`);
+            labelChange = { from: unit.custom_status_label || null, to: label };
+          }
+        }
+      }
+
       if (!setParts.length) return { unit };  // nothing to update
 
       setParts.push(`updated_by = ${push(user_name)}`);
@@ -187,6 +245,20 @@ export async function PATCH(
            VALUES ($1,$2,$3,$4,$5,
                    (SELECT organization_id FROM inventory_units WHERE id = $1))`,
           [Number(id), statusChange.from, statusChange.to, user_name, reason],
+        );
+      }
+
+      if (labelChange) {
+        const fromDesc = labelChange.from ? `"${labelChange.from}"` : "(none)";
+        const toDesc = labelChange.to ? `"${labelChange.to}"` : "(none)";
+        const reason = `custom label: ${fromDesc} → ${toDesc}`;
+        // Record label changes in history using the unit's current operational status
+        // so StatusBadge displays consistently (label changes are not status transitions)
+        await client.query(
+          `INSERT INTO inventory_unit_history (unit_id, old_status, new_status, changed_by, reason, organization_id)
+           VALUES ($1,$2,$3,$4,$5,
+                   (SELECT organization_id FROM inventory_units WHERE id = $1))`,
+          [Number(id), row.status, row.status, user_name, reason],
         );
       }
       return { unit: row };

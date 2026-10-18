@@ -69,9 +69,9 @@ export default function SalesSettingsBells({
   const dropdownGlass = isDark
     ? {}
     : {
-        boxShadow:
-          "0 2px 4px rgba(0,0,0,0.04), 0 8px 20px rgba(158,33,123,0.08), 0 20px 40px rgba(0,0,0,0.10)",
-      };
+      boxShadow:
+        "0 2px 4px rgba(0,0,0,0.04), 0 8px 20px rgba(158,33,123,0.08), 0 20px 40px rgba(0,0,0,0.10)",
+    };
 
   return (
     <>
@@ -92,7 +92,7 @@ export default function SalesSettingsBells({
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -6, scale: 0.98 }}
               transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-              className={`absolute top-12 -right-2 sm:right-0 w-[calc(100vw-24px)] sm:w-80 max-w-[320px] rounded-xl shadow-2xl z-50 overflow-hidden border ${dropdownClasses}`}
+              className={`absolute top-12 -right-2 sm:right-0 w-[calc(100vw-24px)] sm:w-80 max-w-[320px] rounded-2xl shadow-md z-50 overflow-hidden ${dropdownClasses}`}
               style={dropdownGlass}
             >
               <NotificationPopover
@@ -112,11 +112,10 @@ export default function SalesSettingsBells({
                 )}
                 renderMetric={(n) => (
                   <span
-                    className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full border ${
-                      n.visitDiff === 0
-                        ? "text-red-400 bg-red-500/10 border-red-500/30"
-                        : "text-yellow-400 bg-yellow-500/10 border-yellow-500/30"
-                    }`}
+                    className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full border ${n.visitDiff === 0
+                      ? "text-red-400 bg-red-500/10 border-red-500/30"
+                      : "text-yellow-400 bg-yellow-500/10 border-yellow-500/30"
+                      }`}
                   >
                     {n.visitDiff === 0 ? "TODAY" : n.visitDiff === 1 ? "TOMORROW" : `IN ${n.visitDiff}D`}
                   </span>
@@ -144,7 +143,7 @@ export default function SalesSettingsBells({
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -6, scale: 0.98 }}
               transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-              className={`absolute top-12 -right-2 sm:right-0 w-[calc(100vw-24px)] sm:w-80 max-w-[320px] rounded-xl shadow-2xl z-50 overflow-hidden border ${dropdownClasses}`}
+              className={`absolute top-12 -right-2 sm:right-0 w-[calc(100vw-24px)] sm:w-80 max-w-[320px] rounded-2xl shadow-md z-50 overflow-hidden  ${dropdownClasses}`}
               style={dropdownGlass}
             >
               <NotificationPopover
@@ -164,11 +163,10 @@ export default function SalesSettingsBells({
                     </p>
                     {n.interestStatus && n.interestStatus !== "Pending" && (
                       <span
-                        className={`inline-block mt-1 text-[9px] font-bold uppercase px-2 py-0.5 rounded-full border ${
-                          n.interestStatus === "Interested"
-                            ? "text-green-400 border-green-500/30 bg-green-500/10"
-                            : "text-yellow-400 border-yellow-500/30 bg-yellow-500/10"
-                        }`}
+                        className={`inline-block mt-1 text-[9px] font-bold uppercase px-2 py-0.5 rounded-full border ${n.interestStatus === "Interested"
+                          ? "text-green-400 border-green-500/30 bg-green-500/10"
+                          : "text-yellow-400 border-yellow-500/30 bg-yellow-500/10"
+                          }`}
                       >
                         {n.interestStatus}
                       </span>
@@ -178,13 +176,12 @@ export default function SalesSettingsBells({
                 renderMetric={(n) => (
                   <>
                     <div
-                      className={`text-xs font-black ${
-                        (n.daysSince ?? 0) >= 7
-                          ? "text-red-400"
-                          : (n.daysSince ?? 0) >= 4
+                      className={`text-xs font-black ${(n.daysSince ?? 0) >= 7
+                        ? "text-red-400"
+                        : (n.daysSince ?? 0) >= 4
                           ? "text-orange-400"
                           : "text-yellow-400"
-                      }`}
+                        }`}
                     >
                       {n.daysSince}d
                     </div>

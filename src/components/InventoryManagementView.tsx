@@ -33,10 +33,11 @@ export interface InventoryUnit {
   project_id?: number | null; tower_id?: number | null;
   held_by?: string | null; held_for_lead_id?: number | null; hold_reason?: string | null;
   is_corner?: boolean | null; is_park_facing?: boolean | null; parking_slots?: number | null;
+  custom_status_label?: string | null;
   created_by: string | null; updated_by: string | null;
   created_at: string; updated_at: string; deleted_at: string | null;
   lead_name?: string | null; lead_phone?: string | null; lead_email?: string | null;
-  lead_assigned_to?: string | null;   // ← NEW
+  lead_assigned_to?: string | null;
   booking_number?: string | null; booking_status?: string | null; booking_primary_name?: string | null;
 }
 interface HistoryRow { id: number; old_status: string | null; new_status: string; changed_by: string | null; reason: string | null; changed_at: string; }
@@ -49,31 +50,58 @@ const STATUS: Record<string, SC> = {
   blocked: { label: "Blocked", text: "text-[#8E8E93] dark:text-[#8E8E93]", border: "border-[#8E8E93]/30 dark:border-[#8E8E93]/30", bg: "bg-[#F2F2F7] dark:bg-[#2C2C2E]", hex: "#8E8E93" },
   on_hold: { label: "On Hold", text: "text-[#FF9500] dark:text-[#FF9F0A]", border: "border-[#FF9500]/30 dark:border-[#FF9F0A]/30", bg: "bg-[#FFF4E5] dark:bg-[#FF9F0A]/15", hex: "#FF9500" },
   registered: { label: "Registered", text: "text-[#AF52DE] dark:text-[#BF5AF2]", border: "border-[#AF52DE]/30 dark:border-[#BF5AF2]/30", bg: "bg-[#F7EBFC] dark:bg-[#BF5AF2]/15", hex: "#AF52DE" },
-  refuge_area: { label: "Refuge Area", text: "text-[#8E8E93] dark:text-[#8E8E93]", border: "border-[#8E8E93]/30 dark:border-[#8E8E93]/30", bg: "bg-[#F2F2F7] dark:bg-[#2C2C2E]", hex: "#8E8E93" },
-  unfinished: { label: "Unfinished", text: "text-[#FF9500] dark:text-[#FF9F0A]", border: "border-[#FF9500]/30 dark:border-[#FF9F0A]/30", bg: "bg-[#FFF4E5] dark:bg-[#FF9F0A]/15", hex: "#FF9500" },
+  refuge_area: { label: "Refuge Area", text: "text-[#A2845E] dark:text-[#BCA383]", border: "border-[#A2845E]/30 dark:border-[#BCA383]/30", bg: "bg-[#F7F4F0] dark:bg-[#BCA383]/15", hex: "#A2845E" },
+  unfinished: { label: "Unfinished", text: "text-[#F4D03F] dark:text-[#F4D03F]", border: "border-[#F4D03F]/30 dark:border-[#F4D03F]/30", bg: "bg-[#FEF9E7] dark:bg-[#F4D03F]/15", hex: "#F4D03F" },
   cancelled: { label: "Cancelled", text: "text-[#FF3B30] dark:text-[#FF453A]", border: "border-[#FF3B30]/30 dark:border-[#FF453A]/30", bg: "bg-[#FFECEB] dark:bg-[#FF453A]/15", hex: "#FF3B30" },
 };
 const sc = (s: string): SC => STATUS[s] || { label: s, text: "text-[#8E8E93] dark:text-[#8E8E93]", border: "border-[#8E8E93]/30", bg: "bg-[#F2F2F7] dark:bg-[#2C2C2E]", hex: "#8E8E93" };
-export const getStatusColor = sc;
 const STATUS_KEYS = Object.keys(STATUS);
 
-const DUPLICATE_HEX = "#FF3B30";
+// ── Deterministic color for custom labels ──
+const CUSTOM_LABEL_PALETTE: { hex: string; text: string; bg: string; border: string }[] = [
+  { hex: "#E91E63", text: "text-[#E91E63] dark:text-[#F06292]", bg: "bg-[#FCE4EC] dark:bg-[#E91E63]/15", border: "border-[#E91E63]/30 dark:border-[#F06292]/30" },
+  { hex: "#9C27B0", text: "text-[#9C27B0] dark:text-[#CE93D8]", bg: "bg-[#F3E5F5] dark:bg-[#9C27B0]/15", border: "border-[#9C27B0]/30 dark:border-[#CE93D8]/30" },
+  { hex: "#3F51B5", text: "text-[#3F51B5] dark:text-[#9FA8DA]", bg: "bg-[#E8EAF6] dark:bg-[#3F51B5]/15", border: "border-[#3F51B5]/30 dark:border-[#9FA8DA]/30" },
+  { hex: "#00897B", text: "text-[#00897B] dark:text-[#80CBC4]", bg: "bg-[#E0F2F1] dark:bg-[#00897B]/15", border: "border-[#00897B]/30 dark:border-[#80CBC4]/30" },
+  { hex: "#2E7D32", text: "text-[#2E7D32] dark:text-[#A5D6A7]", bg: "bg-[#E8F5E9] dark:bg-[#2E7D32]/15", border: "border-[#2E7D32]/30 dark:border-[#A5D6A7]/30" },
+  { hex: "#F57F17", text: "text-[#F57F17] dark:text-[#FFD54F]", bg: "bg-[#FFFDE7] dark:bg-[#F57F17]/15", border: "border-[#F57F17]/30 dark:border-[#FFD54F]/30" },
+  { hex: "#E65100", text: "text-[#E65100] dark:text-[#FFB74D]", bg: "bg-[#FFF3E0] dark:bg-[#E65100]/15", border: "border-[#E65100]/30 dark:border-[#FFB74D]/30" },
+  { hex: "#455A64", text: "text-[#455A64] dark:text-[#B0BEC5]", bg: "bg-[#ECEFF1] dark:bg-[#455A64]/15", border: "border-[#455A64]/30 dark:border-[#B0BEC5]/30" },
+  { hex: "#5C6BC0", text: "text-[#5C6BC0] dark:text-[#C5CAE9]", bg: "bg-[#E8EAF6] dark:bg-[#5C6BC0]/15", border: "border-[#5C6BC0]/30 dark:border-[#C5CAE9]/30" },
+  { hex: "#00ACC1", text: "text-[#00ACC1] dark:text-[#80DEEA]", bg: "bg-[#E0F7FA] dark:bg-[#00ACC1]/15", border: "border-[#00ACC1]/30 dark:border-[#80DEEA]/30" },
+  { hex: "#C62828", text: "text-[#C62828] dark:text-[#EF9A9A]", bg: "bg-[#FFEBEE] dark:bg-[#C62828]/15", border: "border-[#C62828]/30 dark:border-[#EF9A9A]/30" },
+  { hex: "#6A1B9A", text: "text-[#6A1B9A] dark:text-[#E1BEE7]", bg: "bg-[#F3E5F5] dark:bg-[#6A1B9A]/15", border: "border-[#6A1B9A]/30 dark:border-[#E1BEE7]/30" },
+];
 
-type UnitTypeColor = { ink: string; darkInk: string };
-const UNIT_TYPE_COLORS: Record<string, UnitTypeColor> = {
-  "1RK": { ink: "#8E8E93", darkInk: "#98989D" },
-  "1BHK": { ink: "#34C759", darkInk: "#32D74B" },
-  "1.5BHK": { ink: "#30B0C7", darkInk: "#32ADE6" },
-  "2BHK": { ink: "#007AFF", darkInk: "#0A84FF" },
-  "2.5BHK": { ink: "#5856D6", darkInk: "#5E5CE6" },
-  "3BHK": { ink: "#AF52DE", darkInk: "#BF5AF2" },
-  "3.5BHK": { ink: "#FF2D55", darkInk: "#FF375F" },
-  "4BHK": { ink: "#FF9500", darkInk: "#FF9F0A" },
-  "4.5BHK": { ink: "#FF3B30", darkInk: "#FF453A" },
-  "5BHK": { ink: "#A2845E", darkInk: "#AC8E68" },
-  "PENTHOUSE": { ink: "#D4AF37", darkInk: "#F3C53B" },
-  "SHOP": { ink: "#FF2D55", darkInk: "#FF375F" },
-  "OFFICE": { ink: "#32ADE6", darkInk: "#64D2FF" },
+function hashLabel(label: string): number {
+  let h = 0;
+  for (let i = 0; i < label.length; i++) h = ((h << 5) - h + label.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+function customLabelColor(label: string): SC {
+  const c = CUSTOM_LABEL_PALETTE[hashLabel(label.toLowerCase()) % CUSTOM_LABEL_PALETTE.length];
+  return { label, text: c.text, border: c.border, bg: c.bg, hex: c.hex };
+}
+
+// ── Full-tile Unit Type Color Palette ──
+type UnitTypePalette = { lightBg: string; lightText: string; lightBorder: string; darkBg: string; darkText: string; darkBorder: string; };
+
+const UNIT_TYPE_COLORS: Record<string, UnitTypePalette> = {
+  "1RK": { lightBg: "#E8E9ED", lightText: "#454751", lightBorder: "#C6C8D0", darkBg: "#282A30", darkText: "#B5B7C2", darkBorder: "#454854" },
+  "1BHK": { lightBg: "#DDF3E3", lightText: "#245C37", lightBorder: "#9ACDAB", darkBg: "#1A3324", darkText: "#A3D4B6", darkBorder: "#2E5C40" },
+  "1.5BHK": { lightBg: "#D8F0F3", lightText: "#205C64", lightBorder: "#93CCD3", darkBg: "#143036", darkText: "#8DCCD6", darkBorder: "#265761" },
+  "2BHK": { lightBg: "#DFEBFF", lightText: "#214F96", lightBorder: "#A4C4FF", darkBg: "#15274D", darkText: "#9EBEF2", darkBorder: "#2A4B82" },
+  "2.5BHK": { lightBg: "#E5E3FA", lightText: "#464080", lightBorder: "#B9B3E8", darkBg: "#24204A", darkText: "#AEA8E6", darkBorder: "#3D377A" },
+  "3BHK": { lightBg: "#F0DFF5", lightText: "#713D83", lightBorder: "#D7B0E2", darkBg: "#361B40", darkText: "#D9A8E8", darkBorder: "#5E2F70" },
+  "3.5BHK": { lightBg: "#F9E0E7", lightText: "#8A314A", lightBorder: "#E9ADBE", darkBg: "#421522", darkText: "#ECAEBF", darkBorder: "#73243C" },
+  "4BHK": { lightBg: "#F8E8D4", lightText: "#85521D", lightBorder: "#E7C092", darkBg: "#40260D", darkText: "#E3B588", darkBorder: "#6E4217" },
+  "4.5BHK": { lightBg: "#FDEAE6", lightText: "#8A2A20", lightBorder: "#F2B8B1", darkBg: "#42140F", darkText: "#ECA8A1", darkBorder: "#75231A" },
+  "5BHK": { lightBg: "#F0EAE1", lightText: "#6B5840", lightBorder: "#D4C7B3", darkBg: "#332A1E", darkText: "#D4C7B3", darkBorder: "#5C4B36" },
+  "PENTHOUSE": { lightBg: "#F3E9C9", lightText: "#725D20", lightBorder: "#DCCC91", darkBg: "#382D0F", darkText: "#E0CC8D", darkBorder: "#614D1A" },
+  "SHOP": { lightBg: "#FCE4EC", lightText: "#881B41", lightBorder: "#F48FB1", darkBg: "#400D1F", darkText: "#F48FB1", darkBorder: "#701636" },
+  "OFFICE": { lightBg: "#E0F2F1", lightText: "#00695C", lightBorder: "#80CBC4", darkBg: "#00332D", darkText: "#80CBC4", darkBorder: "#00594F" },
+  "DUPLEX": { lightBg: "#EAE2FA", lightText: "#593A91", lightBorder: "#C6B0EF", darkBg: "#2A1D45", darkText: "#BFA4E6", darkBorder: "#4A3275" },
 };
 
 export const normalizeUnitType = (v: unknown) => String(v ?? "").toUpperCase().replace(/\s+/g, "").trim();
@@ -81,7 +109,7 @@ export const normalizeUnitType = (v: unknown) => String(v ?? "").toUpperCase().r
 const UNIT_TYPE_LABELS: Record<string, string> = {
   "1RK": "1 RK", "1BHK": "1BHK", "1.5BHK": "1.5BHK", "2BHK": "2BHK", "2.5BHK": "2.5BHK",
   "3BHK": "3BHK", "3.5BHK": "3.5BHK", "4BHK": "4BHK", "4.5BHK": "4.5BHK", "5BHK": "5BHK",
-  "PENTHOUSE": "Penthouse", "SHOP": "Shop", "OFFICE": "Office",
+  "PENTHOUSE": "Penthouse", "SHOP": "Shop", "OFFICE": "Office", "DUPLEX": "Duplex"
 };
 
 export const unitTypeLabel = (v: unknown): string => {
@@ -94,39 +122,38 @@ const hashHue = (s: string) => {
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360;
   return h;
 };
-const hslToHex = (h: number, s: number, l: number) => {
-  const a = (s / 100) * Math.min(l / 100, 1 - l / 100);
-  const f = (n: number) => {
-    const k = (n + h / 30) % 12;
-    const v = l / 100 - a * Math.max(-1, Math.min(k - 3, Math.min(9 - k, 1)));
-    return Math.round(255 * v).toString(16).padStart(2, "0");
-  };
-  return `#${f(0)}${f(8)}${f(4)}`;
-};
 
-export function getUnitTypeColor(unitType: string, isDark = false): { key: string; ink: string; fill: string; border: string; label: string } {
+export function getUnitTypeColor(unitType: string, isDark = false): { key: string; bg: string; text: string; label: string; border: string } {
   const key = normalizeUnitType(unitType);
   const found = UNIT_TYPE_COLORS[key];
-  const ink = found
-    ? (isDark ? found.darkInk : found.ink)
-    : hslToHex(hashHue(key || "?"), 42, isDark ? 65 : 42);
+
+  let bg, text, border;
+  if (found) {
+    bg = isDark ? found.darkBg : found.lightBg;
+    text = isDark ? found.darkText : found.lightText;
+    border = isDark ? found.darkBorder : found.lightBorder;
+  } else {
+    // Deterministic fallback for custom unit types
+    const h = hashHue(key || "?");
+    bg = isDark ? `hsl(${h}, 40%, 15%)` : `hsl(${h}, 40%, 92%)`;
+    text = isDark ? `hsl(${h}, 50%, 75%)` : `hsl(${h}, 60%, 25%)`;
+    border = isDark ? `hsl(${h}, 50%, 30%)` : `hsl(${h}, 50%, 75%)`;
+  }
+
   return {
     key,
-    ink,
-    fill: `${ink}1A`,      // 10% — a tint, never a block of colour
-    border: `${ink}59`,    // 35%
+    bg,
+    text,
+    border,
     label: unitTypeLabel(unitType),
   };
 }
 
-const normFlat = (v: unknown) => String(v ?? "").trim().toLowerCase();
-
 export interface DuplicateScoped { flat_no?: string | null; tower?: string | null; wing?: string | null }
 
-const dupScope = (u: DuplicateScoped) =>
-  `${String(u.tower ?? "").trim().toLowerCase()}|${String(u.wing ?? "").trim().toLowerCase()}`;
-
+const dupScope = (u: DuplicateScoped) => `${String(u.tower ?? "").trim().toLowerCase()}|${String(u.wing ?? "").trim().toLowerCase()}`;
 const dupKey = (u: DuplicateScoped) => `${dupScope(u)}|${normFlat(u.flat_no)}`;
+const normFlat = (v: unknown) => String(v ?? "").trim().toLowerCase();
 
 export function findDuplicateFlats(units: DuplicateScoped[]): Set<string> {
   const seen = new Map<string, number>();
@@ -152,7 +179,7 @@ function UnitTypeChip({ unitType, isDark }: { unitType: string; isDark: boolean 
   return (
     <span
       className="inline-flex items-center px-2 py-0.5 rounded-[6px] text-[10px] font-semibold tracking-wide border max-w-full truncate"
-      style={{ color: c.ink, backgroundColor: c.fill, borderColor: c.border }}
+      style={{ color: c.text, backgroundColor: c.bg, borderColor: c.border }}
     >
       {c.label}
     </span>
@@ -180,9 +207,18 @@ const linkLabel = (u: InventoryUnit) => {
 };
 
 const EDITABLE_STATUSES = ["available", "blocked", "refuge_area", "unfinished"];
-const UNIT_TYPES = ["1 RK", "1BHK", "1.5BHK", "2BHK", "2.5BHK", "3BHK", "3.5BHK", "4BHK", "Penthouse", "Shop", "Office", "Other"];
+const UNIT_TYPES = ["1 RK", "1BHK", "1.5BHK", "2BHK", "2.5BHK", "3BHK", "3.5BHK", "4BHK", "Penthouse", "Shop", "Office", "Duplex"];
 
-function StatusBadge({ status }: { status: string }) {
+function StatusBadge({ status, customLabel }: { status: string; customLabel?: string | null }) {
+  if (customLabel) {
+    const cl = customLabelColor(customLabel);
+    return (
+      <span className="inline-flex items-center gap-1.5 flex-shrink-0">
+        <span className={`px-2 py-0.5 rounded-[6px] text-[10px] font-semibold uppercase tracking-wider inline-flex items-center ${cl.text} ${cl.bg}`}>{cl.label}</span>
+        <span className={`px-1.5 py-0.5 rounded-[5px] text-[9px] font-medium uppercase tracking-wider inline-flex items-center ${sc(status).text} opacity-60`}>{sc(status).label}</span>
+      </span>
+    );
+  }
   const c = sc(status);
   return <span className={`px-2 py-0.5 rounded-[6px] text-[10px] font-semibold uppercase tracking-wider inline-flex items-center flex-shrink-0 ${c.text} ${c.bg}`}>{c.label}</span>;
 }
@@ -207,12 +243,12 @@ const COLUMNS: Column[] = [
 interface Props {
   user: { name: string; role: string };
   isDark: boolean;
-  t: any; // Kept for prop compatibility, but Apple UI classes override it below.
+  t: any;
   onOpenLead?: (leadId: number) => void;
   onOpenBooking?: (bookingId: number) => void;
 }
 
-const blankFilters = { search: "", project_name: "", tower: "", wing: "", floor: "", unit_type: "", status: "", min_area: "", max_area: "" };
+const blankFilters = { search: "", project_name: "", tower: "", wing: "", floor: "", unit_type: "", status: "", custom_status_label: "", min_area: "", max_area: "" };
 
 interface TowerSummary {
   key: string; tower: string; tower_id: number | null;
@@ -370,6 +406,7 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
   const isAdminUser = (user?.role || "").trim().toLowerCase() === "admin";
 
   const [buildings, setBuildings] = useState<BuildingSummary[]>([]);
+  const [savedTypes, setSavedTypes] = useState<string[]>([]);
   const [bLoading, setBLoading] = useState(true);
   const [bFilters, setBFilters] = useState({ search: "", project: "", tower: "", status: "" });
   const [showAddBuilding, setShowAddBuilding] = useState(false);
@@ -388,6 +425,7 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
   const [filters, setFilters] = useState({ ...blankFilters });
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "tower", dir: "asc" });
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [orgCustomLabels, setOrgCustomLabels] = useState<string[]>([]);
   const [colW, setColW] = useState<Record<string, number>>(() => Object.fromEntries(COLUMNS.map(c => [c.key, c.w])));
 
   // ── Excel-style column filter/sort ──
@@ -405,7 +443,7 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
   } = useColumnFilters();
 
   const invGetDisplayValue = useCallback((u: InventoryUnit, colKey: string): string => {
-    if (colKey === "status") return sc(u.status).label;
+    if (colKey === "status") return u.custom_status_label ? `${u.custom_status_label} (${sc(u.status).label})` : sc(u.status).label;
     if (colKey === "unit_type") return unitTypeLabel(u.unit_type);
     if (colKey === "carpet_area_sqft") return area(u.carpet_area_sqft);
     if (colKey === "source") return String(u.source || "").replace("_", " ");
@@ -487,6 +525,31 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
 
   useEffect(() => { fetchBuildings(); }, [fetchBuildings]);
 
+  const fetchCustomLabels = useCallback(async () => {
+    try {
+      const res = await fetch("/api/inventory/custom-labels", { credentials: "include" });
+      const json = await res.json();
+      if (json.success) setOrgCustomLabels(json.data.map((d: any) => d.label));
+    } catch { /* custom-labels table may not exist yet */ }
+  }, []);
+  useEffect(() => { fetchCustomLabels(); }, [fetchCustomLabels]);
+
+  const fetchUnitTypes = useCallback(async () => {
+    try {
+      const res = await fetch("/api/inventory?view=unit_types", { credentials: "include" });
+      const json = await res.json();
+      if (json?.success) setSavedTypes((json.data || []).map((r: any) => String(r.unit_type)));
+    } catch { /* */ }
+  }, []);
+  useEffect(() => { fetchUnitTypes(); }, [fetchUnitTypes]);
+
+  const typeOptions = useMemo(() => {
+    const seen = new Set(UNIT_TYPES.map(normalizeUnitType));
+    seen.add("OTHER");
+    const extra = savedTypes.filter(v => { const k = normalizeUnitType(v); if (!k || seen.has(k)) return false; seen.add(k); return true; });
+    return [...UNIT_TYPES, ...extra.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))];
+  }, [savedTypes]);
+
   const buildingsRef = useRef<BuildingSummary[]>([]);
   useEffect(() => { buildingsRef.current = buildings; }, [buildings]);
 
@@ -511,6 +574,7 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
     if (filters.floor) p.set("floor", filters.floor);
     if (filters.unit_type) p.set("unit_type", filters.unit_type);
     if (filters.status) p.set("status", filters.status);
+    if (filters.custom_status_label) p.set("custom_status_label", filters.custom_status_label);
     if (filters.min_area) p.set("min_area", filters.min_area);
     if (filters.max_area) p.set("max_area", filters.max_area);
     p.set("limit", "500");
@@ -677,8 +741,8 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
   const toggleAll = () => setSelected(allSelected ? new Set() : new Set(sorted.map(u => u.id)));
   const toggleOne = (id: number) => setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
-  const afterCreate = () => { setSelected(new Set()); fetchUnits(); fetchBuildings(); };
-  const afterDelete = () => { setSelected(new Set()); setDeleteTarget(null); setBulkDelOpen(false); setBldDelOpen(false); fetchUnits(); fetchBuildings(); };
+  const afterCreate = () => { setSelected(new Set()); fetchUnits(); fetchBuildings(); fetchUnitTypes(); fetchCustomLabels(); };
+  const afterDelete = () => { setSelected(new Set()); setDeleteTarget(null); setBulkDelOpen(false); setBldDelOpen(false); fetchUnits(); fetchBuildings(); fetchUnitTypes(); fetchCustomLabels(); };
 
   const applyBuildingRename = useCallback((projectId: number, nextName: string) => {
     const nextKey = nextName.trim().toLowerCase();
@@ -766,9 +830,6 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
     return <span className={`text-[11px] ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>—</span>;
   };
 
-  // ═════════════════════════════════════════════════════════════════════════
-  // Level 1 — the building list
-  // ═════════════════════════════════════════════════════════════════════════
   if (!building) {
     const q = bFilters.search.trim().toLowerCase();
     const towerNames = [...new Set(buildings.flatMap(b => b.towers.map(x => x.tower)).filter(Boolean))].sort();
@@ -783,7 +844,7 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
     const deleteTargetBuilding = buildings.find(b => b.key === deleteBuildingKey && b.project_id != null) || null;
 
     return (
-      <div className={`flex flex-col h-full overflow-hidden p-0 sm:p-0 font-sans antialiased ${isDark ? "bg-[#000000]" : "bg-[#F2F2F7]"}`}>
+      <div className={`flex flex-col h-full overflow-hidden p-0 sm:p-0 font-sans antialiased ${isDark ? "bg-[#121212]" : "bg-[#F2F2F7]"}`}>
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6">
           <div className="flex flex-col gap-1">
             <h1 className={`text-xl sm:text-2xl font-black tracking-tight ${t.accentText}`}>Inventory</h1>
@@ -827,7 +888,7 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
                   <FaTrash /> Delete Building
                 </button>
                 <button onClick={() => setShowAddBuilding(true)}
-                  className={`flex items-center justify-center gap-1.5 text-[13px] font-semibold tracking-wide px-5 py-2 rounded-full transition-all active:scale-95 shadow-[0_2px_8px_rgba(0,122,255,0.24)] hover:shadow-[0_4px_12px_rgba(0,122,255,0.36)] ${isDark ? "bg-[#0A84FF] text-white" : "bg-[#007AFF] text-white"
+                  className={`flex items-center justify-center gap-1.5 text-[13px] font-semibold tracking-wide px-5 py-2 rounded-full transition-all active:scale-95 shadow-[0_2px_8px_rgba(0,122,255,0.24)] hover:shadow-[0_4px_12px_rgba(0,122,255,0.36)] ${isDark ? "bg-[#0A84FF] text-white hover:bg-[#0A84FF]/90" : "bg-[#007AFF] text-white hover:bg-[#007AFF]/90"
                     }`}>
                   <FaPlus /> Add Building
                 </button>
@@ -939,7 +1000,7 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
   return (
     <div className={fullScreen
       ? `fixed inset-0 z-[100] flex flex-col overflow-hidden px-4 pb-2 font-sans antialiased ${isDark ? "bg-[#000000]" : "bg-[#F2F2F7]"}`
-      : `flex flex-col h-full overflow-hidden font-sans antialiased ${isDark ? "bg-[#000000]" : "bg-[#F2F2F7]"}`}>
+      : `flex flex-col h-full overflow-hidden font-sans antialiased ${isDark ? "bg-[#121212]" : "bg-[#F2F2F7]"}`}>
 
       <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar">
 
@@ -981,7 +1042,7 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
 
             {canManage && (
               <div className="relative">
-                <button onClick={() => setAddMenu(v => !v)} className={`flex items-center justify-center gap-1.5 px-4 py-2 text-[13px] font-semibold tracking-wide rounded-full transition-all active:scale-95 shadow-sm ${isDark ? "bg-[#0A84FF] text-white" : "bg-[#007AFF] text-white"}`}>
+                <button onClick={() => setAddMenu(v => !v)} className={`flex items-center justify-center gap-1.5 px-4 py-2 text-[13px] font-semibold tracking-wide rounded-full transition-all active:scale-95 shadow-sm ${isDark ? "bg-[#0A84FF] text-white hover:bg-[#0A84FF]/90" : "bg-[#007AFF] text-white hover:bg-[#007AFF]/90"}`}>
                   <FaPlus className="text-[10px]" /> Add Unit <FaChevronDown className="text-[9px]" />
                 </button>
                 <AnimatePresence>
@@ -1047,7 +1108,7 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
                   const col = getUnitTypeColor(c.unit_type, isDark);
                   return (
                     <span key={c.key} className="text-[11px] font-semibold px-2.5 py-1 rounded-[8px] border"
-                      style={{ color: col.ink, backgroundColor: col.fill, borderColor: col.border }}>
+                      style={{ color: col.text, backgroundColor: col.bg, borderColor: col.border }}>
                       {col.label}: <b>{c.units}</b>
                     </span>
                   );
@@ -1111,7 +1172,7 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
               <select value={filters.unit_type} onChange={e => setFilter({ unit_type: e.target.value })} className={`appearance-none outline-none cursor-pointer pl-3.5 pr-8 py-1.5 rounded-full text-[13px] font-medium tracking-tight transition-colors ${isDark ? "bg-[#2C2C2E] text-white hover:bg-[#3A3A3C]" : "bg-[#E5E5EA] text-black hover:bg-[#D1D1D6]"
                 }`}>
                 <option value="">All types</option>
-                {UNIT_TYPES.map(o => <option key={o} value={o}>{o}</option>)}
+                {typeOptions.map(o => <option key={o} value={o}>{o}</option>)}
               </select>
               <FaChevronDown className={`absolute right-3 top-1/2 -translate-y-1/2 text-[10px] pointer-events-none ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`} />
             </div>
@@ -1124,6 +1185,16 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
               </select>
               <FaChevronDown className={`absolute right-3 top-1/2 -translate-y-1/2 text-[10px] pointer-events-none ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`} />
             </div>
+
+            {orgCustomLabels.length > 0 && (
+              <div className="relative">
+                <select value={filters.custom_status_label} onChange={e => setFilter({ custom_status_label: e.target.value })} className={`appearance-none outline-none cursor-pointer pl-3.5 pr-8 py-1.5 rounded-full text-[13px] font-medium tracking-tight transition-colors ${isDark ? "bg-[#2C2C2E] text-white hover:bg-[#3A3A3C]" : "bg-[#E5E5EA] text-black hover:bg-[#D1D1D6]"}`}>
+                  <option value="">All labels</option>
+                  {orgCustomLabels.map(l => <option key={l} value={l}>{l}</option>)}
+                </select>
+                <FaChevronDown className={`absolute right-3 top-1/2 -translate-y-1/2 text-[10px] pointer-events-none ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`} />
+              </div>
+            )}
 
             <div className="flex items-center gap-2">
               <input value={filters.min_area} onChange={e => setFilter({ min_area: e.target.value })} placeholder="Min sqft" type="number"
@@ -1253,7 +1324,9 @@ export default function InventoryManagementView({ user, isDark, t, onOpenLead, o
       )}
 
       <UnitDrawer unitId={drawerId} onClose={() => setDrawerId(null)} user={user} canManage={canManage} isAdminUser={isAdminUser} isDark={isDark} t={t}
-        onOpenLead={onOpenLead} onOpenBooking={onOpenBooking} onChanged={fetchUnits}
+        unitTypes={typeOptions}
+        onTypeSaved={() => { fetchUnits(); fetchUnitTypes(); fetchBuildings(); }}
+        onOpenLead={onOpenLead} onOpenBooking={onOpenBooking} onChanged={() => { fetchUnits(); fetchCustomLabels(); }}
         onRequestDelete={(u: InventoryUnit) => { setDrawerId(null); setDeleteTarget(u); }} />
     </div>
   );
@@ -1274,7 +1347,7 @@ function TableView({ columns, colW, sort, sorted, t, allSelected, selected, togg
       </span>
     );
     if (key === "unit_type") return <UnitTypeChip unitType={u.unit_type} isDark={isDark} />;
-    if (key === "status") return <StatusBadge status={u.status} />;
+    if (key === "status") return <StatusBadge status={u.status} customLabel={u.custom_status_label} />;
     if (key === "linked") return linkChip(u);
     if (key === "carpet_area_sqft") return area(u.carpet_area_sqft);
     if (key === "source") return <span className={`text-[12px] font-medium ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>{String(u.source || "").replace("_", " ")}</span>;
@@ -1424,28 +1497,37 @@ function TableView({ columns, colW, sort, sorted, t, allSelected, selected, togg
 // ═══════════════════════════════════════════════════════════════════════════
 function UnitCell({ u, t, isDark, duplicate, onClick }: { u: InventoryUnit; t: any; isDark: boolean; duplicate: boolean; onClick: () => void }) {
   const type = getUnitTypeColor(u.unit_type, isDark);
-  const status = sc(u.status);
+  const status = u.custom_status_label ? customLabelColor(u.custom_status_label) : sc(u.status);
+
   return (
     <button
       type="button"
       onClick={onClick}
       title={unitTooltip(u, duplicate)}
-      className="relative w-full min-w-0 h-[64px] px-2 rounded-[14px] flex flex-col items-center justify-center leading-tight transition-transform hover:scale-[1.03] active:scale-95 shadow-sm"
-      style={{
-        backgroundColor: duplicate ? (isDark ? "rgba(255,69,58,0.15)" : "#FFECEB") : type.fill,
-        border: duplicate ? `1.5px solid ${isDark ? "#FF453A" : "#FF3B30"}` : `1px solid ${type.border}`,
+      className={`relative w-full min-w-0 h-[68px] px-2 rounded-[12px] flex flex-col items-center justify-center leading-tight transition-all hover:shadow-[0_4px_12px_rgba(0,0,0,0.06)] dark:hover:shadow-[0_4px_12px_rgba(0,0,0,0.3)] active:scale-[0.98] border overflow-hidden`}
+      style={duplicate ? {
+        backgroundColor: isDark ? "rgba(255,69,58,0.15)" : "#FFECEB",
+        borderColor: isDark ? "#FF453A" : "#FF3B30",
+        color: isDark ? "#FF453A" : "#FF3B30",
+        borderWidth: "1.5px"
+      } : {
+        backgroundColor: type.bg,
+        borderColor: type.border,
+        color: type.text
       }}
     >
       <span
-        className="absolute top-1.5 right-1.5 w-[8px] h-[8px] rounded-full shadow-sm"
+        className="absolute top-2 right-2 w-[6px] h-[6px] rounded-full shadow-sm"
         style={{ backgroundColor: status.hex }}
-        title={status.label}
+        title={u.custom_status_label ? `${u.custom_status_label} (${sc(u.status).label})` : status.label}
       />
-      <span className={`inline-flex items-center gap-1 max-w-full text-[14px] font-semibold tracking-tight ${duplicate ? (isDark ? "text-[#FF453A]" : "text-[#FF3B30]") : (isDark ? "text-white" : "text-black")}`}>
+      <span className="inline-flex items-center gap-1 max-w-full text-[15px] font-semibold tracking-tight">
         {duplicate && <FaExclamationTriangle className="text-[10px] flex-shrink-0" aria-hidden />}
         <span className="truncate">{u.flat_no}</span>
       </span>
-      <span className="text-[10px] font-bold tracking-wide uppercase mt-0.5" style={{ color: type.ink }}>{type.label}</span>
+      <span className="text-[9px] font-bold tracking-wide uppercase mt-1 max-w-[90%] truncate opacity-90">
+        {type.label}
+      </span>
     </button>
   );
 }
@@ -1480,19 +1562,18 @@ function GridView({ floorsGrouped, t, onCellClick, isDuplicate, isDark, ctx }: {
             {typesPresent.map(([key, label]) => {
               const c = getUnitTypeColor(key, isDark);
               return (
-                <span key={key} className="inline-flex items-center gap-1.5 text-[11px] font-semibold tracking-tight">
-                  <span className="w-3.5 h-3.5 rounded-[4px] shadow-sm" style={{ backgroundColor: c.fill, border: `1px solid ${c.ink}` }} />
-                  <span style={{ color: c.ink }}>{label}</span>
+                <span key={key} className="inline-flex items-center gap-1.5 text-[11px] font-semibold tracking-tight px-2 py-0.5 rounded-[6px] border" style={{ backgroundColor: c.bg, color: c.text, borderColor: c.border }}>
+                  {label}
                 </span>
               );
             })}
           </div>
         )}
-        <div className="flex items-center gap-2.5 flex-wrap">
+        <div className="flex items-center gap-3 flex-wrap">
           <span className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>Status</span>
           {STATUS_KEYS.map(s => (
-            <span key={s} className={`inline-flex items-center gap-1.5 text-[11px] font-semibold tracking-tight ${isDark ? "text-white" : "text-black"}`}>
-              <span className="w-3 h-3 rounded-full shadow-sm" style={{ backgroundColor: STATUS[s].hex }} />
+            <span key={s} className={`inline-flex items-center gap-1.5 text-[11px] font-medium tracking-tight ${isDark ? "text-[#EBEBF5]/90" : "text-[#333333]"}`}>
+              <span className="w-2 h-2 rounded-full shadow-sm border border-black/5 dark:border-white/5" style={{ backgroundColor: STATUS[s].hex }} />
               <span>{STATUS[s].label}</span>
             </span>
           ))}
@@ -2173,7 +2254,7 @@ function BuildingDeleteModal({ user, isDark, t, onClose, onDeleted, defaults, bu
 // ═══════════════════════════════════════════════════════════════════════════
 // Unit detail drawer
 // ═══════════════════════════════════════════════════════════════════════════
-function UnitDrawer({ unitId, onClose, user, canManage, isAdminUser, isDark, t, onOpenLead, onOpenBooking, onChanged, onRequestDelete }: any) {
+function UnitDrawer({ unitId, onClose, user, canManage, isAdminUser, isDark, t, onOpenLead, onOpenBooking, onChanged, onRequestDelete, unitTypes = UNIT_TYPES, onTypeSaved }: any) {
   const [unit, setUnit] = useState<InventoryUnit | null>(null);
   const [history, setHistory] = useState<HistoryRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -2182,34 +2263,210 @@ function UnitDrawer({ unitId, onClose, user, canManage, isAdminUser, isDark, t, 
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  // ── Custom status label state ──
+  const [customLabel, setCustomLabel] = useState<string>("");
+  const [customLabelInput, setCustomLabelInput] = useState("");
+  const [showCustomInput, setShowCustomInput] = useState(false);
+  const [availableLabels, setAvailableLabels] = useState<string[]>([]);
+
+  // ── Inline Unit Type Edit State ──
+  const [editingType, setEditingType] = useState(false);
+  const [selectedType, setSelectedType] = useState("");
+  const [customType, setCustomType] = useState("");
+  const [typeBusy, setTypeBusy] = useState(false);
+  const [typeErr, setTypeErr] = useState<string | null>(null);
+  const [typeSuccess, setTypeSuccess] = useState(false);
+
   const load = useCallback(async () => {
     if (unitId == null) return;
-    setLoading(true); setErr(null);
+    setLoading(true); setErr(null); setTypeErr(null);
     try {
       const res = await fetch(`/api/inventory/${unitId}`);
       const json = await res.json();
-      if (json.success) { setUnit(json.data); setHistory(json.data.history || []); setNewStatus(json.data.status); }
+      if (json.success) {
+        setUnit(json.data);
+        setHistory(json.data.history || []);
+        setNewStatus(json.data.status);
+        setCustomLabel(json.data.custom_status_label || "");
+        setCustomLabelInput("");
+        setShowCustomInput(false);
+      }
     } catch { /* */ } finally { setLoading(false); }
   }, [unitId]);
 
-  useEffect(() => { setEditing(false); load(); }, [load]);
+  // Fetch org-scoped custom labels for the dropdown
+  useEffect(() => {
+    fetch("/api/inventory/custom-labels")
+      .then(r => r.json())
+      .then(j => { if (j.success) setAvailableLabels(j.data.map((d: any) => d.label)); })
+      .catch(() => { });
+  }, []);
+
+  useEffect(() => {
+    setEditing(false);
+    setEditingType(false);
+    setTypeErr(null);
+    setTypeSuccess(false);
+    load();
+  }, [load]);
 
   const saveStatus = async () => {
     if (!unit) return;
+
+    // Resolve the custom label to send
+    let labelToSend: string | null = null;
+    if (showCustomInput) {
+      const trimmed = customLabelInput.trim();
+      if (!trimmed) { setErr("Custom status label cannot be empty."); return; }
+      if (trimmed.length > 50) { setErr("Custom label must be 50 characters or fewer."); return; }
+      labelToSend = trimmed;
+    } else if (customLabel) {
+      labelToSend = customLabel;
+    }
+    // If dropdown is set to a standard status and the previous custom label should be cleared
+    const clearLabel = !showCustomInput && !customLabel && unit.custom_status_label;
+
     setBusy(true); setErr(null);
     try {
+      const payload: any = { status: newStatus, user_name: user.name, user_role: user.role };
+      if (labelToSend) payload.custom_status_label = labelToSend;
+      else if (clearLabel) payload.custom_status_label = null;
+
       const res = await fetch(`/api/inventory/${unit.id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus, user_name: user.name, user_role: user.role }),
+        body: JSON.stringify(payload),
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.message || "Failed to update status");
+      // Refresh labels list if a new label was added
+      if (labelToSend && !availableLabels.includes(labelToSend)) {
+        setAvailableLabels(prev => [labelToSend!, ...prev]);
+      }
       setEditing(false); await load(); onChanged?.();
     } catch (e: any) { setErr(e.message); } finally { setBusy(false); }
   };
 
-  const detailRows: Array<[string, React.ReactNode]> = unit ? [
-    ["Type", unitTypeLabel(unit.unit_type)],
+  const availableUnitTypes = useMemo(() => {
+    const raw = unitTypes || UNIT_TYPES;
+    const seen = new Set<string>();
+    const list: string[] = [];
+    for (const t of raw) {
+      const k = normalizeUnitType(t);
+      if (!k || k === "OTHER" || seen.has(k)) continue;
+      seen.add(k);
+      list.push(t);
+    }
+    if (unit?.unit_type) {
+      const cur = unit.unit_type.trim();
+      const curKey = normalizeUnitType(cur);
+      if (curKey && curKey !== "OTHER" && !seen.has(curKey)) {
+        list.push(cur);
+      }
+    }
+    return list;
+  }, [unitTypes, unit?.unit_type]);
+
+  const startEditType = () => {
+    if (!unit) return;
+    const cur = String(unit.unit_type || "").trim();
+    setTypeErr(null);
+    setTypeSuccess(false);
+
+    const isStandard = UNIT_TYPES.some(
+      s => s.replace(/\s+/g, "").toLowerCase() === cur.replace(/\s+/g, "").toLowerCase()
+    );
+
+    if (cur.toLowerCase() === "other") {
+      setSelectedType("Other");
+      setCustomType("");
+    } else {
+      const match = availableUnitTypes.find(
+        o => o.replace(/\s+/g, "").toLowerCase() === cur.replace(/\s+/g, "").toLowerCase()
+      );
+      if (match) {
+        setSelectedType(match);
+        setCustomType(isStandard ? "" : cur);
+      } else if (cur) {
+        setSelectedType("Other");
+        setCustomType(cur);
+      } else {
+        setSelectedType("");
+        setCustomType("");
+      }
+    }
+    setEditingType(true);
+  };
+
+  const cancelEditType = () => {
+    setEditingType(false);
+    setTypeErr(null);
+    setSelectedType("");
+    setCustomType("");
+  };
+
+  const saveUnitType = async () => {
+    if (!unit) return;
+    if (!canManage) {
+      setTypeErr("Only Admin and Sales Managers can edit units.");
+      return;
+    }
+
+    let resolved = selectedType;
+    if (selectedType === "Other") {
+      const trimmed = customType.trim();
+      if (!trimmed) {
+        setTypeErr("Enter the custom unit type.");
+        return;
+      }
+      if (trimmed.length > 50) {
+        setTypeErr("Custom unit type must be 50 characters or fewer.");
+        return;
+      }
+      if (trimmed.toLowerCase() === "other") {
+        setTypeErr("Enter a specific unit type instead of 'Other'.");
+        return;
+      }
+      resolved = trimmed;
+    }
+
+    if (!resolved) {
+      setTypeErr("Please select or enter a unit type.");
+      return;
+    }
+
+    setTypeBusy(true);
+    setTypeErr(null);
+    try {
+      const res = await fetch(`/api/inventory/${unit.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          unit_type: resolved,
+          user_name: user.name,
+          user_role: user.role,
+        }),
+      });
+      const json = await res.json();
+      if (!json.success) {
+        throw new Error(json.message || "Failed to update unit type");
+      }
+
+      const updatedType = json.data?.unit_type ?? resolved;
+      setUnit(prev => (prev ? { ...prev, unit_type: updatedType } : null));
+      setEditingType(false);
+      setTypeSuccess(true);
+      setTimeout(() => setTypeSuccess(false), 3000);
+      onChanged?.();
+      onTypeSaved?.(updatedType);
+      await load();
+    } catch (e: any) {
+      setTypeErr(e.message || "Failed to update unit type");
+    } finally {
+      setTypeBusy(false);
+    }
+  };
+
+  const otherDetailRows: Array<[string, React.ReactNode]> = unit ? [
     ["Carpet area", `${area(unit.carpet_area_sqft)} sqft`],
     ...(num(unit.built_up_area_sqft) ? [["Built-up area", `${area(unit.built_up_area_sqft)} sqft`] as [string, React.ReactNode]] : []),
     ...(unit.facing ? [["Facing", unit.facing] as [string, React.ReactNode]] : []),
@@ -2243,9 +2500,9 @@ function UnitDrawer({ unitId, onClose, user, canManage, isAdminUser, isDark, t, 
                 <>
                   <div className={`rounded-[16px] border p-4 ${isDark ? "bg-[#2C2C2E]/50 border-[#38383A]" : "bg-[#F2F2F7]/50 border-[#E5E5EA]"}`}>
                     <div className="flex items-center justify-between mb-4">
-                      <StatusBadge status={unit.status} />
+                      <StatusBadge status={unit.status} customLabel={unit.custom_status_label} />
                       <div className="flex items-center gap-3">
-                        {canManage && !editing && <button onClick={() => setEditing(true)} className={`text-[12px] font-semibold flex items-center gap-1.5 transition-colors ${isDark ? "text-[#0A84FF] hover:underline" : "text-[#007AFF] hover:underline"}`}><FaPen className="text-[10px]" /> Edit</button>}
+                        {canManage && !editing && <button onClick={() => { setEditing(true); setCustomLabel(unit.custom_status_label || ""); setShowCustomInput(false); setCustomLabelInput(""); }} className={`text-[12px] font-semibold flex items-center gap-1.5 transition-colors ${isDark ? "text-[#0A84FF] hover:underline" : "text-[#007AFF] hover:underline"}`}><FaPen className="text-[10px]" /> Edit</button>}
                         {isAdminUser && (
                           isBookingProtected(unit) ? (
                             <span title="Locked — linked to booking" className={`inline-flex items-center gap-1.5 text-[12px] font-semibold cursor-not-allowed ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
@@ -2259,17 +2516,67 @@ function UnitDrawer({ unitId, onClose, user, canManage, isAdminUser, isDark, t, 
                     </div>
                     {editing && (
                       <div className={`mt-2 pt-4 border-t ${isDark ? "border-[#38383A]" : "border-[#E5E5EA]"}`}>
+                        {/* Operational status dropdown */}
                         <div className="relative mb-3">
                           <select value={newStatus} onChange={e => setNewStatus(e.target.value)} className={`appearance-none w-full rounded-[10px] px-3.5 py-2 text-[13px] font-medium tracking-tight outline-none border transition-colors focus:ring-2 focus:ring-[#007AFF]/50 cursor-pointer ${isDark ? "bg-[#1C1C1E] border-[#38383A] text-white" : "bg-white border-[#E5E5EA] text-black"}`}>
                             {EDITABLE_STATUSES.map(s => <option key={s} value={s}>{STATUS[s].label}</option>)}
                           </select>
                           <FaChevronDown className={`absolute right-3.5 top-1/2 -translate-y-1/2 text-[10px] pointer-events-none ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`} />
                         </div>
+
+                        {/* Custom label selector */}
+                        <p className={`text-[11px] font-semibold uppercase tracking-wider mb-1.5 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>Custom Label</p>
+                        <div className="relative mb-2">
+                          <select
+                            value={showCustomInput ? "__other__" : customLabel}
+                            onChange={e => {
+                              const v = e.target.value;
+                              if (v === "__other__") {
+                                setShowCustomInput(true);
+                                setCustomLabel("");
+                                setCustomLabelInput("");
+                              } else if (v === "") {
+                                setShowCustomInput(false);
+                                setCustomLabel("");
+                                setCustomLabelInput("");
+                              } else {
+                                setShowCustomInput(false);
+                                setCustomLabel(v);
+                                setCustomLabelInput("");
+                              }
+                            }}
+                            className={`appearance-none w-full rounded-[10px] px-3.5 py-2 text-[13px] font-medium tracking-tight outline-none border transition-colors focus:ring-2 focus:ring-[#007AFF]/50 cursor-pointer ${isDark ? "bg-[#1C1C1E] border-[#38383A] text-white" : "bg-white border-[#E5E5EA] text-black"}`}
+                          >
+                            <option value="">None</option>
+                            {availableLabels.map(l => <option key={l} value={l}>{l}</option>)}
+                            <option value="__other__">Other…</option>
+                          </select>
+                          <FaChevronDown className={`absolute right-3.5 top-1/2 -translate-y-1/2 text-[10px] pointer-events-none ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`} />
+                        </div>
+
+                        {showCustomInput && (
+                          <input
+                            value={customLabelInput}
+                            onChange={e => setCustomLabelInput(e.target.value)}
+                            maxLength={50}
+                            placeholder="Enter Custom Status"
+                            className={`w-full rounded-[10px] px-3.5 py-2 text-[13px] font-medium tracking-tight outline-none border transition-colors focus:ring-2 focus:ring-[#007AFF]/50 mb-2 ${isDark ? "bg-[#1C1C1E] border-[#38383A] text-white placeholder-[#636366]" : "bg-white border-[#E5E5EA] text-black placeholder-[#8E8E93]"}`}
+                            autoFocus
+                          />
+                        )}
+
+                        {/* Preview badge */}
+                        {(customLabel || (showCustomInput && customLabelInput.trim())) && (
+                          <div className="mb-2">
+                            <StatusBadge status={newStatus} customLabel={showCustomInput ? customLabelInput.trim() : customLabel} />
+                          </div>
+                        )}
+
                         <p className={`text-[11px] mb-3 leading-relaxed ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>Booked/Registered are set by the booking flow; not manually settable.</p>
                         {err && <p className={`text-[12px] font-medium mb-3 ${isDark ? "text-[#FF453A]" : "text-[#FF3B30]"}`}>{err}</p>}
                         <div className="flex gap-2">
                           <button onClick={saveStatus} disabled={busy} className={`px-4 py-2 rounded-full text-[12px] font-semibold tracking-wide text-white transition-all active:scale-95 disabled:opacity-50 ${isDark ? "bg-[#0A84FF]" : "bg-[#007AFF]"}`}>{busy ? "Saving…" : "Save"}</button>
-                          <button onClick={() => { setEditing(false); setNewStatus(unit.status); setErr(null); }} className={`px-4 py-2 rounded-full text-[12px] font-semibold tracking-wide transition-colors ${isDark ? "bg-[#2C2C2E] hover:bg-[#3A3A3C] text-white" : "bg-[#E5E5EA] hover:bg-[#D1D1D6] text-black"}`}>Cancel</button>
+                          <button onClick={() => { setEditing(false); setNewStatus(unit.status); setCustomLabel(unit.custom_status_label || ""); setShowCustomInput(false); setCustomLabelInput(""); setErr(null); }} className={`px-4 py-2 rounded-full text-[12px] font-semibold tracking-wide transition-colors ${isDark ? "bg-[#2C2C2E] hover:bg-[#3A3A3C] text-white" : "bg-[#E5E5EA] hover:bg-[#D1D1D6] text-black"}`}>Cancel</button>
                         </div>
                       </div>
                     )}
@@ -2278,8 +2585,129 @@ function UnitDrawer({ unitId, onClose, user, canManage, isAdminUser, isDark, t, 
                   <section>
                     <p className={`text-[11px] font-semibold uppercase tracking-wider mb-3 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>Details</p>
                     <div className={`rounded-[16px] border ${isDark ? "border-[#38383A] bg-[#2C2C2E]/20" : "border-[#E5E5EA] bg-white"}`}>
-                      {detailRows.map(([label, value], i) => (
-                        <div key={label} className={`flex items-center justify-between gap-3 px-4 py-3 ${i !== detailRows.length - 1 ? (isDark ? "border-b border-[#38383A]" : "border-b border-[#E5E5EA]") : ""}`}>
+                      {/* ── Type Row (Editable) ── */}
+                      {!editingType ? (
+                        <div className={`flex items-center justify-between gap-3 px-4 py-3 ${otherDetailRows.length > 0 ? (isDark ? "border-b border-[#38383A]" : "border-b border-[#E5E5EA]") : ""}`}>
+                          <span className={`text-[12px] font-medium ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>Type</span>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-[13px] font-semibold tracking-tight text-right tabular-nums ${isDark ? "text-white" : "text-black"}`}>
+                              {unitTypeLabel(unit.unit_type)}
+                            </span>
+                            {typeSuccess && (
+                              <span className="text-[11px] font-semibold text-[#34C759] dark:text-[#32D74B] animate-pulse">
+                                Saved
+                              </span>
+                            )}
+                            {canManage && (
+                              <button
+                                type="button"
+                                onClick={startEditType}
+                                title="Edit unit type"
+                                className={`p-1.5 rounded-full transition-colors ${isDark ? "text-[#0A84FF] hover:bg-[#0A84FF]/15" : "text-[#007AFF] hover:bg-[#007AFF]/10"}`}
+                              >
+                                <FaPen className="text-[10px]" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className={`p-4 ${otherDetailRows.length > 0 ? (isDark ? "border-b border-[#38383A]" : "border-b border-[#E5E5EA]") : ""}`}>
+                          <div className="flex items-center justify-between gap-2 mb-2.5">
+                            <span className={`text-[12px] font-semibold tracking-tight ${isDark ? "text-white" : "text-black"}`}>
+                              Edit Type
+                            </span>
+                            <span className={`text-[11px] font-medium ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
+                              Flat {unit.flat_no}
+                            </span>
+                          </div>
+
+                          <div className="relative mb-2.5">
+                            <select
+                              value={selectedType}
+                              onChange={e => {
+                                const val = e.target.value;
+                                setSelectedType(val);
+                                setTypeErr(null);
+                                if (val === "Other" && !customType) {
+                                  const isStandard = UNIT_TYPES.some(
+                                    s => s.replace(/\s+/g, "").toLowerCase() === String(unit?.unit_type || "").replace(/\s+/g, "").toLowerCase()
+                                  );
+                                  if (!isStandard && unit?.unit_type && unit.unit_type.toLowerCase() !== "other") {
+                                    setCustomType(unit.unit_type);
+                                  }
+                                }
+                              }}
+                              disabled={typeBusy}
+                              className={`appearance-none w-full rounded-[10px] px-3.5 py-2 pr-8 text-[13px] font-medium tracking-tight outline-none border transition-colors focus:ring-2 focus:ring-[#007AFF]/50 cursor-pointer disabled:opacity-50 ${isDark ? "bg-[#1C1C1E] border-[#38383A] text-white" : "bg-white border-[#E5E5EA] text-black"}`}
+                            >
+                              <option value="">Select unit type…</option>
+                              {availableUnitTypes.map(t => (
+                                <option key={t} value={t}>{unitTypeLabel(t)}</option>
+                              ))}
+                              <option value="Other">Other</option>
+                            </select>
+                            <FaChevronDown className={`absolute right-3.5 top-1/2 -translate-y-1/2 text-[10px] pointer-events-none ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`} />
+                          </div>
+
+                          {selectedType === "Other" && (
+                            <div className="mb-2.5">
+                              <label className={`block text-[11px] font-semibold uppercase tracking-wider mb-1.5 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
+                                Enter Custom Unit Type
+                              </label>
+                              <input
+                                type="text"
+                                value={customType}
+                                onChange={e => {
+                                  setCustomType(e.target.value);
+                                  if (typeErr) setTypeErr(null);
+                                }}
+                                onKeyDown={e => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    saveUnitType();
+                                  } else if (e.key === "Escape") {
+                                    cancelEditType();
+                                  }
+                                }}
+                                placeholder="e.g. Studio, Duplex, 1RK"
+                                maxLength={50}
+                                disabled={typeBusy}
+                                autoFocus
+                                className={`w-full rounded-[10px] px-3.5 py-2 text-[13px] font-medium tracking-tight outline-none border transition-colors focus:ring-2 focus:ring-[#007AFF]/50 disabled:opacity-50 ${isDark ? "bg-[#1C1C1E] border-[#38383A] text-white placeholder-[#8E8E93]" : "bg-white border-[#E5E5EA] text-black placeholder-[#8E8E93]"}`}
+                              />
+                            </div>
+                          )}
+
+                          {typeErr && (
+                            <p className={`text-[12px] font-medium mb-2.5 ${isDark ? "text-[#FF453A]" : "text-[#FF3B30]"}`}>
+                              {typeErr}
+                            </p>
+                          )}
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={saveUnitType}
+                              disabled={typeBusy}
+                              className={`px-4 py-1.5 rounded-full text-[12px] font-semibold tracking-wide text-white transition-all active:scale-95 disabled:opacity-50 ${isDark ? "bg-[#0A84FF]" : "bg-[#007AFF]"}`}
+                            >
+                              {typeBusy ? "Saving…" : "Save"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={cancelEditType}
+                              disabled={typeBusy}
+                              className={`px-4 py-1.5 rounded-full text-[12px] font-semibold tracking-wide transition-colors ${isDark ? "bg-[#2C2C2E] hover:bg-[#3A3A3C] text-white" : "bg-[#E5E5EA] hover:bg-[#D1D1D6] text-black"}`}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ── Other Detail Rows ── */}
+                      {otherDetailRows.map(([label, value], i) => (
+                        <div key={label} className={`flex items-center justify-between gap-3 px-4 py-3 ${i !== otherDetailRows.length - 1 ? (isDark ? "border-b border-[#38383A]" : "border-b border-[#E5E5EA]") : ""}`}>
                           <span className={`text-[12px] font-medium ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>{label}</span>
                           <span className={`text-[13px] font-semibold tracking-tight text-right tabular-nums ${isDark ? "text-white" : "text-black"}`}>{value}</span>
                         </div>

@@ -58,11 +58,10 @@ export default function HREmployeeDetail({ employeeId, employeeName, isDark, onB
       <div className="flex flex-wrap gap-1.5">
         {TABS.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors cursor-pointer border ${
-              tab === t.id
-                ? isDark ? "bg-[#2C2C2E] border-[#38383A] text-emerald-400" : "bg-white border-[#E5E5EA] text-emerald-600 shadow-sm"
-                : isDark ? "border-transparent text-[#98989D] hover:bg-[#2C2C2E]/50" : "border-transparent text-[#86868B] hover:bg-gray-100"
-            }`}>
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors cursor-pointer border ${tab === t.id
+              ? isDark ? "bg-[#2C2C2E] border-[#38383A] text-emerald-400" : "bg-white border-[#E5E5EA] text-emerald-600 shadow-sm"
+              : isDark ? "border-transparent text-[#98989D] hover:bg-[#2C2C2E]/50" : "border-transparent text-[#86868B] hover:bg-gray-100"
+              }`}>
             {t.label}
           </button>
         ))}
@@ -615,11 +614,10 @@ function WeekOffTab({ employeeId, isDark, card, textSec, textPri, inputCls, btnP
             {DAYS_OF_WEEK.map((name, i) => {
               const isOff = data?.activeDays?.includes(i);
               return (
-                <div key={i} className={`px-4 py-2.5 rounded-xl text-xs font-bold border ${
-                  isOff
-                    ? "bg-emerald-600/15 border-emerald-500/30 text-emerald-400"
-                    : isDark ? "bg-[#2C2C2E] border-[#38383A] text-[#58585A]" : "bg-[#F5F5F7] border-[#E5E5EA] text-[#C7C7CC]"
-                }`}>
+                <div key={i} className={`px-4 py-2.5 rounded-xl text-xs font-bold border ${isOff
+                  ? "bg-emerald-600/15 border-emerald-500/30 text-emerald-400"
+                  : isDark ? "bg-[#2C2C2E] border-[#38383A] text-[#58585A]" : "bg-[#F5F5F7] border-[#E5E5EA] text-[#C7C7CC]"
+                  }`}>
                   {name} {isOff ? "(Off)" : ""}
                 </div>
               );
@@ -643,11 +641,10 @@ function WeekOffTab({ employeeId, isDark, card, textSec, textPri, inputCls, btnP
                 const isSelected = selectedDays.includes(i);
                 return (
                   <button key={i} onClick={() => toggleDay(i)}
-                    className={`px-4 py-2.5 rounded-xl text-xs font-bold border cursor-pointer transition-colors ${
-                      isSelected
-                        ? "bg-emerald-600 border-emerald-600 text-white"
-                        : isDark ? "bg-[#2C2C2E] border-[#38383A] text-[#98989D] hover:border-emerald-500/50" : "bg-white border-[#D1D1D6] text-[#86868B] hover:border-emerald-400"
-                    }`}>
+                    className={`px-4 py-2.5 rounded-xl text-xs font-bold border cursor-pointer transition-colors ${isSelected
+                      ? "bg-emerald-600 border-emerald-600 text-white"
+                      : isDark ? "bg-[#2C2C2E] border-[#38383A] text-[#98989D] hover:border-emerald-500/50" : "bg-white border-[#D1D1D6] text-[#86868B] hover:border-emerald-400"
+                      }`}>
                     {name}
                   </button>
                 );
@@ -1086,7 +1083,19 @@ function EarningsTab({ employeeId, isDark, card, textSec, textPri }: any) {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [year, setYear] = useState(new Date().getFullYear());
+
+  // Salary form state
+  const [showSalaryForm, setShowSalaryForm] = useState(false);
+  const [salBase, setSalBase] = useState("");
+  const [salEffective, setSalEffective] = useState(new Date().toISOString().slice(0, 10));
+  const [salReason, setSalReason] = useState("");
+  const [salSaving, setSalSaving] = useState(false);
+
+  const inputCls = `w-full rounded-xl px-3 py-2 text-sm border outline-none ${isDark ? "bg-[#2C2C2E] border-[#38383A] text-white" : "bg-white border-[#D1D1D6] text-[#1D1D1F]"}`;
+  const btnPrimary = `px-4 py-2 rounded-xl text-sm font-semibold transition-colors cursor-pointer ${isDark ? "bg-emerald-600 hover:bg-emerald-500 text-white" : "bg-emerald-600 hover:bg-emerald-700 text-white"}`;
+  const btnSecondary = `px-4 py-2 rounded-xl text-sm font-semibold border transition-colors cursor-pointer ${isDark ? "border-[#38383A] text-[#98989D] hover:border-[#58585A]" : "border-[#D1D1D6] text-[#86868B] hover:border-[#AEAEB2]"}`;
 
   const fetchData = useCallback(async () => {
     setLoading(true); setError(null);
@@ -1101,6 +1110,28 @@ function EarningsTab({ employeeId, isDark, card, textSec, textPri }: any) {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  const handleSaveSalary = async () => {
+    const base = Number(salBase);
+    if (!base || base <= 0) { setError("Base salary must be a positive number."); return; }
+    if (!salEffective) { setError("Effective date is required."); return; }
+    setSalSaving(true); setError(null);
+    try {
+      const res = await fetch(`/api/hr/employees/${employeeId}/salary`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ baseSalary: base, effectiveFrom: salEffective, revisionReason: salReason.trim() || null }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.message || `HTTP ${res.status}`);
+      setSuccess(j.message || "Salary revision saved.");
+      setShowSalaryForm(false);
+      setSalBase(""); setSalReason("");
+      fetchData();
+      setTimeout(() => setSuccess(null), 4000);
+    } catch (e: any) { setError(e.message); }
+    finally { setSalSaving(false); }
+  };
+
   if (loading) return <div className={`rounded-2xl animate-pulse h-48 ${isDark ? "bg-[#1C1C1E]" : "bg-gray-100"}`} />;
 
   const salary = data?.salary;
@@ -1111,6 +1142,7 @@ function EarningsTab({ employeeId, isDark, card, textSec, textPri }: any) {
   return (
     <div className="space-y-5">
       {error && <div className="rounded-xl p-3 text-sm font-medium bg-red-500/10 border border-red-500/30 text-red-400">{error}</div>}
+      {success && <div className="rounded-xl p-3 text-sm font-medium bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">{success}</div>}
 
       <div className="flex items-center gap-2">
         <select value={year} onChange={e => setYear(Number(e.target.value))}
@@ -1121,14 +1153,50 @@ function EarningsTab({ employeeId, isDark, card, textSec, textPri }: any) {
 
       {/* Salary section */}
       <div className={`rounded-2xl p-5 ${card}`}>
-        <h3 className={`text-sm font-bold mb-1 ${textPri}`}>Salary Rate</h3>
+        <div className="flex items-center justify-between mb-1">
+          <h3 className={`text-sm font-bold ${textPri}`}>Salary Rate</h3>
+          <button
+            onClick={() => setShowSalaryForm(!showSalaryForm)}
+            className={`text-[10px] px-3 py-1 rounded-lg font-semibold cursor-pointer ${isDark ? "bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25" : "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"}`}
+          >
+            {salary?.currentMonthlyBase != null ? "Revise Salary" : "Set Salary"}
+          </button>
+        </div>
         <p className={`text-[10px] mb-4 ${textSec}`}>{salary?.note || "Configured rates, not verified payment records."}</p>
+
+        {/* Salary form */}
+        {showSalaryForm && (
+          <div className={`rounded-xl p-4 mb-4 space-y-3 ${isDark ? "bg-[#2C2C2E]" : "bg-[#F5F5F7]"}`}>
+            <p className={`text-xs font-bold ${textPri}`}>{salary?.currentMonthlyBase != null ? "Salary Revision" : "Initial Salary Configuration"}</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className={`text-[10px] font-semibold block mb-1 ${textSec}`}>Monthly Base Salary (INR)</label>
+                <input type="number" value={salBase} onChange={e => setSalBase(e.target.value)} placeholder="e.g. 50000" min={1} className={inputCls} />
+              </div>
+              <div>
+                <label className={`text-[10px] font-semibold block mb-1 ${textSec}`}>Effective From</label>
+                <input type="date" value={salEffective} onChange={e => setSalEffective(e.target.value)} className={inputCls} />
+              </div>
+            </div>
+            <div>
+              <label className={`text-[10px] font-semibold block mb-1 ${textSec}`}>Reason (optional)</label>
+              <input value={salReason} onChange={e => setSalReason(e.target.value)} placeholder="e.g. Annual increment, Promotion" className={inputCls} />
+            </div>
+            <div className="flex gap-2">
+              <button onClick={handleSaveSalary} disabled={salSaving} className={btnPrimary}>
+                {salSaving ? "Saving..." : "Save"}
+              </button>
+              <button onClick={() => { setShowSalaryForm(false); setError(null); }} className={btnSecondary}>Cancel</button>
+            </div>
+          </div>
+        )}
+
         {salary?.currentMonthlyBase != null ? (
           <div>
             <p className={`text-2xl font-black ${isDark ? "text-emerald-400" : "text-emerald-600"}`}>{money(salary.currentMonthlyBase)}<span className={`text-xs font-normal ml-1 ${textSec}`}>/month (rate)</span></p>
           </div>
         ) : (
-          <p className={`text-sm ${textSec}`}>No salary rate configured.</p>
+          <p className={`text-sm ${textSec}`}>No salary rate configured. Click &quot;Set Salary&quot; above.</p>
         )}
         {salary?.rateHistory?.length > 0 && (
           <div className="mt-4">

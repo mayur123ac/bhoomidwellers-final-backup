@@ -96,6 +96,13 @@ export async function GET(
       incentiveTotal: Number(r.incentive_total),
       status: r.status,
       exceptionReason: r.exception_reason,
+      submittedAt: r.submitted_at,
+      submittedBy: r.submitted_by,
+      approvedAt: r.approved_at,
+      approvedBy: r.approved_by,
+      rejectedAt: r.rejected_at,
+      rejectedBy: r.rejected_by,
+      rejectionReason: r.rejection_reason,
       adjustments: adjByRecord.get(r.id) || [],
     }));
 
@@ -199,11 +206,11 @@ export async function PATCH(
         [userId, notes || null, periodId]
       );
 
-      // Cascade status to draft records
+      // Cascade status to draft records only — skip individually submitted/approved/rejected
       await query(
-        `UPDATE payroll_records SET status = 'submitted', updated_at = now()
-         WHERE payroll_period_id = $1 AND status = 'draft'`,
-        [periodId]
+        `UPDATE payroll_records SET status = 'submitted', submitted_at = now(), submitted_by = $1, updated_at = now()
+         WHERE payroll_period_id = $2 AND status = 'draft'`,
+        [userId, periodId]
       );
 
       return NextResponse.json({ success: true, message: "Payroll submitted for approval." });
