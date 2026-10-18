@@ -287,7 +287,7 @@ export async function generateMonthlyPayroll(
   // Update period totals
   await client.query(
     `UPDATE payroll_periods SET
-       total_gross = (SELECT COALESCE(SUM(gross_salary), 0) FROM payroll_records WHERE payroll_period_id = $1),
+       total_gross = (SELECT COALESCE(SUM(gross_salary + total_additions), 0) FROM payroll_records WHERE payroll_period_id = $1),
        total_deductions = (SELECT COALESCE(SUM(total_deductions), 0) FROM payroll_records WHERE payroll_period_id = $1),
        total_net = (SELECT COALESCE(SUM(net_payable), 0) FROM payroll_records WHERE payroll_period_id = $1),
        employee_count = (SELECT COUNT(*) FROM payroll_records WHERE payroll_period_id = $1),

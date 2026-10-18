@@ -22,6 +22,8 @@ import {
   IoPersonOutline, IoPerson,
   IoWalletOutline, IoWallet,
   IoChatbubblesOutline, IoChatbubbles,
+  IoMenuOutline, IoCloseOutline,
+  IoLogOutOutline,
 } from "react-icons/io5";
 import { FaCircle, FaFilter, FaSortAlphaDown, FaSortAlphaUp } from "react-icons/fa";
 import SharedColumnFilterDropdown, { useColumnFilters, type FilterableColumn } from "@/components/ColumnFilterDropdown";
@@ -30,6 +32,7 @@ import HeaderClock from "@/components/HeaderClock";
 import UserAvatar from "@/components/UserAvatar";
 import LogoutConfirmDialog from "@/components/LogoutConfirmDialog";
 import PushNotificationInit from "@/components/PushNotificationInit";
+import NewSettingDesign from "@/components/newSettingdesign";
 
 // Recharts dynamic imports (matches admin dashboard pattern for perf)
 const HRCharts = dynamic(() => import("./HRCharts"), { ssr: false });
@@ -75,22 +78,22 @@ interface DashboardData {
 
 // Navigation
 const NAV_ITEMS = [
-  { id: "overview",   icon: IoGridOutline,      activeIcon: IoGrid,      title: "Overview"  },
-  { id: "analytics",  icon: IoStatsChartOutline, activeIcon: IoStatsChart, title: "Analytics" },
-  { id: "workforce",  icon: IoPeopleOutline,     activeIcon: IoPeople,    title: "Live Workforce" },
-  { id: "employees",  icon: IoPersonOutline,     activeIcon: IoPerson,    title: "Employees" },
-  { id: "holidays",   icon: IoCalendarOutline,   activeIcon: IoCalendar,  title: "Holidays" },
-  { id: "payroll",    icon: IoWalletOutline,     activeIcon: IoWallet,    title: "Payroll" },
-  { id: "connect",   icon: IoChatbubblesOutline, activeIcon: IoChatbubbles, title: "HR Connect" },
-  { id: "my-salary", icon: IoWalletOutline,     activeIcon: IoWallet,    title: "My Salary" },
+  { id: "overview", icon: IoGridOutline, activeIcon: IoGrid, title: "Overview" },
+  { id: "analytics", icon: IoStatsChartOutline, activeIcon: IoStatsChart, title: "Analytics" },
+  { id: "workforce", icon: IoPeopleOutline, activeIcon: IoPeople, title: "Live Workforce" },
+  { id: "employees", icon: IoPersonOutline, activeIcon: IoPerson, title: "Employees" },
+  { id: "holidays", icon: IoCalendarOutline, activeIcon: IoCalendar, title: "Holidays" },
+  { id: "payroll", icon: IoWalletOutline, activeIcon: IoWallet, title: "Payroll" },
+  { id: "connect", icon: IoChatbubblesOutline, activeIcon: IoChatbubbles, title: "HR Connect" },
+  { id: "my-salary", icon: IoWalletOutline, activeIcon: IoWallet, title: "My Salary" },
 ];
 
 // ─── Status badge ──────────────────────────────────────────────────────────
 function StatusBadge({ status, isDark }: { status: string; isDark: boolean }) {
   const colors: Record<string, string> = {
-    Active:  isDark ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" : "bg-emerald-100 text-emerald-700 border-emerald-200",
-    Idle:    isDark ? "bg-amber-500/15 text-amber-400 border-amber-500/30"       : "bg-amber-100 text-amber-700 border-amber-200",
-    Offline: isDark ? "bg-gray-500/15 text-gray-400 border-gray-500/30"          : "bg-gray-100 text-gray-500 border-gray-200",
+    Active: isDark ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" : "bg-emerald-100 text-emerald-700 border-emerald-200",
+    Idle: isDark ? "bg-amber-500/15 text-amber-400 border-amber-500/30" : "bg-amber-100 text-amber-700 border-amber-200",
+    Offline: isDark ? "bg-gray-500/15 text-gray-400 border-gray-500/30" : "bg-gray-100 text-gray-500 border-gray-200",
   };
   const dots: Record<string, string> = {
     Active: "bg-emerald-400", Idle: "bg-amber-400", Offline: "bg-gray-400",
@@ -162,7 +165,9 @@ export default function HRDashboard() {
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [activePopup, setActivePopup] = useState<"profile" | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const topbarRef = useRef<HTMLDivElement>(null);
+  const drawerRef = useRef<HTMLDivElement>(null);
 
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -226,6 +231,15 @@ export default function HRDashboard() {
     return () => document.removeEventListener("mousedown", h);
   }, []);
 
+  // Drawer: Escape key closes, body scroll lock
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setDrawerOpen(false); };
+    document.addEventListener("keydown", onKey);
+    document.body.style.overflow = "hidden";
+    return () => { document.removeEventListener("keydown", onKey); document.body.style.overflow = ""; };
+  }, [drawerOpen]);
+
   // Fetch dashboard data
   const fetchData = useCallback(async (days: number, isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -249,22 +263,22 @@ export default function HRDashboard() {
 
   useEffect(() => { fetchData(trendDays); }, [trendDays, fetchData]);
 
-  const handleLogout = () => { cleanupPushOnLogout().catch(() => {}); clearCrmSession(); router.replace("/"); };
+  const handleLogout = () => { cleanupPushOnLogout().catch(() => { }); clearCrmSession(); router.replace("/"); };
 
   // Theme tokens
-  const bgApp     = isDark ? "bg-[#000000]"                               : "bg-[#F5F5F7]";
-  const bgSidebar = isDark ? "bg-[#1C1C1E]/90 border-r border-[#38383A]"  : "bg-[#F5F5F7]/90 border-r border-[#E5E5EA]";
-  const textPrimary   = isDark ? "text-white"     : "text-[#1D1D1F]";
+  const bgApp = isDark ? "bg-[#000000]" : "bg-[#F5F5F7]";
+  const bgSidebar = isDark ? "bg-[#1C1C1E]/90 border-r border-[#38383A]" : "bg-[#F5F5F7]/90 border-r border-[#E5E5EA]";
+  const textPrimary = isDark ? "text-white" : "text-[#1D1D1F]";
   const textSecondary = isDark ? "text-[#98989D]" : "text-[#86868B]";
-  const textAccent    = isDark ? "text-emerald-400" : "text-emerald-600";
+  const textAccent = isDark ? "text-emerald-400" : "text-emerald-600";
 
   const activeNavItem = NAV_ITEMS.find((n) => n.id === activeTab);
 
   // Derived KPIs
   const totalEmployees = data?.workforceByRole.reduce((s, r) => s + r.count, 0) ?? 0;
-  const totalPresent   = data?.todayWorkforce.present ?? 0;
-  const totalAbsent    = data?.todayWorkforce.absent  ?? 0;
-  const activeNow      = data?.liveWorkforce.active   ?? 0;
+  const totalPresent = data?.todayWorkforce.present ?? 0;
+  const totalAbsent = data?.todayWorkforce.absent ?? 0;
+  const activeNow = data?.liveWorkforce.active ?? 0;
 
   return (
     <div className={`flex flex-col md:flex-row h-[100dvh] font-sans overflow-hidden transition-colors duration-300 ${bgApp} ${textPrimary}`}>
@@ -295,9 +309,8 @@ export default function HRDashboard() {
             const isActive = activeTab === id;
             return (
               <button key={id} onClick={() => setActiveTab(id)}
-                className={`flex items-center gap-3 px-2.5 py-2.5 rounded-xl transition-colors duration-200 border border-transparent cursor-pointer ${
-                  isActive ? isDark ? "bg-[#2C2C2E] border-[#38383A]" : "bg-white border-[#E5E5EA] shadow-sm" : "hover:bg-[#2C2C2E]/50"
-                }`} title={!sidebarExpanded ? title : undefined}>
+                className={`flex items-center gap-3 px-2.5 py-2.5 rounded-xl transition-colors duration-200 border border-transparent cursor-pointer ${isActive ? isDark ? "bg-[#2C2C2E] border-[#38383A]" : "bg-white border-[#E5E5EA] shadow-sm" : "hover:bg-[#2C2C2E]/50"
+                  }`} title={!sidebarExpanded ? title : undefined}>
                 <div className={`flex-shrink-0 flex items-center justify-center w-6 h-6 ${isActive ? textAccent : textSecondary}`}>
                   {isActive ? <ActiveIcon size={18} /> : <Icon size={18} />}
                 </div>
@@ -307,34 +320,135 @@ export default function HRDashboard() {
           })}
         </nav>
         <div className="mt-auto">
-          <button onClick={() => router.push("/dashboard/settings/profile")}
-            className={`w-full flex items-center gap-3 px-2.5 py-2.5 rounded-xl transition-colors border border-transparent cursor-pointer hover:bg-[#2C2C2E]/50`}
+          <button onClick={() => setActiveTab("settings")}
+            className={`w-full flex items-center gap-3 px-2.5 py-2.5 rounded-xl transition-colors duration-200 border border-transparent cursor-pointer ${activeTab === "settings"
+              ? isDark ? "bg-[#2C2C2E] border-[#38383A]" : "bg-white border-[#E5E5EA] shadow-sm"
+              : "hover:bg-[#2C2C2E]/50"
+              }`}
             title={!sidebarExpanded ? "Settings" : undefined}>
-            <div className={`flex-shrink-0 flex items-center justify-center w-6 h-6 ${textSecondary}`}><IoSettingsOutline size={18} /></div>
-            <span className={`text-xs font-medium whitespace-nowrap transition-all duration-300 ${textSecondary} ${sidebarExpanded ? "opacity-100" : "opacity-0"}`}>Settings</span>
+            <div className={`flex-shrink-0 flex items-center justify-center w-6 h-6 ${activeTab === "settings" ? textAccent : textSecondary}`}>
+              {activeTab === "settings" ? <IoSettings size={18} /> : <IoSettingsOutline size={18} />}
+            </div>
+            <span className={`text-xs font-medium whitespace-nowrap transition-all duration-300 ${activeTab === "settings" ? textPrimary : textSecondary} ${sidebarExpanded ? "opacity-100" : "opacity-0"}`}>Settings</span>
           </button>
         </div>
       </aside>
 
-      {/* MOBILE BOTTOM NAV */}
-      <div className={`md:hidden fixed bottom-0 left-0 right-0 z-[100] backdrop-blur-xl border-t flex items-start pt-2 pb-[calc(env(safe-area-inset-bottom)+8px)] justify-around ${bgSidebar}`}>
-        {[...NAV_ITEMS, { id: "settings", icon: IoSettingsOutline, activeIcon: IoSettings, title: "Settings" }].map(({ id, icon: Icon, activeIcon: ActiveIcon, title }) => {
-          const isActive = activeTab === id;
-          return (
-            <button key={id} onClick={() => id === "settings" ? router.push("/dashboard/settings/profile") : setActiveTab(id)}
-              className="flex-1 flex flex-col items-center justify-center gap-1 cursor-pointer">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${isActive ? isDark ? "bg-[#2C2C2E]" : "bg-[#E5E5EA]" : "bg-transparent"}`}>
-                {isActive ? <ActiveIcon size={18} className={textAccent} /> : <Icon size={18} className={textSecondary} />}
+      {/* ── MOBILE HAMBURGER DRAWER ── */}
+      {drawerOpen && (
+        <div
+          className="md:hidden fixed inset-0 z-[200]"
+          aria-modal="true"
+          role="dialog"
+        >
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity duration-300"
+            style={{ animation: "hrDrawerFadeIn 0.25s ease-out" }}
+            onClick={() => setDrawerOpen(false)}
+          />
+          {/* Drawer panel */}
+          <div
+            ref={drawerRef}
+            className={`absolute top-0 left-0 bottom-0 w-[280px] flex flex-col pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] border-r ${isDark ? "bg-[#1C1C1E] border-[#38383A]" : "bg-[#F5F5F7] border-[#E5E5EA]"
+              }`}
+            style={{ animation: "hrDrawerSlideIn 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)" }}
+          >
+            {/* Drawer header */}
+            <div className={`flex items-center justify-between px-5 py-8 border-b ${isDark ? "border-[#38383A]" : "border-[#E5E5EA]"}`}>
+              <div className="flex items-center gap-3">
+                <img src="/assets/logobrowser_trans.png" alt="Logo" className="w-8 h-8 rounded-xl object-cover" />
+                <div className="flex flex-col">
+                  <span className={`font-semibold text-[13px] tracking-tight leading-tight ${textPrimary}`}>Bhoomi CRM</span>
+                  <span className={`text-[10px] ${textSecondary}`}>HR Panel</span>
+                </div>
               </div>
-              <span className={`text-[9px] font-medium ${isActive ? textAccent : textSecondary}`}>{title.replace(" Workforce", "")}</span>
-            </button>
-          );
-        })}
-      </div>
+              <button
+                onClick={() => setDrawerOpen(false)}
+                aria-label="Close menu"
+                className={`w-8 h-8 flex items-center justify-center rounded-full transition-colors cursor-pointer ${isDark ? "hover:bg-[#2C2C2E] text-[#98989D]" : "hover:bg-[#E5E5EA] text-[#86868B]"
+                  }`}
+              >
+                <IoCloseOutline size={20} />
+              </button>
+            </div>
+
+            {/* Nav items */}
+            <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-1">
+              {[...NAV_ITEMS, { id: "settings", icon: IoSettingsOutline, activeIcon: IoSettings, title: "Settings" }].map(({ id, icon: Icon, activeIcon: ActiveIcon, title }) => {
+                const isActive = activeTab === id;
+                return (
+                  <button
+                    key={id}
+                    onClick={() => { setActiveTab(id); setDrawerOpen(false); }}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200 border border-transparent cursor-pointer ${isActive
+                      ? isDark ? "bg-[#2C2C2E] border-[#38383A]" : "bg-white border-[#E5E5EA] shadow-sm"
+                      : isDark ? "hover:bg-[#2C2C2E]" : "hover:bg-white/60"
+                      }`}
+                  >
+                    <div className={`flex-shrink-0 w-6 h-6 flex items-center justify-center ${isActive ? textAccent : textSecondary}`}>
+                      {isActive ? <ActiveIcon size={18} /> : <Icon size={18} />}
+                    </div>
+                    <span className={isActive ? textPrimary : textSecondary}>{title}</span>
+                  </button>
+                );
+              })}
+            </nav>
+
+            {/* Drawer footer — user info + logout */}
+            <div className={`px-6 py-6 border-t ${isDark ? "border-[#38383A]" : "border-[#E5E5EA]"}`}>
+              <div className="flex items-center gap-6 mb-3">
+                <UserAvatar name={user?.name} fallback="H" alt="" />
+                <div className="min-w-0 flex-1">
+                  <p className={`text-[13px] font-semibold truncate ${textPrimary}`}>{user?.name}</p>
+                  <p className={`text-[11px] truncate ${textSecondary}`}>{user?.email}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => { setDrawerOpen(false); setShowLogoutConfirm(true); }}
+                className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[13px] font-medium cursor-pointer transition-colors text-red-500 ${isDark ? "hover:bg-red-500/10" : "hover:bg-red-50"
+                  }`}
+              >
+                <IoLogOutOutline size={16} />
+                Log Out
+              </button>
+            </div>
+          </div>
+
+          {/* Keyframe animations (scoped via style tag) */}
+          <style>{`
+            @keyframes hrDrawerSlideIn { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+            @keyframes hrDrawerFadeIn { from { opacity: 0; } to { opacity: 1; } }
+          `}</style>
+        </div>
+      )}
 
       {/* MAIN */}
-      <div className="flex-1 flex flex-col overflow-hidden relative md:ml-[76px]">
-        <AppHeader isDark={isDark} context={activeNavItem?.title ?? "HR Panel"} role={user?.role || "HR"}>
+      <div className="hr-main-host flex-1 flex flex-col overflow-hidden relative md:ml-[76px]">
+        {/* Mobile: hide AppHeader's built-in mobile logo, replaced by hamburger */}
+        <style>{`
+          @media (max-width: 767px) {
+            .hr-main-host > header > div:first-child > img:first-child { display: none !important; }
+            .hr-main-host > header > div:first-child { padding-left: 40px; }
+          }
+        `}</style>
+
+        {/* Mobile hamburger button — top-left, over AppHeader */}
+        <button
+          type="button"
+          aria-label="Open navigation menu"
+          onClick={() => setDrawerOpen(true)}
+          className="md:hidden absolute top-[env(safe-area-inset-top)] left-1 z-50 flex items-center justify-center min-w-[55px] min-h-[55px] cursor-pointer group outline-none"
+        >
+          <div className={`h-8 w-8 rounded-full flex items-center justify-center transition-all duration-200 group-active:scale-90 ${isDark
+            ? "text-[#EBEBF5] bg-white/5 group-hover:bg-white/15"
+            : "text-[#3C3C43] bg-black/[0.03] group-hover:bg-black/5"
+            }`}>
+            <IoMenuOutline size={20} />
+          </div>
+        </button>
+
+        <AppHeader isDark={isDark} context={activeTab === "settings" ? "Settings" : activeNavItem?.title ?? "HR Panel"} role={user?.role || "HR"}>
           <div className="flex items-center gap-1.5 md:gap-2 relative" ref={topbarRef}>
             <HeaderClock isDark={isDark} />
             <HeaderControl isDark={isDark} onClick={toggleTheme} label={isDark ? "Light mode" : "Dark mode"}>
@@ -363,7 +477,7 @@ export default function HRDashboard() {
                   </div>
                 </div>
                 <div className="p-2">
-                  <button onClick={() => { setActivePopup(null); router.push("/dashboard/settings/profile"); }}
+                  <button onClick={() => { setActivePopup(null); setActiveTab("settings"); }}
                     className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium cursor-pointer ${isDark ? "hover:bg-[#2C2C2E] text-white" : "hover:bg-[#F5F5F7] text-[#1D1D1F]"}`}>
                     <IoSettingsOutline size={15} className={textSecondary} /> Settings
                   </button>
@@ -377,7 +491,7 @@ export default function HRDashboard() {
           </div>
         </AppHeader>
 
-        <main className="flex-1 overflow-y-auto pb-[calc(env(safe-area-inset-bottom)+80px)] md:pb-8">
+        <main className="flex-1 overflow-y-auto pb-8">
           <div className="p-5 md:p-8 max-w-6xl mx-auto space-y-10">
 
             {/* Error banner */}
@@ -393,62 +507,61 @@ export default function HRDashboard() {
               <>
                 <SectionHeader title="Workforce Overview" subtitle="Charts first — real data from existing CRM attendance system" isDark={isDark} />
 
-                    {/* KPI strip */}
+                {/* KPI strip */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <KpiCard label="Total Workforce" value={loading ? "…" : totalEmployees} sub="Active employees" accent={textAccent} isDark={isDark} />
+                  <KpiCard label="Present Today" value={loading ? "…" : totalPresent} sub="Marked attendance" accent="text-emerald-500" isDark={isDark} />
+                  <KpiCard label="Absent Today" value={loading ? "…" : totalAbsent} sub="Not marked" accent="text-red-400" isDark={isDark} />
+                  <KpiCard label="Active Now" value={loading ? "…" : activeNow} sub="Live sessions" accent="text-blue-400" isDark={isDark} />
+                </div>
+
+                {/* Trend toggle */}
+                <div className="flex items-center gap-2">
+                  {([7, 30] as const).map((d) => (
+                    <button key={d} onClick={() => setTrendDays(d)}
+                      className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-colors cursor-pointer ${trendDays === d
+                        ? isDark ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-400" : "bg-emerald-100 border-emerald-300 text-emerald-700"
+                        : isDark ? "border-[#38383A] text-[#98989D] hover:border-[#58585A]" : "border-[#E5E5EA] text-[#86868B] hover:border-[#D1D1D6]"
+                        }`}>
+                      Last {d} days
+                    </button>
+                  ))}
+                </div>
+
+                {/* Charts */}
+                {loading ? (
+                  <div className="grid md:grid-cols-2 gap-6">
+                    <ChartSkeleton isDark={isDark} />
+                    <ChartSkeleton isDark={isDark} />
+                    <ChartSkeleton isDark={isDark} />
+                    <ChartSkeleton isDark={isDark} />
+                  </div>
+                ) : !data ? null : (
+                  <HRCharts
+                    section="overview"
+                    data={data}
+                    trendDays={trendDays}
+                    isDark={isDark}
+                  />
+                )}
+
+                {/* Phase 2 Summary */}
+                {!loading && data?.phase2Summary && (
+                  <>
+                    <SectionHeader title="HR Operations" subtitle="Leave, holidays, incentives, and compliance" isDark={isDark} />
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <KpiCard label="Total Workforce" value={loading ? "…" : totalEmployees} sub="Active employees" accent={textAccent} isDark={isDark} />
-                      <KpiCard label="Present Today" value={loading ? "…" : totalPresent} sub="Marked attendance" accent="text-emerald-500" isDark={isDark} />
-                      <KpiCard label="Absent Today" value={loading ? "…" : totalAbsent} sub="Not marked" accent="text-red-400" isDark={isDark} />
-                      <KpiCard label="Active Now" value={loading ? "…" : activeNow} sub="Live sessions" accent="text-blue-400" isDark={isDark} />
+                      <KpiCard label="Upcoming Holidays" value={data.phase2Summary.activeHolidays} sub="Active entries" accent="text-blue-400" isDark={isDark} />
+                      <KpiCard label="On Leave" value={data.phase2Summary.pendingLeaveRecords} sub="Current/upcoming" accent="text-amber-400" isDark={isDark} />
+                      <KpiCard label="Week-Off Configured" value={data.phase2Summary.weekOffConfigured} sub={`${data.phase2Summary.weekOffNotConfigured} not configured`} accent={textAccent} isDark={isDark} />
+                      <KpiCard label="Pending Incentives" value={data.phase2Summary.pendingIncentives} sub={data.phase2Summary.approvedIncentivesTotal > 0 ? `${data.phase2Summary.approvedIncentivesTotal.toLocaleString("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 })} approved` : "None approved"} accent="text-purple-400" isDark={isDark} />
                     </div>
-
-                    {/* Trend toggle */}
-                    <div className="flex items-center gap-2">
-                      {([7, 30] as const).map((d) => (
-                        <button key={d} onClick={() => setTrendDays(d)}
-                          className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-colors cursor-pointer ${
-                            trendDays === d
-                              ? isDark ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-400" : "bg-emerald-100 border-emerald-300 text-emerald-700"
-                              : isDark ? "border-[#38383A] text-[#98989D] hover:border-[#58585A]" : "border-[#E5E5EA] text-[#86868B] hover:border-[#D1D1D6]"
-                          }`}>
-                          Last {d} days
-                        </button>
-                      ))}
-                    </div>
-
-                    {/* Charts */}
-                    {loading ? (
-                      <div className="grid md:grid-cols-2 gap-6">
-                        <ChartSkeleton isDark={isDark} />
-                        <ChartSkeleton isDark={isDark} />
-                        <ChartSkeleton isDark={isDark} />
-                        <ChartSkeleton isDark={isDark} />
+                    {data.phase2Summary.missingJoiningDate > 0 && (
+                      <div className={`rounded-xl p-3 text-xs font-medium ${isDark ? "bg-amber-500/10 border border-amber-500/20 text-amber-400" : "bg-amber-50 border border-amber-200 text-amber-700"}`}>
+                        {data.phase2Summary.missingJoiningDate} employee{data.phase2Summary.missingJoiningDate !== 1 ? "s" : ""} missing joining date
                       </div>
-                    ) : !data ? null : (
-                      <HRCharts
-                        section="overview"
-                        data={data}
-                        trendDays={trendDays}
-                        isDark={isDark}
-                      />
                     )}
-
-                    {/* Phase 2 Summary */}
-                    {!loading && data?.phase2Summary && (
-                      <>
-                        <SectionHeader title="HR Operations" subtitle="Leave, holidays, incentives, and compliance" isDark={isDark} />
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                          <KpiCard label="Upcoming Holidays" value={data.phase2Summary.activeHolidays} sub="Active entries" accent="text-blue-400" isDark={isDark} />
-                          <KpiCard label="On Leave" value={data.phase2Summary.pendingLeaveRecords} sub="Current/upcoming" accent="text-amber-400" isDark={isDark} />
-                          <KpiCard label="Week-Off Configured" value={data.phase2Summary.weekOffConfigured} sub={`${data.phase2Summary.weekOffNotConfigured} not configured`} accent={textAccent} isDark={isDark} />
-                          <KpiCard label="Pending Incentives" value={data.phase2Summary.pendingIncentives} sub={data.phase2Summary.approvedIncentivesTotal > 0 ? `${data.phase2Summary.approvedIncentivesTotal.toLocaleString("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 })} approved` : "None approved"} accent="text-purple-400" isDark={isDark} />
-                        </div>
-                        {data.phase2Summary.missingJoiningDate > 0 && (
-                          <div className={`rounded-xl p-3 text-xs font-medium ${isDark ? "bg-amber-500/10 border border-amber-500/20 text-amber-400" : "bg-amber-50 border border-amber-200 text-amber-700"}`}>
-                            {data.phase2Summary.missingJoiningDate} employee{data.phase2Summary.missingJoiningDate !== 1 ? "s" : ""} missing joining date
-                          </div>
-                        )}
-                      </>
-                    )}
+                  </>
+                )}
               </>
             )}
 
@@ -478,103 +591,100 @@ export default function HRDashboard() {
                   const wfFiltered = wfFilterRows(data.liveTable, getWfDisplayValue);
                   const wfSorted = wfSortRows(wfFiltered, getWfDisplayValue);
                   return (
-                  <div className={`rounded-3xl overflow-hidden border ${isDark ? "border-[#38383A]" : "border-[#E5E5EA]"}`}>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className={isDark ? "bg-[#1C1C1E] text-[#98989D]" : "bg-[#F5F5F7] text-[#86868B]"}>
-                            {wfColumns.map((col) => {
-                              const isFiltered = !!(wfColFilters[col.key]);
-                              const isSorted = wfColSort?.key === col.key;
-                              const isActive = isFiltered || isSorted;
-                              return (
-                                <th key={col.key} className="text-left text-[10px] font-bold uppercase tracking-wider px-4 py-3 whitespace-nowrap relative">
-                                  <button
-                                    type="button"
-                                    onClick={e => { e.stopPropagation(); setWfOpenFilterCol(prev => prev === col.key ? null : col.key); }}
-                                    className={`group flex items-center gap-1.5 whitespace-nowrap transition-colors ${
-                                      isActive ? "" : isDark ? "text-[#98989D] hover:text-gray-200" : "text-[#86868B] hover:text-gray-700"
-                                    }`}
-                                    style={isActive ? { color: "#007AFF" } : undefined}
-                                    title={`Filter / Sort by ${col.label}`}
-                                  >
-                                    {col.label}
-                                    <span
-                                      className={`inline-flex items-center justify-center w-4 h-4 rounded transition-colors ${
-                                        isActive ? "" : isDark ? "text-[#48484A] group-hover:text-gray-400" : "text-gray-300 group-hover:text-gray-500"
-                                      }`}
-                                      style={isActive ? { backgroundColor: "#007AFF22", color: "#007AFF" } : undefined}
+                    <div className={`rounded-3xl overflow-hidden border ${isDark ? "border-[#38383A]" : "border-[#E5E5EA]"}`}>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className={isDark ? "bg-[#1C1C1E] text-[#98989D]" : "bg-[#F5F5F7] text-[#86868B]"}>
+                              {wfColumns.map((col) => {
+                                const isFiltered = !!(wfColFilters[col.key]);
+                                const isSorted = wfColSort?.key === col.key;
+                                const isActive = isFiltered || isSorted;
+                                return (
+                                  <th key={col.key} className="text-left text-[10px] font-bold uppercase tracking-wider px-4 py-3 whitespace-nowrap relative">
+                                    <button
+                                      type="button"
+                                      onClick={e => { e.stopPropagation(); setWfOpenFilterCol(prev => prev === col.key ? null : col.key); }}
+                                      className={`group flex items-center gap-1.5 whitespace-nowrap transition-colors ${isActive ? "" : isDark ? "text-[#98989D] hover:text-gray-200" : "text-[#86868B] hover:text-gray-700"
+                                        }`}
+                                      style={isActive ? { color: "#007AFF" } : undefined}
+                                      title={`Filter / Sort by ${col.label}`}
                                     >
-                                      {isSorted
-                                        ? wfColSort?.direction === "asc" ? <FaSortAlphaDown className="w-2.5 h-2.5" /> : <FaSortAlphaUp className="w-2.5 h-2.5" />
-                                        : <FaFilter className="w-2 h-2" />}
-                                    </span>
-                                    {isFiltered && <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF] inline-block" />}
-                                  </button>
-                                  {wfOpenFilterCol === col.key && (
-                                    <SharedColumnFilterDropdown
-                                      column={col}
-                                      data={data.liveTable.map(r => ({ [col.key]: getWfDisplayValue(r, col.key) }))}
-                                      activeFilter={wfColFilters[col.key] ?? null}
-                                      activeSort={wfColSort?.key === col.key ? wfColSort : null}
-                                      onApply={vals => wfApplyFilter(col.key, vals)}
-                                      onSort={dir => wfApplySort(col.key, dir)}
-                                      onClose={() => setWfOpenFilterCol(null)}
-                                      isDark={isDark}
-                                    />
-                                  )}
-                                </th>
-                              );
-                            })}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {wfSorted.map((row, i) => (
-                            <tr key={row.userId}
-                              className={`border-t transition-colors ${
-                                isDark ? "border-[#2C2C2E] hover:bg-[#1C1C1E]" : "border-[#F5F5F7] hover:bg-gray-50"
-                              } ${i % 2 === 0 ? isDark ? "bg-[#0A0A0A]" : "bg-white" : isDark ? "bg-[#111]" : "bg-[#FAFAFA]"}`}>
-                              <td className="px-4 py-3">
-                                <div className="flex items-center gap-2">
-                                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0 bg-emerald-600`}>
-                                    {row.name.charAt(0).toUpperCase()}
-                                  </div>
-                                  <span className={`font-semibold text-xs truncate max-w-[100px] ${textPrimary}`}>{row.name}</span>
-                                </div>
-                              </td>
-                              <td className="px-4 py-3">
-                                <span className={`text-xs ${textSecondary}`}>{row.role}</span>
-                              </td>
-                              <td className="px-4 py-3">
-                                <span className={`text-xs font-mono ${textSecondary}`}>
-                                  {row.loginTime
-                                    ? new Date(row.loginTime).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })
-                                    : "—"}
-                                </span>
-                              </td>
-                              <td className="px-4 py-3">
-                                <StatusBadge status={row.status} isDark={isDark} />
-                              </td>
-                              <td className="px-4 py-3">
-                                <span className={`text-xs truncate max-w-[120px] block ${textSecondary}`}>{row.currentModule}</span>
-                              </td>
-                              <td className="px-4 py-3">
-                                <span className={`text-xs truncate max-w-[100px] block ${textSecondary}`}>{row.activeLead}</span>
-                              </td>
-                              <td className="px-4 py-3">
-                                <span className={`text-xs truncate max-w-[120px] block ${textSecondary}`}>{row.currentAction}</span>
-                              </td>
-                              <td className="px-4 py-3">
-                                <span className={`text-xs font-mono ${textSecondary}`}>
-                                  {row.workingHours != null ? `${row.workingHours}h` : "—"}
-                                </span>
-                              </td>
+                                      {col.label}
+                                      <span
+                                        className={`inline-flex items-center justify-center w-4 h-4 rounded transition-colors ${isActive ? "" : isDark ? "text-[#48484A] group-hover:text-gray-400" : "text-gray-300 group-hover:text-gray-500"
+                                          }`}
+                                        style={isActive ? { backgroundColor: "#007AFF22", color: "#007AFF" } : undefined}
+                                      >
+                                        {isSorted
+                                          ? wfColSort?.direction === "asc" ? <FaSortAlphaDown className="w-2.5 h-2.5" /> : <FaSortAlphaUp className="w-2.5 h-2.5" />
+                                          : <FaFilter className="w-2 h-2" />}
+                                      </span>
+                                      {isFiltered && <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF] inline-block" />}
+                                    </button>
+                                    {wfOpenFilterCol === col.key && (
+                                      <SharedColumnFilterDropdown
+                                        column={col}
+                                        data={data.liveTable.map(r => ({ [col.key]: getWfDisplayValue(r, col.key) }))}
+                                        activeFilter={wfColFilters[col.key] ?? null}
+                                        activeSort={wfColSort?.key === col.key ? wfColSort : null}
+                                        onApply={vals => wfApplyFilter(col.key, vals)}
+                                        onSort={dir => wfApplySort(col.key, dir)}
+                                        onClose={() => setWfOpenFilterCol(null)}
+                                        isDark={isDark}
+                                      />
+                                    )}
+                                  </th>
+                                );
+                              })}
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody>
+                            {wfSorted.map((row, i) => (
+                              <tr key={row.userId}
+                                className={`border-t transition-colors ${isDark ? "border-[#2C2C2E] hover:bg-[#1C1C1E]" : "border-[#F5F5F7] hover:bg-gray-50"
+                                  } ${i % 2 === 0 ? isDark ? "bg-[#0A0A0A]" : "bg-white" : isDark ? "bg-[#111]" : "bg-[#FAFAFA]"}`}>
+                                <td className="px-4 py-3">
+                                  <div className="flex items-center gap-2">
+                                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0 bg-emerald-600`}>
+                                      {row.name.charAt(0).toUpperCase()}
+                                    </div>
+                                    <span className={`font-semibold text-xs truncate max-w-[100px] ${textPrimary}`}>{row.name}</span>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <span className={`text-xs ${textSecondary}`}>{row.role}</span>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <span className={`text-xs font-mono ${textSecondary}`}>
+                                    {row.loginTime
+                                      ? new Date(row.loginTime).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })
+                                      : "—"}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <StatusBadge status={row.status} isDark={isDark} />
+                                </td>
+                                <td className="px-4 py-3">
+                                  <span className={`text-xs truncate max-w-[120px] block ${textSecondary}`}>{row.currentModule}</span>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <span className={`text-xs truncate max-w-[100px] block ${textSecondary}`}>{row.activeLead}</span>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <span className={`text-xs truncate max-w-[120px] block ${textSecondary}`}>{row.currentAction}</span>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <span className={`text-xs font-mono ${textSecondary}`}>
+                                    {row.workingHours != null ? `${row.workingHours}h` : "—"}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
-                  </div>
                   );
                 })()}
               </>
@@ -602,6 +712,11 @@ export default function HRDashboard() {
 
             {/* ── MY SALARY (Phase 3.5) ──────────────────────── */}
             {activeTab === "my-salary" && <SalaryTab isDark={isDark} />}
+
+            {/* ── SETTINGS ─────────────────────────────────── */}
+            {activeTab === "settings" && (
+              <NewSettingDesign user={user} setUser={setUser} isDark={isDark} />
+            )}
           </div>
         </main>
       </div>
