@@ -27,6 +27,8 @@ import ColumnFilterDropdown, {
   type FilterableColumn,
 } from "@/components/ColumnFilterDropdown";
 import { APP_HEADER_HEIGHT, APP_HEADER_PADDING } from "@/components/AppHeader";
+import dynamic from "next/dynamic";
+const SalaryTab = dynamic(() => import("@/components/hr/SalaryTab"), { ssr: false });
 import LogoutConfirmDialog from "@/components/LogoutConfirmDialog";
 import PushNotificationInit from "@/components/PushNotificationInit";
 
@@ -53,7 +55,7 @@ interface SavedLead extends RawLead {
   siteVisitDate?: string;
 }
 interface FollowUp { id: string; message: string; createdAt: string; createdBy: string; }
-type SidebarSection = "dashboard" | "forms" | "interested" | "not_interested";
+type SidebarSection = "dashboard" | "forms" | "interested" | "not_interested" | "my-salary";
 type DBState = "idle" | "saving" | "saved" | "error";
 
 // ─────────────────────────────────────────────
@@ -1088,6 +1090,7 @@ export default function PresalesCallerPanel() {
     { id: "forms" as SidebarSection, icon: FaClipboardList, label: "Forms", badge: formLeads.length, activeColor: "text-purple-400 bg-purple-500/10", dotColor: "bg-purple-500" },
     { id: "interested" as SidebarSection, icon: FaHeart, label: "Interested", badge: interestedLeads.length, activeColor: "text-green-400 bg-green-500/10", dotColor: "bg-green-500" },
     { id: "not_interested" as SidebarSection, icon: FaTimesCircle, label: "Not Interested", badge: notIntLeads.length, activeColor: "text-red-400 bg-red-500/10", dotColor: "bg-red-500" },
+    { id: "my-salary" as SidebarSection, icon: FaMoneyBillWave, label: "My Salary", badge: null, activeColor: "text-emerald-400 bg-emerald-500/10", dotColor: "bg-emerald-500" },
   ];
 
   return (
@@ -1402,6 +1405,12 @@ export default function PresalesCallerPanel() {
                     </tbody>
                   </table>
                 </div></div>}
+            </div>
+          )}
+
+          {section === "my-salary" && (
+            <div className="animate-fadeIn">
+              <SalaryTab isDark={true} />
             </div>
           )}
         </main>

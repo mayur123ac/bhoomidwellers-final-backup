@@ -18,6 +18,9 @@ import {
   IoPeopleOutline, IoPeople,
   IoStatsChartOutline, IoStatsChart,
   IoRefreshOutline,
+  IoCalendarOutline, IoCalendar,
+  IoPersonOutline, IoPerson,
+  IoWalletOutline, IoWallet,
 } from "react-icons/io5";
 import { FaCircle, FaFilter, FaSortAlphaDown, FaSortAlphaUp } from "react-icons/fa";
 import SharedColumnFilterDropdown, { useColumnFilters, type FilterableColumn } from "@/components/ColumnFilterDropdown";
@@ -29,6 +32,10 @@ import PushNotificationInit from "@/components/PushNotificationInit";
 
 // Recharts dynamic imports (matches admin dashboard pattern for perf)
 const HRCharts = dynamic(() => import("./HRCharts"), { ssr: false });
+const HRHolidays = dynamic(() => import("./HRHolidays"), { ssr: false });
+const HREmployeeDirectory = dynamic(() => import("./HREmployeeDirectory"), { ssr: false });
+const HRPayroll = dynamic(() => import("./HRPayroll"), { ssr: false });
+const SalaryTab = dynamic(() => import("@/components/hr/SalaryTab"), { ssr: false });
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 interface DashboardData {
@@ -51,13 +58,26 @@ interface DashboardData {
     workingHours: number | null;
     attendanceStatus: string;
   }[];
+  phase2Summary?: {
+    activeHolidays: number;
+    pendingLeaveRecords: number;
+    weekOffConfigured: number;
+    weekOffNotConfigured: number;
+    pendingIncentives: number;
+    approvedIncentivesTotal: number;
+    missingJoiningDate: number;
+  };
 }
 
 // Navigation
 const NAV_ITEMS = [
-  { id: "overview",  icon: IoGridOutline,      activeIcon: IoGrid,      title: "Overview"  },
-  { id: "analytics", icon: IoStatsChartOutline, activeIcon: IoStatsChart, title: "Analytics" },
-  { id: "workforce", icon: IoPeopleOutline,     activeIcon: IoPeople,    title: "Live Workforce" },
+  { id: "overview",   icon: IoGridOutline,      activeIcon: IoGrid,      title: "Overview"  },
+  { id: "analytics",  icon: IoStatsChartOutline, activeIcon: IoStatsChart, title: "Analytics" },
+  { id: "workforce",  icon: IoPeopleOutline,     activeIcon: IoPeople,    title: "Live Workforce" },
+  { id: "employees",  icon: IoPersonOutline,     activeIcon: IoPerson,    title: "Employees" },
+  { id: "holidays",   icon: IoCalendarOutline,   activeIcon: IoCalendar,  title: "Holidays" },
+  { id: "payroll",    icon: IoWalletOutline,     activeIcon: IoWallet,    title: "Payroll" },
+  { id: "my-salary", icon: IoWalletOutline,     activeIcon: IoWallet,    title: "My Salary" },
 ];
 
 // ─── Status badge ──────────────────────────────────────────────────────────
@@ -408,6 +428,24 @@ export default function HRDashboard() {
                         isDark={isDark}
                       />
                     )}
+
+                    {/* Phase 2 Summary */}
+                    {!loading && data?.phase2Summary && (
+                      <>
+                        <SectionHeader title="HR Operations" subtitle="Leave, holidays, incentives, and compliance" isDark={isDark} />
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          <KpiCard label="Upcoming Holidays" value={data.phase2Summary.activeHolidays} sub="Active entries" accent="text-blue-400" isDark={isDark} />
+                          <KpiCard label="On Leave" value={data.phase2Summary.pendingLeaveRecords} sub="Current/upcoming" accent="text-amber-400" isDark={isDark} />
+                          <KpiCard label="Week-Off Configured" value={data.phase2Summary.weekOffConfigured} sub={`${data.phase2Summary.weekOffNotConfigured} not configured`} accent={textAccent} isDark={isDark} />
+                          <KpiCard label="Pending Incentives" value={data.phase2Summary.pendingIncentives} sub={data.phase2Summary.approvedIncentivesTotal > 0 ? `${data.phase2Summary.approvedIncentivesTotal.toLocaleString("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 })} approved` : "None approved"} accent="text-purple-400" isDark={isDark} />
+                        </div>
+                        {data.phase2Summary.missingJoiningDate > 0 && (
+                          <div className={`rounded-xl p-3 text-xs font-medium ${isDark ? "bg-amber-500/10 border border-amber-500/20 text-amber-400" : "bg-amber-50 border border-amber-200 text-amber-700"}`}>
+                            {data.phase2Summary.missingJoiningDate} employee{data.phase2Summary.missingJoiningDate !== 1 ? "s" : ""} missing joining date
+                          </div>
+                        )}
+                      </>
+                    )}
                   </>
                 )}
 
@@ -555,6 +593,24 @@ export default function HRDashboard() {
                 })()}
               </>
             )}
+
+            {/* ── EMPLOYEES (Phase 2) ──────────────────────────── */}
+            {activeTab === "employees" && (
+              <HREmployeeDirectory isDark={isDark} />
+            )}
+
+            {/* ── HOLIDAYS (Phase 2) ──────────────────────────── */}
+            {activeTab === "holidays" && (
+              <HRHolidays isDark={isDark} />
+            )}
+
+            {/* ── PAYROLL (Phase 3) ───────────────────────────── */}
+            {activeTab === "payroll" && (
+              <HRPayroll isDark={isDark} userRole={user?.role || ""} />
+            )}
+
+            {/* ── MY SALARY (Phase 3.5) ──────────────────────── */}
+            {activeTab === "my-salary" && <SalaryTab isDark={isDark} />}
           </div>
         </main>
       </div>

@@ -28,6 +28,7 @@ import {
   FaCog,
   FaFileInvoice,
   FaHandshake,
+  FaMoneyBillWave,
   FaRobot,
   FaThLarge,
   FaUniversity,
@@ -60,6 +61,7 @@ export const SALES_NAV: SalesNavItem[] = [
   { id: "cp_enquiry", icon: FaHandshake, label: "Active CP Info" },
   { id: "banking_info", icon: FaUniversity, label: "Bankers Info" },
   { id: "attendance", icon: FaClock, label: "My Attendance" },
+  { id: "my-salary", icon: FaMoneyBillWave, label: "My Salary" },
   { id: "assistant", icon: FaRobot, label: "Bhoomi AI" },
   { id: "settings", icon: FaCog, label: "Settings", pinned: true },
 ];

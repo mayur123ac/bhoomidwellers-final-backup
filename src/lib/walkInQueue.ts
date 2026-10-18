@@ -16,7 +16,8 @@
 import type { PoolClient } from "pg";
 
 /**
- * Returns true when the SM has no outstanding unreworked receptionist lead.
+ * Returns true when the SM has no outstanding unreworked receptionist lead,
+ * OR when the SM has the admin-granted sales_form_exception flag.
  * Must be called inside a transaction that holds the per-SM advisory lock.
  */
 export async function isManagerEligible(
@@ -24,6 +25,13 @@ export async function isManagerEligible(
   smUserId: number,
   orgId: string
 ): Promise<boolean> {
+  // Check the admin-controlled exception flag first (authoritative, from DB).
+  const userRes = await client.query<{ sales_form_exception: boolean }>(
+    `SELECT sales_form_exception FROM users WHERE id = $1 LIMIT 1`,
+    [smUserId]
+  );
+  if (userRes.rows[0]?.sales_form_exception) return true;
+
   const res = await client.query<{ id: number }>(
     `SELECT id
      FROM walkin_enquiries

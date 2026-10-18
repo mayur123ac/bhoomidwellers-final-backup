@@ -34,8 +34,8 @@ import { getOrganizationId } from "@/lib/tenantContext";
 
 export const dynamic = "force-dynamic";
 
-/** Attendance data is employee PII — Admin only, enforced server-side. */
-const REPORT_ROLES = ["admin"];
+/** Attendance data is employee PII — Admin and HR, enforced server-side. */
+const REPORT_ROLES = ["admin", "hr"];
 
 /** Guards against an unbounded scan from a hand-rolled request. */
 const MAX_RANGE_DAYS = 400;
@@ -48,6 +48,7 @@ export interface DailyRow {
   employeeName: string;
   role: string;
   attendanceStatus: string;
+  effectiveStatus: string;
   loginTime: string | null;
   logoutTime: string | null;
   punctuality: string;
@@ -55,6 +56,13 @@ export interface DailyRow {
   workedSeconds: number;
   sessionCount: number;
   stillActive: boolean;
+  isHoliday: boolean;
+  holidayName: string | null;
+  isLeave: boolean;
+  leaveType: string | null;
+  isWeekOff: boolean;
+  locationName: string | null;
+  locationAvailable: boolean;
 }
 
 /**
@@ -191,7 +199,7 @@ export async function GET(req: NextRequest) {
 
     // ── Query 3: the marked attendance status per employee per day ──────────
     // DISTINCT ON mirrors the live route: if a day somehow has two records, the
-    // latest one wins, exactly as the screen resolves it.
+    // first one wins (ORDER BY id ASC = first punch of the day).
     const marks = await query<any>(
       `SELECT DISTINCT ON (employee_id, DATE(login_time))
               employee_id,
@@ -202,15 +210,70 @@ export async function GET(req: NextRequest) {
          FROM attendance_records
         WHERE organization_id = $3
           AND DATE(login_time) BETWEEN $1::date AND $2::date
-        ORDER BY employee_id, DATE(login_time), login_time DESC`,
+        ORDER BY employee_id, DATE(login_time), id ASC`,
       [from, effectiveTo, orgId]
     );
+
+    // ── Query 4: session location (first session per employee per day) ────
+    const sessionLocations = await query<any>(
+      `SELECT DISTINCT ON (s.user_id, DATE(s.session_start AT TIME ZONE 'Asia/Kolkata'))
+              s.user_id,
+              TO_CHAR(DATE(s.session_start AT TIME ZONE 'Asia/Kolkata'), 'YYYY-MM-DD') AS day,
+              s.login_location_name
+         FROM employee_sessions s
+        WHERE s.organization_id = $3
+          AND DATE(s.session_start AT TIME ZONE 'Asia/Kolkata') BETWEEN $1::date AND $2::date
+          AND s.login_location_name IS NOT NULL
+        ORDER BY s.user_id, DATE(s.session_start AT TIME ZONE 'Asia/Kolkata'), s.session_start ASC`,
+      [from, effectiveTo, orgId]
+    );
+
+    // ── Query 5 (Phase 2): holidays in range ─────────────────────────────
+    let holidayRows: any[] = [];
+    try {
+      holidayRows = await query<any>(
+        `SELECT holiday_date::text AS day, name AS holiday_name
+           FROM organization_holidays
+          WHERE organization_id = $1 AND is_active = true
+            AND holiday_date BETWEEN $2::date AND $3::date`,
+        [orgId, from, effectiveTo]
+      );
+    } catch { /* table may not exist yet */ }
+
+    // ── Query 6 (Phase 2): approved leave records in range ────────────────
+    let leaveRows: any[] = [];
+    try {
+      leaveRows = await query<any>(
+        `SELECT user_id, start_date, end_date, leave_type
+           FROM employee_leave_records
+          WHERE organization_id = $1 AND status = 'approved'
+            AND daterange(start_date, end_date, '[]') && daterange($2::date, $3::date, '[]')`,
+        [orgId, from, effectiveTo]
+      );
+    } catch { /* table may not exist yet */ }
+
+    // ── Query 7 (Phase 2): active week-off patterns ──────────────────────
+    let weekOffRows: any[] = [];
+    try {
+      weekOffRows = await query<any>(
+        `SELECT user_id, day_of_week, effective_from, effective_to
+           FROM employee_week_off_pattern
+          WHERE organization_id = $1
+            AND effective_from <= $3::date
+            AND (effective_to IS NULL OR effective_to >= $2::date)`,
+        [orgId, from, effectiveTo]
+      );
+    } catch { /* table may not exist yet */ }
 
     // ── Assemble ────────────────────────────────────────────────────────────
     const sessionByKey = new Map<string, any>();
     for (const s of sessions) sessionByKey.set(`${s.user_id}|${s.day}`, s);
     const markByKey = new Map<string, any>();
     for (const m of marks) markByKey.set(`${m.employee_id}|${m.day}`, m);
+    const locationByKey = new Map<string, string>();
+    for (const l of sessionLocations) locationByKey.set(`${l.user_id}|${l.day}`, l.login_location_name);
+    const holidayByDay = new Map<string, string>();
+    for (const h of holidayRows) holidayByDay.set(h.day, h.holiday_name);
 
     const days: string[] = [];
     {
@@ -230,25 +293,62 @@ export async function GET(req: NextRequest) {
         const key = `${emp.id}|${day}`;
         const s = sessionByKey.get(key);
         const m = markByKey.get(key);
+        const dayDate = new Date(`${day}T00:00:00`);
+        const dayOfWeek = dayDate.getDay();
 
-        // A day with neither a session nor a mark is an absence, and is emitted
-        // rather than skipped — a report that omits absent days cannot be used
-        // to count them.
         const firstLogin = s?.first_login ? new Date(s.first_login) : null;
         const { label: punctuality, lateMinutes } = derivePunctuality(firstLogin, shiftStart, flexible);
 
-        const status = m?.attendance_status
+        const originalStatus = m?.attendance_status
           ? m.attendance_status
           : s?.still_active
             ? "Pending"
             : "Absent";
+
+        // Phase 2 indicators
+        const isHoliday = holidayByDay.has(day);
+        const holidayName = holidayByDay.get(day) ?? null;
+
+        const leave = leaveRows.find((l: any) =>
+          l.user_id === emp.id &&
+          dayDate >= new Date(l.start_date) &&
+          dayDate <= new Date(l.end_date)
+        );
+        const isLeave = !!leave;
+        const leaveType = leave?.leave_type ?? null;
+
+        const isWeekOff = weekOffRows.some((w: any) =>
+          w.user_id === emp.id &&
+          w.day_of_week === dayOfWeek &&
+          dayDate >= new Date(w.effective_from) &&
+          (!w.effective_to || dayDate <= new Date(w.effective_to))
+        );
+
+        // Status precedence: actual presence wins over everything
+        let effectiveStatus: string;
+        if (/present/i.test(originalStatus)) {
+          effectiveStatus = "Present";
+        } else if (isLeave) {
+          effectiveStatus = leaveType!;
+        } else if (originalStatus !== "Absent") {
+          effectiveStatus = originalStatus;
+        } else if (isHoliday) {
+          effectiveStatus = "Holiday";
+        } else if (isWeekOff) {
+          effectiveStatus = "Week Off";
+        } else {
+          effectiveStatus = "Absent";
+        }
+
+        const locName = locationByKey.get(key) ?? null;
 
         daily.push({
           date: day,
           employeeId: emp.id,
           employeeName: emp.name,
           role: emp.role,
-          attendanceStatus: status,
+          attendanceStatus: originalStatus,
+          effectiveStatus,
           loginTime: firstLogin ? firstLogin.toISOString() : null,
           logoutTime: s?.last_logout ? new Date(s.last_logout).toISOString() : null,
           punctuality: s ? punctuality : "—",
@@ -256,6 +356,13 @@ export async function GET(req: NextRequest) {
           workedSeconds: s ? Number(s.worked_seconds) : 0,
           sessionCount: s ? s.session_count : 0,
           stillActive: !!s?.still_active,
+          isHoliday,
+          holidayName,
+          isLeave,
+          leaveType,
+          isWeekOff,
+          locationName: locName,
+          locationAvailable: !!locName,
         });
       }
     }
@@ -267,7 +374,7 @@ export async function GET(req: NextRequest) {
       // Sundays excluded from the denominator, so they are excluded here too —
       // otherwise a Sunday login would push attendance above 100%.
       const counted = rows.filter((r) => new Date(`${r.date}T00:00:00`).getDay() !== 0);
-      const present = counted.filter((r) => /present/i.test(r.attendanceStatus)).length;
+      const present = counted.filter((r) => /present/i.test(r.effectiveStatus)).length;
       const late = counted.filter((r) => r.lateMinutes > 0).length;
       const workedSeconds = counted.reduce((sum, r) => sum + r.workedSeconds, 0);
       const daysWithWork = counted.filter((r) => r.workedSeconds > 0).length;
@@ -297,7 +404,7 @@ export async function GET(req: NextRequest) {
         shift: { start: shiftStart, end: shiftEnd, flexible },
         // Stated so the workbook can print the basis rather than leaving the
         // reader to guess how the percentage was reached.
-        workingDayBasis: "Calendar days excluding Sundays. No holiday or leave calendar exists in this system.",
+        workingDayBasis: "Calendar days excluding Sundays. Holiday, leave, and week-off indicators are included where configured.",
         employeeCount: employees.length,
         summary,
         daily,

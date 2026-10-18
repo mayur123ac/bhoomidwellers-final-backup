@@ -30,7 +30,7 @@ export async function GET() {
     // plaintext exception is limited to the creation response in POST below.
     const users = await query(
       `SELECT id, name, username, email, role, is_active as "isActive", created_at,
-              organization_id
+              organization_id, sales_form_exception
        FROM users
        WHERE organization_id = $1
        ORDER BY created_at DESC`,
@@ -245,6 +245,18 @@ export async function PUT(req: Request) {
         },
         { status: 200 }
       );
+    }
+
+    // ── SALES FORM EXCEPTION TOGGLE ──
+    if (typeof body.salesFormException === "boolean") {
+      const updated = await query(
+        `UPDATE users SET sales_form_exception = $1 WHERE id = $2 AND organization_id = $3 RETURNING id`,
+        [body.salesFormException, userId, await getOrganizationId()]
+      );
+      if (updated.length === 0) {
+        return NextResponse.json({ message: "User not found." }, { status: 404 });
+      }
+      return NextResponse.json({ message: "Sales form exception updated." }, { status: 200 });
     }
 
     // ── STATUS TOGGLE ──

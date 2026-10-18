@@ -31,6 +31,7 @@ import {
   FaClock,
   FaCog,
   FaHandshake,
+  FaMoneyBillWave,
   FaThLarge,
   FaUniversity,
   FaUsers,
@@ -67,6 +68,7 @@ export const RECEPTIONIST_NAV: ReceptionistNavItem[] = [
   // booked against this receptionist's own leads, not the site's diary.
   { id: "site_visits", icon: FaCalendarAlt, label: "Site Visit Overview" },
   { id: "attendance", icon: FaClock, label: "My Attendance" },
+  { id: "my-salary", icon: FaMoneyBillWave, label: "My Salary" },
   // Was FaRobot / "CRM AI Assistant" — a generic robot for what was a mock chat
   // panel. It is the real assistant now, so it carries the same mark and the
   // same name it has in the Admin and Sales rails. One assistant, one identity.

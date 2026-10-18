@@ -39,6 +39,7 @@ function serializeEmployee(row: any) {
     initials: initialsFor(row.name),
     reportingManagerId: row.reporting_manager_id,
     reportingManagerName: row.manager_name ?? null,
+    salesFormException: row.sales_form_exception ?? false,
   };
 }
 
@@ -92,6 +93,7 @@ export async function GET(req: NextRequest) {
       `SELECT e.id, e.name, e.email, e.phone, e.role, e.department, e.is_active,
               e.created_at, e.last_login_at, e.first_login_at, e.invite_sent_at,
               e.deactivated_at, e.avatar_key, e.avatar_url, e.reporting_manager_id,
+              e.sales_form_exception,
               m.name AS manager_name
        FROM users e
        LEFT JOIN users m ON m.id = e.reporting_manager_id
@@ -194,8 +196,8 @@ export async function POST(req: NextRequest) {
 
     const rows = await query<any>(
       `INSERT INTO users (name, email, phone, role, department, reporting_manager_id,
-                          organization_id, is_active, password, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8, NOW())
+                          organization_id, is_active, password, sales_form_exception, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8, $9, NOW())
        RETURNING id`,
       [
         name,
@@ -206,6 +208,7 @@ export async function POST(req: NextRequest) {
         body.reportingManagerId || null,
         orgId || null,
         hashedPassword,
+        Boolean(body.salesFormException),
       ]
     );
 
@@ -307,14 +310,15 @@ export async function PATCH(req: NextRequest) {
 
       const sets = [
         "name = $1", "email = $2", "phone = $3", "role = $4",
-        "department = $5", "reporting_manager_id = $6",
+        "department = $5", "reporting_manager_id = $6", "sales_form_exception = $7",
       ];
       const params: any[] = [
         name, body.email?.trim(), body.phone?.trim() || null,
         body.role || null, body.department || null,
         body.reportingManagerId || null,
+        Boolean(body.salesFormException),
       ];
-      let idx = 7;
+      let idx = 8;
 
       if (body.password) {
         const { scryptSync, randomBytes } = await import("node:crypto");

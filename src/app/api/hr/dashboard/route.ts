@@ -310,6 +310,123 @@ export async function GET(req: NextRequest) {
       attendanceStatus: r.attendance_status,
     }));
 
+    // Q8: HR Phase 1 summary counters (best-effort; tables may not exist yet).
+    let hrSummary = {
+      incompleteProfiles: 0,
+      pendingDocVerifications: 0,
+      overdueComplianceTasks: 0,
+      assetsAssigned: 0,
+    };
+    try {
+      const [incompleteRows, pendingDocRows, overdueRows, assetRows] = await Promise.all([
+        query<any>(
+          `SELECT COUNT(DISTINCT u.id)::int AS c
+             FROM users u
+             JOIN hr_mandatory_documents m
+               ON m.organization_id = u.organization_id AND m.is_active = true
+             LEFT JOIN employee_documents d
+               ON d.user_id = u.id AND d.organization_id = u.organization_id
+              AND d.document_type = m.document_type
+              AND d.verification_status IN ('verified','pending')
+              AND d.superseded_by IS NULL
+            WHERE u.organization_id = $1 AND u.is_active = true AND u.deleted_at IS NULL
+              AND d.id IS NULL`,
+          [orgId]
+        ),
+        query<any>(
+          `SELECT COUNT(*)::int AS c FROM employee_documents
+            WHERE organization_id = $1 AND verification_status = 'pending'
+              AND superseded_by IS NULL`,
+          [orgId]
+        ),
+        query<any>(
+          `SELECT COUNT(*)::int AS c FROM hr_compliance_tasks
+            WHERE organization_id = $1 AND status IN ('pending','overdue')
+              AND deadline < CURRENT_DATE`,
+          [orgId]
+        ),
+        query<any>(
+          `SELECT COUNT(*)::int AS c FROM employee_asset_assignments
+            WHERE organization_id = $1 AND returned_date IS NULL`,
+          [orgId]
+        ),
+      ]);
+      hrSummary = {
+        incompleteProfiles: incompleteRows[0]?.c ?? 0,
+        pendingDocVerifications: pendingDocRows[0]?.c ?? 0,
+        overdueComplianceTasks: overdueRows[0]?.c ?? 0,
+        assetsAssigned: assetRows[0]?.c ?? 0,
+      };
+    } catch {
+      // Tables may not be migrated yet; ignore silently.
+    }
+
+    // Q9: Phase 2 summary counters (best-effort; tables may not exist yet).
+    let phase2Summary = {
+      activeHolidays: 0,
+      pendingLeaveRecords: 0,
+      weekOffConfigured: 0,
+      weekOffNotConfigured: 0,
+      pendingIncentives: 0,
+      approvedIncentivesTotal: 0,
+      missingJoiningDate: 0,
+    };
+    try {
+      const [holRows, leaveCountRows, weekOffRows, incentiveRows, joiningRows] = await Promise.all([
+        query<any>(
+          `SELECT COUNT(*)::int AS c FROM organization_holidays
+            WHERE organization_id = $1 AND is_active = true
+              AND holiday_date >= CURRENT_DATE`,
+          [orgId]
+        ),
+        query<any>(
+          `SELECT COUNT(*)::int AS c FROM employee_leave_records
+            WHERE organization_id = $1 AND status = 'approved'
+              AND end_date >= CURRENT_DATE`,
+          [orgId]
+        ),
+        query<any>(
+          `WITH configured AS (
+             SELECT DISTINCT user_id FROM employee_week_off_pattern
+              WHERE organization_id = $1 AND effective_to IS NULL
+           ),
+           total AS (
+             SELECT COUNT(*)::int AS c FROM users
+              WHERE organization_id = $1 AND is_active = true AND deleted_at IS NULL
+           )
+           SELECT
+             (SELECT COUNT(*)::int FROM configured) AS configured,
+             (SELECT c FROM total) - (SELECT COUNT(*)::int FROM configured) AS not_configured`,
+          [orgId]
+        ),
+        query<any>(
+          `SELECT
+             COUNT(CASE WHEN status = 'pending' THEN 1 END)::int AS pending,
+             COALESCE(SUM(CASE WHEN status = 'approved' THEN amount END), 0)::numeric AS approved_total
+           FROM employee_incentives
+          WHERE organization_id = $1 AND status != 'reversed'`,
+          [orgId]
+        ),
+        query<any>(
+          `SELECT COUNT(*)::int AS c FROM users
+            WHERE organization_id = $1 AND is_active = true AND deleted_at IS NULL
+              AND joining_date IS NULL`,
+          [orgId]
+        ),
+      ]);
+      phase2Summary = {
+        activeHolidays: holRows[0]?.c ?? 0,
+        pendingLeaveRecords: leaveCountRows[0]?.c ?? 0,
+        weekOffConfigured: weekOffRows[0]?.configured ?? 0,
+        weekOffNotConfigured: weekOffRows[0]?.not_configured ?? 0,
+        pendingIncentives: incentiveRows[0]?.pending ?? 0,
+        approvedIncentivesTotal: Number(incentiveRows[0]?.approved_total ?? 0),
+        missingJoiningDate: joiningRows[0]?.c ?? 0,
+      };
+    } catch {
+      // Phase 2 tables may not be migrated yet; ignore silently.
+    }
+
     return NextResponse.json({
       success: true,
       data: {
@@ -321,6 +438,8 @@ export async function GET(req: NextRequest) {
         workingHoursByRole,
         attendanceByRole,
         liveTable,
+        hrSummary,
+        phase2Summary,
       },
     });
   } catch (err: any) {

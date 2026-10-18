@@ -52,6 +52,7 @@ const EMPTY_FORM = {
   sendInvite: true,
   tempPassword: "",
   password: "",
+  salesFormException: false,
 };
 
 function EmployeeModal({
@@ -92,6 +93,7 @@ function EmployeeModal({
         role: employee.role ?? "",
         department: employee.department ?? "",
         reportingManagerId: employee.reportingManagerId ? String(employee.reportingManagerId) : "",
+        salesFormException: employee.salesFormException ?? false,
       });
     } else {
       // Invite is defaulted OFF when no mail transport exists — leaving it ON
@@ -116,6 +118,7 @@ function EmployeeModal({
             role: form.role,
             department: form.department,
             reportingManagerId: form.reportingManagerId || null,
+            salesFormException: form.salesFormException,
             ...(form.password ? { password: form.password } : {}),
           },
         });
@@ -135,6 +138,7 @@ function EmployeeModal({
             reportingManagerId: form.reportingManagerId || null,
             sendInvite: form.sendInvite,
             tempPassword: form.tempPassword,
+            salesFormException: form.salesFormException,
           },
         });
 
@@ -343,6 +347,26 @@ function EmployeeModal({
             ))}
         </Select>
       </Field>
+
+      {/sales.manager|senior.sales.manager|site.head/i.test(form.role.replace(/_/g, " ")) && (
+        <div className="mt-2 border-t pt-4" style={{ borderColor: T.border }}>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="crm-body font-medium" style={{ color: T.text }}>
+                Submit Sales Form Exception
+              </p>
+              <p className="mt-0.5 crm-secondary" style={{ color: T.muted }}>
+                Allows this employee to receive another eligible lead without submitting the sales form for their current lead.
+              </p>
+            </div>
+            <Toggle
+              checked={form.salesFormException}
+              onChange={(v) => setForm((f) => ({ ...f, salesFormException: v }))}
+              label="Sales form exception"
+            />
+          </div>
+        </div>
+      )}
 
       {editing ? (
         <Field

@@ -53,7 +53,7 @@ type RoleType = { _id: string; name: string };
 type EmployeeType = {
   _id: string; name: string; username: string;
   email: string; role: string; isActive: boolean; password?: string;
-  organization_id?: string;
+  organization_id?: string; sales_form_exception?: boolean;
 };
 
 /**
@@ -1561,6 +1561,7 @@ export default function EmployeesPage() {
                           { key: "_changePwd", label: "Change Pwd", center: true },
                           { key: "role", label: "Assigned Role", center: false },
                           { key: "status", label: "Status", center: true },
+                          { key: "_exception", label: "Exception", center: true },
                           { key: "_actions", label: "Actions", center: true },
                         ] as const).map(col => {
                           const filterCol = empColumns.find(c => c.key === col.key);
@@ -1703,6 +1704,40 @@ export default function EmployeesPage() {
                                 {emp.isActive ? "Active" : "Inactive"}
                               </span>
                             </td>
+                            {/* Exception Toggle */}
+                            <td className="px-5 py-3.5 text-center">
+                              {(() => {
+                                const normalizedRole = emp.role?.toLowerCase().replace(/[\s_]+/g, " ") ?? "";
+                                const isSalesRole = normalizedRole.includes("sales manager") || normalizedRole.includes("senior sales manager") || normalizedRole.includes("site head");
+                                if (!isSalesRole) return <span className={`text-[11px] font-medium ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>—</span>;
+                                const isOn = emp.sales_form_exception ?? false;
+                                return (
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      try {
+                                        const r = await fetch("/api/employees", {
+                                          method: "PUT",
+                                          headers: { "Content-Type": "application/json" },
+                                          body: JSON.stringify({ userId: emp._id, salesFormException: !isOn }),
+                                        });
+                                        if (r.ok) {
+                                          setEmployees(prev => prev.map(e => e._id === emp._id ? { ...e, sales_form_exception: !isOn } : e));
+                                        }
+                                      } catch { }
+                                    }}
+                                    className={`relative inline-flex h-[22px] w-[40px] items-center rounded-full transition-colors cursor-pointer ${
+                                      isOn
+                                        ? "bg-[#34C759]"
+                                        : isDark ? "bg-[#48484A]" : "bg-[#D1D1D6]"
+                                    }`}
+                                    title={isOn ? "Exception enabled — can receive leads without submitting sales form" : "Exception disabled — must submit sales form before next lead"}
+                                  >
+                                    <span className={`inline-block h-[18px] w-[18px] rounded-full bg-white shadow-sm transition-transform ${isOn ? "translate-x-[20px]" : "translate-x-[2px]"}`} />
+                                  </button>
+                                );
+                              })()}
+                            </td>
                             {/* Actions */}
                             <td className="px-5 py-3.5">
                               {isEditing ? (
@@ -1754,7 +1789,7 @@ export default function EmployeesPage() {
                       })}
                       {employees.length === 0 && (
                         <tr>
-                          <td colSpan={6} className={`px-6 py-12 text-center text-[13px] font-medium ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
+                          <td colSpan={7} className={`px-6 py-12 text-center text-[13px] font-medium ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
                             No employees found.
                           </td>
                         </tr>

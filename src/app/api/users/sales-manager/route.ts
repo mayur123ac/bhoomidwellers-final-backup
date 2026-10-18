@@ -34,6 +34,7 @@ export async function GET() {
       query(
       `SELECT u.id, u.name, u.username, u.email,
               u.whatsapp_number AS phone, u.whatsapp_number,
+              u.sales_form_exception,
               CASE
                 WHEN EXISTS (
                   SELECT 1 FROM employee_sessions es
@@ -44,6 +45,7 @@ export async function GET() {
                 ELSE 'OFFLINE'
               END AS presence,
               CASE
+                WHEN u.sales_form_exception = true THEN 'available'
                 WHEN EXISTS (
                   SELECT 1 FROM walkin_enquiries w
                    WHERE w.assigned_to_user_id = u.id

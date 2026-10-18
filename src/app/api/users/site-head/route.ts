@@ -33,6 +33,7 @@ export async function GET(req: Request) {
     const rows = await query(
       `SELECT u.id, u.name, u.email, u.username, u.role, u.is_active AS "isActive",
               u.whatsapp_number, u.phone, u.avatar_key, u.avatar_url, u.organization_id,
+              u.sales_form_exception,
               CASE
                 WHEN EXISTS (
                   SELECT 1 FROM employee_sessions es
@@ -43,6 +44,7 @@ export async function GET(req: Request) {
                 ELSE 'OFFLINE'
               END AS presence,
               CASE
+                WHEN u.sales_form_exception = true THEN 'available'
                 WHEN EXISTS (
                   SELECT 1 FROM walkin_enquiries w
                    WHERE w.assigned_to_user_id = u.id

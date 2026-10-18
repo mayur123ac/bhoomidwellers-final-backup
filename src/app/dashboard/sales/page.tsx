@@ -88,6 +88,7 @@ import {
 } from "@/lib/hooks/useNotificationFeed";
 import NotificationPopover from "@/components/notifications/NotificationPopover";
 import NotificationCenterView from "@/components/notifications/NotificationCenterView";
+const SalaryTab = dynamic(() => import("@/components/hr/SalaryTab"), { ssr: false });
 import BhoomiAiPanel from "@/components/bhoomi-ai/BhoomiAiPanel";
 import { CRMContextManager } from "@/lib/admin-ai/contextManager";
 import {
@@ -1118,6 +1119,8 @@ export default function SalesDashboard() {
               t={t}
               now={now}
             />
+          ) : activeView === "my-salary" ? (
+            <SalaryTab isDark={isDark} />
           ) : activeView === "notifications" ? (
             /* The Notification Center: the COMPLETE queue the popovers cap at
                three. Reached from a "See all N …" footer, which preselects the

@@ -18,7 +18,8 @@ import {
   IoSettingsOutline, IoSettings,
   IoAddOutline, IoRefreshOutline,
   IoMoonOutline, IoSunnyOutline,
-  IoChevronForward
+  IoChevronForward,
+  IoWalletOutline, IoWallet,
 } from "react-icons/io5";
 
 import ChannelPartnerEnquiriesTable from "@/components/ChannelPartnerEnquiriesTable";
@@ -32,6 +33,8 @@ import HeaderClock from "@/components/HeaderClock";
 import AppHeader, { HeaderControl, AppLogo } from "@/components/AppHeader";
 import { APP_HEADER_HEIGHT, APP_HEADER_PADDING } from "@/components/AppHeader";
 import LogoutConfirmDialog from "@/components/LogoutConfirmDialog";
+import dynamic from "next/dynamic";
+const SalaryTab = dynamic(() => import("@/components/hr/SalaryTab"), { ssr: false });
 import PushNotificationInit from "@/components/PushNotificationInit";
 /**
  * The theme object two panels on this page are given.
@@ -49,6 +52,7 @@ const NAV_ITEMS = [
   { id: "my-cps", icon: IoPeopleOutline, activeIcon: IoPeople, title: "Channel Partners" },
   { id: "assigned-cps", icon: IoDocumentTextOutline, activeIcon: IoDocumentText, title: "CP Linked with Leads" },
   { id: "cp-chat", icon: IoChatbubbleEllipsesOutline, activeIcon: IoChatbubbleEllipses, title: "CP Chat" },
+  { id: "my-salary", icon: IoWalletOutline, activeIcon: IoWallet, title: "My Salary" },
 ];
 
 export default function SourcingManagerDashboard() {
@@ -472,6 +476,10 @@ export default function SourcingManagerDashboard() {
             <div className="animate-fadeIn h-full flex flex-col">
               <CpChatPanel user={user} isDark={isDark} t={t} isAdmin={false} />
             </div>
+          )}
+
+          {activeTab === "my-salary" && (
+            <SalaryTab isDark={isDark} />
           )}
 
           {/* ════════════════════════════════════════════════════

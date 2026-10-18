@@ -13,7 +13,7 @@ import {
   FaSearch, FaBell, FaChevronLeft, FaPhoneAlt, FaComments,
   FaCheckCircle, FaCalendarAlt, FaTimes, FaArrowLeft, FaChevronDown,
   FaFileInvoice, FaFileInvoiceDollar, FaMicrophone, FaWhatsapp, FaTable, FaChartPie, FaEyeSlash, FaUniversity, FaHandshake, FaExchangeAlt, FaBriefcase, FaDownload, FaCog, FaMapMarkerAlt, FaSignal, FaUserClock, FaTrashAlt, FaBoxes, FaUserTie,
-  FaFilter, FaSortAlphaDown, FaSortAlphaUp
+  FaFilter, FaSortAlphaDown, FaSortAlphaUp, FaMoneyBillWave
 } from "react-icons/fa";
 import SharedColumnFilterDropdown from "@/components/ColumnFilterDropdown";
 import type { FilterableColumn } from "@/components/ColumnFilterDropdown";
@@ -140,6 +140,7 @@ const WhatsAppConversationPanel = dynamic(
   { ssr: false }
 );
 const LoanDealForm = dynamic(() => import("@/components/LoanDealForm"), { ssr: false });
+const SalaryTab = dynamic(() => import("@/components/hr/SalaryTab"), { ssr: false });
 
 // ─── SUN/MOON ICONS ───────────────────────────────────────────────────────────
 const SunIcon = () => (
@@ -1038,6 +1039,7 @@ function AdminAtlasDashboardContent() {
     // this list and missing here, so the Admin rail gained and lost a WhatsApp
     // Alerts button depending on which route you happened to be on.
     { id: "notifications", icon: FaWhatsapp, label: "WhatsApp Alerts" },
+    { id: "my-salary", icon: FaMoneyBillWave, label: "My Salary" },
     // `pinned` entries render in the rail's bottom block, in this order — so
     // Bhoomi AI keeps the place it has always had and Settings is the final
     // button. (This used to be position-based: the sidebar pinned whatever item
@@ -1499,6 +1501,8 @@ function AdminAtlasDashboardContent() {
               </div>
             </div>
           )}
+
+          {activeView === "my-salary" && <SalaryTab isDark={isDark} />}
 
           {activeView === "notification_center" && (
             <div className="flex flex-col h-full overflow-hidden">

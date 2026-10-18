@@ -85,6 +85,12 @@ export async function middleware(request: NextRequest) {
       return NextResponse.next();
     }
 
+    // My Salary — reachable by every signed-in role (same reasoning as Settings).
+    // Salary data is gated server-side by password verification + authorization token.
+    if (pathname.startsWith("/dashboard/my-salary")) {
+      return NextResponse.next();
+    }
+
     // 3. Sales Manager
     // Can only access /dashboard/sales
     if (role === "sales manager") {

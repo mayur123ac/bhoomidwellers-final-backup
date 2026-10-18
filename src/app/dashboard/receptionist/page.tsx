@@ -87,6 +87,7 @@ const SiteVisitOverview = dynamic(() => import("../SiteVisitOverview"), { ssr: f
 // before first paint even for staff who never scroll to a chart. ssr: false
 // because ResponsiveContainer measures the DOM, which the server cannot do.
 const ReceptionistDonutChart = dynamic(() => import("@/components/receptionist/ReceptionistDonutChart"), { ssr: false });
+const SalaryTab = dynamic(() => import("@/components/hr/SalaryTab"), { ssr: false });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ORG LOGO — enquiry form header
@@ -4507,6 +4508,10 @@ export default function ReceptionistDashboard() {
             />
           )}
 
+          {activeTab === "my-salary" && (
+            <SalaryTab isDark={isDark} />
+          )}
+
           {/* ════════════════════════════════════════════════════
               SITE VISIT OVERVIEW
           ════════════════════════════════════════════════════ */}
@@ -5579,6 +5584,17 @@ export default function ReceptionistDashboard() {
                                         <span className={`text-[10px] font-bold ${isBusy ? "text-orange-500" : "text-emerald-600"}`}>
                                           {isBusy ? "BUSY" : "AVAILABLE"}
                                         </span>
+                                        {sel.sales_form_exception && (
+                                          <span
+                                            className="inline-flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-600 border border-emerald-200"
+                                            title="Exception: Can receive leads without submitting the sales form"
+                                          >
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-2.5 h-2.5 flex-shrink-0">
+                                              <path fillRule="evenodd" d="M15 8A7 7 0 1 1 1 8a7 7 0 0 1 14 0ZM9 5a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM6.75 8a.75.75 0 0 0 0 1.5h.75v1.75a.75.75 0 0 0 1.5 0v-2.5A.75.75 0 0 0 8.25 8h-1.5Z" clipRule="evenodd" />
+                                            </svg>
+                                            Exception
+                                          </span>
+                                        )}
                                       </>
                                     );
                                   })()}
@@ -5640,6 +5656,17 @@ export default function ReceptionistDashboard() {
                                         <span className={`text-[10px] font-bold ${m.assignmentAvailability === "busy" ? "text-orange-500" : "text-emerald-600"}`}>
                                           {m.assignmentAvailability === "busy" ? "BUSY" : "AVAILABLE"}
                                         </span>
+                                        {m.sales_form_exception && (
+                                          <span
+                                            className="inline-flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-600 border border-emerald-200"
+                                            title="Exception: This manager can receive leads without submitting the sales form for their current lead"
+                                          >
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-2.5 h-2.5 flex-shrink-0">
+                                              <path fillRule="evenodd" d="M15 8A7 7 0 1 1 1 8a7 7 0 0 1 14 0ZM9 5a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM6.75 8a.75.75 0 0 0 0 1.5h.75v1.75a.75.75 0 0 0 1.5 0v-2.5A.75.75 0 0 0 8.25 8h-1.5Z" clipRule="evenodd" />
+                                            </svg>
+                                            Exception
+                                          </span>
+                                        )}
                                         <span className="text-[11px] opacity-60 uppercase tracking-wider">{String(m.role || "Manager").replace("_", " ")}</span>
                                       </span>
                                     </div>
