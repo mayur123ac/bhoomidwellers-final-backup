@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "417687992603",
+    "project_id": "bhoomi-434bc",
+    "storage_bucket": "bhoomi-434bc.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "PLACEHOLDER_REGISTER_V2_IN_FIREBASE",
+        "android_client_info": {
+          "package_name": "com.bhoomidwellers.crm.v2"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAnfXXt5yqfgRYrKCD_PFG0V3R9Xka_3Vo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

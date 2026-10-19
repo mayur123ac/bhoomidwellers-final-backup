@@ -10,6 +10,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import BhoomiAiPanel from "@/components/bhoomi-ai/BhoomiAiPanel";
+import CreativeStudioPanel from "@/components/creative-studio/CreativeStudioPanel";
 import { BhoomiAiGlyph } from "@/components/bhoomi-ai/BhoomiAiIcon";
 import { getAdminNavItems, getAdminNavGroups, filterNavByRole, type AdminNavEntry } from "@/lib/adminNavConfig";
 // The canvas colour, imported rather than retyped, so the header and the
@@ -292,7 +293,7 @@ export default function EmployeesPage() {
   });
   const t = useMemo(() => buildTheme(isDark), [isDark]);
 
-  const [activeSection, setActiveSection] = useState<"employees" | "callers" | "ai" | "notifications">("employees");
+  const [activeSection, setActiveSection] = useState<"employees" | "callers" | "ai" | "notifications" | "creative_studio">("employees");
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   // Org name for the sidebar header — fetched once, null while loading.
@@ -488,6 +489,7 @@ export default function EmployeesPage() {
     if (tab === "callers") setActiveSection("callers");
     else if (tab === "ai") setActiveSection("ai");
     else if (tab === "notifications") setActiveSection("notifications");
+    else if (tab === "creative_studio") setActiveSection("creative_studio");
 
     const userRole = parsed.role?.toLowerCase() || "";
     if (userRole === "admin" || userRole === "site head" || userRole === "site_head") {
@@ -1003,7 +1005,7 @@ export default function EmployeesPage() {
           if (nav.owner === "employees" || nav.owner === "local") {
             setActiveSection((nav.section || nav.id) as typeof activeSection);
           } else if (nav.owner === "settings") {
-            router.push("/dashboard/settings");
+            router.push(nav.href || "/dashboard/settings");
           } else {
             localStorage.setItem("return_tab", nav.id);
             router.push("/dashboard");
@@ -1022,7 +1024,7 @@ export default function EmployeesPage() {
           if (nav.owner === "employees" || nav.owner === "local") {
             setActiveSection((nav.section || nav.id) as typeof activeSection);
           } else if (nav.owner === "settings") {
-            router.push("/dashboard/settings");
+            router.push(nav.href || "/dashboard/settings");
           } else {
             localStorage.setItem("return_tab", nav.id);
             router.push("/dashboard");
@@ -1054,7 +1056,8 @@ export default function EmployeesPage() {
           context={activeSection === "callers"
             ? callerSubView === "control" ? "Caller Control" : "Caller Panel"
             : activeSection === "ai" ? "Bhoomi AI"
-              : activeSection === "notifications" ? "WhatsApp Alerts" : "Add Employee"}
+              : activeSection === "notifications" ? "WhatsApp Alerts"
+                : activeSection === "creative_studio" ? "AI Creative Studio" : "Add Employee"}
           role={callerSubView === "control" ? "Admin Acting as Caller" : "Admin Root"}
         >
           <div className="flex items-center gap-4 flex-shrink-0 relative z-[50]" ref={topbarRef}>
@@ -1788,6 +1791,15 @@ export default function EmployeesPage() {
               user={user}
             />
           </div>
+
+        ) : activeSection === "creative_studio" ? (
+
+          /* ════════════ CREATIVE STUDIO ════════════ */
+          <main className={`flex-1 overflow-y-auto px-4 sm:px-8 py-8 transition-colors duration-300 ${isDark ? "bg-[#000000]" : "bg-[#F2F2F7]"} custom-scrollbar font-sans antialiased`}>
+            <div className="max-w-[1400px] mx-auto">
+              <CreativeStudioPanel />
+            </div>
+          </main>
 
         ) : callerSubView === "control" ? (
 

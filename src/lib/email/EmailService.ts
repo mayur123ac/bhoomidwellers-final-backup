@@ -33,7 +33,9 @@ import { writeAuditLog } from "@/lib/auditLog";
 import { sendToUser, type EmailType, type RoutedSendResult } from "@/lib/emailRouting";
 import { activeProvider, isCustomerEnquiryEmailEnabled, isMailConfigured, readSenderConfig } from "./config";
 import { dispatch, verifyProvider } from "./provider";
+import { loadTriggerConfig } from "./triggerConfig";
 import type { EmailError, SendOutcome } from "./types";
+import { esc, renderEmail } from "./templates/layout";
 import {
   employeeInvitationTemplate,
   enquiryConfirmationTemplate,
@@ -118,6 +120,115 @@ async function record(
       err instanceof Error ? err.message : String(err)
     );
   }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Trigger configuration gate
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Check the admin-configured enabled/disabled state for a trigger and load
+ * any custom subject/body.
+ *
+ * Returns { skip: true } when the trigger is explicitly disabled, with a
+ * pre-built result the caller can return immediately. The audit log records
+ * the intentional skip as "email.admin_disabled" — distinct from both
+ * "email.suppressed" (user preference) and "email.failed" (delivery error).
+ *
+ * When the trigger is enabled (or unknown/errored — fail-safe), returns the
+ * custom subject and body so the caller can apply overrides before sending.
+ */
+interface TriggerGate {
+  skip: boolean;
+  directResult?: DirectSendResult;
+  customSubject?: string | null;
+  customBody?: string | null;
+}
+
+async function checkTrigger(
+  triggerKey: string,
+  auditAction: string,
+  recipient: string,
+  context: AuditContext
+): Promise<TriggerGate> {
+  const config = await loadTriggerConfig(triggerKey);
+  if (config && !config.enabled) {
+    await record(
+      "email.admin_disabled",
+      recipient || "(trigger disabled)",
+      { delivered: false, provider: "disabled" },
+      context,
+      { triggerKey, type: auditAction }
+    );
+    return { skip: true, directResult: { delivered: false, provider: "disabled" } };
+  }
+  return {
+    skip: false,
+    customSubject: config?.subject ?? null,
+    customBody: config?.body ?? null,
+  };
+}
+
+/**
+ * Apply admin-customised subject and/or body to a built template.
+ *
+ * Escaping strategy (context-dependent):
+ *
+ *   Subject    — plain text. Variable values inserted verbatim; the provider's
+ *                `sanitiseHeader()` strips newlines/control chars at the
+ *                transport boundary.
+ *
+ *   HTML body  — resolve variables with plain values, then `esc()` the ENTIRE
+ *                result once. This escapes both the admin's template text and
+ *                every variable value uniformly. Newlines become `<br/>` AFTER
+ *                escaping. The result is wrapped in the branded email layout
+ *                (header, footer, logo, company name are always preserved).
+ *
+ *   Plain text — variable values inserted verbatim (no escaping needed).
+ *
+ * Custom body replaces only the content area, never the structural shell.
+ */
+function applyOverrides(
+  template: Template,
+  gate: TriggerGate,
+  vars: Record<string, string>
+): Template {
+  if (!gate.customSubject && !gate.customBody) return template;
+
+  const resolve = (text: string) =>
+    text.replace(/\{\{(\w+)\}\}/g, (_, key: string) => vars[key] ?? `{{${key}}}`);
+
+  let result = template;
+
+  if (gate.customSubject) {
+    result = { ...result, subject: resolve(gate.customSubject) };
+  }
+
+  if (gate.customBody) {
+    const plainText = resolve(gate.customBody);
+    // Escape the entire resolved text (template + values) once, then convert
+    // newlines. This prevents any variable value from introducing HTML tags.
+    const safeHtml = esc(plainText).replace(/\r?\n/g, "<br/>");
+
+    const heading = gate.customSubject
+      ? resolve(gate.customSubject)
+      : template.subject;
+
+    const rendered = renderEmail({
+      preview: heading,
+      heading,
+      bodyHtml: `<p style="margin:0 0 14px;line-height:1.7;">${safeHtml}</p>`,
+      bodyText: plainText,
+    });
+    result = {
+      ...result,
+      html: rendered.html,
+      text: rendered.text,
+      attachments: rendered.attachments,
+    };
+  }
+
+  return result;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -238,7 +349,11 @@ export const EmailService = {
     input: OtpTemplateInput,
     context: AuditContext = {}
   ): Promise<DirectSendResult> {
-    return sendDirect(to, otpTemplate(input), "email.otp_sent", context, {
+    const triggerKey = /reset.*password/i.test(input.purpose) ? "password_reset" : "otp_verification";
+    const gate = await checkTrigger(triggerKey, "email.otp_sent", to, context);
+    if (gate.skip) return gate.directResult!;
+    const vars = { name: input.name, code: input.code, expiry_minutes: String(input.expiryMinutes), purpose: input.purpose };
+    return sendDirect(to, applyOverrides(otpTemplate(input), gate, vars), "email.otp_sent", context, {
       purpose: input.purpose,
       expiryMinutes: input.expiryMinutes,
     });
@@ -251,16 +366,19 @@ export const EmailService = {
     input: LoginAlertInput,
     context: AuditContext = {}
   ): Promise<RoutedSendResult> {
+    const gate = await checkTrigger("login_alert", "email.login_alert_sent", "", context);
+    if (gate.skip) return { delivered: false, suppressed: true, attempted: [], fallbackUsed: false, notes: ["admin_disabled"] };
     const emailType: EmailType = input.isNewDevice
       ? "login.new_device"
       : input.status === "Failed"
         ? "login.failed"
         : "login.success";
+    const vars = { name: input.name, date: input.date, time: input.time, device: input.device, browser: input.browser, ip_address: input.ipAddress, location: input.location };
 
     return sendRouted(
       userId,
       emailType,
-      loginAlertTemplate(input),
+      applyOverrides(loginAlertTemplate(input), gate, vars),
       "email.login_alert_sent",
       context
     );
@@ -270,17 +388,34 @@ export const EmailService = {
    * Notify an admin about another user's login.
    *
    * Direct, not routed: the admin's interest in team logins is not governed
-   * by the signing-in user's notification preferences. The template is
-   * pre-built by the caller (loginNotification.ts) so this method only
-   * dispatches and audits.
+   * by the signing-in user's notification preferences.
+   *
+   * Accepts BOTH the pre-built template (for the default path) AND the raw
+   * alert input (for the custom-template path). When a custom subject/body
+   * is configured, `applyOverrides` resolves the admin-notification variables
+   * into it; otherwise the caller's pre-built template is sent unchanged.
    */
   async sendAdminLoginNotification(
     to: string,
     template: Template,
     context: AuditContext = {},
-    extra?: Record<string, unknown>
+    extra?: Record<string, unknown>,
+    alertInput?: LoginAlertInput
   ): Promise<DirectSendResult> {
-    return sendDirect(to, template, "email.admin_login_alert_sent", context, extra);
+    const gate = await checkTrigger("admin_login_notification", "email.admin_login_alert_sent", to, context);
+    if (gate.skip) return gate.directResult!;
+    const vars: Record<string, string> = alertInput
+      ? {
+          employee_name: alertInput.name,
+          role: alertInput.role,
+          date: alertInput.date,
+          time: alertInput.time,
+          device: alertInput.device,
+          ip_address: alertInput.ipAddress,
+          location: alertInput.location,
+        }
+      : {};
+    return sendDirect(to, applyOverrides(template, gate, vars), "email.admin_login_alert_sent", context, extra);
   },
 
   async sendFailedLoginBurst(
@@ -288,10 +423,13 @@ export const EmailService = {
     input: FailedLoginBurstInput,
     context: AuditContext = {}
   ): Promise<RoutedSendResult> {
+    const gate = await checkTrigger("failed_login_burst", "email.security_alert_sent", "", context);
+    if (gate.skip) return { delivered: false, suppressed: true, attempted: [], fallbackUsed: false, notes: ["admin_disabled"] };
+    const vars = { name: input.name, organization: input.organization };
     return sendRouted(
       userId,
       "security.alert",
-      failedLoginBurstTemplate(input),
+      applyOverrides(failedLoginBurstTemplate(input), gate, vars),
       "email.security_alert_sent",
       context
     );
@@ -302,10 +440,13 @@ export const EmailService = {
     input: PasswordChangedInput,
     context: AuditContext = {}
   ): Promise<RoutedSendResult> {
+    const gate = await checkTrigger("password_changed", "email.password_changed_sent", "", context);
+    if (gate.skip) return { delivered: false, suppressed: true, attempted: [], fallbackUsed: false, notes: ["admin_disabled"] };
+    const vars = { name: input.name, date: input.timestamp, time: input.timestamp };
     return sendRouted(
       userId,
       "password.changed",
-      passwordChangedTemplate(input),
+      applyOverrides(passwordChangedTemplate(input), gate, vars),
       "email.password_changed_sent",
       context
     );
@@ -325,7 +466,10 @@ export const EmailService = {
     input: PasswordResetInput,
     context: AuditContext = {}
   ): Promise<DirectSendResult> {
-    return sendDirect(to, passwordResetTemplate(input), "email.password_reset_sent", context, {
+    const gate = await checkTrigger("password_reset", "email.password_reset_sent", to, context);
+    if (gate.skip) return gate.directResult!;
+    const vars = { name: input.name, expiry_minutes: String(input.expiryMinutes) };
+    return sendDirect(to, applyOverrides(passwordResetTemplate(input), gate, vars), "email.password_reset_sent", context, {
       expiryMinutes: input.expiryMinutes,
     });
   },
@@ -343,9 +487,12 @@ export const EmailService = {
     input: InvitationInput,
     context: AuditContext = {}
   ): Promise<DirectSendResult> {
+    const gate = await checkTrigger("employee_invitation", "email.invitation_sent", to, context);
+    if (gate.skip) return gate.directResult!;
+    const vars = { name: input.name, organization: input.organization, role: input.role };
     return sendDirect(
       to,
-      employeeInvitationTemplate(input),
+      applyOverrides(employeeInvitationTemplate(input), gate, vars),
       "email.invitation_sent",
       context,
       { organization: input.organization, role: input.role }
@@ -359,10 +506,13 @@ export const EmailService = {
     input: SupportReplyInput,
     context: AuditContext = {}
   ): Promise<RoutedSendResult> {
+    const gate = await checkTrigger("support_reply", "email.support_reply_sent", "", context);
+    if (gate.skip) return { delivered: false, suppressed: true, attempted: [], fallbackUsed: false, notes: ["admin_disabled"] };
+    const vars = { name: input.name };
     return sendRouted(
       userId,
       "support.reply",
-      supportReplyTemplate(input),
+      applyOverrides(supportReplyTemplate(input), gate, vars),
       "email.support_reply_sent",
       context
     );
@@ -384,10 +534,13 @@ export const EmailService = {
     input: SubscriptionInput,
     context: AuditContext = {}
   ): Promise<RoutedSendResult> {
+    const gate = await checkTrigger("subscription_email", "email.subscription_sent", "", context);
+    if (gate.skip) return { delivered: false, suppressed: true, attempted: [], fallbackUsed: false, notes: ["admin_disabled"] };
+    const vars = { name: input.name };
     return sendRouted(
       userId,
       emailType,
-      subscriptionTemplate(input),
+      applyOverrides(subscriptionTemplate(input), gate, vars),
       "email.subscription_sent",
       context
     );
@@ -401,10 +554,13 @@ export const EmailService = {
     input: SystemNotificationInput,
     context: AuditContext = {}
   ): Promise<RoutedSendResult> {
+    const gate = await checkTrigger("system_notification", "email.system_notification_sent", "", context);
+    if (gate.skip) return { delivered: false, suppressed: true, attempted: [], fallbackUsed: false, notes: ["admin_disabled"] };
+    const vars = { name: input.name };
     return sendRouted(
       userId,
       emailType,
-      systemNotificationTemplate(input),
+      applyOverrides(systemNotificationTemplate(input), gate, vars),
       "email.system_notification_sent",
       context
     );
@@ -430,9 +586,12 @@ export const EmailService = {
     if (!isCustomerEnquiryEmailEnabled()) {
       return { delivered: false, provider: "disabled" };
     }
+    const gate = await checkTrigger("enquiry_confirmation", "email.enquiry_confirmation_sent", to, context);
+    if (gate.skip) return gate.directResult!;
+    const vars = { customer_name: input.clientName, organization: input.orgName, assigned_to: input.assignedTo ?? "" };
     return sendDirect(
       to,
-      enquiryConfirmationTemplate(input),
+      applyOverrides(enquiryConfirmationTemplate(input), gate, vars),
       "email.enquiry_confirmation_sent",
       context,
       { orgName: input.orgName, assignedTo: input.assignedTo }
@@ -443,7 +602,10 @@ export const EmailService = {
 
   /** Send a test message to prove the configuration works end to end. */
   async sendTestEmail(to: string, context: AuditContext = {}): Promise<DirectSendResult> {
-    return sendDirect(to, testEmailTemplate(activeProvider()), "email.test_sent", context);
+    const gate = await checkTrigger("test_email", "email.test_sent", to, context);
+    if (gate.skip) return gate.directResult!;
+    const vars = { provider: activeProvider() };
+    return sendDirect(to, applyOverrides(testEmailTemplate(activeProvider()), gate, vars), "email.test_sent", context);
   },
 };
 

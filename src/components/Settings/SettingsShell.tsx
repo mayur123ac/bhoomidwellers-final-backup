@@ -44,6 +44,7 @@ import {
   FaKey,
   FaLifeRing,
   FaMapMarkerAlt,
+  FaPalette,
   FaPhoneAlt,
   FaPlug,
   FaPuzzlePiece,
@@ -160,6 +161,8 @@ const RAIL: RailItem[] = [
   { id: "callers", icon: FaPhoneAlt, label: "Caller Panel", link: "/dashboard/employees?tab=callers" },
   { id: "employees", icon: FaIdCard, label: "Add Employee", link: "/dashboard/employees" },
   { id: "notifications", icon: FaWhatsapp, label: "WhatsApp Alerts", link: "/dashboard/employees?tab=notifications" },
+  { id: "email_config", icon: FaEnvelope, label: "Email Configuration", link: "/dashboard/settings/email-config" },
+  { id: "creative_studio", icon: FaPalette, label: "AI Creative Studio", link: "/dashboard/employees?tab=creative_studio" },
   { id: "ai", icon: BhoomiAiGlyph, label: "Bhoomi AI", link: "/dashboard/employees?tab=ai", pinned: true },
   { id: "settings", icon: FaCog, label: "Settings", link: "/dashboard/settings", pinned: true },
 ];
@@ -232,6 +235,8 @@ const RAIL_GROUPS: Record<string, string> = {
   callers: "Admin",
   employees: "Admin",
   notifications: "Admin",
+  email_config: "Admin",
+  creative_studio: "Admin",
 };
 
 /* ── Header chrome theme ────────────────────────────────────────────────────
@@ -484,7 +489,7 @@ export default function SettingsShell({ children }: { children: React.ReactNode 
             Settings item in BOTH rails, so it highlights either way. */}
           <RoleSidebar
             role={user?.role}
-            activeId="settings"
+            activeId={pathname === "/dashboard/settings/email-config" ? "email_config" : "settings"}
             onNavigate={railSelect}
             expanded={isSidebarHovered}
             onExpandedChange={setIsSidebarHovered}
@@ -763,7 +768,7 @@ export default function SettingsShell({ children }: { children: React.ReactNode 
             <AdminMobileDrawer
               open={adminMobileNavOpen}
               onClose={() => setAdminMobileNavOpen(false)}
-              activeId="settings"
+              activeId={pathname === "/dashboard/settings/email-config" ? "email_config" : "settings"}
               onSelect={(item: any) => {
                 setAdminMobileNavOpen(false);
                 if (item.id === "settings") return;

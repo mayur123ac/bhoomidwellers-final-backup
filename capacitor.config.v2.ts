@@ -1,0 +1,29 @@
+import type { CapacitorConfig } from '@capacitor/cli';
+
+const config: CapacitorConfig = {
+  appId: 'com.bhoomidwellers.crm.v2',
+  appName: 'Bhoomi Dwellers V2',
+  webDir: 'dist-capacitor',
+
+  server: {
+    url: 'https://www.bhoomidwellers.com',
+    allowNavigation: ['bhoomidwellers.com', 'www.bhoomidwellers.com'],
+    androidScheme: 'https',
+  },
+
+  plugins: {
+    PushNotifications: {
+      presentationOptions: [],
+    },
+  },
+
+  android: {
+    allowMixedContent: false,
+  },
+
+  ios: {
+    scheme: 'https',
+  },
+};
+
+export default config;

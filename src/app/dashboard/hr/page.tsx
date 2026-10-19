@@ -24,6 +24,8 @@ import {
   IoChatbubblesOutline, IoChatbubbles,
   IoMenuOutline, IoCloseOutline,
   IoLogOutOutline,
+  IoCashOutline, IoCash,
+  IoCubeOutline, IoCube,
 } from "react-icons/io5";
 import { FaCircle, FaFilter, FaSortAlphaDown, FaSortAlphaUp } from "react-icons/fa";
 import SharedColumnFilterDropdown, { useColumnFilters, type FilterableColumn } from "@/components/ColumnFilterDropdown";
@@ -35,7 +37,6 @@ import PushNotificationInit from "@/components/PushNotificationInit";
 import NewSettingDesign from "@/components/newSettingdesign";
 
 // Recharts dynamic imports (matches admin dashboard pattern for perf)
-const HRCharts = dynamic(() => import("./HRCharts"), { ssr: false });
 const HRHolidays = dynamic(() => import("./HRHolidays"), { ssr: false });
 const HREmployeeDirectory = dynamic(() => import("./HREmployeeDirectory"), { ssr: false });
 const HRPayroll = dynamic(() => import("./HRPayroll"), { ssr: false });
@@ -43,6 +44,10 @@ const HRConnect = dynamic(() => import("./HRConnect"), { ssr: false });
 const HRAnalyticsChat = dynamic(() => import("./HRAnalyticsChat"), { ssr: false });
 const HRAnalyticsDashboard = dynamic(() => import("./HRAnalyticsDashboard"), { ssr: false });
 const SalaryTab = dynamic(() => import("@/components/hr/SalaryTab"), { ssr: false });
+const HRProfitability = dynamic(() => import("./HRProfitability"), { ssr: false });
+const HRBrokerageConfig = dynamic(() => import("./HRBrokerageConfig"), { ssr: false });
+const HRBrokerageCenter = dynamic(() => import("./HRBrokerageCenter"), { ssr: false });
+const HRResourceExpenses = dynamic(() => import("./HRResourceExpenses"), { ssr: false });
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 interface DashboardData {
@@ -85,6 +90,8 @@ const NAV_ITEMS = [
   { id: "holidays", icon: IoCalendarOutline, activeIcon: IoCalendar, title: "Holidays" },
   { id: "payroll", icon: IoWalletOutline, activeIcon: IoWallet, title: "Payroll" },
   { id: "connect", icon: IoChatbubblesOutline, activeIcon: IoChatbubbles, title: "HR Connect" },
+  { id: "brokerage", icon: IoCashOutline, activeIcon: IoCash, title: "Brokerage" },
+  { id: "resources", icon: IoCubeOutline, activeIcon: IoCube, title: "Resources" },
   { id: "my-salary", icon: IoWalletOutline, activeIcon: IoWallet, title: "My Salary" },
 ];
 
@@ -174,6 +181,7 @@ export default function HRDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [trendDays, setTrendDays] = useState<7 | 30>(7);
   const [refreshing, setRefreshing] = useState(false);
+  const [showBrokerageCenter, setShowBrokerageCenter] = useState(false);
 
   // ── Column filter / sort for Live Workforce table ──
   const {
@@ -274,12 +282,6 @@ export default function HRDashboard() {
 
   const activeNavItem = NAV_ITEMS.find((n) => n.id === activeTab);
 
-  // Derived KPIs
-  const totalEmployees = data?.workforceByRole.reduce((s, r) => s + r.count, 0) ?? 0;
-  const totalPresent = data?.todayWorkforce.present ?? 0;
-  const totalAbsent = data?.todayWorkforce.absent ?? 0;
-  const activeNow = data?.liveWorkforce.active ?? 0;
-
   return (
     <div className={`flex flex-col md:flex-row h-[100dvh] font-sans overflow-hidden transition-colors duration-300 ${bgApp} ${textPrimary}`}>
 
@@ -308,7 +310,7 @@ export default function HRDashboard() {
           {NAV_ITEMS.map(({ id, icon: Icon, activeIcon: ActiveIcon, title }) => {
             const isActive = activeTab === id;
             return (
-              <button key={id} onClick={() => setActiveTab(id)}
+              <button key={id} onClick={() => { setActiveTab(id); setShowBrokerageCenter(false); }}
                 className={`flex items-center gap-3 px-2.5 py-2.5 rounded-xl transition-colors duration-200 border border-transparent cursor-pointer ${isActive ? isDark ? "bg-[#2C2C2E] border-[#38383A]" : "bg-white border-[#E5E5EA] shadow-sm" : "hover:bg-[#2C2C2E]/50"
                   }`} title={!sidebarExpanded ? title : undefined}>
                 <div className={`flex-shrink-0 flex items-center justify-center w-6 h-6 ${isActive ? textAccent : textSecondary}`}>
@@ -380,7 +382,7 @@ export default function HRDashboard() {
                 return (
                   <button
                     key={id}
-                    onClick={() => { setActiveTab(id); setDrawerOpen(false); }}
+                    onClick={() => { setActiveTab(id); setDrawerOpen(false); setShowBrokerageCenter(false); }}
                     className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200 border border-transparent cursor-pointer ${isActive
                       ? isDark ? "bg-[#2C2C2E] border-[#38383A]" : "bg-white border-[#E5E5EA] shadow-sm"
                       : isDark ? "hover:bg-[#2C2C2E]" : "hover:bg-white/60"
@@ -502,67 +504,16 @@ export default function HRDashboard() {
               </div>
             )}
 
-            {/* ── WORKFORCE OVERVIEW ──────────────────────────────── */}
-            {activeTab === "overview" && (
-              <>
-                <SectionHeader title="Workforce Overview" subtitle="Charts first — real data from existing CRM attendance system" isDark={isDark} />
-
-                {/* KPI strip */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <KpiCard label="Total Workforce" value={loading ? "…" : totalEmployees} sub="Active employees" accent={textAccent} isDark={isDark} />
-                  <KpiCard label="Present Today" value={loading ? "…" : totalPresent} sub="Marked attendance" accent="text-emerald-500" isDark={isDark} />
-                  <KpiCard label="Absent Today" value={loading ? "…" : totalAbsent} sub="Not marked" accent="text-red-400" isDark={isDark} />
-                  <KpiCard label="Active Now" value={loading ? "…" : activeNow} sub="Live sessions" accent="text-blue-400" isDark={isDark} />
-                </div>
-
-                {/* Trend toggle */}
-                <div className="flex items-center gap-2">
-                  {([7, 30] as const).map((d) => (
-                    <button key={d} onClick={() => setTrendDays(d)}
-                      className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-colors cursor-pointer ${trendDays === d
-                        ? isDark ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-400" : "bg-emerald-100 border-emerald-300 text-emerald-700"
-                        : isDark ? "border-[#38383A] text-[#98989D] hover:border-[#58585A]" : "border-[#E5E5EA] text-[#86868B] hover:border-[#D1D1D6]"
-                        }`}>
-                      Last {d} days
-                    </button>
-                  ))}
-                </div>
-
-                {/* Charts */}
-                {loading ? (
-                  <div className="grid md:grid-cols-2 gap-6">
-                    <ChartSkeleton isDark={isDark} />
-                    <ChartSkeleton isDark={isDark} />
-                    <ChartSkeleton isDark={isDark} />
-                    <ChartSkeleton isDark={isDark} />
-                  </div>
-                ) : !data ? null : (
-                  <HRCharts
-                    section="overview"
-                    data={data}
-                    trendDays={trendDays}
-                    isDark={isDark}
-                  />
-                )}
-
-                {/* Phase 2 Summary */}
-                {!loading && data?.phase2Summary && (
-                  <>
-                    <SectionHeader title="HR Operations" subtitle="Leave, holidays, incentives, and compliance" isDark={isDark} />
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <KpiCard label="Upcoming Holidays" value={data.phase2Summary.activeHolidays} sub="Active entries" accent="text-blue-400" isDark={isDark} />
-                      <KpiCard label="On Leave" value={data.phase2Summary.pendingLeaveRecords} sub="Current/upcoming" accent="text-amber-400" isDark={isDark} />
-                      <KpiCard label="Week-Off Configured" value={data.phase2Summary.weekOffConfigured} sub={`${data.phase2Summary.weekOffNotConfigured} not configured`} accent={textAccent} isDark={isDark} />
-                      <KpiCard label="Pending Incentives" value={data.phase2Summary.pendingIncentives} sub={data.phase2Summary.approvedIncentivesTotal > 0 ? `${data.phase2Summary.approvedIncentivesTotal.toLocaleString("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 })} approved` : "None approved"} accent="text-purple-400" isDark={isDark} />
-                    </div>
-                    {data.phase2Summary.missingJoiningDate > 0 && (
-                      <div className={`rounded-xl p-3 text-xs font-medium ${isDark ? "bg-amber-500/10 border border-amber-500/20 text-amber-400" : "bg-amber-50 border border-amber-200 text-amber-700"}`}>
-                        {data.phase2Summary.missingJoiningDate} employee{data.phase2Summary.missingJoiningDate !== 1 ? "s" : ""} missing joining date
-                      </div>
-                    )}
-                  </>
-                )}
-              </>
+            {/* ── FINANCIAL OVERVIEW / BROKERAGE CENTER ────────────── */}
+            {activeTab === "overview" && !showBrokerageCenter && (
+              <HRProfitability isDark={isDark} onOpenBrokerageCenter={() => setShowBrokerageCenter(true)} />
+            )}
+            {activeTab === "overview" && showBrokerageCenter && (
+              <HRBrokerageCenter
+                isDark={isDark}
+                onBack={() => setShowBrokerageCenter(false)}
+                onOpenSettings={() => { setShowBrokerageCenter(false); setActiveTab("brokerage"); }}
+              />
             )}
 
             {/* ── ANALYTICS (Phase 4B — unified dashboard) ───────── */}
@@ -708,6 +659,16 @@ export default function HRDashboard() {
             {/* ── HR CONNECT (Phase 4A) ────────────────────────── */}
             {activeTab === "connect" && (
               <HRConnect isDark={isDark} />
+            )}
+
+            {/* ── BROKERAGE CONFIG ─────────────────────────── */}
+            {activeTab === "brokerage" && (
+              <HRBrokerageConfig isDark={isDark} />
+            )}
+
+            {/* ── RESOURCE EXPENSES ────────────────────────── */}
+            {activeTab === "resources" && (
+              <HRResourceExpenses isDark={isDark} />
             )}
 
             {/* ── MY SALARY (Phase 3.5) ──────────────────────── */}

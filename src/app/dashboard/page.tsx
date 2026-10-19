@@ -1081,7 +1081,7 @@ function AdminAtlasDashboardContent() {
     if (item.owner === "employees") {
       router.push(`/dashboard/employees?tab=${item.section || item.id}`);
     } else if (item.owner === "settings") {
-      router.push("/dashboard/settings");
+      router.push(item.href || "/dashboard/settings");
     } else {
       // "dashboard" and "local" items render in-place on this page
       setActiveView(item.id);

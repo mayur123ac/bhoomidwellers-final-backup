@@ -332,7 +332,8 @@ async function sendAdminLoginNotification(
             ip: ctx.ip,
             userAgent: ctx.userAgent,
           },
-          { adminId: admin.id, adminName: admin.name }
+          { adminId: admin.id, adminName: admin.name },
+          alertInput
         );
       } catch (err) {
         console.error(

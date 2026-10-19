@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "748995342818",
+    "project_id": "bhoomidwellers-v2",
+    "storage_bucket": "bhoomidwellers-v2.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:748995342818:android:0b73100590f992af6249bb",
+        "android_client_info": {
+          "package_name": "com.bhoomidwellers_V2.com"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDjbzSZxYlVwzF2StIYvwC8iLbKzfF-_Tw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -10,7 +10,8 @@ import {
   FaThLarge, FaFileInvoiceDollar, FaBoxes, FaHandshake, FaComments,
   FaUniversity, FaClipboardList, FaUsers, FaIdCard, FaPhoneAlt,
   FaSignal, FaCalendarAlt, FaUserClock, FaChartPie, FaFileInvoice,
-  FaMapMarkerAlt, FaWhatsapp, FaCog, FaMoneyBillWave,
+  FaMapMarkerAlt, FaWhatsapp, FaCog, FaMoneyBillWave, FaEnvelope,
+  FaPalette,
 } from "react-icons/fa";
 import { BhoomiAiGlyph } from "@/components/bhoomi-ai/BhoomiAiIcon";
 
@@ -35,6 +36,12 @@ export interface AdminNavEntry {
    * Matches the ?tab= value that the employees page reads on mount.
    */
   section?: string;
+  /**
+   * Optional explicit href. When set, the consumer should router.push(href)
+   * instead of inferring the route from `owner`. Used for items that live
+   * at a specific sub-route (e.g. email-config under /dashboard/settings/).
+   */
+  href?: string;
 }
 
 /**
@@ -73,6 +80,8 @@ export function getAdminNavItems(): AdminNavEntry[] {
 
     // ── ADMIN & TOOLS ──
     { id: "notifications",          icon: FaWhatsapp,           label: "WhatsApp Alerts",         group: "Admin & Tools", owner: "employees", section: "notifications" },
+    { id: "email_config",           icon: FaEnvelope,           label: "Email Configuration",     group: "Admin & Tools", owner: "settings", href: "/dashboard/settings/email-config" },
+    { id: "creative_studio",        icon: FaPalette,            label: "AI Creative Studio",      group: "Admin & Tools", owner: "employees", section: "creative_studio" },
     // ai renders in-place on BOTH pages — owner is "local" so each page treats it as its own view
     { id: "ai",                     icon: BhoomiAiGlyph,        label: "Bhoomi AI",               group: "Admin & Tools", owner: "local",  pinned: true },
     { id: "settings",               icon: FaCog,                label: "Settings",                group: "Admin & Tools", owner: "settings",   pinned: true },
@@ -109,7 +118,7 @@ export function filterNavByRole(
 
     // Admin-only items
     if (item.id === "revenue_intelligence" || item.id === "geo" || item.id === "payroll_approvals") return false;
-    if (item.id === "settings") return false;
+    if (item.id === "settings" || item.id === "email_config" || item.id === "creative_studio") return false;
 
     // CP Chat requires partner-viewing permission
     if (item.id === "cp_chat" && opts.canViewPartners && !opts.canViewPartners(opts.userRole)) return false;

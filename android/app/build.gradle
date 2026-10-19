@@ -31,6 +31,21 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+
+    flavorDimensions "appVariant"
+    productFlavors {
+        original {
+            dimension "appVariant"
+            // Preserves existing app — no overrides needed
+        }
+        v2 {
+            dimension "appVariant"
+            applicationId "com.bhoomidwellers.crm.v2"
+            versionCode 1
+            versionName "1.0"
+        }
+    }
+
     buildTypes {
         release {
             signingConfig signingConfigs.release
