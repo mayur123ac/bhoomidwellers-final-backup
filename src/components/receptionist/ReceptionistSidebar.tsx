@@ -174,7 +174,7 @@ export default function ReceptionistSidebar({
       <aside
         onMouseEnter={() => onExpandedChange(true)}
         onMouseLeave={() => onExpandedChange(false)}
-        className={`${hideOnMobile ? "hidden md:flex" : "flex"} flex-col py-5 px-1 z-50 overflow-hidden fixed left-0 top-0 h-full`}
+        className={`${hideOnMobile ? "hidden lg:flex" : "flex"} flex-col py-5 px-1 z-50 overflow-hidden fixed left-0 top-0 h-full`}
         style={{
           width: expanded ? "248px" : "72px",
           transition: "width 320ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 320ms ease",
@@ -260,7 +260,7 @@ export default function ReceptionistSidebar({
       {/* Dim + blur behind the expanded rail. Pointer-events off so it never
           intercepts a click meant for the page underneath. */}
       <div
-        className={`${hideOnMobile ? "hidden md:block" : "block"} fixed inset-0 pointer-events-none`}
+        className={`${hideOnMobile ? "hidden lg:block" : "block"} fixed inset-0 pointer-events-none`}
         style={{
           zIndex: 45,
           left: "72px",

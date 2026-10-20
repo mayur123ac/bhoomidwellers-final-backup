@@ -17,7 +17,7 @@
 export const DEFAULT_GST_RATE = 5;
 
 /** The quick-pick rates offered in the UI. Not a whitelist — any rate is valid. */
-export const GST_RATE_PRESETS = [0, 5, 12] as const;
+export const GST_RATE_PRESETS = [1, 5] as const;
 
 /** Rates outside this range are treated as typos rather than intent. */
 const MIN_GST_RATE = 0;

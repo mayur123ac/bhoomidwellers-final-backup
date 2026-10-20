@@ -3,17 +3,19 @@
 // "Does this CP (by phone, name, or company) exist in the registry, and whose is it?"
 //
 // The walk-in enquiry form calls this as the receptionist types into any one of
-// the three CP fields so auto-fill is on screen before submit. Three modes:
+// the three CP fields so auto-fill is on screen before submit. Four modes:
 //
 //   ?phone=<digits>   — last-10-digit normalized match on channel_partners.phone
 //   ?name=<string>    — case/whitespace-insensitive exact match on cp.name
 //   ?company=<string> — case/whitespace-insensitive exact match on cp.company_name
+//   ?search=<string>  — partial prefix match on cp.name, returns up to 5 candidates
 //
 // Phone is the strongest identity key (used by findOrCreateChannelPartner).
 // Name and company are convenience look-ups — useful when the receptionist
 // knows who the CP is but does not have the number handy.
+// Search is for autocomplete — returns multiple candidates for the user to pick.
 //
-// All three modes are scoped by organization_id so one tenant cannot see
+// All modes are scoped by organization_id so one tenant cannot see
 // another tenant's partners.
 //
 // This endpoint only reads. The authoritative routing decision is made again
@@ -70,11 +72,13 @@ export async function GET(req: NextRequest) {
   const phoneRaw = sp.get("phone");
   const nameRaw  = (sp.get("name")    ?? "").trim();
   const companyRaw = (sp.get("company") ?? "").trim();
+  const searchRaw = (sp.get("search")  ?? "").trim();
 
-  // Determine search mode (priority: phone > name > company).
+  // Determine search mode (priority: phone > name > company > search).
   // For phone: the param must be present AND normalize to 10 digits.
   // For name/company: at least 2 characters (prevents single-letter false matches).
-  let searchMode: "phone" | "name" | "company" | null = null;
+  // For search: at least 2 characters; returns multiple candidates via prefix match.
+  let searchMode: "phone" | "name" | "company" | "search" | null = null;
   if (phoneRaw !== null) {
     // Phone param was explicitly passed — guard against partial numbers.
     const phone = normalizeCpPhone(phoneRaw);
@@ -90,6 +94,8 @@ export async function GET(req: NextRequest) {
     searchMode = "name";
   } else if (companyRaw.length >= 2) {
     searchMode = "company";
+  } else if (searchRaw.length >= 2) {
+    searchMode = "search";
   }
 
   if (!searchMode) {
@@ -101,6 +107,38 @@ export async function GET(req: NextRequest) {
 
   try {
     const orgId = await getOrganizationId();
+
+    // ── Search mode: partial prefix match, returns multiple candidates ──
+    if (searchMode === "search") {
+      const candidates = await query(
+        `${PARTNER_SELECT}
+          WHERE LOWER(TRIM(cp.name)) LIKE $1
+            AND cp.organization_id = $2
+            AND cp.status = 'active'
+          ORDER BY cp.name ASC
+          LIMIT 5`,
+        [`${searchRaw.toLowerCase()}%`, orgId]
+      );
+      return NextResponse.json({
+        success: true,
+        found: candidates.length > 0,
+        candidates: candidates.map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          company_name: p.company_name,
+          phone: p.phone,
+          status: p.status,
+          assigned_sourcing_manager_id: p.assigned_sourcing_manager_id,
+          assigned_sourcing_manager_name: p.assigned_sourcing_manager_name,
+          routable:
+            p.assigned_sourcing_manager_id != null &&
+            p.assigned_sourcing_manager_active === true &&
+            p.assigned_sourcing_manager_is_sm === true,
+        })),
+      });
+    }
+
+    // ── Single-result modes: phone, name, company (exact match) ──
     let rows: any[];
 
     if (searchMode === "phone") {

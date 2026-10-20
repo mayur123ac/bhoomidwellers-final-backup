@@ -512,36 +512,36 @@ const RECEP_COLUMNS: { key: string; label: string; locked?: boolean }[] = [
 
 const ALL_LEADS_COLS_KEY = "bd:recep:all-leads:hiddenCols:v1";
 const ALL_LEADS_COLUMNS: { key: string; label: string; locked?: boolean; type?: 'text' | 'number' | 'date' }[] = [
-  { key: "lead_no",      label: "Sr. No.",       locked: true, type: 'number' },
-  { key: "client_name", label: "Client Name",   locked: true, type: 'text' },
-  { key: "source",      label: "Source",                      type: 'text' },
-  { key: "cp_name",     label: "CP Name",                     type: 'text' },
-  { key: "cp_company",  label: "CP Company",                  type: 'text' },
-  { key: "cp_phone",    label: "CP Phone",                    type: 'text' },
-  { key: "budget",      label: "Budget",                      type: 'text' },
-  { key: "phone",       label: "Phone",                       type: 'text' },
-  { key: "alt_phone",   label: "Alt. Phone",                  type: 'text' },
-  { key: "date_created",label: "Date Created",                type: 'date' },
-  { key: "backdated",   label: "Backdated Entry",             type: 'date' },
-  { key: "sales_manager",label: "Sales Manager",              type: 'text' },
+  { key: "lead_no", label: "Sr. No.", locked: true, type: 'number' },
+  { key: "client_name", label: "Client Name", locked: true, type: 'text' },
+  { key: "source", label: "Source", type: 'text' },
+  { key: "cp_name", label: "CP Name", type: 'text' },
+  { key: "cp_company", label: "CP Company", type: 'text' },
+  { key: "cp_phone", label: "CP Phone", type: 'text' },
+  { key: "budget", label: "Budget", type: 'text' },
+  { key: "phone", label: "Phone", type: 'text' },
+  { key: "alt_phone", label: "Alt. Phone", type: 'text' },
+  { key: "date_created", label: "Date Created", type: 'date' },
+  { key: "backdated", label: "Backdated Entry", type: 'date' },
+  { key: "sales_manager", label: "Sales Manager", type: 'text' },
 ];
 
 /** Returns a comparable display value for a receptionist lead by ALL_LEADS_COLUMNS key. */
 function getLeadValueForColRecep(lead: any, key: string): string {
   switch (key) {
-    case 'lead_no':       return String(lead.sr_no || lead.id || '');
-    case 'client_name':   return String(lead.name || '');
-    case 'source':        return String(lead.source || '');
-    case 'cp_name':       return String(lead.cp_name || '');
-    case 'cp_company':    return String(lead.cp_company || '');
-    case 'cp_phone':      return String(lead.cp_phone || '');
-    case 'budget':        return String(lead.salesBudget || lead.budget || '');
-    case 'phone':         return String(lead.phone || '');
-    case 'alt_phone':     return String(lead.altPhone || lead.alt_phone || '');
-    case 'date_created':  return String(lead.date || '');
-    case 'backdated':     return lead.autoDateEnabled === false && lead.enquiryDate ? String(lead.enquiryDate) : '';
+    case 'lead_no': return String(lead.sr_no || lead.id || '');
+    case 'client_name': return String(lead.name || '');
+    case 'source': return String(lead.source || '');
+    case 'cp_name': return String(lead.cp_name || '');
+    case 'cp_company': return String(lead.cp_company || '');
+    case 'cp_phone': return String(lead.cp_phone || '');
+    case 'budget': return String(lead.salesBudget || lead.budget || '');
+    case 'phone': return String(lead.phone || '');
+    case 'alt_phone': return String(lead.altPhone || lead.alt_phone || '');
+    case 'date_created': return String(lead.date || '');
+    case 'backdated': return lead.autoDateEnabled === false && lead.enquiryDate ? String(lead.enquiryDate) : '';
     case 'sales_manager': return String(lead.assignedTo || '');
-    default:              return '';
+    default: return '';
   }
 }
 
@@ -619,9 +619,9 @@ const RcpColumnFilterDropdown: React.FC<RcpColumnFilterProps> = ({
     onClose();
   };
 
-  const baseText = isDark ? 'text-gray-200'  : 'text-gray-700';
-  const baseBg   = isDark ? 'bg-[#1C1C1E] border-white/10' : 'bg-white border-gray-200';
-  const hoverBg  = isDark ? 'hover:bg-white/5' : 'hover:bg-gray-50';
+  const baseText = isDark ? 'text-gray-200' : 'text-gray-700';
+  const baseBg = isDark ? 'bg-[#1C1C1E] border-white/10' : 'bg-white border-gray-200';
+  const hoverBg = isDark ? 'hover:bg-white/5' : 'hover:bg-gray-50';
 
   return (
     <div
@@ -933,7 +933,7 @@ export default function ReceptionistDashboard() {
   // ── Revisit lead detection ──
   // Multi-field revisit detection state
   type MatchReason = "primary_mobile" | "alternate_mobile" | "email" | "name_address" | "name_pin_city";
-  type MatchCandidate = { id: number; name: string; phone: string; assigned_to: string | null; created_at: string; lead_classification: string; visitCount: number; matchReasons: MatchReason[] };
+  type MatchCandidate = { id: number; name: string; phone: string; assigned_to: string | null; created_at: string; lead_classification: string; visitCount: number; matchReasons: MatchReason[]; cpName: string | null; cpPhone: string | null; cpCompany: string | null; budget: string | null; configuration: string | null; purpose: string | null; source: string | null; status: string | null; sr_no: number | null };
   const [matchCandidates, setMatchCandidates] = useState<MatchCandidate[]>([]);
   const [selectedCandidate, setSelectedCandidate] = useState<MatchCandidate | null>(null);
   const [isRevisit, setIsRevisit] = useState(false);
@@ -2270,7 +2270,7 @@ export default function ReceptionistDashboard() {
   // handleChatSubmit lived here: a setTimeout, three `userMsg.includes(...)`
   // branches and a default apology. It is gone with the mock it drove.
 
-  const handleLogout = () => { cleanupPushOnLogout().catch(() => {}); clearCrmSession(); router.replace("/"); };
+  const handleLogout = () => { cleanupPushOnLogout().catch(() => { }); clearCrmSession(); router.replace("/"); };
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -2458,7 +2458,7 @@ export default function ReceptionistDashboard() {
       /* `recep-panel` scopes the Apple-discipline type/spacing/touch-target
          layer in globals.css to this panel only — see the block there. It
          replaces `font-sans` (Geist) with the native system stack. */
-      className={`recep-panel flex flex-col md:flex-row h-screen overflow-hidden ${t.pageWrap}`}
+      className={`recep-panel flex flex-col lg:flex-row h-screen overflow-hidden ${t.pageWrap}`}
       style={isDark ? {} : { background: "linear-gradient(135deg, #e8f6fd 0%, #f8fafc 30%, #faf0fb 62%, #f8fafc 78%, #e6fafe 100%)" }}
     >
       {/* ── TOAST ── */}
@@ -2509,7 +2509,7 @@ export default function ReceptionistDashboard() {
       {/* ════════════════════════════════════════════════════
           MAIN CONTENT
       ════════════════════════════════════════════════════ */}
-      <div className="flex-1 flex flex-col overflow-hidden relative md:ml-[72px]">
+      <div className="flex-1 flex flex-col overflow-hidden relative lg:ml-[72px]">
 
         {/* HEADER — the shared AppHeader, i.e. literally the bar the Settings
             page renders. It was hand-rolled here before, which is why its
@@ -2525,7 +2525,7 @@ export default function ReceptionistDashboard() {
         >
           <div className="flex items-center gap-4 flex-shrink-0 relative z-[50]" ref={topbarRef}>
             {/* Desktop-only controls: hidden on mobile */}
-            <div className="hidden md:flex items-center gap-4">
+            <div className="hidden lg:flex items-center gap-4">
               <HeaderClock isDark={isDark} />
               <div
                 className={`w-5 h-5 flex items-center justify-center cursor-pointer ${isDark ? "text-gray-400" : "text-[#6B7280]"} hover:text-[#9E217B] transition-colors`}
@@ -2562,7 +2562,7 @@ export default function ReceptionistDashboard() {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: -6, scale: 0.98 }}
                     transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-                    className={`fixed right-4 top-14 md:absolute md:top-12 md:right-0 w-[320px] max-w-[calc(100vw-2rem)] border rounded-xl shadow-2xl flex flex-col z-50 overflow-hidden ${t.dropdown}`} style={t.dropdownGlass}
+                    className={`fixed right-4 top-14 lg:absolute lg:top-12 lg:right-0 w-[320px] max-w-[calc(100vw-2rem)] border rounded-xl shadow-2xl flex flex-col z-50 overflow-hidden ${t.dropdown}`} style={t.dropdownGlass}
                   >
                     {/* Three at most, newest first, no internal scrollbar, and a
                         centred "You're all caught up" instead of a blank box.
@@ -2597,7 +2597,7 @@ export default function ReceptionistDashboard() {
               </div>
             )} */}
             {/* Profile — desktop only */}
-            <div className="relative hidden md:block">
+            <div className="relative hidden lg:block">
               <div
                 onClick={() => setActivePopup(activePopup === "profile" ? null : "profile")}
                 className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm cursor-pointer shadow-sm hover:opacity-80 transition-opacity border
@@ -2678,7 +2678,7 @@ export default function ReceptionistDashboard() {
             <button
               type="button"
               onClick={() => setIsMobileSidebarOpen(true)}
-              className={`md:hidden h-8 w-8 sm:h-9 sm:w-9 flex-shrink-0 rounded-full sm:rounded-lg border border-transparent sm:border flex items-center justify-center transition-colors duration-150 cursor-pointer ${isDark ? "bg-white/10 text-[#EBEBF5] sm:bg-[#1C1C2A] sm:border-[#2A2A38] sm:text-yellow-300 hover:bg-white/20" : "bg-black/5 text-[#3C3C43] sm:bg-[#F1F5F9] sm:border-[#9CA3AF] sm:text-[#1A1A1A] hover:bg-black/10"} sm:hover:bg-[inherit]`}
+              className={`lg:hidden h-8 w-8 sm:h-9 sm:w-9 flex-shrink-0 rounded-full sm:rounded-lg border border-transparent sm:border flex items-center justify-center transition-colors duration-150 cursor-pointer ${isDark ? "bg-white/10 text-[#EBEBF5] sm:bg-[#1C1C2A] sm:border-[#2A2A38] sm:text-yellow-300 hover:bg-white/20" : "bg-black/5 text-[#3C3C43] sm:bg-[#F1F5F9] sm:border-[#9CA3AF] sm:text-[#1A1A1A] hover:bg-black/10"} sm:hover:bg-[inherit]`}
               aria-label="Open navigation menu"
             >
               <Menu className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -2768,7 +2768,7 @@ export default function ReceptionistDashboard() {
           )}
           {/* Header container */}
           {/* ── SHARED PAGE HEADER ── */}
-          {!["settings", "detail", "assistant", "assigned", "recep-leads", "closed-leads", "attendance", "analytics", "cp-enquiries", "cp-enquiry-records", "banking_info", "site_visits"].includes(activeTab) && (
+          {!["settings", "detail", "assistant", "assigned", "recep-leads", "closed-leads", "attendance", "analytics", "cp-enquiries", "cp-enquiry-records", "banking_info", "site_visits", "my-salary"].includes(activeTab) && (
             <div
               className="relative overflow-hidden"
               style={{
@@ -2985,7 +2985,7 @@ export default function ReceptionistDashboard() {
                       <tr className={`${isDark ? "bg-[#1C1C1E]" : "bg-white"} border-b ${isDark ? "border-white/[0.08]" : "border-black/[0.06]"}`}>
                         {visibleAllLeadsCols.map(col => {
                           const isFiltered = !!(rcpColFilters[col.key]);
-                          const isSorted   = rcpColSort?.key === col.key;
+                          const isSorted = rcpColSort?.key === col.key;
                           const stickyBase = col.key === 'lead_no'
                             ? `md:sticky md:left-0 md:z-20 ${isDark ? 'md:bg-[#1C1C1E]' : 'md:bg-white'}`
                             : col.key === 'client_name'
@@ -2996,26 +2996,24 @@ export default function ReceptionistDashboard() {
                               key={col.key}
                               className={`px-4 py-3 text-[12px] font-medium capitalize tracking-tight relative ${isDark ? 'text-gray-400' : 'text-gray-500'} ${stickyBase}`}
                               style={
-                                col.key === 'lead_no'      ? { minWidth: '88px',  maxWidth: '88px' }  :
-                                col.key === 'client_name'  ? { minWidth: '180px', maxWidth: '180px' } : {}
+                                col.key === 'lead_no' ? { minWidth: '88px', maxWidth: '88px' } :
+                                  col.key === 'client_name' ? { minWidth: '180px', maxWidth: '180px' } : {}
                               }
                             >
                               <button
                                 type="button"
                                 onClick={e => { e.stopPropagation(); setOpenRcpFilterCol(prev => prev === col.key ? null : col.key); }}
-                                className={`group flex items-center gap-1.5 whitespace-nowrap transition-colors ${
-                                  isFiltered || isSorted
-                                    ? (isDark ? 'text-[#0A84FF]' : 'text-[#007AFF]')
-                                    : isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700'
-                                }`}
+                                className={`group flex items-center gap-1.5 whitespace-nowrap transition-colors ${isFiltered || isSorted
+                                  ? (isDark ? 'text-[#0A84FF]' : 'text-[#007AFF]')
+                                  : isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700'
+                                  }`}
                                 title={`Filter / Sort by ${col.label}`}
                               >
                                 {col.label}
-                                <span className={`inline-flex items-center justify-center w-4 h-4 rounded transition-colors ${
-                                  isFiltered || isSorted
-                                    ? (isDark ? 'text-[#0A84FF]' : 'text-[#007AFF]')
-                                    : isDark ? 'text-gray-700 group-hover:text-gray-500' : 'text-gray-300 group-hover:text-gray-400'
-                                }`}>
+                                <span className={`inline-flex items-center justify-center w-4 h-4 rounded transition-colors ${isFiltered || isSorted
+                                  ? (isDark ? 'text-[#0A84FF]' : 'text-[#007AFF]')
+                                  : isDark ? 'text-gray-700 group-hover:text-gray-500' : 'text-gray-300 group-hover:text-gray-400'
+                                  }`}>
                                   {isSorted
                                     ? (rcpColSort?.direction === 'asc' ? <FaSortAlphaDown className="w-2.5 h-2.5" /> : <FaSortAlphaUp className="w-2.5 h-2.5" />)
                                     : <FaFilter className="w-2 h-2" />
@@ -5735,6 +5733,78 @@ export default function ReceptionistDashboard() {
                                 </span>
                               ))}
                             </div>
+                            {/* ── Historical Lead Details ── */}
+                            <div className={`mt-3 pt-3 border-t ${isDark ? "border-white/10" : "border-[#18392B]/10"}`}>
+                              <div className={`rounded-lg px-3 py-2.5 ${isDark ? "bg-white/5" : "bg-[#18392B]/[0.03]"}`}>
+                                <div className="text-[10px] font-bold uppercase tracking-widest mb-2 text-[#C5A059]">Previous Enquiry Details</div>
+                                <div className={`grid grid-cols-3 gap-x-4 gap-y-2 text-[12px] ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+                                  {c.sr_no && (
+                                    <div>
+                                      <div className="font-semibold uppercase text-[10px] tracking-wider opacity-60 mb-0.5">Lead #</div>
+                                      <div className="font-mono">#{c.sr_no}</div>
+                                    </div>
+                                  )}
+                                  {c.budget && (
+                                    <div>
+                                      <div className="font-semibold uppercase text-[10px] tracking-wider opacity-60 mb-0.5">Budget</div>
+                                      <div className="font-semibold">{c.budget}</div>
+                                    </div>
+                                  )}
+                                  {c.configuration && (
+                                    <div>
+                                      <div className="font-semibold uppercase text-[10px] tracking-wider opacity-60 mb-0.5">Configuration</div>
+                                      <div>{c.configuration}</div>
+                                    </div>
+                                  )}
+                                  {c.purpose && (
+                                    <div>
+                                      <div className="font-semibold uppercase text-[10px] tracking-wider opacity-60 mb-0.5">Purpose</div>
+                                      <div>{c.purpose}</div>
+                                    </div>
+                                  )}
+                                  {c.source && (
+                                    <div>
+                                      <div className="font-semibold uppercase text-[10px] tracking-wider opacity-60 mb-0.5">Source</div>
+                                      <div>{c.source}</div>
+                                    </div>
+                                  )}
+                                  {c.status && (
+                                    <div>
+                                      <div className="font-semibold uppercase text-[10px] tracking-wider opacity-60 mb-0.5">Status</div>
+                                      <div>{c.status}</div>
+                                    </div>
+                                  )}
+                                  {c.assigned_to && (
+                                    <div>
+                                      <div className="font-semibold uppercase text-[10px] tracking-wider opacity-60 mb-0.5">Sales Manager</div>
+                                      <div>{c.assigned_to}</div>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            {/* ── Channel Partner Details ── */}
+                            {(c.cpName || c.cpCompany || c.cpPhone) && (
+                            <div className={`mt-2`}>
+                              <div className={`rounded-lg px-3 py-2.5 ${isDark ? "bg-white/5" : "bg-[#18392B]/[0.03]"}`}>
+                                <div className="text-[10px] font-bold uppercase tracking-widest mb-2 text-[#C5A059]">Channel Partner</div>
+                                <div className={`grid grid-cols-3 gap-x-4 gap-y-1 text-[12px] ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+                                  <div>
+                                    <div className="font-semibold uppercase text-[10px] tracking-wider opacity-60 mb-0.5">Name</div>
+                                    <div>{c.cpName || "—"}</div>
+                                  </div>
+                                  <div>
+                                    <div className="font-semibold uppercase text-[10px] tracking-wider opacity-60 mb-0.5">Company</div>
+                                    <div>{c.cpCompany || "—"}</div>
+                                  </div>
+                                  <div>
+                                    <div className="font-semibold uppercase text-[10px] tracking-wider opacity-60 mb-0.5">Phone</div>
+                                    <div>{c.cpPhone || "—"}</div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                            )}
                           </div>
                         );
                       })}

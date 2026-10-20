@@ -74,6 +74,16 @@ export interface MatchedCandidate {
   lead_classification: string;
   visitCount: number;
   matchReasons: MatchReason[];
+  cpName: string | null;
+  cpPhone: string | null;
+  cpCompany: string | null;
+  // Historical context fields
+  budget: string | null;
+  configuration: string | null;
+  purpose: string | null;
+  source: string | null;
+  status: string | null;
+  sr_no: number | null;
 }
 
 export async function GET(req: Request) {
@@ -119,6 +129,8 @@ export async function GET(req: Request) {
       const rows = await query(
         `SELECT id, name, phone, alt_phone, email, address, pin_code, city,
                 assigned_to, created_at, lead_classification,
+                cp_name, cp_phone, cp_company, channel_partner_id,
+                budget, configuration, purpose, source, status, sr_no,
                 EXTRACT(EPOCH FROM (NOW() - created_at)) AS seconds_ago
          FROM walkin_enquiries
          WHERE RIGHT(regexp_replace(phone, '[^0-9]', '', 'g'), 10)
@@ -139,6 +151,8 @@ export async function GET(req: Request) {
       const rows = await query(
         `SELECT id, name, phone, alt_phone, email, address, pin_code, city,
                 assigned_to, created_at, lead_classification,
+                cp_name, cp_phone, cp_company, channel_partner_id,
+                budget, configuration, purpose, source, status, sr_no,
                 EXTRACT(EPOCH FROM (NOW() - created_at)) AS seconds_ago
          FROM walkin_enquiries
          WHERE RIGHT(regexp_replace(alt_phone, '[^0-9]', '', 'g'), 10)
@@ -158,6 +172,8 @@ export async function GET(req: Request) {
       const rows1 = await query(
         `SELECT id, name, phone, alt_phone, email, address, pin_code, city,
                 assigned_to, created_at, lead_classification,
+                cp_name, cp_phone, cp_company, channel_partner_id,
+                budget, configuration, purpose, source, status, sr_no,
                 EXTRACT(EPOCH FROM (NOW() - created_at)) AS seconds_ago
          FROM walkin_enquiries
          WHERE RIGHT(regexp_replace(phone, '[^0-9]', '', 'g'), 10)
@@ -175,6 +191,8 @@ export async function GET(req: Request) {
       const rows2 = await query(
         `SELECT id, name, phone, alt_phone, email, address, pin_code, city,
                 assigned_to, created_at, lead_classification,
+                cp_name, cp_phone, cp_company, channel_partner_id,
+                budget, configuration, purpose, source, status, sr_no,
                 EXTRACT(EPOCH FROM (NOW() - created_at)) AS seconds_ago
          FROM walkin_enquiries
          WHERE RIGHT(regexp_replace(alt_phone, '[^0-9]', '', 'g'), 10)
@@ -195,6 +213,8 @@ export async function GET(req: Request) {
       const rows = await query(
         `SELECT id, name, phone, alt_phone, email, address, pin_code, city,
                 assigned_to, created_at, lead_classification,
+                cp_name, cp_phone, cp_company, channel_partner_id,
+                budget, configuration, purpose, source, status, sr_no,
                 EXTRACT(EPOCH FROM (NOW() - created_at)) AS seconds_ago
          FROM walkin_enquiries
          WHERE LOWER(TRIM(email)) = $1
@@ -216,6 +236,8 @@ export async function GET(req: Request) {
       const rows = await query(
         `SELECT id, name, phone, alt_phone, email, address, pin_code, city,
                 assigned_to, created_at, lead_classification,
+                cp_name, cp_phone, cp_company, channel_partner_id,
+                budget, configuration, purpose, source, status, sr_no,
                 EXTRACT(EPOCH FROM (NOW() - created_at)) AS seconds_ago
          FROM walkin_enquiries
          WHERE LOWER(TRIM(regexp_replace(name, '\\s+', ' ', 'g'))) = $1
@@ -241,6 +263,8 @@ export async function GET(req: Request) {
         pinCityRows = await query(
           `SELECT id, name, phone, alt_phone, email, address, pin_code, city,
                   assigned_to, created_at, lead_classification,
+                  cp_name, cp_phone, cp_company, channel_partner_id,
+                  budget, configuration, purpose, source, status, sr_no,
                   EXTRACT(EPOCH FROM (NOW() - created_at)) AS seconds_ago
            FROM walkin_enquiries
            WHERE LOWER(TRIM(regexp_replace(name, '\\s+', ' ', 'g'))) = $1
@@ -255,6 +279,8 @@ export async function GET(req: Request) {
         pinCityRows = await query(
           `SELECT id, name, phone, alt_phone, email, address, pin_code, city,
                   assigned_to, created_at, lead_classification,
+                  cp_name, cp_phone, cp_company, channel_partner_id,
+                  budget, configuration, purpose, source, status, sr_no,
                   EXTRACT(EPOCH FROM (NOW() - created_at)) AS seconds_ago
            FROM walkin_enquiries
            WHERE LOWER(TRIM(regexp_replace(name, '\\s+', ' ', 'g'))) = $1
@@ -291,6 +317,22 @@ export async function GET(req: Request) {
     const allIds = Array.from(matchMap.keys());
     const depthMap = await batchGetVisitDepths(allIds, orgId);
 
+    // ── Batch-fetch canonical CP details for rows that have channel_partner_id ──
+    const cpIdsNeeded = new Set<number>();
+    for (const { row } of matchMap.values()) {
+      if (row.channel_partner_id && (!row.cp_name && !row.cp_phone && !row.cp_company)) {
+        cpIdsNeeded.add(row.channel_partner_id);
+      }
+    }
+    const cpMap = new Map<number, { name: string; phone: string; company_name: string }>();
+    if (cpIdsNeeded.size > 0) {
+      const cpRows = await query(
+        `SELECT id, name, phone, company_name FROM channel_partners WHERE id = ANY($1::int[])`,
+        [Array.from(cpIdsNeeded)]
+      );
+      for (const cp of cpRows) cpMap.set(cp.id, cp);
+    }
+
     const candidates: MatchedCandidate[] = [];
     for (const [id, { row, reasons }] of matchMap) {
       const maskedPhone = await resolvePhone(
@@ -300,6 +342,8 @@ export async function GET(req: Request) {
         orgId,
         row.phone
       );
+      // Resolve CP details: prefer denormalized columns, fall back to channel_partners table
+      const cp = row.channel_partner_id ? cpMap.get(row.channel_partner_id) : undefined;
       candidates.push({
         id,
         name: row.name,
@@ -309,6 +353,15 @@ export async function GET(req: Request) {
         lead_classification: row.lead_classification,
         visitCount: depthMap.get(id) ?? 1,
         matchReasons: Array.from(reasons),
+        cpName: row.cp_name || cp?.name || null,
+        cpPhone: row.cp_phone || cp?.phone || null,
+        cpCompany: row.cp_company || cp?.company_name || null,
+        budget: row.budget ?? null,
+        configuration: row.configuration ?? null,
+        purpose: row.purpose ?? null,
+        source: row.source ?? null,
+        status: row.status ?? null,
+        sr_no: row.sr_no ?? null,
       });
     }
 

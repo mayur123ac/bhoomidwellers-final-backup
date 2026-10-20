@@ -23,10 +23,9 @@ export const DEFAULT_REGISTRATION_FEE_RATE = 1;
 
 /**
  * Quick-pick stamp duty rates. Not a whitelist — any rate is valid.
- * 4% = female sole/co-owner concession, 5% = standard Maharashtra urban,
- * 6% = Mumbai / metro (includes the 1% metro cess).
+ * 6% = standard, 7% = higher rate.
  */
-export const STAMP_DUTY_RATE_PRESETS = [4, 5, 6] as const;
+export const STAMP_DUTY_RATE_PRESETS = [6, 7] as const;
 
 /** Quick-pick registration fee rates. 1% capped at ₹30,000 is the norm. */
 export const REGISTRATION_FEE_RATE_PRESETS = [0.5, 1] as const;

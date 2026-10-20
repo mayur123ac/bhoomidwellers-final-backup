@@ -2219,7 +2219,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                                   <RateRow
                                     label="+ Stamp Duty"
                                     presets={STAMP_DUTY_RATE_PRESETS}
-                                    presetTitle={p => p === 4 ? "4% — female sole/co-owner concession" : p === 5 ? "5% — standard Maharashtra urban" : "6% — Mumbai / metro (incl. 1% metro cess)"}
+                                    presetTitle={p => p === 6 ? "6% — standard" : "7% — higher rate"}
                                     rate={form.stamp_duty_rate}
                                     onRate={v => set("stamp_duty_rate", v)}
                                     ariaLabel="Stamp duty rate percentage"
