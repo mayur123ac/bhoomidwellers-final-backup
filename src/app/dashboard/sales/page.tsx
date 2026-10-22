@@ -17,6 +17,7 @@ import { cleanupPushOnLogout } from "@/lib/pushNotifications";
 import { formatBudget } from "@/lib/formatBudget";
 import { useCpEnquiryVisible } from "@/lib/hooks/useCpEnquiryVisible";
 import { useCrmTheme } from "@/lib/hooks/useCrmTheme";
+import { useDetailReturnView } from "@/lib/hooks/useDetailReturnView";
 import { useShiftTiming } from "@/hooks/useShiftTiming";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -1383,6 +1384,7 @@ function SalesManagerView({
   const [subView, setSubView] = useState<"overview" | "cards" | "detail" | "closed-leads">(
     initialView === "overview" ? "overview" : initialView === "detail" ? "detail" : initialView === "closed-leads" ? "closed-leads" : "cards"
   );
+  const returnView = useDetailReturnView(initialView, "detail", "forms");
   const [selectedLead, setSelectedLead] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [searchClosed, setSearchClosed] = useState("");
@@ -2961,9 +2963,9 @@ function SalesManagerView({
                 <div className="flex items-center justify-between w-full sm:w-auto gap-2">
                   <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
                     <button
-                      onClick={() => { setMainView("overview"); }}
+                      onClick={() => { setMainView(returnView); }}
                       className={`w-8 h-8 sm:w-9 sm:h-9 flex flex-shrink-0 items-center justify-center border rounded-lg sm:rounded-xl transition-all cursor-pointer active:scale-95 shadow-sm ${t.textMuted} ${t.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-gray-50"}`}
-                      aria-label="Back to dashboard"
+                      aria-label="Back to previous view"
                     >
                       <FaChevronLeft className="text-[10px] sm:text-sm" />
                     </button>

@@ -1257,7 +1257,7 @@ export default function LoanDealForm({ lead, booking, loanUpdate, user, isDark =
                             key={p}
                             type="button"
                             onClick={() => updateDealForm({ gst_rate: String(p) })}
-                            title={p === 0 ? "No GST" : p === 5 ? "5% (no ITC)" : "12% (with ITC)"}
+                            title={p === 1 ? "1% GST" : "5% GST"}
                             className={`px-2 py-1.5 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer ${active
                               ? "bg-[#9E217B] border-[#9E217B] text-white"
                               : `${t.textMuted} ${t.tableBorder} hover:border-[#9E217B]/50`

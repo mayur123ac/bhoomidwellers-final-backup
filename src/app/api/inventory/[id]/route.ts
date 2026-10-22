@@ -81,24 +81,76 @@ export async function GET(
       return NextResponse.json({ success: false, message: "Unit not found" }, { status: 404 });
 
     // Lazy hold-expiry self-heal (spec §2).
+    // When the expired hold came from a waitlist promotion, the next waiting
+    // lead is auto-promoted and the expired entry is marked 'expired'.
     const u = rows[0];
     if (u.status === "on_hold" && u.hold_expires_at && new Date(u.hold_expires_at) < new Date() && !u.deleted_at) {
-      await query(
-        `UPDATE inventory_units SET status='available', hold_expires_at=NULL, updated_at=NOW() WHERE id=$1`,
-        [Number(id)],
-      );
-      await query(
-        `INSERT INTO inventory_unit_history (unit_id, old_status, new_status, changed_by, reason, organization_id)
-         VALUES ($1, 'on_hold', 'available', 'System', 'hold expired',
-                 (SELECT organization_id FROM inventory_units WHERE id = $1))`,
-        [Number(id)],
-      );
+      await transaction(async (client) => {
+        await client.query(
+          `UPDATE inventory_units
+           SET status='available', hold_expires_at=NULL,
+               held_by=NULL, held_for_lead_id=NULL, hold_reason=NULL,
+               updated_at=NOW()
+           WHERE id=$1`,
+          [Number(id)],
+        );
+        await client.query(
+          `INSERT INTO inventory_unit_history (unit_id, old_status, new_status, changed_by, reason, organization_id)
+           VALUES ($1, 'on_hold', 'available', 'System', 'hold expired', $2)`,
+          [Number(id), unitOrgId],
+        );
+
+        // If this hold came from a waitlist promotion, expire + promote next
+        if (u.hold_reason && String(u.hold_reason).startsWith("Auto-promoted from waitlist")) {
+          const tableCheck = await client.query(
+            `SELECT 1 FROM information_schema.tables WHERE table_name = 'inventory_unit_waitlist' LIMIT 1`,
+          );
+          if (tableCheck.rows.length > 0) {
+            await client.query(
+              `UPDATE inventory_unit_waitlist
+               SET status = 'expired', updated_at = NOW()
+               WHERE unit_id = $1 AND organization_id = $2 AND status = 'promoted'`,
+              [Number(id), unitOrgId],
+            );
+            const next = await client.query(
+              `SELECT w.id, w.lead_id, w.position
+               FROM inventory_unit_waitlist w
+               WHERE w.unit_id = $1 AND w.status = 'waiting' AND w.organization_id = $2
+               ORDER BY w.position ASC, w.created_at ASC
+               LIMIT 1
+               FOR UPDATE SKIP LOCKED`,
+              [Number(id), unitOrgId],
+            );
+            if (next.rows.length > 0) {
+              const entry = next.rows[0];
+              const holdReason = `Auto-promoted from waitlist (position ${entry.position})`;
+              await client.query(
+                `UPDATE inventory_units
+                 SET status = 'on_hold', held_for_lead_id = $2, held_by = 'System',
+                     hold_reason = $3, hold_expires_at = NOW() + INTERVAL '7 days',
+                     lead_id = $2, updated_by = 'System', updated_at = NOW()
+                 WHERE id = $1`,
+                [Number(id), entry.lead_id, holdReason],
+              );
+              await client.query(
+                `INSERT INTO inventory_unit_history (unit_id, old_status, new_status, changed_by, reason, organization_id)
+                 VALUES ($1, 'available', 'on_hold', 'System', $2, $3)`,
+                [Number(id), `Waitlist promotion: lead #${entry.lead_id} (position ${entry.position})`, unitOrgId],
+              );
+              await client.query(
+                `UPDATE inventory_unit_waitlist SET status = 'promoted', promoted_at = NOW(), updated_at = NOW() WHERE id = $1`,
+                [entry.id],
+              );
+            }
+          }
+        }
+      });
       rows = await query(UNIT_DETAIL_SQL, [Number(id), unitOrgId]);
     }
 
     const history = await query(
-      `SELECT * FROM inventory_unit_history WHERE unit_id = $1 ORDER BY changed_at DESC, id DESC`,
-      [Number(id)],
+      `SELECT * FROM inventory_unit_history WHERE unit_id = $1 AND organization_id = $2 ORDER BY changed_at DESC, id DESC`,
+      [Number(id), unitOrgId],
     );
     return NextResponse.json({ success: true, data: { ...rows[0], history } }, { status: 200 });
   } catch (err: any) {

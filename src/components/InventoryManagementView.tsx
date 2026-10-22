@@ -9,7 +9,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   FaPlus, FaTable, FaThLarge, FaTimes, FaSort, FaSortUp, FaSortDown,
   FaHistory, FaExternalLinkAlt, FaChevronDown, FaLayerGroup, FaPen,
-  FaTrash, FaExclamationTriangle, FaBuilding, FaLock, FaTags, FaHandshake, FaChartBar,
+  FaTrash, FaExclamationTriangle, FaBuilding, FaLock, FaTags, FaHandshake, FaChartBar, FaUsers,
   FaArrowLeft, FaArrowRight, FaExpand, FaCompress,
 } from "react-icons/fa";
 import ColumnFilterDropdown, { useColumnFilters, FilterableColumnHeader, type FilterableColumn } from "@/components/ColumnFilterDropdown";
@@ -2277,6 +2277,22 @@ function UnitDrawer({ unitId, onClose, user, canManage, isAdminUser, isDark, t, 
   const [typeErr, setTypeErr] = useState<string | null>(null);
   const [typeSuccess, setTypeSuccess] = useState(false);
 
+  // ── Waitlist state ──
+  const [waitlist, setWaitlist] = useState<any[]>([]);
+  const [waitlistLeadId, setWaitlistLeadId] = useState("");
+  const [waitlistNotes, setWaitlistNotes] = useState("");
+  const [waitlistBusy, setWaitlistBusy] = useState(false);
+  const [waitlistErr, setWaitlistErr] = useState<string | null>(null);
+
+  const loadWaitlist = useCallback(async () => {
+    if (unitId == null) return;
+    try {
+      const res = await fetch(`/api/inventory/${unitId}/waitlist`);
+      const json = await res.json();
+      if (json.success) setWaitlist(json.data || []);
+    } catch { /* */ }
+  }, [unitId]);
+
   const load = useCallback(async () => {
     if (unitId == null) return;
     setLoading(true); setErr(null); setTypeErr(null);
@@ -2292,7 +2308,8 @@ function UnitDrawer({ unitId, onClose, user, canManage, isAdminUser, isDark, t, 
         setShowCustomInput(false);
       }
     } catch { /* */ } finally { setLoading(false); }
-  }, [unitId]);
+    loadWaitlist();
+  }, [unitId, loadWaitlist]);
 
   // Fetch org-scoped custom labels for the dropdown
   useEffect(() => {
@@ -2750,6 +2767,116 @@ function UnitDrawer({ unitId, onClose, user, canManage, isAdminUser, isDark, t, 
                       </div>
                     </section>
                   )}
+
+                  {/* ── Unit Waitlist / Pipeline ── */}
+                  <section>
+                    <p className={`text-[11px] font-semibold uppercase tracking-wider mb-3 flex items-center gap-1.5 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
+                      <FaUsers className="text-[10px]" /> Waitlist ({waitlist.filter((w: any) => w.status === "waiting").length})
+                    </p>
+                    {waitlist.length === 0 && <p className={`text-[13px] italic mb-3 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>No leads on the waitlist.</p>}
+                    {waitlist.length > 0 && (
+                      <div className="space-y-2 mb-3">
+                        {waitlist.map((w: any) => (
+                          <div key={w.id} className={`rounded-[12px] border p-3 flex items-center justify-between ${
+                            w.status === "waiting"
+                              ? isDark ? "border-[#FF9500]/40 bg-[#FF9500]/5" : "border-[#FF9500]/30 bg-[#FFF8EE]"
+                              : w.status === "promoted"
+                              ? isDark ? "border-[#34C759]/40 bg-[#34C759]/5" : "border-[#34C759]/30 bg-[#EEFBF0]"
+                              : isDark ? "border-[#38383A] bg-[#2C2C2E]/20" : "border-[#E5E5EA] bg-[#F9F9F9]"
+                          }`}>
+                            <div>
+                              <div className="flex items-center gap-2 mb-0.5">
+                                <span className={`text-[13px] font-semibold tracking-tight ${isDark ? "text-white" : "text-black"}`}>
+                                  #{w.position} — {w.lead_name || `Lead #${w.lead_id}`}
+                                </span>
+                                <span className={`text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full ${
+                                  w.status === "waiting" ? "bg-[#FF9500]/20 text-[#FF9500]"
+                                  : w.status === "promoted" ? "bg-[#34C759]/20 text-[#34C759]"
+                                  : w.status === "withdrawn" ? "bg-[#8E8E93]/20 text-[#8E8E93]"
+                                  : "bg-[#FF3B30]/20 text-[#FF3B30]"
+                                }`}>{w.status}</span>
+                              </div>
+                              {w.assigned_to && <p className={`text-[11px] ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>SM: {w.assigned_to}</p>}
+                              {w.notes && <p className={`text-[11px] italic ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>{w.notes}</p>}
+                              <p className={`text-[10px] ${isDark ? "text-[#636366]" : "text-[#AEAEB2]"}`}>
+                                {new Date(w.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                                {w.promoted_at && ` · Promoted ${new Date(w.promoted_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`}
+                              </p>
+                            </div>
+                            {w.status === "waiting" && canManage && (
+                              <button
+                                onClick={async () => {
+                                  if (!confirm(`Withdraw ${w.lead_name || "this lead"} from the waitlist?`)) return;
+                                  try {
+                                    const res = await fetch(`/api/inventory/${unitId}/waitlist`, {
+                                      method: "PUT",
+                                      headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify({ entry_id: w.id, action: "withdraw" }),
+                                    });
+                                    const json = await res.json();
+                                    if (!json.success) throw new Error(json.message);
+                                    loadWaitlist();
+                                  } catch (e: any) { setWaitlistErr(e.message); }
+                                }}
+                                title="Withdraw"
+                                className={`p-2 rounded-full transition-colors ${isDark ? "text-[#FF453A] hover:bg-[#FF453A]/15" : "text-[#FF3B30] hover:bg-[#FF3B30]/10"}`}
+                              >
+                                <FaTimes className="text-[11px]" />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {/* Add to waitlist form */}
+                    {canManage && (
+                      <div className={`rounded-[14px] border p-3 ${isDark ? "border-[#38383A] bg-[#2C2C2E]/20" : "border-[#E5E5EA] bg-[#F9F9F9]"}`}>
+                        <p className={`text-[11px] font-semibold uppercase tracking-wider mb-2 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>Add Lead to Waitlist</p>
+                        <div className="flex gap-2 items-end">
+                          <div className="flex-1">
+                            <input
+                              type="number"
+                              value={waitlistLeadId}
+                              onChange={e => { setWaitlistLeadId(e.target.value); setWaitlistErr(null); }}
+                              placeholder="Lead ID"
+                              className={`w-full rounded-[10px] px-3 py-2 text-[13px] font-medium outline-none border transition-colors focus:ring-2 focus:ring-[#007AFF]/50 ${isDark ? "bg-[#1C1C1E] border-[#38383A] text-white placeholder-[#636366]" : "bg-white border-[#E5E5EA] text-black placeholder-[#8E8E93]"}`}
+                            />
+                          </div>
+                          <div className="flex-1">
+                            <input
+                              value={waitlistNotes}
+                              onChange={e => setWaitlistNotes(e.target.value)}
+                              placeholder="Notes (optional)"
+                              className={`w-full rounded-[10px] px-3 py-2 text-[13px] font-medium outline-none border transition-colors focus:ring-2 focus:ring-[#007AFF]/50 ${isDark ? "bg-[#1C1C1E] border-[#38383A] text-white placeholder-[#636366]" : "bg-white border-[#E5E5EA] text-black placeholder-[#8E8E93]"}`}
+                            />
+                          </div>
+                          <button
+                            onClick={async () => {
+                              const lid = parseInt(waitlistLeadId, 10);
+                              if (!Number.isFinite(lid)) { setWaitlistErr("Enter a valid lead ID."); return; }
+                              setWaitlistBusy(true); setWaitlistErr(null);
+                              try {
+                                const res = await fetch(`/api/inventory/${unitId}/waitlist`, {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ lead_id: lid, notes: waitlistNotes }),
+                                });
+                                const json = await res.json();
+                                if (!json.success) throw new Error(json.message);
+                                setWaitlistLeadId(""); setWaitlistNotes("");
+                                loadWaitlist();
+                              } catch (e: any) { setWaitlistErr(e.message); } finally { setWaitlistBusy(false); }
+                            }}
+                            disabled={waitlistBusy}
+                            className={`px-4 py-2 rounded-full text-[12px] font-semibold tracking-wide text-white transition-all active:scale-95 disabled:opacity-50 ${isDark ? "bg-[#FF9500]" : "bg-[#FF9500]"}`}
+                          >
+                            {waitlistBusy ? "…" : "Add"}
+                          </button>
+                        </div>
+                        {waitlistErr && <p className={`text-[12px] font-medium mt-2 ${isDark ? "text-[#FF453A]" : "text-[#FF3B30]"}`}>{waitlistErr}</p>}
+                      </div>
+                    )}
+                  </section>
 
                   <section>
                     <p className={`text-[11px] font-semibold uppercase tracking-wider mb-3 flex items-center gap-1.5 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}><FaHistory className="text-[10px]" /> History ({history.length})</p>

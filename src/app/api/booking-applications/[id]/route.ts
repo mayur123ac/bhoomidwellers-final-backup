@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { query, transaction } from "@/lib/db";
 import { getOrganizationId } from "@/lib/tenantContext";
 import { uploadBufferToR2 } from "@/lib/r2";
-import { syncBookingUnit, releaseUnitForBooking, flatIdentityChanged, parseFloor } from "@/lib/inventorySync";
+import { syncBookingUnit, releaseUnitForBooking, promoteNextFromWaitlist, flatIdentityChanged, parseFloor } from "@/lib/inventorySync";
 import { requireSession, requireRoles, getSessionUserId } from "@/lib/serverAuth";
 import { resolveGstRate, calcGstAmount } from "@/lib/gst";
 import { resolveStampDutyRate, resolveRegistrationFeeRate, calcStampDuty } from "@/lib/charges";
@@ -563,17 +563,29 @@ export async function PUT(
              WHERE id=$1 AND organization_id=$5`,
           [Number(id), reason, remarks, user_name, orgId],
         );
-        await releaseUnitForBooking(client, Number(id), `booking #${id} cancelled`, user_name);
+        const releasedUnitIds = await releaseUnitForBooking(client, Number(id), `booking #${id} cancelled`, user_name);
+
+        // Auto-promote the next lead from the unit waitlist (if any).
+        // Runs inside the same transaction so the promotion is atomic with the
+        // release — no window where the unit appears "available" to a concurrent
+        // request while a waitlisted lead exists.
+        const promotion = await promoteNextFromWaitlist(client, releasedUnitIds, user_name);
+
+        const changedFields: any = { booking_status: { from: cur, to: "Cancelled" }, cancellation_reason: reason };
+        if (promotion) {
+          changedFields.waitlist_promotion = {
+            unit_id: promotion.unitId,
+            promoted_lead_id: promotion.leadId,
+            waitlist_entry_id: promotion.waitlistId,
+          };
+        }
+
         await client.query(
           `INSERT INTO booking_history (booking_id, updated_by, user_role, changed_fields, organization_id)
            VALUES ($1, $2, $3, $4, $5)`,
-          [Number(id), user_name, user_role, JSON.stringify({ booking_status: { from: cur, to: "Cancelled" }, cancellation_reason: reason }), orgId],
+          [Number(id), user_name, user_role, JSON.stringify(changedFields), orgId],
         );
-        // No re-read here. This row was fetched, shipped across the wire and then
-        // discarded — the response is built by fetchBookingById() after commit,
-        // and `updatedRow` is only ever a fallback for a booking that vanished
-        // between commit and read. One wasted 121-column round trip per save.
-        return { id: Number(id) };
+        return { id: Number(id), promotion: promotion || null };
       }
 
       // ── (B) Reactivate: Cancelled → Confirmed. Re-book the flat (block if another

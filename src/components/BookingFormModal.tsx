@@ -2179,7 +2179,7 @@ export default function BookingFormModal({ isOpen, onClose, lead, user, isDark =
                                               key={p}
                                               type="button"
                                               onClick={() => set("gst_rate", String(p))}
-                                              title={p === 0 ? "No GST" : p === 5 ? "5% (no ITC)" : "12% (with ITC)"}
+                                              title={p === 1 ? "1% GST" : "5% GST"}
                                               className={`px-2 py-1 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer ${active
                                                 ? "bg-[#9E217B] border-[#9E217B] text-white"
                                                 : `${textMuted} ${isDark ? "border-[#2A2A35]" : "border-[#9CA3AF]"} hover:border-[#9E217B]/50`

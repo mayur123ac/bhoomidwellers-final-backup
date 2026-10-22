@@ -712,6 +712,9 @@ function AdminAtlasDashboardContent() {
   const searchParams = useSearchParams();
   const { isMarkedPresent, timeIn } = useAttendance();
   const [activeView, setActiveView] = useState("dashboard");
+  // Captures the originating tab before a cross-tab drill (Inventory, Dashboard Overview).
+  // AdminSalesView / AdminSiteHeadView use this to navigate back to the correct tab.
+  const drillReturnRef = useRef<string | null>(null);
   // Deep-link target for the Sales view. Two callers want different things once
   // the lead is open: the Inventory drawer wants its booking, a notification
   // wants the Lead Detail panel. `openBooking` is what tells them apart — this
@@ -1343,6 +1346,7 @@ function AdminAtlasDashboardContent() {
             const isReceptionist = receptionists.some((r: any) => r.name === lead.assigned_receptionist);
             const targetTab = isSiteHead ? "site_head" : isReceptionist ? "receptionist" : "sales";
             localStorage.setItem("crm_drill_lead", JSON.stringify({ ...lead, _drillTab: targetTab }));
+            drillReturnRef.current = activeView;
             setActiveView(targetTab);
           }} />}
 
@@ -1361,7 +1365,7 @@ function AdminAtlasDashboardContent() {
           {activeView === "inventory" && (
             <div className="flex flex-col h-full overflow-hidden p-2">
               <InventoryManagementView user={user} isDark={isDark} t={theme}
-                onOpenLead={(leadId: number) => { setInvOpenLeadId({ id: leadId, openBooking: true }); setActiveView("sales"); }}
+                onOpenLead={(leadId: number) => { drillReturnRef.current = activeView; setInvOpenLeadId({ id: leadId, openBooking: true }); setActiveView("sales"); }}
                 onOpenBooking={openBookingFromInventory} />
             </div>
           )}
@@ -1416,7 +1420,7 @@ function AdminAtlasDashboardContent() {
             )
           )} */}
 
-          {activeView === "sales" && <AdminSalesView managers={managers} allLeads={allLeads} followUps={followUps} isLoading={isLoading} adminUser={user} refetch={refetch} appendFollowUp={appendFollowUp} reconcileFollowUp={reconcileFollowUp} removeFollowUp={removeFollowUp} theme={theme} isDark={isDark} openLeadId={invOpenLeadId} onOpenLeadHandled={() => setInvOpenLeadId(null)} />}
+          {activeView === "sales" && <AdminSalesView managers={managers} allLeads={allLeads} followUps={followUps} isLoading={isLoading} adminUser={user} refetch={refetch} appendFollowUp={appendFollowUp} reconcileFollowUp={reconcileFollowUp} removeFollowUp={removeFollowUp} theme={theme} isDark={isDark} openLeadId={invOpenLeadId} onOpenLeadHandled={() => setInvOpenLeadId(null)} onDrillBack={drillReturnRef.current ? () => { const rv = drillReturnRef.current!; drillReturnRef.current = null; setActiveView(rv); } : undefined} />}
 
           {/* 👇 NEW: Passing onFocusModeChange to allow the internal component to trigger Fullscreen Focus Mode 👇 */}
           {activeView === "site_head" && (
@@ -1433,6 +1437,7 @@ function AdminAtlasDashboardContent() {
               theme={theme}
               isDark={isDark}
               onFocusModeChange={setIsFocusMode}
+              onDrillBack={drillReturnRef.current ? () => { const rv = drillReturnRef.current!; drillReturnRef.current = null; setActiveView(rv); } : undefined}
             />
           )}
 
@@ -3245,7 +3250,7 @@ function useInventoryDeepLink({ openLeadId, allLeads, onOpenLeadHandled, open }:
   }, [openLeadId, allLeads]);
 }
 
-function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, refetch, appendFollowUp, reconcileFollowUp, removeFollowUp, theme, isDark, openLeadId, onOpenLeadHandled }: any) {
+function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, refetch, appendFollowUp, reconcileFollowUp, removeFollowUp, theme, isDark, openLeadId, onOpenLeadHandled, onDrillBack }: any) {
   const canDeleteFollowUps = useFollowUpDeletionPermission(adminUser?.role);
   const [deletingFollowUpId, setDeletingFollowUpId] = useState<string | null>(null);
   const [confirmDeleteFollowUpId, setConfirmDeleteFollowUpId] = useState<string | null>(null);
@@ -3277,6 +3282,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
       const mgr = managers.find((m: any) => m.name === l.assigned_to);
       if (mgr) setSelectedManager(mgr);
 
+      isDrillEntryRef.current = true;
       setSelectedLead(l);
       setSubView("detail");
       try { prefillSalesForm(l); } catch { }
@@ -3294,6 +3300,10 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
   const [activeSection, setActiveSection] = useState<"assignedTable" | "closed">("assignedTable");
   const [subView, setSubView] = useState<"list" | "detail">("list");
   const [selectedLead, setSelectedLead] = useState<any>(null);
+  // Tracks whether the current detail view was entered via a cross-tab drill
+  // (Inventory deep-link or Dashboard Overview). When true, the back button
+  // navigates to the originating tab instead of the manager's leads list.
+  const isDrillEntryRef = useRef(false);
   const [detailTab, setDetailTab] = useState<"personal" | "loan">("personal");
   const [isClosingModalOpen, setIsClosingModalOpen] = useState(false);
   const followUpEndRef = useRef<HTMLDivElement>(null);
@@ -3353,6 +3363,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
       localStorage.removeItem("crm_drill_lead");
       const sh = managers.find((s: any) => s.name === drillLead.assigned_to);
       if (sh) {
+        isDrillEntryRef.current = true;
         setSelectedManager(sh);
         setSelectedLead(drillLead);
         setSubView("detail"); prefillSalesForm(drillLead); setShowSalesForm(false); setShowLoanForm(false);
@@ -4108,7 +4119,14 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
             <div className={`p-3 border-b flex justify-between items-center shadow-sm z-10 flex-shrink-0 gap-1 ${theme.header}`} style={theme.headerGlass}>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => { setSelectedManager(null); setSubView("list"); setSelectedLead(null); }}
+                  onClick={() => {
+                    if (subView === "detail") {
+                      if (isDrillEntryRef.current && onDrillBack) { isDrillEntryRef.current = false; onDrillBack(); }
+                      else { setSubView("list"); setShowSalesForm(false); setShowLoanForm(false); }
+                    } else {
+                      setSelectedManager(null); setSubView("list"); setSelectedLead(null);
+                    }
+                  }}
                   className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-bold transition-colors cursor-pointer flex-shrink-0 ${theme.textMuted} ${theme.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}
                 >
                   <FaChevronLeft className="text-[10px]" /> Back
@@ -4181,7 +4199,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                     isDark={isDark}
                     isLoading={isLoading}
                     formatDate={formatDate}
-                    onRowClick={(lead) => { setSelectedLead(lead); setSubView("detail"); prefillSalesForm(lead); setShowSalesForm(false); setShowLoanForm(false); }}
+                    onRowClick={(lead) => { isDrillEntryRef.current = false; setSelectedLead(lead); setSubView("detail"); prefillSalesForm(lead); setShowSalesForm(false); setShowLoanForm(false); }}
                   />
 
                 </div>
@@ -4217,7 +4235,10 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                       {/* TITLE ROW: Back Button, Name, and Mobile Toggle */}
                       <div className="flex items-center justify-between w-full sm:w-auto gap-2">
                         <div className="flex items-center gap-1.5 sm:gap-2">
-                          <button onClick={() => { setSubView("list"); setShowSalesForm(false); setShowLoanForm(false); }} className={`w-8 h-8 sm:w-9 sm:h-9 flex-shrink-0 flex items-center justify-center border rounded-lg sm:rounded-xl transition-colors cursor-pointer shadow-sm ${theme.textMuted} ${theme.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}>
+                          <button onClick={() => {
+                            if (isDrillEntryRef.current && onDrillBack) { isDrillEntryRef.current = false; onDrillBack(); }
+                            else { setSubView("list"); setShowSalesForm(false); setShowLoanForm(false); }
+                          }} className={`w-8 h-8 sm:w-9 sm:h-9 flex-shrink-0 flex items-center justify-center border rounded-lg sm:rounded-xl transition-colors cursor-pointer shadow-sm ${theme.textMuted} ${theme.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}>
                             <FaChevronLeft className="text-[10px] sm:text-xs" />
                           </button>
                           <h1 className={`text-sm sm:text-base lg:text-lg font-bold flex flex-wrap items-center gap-1.5 sm:gap-2 ${theme.text}`}>
@@ -4846,7 +4867,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
 // ============================================================================
 // ADMIN SITE HEAD VIEW
 // ============================================================================
-function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUser, refetch, appendFollowUp, reconcileFollowUp, removeFollowUp, theme, isDark }: any) {
+function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUser, refetch, appendFollowUp, reconcileFollowUp, removeFollowUp, theme, isDark, onDrillBack }: any) {
   const canDeleteFollowUps = useFollowUpDeletionPermission(adminUser?.role);
   const [deletingFollowUpId, setDeletingFollowUpId] = useState<string | null>(null);
   const [confirmDeleteFollowUpId, setConfirmDeleteFollowUpId] = useState<string | null>(null);
@@ -4874,6 +4895,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
   const [activeSection, setActiveSection] = useState<"assignedTable" | "closed">("assignedTable");
   const [subView, setSubView] = useState<"list" | "detail">("list");
   const [selectedLead, setSelectedLead] = useState<any>(null);
+  const isDrillEntryRef = useRef(false);
   const [detailTab, setDetailTab] = useState<"personal" | "loan">("personal");
   const [isClosingModalOpen, setIsClosingModalOpen] = useState(false);
   const followUpEndRef = useRef<HTMLDivElement>(null);
@@ -5094,6 +5116,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
       localStorage.removeItem("crm_drill_lead");
       const sh = siteHeads.find((s: any) => s.name === drillLead.assigned_to);
       if (sh) {
+        isDrillEntryRef.current = true;
         setSelectedSiteHead(sh);
         setSelectedLead(drillLead);
         setSubView("detail"); prefillSalesForm(drillLead); setShowSalesForm(false); setShowLoanForm(false);
@@ -5683,7 +5706,14 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
             <div className={`p-2 border-b flex justify-between items-center shadow-sm z-10 flex-shrink-0 gap-2 ${theme.header}`} style={theme.headerGlass}>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => { setSelectedSiteHead(null); setSubView("list"); setSelectedLead(null); }}
+                  onClick={() => {
+                    if (subView === "detail") {
+                      if (isDrillEntryRef.current && onDrillBack) { isDrillEntryRef.current = false; onDrillBack(); }
+                      else { setSubView("list"); setShowSalesForm(false); setShowLoanForm(false); }
+                    } else {
+                      setSelectedSiteHead(null); setSubView("list"); setSelectedLead(null);
+                    }
+                  }}
                   className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-bold transition-colors cursor-pointer flex-shrink-0 ${theme.textMuted} ${theme.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}
                 >
                   <FaChevronLeft className="text-[10px]" /> Back
@@ -5756,7 +5786,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                     isDark={isDark}
                     isLoading={isLoading}
                     formatDate={formatDate}
-                    onRowClick={(lead) => { setSelectedLead(lead); setSubView("detail"); prefillSalesForm(lead); setShowSalesForm(false); setShowLoanForm(false); }}
+                    onRowClick={(lead) => { isDrillEntryRef.current = false; setSelectedLead(lead); setSubView("detail"); prefillSalesForm(lead); setShowSalesForm(false); setShowLoanForm(false); }}
                   />
 
                 </div>
@@ -5791,7 +5821,10 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                     <div className={`sticky top-0 z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-0 rounded-xl border p-2 shadow-sm flex-shrink-0 ${selectedLead.is_lost_lead ? theme.cardLost : theme.card}`} style={theme.cardGlass}>
                       <div className="flex items-center justify-between w-full sm:w-auto gap-2">
                         <div className="flex items-center gap-1.5 sm:gap-2">
-                          <button onClick={() => { setSubView("list"); setShowSalesForm(false); setShowLoanForm(false); }} className={`w-8 h-8 sm:w-9 sm:h-9 flex-shrink-0 flex items-center justify-center border rounded-lg sm:rounded-xl transition-colors cursor-pointer shadow-sm ${theme.textMuted} ${theme.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}>
+                          <button onClick={() => {
+                            if (isDrillEntryRef.current && onDrillBack) { isDrillEntryRef.current = false; onDrillBack(); }
+                            else { setSubView("list"); setShowSalesForm(false); setShowLoanForm(false); }
+                          }} className={`w-8 h-8 sm:w-9 sm:h-9 flex-shrink-0 flex items-center justify-center border rounded-lg sm:rounded-xl transition-colors cursor-pointer shadow-sm ${theme.textMuted} ${theme.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}>
                             <FaChevronLeft className="text-[10px] sm:text-xs" />
                           </button>
                           <h1 className={`text-sm sm:text-base lg:text-lg font-bold flex flex-wrap items-center gap-1.5 sm:gap-2 ${theme.text}`}>

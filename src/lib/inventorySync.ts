@@ -210,6 +210,80 @@ export async function releaseUnitForBooking(
   return released;
 }
 
+// After releasing a unit, check the waitlist and promote the next waiting lead.
+// Promotion sets the unit to 'on_hold' with held_for_lead_id — it does NOT
+// auto-create a booking, because booking creation requires extensive applicant
+// data that a simple interest record does not carry. The assigned sales manager
+// is expected to initiate the actual booking through the normal form.
+//
+// Returns the promoted waitlist entry id, or null if no one was waiting.
+export async function promoteNextFromWaitlist(
+  client: PoolClient,
+  unitIds: number[],
+  actor: string,
+): Promise<{ unitId: number; waitlistId: number; leadId: number } | null> {
+  if (unitIds.length === 0) return null;
+
+  const orgId = await getOrganizationId(client);
+
+  // Pre-migration guard: if the waitlist table doesn't exist yet, skip silently.
+  const tableCheck = await client.query(
+    `SELECT 1 FROM information_schema.tables WHERE table_name = 'inventory_unit_waitlist' LIMIT 1`,
+  );
+  if (tableCheck.rows.length === 0) return null;
+
+  for (const unitId of unitIds) {
+    // Lock and fetch the next waiting entry for this unit.
+    const next = await client.query(
+      `SELECT w.id, w.lead_id, w.position
+       FROM inventory_unit_waitlist w
+       WHERE w.unit_id = $1 AND w.status = 'waiting' AND w.organization_id = $2
+       ORDER BY w.position ASC, w.created_at ASC
+       LIMIT 1
+       FOR UPDATE SKIP LOCKED`,
+      [unitId, orgId],
+    );
+
+    if (next.rows.length === 0) continue;
+
+    const entry = next.rows[0];
+
+    // Promote: set unit to on_hold for this lead
+    const holdReason = `Auto-promoted from waitlist (position ${entry.position})`;
+    await client.query(
+      `UPDATE inventory_units
+       SET status = 'on_hold',
+           held_for_lead_id = $2,
+           held_by = $3,
+           hold_reason = $4,
+           hold_expires_at = NOW() + INTERVAL '7 days',
+           lead_id = $2,
+           updated_by = $3, updated_at = NOW()
+       WHERE id = $1`,
+      [unitId, entry.lead_id, actor, holdReason],
+    );
+
+    // Log history
+    await client.query(
+      `INSERT INTO inventory_unit_history (unit_id, old_status, new_status, changed_by, reason, organization_id)
+       VALUES ($1, 'available', 'on_hold', $2, $3, $4)`,
+      [unitId, actor, `Waitlist promotion: lead #${entry.lead_id} (position ${entry.position})`, orgId],
+    );
+
+    // Mark waitlist entry as promoted
+    await client.query(
+      `UPDATE inventory_unit_waitlist
+       SET status = 'promoted', promoted_at = NOW(), updated_at = NOW()
+       WHERE id = $1`,
+      [entry.id],
+    );
+
+    return { unitId, waitlistId: entry.id, leadId: entry.lead_id };
+  }
+
+  return null;
+}
+
 // Did the flat identity change between the stored booking and the incoming edit?
 export function flatIdentityChanged(oldRow: any, next: any): boolean {
   const norm = (v: any) => String(v ?? "").trim().toLowerCase();

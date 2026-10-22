@@ -17,6 +17,7 @@ import { clearCrmSession, getStoredCrmUser, installLoggedOutBackGuard } from "@/
 import { cleanupPushOnLogout } from "@/lib/pushNotifications";
 import { formatBudget } from "@/lib/formatBudget";
 import { useCrmTheme } from "@/lib/hooks/useCrmTheme";
+import { useDetailReturnView } from "@/lib/hooks/useDetailReturnView";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FaThLarge, FaCog, FaBell, FaTimes, FaClipboardList,
@@ -775,6 +776,7 @@ export default function ReceptionistDashboard() {
   const [user, setUser] = useState<any>({ name: "Loading...", role: "Receptionist", email: "", password: "" });
   const [orgTheme, setOrgTheme] = useState({ primary: "#18392B", secondary: "#C5A059", textColor: "#1F2937" });
   const [activeTab, setActiveTab] = useState("overview");
+  const overviewReturnTab = useDetailReturnView(activeTab, "detail", "overview");
   const [showPassword, setShowPassword] = useState(false);
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -3461,7 +3463,7 @@ export default function ReceptionistDashboard() {
             <div className="animate-fadeIn max-w-5xl mx-auto pb-4 sm:pb-10">
               <div className={`flex flex-row sm:flex-row sm:items-center gap-3 sm:gap-4 mb-4 sm:mb-6 md:mb-4 rounded-xl sm:rounded-2xl md:rounded-3xl border p-3 sm:p-2.5 md:p-4 ${t.card}`} style={t.cardGlass}>
                 <div className="flex items-center gap-2.5 sm:gap-3">
-                  <button onClick={() => setActiveTab("overview")} className={`w-9 h-9 sm:w-11 sm:h-11 md:w-10 md:h-10 flex-shrink-0 flex items-center justify-center border hover:border-current rounded-lg sm:rounded-xl transition-colors cursor-pointer shadow-sm ${t.textMuted} ${t.tableBorder}`}><FaChevronLeft className="text-xs sm:text-sm" /></button>
+                  <button onClick={() => setActiveTab(overviewReturnTab)} className={`w-9 h-9 sm:w-11 sm:h-11 md:w-10 md:h-10 flex-shrink-0 flex items-center justify-center border hover:border-current rounded-lg sm:rounded-xl transition-colors cursor-pointer shadow-sm ${t.textMuted} ${t.tableBorder}`}><FaChevronLeft className="text-xs sm:text-sm" /></button>
                   <h1 className={`text-lg sm:text-xl md:text-3xl font-bold flex flex-wrap items-center gap-1.5 sm:gap-2 md:gap-3 ${t.text}`}>
                     <span className={t.accentText}>#{selectedLead.sr_no || selectedLead.id}</span>
                     <span className="truncate max-w-[200px] sm:max-w-none">{selectedLead.name}</span>

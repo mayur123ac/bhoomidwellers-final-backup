@@ -37,31 +37,83 @@ const SORTABLE = new Set([
 
 // Lazily self-heal expired holds so a stale on_hold never blocks a unit even
 // without a cron job (spec §2). Cheap — touches only the expired rows.
+//
+// When an expired hold came from a waitlist promotion, the next waiting lead is
+// auto-promoted (same logic as booking cancellation). The expired entry in the
+// waitlist is also marked 'expired' so the queue position is freed.
 async function revertExpiredHolds() {
-  // held_by / held_for_lead_id are cleared alongside the expiry: leaving them set
-  // on a unit that is available again would show a released flat as still spoken
-  // for, which is worse than the no-ownership state this replaced.
-  const expired = await query<{ id: number; held_by: string | null }>(
-    `UPDATE inventory_units
-        SET status = 'available', hold_expires_at = NULL,
-            held_by = NULL, held_for_lead_id = NULL, hold_reason = NULL,
-            updated_at = NOW()
-      WHERE status = 'on_hold' AND hold_expires_at IS NOT NULL
-        AND hold_expires_at < NOW() AND deleted_at IS NULL
-      RETURNING id, held_by`,
-  );
-  for (const r of expired) {
-    await query(
-      // MT-05: the organization is taken from the unit itself, not from a
-      // session — this sweeper runs for expired holds and has no actor. Deriving
-      // it in SQL also makes a history row in a different tenant to its unit
-      // structurally impossible.
-      `INSERT INTO inventory_unit_history (unit_id, old_status, new_status, changed_by, reason, organization_id)
-       VALUES ($1, 'on_hold', 'available', 'System', $2,
-               (SELECT organization_id FROM inventory_units WHERE id = $1))`,
-      [r.id, r.held_by ? `hold expired (was ${r.held_by}'s)` : "hold expired"],
+  await transaction(async (client) => {
+    // held_by / held_for_lead_id are cleared alongside the expiry: leaving them set
+    // on a unit that is available again would show a released flat as still spoken
+    // for, which is worse than the no-ownership state this replaced.
+    const { rows: expired } = await client.query<{ id: number; held_by: string | null; hold_reason: string | null; organization_id: number }>(
+      `UPDATE inventory_units
+          SET status = 'available', hold_expires_at = NULL,
+              held_by = NULL, held_for_lead_id = NULL, hold_reason = NULL,
+              updated_at = NOW()
+        WHERE status = 'on_hold' AND hold_expires_at IS NOT NULL
+          AND hold_expires_at < NOW() AND deleted_at IS NULL
+        RETURNING id, held_by, hold_reason, organization_id`,
     );
-  }
+    for (const r of expired) {
+      await client.query(
+        `INSERT INTO inventory_unit_history (unit_id, old_status, new_status, changed_by, reason, organization_id)
+         VALUES ($1, 'on_hold', 'available', 'System', $2, $3)`,
+        [r.id, r.held_by ? `hold expired (was ${r.held_by}'s)` : "hold expired", r.organization_id],
+      );
+
+      // If this hold came from a waitlist promotion, mark that entry expired
+      // and promote the next waiting lead.
+      if (r.hold_reason && r.hold_reason.startsWith("Auto-promoted from waitlist")) {
+        // Mark the promoted waitlist entry as expired
+        const tableCheck = await client.query(
+          `SELECT 1 FROM information_schema.tables WHERE table_name = 'inventory_unit_waitlist' LIMIT 1`,
+        );
+        if (tableCheck.rows.length > 0) {
+          await client.query(
+            `UPDATE inventory_unit_waitlist
+             SET status = 'expired', updated_at = NOW()
+             WHERE unit_id = $1 AND organization_id = $2 AND status = 'promoted'`,
+            [r.id, r.organization_id],
+          );
+
+          // Promote the next waiting lead
+          const next = await client.query(
+            `SELECT w.id, w.lead_id, w.position
+             FROM inventory_unit_waitlist w
+             WHERE w.unit_id = $1 AND w.status = 'waiting' AND w.organization_id = $2
+             ORDER BY w.position ASC, w.created_at ASC
+             LIMIT 1
+             FOR UPDATE SKIP LOCKED`,
+            [r.id, r.organization_id],
+          );
+          if (next.rows.length > 0) {
+            const entry = next.rows[0];
+            const holdReason = `Auto-promoted from waitlist (position ${entry.position})`;
+            await client.query(
+              `UPDATE inventory_units
+               SET status = 'on_hold',
+                   held_for_lead_id = $2, held_by = 'System',
+                   hold_reason = $3,
+                   hold_expires_at = NOW() + INTERVAL '7 days',
+                   lead_id = $2, updated_by = 'System', updated_at = NOW()
+               WHERE id = $1`,
+              [r.id, entry.lead_id, holdReason],
+            );
+            await client.query(
+              `INSERT INTO inventory_unit_history (unit_id, old_status, new_status, changed_by, reason, organization_id)
+               VALUES ($1, 'available', 'on_hold', 'System', $2, $3)`,
+              [r.id, `Waitlist promotion: lead #${entry.lead_id} (position ${entry.position})`, r.organization_id],
+            );
+            await client.query(
+              `UPDATE inventory_unit_waitlist SET status = 'promoted', promoted_at = NOW(), updated_at = NOW() WHERE id = $1`,
+              [entry.id],
+            );
+          }
+        }
+      }
+    }
+  });
 }
 
 // ─── GET — list units (filters + pagination) ──────────────────────────────────
