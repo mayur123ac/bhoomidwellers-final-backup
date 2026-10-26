@@ -1,14 +1,71 @@
 "use client";
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { useShiftTiming } from "@/hooks/useShiftTiming";
-import AttendanceTimerWidget from "@/components/AttendanceTimerWidget";
-import { FaClock, FaCalendarAlt, FaCheckCircle, FaTimesCircle, FaMapMarkerAlt, FaFileExcel, FaTimes, FaCog, FaClipboardList, FaCheck, FaFilter, FaSortAlphaDown, FaSortAlphaUp } from "react-icons/fa";
+import { FaCheckCircle, FaClipboardList, FaCheck } from "react-icons/fa";
 import { useAttendance } from "@/components/AttendanceContext";
 import ColumnFilterDropdown, { FilterableColumnHeader, useColumnFilters, type FilterableColumn } from "@/components/ColumnFilterDropdown";
 import { motion, AnimatePresence } from "framer-motion";
 import AppleDatePicker from "@/components/AppleDatePicker";
+import { computeFirstToLastSeconds, formatDurationHM } from "@/lib/attendance/sessionDuration";
+
+/**
+ * Compute the authoritative daily Working Hours from attendance timestamps.
+ *
+ * The metric is always: first attendance mark (login_time) → latest completion
+ * (logout_time) or NOW if the day is still active.  Gaps between CRM sessions
+ * are included — this is the attendance *span*, not the sum of online time.
+ *
+ * Falls back to session-based computation only when no attendance record exists
+ * (e.g. employee is logged in but hasn't marked attendance yet).
+ */
+function computeAttendanceSpan(
+  sessions: any[],
+  now: number,
+): number | null {
+  if (!sessions || sessions.length === 0) return null;
+
+  // The ar subquery is DISTINCT ON employee_id, so every session row carries
+  // the same attendance_* fields. Read them from the first row.
+  const row = sessions[0];
+  const loginTimeStr: string | null = row?.attendance_login_time ?? null;
+  const completedStr: string | null = row?.attendance_completed_at ?? null;
+
+  if (loginTimeStr) {
+    const loginMs = new Date(loginTimeStr).getTime();
+    if (!isNaN(loginMs)) {
+      if (completedStr) {
+        // Day completed: frozen span from first mark to completion.
+        // Prefer the server-computed span (avoids client-clock drift),
+        // but fall back to client-side timestamp math if missing.
+        const spanFromServer = row?.attendance_span_seconds;
+        if (spanFromServer != null && Number(spanFromServer) >= 0) {
+          return Math.floor(Number(spanFromServer));
+        }
+        const completedMs = new Date(completedStr).getTime();
+        if (!isNaN(completedMs)) {
+          const sec = Math.floor((completedMs - loginMs) / 1000);
+          return sec >= 0 ? sec : null;
+        }
+      }
+      // Day still active (no logout_time): compute client-side so the
+      // live timer ticks every second instead of stalling between fetches.
+      const sec = Math.floor((now - loginMs) / 1000);
+      return sec >= 0 ? sec : null;
+    }
+  }
+
+  // No attendance record — fall back to session-based computation.
+  // This handles the "logged in but not yet marked" state.
+  return computeFirstToLastSeconds(sessions, now);
+}
 export type ThemeTokens = Record<string, string | any>;
-const istToday = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+
+/** Format a timestamptz ISO string as IST time (hh:mm:ss AM/PM). */
+const fmtIST = (v: string) =>
+  new Date(v).toLocaleTimeString("en-US", {
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+    timeZone: "Asia/Kolkata",
+  });
+
 export default function AttendanceView({
   adminUser,
   isDark,
@@ -24,9 +81,11 @@ export default function AttendanceView({
   const [isLoading, setIsLoading] = useState(true);
   const [markingId, setMarkingId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
-  const [showHistory, setShowHistory] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string>(
-    () => new Date().toISOString().split("T")[0]
+    // IST date, not UTC.  Between 12:00 AM and 5:30 AM IST the UTC calendar
+    // day is still the previous day, so .toISOString().split("T")[0] would
+    // select yesterday's sessions for the first 5.5 hours of every workday.
+    () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date())
   );
 
   const {
@@ -35,9 +94,6 @@ export default function AttendanceView({
     isMarkedPresent: headerIsMarkedPresent,
     employeeId: headerEmployeeId,
   } = useAttendance();
-
-  // Real-time Centralized Shift Timing
-  const { timing: workingHours } = useShiftTiming();
 
   // ── Column filter / sort state ──────────────────────────────────────────────
   const {
@@ -48,66 +104,35 @@ export default function AttendanceView({
   const attendanceCols: FilterableColumn[] = [
     { key: "status", label: "Status" },
     { key: "employee", label: "Employee" },
-    { key: "loginTime", label: "Login Time" },
-    { key: "punctuality", label: "Punctuality" },
-    { key: "logoutTime", label: "Logout Time" },
-    { key: "loggedTime", label: "Logged Time" },
-    { key: "workingHour", label: "Working Hour" },
-    { key: "attendance", label: "Attendance" },
+    { key: "markAttendanceTime", label: "Mark Attendance Time" },
+    { key: "dayCompletedAt", label: "Day Completed At" },
+    { key: "workingHours", label: "Working Hours" },
   ];
 
   /** Map a session row + column key to the display string used for filtering / sorting. */
   const getDisplayValue = useCallback((s: any, colKey: string): string => {
-    const isActive = !!s.session_is_active;
     switch (colKey) {
-      case "status":
-        return isActive ? "Active" : s.session_end ? "Offline" : "Idle";
+      case "status": {
+        const st = s.attendance_status?.toLowerCase();
+        if (st === "present") return "Present";
+        if (st === "absent") return "Absent";
+        return "Pending";
+      }
       case "employee":
         return s.name || adminUser.name || "";
-      case "loginTime":
-        return s.session_start
-          ? new Date(s.session_start).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" })
-          : "";
-      case "punctuality": {
-        if (!s.session_start) return "";
-        if (workingHours.flexible) return "Flexible";
-        const loginDate = new Date(s.session_start);
-        const [cH, cM] = workingHours.loginTime.split(":").map(Number);
-        const expected = new Date(loginDate);
-        expected.setHours(cH, cM, 0, 0);
-        const diff = Math.round((loginDate.getTime() - expected.getTime()) / 60000);
-        if (diff > 2) return `Late`;
-        if (diff < -2) return `Early`;
-        return "On Time";
-      }
-      case "logoutTime":
-        return isActive ? "Active Session" : s.session_end
-          ? new Date(s.session_end).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" })
-          : "N/A";
-      case "loggedTime": {
-        if (!s.session_start) return "";
-        const startMs = new Date(s.session_start).getTime();
-        const endMs = isActive ? now : s.session_end ? new Date(s.session_end).getTime() : startMs;
-        const diff = Math.max(0, Math.floor((endMs - startMs) / 1000));
-        const hh = Math.floor(diff / 3600);
-        const mm = Math.floor((diff % 3600) / 60);
-        const ss = diff % 60;
-        return `${String(hh).padStart(2, "0")}h ${String(mm).padStart(2, "0")}m ${String(ss).padStart(2, "0")}s`;
-      }
-      case "workingHour":
-        if (s.attendance_working_track != null) {
-          const sec = Number(s.attendance_working_track);
-          const h = Math.floor(sec / 3600);
-          const m = Math.floor((sec % 3600) / 60);
-          return `${String(h).padStart(2, "0")}h ${String(m).padStart(2, "0")}m`;
-        }
+      case "markAttendanceTime":
+        return s.attendance_marked_at ? fmtIST(s.attendance_marked_at) : "—";
+      case "dayCompletedAt":
+        return s.attendance_completed_at ? fmtIST(s.attendance_completed_at) : "—";
+      case "workingHours": {
+        const total = computeAttendanceSpan(sessions, now);
+        if (total != null && total > 0) return formatDurationHM(total);
         return "—";
-      case "attendance":
-        return s.attendance_status?.toLowerCase() === "present" ? "Confirmed" : "Pending";
+      }
       default:
         return "";
     }
-  }, [adminUser.name, workingHours, now]);
+  }, [adminUser.name, sessions, now]);
 
   /** Build the flat record array that the dropdown needs for unique-value extraction. */
   const buildFilterData = useCallback((rows: any[]) => {
@@ -124,7 +149,7 @@ export default function AttendanceView({
   };
 
   const fetchSessions = async () => {
-    const today = new Date().toISOString().split("T")[0];
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
     if (selectedDate > today) {
       setSessions([]);
       setIsLoading(false);
@@ -207,7 +232,7 @@ export default function AttendanceView({
         setSessions((prev) =>
           prev.map((sess) =>
             (sess.session_id ?? sess.id) === (s.session_id ?? s.id)
-              ? { ...sess, attendance_status: "Present" }
+              ? { ...sess, attendance_status: "Present", attendance_marked_at: data.markedAt || new Date().toISOString() }
               : sess
           )
         );
@@ -223,106 +248,28 @@ export default function AttendanceView({
     }
   };
 
-  // ── Helpers ─────────────────────────────────────────────────────────────────
+  // ── Derived state ─────────────────────────────────────────────────────────
 
-  const getSessionDuration = (start: string, end: string, isActive: boolean) => {
-    if (!start) return "—";
-    const startTime = new Date(start).getTime();
-    const endTime = isActive ? now : end ? new Date(end).getTime() : startTime;
-    const diff = Math.max(0, Math.floor((endTime - startTime) / 1000));
-    const h = Math.floor(diff / 3600);
-    const m = Math.floor((diff % 3600) / 60);
-    const sec = diff % 60;
-    return `${String(h).padStart(2, "0")}h ${String(m).padStart(2, "0")}m ${String(sec).padStart(2, "0")}s`;
-  };
-
-  const getCumulativeLiveTimer = () => {
-    let totalMs = 0;
-    for (const s of sessions) {
-      const startTime = new Date(s.session_start).getTime();
-      const endTime = s.session_is_active
-        ? now
-        : s.session_end
-          ? new Date(s.session_end).getTime()
-          : startTime;
-      totalMs += Math.max(0, endTime - startTime);
-    }
-    const totalSec = Math.floor(totalMs / 1000);
-    const h = Math.floor(totalSec / 3600);
-    const m = Math.floor((totalSec % 3600) / 60);
-    const sec = totalSec % 60;
-    return `${String(h).padStart(2, "0")}h ${String(m).padStart(2, "0")}m ${String(sec).padStart(2, "0")}s`;
-  };
-
-  const formatPunctualityDiff = (diffMinutes: number): string => {
-    const abs = Math.abs(diffMinutes);
-    const h = Math.floor(abs / 60);
-    const m = abs % 60;
-    if (h > 0 && m > 0) return `${h}h ${m}m`;
-    if (h > 0) return `${h}h`;
-    return `${m}m`;
-  };
-
-  const getPunctualityInfo = (sessionStart: string) => {
-    if (workingHours.flexible)
-      return {
-        label: "Flexible",
-        style: isDark ? "text-[#0A84FF] bg-[rgba(10,132,255,0.15)]" : "text-[#007AFF] bg-[#E5F1FF]",
-      };
-
-    const loginDate = new Date(sessionStart);
-    const [configH, configM] = workingHours.loginTime.split(":").map(Number);
-    const expected = new Date(loginDate);
-    expected.setHours(configH, configM, 0, 0);
-    const diffMinutes = Math.round(
-      (loginDate.getTime() - expected.getTime()) / 60000
-    );
-
-    if (diffMinutes > 2)
-      return {
-        label: `Late ${formatPunctualityDiff(diffMinutes)}`,
-        style: isDark ? "text-[#FF453A] bg-[rgba(255,69,58,0.15)]" : "text-[#FF3B30] bg-[#FFECEB]",
-      };
-    if (diffMinutes < -2)
-      return {
-        label: `Early ${formatPunctualityDiff(diffMinutes)}`,
-        style: isDark ? "text-[#32D74B] bg-[rgba(50,215,75,0.15)]" : "text-[#34C759] bg-[#EBF9EE]",
-      };
-    return {
-      label: "On Time",
-      style: isDark ? "text-[#0A84FF] bg-[rgba(10,132,255,0.15)]" : "text-[#007AFF] bg-[#E5F1FF]",
-    };
-  };
-
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
   const isFutureDate = selectedDate > todayStr;
   const isLoggedInNow = sessions.some((s) => s.session_is_active);
   const firstLogin = sessions.length > 0 ? sessions[0].session_start : null;
 
-  const totalWorkingMs = sessions.reduce((acc, s) => {
-    const start = new Date(s.session_start).getTime();
-    const end = s.session_is_active
-      ? now
-      : s.session_end
-        ? new Date(s.session_end).getTime()
-        : start;
-    return acc + Math.max(0, end - start);
-  }, 0);
-  const totalH = Math.floor(totalWorkingMs / 3600000);
-  const totalM = Math.floor((totalWorkingMs % 3600000) / 60000);
+  const totalWorkingRaw = computeAttendanceSpan(sessions, now);
+  const totalWorkingSec = totalWorkingRaw ?? 0;
+  const totalH = Math.floor(totalWorkingSec / 3600);
+  const totalM = Math.floor((totalWorkingSec % 3600) / 60);
 
   const isMarkedPresent = sessions.some(
     (s) => s.attendance_status?.toLowerCase() === "present"
   );
 
-  const displaySessions = showHistory
-    ? sessions
-    : sessions.length <= 1
-      ? sessions
-      : (() => {
-        const active = sessions.find((s) => s.session_is_active);
-        return active ? [active] : [sessions[sessions.length - 1]];
-      })();
+  // Simplified view: one summary row (attendance data is the same across all
+  // sessions because the subquery uses DISTINCT ON employee_id). Pick the
+  // active session if one exists, otherwise the latest.
+  const displaySessions = sessions.length === 0
+    ? []
+    : [sessions.find((s) => s.session_is_active) || sessions[sessions.length - 1]];
 
   // ── Apply column filters & sort to display sessions ──
   const filteredSessions = useMemo(() => {
@@ -348,6 +295,39 @@ export default function AttendanceView({
       },
     });
   }, [isMarkedPresent, headerIsMarkedPresent, headerEmployeeId, selectedDate, todayStr, sessions]);
+
+  // ── Helpers ─────────────────────────────────────────────────────────────────
+
+  /** Working hours: First Login → Final Logout (or NOW if active). */
+  const getWorkingHoursDisplay = (): { text: string; isLive: boolean } => {
+    // totalWorkingRaw is null when no valid session timestamps exist;
+    // 0 is a legitimate (if unlikely) duration.  Show "—" only for null.
+    if (totalWorkingRaw != null) {
+      return { text: formatDurationHM(totalWorkingSec), isLive: isLoggedInNow && selectedDate === todayStr };
+    }
+    return { text: "—", isLive: false };
+  };
+
+  /** Status badge styling. */
+  const statusStyle = (status: string) => {
+    const st = status.toLowerCase();
+    if (st === "present") return {
+      label: "Present",
+      cls: isDark ? "text-[#32D74B] bg-[rgba(50,215,75,0.15)]" : "text-[#34C759] bg-[#EBF9EE]",
+    };
+    if (st === "absent") return {
+      label: "Absent",
+      cls: isDark ? "text-[#FF453A] bg-[rgba(255,69,58,0.15)]" : "text-[#FF3B30] bg-[#FFECEB]",
+    };
+    return {
+      label: "Pending",
+      cls: isDark ? "text-[#FF9F0A] bg-[rgba(255,159,10,0.15)]" : "text-[#FF9500] bg-[#FFF4E5]",
+    };
+  };
+
+  // ── Common cell border helper ──
+  const borderCls = (isLast: boolean) =>
+    !isLast ? (isDark ? "border-b border-[#38383A]" : "border-b border-[#E5E5EA]") : "";
 
   return (
     <div className={`font-sans antialiased w-full min-w-0 max-w-full mx-auto p-2 sm:p-0 lg:p-0 space-y-0 sm:space-y-6 ${isDark ? "bg-transparent text-white" : "bg-transparent text-black"}`}>
@@ -385,11 +365,6 @@ export default function AttendanceView({
             maxDate={todayStr}
             isDark={isDark}
           />
-          <div className={`px-3 py-1.5 rounded-md text-[12px] font-medium tracking-wide flex items-center gap-1.5 border ${isDark ? "bg-[#1C1C1E] border-white/10 text-[#EBEBF5]" : "bg-white border-gray-200 text-[#333333] shadow-sm"
-            }`}>
-            <span className="text-[#8E8E93] text-[10px] uppercase tracking-wider">Shift</span>
-            {workingHours.flexible ? "Flexible" : `${workingHours.loginTime} – ${workingHours.logoutTime}`}
-          </div>
         </div>
       </div>
 
@@ -414,7 +389,7 @@ export default function AttendanceView({
                   Mark Today's Attendance
                 </p>
                 <p className={`text-[11px] sm:text-[12px] mt-0.5 ${isDark ? "text-[#EBEBF5]/60" : "text-[#8E8E93]"}`}>
-                  You are logged in. Select the checkbox in the active session below and submit to confirm.
+                  You are logged in. Use the mark action in the table below to confirm your attendance.
                 </p>
               </div>
               <span className={`text-[10px] font-semibold uppercase tracking-wide px-2.5 py-1 rounded-full animate-pulse flex-shrink-0 ${isDark ? "text-[#FF9F0A] bg-[rgba(255,159,10,0.2)]" : "text-[#FF9500] bg-[#FFE0B2]"
@@ -462,7 +437,7 @@ export default function AttendanceView({
             },
             {
               label: "Total Working",
-              value: sessions.length > 0 ? `${String(totalH).padStart(2, "0")}h ${String(totalM).padStart(2, "0")}m` : "—",
+              value: totalWorkingRaw != null ? `${String(totalH).padStart(2, "0")}h ${String(totalM).padStart(2, "0")}m` : "—",
               color: isDark ? "text-[#0A84FF]" : "text-[#007AFF]",
             },
             {
@@ -485,64 +460,17 @@ export default function AttendanceView({
           ))}
         </div>
 
-        {/* ── Cumulative Timer Banner ── */}
-        <AnimatePresence>
-          {isLoggedInNow && selectedDate === todayStr && sessions.length > 1 && (
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-              className={`rounded-[14px] p-3 sm:p-4 flex items-center gap-3 ${isDark ? "bg-[rgba(10,132,255,0.15)] border border-[rgba(10,132,255,0.2)]" : "bg-[#E5F1FF] border border-[#BCE0FD]"}`}
-            >
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${isDark ? "bg-[#0A84FF]" : "bg-[#007AFF]"}`}>
-                <FaClock className="text-white text-sm" />
-              </div>
-              <div className="flex-1">
-                <p className={`text-[12px] sm:text-[13px] font-semibold tracking-tight ${isDark ? "text-[#0A84FF]" : "text-[#007AFF]"}`}>
-                  Cumulative Timer ({sessions.length} sessions today)
-                </p>
-                <p className={`text-[10px] sm:text-[11px] mt-0.5 ${isDark ? "text-[#EBEBF5]/60" : "text-[#8E8E93]"}`}>
-                  Time accumulates across all cycles. Total shown in the table below.
-                </p>
-              </div>
-              <span className={`font-mono text-sm sm:text-base font-bold tracking-tight ${isDark ? "text-[#0A84FF]" : "text-[#007AFF]"}`}>
-                {getCumulativeLiveTimer()}
-              </span>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* ── Attendance List ── */}
+        {/* ── Attendance Table ── */}
         <div className={`rounded-[18px] shadow-sm overflow-hidden border ${isDark ? "bg-[#1C1C1E] border-white/10 shadow-sm" : "bg-white border-black/5 shadow-[0_2px_16px_rgba(0,0,0,0.03)]"}`}>
 
-          <div className={`px-4 py-3 border-b flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${isDark ? "border-[#38383A] bg-[#2C2C2E]/20" : "border-[#E5E5EA] bg-[#F9F9F9]"}`}>
+          <div className={`px-4 py-3 border-b flex items-center justify-between ${isDark ? "border-[#38383A] bg-[#2C2C2E]/20" : "border-[#E5E5EA] bg-[#F9F9F9]"}`}>
             <h3 className={`text-[13px] sm:text-[14px] font-semibold tracking-tight flex items-center gap-2 ${isDark ? "text-[#9E217B]" : "text-[#9E217B]"}`}>
               <FaClipboardList className={isDark ? "text-[#9E217B]" : "text-[#9E217B]"} />
               Session Log
             </h3>
-            <div className="flex items-center gap-3">
-              {sessions.length > 1 && (
-                <div className="flex items-center gap-2">
-                  <span className={`text-[11px] sm:text-[12px] font-medium ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>Show History</span>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={showHistory}
-                    onClick={() => setShowHistory((p) => !p)}
-                    className={`relative w-[36px] h-[22px] rounded-full transition-colors duration-200 ease-in-out ${showHistory ? (isDark ? "bg-[#32D74B]" : "bg-[#34C759]") : (isDark ? "bg-[#3A3A3C]" : "bg-[#E5E5EA]")
-                      }`}
-                  >
-                    <span
-                      className={`absolute top-[2px] left-[2px] w-[18px] h-[18px] rounded-full bg-white shadow-sm transition-transform duration-200 ease-in-out ${showHistory ? "translate-x-[14px]" : "translate-x-0"
-                        }`}
-                    />
-                  </button>
-                </div>
-              )}
-              <span className={`text-[10px] font-semibold uppercase tracking-wider px-2.5 py-1 rounded-md ${isDark ? "bg-[#2C2C2E] text-[#8E8E93]" : "bg-[#F2F2F7] text-[#8E8E93]"}`}>
-                {sessions.length} Session{sessions.length !== 1 ? "s" : ""}
-              </span>
-            </div>
           </div>
 
+          {/* ── Desktop table ── */}
           <div className="hidden lg:block overflow-x-auto custom-scrollbar">
             <table className="w-full text-left whitespace-nowrap">
               <thead>
@@ -580,7 +508,7 @@ export default function AttendanceView({
               <tbody>
                 {isFutureDate ? (
                   <tr>
-                    <td colSpan={8} className="py-12 text-center">
+                    <td colSpan={5} className="py-12 text-center">
                       <div className="flex flex-col items-center gap-1.5">
                         <span className="text-3xl opacity-50">📅</span>
                         <p className={`text-[13px] sm:text-[14px] font-semibold tracking-tight ${isDark ? "text-white" : "text-black"}`}>No Data Available</p>
@@ -590,88 +518,78 @@ export default function AttendanceView({
                   </tr>
                 ) : isLoading ? (
                   <tr>
-                    <td colSpan={8} className="py-10 text-center">
+                    <td colSpan={5} className="py-10 text-center">
                       <div className="flex items-center justify-center gap-2.5">
                         <div className="w-4 h-4 rounded-full border-[2px] border-[#8E8E93] border-t-transparent animate-spin" />
-                        <span className={`text-[12px] sm:text-[13px] font-medium ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>Loading sessions...</span>
+                        <span className={`text-[12px] sm:text-[13px] font-medium ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>Loading...</span>
                       </div>
                     </td>
                   </tr>
                 ) : filteredSessions.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="py-12 text-center">
+                    <td colSpan={5} className="py-12 text-center">
                       <div className="flex flex-col items-center gap-1.5">
                         <span className="text-3xl opacity-50">📭</span>
-                        <p className={`text-[13px] sm:text-[14px] font-semibold tracking-tight ${isDark ? "text-white" : "text-black"}`}>No sessions found</p>
-                        <p className={`text-[11px] sm:text-[12px] ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>Make sure the CRM session tracker is active.</p>
+                        <p className={`text-[13px] sm:text-[14px] font-semibold tracking-tight ${isDark ? "text-white" : "text-black"}`}>No attendance record</p>
+                        <p className={`text-[11px] sm:text-[12px] ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>No session found for this date.</p>
                       </div>
                     </td>
                   </tr>
                 ) : (
                   filteredSessions.map((s: any, i: number) => {
-                    const punct = getPunctualityInfo(s.session_start);
-                    const isActive = !!s.session_is_active;
+                    const st = statusStyle(s.attendance_status ?? "Pending");
                     const isAlreadyMarked = s.attendance_status?.toLowerCase() === "present";
                     const isCurrentlyMarking = markingId === (s.session_id ?? s.id);
                     const isLast = i === filteredSessions.length - 1;
+                    const wh = getWorkingHoursDisplay();
 
                     return (
                       <tr key={i} className={`transition-colors ${isDark ? "hover:bg-white/[0.03]" : "hover:bg-black/[0.02]"}`}>
-                        <td className={`px-4 py-3 relative ${!isLast ? (isDark ? "border-b border-[#38383A]" : "border-b border-[#E5E5EA]") : ""}`}>
-                          {isActive && <div className={`absolute left-0 top-1/2 -translate-y-1/2 h-2/3 w-[3px] rounded-r-full ${isDark ? "bg-[#32D74B]" : "bg-[#34C759]"}`} />}
-                          <span className={`font-medium tracking-tight text-[12px] sm:text-[13px] ${isActive ? (isDark ? "text-[#32D74B]" : "text-[#34C759]") : (isDark ? "text-[#8E8E93]" : "text-[#8E8E93]")}`}>
-                            {isActive ? "Active" : s.session_end ? "Offline" : "Idle"}
-                          </span>
-                        </td>
-
-                        <td className={`px-4 py-3 font-medium tracking-tight text-[12px] sm:text-[13px] ${isDark ? "text-white" : "text-black"} ${!isLast ? (isDark ? "border-b border-[#38383A]" : "border-b border-[#E5E5EA]") : ""}`}>
-                          {s.name || adminUser.name}
-                        </td>
-
-                        <td className={`px-4 py-3 text-[12px] sm:text-[13px] font-medium tracking-tight ${isDark ? "text-[#EBEBF5]" : "text-[#333333]"} ${!isLast ? (isDark ? "border-b border-[#38383A]" : "border-b border-[#E5E5EA]") : ""}`}>
-                          {new Date(s.session_start).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" })}
-                        </td>
-
-                        <td className={`px-4 py-3 ${!isLast ? (isDark ? "border-b border-[#38383A]" : "border-b border-[#E5E5EA]") : ""}`}>
-                          <span className={`px-2 py-0.5 rounded-md text-[10px] sm:text-[11px] font-semibold tracking-wide ${punct.style}`}>
-                            {punct.label}
-                          </span>
-                        </td>
-
-                        <td className={`px-4 py-3 text-[12px] sm:text-[13px] font-medium tracking-tight ${isActive ? (isDark ? "text-[#32D74B]" : "text-[#34C759]") : (isDark ? "text-[#8E8E93]" : "text-[#8E8E93]")} ${!isLast ? (isDark ? "border-b border-[#38383A]" : "border-b border-[#E5E5EA]") : ""}`}>
-                          {isActive ? "Active Session" : s.session_end ? new Date(s.session_end).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" }) : "N/A"}
-                        </td>
-
-                        <td className={`px-4 py-3 font-mono text-[12px] sm:text-[13px] tracking-tight ${isDark ? "text-[#EBEBF5]" : "text-[#333333]"} ${!isLast ? (isDark ? "border-b border-[#38383A]" : "border-b border-[#E5E5EA]") : ""}`}>
-                          {getSessionDuration(s.session_start, s.session_end, isActive)}
-                        </td>
-
-                        <td className={`px-4 py-3 font-mono text-[12px] sm:text-[13px] font-semibold tracking-tight ${isDark ? "text-[#0A84FF]" : "text-[#007AFF]"} ${!isLast ? (isDark ? "border-b border-[#38383A]" : "border-b border-[#E5E5EA]") : ""}`}>
-                          {i === 0 && s.attendance_working_track != null ? (
-                            (() => {
-                              const sec = Number(s.attendance_working_track);
-                              const h = Math.floor(sec / 3600);
-                              const m = Math.floor((sec % 3600) / 60);
-                              return `${String(h).padStart(2, "0")}h ${String(m).padStart(2, "0")}m`;
-                            })()
-                          ) : (
-                            <span className={isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}>—</span>
-                          )}
-                        </td>
-
-                        <td className={`px-4 py-3 ${!isLast ? (isDark ? "border-b border-[#38383A]" : "border-b border-[#E5E5EA]") : ""}`}>
+                        {/* Status */}
+                        <td className={`px-4 py-3 ${borderCls(isLast)}`}>
                           {isAlreadyMarked ? (
-                            <span className={`flex items-center gap-1.5 text-[12px] sm:text-[13px] font-semibold tracking-tight ${isDark ? "text-[#32D74B]" : "text-[#34C759]"}`}>
-                              <FaCheckCircle className="text-[14px]" /> Confirmed
+                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] sm:text-[12px] font-semibold tracking-wide ${st.cls}`}>
+                              <FaCheckCircle className="text-[12px]" /> {st.label}
                             </span>
                           ) : (
                             <AttendanceCheckbox
                               sessionId={s.session_id ?? s.id}
                               isMarking={isCurrentlyMarking}
                               isDark={isDark}
+                              statusBadge={st}
                               onSubmit={() => handleMarkAttendance(s)}
                             />
                           )}
+                        </td>
+
+                        {/* Employee */}
+                        <td className={`px-4 py-3 font-medium tracking-tight text-[12px] sm:text-[13px] ${isDark ? "text-white" : "text-black"} ${borderCls(isLast)}`}>
+                          {s.name || adminUser.name}
+                        </td>
+
+                        {/* Mark Attendance Time */}
+                        <td className={`px-4 py-3 text-[12px] sm:text-[13px] font-medium tracking-tight ${isDark ? "text-[#EBEBF5]" : "text-[#333333]"} ${borderCls(isLast)}`}>
+                          {s.attendance_marked_at
+                            ? fmtIST(s.attendance_marked_at)
+                            : <span className="text-[#8E8E93]">—</span>}
+                        </td>
+
+                        {/* Day Completed At */}
+                        <td className={`px-4 py-3 text-[12px] sm:text-[13px] font-medium tracking-tight ${borderCls(isLast)}`}>
+                          {s.attendance_completed_at
+                            ? <span className={isDark ? "text-[#EBEBF5]" : "text-[#333333]"}>{fmtIST(s.attendance_completed_at)}</span>
+                            : selectedDate === todayStr && sessions.length > 0
+                              ? <span className={isDark ? "text-[#0A84FF]" : "text-[#007AFF]"}>In Progress</span>
+                              : <span className="text-[#8E8E93]">—</span>}
+                        </td>
+
+                        {/* Working Hours */}
+                        <td className={`px-4 py-3 font-mono text-[12px] sm:text-[13px] font-semibold tracking-tight ${borderCls(isLast)}`}>
+                          <span className={wh.text === "—"
+                            ? "text-[#8E8E93]"
+                            : isDark ? "text-[#0A84FF]" : "text-[#007AFF]"}>
+                            {wh.text}
+                          </span>
                         </td>
                       </tr>
                     );
@@ -682,86 +600,87 @@ export default function AttendanceView({
           </div>
 
         </div>
-        {/* ── Mobile / tablet: cards instead of the table ── */}
+
+        {/* ── Mobile / tablet: cards ── */}
         {isFutureDate || isLoading || filteredSessions.length === 0 ? (
           <div className="lg:hidden py-10 px-4 text-center text-[12px] font-medium text-[#8E8E93]">
             {isFutureDate
               ? "Selected date is in the future."
               : isLoading
-                ? "Loading sessions..."
-                : "No sessions found. Make sure the CRM session tracker is active."}
+                ? "Loading..."
+                : "No attendance record for this date."}
           </div>
         ) : (
           <div className={`lg:hidden divide-y ${isDark ? "divide-[#38383A]" : "divide-[#E5E5EA]"}`}>
             {filteredSessions.map((s: any, i: number) => {
-              const punct = getPunctualityInfo(s.session_start);
-              const isActive = !!s.session_is_active;
+              const st = statusStyle(s.attendance_status ?? "Pending");
               const isAlreadyMarked = s.attendance_status?.toLowerCase() === "present";
               const isCurrentlyMarking = markingId === (s.session_id ?? s.id);
-              const green = isDark ? "text-[#32D74B]" : "text-[#34C759]";
-              const fmt = (v: string) =>
-                new Date(v).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" });
-
-              let tracked = "—";
-              if (i === 0 && s.attendance_working_track != null) {
-                const sec = Number(s.attendance_working_track);
-                tracked = `${String(Math.floor(sec / 3600)).padStart(2, "0")}h ${String(Math.floor((sec % 3600) / 60)).padStart(2, "0")}m`;
-              }
+              const wh = getWorkingHoursDisplay();
 
               return (
                 <div key={s.session_id ?? s.id ?? i} className="relative p-4 space-y-3">
-                  {isActive && (
-                    <div className={`absolute left-0 top-4 bottom-4 w-[3px] rounded-r-full ${isDark ? "bg-[#32D74B]" : "bg-[#34C759]"}`} />
-                  )}
-
                   <div className="flex items-center justify-between gap-2">
-                    <span className={`text-[13px] font-semibold tracking-tight ${isActive ? green : "text-[#8E8E93]"}`}>
-                      {isActive ? "Active" : s.session_end ? "Offline" : "Idle"}
+                    <span className={`text-[13px] font-semibold tracking-tight ${isDark ? "text-white" : "text-black"}`}>
+                      {s.name || adminUser.name}
                     </span>
-                    <span className={`px-2 py-0.5 rounded-md text-[11px] font-semibold tracking-wide ${punct.style}`}>
-                      {punct.label}
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold tracking-wide ${st.cls}`}>
+                      {isAlreadyMarked && <FaCheckCircle className="text-[10px]" />} {st.label}
                     </span>
                   </div>
 
                   <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-                    <Field label="Login" value={fmt(s.session_start)} isDark={isDark} />
                     <Field
-                      label="Logout"
-                      value={isActive ? "Active Session" : s.session_end ? fmt(s.session_end) : "N/A"}
+                      label="Mark Attendance Time"
+                      value={s.attendance_marked_at ? fmtIST(s.attendance_marked_at) : "—"}
                       isDark={isDark}
-                      valueClass={isActive ? green : undefined}
                     />
-                    <Field label="Logged Time" value={getSessionDuration(s.session_start, s.session_end, isActive)} isDark={isDark} mono />
-                    <Field label="Working Hour" value={tracked} isDark={isDark} mono valueClass={isDark ? "text-[#0A84FF]" : "text-[#007AFF]"} />
+                    <Field
+                      label="Day Completed At"
+                      value={s.attendance_completed_at
+                        ? fmtIST(s.attendance_completed_at)
+                        : selectedDate === todayStr && sessions.length > 0
+                          ? "In Progress"
+                          : "—"}
+                      isDark={isDark}
+                      valueClass={!s.attendance_completed_at && selectedDate === todayStr && sessions.length > 0
+                        ? (isDark ? "text-[#0A84FF]" : "text-[#007AFF]")
+                        : undefined}
+                    />
+                    <Field
+                      label="Working Hours"
+                      value={wh.text}
+                      isDark={isDark}
+                      mono
+                      valueClass={wh.text !== "—" ? (isDark ? "text-[#0A84FF]" : "text-[#007AFF]") : undefined}
+                    />
                   </div>
 
-                  <div className="pt-1">
-                    {isAlreadyMarked ? (
-                      <span className={`flex items-center gap-1.5 text-[13px] font-semibold tracking-tight ${green}`}>
-                        <FaCheckCircle className="text-[14px]" /> Confirmed
-                      </span>
-                    ) : (
+                  {!isAlreadyMarked && (
+                    <div className="pt-1">
                       <AttendanceCheckbox
                         sessionId={s.session_id ?? s.id}
                         isMarking={isCurrentlyMarking}
                         isDark={isDark}
+                        statusBadge={st}
                         onSubmit={() => handleMarkAttendance(s)}
                       />
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
         )}
+
         <p className={`text-[11px] text-center font-medium leading-relaxed pb-4 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
           Attendance data is sourced automatically from the CRM session tracker.
-          <br className="hidden sm:block" /> The cumulative live timer displays total working time today across all sessions.
         </p>
       </motion.div>
     </div>
   );
 }
+
 function Field({
   label,
   value,
@@ -787,15 +706,18 @@ function Field({
     </div>
   );
 }
+
 function AttendanceCheckbox({
   sessionId,
   isMarking,
   isDark,
+  statusBadge,
   onSubmit,
 }: {
   sessionId: any;
   isMarking: boolean;
   isDark: boolean;
+  statusBadge: { label: string; cls: string };
   onSubmit: () => void;
 }) {
   const [checked, setChecked] = useState(false);
@@ -805,7 +727,7 @@ function AttendanceCheckbox({
       <label className="flex items-center gap-1.5 cursor-pointer select-none group">
         <div
           onClick={() => !isMarking && setChecked((p) => !p)}
-          className={`w-[22px] h-[22px] sm:w-[18px] sm:h-[18px] rounded-full border-[1.5px]flex items-center justify-center transition-all duration-200 ${checked
+          className={`w-[22px] h-[22px] sm:w-[18px] sm:h-[18px] rounded-full border-[1.5px] flex items-center justify-center transition-all duration-200 ${checked
             ? isDark ? "bg-[#0A84FF] border-[#0A84FF]" : "bg-[#007AFF] border-[#007AFF]"
             : isDark ? "border-[#8E8E93] bg-transparent group-hover:border-[#0A84FF]" : "border-[#C7C7CC] bg-white group-hover:border-[#007AFF]"
             }`}
@@ -813,7 +735,7 @@ function AttendanceCheckbox({
           {checked && <FaCheck className="text-white text-[8px]" />}
         </div>
         <span className={`text-[12px] font-medium tracking-tight ${isDark ? "text-white" : "text-black"}`}>
-          Present
+          Mark Present
         </span>
       </label>
 

@@ -12,6 +12,7 @@ import ColumnFilterDropdown, { useColumnFilters, FilterableColumnHeader, type Fi
 import AttendanceReportButton from "@/components/AttendanceReportButton";
 import { useShiftTiming } from "@/hooks/useShiftTiming";
 import { useRealtimeOrg } from "@/lib/supabase/useRealtimeOrg";
+import { computeSessionSeconds, formatDurationHM, formatDurationHMS } from "@/lib/attendance/sessionDuration";
 
 export default function LiveActivityView({ theme, isDark }: { theme: any; isDark: boolean }) {
   const [sessions, setSessions] = useState<any[]>([]);
@@ -88,24 +89,15 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
   }, []);
 
   const getLiveTimer = (start: string, end: string, isActive: boolean) => {
-    if (!start) return "Frozen";
-    const startTime = new Date(start).getTime();
-    const endTime = isActive ? now : (end ? new Date(end).getTime() : startTime);
-    const diff = Math.max(0, Math.floor((endTime - startTime) / 1000));
-    const h = Math.floor(diff / 3600);
-    const m = Math.floor((diff % 3600) / 60);
-    const s = diff % 60;
-    return `${String(h).padStart(2, '0')}h ${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s`;
+    const sec = computeSessionSeconds(start, end, isActive, now);
+    if (sec == null) return "Frozen";
+    return formatDurationHMS(sec);
   };
 
   const getWorkingHours = (start: string, end: string, isActive: boolean) => {
-    if (!start) return "-";
-    const startTime = new Date(start).getTime();
-    const endTime = isActive ? now : (end ? new Date(end).getTime() : startTime);
-    const diff = Math.max(0, Math.floor((endTime - startTime) / 1000));
-    const h = Math.floor(diff / 3600);
-    const m = Math.floor((diff % 3600) / 60);
-    return `${String(h).padStart(2, '0')}h ${String(m).padStart(2, '0')}m`;
+    const sec = computeSessionSeconds(start, end, isActive, now);
+    if (sec == null) return "-";
+    return formatDurationHM(sec);
   };
 
   const formatPunctualityDiff = (diffMinutes: number): string => {
@@ -737,6 +729,13 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
                                   {s.session_start ? (s.session_is_active ? "Active Session" : (s.session_end ? new Date(s.session_end).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' }) : "N/A")) : "-"}
                                 </td>
                               )}
+                              {visibleColumns.risk && (
+                                <td className={`px-4 py-3`}>
+                                  {s.idle_duration_seconds > 1800
+                                    ? <span className={`px-2 py-1 rounded-[6px] text-[10px] font-bold tracking-wide ${isDark ? "bg-[#FF453A]/15 text-[#FF453A]" : "bg-[#FFECEB] text-[#FF3B30]"} whitespace-nowrap`}>⚠ Long Idle</span>
+                                    : <span className={isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}>-</span>}
+                                </td>
+                              )}
                               {visibleColumns.liveTimer && (
                                 <td className={`px-4 py-3`}>
                                   <button className="w-full text-left group" onClick={(e) => toggleAccordion(e, s)} disabled={!s.session_start}>
@@ -749,19 +748,16 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
                               )}
                               {visibleColumns.todayWorkingHours && (
                                 <td className={`px-4 py-3 font-mono font-medium tracking-tight text-[13px] ${isDark ? "text-[#BF5AF2]" : "text-[#AF52DE]"}`}>
-                                  {s.working_track != null ? (() => {
-                                    const wt = Number(s.working_track);
-                                    const h = Math.floor(wt / 3600);
-                                    const m = Math.floor((wt % 3600) / 60);
-                                    return <span>{`${h}h ${String(m).padStart(2, '0')}m`}</span>;
-                                  })() : <span className={isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}>—</span>}
-                                </td>
-                              )}
-                              {visibleColumns.risk && (
-                                <td className={`px-4 py-3`}>
-                                  {s.idle_duration_seconds > 1800
-                                    ? <span className={`px-2 py-1 rounded-[6px] text-[10px] font-bold tracking-wide ${isDark ? "bg-[#FF453A]/15 text-[#FF453A]" : "bg-[#FFECEB] text-[#FF3B30]"} whitespace-nowrap`}>⚠ Long Idle</span>
-                                    : <span className={isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}>-</span>}
+                                  {(() => {
+                                    // First Login → Final Logout, computed server-side
+                                    // across all sessions. Falls back to single-session
+                                    // only when the server value is missing.
+                                    const wt = s.total_working_seconds != null
+                                      ? Number(s.total_working_seconds)
+                                      : computeSessionSeconds(s.session_start, s.session_end, !!s.session_is_active, now);
+                                    if (wt == null) return <span className={isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}>—</span>;
+                                    return <span>{formatDurationHM(wt)}</span>;
+                                  })()}
                                 </td>
                               )}
                               <td className={`px-4 py-3 text-[12px] font-semibold tracking-tight`}>

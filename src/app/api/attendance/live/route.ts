@@ -74,8 +74,18 @@ export async function GET(req: Request) {
         s.login_location_accuracy,
         sc.active_sessions_count,
         
-        EXTRACT(EPOCH FROM (NOW() - s.session_start)) as session_duration_seconds,
+        -- Per-session elapsed time (correct for both active and ended sessions)
+        CASE
+          WHEN s.session_start IS NULL THEN NULL
+          WHEN s.is_active THEN EXTRACT(EPOCH FROM (NOW() - s.session_start))::integer
+          WHEN s.session_end IS NOT NULL THEN EXTRACT(EPOCH FROM (s.session_end - s.session_start))::integer
+          ELSE NULL
+        END as session_duration_seconds,
         ar.working_track,
+        -- Daily total working seconds across ALL sessions for this user on
+        -- this date.  Preferred over working_track when working_track is NULL
+        -- (employee never explicitly checked out via "Done for the Day").
+        sw.total_working_seconds,
         CASE
           WHEN s.user_id IS NULL THEN 'OFFLINE'
           WHEN s.is_active = false THEN 'OFFLINE'
@@ -92,12 +102,29 @@ export async function GET(req: Request) {
         ORDER BY user_id, session_start DESC
       ) s ON u.id = s.user_id
       LEFT JOIN (
-        SELECT user_id, COUNT(id) as active_sessions_count 
-        FROM employee_sessions 
+        SELECT user_id, COUNT(id) as active_sessions_count
+        FROM employee_sessions
         WHERE is_active = true AND DATE(session_start AT TIME ZONE 'Asia/Kolkata') = $1
           AND organization_id = $2
         GROUP BY user_id
       ) sc ON u.id = sc.user_id
+      LEFT JOIN (
+        -- Working hours = First Login → Final Logout (or NOW if still active).
+        -- Breaks between sessions are NOT subtracted: the client's rule is
+        -- continuous first-login-to-final-logout.
+        SELECT user_id,
+          EXTRACT(EPOCH FROM (
+            MAX(CASE
+              WHEN is_active THEN NOW()
+              ELSE COALESCE(session_end, last_heartbeat, session_start)
+            END)
+            - MIN(session_start)
+          ))::integer AS total_working_seconds
+        FROM employee_sessions
+        WHERE DATE(session_start AT TIME ZONE 'Asia/Kolkata') = $1
+          AND organization_id = $2
+        GROUP BY user_id
+      ) sw ON u.id = sw.user_id
       LEFT JOIN employee_live_state l ON u.id = l.user_id AND l.organization_id = $2
       LEFT JOIN (
         -- ORDER BY id ASC matches mark/status/checkout routes: the first

@@ -1,7 +1,7 @@
 // lib/formatBudget.ts
 // Shared budget formatting utility used by all CRM panels.
 
-const UNIT_REGEX = /^([\d\s\-,.]+)\s*(lakh|crore|thousand)\b/i;
+const UNIT_REGEX = /^([\d\s\-,.]+)\s*(lakh|lakhs|lac|lacs|crore|crores|cr|thousand)\b/i;
 
 /**
  * Formats a budget value and optional unit into a human-readable string.
@@ -24,7 +24,7 @@ export function formatBudget(
   if (!b) return "";
 
   // Short-circuit sentinel values
-  if (b === "Not Disclosed" || b === "Pending" || b === "N/A") return b;
+  if (b === "NOT DISCLOSED" || b === "Not Disclosed" || b === "Pending" || b === "N/A") return b;
 
   // Canonical path: unit column is set
   if (unit) {
@@ -40,7 +40,9 @@ export function formatBudget(
     const amount = match[1].trim();
     const rawUnit = match[2].toLowerCase();
     const label =
-      rawUnit === "lakh" ? "Lakh" : rawUnit === "crore" ? "Crore" : "Thousand";
+      rawUnit === "lakh" || rawUnit === "lakhs" || rawUnit === "lac" || rawUnit === "lacs" ? "Lakh"
+      : rawUnit === "crore" || rawUnit === "crores" || rawUnit === "cr" ? "Crore"
+      : "Thousand";
     return `₹${amount} ${label}`;
   }
 
@@ -64,10 +66,15 @@ export function parseBudgetString(raw: string | null | undefined): {
 } {
   const b = String(raw ?? "").trim();
   if (!b) return { value: "", unit: null };
+  if (b === "NOT DISCLOSED" || b === "Not Disclosed" || b === "Pending" || b === "N/A") return { value: b, unit: null };
 
   const match = b.match(UNIT_REGEX);
   if (match) {
-    return { value: match[1].trim(), unit: match[2].toLowerCase() };
+    const raw = match[2].toLowerCase();
+    const unit = raw === "lakhs" || raw === "lac" || raw === "lacs" ? "lakh"
+      : raw === "crores" || raw === "cr" ? "crore"
+      : raw;
+    return { value: match[1].trim(), unit };
   }
 
   return { value: b, unit: null };

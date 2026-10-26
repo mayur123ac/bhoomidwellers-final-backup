@@ -2148,7 +2148,7 @@ export default function ReceptionistDashboard() {
     if (sf.length === 0) return;
     const msg = sf[sf.length - 1].message;
     const g = (label: string) => { const m = msg.match(new RegExp(`• ${label}: (.*)`)); return m && m[1].trim() !== "N/A" ? m[1].trim() : ""; };
-    setSalesForm({ propertyType: g("Property Type"), location: g("Location"), budget: g("Budget"), useType: g("Use Type"), purchaseDate: g("Planning to Purchase"), loanPlanned: g("Loan Planned"), leadStatus: g("Lead Status"), siteVisit: "" });
+    setSalesForm({ propertyType: g("Property Type").toUpperCase(), location: g("Location"), budget: g("Budget").toUpperCase(), useType: g("Use Type"), purchaseDate: g("Planning to Purchase"), loanPlanned: g("Loan Planned"), leadStatus: g("Lead Status"), siteVisit: "" });
   };
 
   const handleSendCustomNote = async (e: React.FormEvent) => {
@@ -3735,9 +3735,9 @@ export default function ReceptionistDashboard() {
                               <button type="button" onClick={() => setShowSalesForm(false)} className={`p-1.5 sm:p-2 rounded-lg bg-black/5 dark:bg-white/5 transition-colors ${t.textMuted} hover:text-red-500`}><FaTimes className="text-sm" /></button>
                             </div>
                             <form onSubmit={handleSalesFormSubmit} className="flex flex-col gap-3 sm:gap-4 flex-1">
-                              <div><label className={`crm-eyebrow mb-1.5 block ${t.textMuted}`}>Property Type?</label><input type="text" placeholder="e.g. 1BHK, 2BHK" value={salesForm.propertyType} onChange={e => setSalesForm({ ...salesForm, propertyType: e.target.value })} className={formInput} /></div>
+                              <div><label className={`crm-eyebrow mb-1.5 block ${t.textMuted}`}>Property Type?</label><input type="text" placeholder="e.g. 1BHK, 2BHK" value={salesForm.propertyType} onChange={e => setSalesForm({ ...salesForm, propertyType: e.target.value.toUpperCase() })} className={formInput} /></div>
                               <div><label className={`crm-eyebrow mb-1.5 block ${t.textMuted}`}>Preferred Location?</label><input type="text" placeholder="e.g. Dombivali, Kalyan" value={salesForm.location} onChange={e => setSalesForm({ ...salesForm, location: e.target.value })} className={formInput} /></div>
-                              <div><label className={`crm-eyebrow mb-1.5 block ${t.textMuted}`}>Approximate Budget?</label><input type="text" placeholder="e.g. 5 cr" value={salesForm.budget} onChange={e => setSalesForm({ ...salesForm, budget: e.target.value })} className={formInput} /></div>
+                              <div><label className={`crm-eyebrow mb-1.5 block ${t.textMuted}`}>Approximate Budget?</label><input type="text" placeholder="e.g. 5 cr" value={salesForm.budget} onChange={e => setSalesForm({ ...salesForm, budget: e.target.value.toUpperCase() })} className={formInput} /></div>
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                                 <div><label className={`crm-eyebrow mb-1.5 block ${t.textMuted}`}>Self-use or Investment?</label><select value={salesForm.useType} onChange={e => setSalesForm({ ...salesForm, useType: e.target.value })} className={formSelect}><option value="">Select</option><option>Self Use</option><option>Investment</option></select></div>
                                 <div><label className={`crm-eyebrow mb-1.5 block ${t.textMuted}`}>Planning to Purchase?</label><select value={salesForm.purchaseDate} onChange={e => setSalesForm({ ...salesForm, purchaseDate: e.target.value })} className={formSelect}><option value="">Select</option><option>Immediate</option><option>Next 3 Months</option></select></div>
@@ -5787,25 +5787,25 @@ export default function ReceptionistDashboard() {
                             </div>
                             {/* ── Channel Partner Details ── */}
                             {(c.cpName || c.cpCompany || c.cpPhone) && (
-                            <div className={`mt-2`}>
-                              <div className={`rounded-lg px-3 py-2.5 ${isDark ? "bg-white/5" : "bg-[#18392B]/[0.03]"}`}>
-                                <div className="text-[10px] font-bold uppercase tracking-widest mb-2 text-[#C5A059]">Channel Partner</div>
-                                <div className={`grid grid-cols-3 gap-x-4 gap-y-1 text-[12px] ${isDark ? "text-gray-300" : "text-gray-700"}`}>
-                                  <div>
-                                    <div className="font-semibold uppercase text-[10px] tracking-wider opacity-60 mb-0.5">Name</div>
-                                    <div>{c.cpName || "—"}</div>
-                                  </div>
-                                  <div>
-                                    <div className="font-semibold uppercase text-[10px] tracking-wider opacity-60 mb-0.5">Company</div>
-                                    <div>{c.cpCompany || "—"}</div>
-                                  </div>
-                                  <div>
-                                    <div className="font-semibold uppercase text-[10px] tracking-wider opacity-60 mb-0.5">Phone</div>
-                                    <div>{c.cpPhone || "—"}</div>
+                              <div className={`mt-2`}>
+                                <div className={`rounded-lg px-3 py-2.5 ${isDark ? "bg-white/5" : "bg-[#18392B]/[0.03]"}`}>
+                                  <div className="text-[10px] font-bold uppercase tracking-widest mb-2 text-[#C5A059]">Channel Partner</div>
+                                  <div className={`grid grid-cols-3 gap-x-4 gap-y-1 text-[12px] ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+                                    <div>
+                                      <div className="font-semibold uppercase text-[10px] tracking-wider opacity-60 mb-0.5">Name</div>
+                                      <div>{c.cpName || "—"}</div>
+                                    </div>
+                                    <div>
+                                      <div className="font-semibold uppercase text-[10px] tracking-wider opacity-60 mb-0.5">Company</div>
+                                      <div>{c.cpCompany || "—"}</div>
+                                    </div>
+                                    <div>
+                                      <div className="font-semibold uppercase text-[10px] tracking-wider opacity-60 mb-0.5">Phone</div>
+                                      <div>{c.cpPhone || "—"}</div>
+                                    </div>
                                   </div>
                                 </div>
                               </div>
-                            </div>
                             )}
                           </div>
                         );

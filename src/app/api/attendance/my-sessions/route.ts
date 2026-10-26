@@ -29,8 +29,11 @@ export async function GET(req: Request) {
     }
 
     const { searchParams } = new URL(req.url);
-    const dateStr =
-      searchParams.get("date") || new Date().toISOString().split("T")[0];
+    // Derive today's date in IST, not UTC.  Between 12:00 AM and 5:30 AM IST
+    // the UTC calendar date is still the previous day, so a UTC fallback would
+    // show yesterday's data for the first 5.5 hours of every Indian workday.
+    const todayIst = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+    const dateStr = searchParams.get("date") || todayIst;
 
     // Resolve the user_id and name from the authenticated session
     const userId = getSessionUserId(auth.session);
@@ -66,7 +69,14 @@ export async function GET(req: Request) {
           u.email,
           u.role,
           es.session_start,
-          es.session_end,
+          -- Resolve session_end for expired sessions: the heartbeat cleanup
+          -- sets session_end = last_heartbeat, but if last_heartbeat was NULL
+          -- (no heartbeats after login) session_end stays NULL.  COALESCE
+          -- ensures the frontend always has a valid end timestamp for inactive
+          -- sessions, matching the admin live API's sw subquery logic.
+          CASE WHEN es.is_active THEN es.session_end
+               ELSE COALESCE(es.session_end, es.last_heartbeat)
+          END                                          AS session_end,
           es.is_active                                 AS session_is_active,
           es.ip_address,
           es.device_info,
@@ -76,18 +86,42 @@ export async function GET(req: Request) {
             ELSE 'Absent'
           END                                          AS attendance_status,
           ar.working_track                              AS attendance_working_track,
+          -- TO_CHAR produces an explicit ISO-8601 UTC string that bypasses
+          -- the postgres-date driver parser entirely.  This is necessary
+          -- because the actual Neon column types diverge from the migration
+          -- file: logout_time is TIMESTAMPTZ while submitted_at is TIMESTAMP.
+          -- "col AT TIME ZONE 'UTC'" flips direction depending on the input
+          -- type, and postgres-date interprets a bare TIMESTAMP wire value
+          -- (no +00 offset) in the Node process timezone — which on an IST
+          -- machine shifts the instant by −5:30.
+          TO_CHAR(ar.login_time   AT TIME ZONE 'UTC' AT TIME ZONE 'UTC',
+                  'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')    AS attendance_login_time,
+          TO_CHAR(ar.submitted_at AT TIME ZONE 'UTC' AT TIME ZONE 'UTC',
+                  'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')    AS attendance_marked_at,
+          TO_CHAR(ar.logout_time  AT TIME ZONE 'UTC' AT TIME ZONE 'UTC',
+                  'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')    AS attendance_completed_at,
+          -- Authoritative daily Working Hours: attendance span from first mark
+          -- to latest completion (or NOW if still active).  This is
+          -- logout_time − login_time, NOT a sum of session durations.
+          CASE WHEN ar.login_time IS NOT NULL THEN
+            EXTRACT(EPOCH FROM (
+              COALESCE(ar.logout_time, CURRENT_TIMESTAMP) - ar.login_time
+            ))::integer
+          END                                          AS attendance_span_seconds,
           EXTRACT(EPOCH FROM (
             COALESCE(
               CASE WHEN es.is_active THEN NOW() ELSE es.session_end END,
+              es.last_heartbeat,
               es.session_start
             ) - es.session_start
           ))                                           AS session_duration_seconds
         FROM employee_sessions es
         JOIN users u ON u.id = es.user_id
         LEFT JOIN (
-          SELECT DISTINCT ON (employee_id) employee_id, attendance_status, working_track
+          SELECT DISTINCT ON (employee_id) employee_id, attendance_status, working_track, submitted_at, logout_time, login_time
           FROM attendance_records
-          WHERE DATE(login_time) = $2::date AND organization_id = $3
+          WHERE DATE(login_time AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata') = $2::date AND organization_id = $3
+          ORDER BY employee_id, id ASC
         ) ar ON u.id = ar.employee_id
         WHERE es.user_id = $1
           AND es.organization_id = $3
@@ -108,7 +142,9 @@ export async function GET(req: Request) {
           u.email,
           u.role,
           es.session_start,
-          es.session_end,
+          CASE WHEN es.is_active THEN es.session_end
+               ELSE COALESCE(es.session_end, es.last_heartbeat)
+          END                                          AS session_end,
           es.is_active                                 AS session_is_active,
           es.ip_address,
           es.device_info,
@@ -118,18 +154,31 @@ export async function GET(req: Request) {
             ELSE 'Absent'
           END                                          AS attendance_status,
           ar.working_track                              AS attendance_working_track,
+          TO_CHAR(ar.login_time   AT TIME ZONE 'UTC' AT TIME ZONE 'UTC',
+                  'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')    AS attendance_login_time,
+          TO_CHAR(ar.submitted_at AT TIME ZONE 'UTC' AT TIME ZONE 'UTC',
+                  'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')    AS attendance_marked_at,
+          TO_CHAR(ar.logout_time  AT TIME ZONE 'UTC' AT TIME ZONE 'UTC',
+                  'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')    AS attendance_completed_at,
+          CASE WHEN ar.login_time IS NOT NULL THEN
+            EXTRACT(EPOCH FROM (
+              COALESCE(ar.logout_time, CURRENT_TIMESTAMP) - ar.login_time
+            ))::integer
+          END                                          AS attendance_span_seconds,
           EXTRACT(EPOCH FROM (
             COALESCE(
               CASE WHEN es.is_active THEN NOW() ELSE es.session_end END,
+              es.last_heartbeat,
               es.session_start
             ) - es.session_start
           ))                                           AS session_duration_seconds
         FROM employee_sessions es
         JOIN users u ON u.id = es.user_id
         LEFT JOIN (
-          SELECT DISTINCT ON (employee_id) employee_id, attendance_status, working_track
+          SELECT DISTINCT ON (employee_id) employee_id, attendance_status, working_track, submitted_at, logout_time, login_time
           FROM attendance_records
-          WHERE DATE(login_time) = $2::date AND organization_id = $3
+          WHERE DATE(login_time AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata') = $2::date AND organization_id = $3
+          ORDER BY employee_id, id ASC
         ) ar ON u.id = ar.employee_id
         -- Name matching is ambiguous ACROSS tenants as well as within one, so the
         -- organization predicate is what keeps a same-named user in another tenant

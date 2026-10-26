@@ -398,7 +398,8 @@ function useAdminData(onReminderDue?: (r: import("@/lib/followUpSync").ReminderS
 
         const fupsWithDate = leadFups.filter((f: any) => f.siteVisitDate?.trim() !== "");
         const latestVisitDate = fupsWithDate.length > 0 ? fupsWithDate[fupsWithDate.length - 1].siteVisitDate : null;
-        const activeBudget = extractField("Budget") !== "Pending" ? extractField("Budget") : formatBudget(lead.budget, lead.budget_unit);
+        const sfBudget = extractField("Budget");
+        const activeBudget = sfBudget !== "Pending" ? formatBudget(sfBudget, null) : formatBudget(lead.budget, lead.budget_unit);
 
         const closingFups = leadFups.filter((f: any) => f.message?.includes("✅ Lead Marked as Closing"));
         const reopenFups = leadFups.filter((f: any) => f.message?.includes("↩️ Lead Reopened"));
@@ -409,7 +410,7 @@ function useAdminData(onReminderDue?: (r: import("@/lib/followUpSync").ReminderS
         return {
           ...lead,
           propType: extractField("Property Type") !== "Pending"
-            ? extractField("Property Type")
+            ? extractField("Property Type").replace(/bhk/gi, "BHK")
             : (lead.configuration && lead.configuration !== "N/A" ? lead.configuration : "Pending"),
           salesBudget: activeBudget,
           useType: extractField("Use Type") !== "Pending" ? extractField("Use Type") : (lead.purpose || "Pending"),
@@ -2201,7 +2202,7 @@ function SalesManagerView({
       setIsSubmittingSalesForm(false);
     }
   };
-  const prefillSalesForm = (targetLead?: any) => { const l = targetLead || selectedLead; if (!l) return; const fups = followUps.filter((f: any) => String(f.leadId) === String(l.id)); const sf = fups.filter((f: any) => f.message?.includes("Detailed Salesform Submitted")); if (sf.length === 0) return; const msg = sf[sf.length - 1].message; const g = (label: string) => { const m = msg.match(new RegExp(`• ${label}: (.*)`)); return m && m[1].trim() !== "N/A" ? m[1].trim() : ""; }; setSalesForm({ propertyType: g("Property Type"), location: g("Location"), budget: g("Budget"), useType: g("Use Type"), purchaseDate: g("Planning to Purchase"), loanPlanned: g("Loan Planned"), leadStatus: g("Lead Status"), siteVisit: "" }); };
+  const prefillSalesForm = (targetLead?: any) => { const l = targetLead || selectedLead; if (!l) return; const fups = followUps.filter((f: any) => String(f.leadId) === String(l.id)); const sf = fups.filter((f: any) => f.message?.includes("Detailed Salesform Submitted")); if (sf.length === 0) return; const msg = sf[sf.length - 1].message; const g = (label: string) => { const m = msg.match(new RegExp(`• ${label}: (.*)`)); return m && m[1].trim() !== "N/A" ? m[1].trim() : ""; }; setSalesForm({ propertyType: g("Property Type").toUpperCase(), location: g("Location"), budget: g("Budget").toUpperCase(), useType: g("Use Type"), purchaseDate: g("Planning to Purchase"), loanPlanned: g("Loan Planned"), leadStatus: g("Lead Status"), siteVisit: "" }); };
 
 
   const CardsLoader = () => (
@@ -3131,9 +3132,9 @@ function SalesManagerView({
                         <button type="button" onClick={() => setShowSalesForm(false)} className={`p-2 ${t.textMuted} hover:text-red-500`}><FaTimes /></button>
                       </div>
                       <form onSubmit={handleSalesFormSubmit} className="flex flex-col gap-2 flex-1">
-                        <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Property Type?</label><input type="text" placeholder="e.g. 1BHK, 2BHK" value={salesForm.propertyType} onChange={e => setSalesForm({ ...salesForm, propertyType: e.target.value })} className={formInput} /></div>
+                        <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Property Type?</label><input type="text" placeholder="e.g. 1BHK, 2BHK" value={salesForm.propertyType} onChange={e => setSalesForm({ ...salesForm, propertyType: e.target.value.toUpperCase() })} className={formInput} /></div>
                         <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Preferred Location?</label><input type="text" placeholder="e.g. Dombivali, Kalyan" value={salesForm.location} onChange={e => setSalesForm({ ...salesForm, location: e.target.value })} className={formInput} /></div>
-                        <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Approximate Budget?</label><input type="text" placeholder="e.g. 5 cr" value={salesForm.budget} onChange={e => setSalesForm({ ...salesForm, budget: e.target.value })} className={formInput} /></div>
+                        <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Approximate Budget?</label><input type="text" placeholder="e.g. 5 cr" value={salesForm.budget} onChange={e => setSalesForm({ ...salesForm, budget: e.target.value.toUpperCase() })} className={formInput} /></div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Self-use or Investment?</label><select value={salesForm.useType} onChange={e => setSalesForm({ ...salesForm, useType: e.target.value })} className={formSelect}><option value="">Select</option><option>Self Use</option><option>Investment</option></select></div>
                           <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Planning to Purchase?</label><select value={salesForm.purchaseDate} onChange={e => setSalesForm({ ...salesForm, purchaseDate: e.target.value })} className={formSelect}><option value="">Select</option><option>Immediate</option><option>Next 3 Months</option></select></div>

@@ -33,18 +33,25 @@ export async function POST(req: NextRequest) {
         let loginTime: Date | null = null;
 
         if (!sessionIdToUse) {
-            const activeSession = await query(`
+            // Look for the most recent session TODAY (IST), regardless of
+            // is_active.  Sessions expire after 5 minutes without a heartbeat,
+            // but the employee is still authenticated (cookie valid 7 days) and
+            // still working — blocking attendance because a heartbeat was late
+            // is a false negative.  Restricting to today's IST date prevents a
+            // stale multi-day-old session from being used.
+            const todaySession = await query(`
                 SELECT id, session_start
                 FROM employee_sessions
-                WHERE user_id = $1 AND organization_id = $2 AND is_active = true
+                WHERE user_id = $1 AND organization_id = $2
+                  AND DATE(session_start AT TIME ZONE 'Asia/Kolkata') = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date
                 ORDER BY session_start DESC LIMIT 1
             `, [targetUserId, orgId]);
 
-            if (activeSession.length === 0) {
-                return NextResponse.json({ success: false, message: "No active session found to mark attendance" }, { status: 404 });
+            if (todaySession.length === 0) {
+                return NextResponse.json({ success: false, message: "No session found for today. Please log in again to mark attendance." }, { status: 404 });
             }
-            sessionIdToUse = activeSession[0].id;
-            loginTime = activeSession[0].session_start;
+            sessionIdToUse = todaySession[0].id;
+            loginTime = todaySession[0].session_start;
         }
 
         // Check if attendance already exists today (IST), computed DB-side so it does
@@ -64,7 +71,7 @@ export async function POST(req: NextRequest) {
         // anchors the header to the employee's actual first punch of the day,
         // exactly like a logout/re-login must never move it.
         const existing = await query(`
-            SELECT id, attendance_status, login_time FROM attendance_records
+            SELECT id, attendance_status, login_time, submitted_at AT TIME ZONE 'UTC' AS submitted_at FROM attendance_records
             WHERE employee_id = $1 AND organization_id = $2
               AND DATE(login_time AT TIME ZONE 'Asia/Kolkata') = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date
             ORDER BY id ASC
@@ -78,6 +85,7 @@ export async function POST(req: NextRequest) {
                 employeeId: targetUserId,
                 status: existing[0].attendance_status,
                 timeIn: existing[0].login_time,
+                markedAt: existing[0].submitted_at,
             }, { status: 200 });
         }
 
@@ -89,7 +97,7 @@ export async function POST(req: NextRequest) {
         const result = await query(`
             INSERT INTO attendance_records (organization_id, employee_id, login_session_id, attendance_status, login_time)
             VALUES ($1, $2, $3, $4, COALESCE($5::timestamptz, CURRENT_TIMESTAMP))
-            RETURNING id, attendance_status, login_time
+            RETURNING id, attendance_status, login_time, submitted_at AT TIME ZONE 'UTC' AS submitted_at
         `, [orgId, targetUserId, sessionIdToUse, 'Present', loginTime]);
 
         if (result.length === 0) {
@@ -114,6 +122,7 @@ export async function POST(req: NextRequest) {
             employeeId: targetUserId,
             status: result[0].attendance_status,
             timeIn: result[0].login_time,
+            markedAt: result[0].submitted_at,
             data: result[0],
         });
     } catch (err: any) {

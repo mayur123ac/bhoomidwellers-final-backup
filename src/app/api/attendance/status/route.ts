@@ -47,7 +47,8 @@ export async function GET() {
                 ar.id,
                 ar.login_time,
                 ar.logout_time,
-                ar.attendance_status
+                ar.attendance_status,
+                ar.working_track
             FROM (SELECT 1) AS _
             LEFT JOIN LATERAL (
                 SELECT id, login_time, logout_time, attendance_status, working_track

@@ -956,27 +956,7 @@ export function ColumnFilterDropdown({
         setTimeout(() => searchRef.current?.focus(), 30);
     }, [anchorEl]);
 
-    // Close on outside click or Escape
-    useEffect(() => {
-        const onDown = (e: MouseEvent) => {
-            if (!dropRef.current?.contains(e.target as Node) &&
-                !anchorEl?.contains(e.target as Node)) {
-                onClose();
-            }
-        };
-        const onKey = (e: KeyboardEvent) => {
-            if (e.key === "Escape") onClose();
-        };
-        const onScroll = () => onClose();
-        document.addEventListener("mousedown", onDown);
-        document.addEventListener("keydown", onKey);
-        window.addEventListener("scroll", onScroll, true);
-        return () => {
-            document.removeEventListener("mousedown", onDown);
-            document.removeEventListener("keydown", onKey);
-            window.removeEventListener("scroll", onScroll, true);
-        };
-    }, [anchorEl, onClose]);
+    // ColumnFilterDropdown only closes via explicit user action (✕, Cancel, OK)
 
     // Filtered list based on search input
     const lowerSearch = search.toLowerCase();
@@ -1100,7 +1080,7 @@ export function ColumnFilterDropdown({
                             ref={searchRef}
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
-                            onKeyDown={(e) => e.key === "Escape" && (search ? setSearch("") : onClose())}
+                            onKeyDown={(e) => e.key === "Escape" && setSearch("")}
                             placeholder="Search values..."
                             aria-label="Search filter values"
                             className={`w-full h-7 pl-7 pr-7 rounded-lg text-[11px] font-medium outline-none border transition-all duration-200 focus:shadow-[0_0_0_2px_rgba(158,33,123,0.15)] ${inputCls}`}

@@ -264,6 +264,7 @@ export default function AttendanceBadge({
   const [isPunching, setIsPunching] = useState(false);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [showWelcome, setShowWelcome] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   // Confirmation dialog (shown before executing checkout)
   const [showDayCompleteConfirm, setShowDayCompleteConfirm] = useState(false);
@@ -275,6 +276,7 @@ export default function AttendanceBadge({
   const handleMarkAttendance = useCallback(async () => {
     if (isPunching) return;
     setIsPunching(true);
+    setErrorMsg(null);
     try {
       const res = await fetch("/api/attendance/mark", {
         method: "POST",
@@ -289,10 +291,16 @@ export default function AttendanceBadge({
         setTimeout(() => setShowWelcome(false), 3000);
         await refreshAttendance();
       } else {
-        console.error("Failed to mark attendance", data);
+        const msg = data?.message || `Attendance marking failed (${res.status})`;
+        console.error("Failed to mark attendance:", msg, data);
+        setErrorMsg(msg);
+        setTimeout(() => setErrorMsg(null), 5000);
       }
     } catch (e) {
-      console.error("Failed to mark attendance", e);
+      const msg = "Network error — please check your connection";
+      console.error("Failed to mark attendance:", e);
+      setErrorMsg(msg);
+      setTimeout(() => setErrorMsg(null), 5000);
     } finally {
       setIsPunching(false);
     }
@@ -315,10 +323,15 @@ export default function AttendanceBadge({
         setShowGoodbyeModal(true);
         await refreshAttendance();
       } else {
-        console.error("Checkout failed", data);
+        const msg = data?.message || `Checkout failed (${res.status})`;
+        console.error("Checkout failed:", msg, data);
+        setErrorMsg(msg);
+        setTimeout(() => setErrorMsg(null), 5000);
       }
     } catch (e) {
-      console.error("Checkout error", e);
+      console.error("Checkout error:", e);
+      setErrorMsg("Network error — please check your connection");
+      setTimeout(() => setErrorMsg(null), 5000);
     } finally {
       setIsCheckingOut(false);
     }
@@ -348,6 +361,12 @@ export default function AttendanceBadge({
             {timeGreeting()}, {userName || "Welcome"}! 👋
           </p>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Attendance marked for today.</p>
+        </AttendancePopup>
+
+        <AttendancePopup show={!!errorMsg}>
+          <p className="text-sm font-bold text-red-600 dark:text-red-400">
+            {errorMsg}
+          </p>
         </AttendancePopup>
       </>
     );
@@ -423,6 +442,12 @@ export default function AttendanceBadge({
         userName={userName}
         onDone={() => setShowGoodbyeModal(false)}
       />
+
+      <AttendancePopup show={!!errorMsg}>
+        <p className="text-sm font-bold text-red-600 dark:text-red-400">
+          {errorMsg}
+        </p>
+      </AttendancePopup>
     </>
   );
 }
