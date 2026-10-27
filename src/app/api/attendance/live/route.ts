@@ -82,9 +82,14 @@ export async function GET(req: Request) {
           ELSE NULL
         END as session_duration_seconds,
         ar.working_track,
+        ar.attendance_span_seconds,
+        ar.attendance_marked_at,
+        ar.attendance_completed_at,
+        ar.attendance_completed,
+        ar.total_periods,
         -- Daily total working seconds across ALL sessions for this user on
-        -- this date.  Preferred over working_track when working_track is NULL
-        -- (employee never explicitly checked out via "Done for the Day").
+        -- this date.  Session-based fallback for employees who have not
+        -- marked attendance.
         sw.total_working_seconds,
         CASE
           WHEN s.user_id IS NULL THEN 'OFFLINE'
@@ -130,11 +135,46 @@ export async function GET(req: Request) {
         -- ORDER BY id ASC matches mark/status/checkout routes: the first
         -- attendance_records row for the day is the authoritative one, and
         -- working_track is written to that row by the checkout route.
-        SELECT DISTINCT ON (employee_id) employee_id, attendance_status, working_track
-        FROM attendance_records
-        WHERE DATE(login_time AT TIME ZONE 'Asia/Kolkata') = $1::date
-          AND organization_id = $2
-        ORDER BY employee_id, id ASC
+        --
+        -- attendance_span_seconds: the authoritative Working Hours metric.
+        -- Uses SUM of attendance_periods durations (net working time,
+        -- excludes breaks between periods). Falls back to gross span
+        -- (logout_time − submitted_at) for records without periods.
+        --
+        -- attendance_marked_at: ISO-8601 UTC string of submitted_at for
+        -- client-side live timer on active attendance days.
+        SELECT DISTINCT ON (ar_inner.employee_id)
+          ar_inner.employee_id,
+          ar_inner.attendance_status,
+          ar_inner.working_track,
+          CASE WHEN ar_inner.submitted_at IS NOT NULL THEN
+            COALESCE(
+              ap_sum.periods_total_seconds,
+              EXTRACT(EPOCH FROM (
+                COALESCE(ar_inner.logout_time, CURRENT_TIMESTAMP) - (ar_inner.submitted_at AT TIME ZONE 'UTC')
+              ))::integer
+            )
+          END AS attendance_span_seconds,
+          TO_CHAR(ar_inner.submitted_at AT TIME ZONE 'UTC' AT TIME ZONE 'UTC',
+                  'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS attendance_marked_at,
+          TO_CHAR(ar_inner.logout_time AT TIME ZONE 'UTC' AT TIME ZONE 'UTC',
+                  'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS attendance_completed_at,
+          CASE WHEN ar_inner.logout_time IS NOT NULL THEN true ELSE false END AS attendance_completed,
+          COALESCE(ap_sum.total_periods, 0) AS total_periods
+        FROM attendance_records ar_inner
+        LEFT JOIN LATERAL (
+          SELECT
+            SUM(CASE
+              WHEN ap.completed_at IS NOT NULL THEN ap.duration_seconds
+              ELSE EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - ap.started_at))::integer
+            END)::integer AS periods_total_seconds,
+            COUNT(*)::integer AS total_periods
+          FROM attendance_periods ap
+          WHERE ap.attendance_id = ar_inner.id
+        ) ap_sum ON true
+        WHERE DATE(ar_inner.login_time AT TIME ZONE 'Asia/Kolkata') = $1::date
+          AND ar_inner.organization_id = $2
+        ORDER BY ar_inner.employee_id, ar_inner.id ASC
       ) ar ON u.id = ar.employee_id
       -- Every derived table carries its own organization predicate INSIDE the
       -- subquery, ahead of its DISTINCT ON / GROUP BY: a filter applied after the

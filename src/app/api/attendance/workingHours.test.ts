@@ -314,11 +314,11 @@ describe("timezone and date filtering", () => {
 
 // ── Attendance span: the authoritative Working Hours metric ─────────────────
 // These tests verify that Working Hours uses attendance timestamps
-// (login_time → logout_time) NOT session durations.
+// (submitted_at → logout_time) NOT session durations.
 //
-// Bug scenario (2026-10-26): employee marked at 1:11 PM, checked out at 1:42 PM,
-// but My Attendance showed "00h 14m" because it used employee_sessions duration
-// (14 minutes of CRM online time) instead of the attendance span (31 minutes).
+// Business rule: working_seconds = day_completed_at − attendance_marked_at
+// submitted_at records when "Mark Attendance" was clicked.
+// logout_time records when "Done for the Day" was clicked.
 
 /**
  * Mirrors the computeAttendanceSpan function in AttendanceView.tsx.
@@ -331,12 +331,12 @@ function computeAttendanceSpan(
   if (!sessions || sessions.length === 0) return null;
 
   const row = sessions[0];
-  const loginTimeStr: string | null = row?.attendance_login_time ?? null;
+  const markedAtStr: string | null = row?.attendance_marked_at ?? null;
   const completedStr: string | null = row?.attendance_completed_at ?? null;
 
-  if (loginTimeStr) {
-    const loginMs = new Date(loginTimeStr).getTime();
-    if (!isNaN(loginMs)) {
+  if (markedAtStr) {
+    const markedMs = new Date(markedAtStr).getTime();
+    if (!isNaN(markedMs)) {
       if (completedStr) {
         const spanFromServer = row?.attendance_span_seconds;
         if (spanFromServer != null && Number(spanFromServer) >= 0) {
@@ -344,11 +344,11 @@ function computeAttendanceSpan(
         }
         const completedMs = new Date(completedStr).getTime();
         if (!isNaN(completedMs)) {
-          const sec = Math.floor((completedMs - loginMs) / 1000);
+          const sec = Math.floor((completedMs - markedMs) / 1000);
           return sec >= 0 ? sec : null;
         }
       }
-      const sec = Math.floor((now - loginMs) / 1000);
+      const sec = Math.floor((now - markedMs) / 1000);
       return sec >= 0 ? sec : null;
     }
   }
@@ -358,15 +358,16 @@ function computeAttendanceSpan(
 
 describe("computeAttendanceSpan — authoritative Working Hours", () => {
   // THE BUG: 1:11 PM mark, 1:42 PM checkout = 31 minutes, but session was only 14 min
+  // Formula: working_seconds = logout_time − submitted_at
   it("uses attendance span (31 min) not session duration (14 min)", () => {
     const sessions = [{
       // CRM session: only 14 minutes of online time
       session_start: "2026-10-26T08:17:00.000Z",  // 1:47 PM IST (late session start)
       session_end:   "2026-10-26T08:31:00.000Z",  // 2:01 PM IST
       session_is_active: false,
-      // Attendance record: 31 minutes span
-      attendance_login_time:   "2026-10-26T07:41:00.000Z",  // 1:11 PM IST
-      attendance_completed_at: "2026-10-26T08:12:00.000Z",  // 1:42 PM IST
+      // Attendance record: 31 minutes span (submitted_at → logout_time)
+      attendance_marked_at:    "2026-10-26T07:41:00.000Z",  // 1:11 PM IST (submitted_at)
+      attendance_completed_at: "2026-10-26T08:12:00.000Z",  // 1:42 PM IST (logout_time)
       attendance_span_seconds: 1860,  // 31 minutes
       attendance_working_track: 1860,
     }];
@@ -384,20 +385,20 @@ describe("computeAttendanceSpan — authoritative Working Hours", () => {
       session_start: "2026-10-26T03:30:00.000Z",
       session_end:   "2026-10-26T12:30:00.000Z",
       session_is_active: false,
-      attendance_login_time:   "2026-10-26T03:30:00.000Z",  // 9:00 AM IST
+      attendance_marked_at:   "2026-10-26T03:30:00.000Z",  // 9:00 AM IST
       attendance_completed_at: "2026-10-26T12:30:00.000Z",  // 6:00 PM IST
       attendance_span_seconds: 32400,  // 9 hours
     }];
     expect(computeAttendanceSpan(sessions, 0)).toBe(32400);
   });
 
-  it("active day: computes live timer from attendance_login_time to now", () => {
+  it("active day: computes live timer from attendance_marked_at to now", () => {
     const loginUtc = "2026-10-26T07:41:00.000Z";  // 1:11 PM IST
     const nowMs = new Date("2026-10-26T08:11:00.000Z").getTime();  // 1:41 PM IST
     const sessions = [{
       session_start: "2026-10-26T07:50:00.000Z",  // session started later
       session_is_active: true,
-      attendance_login_time: loginUtc,
+      attendance_marked_at: loginUtc,
       attendance_completed_at: null,
       attendance_span_seconds: null,  // no server span for active day (logout_time is null)
     }];
@@ -413,7 +414,7 @@ describe("computeAttendanceSpan — authoritative Working Hours", () => {
     const sessions = [{
       session_start: "2026-10-26T07:50:00.000Z",
       session_is_active: true,
-      attendance_login_time: loginUtc,
+      attendance_marked_at: loginUtc,
       attendance_completed_at: null,
       // Even if server sent a stale span, active day ignores it
       attendance_span_seconds: 1500,
@@ -429,8 +430,8 @@ describe("computeAttendanceSpan — authoritative Working Hours", () => {
       session_start: "2026-10-26T03:30:00.000Z",
       session_end:   "2026-10-26T12:30:00.000Z",
       session_is_active: false,
-      // No attendance_login_time — employee didn't mark attendance
-      attendance_login_time: null,
+      // No attendance_marked_at — employee didn't mark attendance
+      attendance_marked_at: null,
       attendance_completed_at: null,
       attendance_span_seconds: null,
     }];
@@ -445,12 +446,12 @@ describe("computeAttendanceSpan — authoritative Working Hours", () => {
 
   it("resuming attendance does NOT overwrite original login_time", () => {
     // Simulates: first mark at 9:00 AM, checkout at 12:00 PM, resume at 2:00 PM, checkout at 6:00 PM
-    // The attendance_login_time must still be 9:00 AM (first mark), not 2:00 PM (resume)
+    // The attendance_marked_at must still be 9:00 AM (first mark), not 2:00 PM (resume)
     const sessions = [{
       session_start: "2026-10-26T08:30:00.000Z",  // 2:00 PM IST (resume session)
       session_end:   "2026-10-26T12:30:00.000Z",  // 6:00 PM IST
       session_is_active: false,
-      attendance_login_time:   "2026-10-26T03:30:00.000Z",  // 9:00 AM IST — FIRST mark, never overwritten
+      attendance_marked_at:   "2026-10-26T03:30:00.000Z",  // 9:00 AM IST — FIRST mark, never overwritten
       attendance_completed_at: "2026-10-26T12:30:00.000Z",  // 6:00 PM IST — LATEST checkout
       attendance_span_seconds: 32400,  // 9 hours (6 PM - 9 AM)
     }];
@@ -466,7 +467,7 @@ describe("computeAttendanceSpan — authoritative Working Hours", () => {
         session_start: "2026-10-26T03:30:00.000Z",
         session_end:   "2026-10-26T05:30:00.000Z",
         session_is_active: false,
-        attendance_login_time:   "2026-10-26T03:30:00.000Z",
+        attendance_marked_at:   "2026-10-26T03:30:00.000Z",
         attendance_completed_at: "2026-10-26T12:30:00.000Z",
         attendance_span_seconds: 32400,
       },
@@ -474,7 +475,7 @@ describe("computeAttendanceSpan — authoritative Working Hours", () => {
         session_start: "2026-10-26T07:30:00.000Z",
         session_end:   "2026-10-26T09:30:00.000Z",
         session_is_active: false,
-        attendance_login_time:   "2026-10-26T03:30:00.000Z",
+        attendance_marked_at:   "2026-10-26T03:30:00.000Z",
         attendance_completed_at: "2026-10-26T12:30:00.000Z",
         attendance_span_seconds: 32400,
       },
@@ -482,7 +483,7 @@ describe("computeAttendanceSpan — authoritative Working Hours", () => {
         session_start: "2026-10-26T11:30:00.000Z",
         session_end:   "2026-10-26T12:30:00.000Z",
         session_is_active: false,
-        attendance_login_time:   "2026-10-26T03:30:00.000Z",
+        attendance_marked_at:   "2026-10-26T03:30:00.000Z",
         attendance_completed_at: "2026-10-26T12:30:00.000Z",
         attendance_span_seconds: 32400,
       },
@@ -494,6 +495,35 @@ describe("computeAttendanceSpan — authoritative Working Hours", () => {
     // Session-based would give 9 hours too (first to last) in this case,
     // but verify the attendance span is used, not session computation
     expect(result).toBe(sessions[0].attendance_span_seconds);
+  });
+
+  // Exact user scenario: mark at 1:11 PM, checkout at 1:41 PM = 1800 seconds
+  it("mark at 1:11 PM, checkout at 1:41 PM = exactly 1800 seconds (30 min)", () => {
+    const sessions = [{
+      session_start: "2026-10-26T07:30:00.000Z",
+      session_end:   "2026-10-26T08:20:00.000Z",
+      session_is_active: false,
+      attendance_marked_at:    "2026-10-26T07:41:00.000Z",  // 1:11 PM IST (submitted_at)
+      attendance_completed_at: "2026-10-26T08:11:00.000Z",  // 1:41 PM IST (logout_time)
+      attendance_span_seconds: 1800,  // 30 minutes exactly
+    }];
+    const result = computeAttendanceSpan(sessions, 0);
+    expect(result).toBe(1800);
+    expect(formatDurationHM(result!)).toBe("00h 30m");
+  });
+
+  // Client-side fallback when server span is missing but both timestamps exist
+  it("client-side fallback: submitted_at to logout_time without server span", () => {
+    const sessions = [{
+      session_start: "2026-10-26T07:30:00.000Z",
+      session_end:   "2026-10-26T08:20:00.000Z",
+      session_is_active: false,
+      attendance_marked_at:    "2026-10-26T07:41:00.000Z",  // 1:11 PM IST
+      attendance_completed_at: "2026-10-26T08:11:00.000Z",  // 1:41 PM IST
+      attendance_span_seconds: null,  // server span missing
+    }];
+    const result = computeAttendanceSpan(sessions, 0);
+    expect(result).toBe(1800);  // 30 minutes from timestamp math
   });
 });
 

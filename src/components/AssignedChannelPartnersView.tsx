@@ -19,7 +19,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   FaSearch, FaTimes, FaUserTie, FaHandshake, FaMapMarkerAlt, FaPhone,
   FaClipboardList, FaRegCommentDots, FaWalking, FaFileSignature, FaPlus,
-  FaFilter, FaSortAlphaDown, FaSortAlphaUp,
+  FaFilter, FaSortAlphaDown, FaSortAlphaUp, FaSlidersH, FaUndo, FaGripVertical
 } from "react-icons/fa";
 import { useCpResource, invalidateCpCache } from "@/lib/hooks/useCpResource";
 import {
@@ -66,8 +66,22 @@ type PartnerRow = Record<string, any>;
 /** Stable empty list — a `[]` literal would be a new identity on every render. */
 const NO_ROWS: PartnerRow[] = [];
 
-/** Per-column skeleton widths, sized near the typical value in each column. */
-const COLUMN_BAR_WIDTHS = [110, 120, 100, 84, 70, 52, 96, 104, 28, 28, 68, 56, 88];
+/** Per-column skeleton widths mapped to column keys */
+const COL_WIDTHS_MAP: Record<string, number> = {
+  name: 110,
+  company_name: 120,
+  owner_contact_person: 100,
+  phone: 84,
+  city: 70,
+  pin_code: 52,
+  rera_registration_no: 96,
+  gst_number: 104,
+  lead_count: 28,
+  booking_count: 28,
+  _profile: 68,
+  status: 56,
+  assigned_sourcing_manager_at: 88,
+};
 
 // The signed-in user is never passed in: "assigned to me" is resolved server-side
 // from the session cookie, so this component cannot be pointed at another manager.
@@ -136,20 +150,101 @@ function AssignedChannelPartnersView({
 
   /** Schema for Excel-style column filter dropdowns. */
   const filterableCols: FilterableColumn[] = useMemo(() => [
-    { key: "name",                     label: "CP Name" },
-    { key: "company_name",             label: "Company" },
-    { key: "owner_contact_person",     label: "Primary Contact" },
-    { key: "phone",                    label: "Phone" },
-    { key: "city",                     label: "City" },
-    { key: "pin_code",                 label: "Pin" },
-    { key: "rera_registration_no",     label: "RERA" },
-    { key: "gst_number",              label: "GST" },
-    { key: "lead_count",              label: "Leads",       type: "number" },
-    { key: "booking_count",           label: "Bookings",    type: "number" },
-    { key: "_profile",                label: "Profile" },
-    { key: "status",                  label: "Status" },
+    { key: "name", label: "CP Name" },
+    { key: "company_name", label: "Company" },
+    { key: "owner_contact_person", label: "Primary Contact" },
+    { key: "phone", label: "Phone" },
+    { key: "city", label: "City" },
+    { key: "pin_code", label: "Pin" },
+    { key: "rera_registration_no", label: "RERA" },
+    { key: "gst_number", label: "GST" },
+    { key: "lead_count", label: "Leads", type: "number" },
+    { key: "booking_count", label: "Bookings", type: "number" },
+    { key: "_profile", label: "Profile" },
+    { key: "status", label: "Status" },
     { key: "assigned_sourcing_manager_at", label: "Assigned On", type: "date" },
   ], []);
+
+  /* ── Drag & Drop Column Reordering ── */
+  const defaultColOrder = useMemo(() => filterableCols.map((c) => c.key), [filterableCols]);
+  const [colOrder, setColOrder] = useState<string[]>(defaultColOrder);
+  const [isCustomizing, setIsCustomizing] = useState(false);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("cp_assigned_colOrder:v1");
+      if (saved) {
+        const parsed = JSON.parse(saved) as string[];
+        const validSaved = parsed.filter((k) => filterableCols.some((c) => c.key === k));
+        const missing = defaultColOrder.filter((k) => !validSaved.includes(k));
+        setColOrder([...validSaved, ...missing]);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [defaultColOrder, filterableCols]);
+
+  const persistColOrder = (next: string[]) => {
+    setColOrder(next);
+    try {
+      localStorage.setItem("cp_assigned_colOrder:v1", JSON.stringify(next));
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const orderedCols = useMemo(() => {
+    return colOrder
+      .map((key) => filterableCols.find((c) => c.key === key))
+      .filter(Boolean) as FilterableColumn[];
+  }, [colOrder, filterableCols]);
+
+  const [draggedCol, setDraggedCol] = useState<string | null>(null);
+  const [dragOverCol, setDragOverCol] = useState<string | null>(null);
+
+  const handleDragStart = (e: React.DragEvent | React.TouchEvent, colKey: string) => setDraggedCol(colKey);
+  const handleDragOver = (e: React.DragEvent, colKey: string) => {
+    e.preventDefault();
+    if (colKey !== dragOverCol) setDragOverCol(colKey);
+  };
+  const handleDrop = (e: React.DragEvent, targetKey: string) => {
+    e.preventDefault();
+    if (draggedCol && draggedCol !== targetKey) {
+      const oldIdx = colOrder.indexOf(draggedCol);
+      const newIdx = colOrder.indexOf(targetKey);
+      const newOrder = [...colOrder];
+      newOrder.splice(oldIdx, 1);
+      newOrder.splice(newIdx, 0, draggedCol);
+      persistColOrder(newOrder);
+    }
+    setDraggedCol(null);
+    setDragOverCol(null);
+  };
+  const handleDragEnd = () => { setDraggedCol(null); setDragOverCol(null); };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isCustomizing || !draggedCol) return;
+    const touch = e.touches[0];
+    const target = document.elementFromPoint(touch.clientX, touch.clientY);
+    const targetTh = target?.closest("th[data-colkey]");
+    if (targetTh) {
+      const targetKey = targetTh.getAttribute("data-colkey");
+      if (targetKey && targetKey !== dragOverCol) setDragOverCol(targetKey);
+    }
+  };
+  const handleTouchEnd = () => {
+    if (!isCustomizing) return;
+    if (draggedCol && dragOverCol && draggedCol !== dragOverCol) {
+      const oldIdx = colOrder.indexOf(draggedCol);
+      const newIdx = colOrder.indexOf(dragOverCol);
+      const newOrder = [...colOrder];
+      newOrder.splice(oldIdx, 1);
+      newOrder.splice(newIdx, 0, draggedCol);
+      persistColOrder(newOrder);
+    }
+    setDraggedCol(null);
+    setDragOverCol(null);
+  };
 
   /** Map a row + column key to the display string shown in filter dropdowns. */
   const getDisplayValue = useCallback((row: PartnerRow, colKey: string): string => {
@@ -178,7 +273,7 @@ function AssignedChannelPartnersView({
       }
       return mapped;
     }),
-  [rows, filterableCols, getDisplayValue]);
+    [rows, filterableCols, getDisplayValue]);
 
   // Client-side: one manager's partner list is tens of rows, so filtering in
   // place beats a round trip per keystroke. Deferred so the character the
@@ -234,11 +329,6 @@ function AssignedChannelPartnersView({
     };
   }, [rows]);
 
-  const columns = useMemo(() => [
-    "CP Name", "Company", "Primary Contact", "Phone", "City", "Pin",
-    "RERA", "GST", "Leads", "Bookings", "Profile", "Status", "Assigned On",
-  ], []);
-
   const inputCls = `rounded-xl px-3 py-2 text-xs outline-none transition-all w-[170px] sm:w-56 max-w-full ${isDark
     ? "bg-[#1C1C1E] text-white placeholder-gray-500 border border-[#38383A] focus:bg-[#2C2C2E] focus:border-[#9E217B] focus:ring-2 focus:ring-[#9E217B]/10"
     : "bg-white text-gray-900 placeholder-gray-400 border border-gray-200 focus:bg-white focus:border-[#9E217B] focus:ring-2 focus:ring-[#9E217B]/10"
@@ -293,20 +383,21 @@ function AssignedChannelPartnersView({
   return (
     <div className="flex flex-col h-full overflow-hidden p-2">
       {/* ── Header ── */}
+      {/* ── Header ── */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-3 px-2 pt-2">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <FaHandshake className={t.accentText} />
           <div>
             <h2 className={`text-base font-bold ${t.text}`}>{title || "My Channel Partners"}</h2>
             {subtitle && <p className={`text-[11px] ${t.textFaint}`}>{subtitle}</p>}
           </div>
-          {/* `(0)` while the count is still unknown reads as "you have none",
-              which is a different fact from "not loaded yet". */}
           {loading
             ? <SkeletonBar isDark={isDark} w="26px" h={12} className="inline-block" />
             : <span className={`text-xs ${t.textFaint}`}>({rows.length})</span>}
         </div>
-        <div className="flex items-center gap-2">
+
+        {/* ADDED flex-wrap HERE so buttons drop to a new line if they don't fit */}
+        <div className="flex flex-wrap items-center gap-2">
           <select value={sortBy} onChange={e => setSortBy(e.target.value as any)}
             className={`${inputCls} cursor-pointer`} aria-label="Sort partners">
             <option value="leads">Most leads brought</option>
@@ -319,13 +410,44 @@ function AssignedChannelPartnersView({
             <input type="text" value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Search name, company, phone…" className={`${inputCls} pl-7 w-56`} />
           </div>
-          <button onClick={fetchRows} className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${t.textMuted} ${isDark ? "hover:bg-[#222]" : "hover:bg-slate-100"}`}>
-            ↻ Refresh
+
+          <button
+            onClick={() => setIsCustomizing(!isCustomizing)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-colors ${isCustomizing
+              ? isDark ? "bg-[#9E217B]/20 text-[#d946a8]" : "bg-[#9E217B]/10 text-[#9E217B]"
+              : `${t.textMuted} ${isDark ? "hover:bg-[#222]" : "hover:bg-slate-100"}`
+              }`}
+            title="Customize column layout"
+          >
+            <FaSlidersH className="text-[10px]" />
+            {/* Removed "hidden sm:inline" so the word is always visible */}
+            <span>{isCustomizing ? "Done" : "Customize"}</span>
           </button>
+
+          {isCustomizing && (
+            <button
+              onClick={() => {
+                setColOrder(defaultColOrder);
+                persistColOrder(defaultColOrder);
+                setIsCustomizing(false);
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-colors ${t.textMuted} ${isDark ? "hover:bg-[#222]" : "hover:bg-slate-100"}`}
+              title="Reset layout to default"
+            >
+              <FaUndo className="text-[10px]" />
+              <span>Reset</span>
+            </button>
+          )}
+
+          <button onClick={fetchRows} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${t.textMuted} ${isDark ? "hover:bg-[#222]" : "hover:bg-slate-100"}`}>
+            ↻ <span className="hidden sm:inline">Refresh</span>
+          </button>
+
           {onNewEntry && (
             <button onClick={onNewEntry}
               className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${t.btnPrimary}`}>
-              <FaPlus className="text-[10px]" /> New Entry
+              <FaPlus className="text-[10px]" />
+              <span className="hidden sm:inline">New Entry</span>
             </button>
           )}
         </div>
@@ -378,29 +500,62 @@ function AssignedChannelPartnersView({
       </div>
 
       {/* ── Table ── */}
-      <div className={`flex-1 overflow-auto mx-2 rounded-3xl ${t.card}`}>
+      <div className={`flex-1 overflow-auto mx-2 rounded-3xl ${t.card} custom-scrollbar`}>
         <table className="w-full text-left border-collapse">
           <thead className={`sticky top-0 z-10 backdrop-blur-xl ${isDark
             ? "bg-[#000000]/70 border-b border-white/10"
             : "bg-white/70 border-b border-black/5"
             }`}>
             <tr className={`text-[10px] uppercase ${t.textMuted}`}>
-              {filterableCols.map(col => {
+              {orderedCols.map(col => {
                 const isFiltered = !!colFilters[col.key];
                 const isOpen = openFilterCol === col.key;
+
+                const isBeingDragged = draggedCol === col.key;
+                const isDropTarget = dragOverCol === col.key && draggedCol !== col.key;
+                const draggedIdx = draggedCol ? colOrder.indexOf(draggedCol) : -1;
+                const dropIdx = colOrder.indexOf(col.key);
+
+                const dropIndicatorClass = isDropTarget
+                  ? draggedIdx < dropIdx
+                    ? "shadow-[-2px_0_0_#9E217B_inset] bg-[#9E217B]/10"
+                    : "shadow-[2px_0_0_#9E217B_inset] bg-[#9E217B]/10"
+                  : "";
+
                 return (
                   <FilterableColumnHeader
                     key={col.key}
-                    column={col}
+                    column={{
+                      ...col,
+                      label: isCustomizing ? (
+                        <div className="flex items-center gap-1.5 pointer-events-none whitespace-nowrap">
+                          <FaGripVertical className="opacity-50 shrink-0" />
+                          <span>{col.label}</span>
+                        </div>
+                      ) : col.label
+                    } as any}
                     isFiltered={isFiltered}
                     colSort={colSort}
                     isOpen={isOpen}
-                    onToggle={() => setOpenFilterCol(isOpen ? null : col.key)}
+                    onToggle={() => {
+                      if (isCustomizing) return;
+                      setOpenFilterCol(isOpen ? null : col.key);
+                    }}
                     isDark={isDark}
                     accent="#9E217B"
-                    className="relative"
+                    className={`relative transition-all duration-150 ${isCustomizing ? "cursor-grab active:cursor-grabbing touch-none select-none hover:bg-black/5 dark:hover:bg-white/5" : ""
+                      } ${isBeingDragged ? "opacity-30 bg-black/10 dark:bg-white/10" : ""} ${dropIndicatorClass}`}
+                    data-colkey={col.key}
+                    draggable={isCustomizing}
+                    onDragStart={isCustomizing ? (e: any) => handleDragStart(e, col.key) : undefined}
+                    onDragOver={isCustomizing ? (e: any) => handleDragOver(e, col.key) : undefined}
+                    onDrop={isCustomizing ? (e: any) => handleDrop(e, col.key) : undefined}
+                    onDragEnd={isCustomizing ? handleDragEnd : undefined}
+                    onTouchStart={isCustomizing ? (e: any) => handleDragStart(e, col.key) : undefined}
+                    onTouchMove={isCustomizing ? handleTouchMove : undefined}
+                    onTouchEnd={isCustomizing ? handleTouchEnd : undefined}
                   >
-                    {isOpen && (
+                    {isOpen && !isCustomizing && (
                       <SharedColumnFilterDropdown
                         column={col}
                         data={filterDisplayRows}
@@ -422,9 +577,9 @@ function AssignedChannelPartnersView({
             {loading && (
               <CpTableSkeletonRows
                 isDark={isDark}
-                columns={columns.length}
+                columns={orderedCols.length}
                 rows={8}
-                widths={COLUMN_BAR_WIDTHS}
+                widths={orderedCols.map(c => COL_WIDTHS_MAP[c.key] || 80)}
               />
             )}
 
@@ -433,7 +588,7 @@ function AssignedChannelPartnersView({
                 would be a lie about the data. */}
             {!loading && rows.length === 0 && loadError && (
               <tr>
-                <td colSpan={columns.length} className="px-4 py-16 text-center">
+                <td colSpan={orderedCols.length} className="px-4 py-16 text-center">
                   <p className={`text-sm font-bold mb-1 ${t.text}`}>Couldn&apos;t load your channel partners</p>
                   <p className={`text-xs mb-3 ${t.textMuted}`}>{loadError}</p>
                   <button
@@ -448,7 +603,7 @@ function AssignedChannelPartnersView({
 
             {!loading && visible.length === 0 && !(rows.length === 0 && loadError) && (
               <tr>
-                <td colSpan={columns.length} className="px-4 py-16 text-center">
+                <td colSpan={orderedCols.length} className="px-4 py-16 text-center">
                   <FaUserTie className={`mx-auto mb-3 text-2xl ${t.textFaint}`} />
                   <p className={`text-sm font-bold mb-1 ${t.text}`}>
                     {search ? "No partners match your search" : "No channel partners assigned to you yet"}
@@ -465,48 +620,73 @@ function AssignedChannelPartnersView({
             {!loading && visible.map(p => (
               <tr key={p.id} onClick={() => setDetailFor(p)}
                 className={`text-xs cursor-pointer ${t.tableRow} ${isDark ? "border-b border-[#222]" : "border-b border-slate-100"}`}>
-                <td className={`px-3 py-3 font-bold whitespace-nowrap ${t.text}`}>{p.name}</td>
-                <td className={cell}>{p.company_name || dash(t)}</td>
-                <td className={cell}>{p.owner_contact_person || dash(t)}</td>
-                <td className={cell}>{p.phone || dash(t)}</td>
-                <td className={cell}>{p.city || dash(t)}</td>
-                <td className={cell}>{p.pin_code || dash(t)}</td>
-                <td className={cell}>{p.rera_registration_no || dash(t)}</td>
-                <td className={cell}>{p.gst_number || dash(t)}</td>
-                {/* The count this table is sorted and judged on — a partner who has
-                    delivered reads differently from one who has only registered. */}
-                <td className="px-3 py-3 whitespace-nowrap">
-                  {Number(p.lead_count || 0) > 0 ? (
-                    <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${isDark ? "bg-[#9E217B]/20 text-[#d946a8]" : "bg-[#9E217B]/10 text-[#9E217B]"}`}>
-                      {p.lead_count}
-                    </span>
-                  ) : (
-                    <span className={t.textFaint}>0</span>
-                  )}
-                </td>
-                <td className="px-3 py-3 whitespace-nowrap">
-                  <span className={Number(p.booking_count || 0) > 0 ? `font-bold ${t.text}` : t.textFaint}>
-                    {p.booking_count ?? 0}
-                  </span>
-                </td>
-                <td className="px-3 py-3 whitespace-nowrap">
-                  {profileComplete(p) ? (
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-500">Complete</span>
-                  ) : (
-                    // The gap is this role's actual work queue: partners created
-                    // automatically from lead intake have only a name and phone.
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-500">Incomplete</span>
-                  )}
-                </td>
-                <td className="px-3 py-3 whitespace-nowrap">
-                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-semibold tracking-wide ${p.status === "active"
-                    ? isDark ? "bg-emerald-500/20 text-emerald-400" : "bg-emerald-500/10 text-emerald-700"
-                    : isDark ? "bg-gray-500/20 text-gray-400" : "bg-gray-500/10 text-gray-700"
-                    }`}>
-                    {p.status === "active" ? "Active" : "Inactive"}
-                  </span>
-                </td>
-                <td className={cell}>{fmtDate(p.assigned_sourcing_manager_at) || dash(t)}</td>
+
+                {orderedCols.map((col) => {
+                  switch (col.key) {
+                    case 'name':
+                      return <td key={col.key} className={`px-3 py-3 font-bold whitespace-nowrap ${t.text}`}>{p.name}</td>;
+                    case 'company_name':
+                      return <td key={col.key} className={cell}>{p.company_name || dash(t)}</td>;
+                    case 'owner_contact_person':
+                      return <td key={col.key} className={cell}>{p.owner_contact_person || dash(t)}</td>;
+                    case 'phone':
+                      return <td key={col.key} className={cell}>{p.phone || dash(t)}</td>;
+                    case 'city':
+                      return <td key={col.key} className={cell}>{p.city || dash(t)}</td>;
+                    case 'pin_code':
+                      return <td key={col.key} className={cell}>{p.pin_code || dash(t)}</td>;
+                    case 'rera_registration_no':
+                      return <td key={col.key} className={cell}>{p.rera_registration_no || dash(t)}</td>;
+                    case 'gst_number':
+                      return <td key={col.key} className={cell}>{p.gst_number || dash(t)}</td>;
+                    case 'lead_count':
+                      return (
+                        <td key={col.key} className="px-3 py-3 whitespace-nowrap">
+                          {Number(p.lead_count || 0) > 0 ? (
+                            <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${isDark ? "bg-[#9E217B]/20 text-[#d946a8]" : "bg-[#9E217B]/10 text-[#9E217B]"}`}>
+                              {p.lead_count}
+                            </span>
+                          ) : (
+                            <span className={t.textFaint}>0</span>
+                          )}
+                        </td>
+                      );
+                    case 'booking_count':
+                      return (
+                        <td key={col.key} className="px-3 py-3 whitespace-nowrap">
+                          <span className={Number(p.booking_count || 0) > 0 ? `font-bold ${t.text}` : t.textFaint}>
+                            {p.booking_count ?? 0}
+                          </span>
+                        </td>
+                      );
+                    case '_profile':
+                      return (
+                        <td key={col.key} className="px-3 py-3 whitespace-nowrap">
+                          {profileComplete(p) ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-500">Complete</span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-500">Incomplete</span>
+                          )}
+                        </td>
+                      );
+                    case 'status':
+                      return (
+                        <td key={col.key} className="px-3 py-3 whitespace-nowrap">
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-semibold tracking-wide ${p.status === "active"
+                            ? isDark ? "bg-emerald-500/20 text-emerald-400" : "bg-emerald-500/10 text-emerald-700"
+                            : isDark ? "bg-gray-500/20 text-gray-400" : "bg-gray-500/10 text-gray-700"
+                            }`}>
+                            {p.status === "active" ? "Active" : "Inactive"}
+                          </span>
+                        </td>
+                      );
+                    case 'assigned_sourcing_manager_at':
+                      return <td key={col.key} className={cell}>{fmtDate(p.assigned_sourcing_manager_at) || dash(t)}</td>;
+                    default:
+                      return <td key={col.key} className={cell}>—</td>;
+                  }
+                })}
+
               </tr>
             ))}
           </tbody>

@@ -91,19 +91,37 @@ export async function POST() {
       });
     }
 
+    // Complete the active attendance period (if one exists).
+    // duration_seconds = elapsed time from period start to now.
+    // The partial UNIQUE index ensures at most one active period per attendance.
+    try {
+      await query(
+        `UPDATE attendance_periods
+            SET completed_at     = CURRENT_TIMESTAMP,
+                duration_seconds = EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - started_at))::integer,
+                updated_at       = CURRENT_TIMESTAMP
+          WHERE attendance_id = $1 AND completed_at IS NULL`,
+        [record.id]
+      );
+    } catch (periodErr) {
+      // Non-fatal: the attendance_records update below is the critical path.
+      console.error("attendance_periods complete failed (non-fatal):", periodErr);
+    }
+
     // Write logout_time and working_track atomically.
-    // login_time is TIMESTAMPTZ (confirmed: mark route inserts via ::timestamptz
-    // cast and route comments state "genuine timestamptz in production").
-    // CURRENT_TIMESTAMP is also TIMESTAMPTZ. Subtracting two TIMESTAMPTZ values
-    // gives a pure elapsed-time INTERVAL independent of session timezone — the
-    // correct formula regardless of whether the DB session runs UTC or IST.
-    // Do NOT use AT TIME ZONE here: (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')
-    // produces a naive TIMESTAMP, and TIMESTAMP - TIMESTAMPTZ forces the TIMESTAMP
-    // back through the session timezone (UTC on Neon), introducing a ±5.5h error.
+    // working_track = logout_time − submitted_at: the gross attendance span
+    // from "Mark Attendance" click to "Done for the Day" click. With multiple
+    // periods this includes break time; the net working hours live in the
+    // attendance_periods rows (SUM of duration_seconds).
+    //
+    // submitted_at is TIMESTAMP (no timezone) on Neon, stored as UTC wall-clock.
+    // `submitted_at AT TIME ZONE 'UTC'` reinterprets it as a TIMESTAMPTZ, so the
+    // subtraction (TIMESTAMPTZ − TIMESTAMPTZ → INTERVAL) is timezone-safe
+    // regardless of the DB session's own timezone setting.
     const updated = await query<{ logout_time: string; working_track: number }>(
       `UPDATE attendance_records
           SET logout_time   = CURRENT_TIMESTAMP,
-              working_track = EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - login_time))::integer
+              working_track = EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - (submitted_at AT TIME ZONE 'UTC')))::integer
         WHERE id = $1 AND organization_id = $2
         RETURNING logout_time, working_track`,
       [record.id, orgId]

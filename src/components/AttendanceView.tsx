@@ -1,16 +1,46 @@
 "use client";
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { FaCheckCircle, FaClipboardList, FaCheck } from "react-icons/fa";
+import { FaCheckCircle, FaClipboardList, FaCheck, FaChevronDown, FaChevronUp } from "react-icons/fa";
 import { useAttendance } from "@/components/AttendanceContext";
 import ColumnFilterDropdown, { FilterableColumnHeader, useColumnFilters, type FilterableColumn } from "@/components/ColumnFilterDropdown";
 import { motion, AnimatePresence } from "framer-motion";
 import AppleDatePicker from "@/components/AppleDatePicker";
 import { computeFirstToLastSeconds, formatDurationHM } from "@/lib/attendance/sessionDuration";
 
+/** Ordinal suffix: 1→1st, 2→2nd, 3→3rd, 11→11th, etc. */
+const ordinal = (n: number): string => {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+};
+
+/** Format IST time from a bare IST datetime string (no timezone offset). */
+const fmtISTBare = (v: string) => {
+  // started_at_ist / completed_at_ist come as 'YYYY-MM-DDTHH:MM:SS' in IST
+  // without offset. Parse manually to avoid timezone reinterpretation.
+  const m = v.match(/(\d{2}):(\d{2}):(\d{2})$/);
+  if (!m) return v;
+  const h = parseInt(m[1], 10);
+  const min = m[2];
+  const sec = m[3];
+  const ampm = h >= 12 ? "PM" : "AM";
+  const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return `${String(h12).padStart(2, "0")}:${min}:${sec} ${ampm}`;
+};
+
+type PeriodRow = {
+  period_number: number;
+  started_at_ist: string;
+  completed_at_ist: string | null;
+  duration_seconds: number | null;
+  effective_seconds: number;
+  is_completed: boolean;
+};
+
 /**
  * Compute the authoritative daily Working Hours from attendance timestamps.
  *
- * The metric is always: first attendance mark (login_time) → latest completion
+ * The metric is always: attendance mark time (submitted_at) → latest completion
  * (logout_time) or NOW if the day is still active.  Gaps between CRM sessions
  * are included — this is the attendance *span*, not the sum of online time.
  *
@@ -26,14 +56,14 @@ function computeAttendanceSpan(
   // The ar subquery is DISTINCT ON employee_id, so every session row carries
   // the same attendance_* fields. Read them from the first row.
   const row = sessions[0];
-  const loginTimeStr: string | null = row?.attendance_login_time ?? null;
+  const markedAtStr: string | null = row?.attendance_marked_at ?? null;
   const completedStr: string | null = row?.attendance_completed_at ?? null;
 
-  if (loginTimeStr) {
-    const loginMs = new Date(loginTimeStr).getTime();
-    if (!isNaN(loginMs)) {
+  if (markedAtStr) {
+    const markedMs = new Date(markedAtStr).getTime();
+    if (!isNaN(markedMs)) {
       if (completedStr) {
-        // Day completed: frozen span from first mark to completion.
+        // Day completed: frozen span from mark time to completion.
         // Prefer the server-computed span (avoids client-clock drift),
         // but fall back to client-side timestamp math if missing.
         const spanFromServer = row?.attendance_span_seconds;
@@ -42,13 +72,13 @@ function computeAttendanceSpan(
         }
         const completedMs = new Date(completedStr).getTime();
         if (!isNaN(completedMs)) {
-          const sec = Math.floor((completedMs - loginMs) / 1000);
+          const sec = Math.floor((completedMs - markedMs) / 1000);
           return sec >= 0 ? sec : null;
         }
       }
       // Day still active (no logout_time): compute client-side so the
       // live timer ticks every second instead of stalling between fetches.
-      const sec = Math.floor((now - loginMs) / 1000);
+      const sec = Math.floor((now - markedMs) / 1000);
       return sec >= 0 ? sec : null;
     }
   }
@@ -94,6 +124,32 @@ export default function AttendanceView({
     isMarkedPresent: headerIsMarkedPresent,
     employeeId: headerEmployeeId,
   } = useAttendance();
+
+  // ── Period history state ──────────────────────────────────────────────────
+  const [periodHistoryOpen, setPeriodHistoryOpen] = useState(false);
+  const [periods, setPeriods] = useState<PeriodRow[]>([]);
+  const [periodsLoading, setPeriodsLoading] = useState(false);
+
+  const fetchPeriods = useCallback(async () => {
+    setPeriodsLoading(true);
+    try {
+      const res = await fetch(`/api/attendance/my-periods?date=${selectedDate}`, { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        setPeriods(data.periods || []);
+      }
+    } catch (e) {
+      console.error("my-periods fetch error:", e);
+    } finally {
+      setPeriodsLoading(false);
+    }
+  }, [selectedDate]);
+
+  const togglePeriodHistory = () => {
+    const next = !periodHistoryOpen;
+    setPeriodHistoryOpen(next);
+    if (next && periods.length === 0) fetchPeriods();
+  };
 
   // ── Column filter / sort state ──────────────────────────────────────────────
   const {
@@ -197,6 +253,9 @@ export default function AttendanceView({
 
   useEffect(() => {
     fetchSessions();
+    // Reset period history when date changes
+    setPeriodHistoryOpen(false);
+    setPeriods([]);
   }, [selectedDate, adminUser.name, adminUser.email]);
 
   useEffect(() => {
@@ -237,6 +296,7 @@ export default function AttendanceView({
           )
         );
         await refreshAttendance();
+        if (periodHistoryOpen) fetchPeriods();
         window.dispatchEvent(new Event("attendance-marked"));
       } else {
         showToast("❌ " + (data.message || "Failed to mark attendance"), false);
@@ -542,40 +602,61 @@ export default function AttendanceView({
                     const isCurrentlyMarking = markingId === (s.session_id ?? s.id);
                     const isLast = i === filteredSessions.length - 1;
                     const wh = getWorkingHoursDisplay();
+                    const tp = Number(s.total_periods || 0);
+                    const isRemarkDay = tp > 1;
 
                     return (
-                      <tr key={i} className={`transition-colors ${isDark ? "hover:bg-white/[0.03]" : "hover:bg-black/[0.02]"}`}>
+                      <React.Fragment key={i}>
+                      <tr className={`transition-colors ${isDark ? "hover:bg-white/[0.03]" : "hover:bg-black/[0.02]"}`}>
                         {/* Status */}
-                        <td className={`px-4 py-3 ${borderCls(isLast)}`}>
-                          {isAlreadyMarked ? (
-                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] sm:text-[12px] font-semibold tracking-wide ${st.cls}`}>
-                              <FaCheckCircle className="text-[12px]" /> {st.label}
-                            </span>
-                          ) : (
-                            <AttendanceCheckbox
-                              sessionId={s.session_id ?? s.id}
-                              isMarking={isCurrentlyMarking}
-                              isDark={isDark}
-                              statusBadge={st}
-                              onSubmit={() => handleMarkAttendance(s)}
-                            />
-                          )}
+                        <td className={`px-4 py-3 ${borderCls(isLast && !periodHistoryOpen)}`}>
+                          <div className="flex flex-col gap-1.5">
+                            {isAlreadyMarked ? (
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] sm:text-[12px] font-semibold tracking-wide ${st.cls}`}>
+                                  <FaCheckCircle className="text-[12px]" /> {st.label}
+                                </span>
+                                {isRemarkDay && (
+                                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] sm:text-[11px] font-semibold tracking-wide ${isDark ? "text-[#BF5AF2] bg-[rgba(191,90,242,0.15)]" : "text-[#AF52DE] bg-[#F5EAFA]"}`}>
+                                    Remarked &middot; {ordinal(tp)} period
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <AttendanceCheckbox
+                                sessionId={s.session_id ?? s.id}
+                                isMarking={isCurrentlyMarking}
+                                isDark={isDark}
+                                statusBadge={st}
+                                onSubmit={() => handleMarkAttendance(s)}
+                              />
+                            )}
+                            {isRemarkDay && (
+                              <button
+                                onClick={togglePeriodHistory}
+                                className={`inline-flex items-center gap-1 text-[11px] font-medium tracking-tight w-fit ${isDark ? "text-[#0A84FF] hover:text-[#409CFF]" : "text-[#007AFF] hover:text-[#005BB5]"}`}
+                              >
+                                {periodHistoryOpen ? <FaChevronUp className="text-[9px]" /> : <FaChevronDown className="text-[9px]" />}
+                                View History
+                              </button>
+                            )}
+                          </div>
                         </td>
 
                         {/* Employee */}
-                        <td className={`px-4 py-3 font-medium tracking-tight text-[12px] sm:text-[13px] ${isDark ? "text-white" : "text-black"} ${borderCls(isLast)}`}>
+                        <td className={`px-4 py-3 font-medium tracking-tight text-[12px] sm:text-[13px] ${isDark ? "text-white" : "text-black"} ${borderCls(isLast && !periodHistoryOpen)}`}>
                           {s.name || adminUser.name}
                         </td>
 
                         {/* Mark Attendance Time */}
-                        <td className={`px-4 py-3 text-[12px] sm:text-[13px] font-medium tracking-tight ${isDark ? "text-[#EBEBF5]" : "text-[#333333]"} ${borderCls(isLast)}`}>
+                        <td className={`px-4 py-3 text-[12px] sm:text-[13px] font-medium tracking-tight ${isDark ? "text-[#EBEBF5]" : "text-[#333333]"} ${borderCls(isLast && !periodHistoryOpen)}`}>
                           {s.attendance_marked_at
                             ? fmtIST(s.attendance_marked_at)
                             : <span className="text-[#8E8E93]">—</span>}
                         </td>
 
                         {/* Day Completed At */}
-                        <td className={`px-4 py-3 text-[12px] sm:text-[13px] font-medium tracking-tight ${borderCls(isLast)}`}>
+                        <td className={`px-4 py-3 text-[12px] sm:text-[13px] font-medium tracking-tight ${borderCls(isLast && !periodHistoryOpen)}`}>
                           {s.attendance_completed_at
                             ? <span className={isDark ? "text-[#EBEBF5]" : "text-[#333333]"}>{fmtIST(s.attendance_completed_at)}</span>
                             : selectedDate === todayStr && sessions.length > 0
@@ -584,7 +665,7 @@ export default function AttendanceView({
                         </td>
 
                         {/* Working Hours */}
-                        <td className={`px-4 py-3 font-mono text-[12px] sm:text-[13px] font-semibold tracking-tight ${borderCls(isLast)}`}>
+                        <td className={`px-4 py-3 font-mono text-[12px] sm:text-[13px] font-semibold tracking-tight ${borderCls(isLast && !periodHistoryOpen)}`}>
                           <span className={wh.text === "—"
                             ? "text-[#8E8E93]"
                             : isDark ? "text-[#0A84FF]" : "text-[#007AFF]"}>
@@ -592,6 +673,22 @@ export default function AttendanceView({
                           </span>
                         </td>
                       </tr>
+
+                      {/* ── Period History Expandable ── */}
+                      {isRemarkDay && periodHistoryOpen && (
+                        <tr>
+                          <td colSpan={5} className={`px-0 py-0 ${borderCls(isLast)}`}>
+                            <PeriodHistory
+                              periods={periods}
+                              loading={periodsLoading}
+                              isDark={isDark}
+                              session={s}
+                              now={now}
+                            />
+                          </td>
+                        </tr>
+                      )}
+                      </React.Fragment>
                     );
                   })
                 )}
@@ -617,6 +714,8 @@ export default function AttendanceView({
               const isAlreadyMarked = s.attendance_status?.toLowerCase() === "present";
               const isCurrentlyMarking = markingId === (s.session_id ?? s.id);
               const wh = getWorkingHoursDisplay();
+              const tp = Number(s.total_periods || 0);
+              const isRemarkDay = tp > 1;
 
               return (
                 <div key={s.session_id ?? s.id ?? i} className="relative p-4 space-y-3">
@@ -624,9 +723,16 @@ export default function AttendanceView({
                     <span className={`text-[13px] font-semibold tracking-tight ${isDark ? "text-white" : "text-black"}`}>
                       {s.name || adminUser.name}
                     </span>
-                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold tracking-wide ${st.cls}`}>
-                      {isAlreadyMarked && <FaCheckCircle className="text-[10px]" />} {st.label}
-                    </span>
+                    <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold tracking-wide ${st.cls}`}>
+                        {isAlreadyMarked && <FaCheckCircle className="text-[10px]" />} {st.label}
+                      </span>
+                      {isRemarkDay && (
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold tracking-wide ${isDark ? "text-[#BF5AF2] bg-[rgba(191,90,242,0.15)]" : "text-[#AF52DE] bg-[#F5EAFA]"}`}>
+                          Remarked &middot; {ordinal(tp)} period
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-x-4 gap-y-3">
@@ -667,6 +773,27 @@ export default function AttendanceView({
                       />
                     </div>
                   )}
+
+                  {isRemarkDay && (
+                    <>
+                      <button
+                        onClick={togglePeriodHistory}
+                        className={`inline-flex items-center gap-1 text-[11px] font-medium tracking-tight ${isDark ? "text-[#0A84FF] hover:text-[#409CFF]" : "text-[#007AFF] hover:text-[#005BB5]"}`}
+                      >
+                        {periodHistoryOpen ? <FaChevronUp className="text-[9px]" /> : <FaChevronDown className="text-[9px]" />}
+                        View History
+                      </button>
+                      {periodHistoryOpen && (
+                        <PeriodHistory
+                          periods={periods}
+                          loading={periodsLoading}
+                          isDark={isDark}
+                          session={s}
+                          now={now}
+                        />
+                      )}
+                    </>
+                  )}
                 </div>
               );
             })}
@@ -677,6 +804,120 @@ export default function AttendanceView({
           Attendance data is sourced automatically from the CRM session tracker.
         </p>
       </motion.div>
+    </div>
+  );
+}
+
+/** Period history expandable — shows each attendance period with summary footer. */
+function PeriodHistory({
+  periods,
+  loading,
+  isDark,
+  session,
+  now,
+}: {
+  periods: PeriodRow[];
+  loading: boolean;
+  isDark: boolean;
+  session: any;
+  now: number;
+}) {
+  if (loading) {
+    return (
+      <div className={`px-6 py-4 ${isDark ? "bg-[#1C1C1E]" : "bg-[#FAFAFA]"}`}>
+        <div className="flex items-center gap-2">
+          <div className="w-3.5 h-3.5 rounded-full border-[2px] border-[#8E8E93] border-t-transparent animate-spin" />
+          <span className="text-[11px] font-medium text-[#8E8E93]">Loading periods...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (periods.length === 0) {
+    return (
+      <div className={`px-6 py-4 ${isDark ? "bg-[#1C1C1E]" : "bg-[#FAFAFA]"}`}>
+        <span className="text-[11px] font-medium text-[#8E8E93]">No period data available.</span>
+      </div>
+    );
+  }
+
+  // Summary calculations
+  const totalPeriods = periods.length;
+  const firstTime = periods[0]?.started_at_ist;
+  const lastCompleted = [...periods].reverse().find(p => p.is_completed);
+  const latestCompletionTime = lastCompleted?.completed_at_ist;
+  const totalWorkingSeconds = periods.reduce((sum, p) => sum + (p.effective_seconds || 0), 0);
+
+  return (
+    <div className={`px-4 sm:px-6 py-3 ${isDark ? "bg-[#1C1C1E]/60" : "bg-[#F9F9FB]"}`}>
+      <div className={`rounded-xl border overflow-hidden ${isDark ? "border-[#38383A] bg-[#2C2C2E]/40" : "border-[#E5E5EA] bg-white"}`}>
+        {/* Header */}
+        <div className={`px-4 py-2.5 border-b ${isDark ? "border-[#38383A]" : "border-[#E5E5EA]"}`}>
+          <span className={`text-[11px] font-semibold uppercase tracking-wider ${isDark ? "text-[#BF5AF2]" : "text-[#AF52DE]"}`}>
+            Attendance Periods
+          </span>
+        </div>
+
+        {/* Period rows */}
+        <div className={`divide-y ${isDark ? "divide-[#38383A]/60" : "divide-[#E5E5EA]"}`}>
+          {periods.map((p) => (
+            <div key={p.period_number} className="px-4 py-2.5 flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-4">
+              {/* Period number + activity type */}
+              <div className="flex items-center gap-2 min-w-[140px]">
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${isDark ? "bg-[rgba(191,90,242,0.2)] text-[#BF5AF2]" : "bg-[#F5EAFA] text-[#AF52DE]"}`}>
+                  {p.period_number}
+                </div>
+                <span className={`text-[11px] font-medium ${isDark ? "text-[#EBEBF5]" : "text-[#333]"}`}>
+                  {p.period_number === 1 ? "Initial Mark" : "Remark"}
+                </span>
+              </div>
+
+              {/* Time range */}
+              <div className="flex items-center gap-1.5 text-[11px] font-medium min-w-[200px]">
+                <span className={isDark ? "text-[#EBEBF5]/80" : "text-[#666]"}>
+                  {fmtISTBare(p.started_at_ist)}
+                </span>
+                <span className="text-[#8E8E93]">&rarr;</span>
+                <span className={isDark ? "text-[#EBEBF5]/80" : "text-[#666]"}>
+                  {p.completed_at_ist ? fmtISTBare(p.completed_at_ist) : "—"}
+                </span>
+              </div>
+
+              {/* Duration */}
+              <span className={`font-mono text-[11px] font-semibold min-w-[60px] ${isDark ? "text-[#0A84FF]" : "text-[#007AFF]"}`}>
+                {p.effective_seconds > 0 ? formatDurationHM(p.effective_seconds) : "—"}
+              </span>
+
+              {/* Status badge */}
+              {p.is_completed ? (
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold tracking-wide ${isDark ? "text-[#32D74B] bg-[rgba(50,215,75,0.15)]" : "text-[#34C759] bg-[#EBF9EE]"}`}>
+                  Completed
+                </span>
+              ) : (
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold tracking-wide ${isDark ? "text-[#0A84FF] bg-[rgba(10,132,255,0.15)]" : "text-[#007AFF] bg-[#E8F2FF]"}`}>
+                  Active
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Summary footer */}
+        <div className={`px-4 py-2.5 border-t flex flex-wrap gap-x-6 gap-y-1 ${isDark ? "border-[#38383A] bg-[#1C1C1E]/40" : "border-[#E5E5EA] bg-[#F9F9F9]"}`}>
+          <span className={`text-[10px] font-medium uppercase tracking-wider ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
+            Total Periods: <span className={isDark ? "text-white" : "text-black"}>{totalPeriods}</span>
+          </span>
+          <span className={`text-[10px] font-medium uppercase tracking-wider ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
+            First Attendance: <span className={isDark ? "text-white" : "text-black"}>{firstTime ? fmtISTBare(firstTime) : "—"}</span>
+          </span>
+          <span className={`text-[10px] font-medium uppercase tracking-wider ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
+            Latest Completion: <span className={isDark ? "text-white" : "text-black"}>{latestCompletionTime ? fmtISTBare(latestCompletionTime) : "In Progress"}</span>
+          </span>
+          <span className={`text-[10px] font-medium uppercase tracking-wider ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
+            Total Working: <span className={isDark ? "text-[#0A84FF]" : "text-[#007AFF]"}>{formatDurationHM(totalWorkingSeconds)}</span>
+          </span>
+        </div>
+      </div>
     </div>
   );
 }

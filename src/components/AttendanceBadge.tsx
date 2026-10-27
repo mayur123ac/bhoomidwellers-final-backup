@@ -212,10 +212,15 @@ export default function AttendanceBadge({
   const {
     markAttendanceOptimistic,
     markDayComplete,
+    remarkAttendance,
     refreshAttendance,
     isDayCompleted,
     logoutTime,
     workingTrack,
+    canRemark,
+    currentPeriod,
+    completedPeriodsSeconds,
+    activePeriodStartedAt,
   } = useAttendance();
 
   const { isDark } = useCrmTheme();
@@ -246,19 +251,30 @@ export default function AttendanceBadge({
     });
   }, [punchedAt]);
 
-  // Live elapsed (only used in ATTENDANCE_ACTIVE state)
+  // Live elapsed: for multi-period, sum completed periods + current period elapsed.
+  // Falls back to single-span if no period data available.
   const liveElapsed = useMemo(() => {
+    const periodStart = activePeriodStartedAt ? parseTimeIn(activePeriodStartedAt) : null;
+    if (periodStart) {
+      const currentElapsed = Math.max(0, Math.floor((now - periodStart.getTime()) / 1000));
+      const total = completedPeriodsSeconds + currentElapsed;
+      return formatElapsed(new Date(now - total * 1000), now);
+    }
     if (!punchedAt) return "";
     return formatElapsed(punchedAt, now);
-  }, [punchedAt, now]);
+  }, [punchedAt, now, activePeriodStartedAt, completedPeriodsSeconds]);
 
-  // Frozen elapsed from punch-in to checkout (used in DAY_COMPLETED state)
+  // Frozen elapsed: for multi-period, use sum of all completed period durations.
+  // Falls back to punch-to-logout span if no period data.
   const frozenElapsed = useMemo(() => {
+    if (completedPeriodsSeconds > 0) {
+      return formatWorkingTrack(completedPeriodsSeconds);
+    }
     if (!punchedAt || !logoutTime) return "";
     const logoutDate = parseTimeIn(logoutTime);
     if (!logoutDate) return "";
     return formatElapsed(punchedAt, logoutDate.getTime());
-  }, [punchedAt, logoutTime]);
+  }, [punchedAt, logoutTime, completedPeriodsSeconds]);
 
   // ── Action state ──────────────────────────────────────────────────────────
   const [isPunching, setIsPunching] = useState(false);
@@ -266,6 +282,7 @@ export default function AttendanceBadge({
   const [showWelcome, setShowWelcome] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  const [isRemarking, setIsRemarking] = useState(false);
   // Confirmation dialog (shown before executing checkout)
   const [showDayCompleteConfirm, setShowDayCompleteConfirm] = useState(false);
   // Goodbye modal (shown after successful checkout)
@@ -337,6 +354,25 @@ export default function AttendanceBadge({
     }
   }, [isCheckingOut, isDayCompleted, markDayComplete, refreshAttendance]);
 
+  // ── Remark Attendance ─────────────────────────────────────────────────
+  const handleRemark = useCallback(async () => {
+    if (isRemarking) return;
+    setIsRemarking(true);
+    setErrorMsg(null);
+    try {
+      const ok = await remarkAttendance();
+      if (!ok) {
+        setErrorMsg("Failed to remark attendance");
+        setTimeout(() => setErrorMsg(null), 5000);
+      }
+    } catch {
+      setErrorMsg("Network error — please check your connection");
+      setTimeout(() => setErrorMsg(null), 5000);
+    } finally {
+      setIsRemarking(false);
+    }
+  }, [isRemarking, remarkAttendance]);
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   // STATE 1: NOT_MARKED
@@ -376,23 +412,39 @@ export default function AttendanceBadge({
   if (isDayCompleted) {
     return (
       <>
-        <div
-          title="Day complete — attendance recorded"
-          className="h-8 sm:h-9 flex items-center gap-1.5 sm:gap-2 rounded-md bg-gray-100 dark:bg-white/5 px-2.5 sm:px-3 text-gray-500 dark:text-gray-400 border border-transparent"
-        >
-          <FaCheckCircle className="text-gray-400 dark:text-gray-500 w-3 h-3 sm:w-3.5 sm:h-3.5 flex-shrink-0" />
-          <span className="hidden sm:flex flex-col items-start leading-none">
-            {markedAtLabel && (
-              <span className="text-[8px] font-semibold uppercase tracking-wide opacity-70 whitespace-nowrap">
-                Day complete · in at {markedAtLabel}
+        <div className="flex items-center gap-1.5">
+          <div
+            title="Day complete — attendance recorded"
+            className="h-8 sm:h-9 flex items-center gap-1.5 sm:gap-2 rounded-md bg-gray-100 dark:bg-white/5 px-2.5 sm:px-3 text-gray-500 dark:text-gray-400 border border-transparent"
+          >
+            <FaCheckCircle className="text-gray-400 dark:text-gray-500 w-3 h-3 sm:w-3.5 sm:h-3.5 flex-shrink-0" />
+            <span className="hidden sm:flex flex-col items-start leading-none">
+              {markedAtLabel && (
+                <span className="text-[8px] font-semibold uppercase tracking-wide opacity-70 whitespace-nowrap">
+                  {currentPeriod > 1 ? `${currentPeriod} periods` : "Day complete"} · in at {markedAtLabel}
+                </span>
+              )}
+              {(completedPeriodsSeconds > 0 || workingTrack != null || frozenElapsed) && (
+                <span className="text-[11px] sm:text-[12px] font-bold tracking-wide whitespace-nowrap font-mono mt-0.5">
+                  {completedPeriodsSeconds > 0 ? formatWorkingTrack(completedPeriodsSeconds) : workingTrack != null ? formatWorkingTrack(workingTrack) : frozenElapsed}
+                </span>
+              )}
+            </span>
+          </div>
+          {canRemark && (
+            <button
+              type="button"
+              onClick={handleRemark}
+              disabled={isRemarking}
+              title="Start a new work period"
+              className="h-8 sm:h-9 flex items-center gap-1 sm:gap-1.5 rounded-md bg-[#007AFF]/10 px-2 sm:px-2.5 text-[#007AFF] hover:bg-[#007AFF]/20 transition-colors duration-150 cursor-pointer border border-transparent disabled:opacity-60 disabled:cursor-wait"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF] flex-shrink-0" />
+              <span className="hidden sm:inline text-[11px] sm:text-[12px] font-medium tracking-wide whitespace-nowrap">
+                {isRemarking ? "Starting…" : "Remark"}
               </span>
-            )}
-            {(workingTrack != null || frozenElapsed) && (
-              <span className="text-[11px] sm:text-[12px] font-bold tracking-wide whitespace-nowrap font-mono mt-0.5">
-                {workingTrack != null ? formatWorkingTrack(workingTrack) : frozenElapsed}
-              </span>
-            )}
-          </span>
+            </button>
+          )}
         </div>
 
         <GoodbyeModal
@@ -401,6 +453,12 @@ export default function AttendanceBadge({
           userName={userName}
           onDone={() => setShowGoodbyeModal(false)}
         />
+
+        <AttendancePopup show={!!errorMsg}>
+          <p className="text-sm font-bold text-red-600 dark:text-red-400">
+            {errorMsg}
+          </p>
+        </AttendancePopup>
       </>
     );
   }
@@ -419,7 +477,7 @@ export default function AttendanceBadge({
         <span className="hidden sm:flex flex-col items-start leading-none">
           {markedAtLabel && (
             <span className="text-[8px] font-semibold uppercase tracking-wide opacity-70 whitespace-nowrap group-hover:opacity-100">
-              {isCheckingOut ? "Checking out…" : `Logged in at ${markedAtLabel}`}
+              {isCheckingOut ? "Checking out…" : currentPeriod > 1 ? `Period ${currentPeriod}` : `Logged in at ${markedAtLabel}`}
             </span>
           )}
           <span className="text-[11px] sm:text-[12px] font-bold tracking-wide whitespace-nowrap font-mono mt-0.5">

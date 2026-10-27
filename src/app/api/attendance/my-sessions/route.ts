@@ -100,14 +100,18 @@ export async function GET(req: Request) {
                   'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')    AS attendance_marked_at,
           TO_CHAR(ar.logout_time  AT TIME ZONE 'UTC' AT TIME ZONE 'UTC',
                   'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')    AS attendance_completed_at,
-          -- Authoritative daily Working Hours: attendance span from first mark
-          -- to latest completion (or NOW if still active).  This is
-          -- logout_time − login_time, NOT a sum of session durations.
-          CASE WHEN ar.login_time IS NOT NULL THEN
-            EXTRACT(EPOCH FROM (
-              COALESCE(ar.logout_time, CURRENT_TIMESTAMP) - ar.login_time
-            ))::integer
+          -- Authoritative daily Working Hours: uses SUM of attendance_periods
+          -- durations (net working time, excludes breaks). Falls back to gross
+          -- span (logout − submitted_at) for records without periods.
+          CASE WHEN ar.submitted_at IS NOT NULL THEN
+            COALESCE(
+              ap_sum.periods_total_seconds,
+              EXTRACT(EPOCH FROM (
+                COALESCE(ar.logout_time, CURRENT_TIMESTAMP) - (ar.submitted_at AT TIME ZONE 'UTC')
+              ))::integer
+            )
           END                                          AS attendance_span_seconds,
+          COALESCE(ap_sum.total_periods, 0)            AS total_periods,
           EXTRACT(EPOCH FROM (
             COALESCE(
               CASE WHEN es.is_active THEN NOW() ELSE es.session_end END,
@@ -118,11 +122,24 @@ export async function GET(req: Request) {
         FROM employee_sessions es
         JOIN users u ON u.id = es.user_id
         LEFT JOIN (
-          SELECT DISTINCT ON (employee_id) employee_id, attendance_status, working_track, submitted_at, logout_time, login_time
-          FROM attendance_records
-          WHERE DATE(login_time AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata') = $2::date AND organization_id = $3
-          ORDER BY employee_id, id ASC
+          SELECT DISTINCT ON (ar_inner.employee_id)
+            ar_inner.employee_id, ar_inner.attendance_status, ar_inner.working_track,
+            ar_inner.submitted_at, ar_inner.logout_time, ar_inner.login_time,
+            ar_inner.id AS ar_id
+          FROM attendance_records ar_inner
+          WHERE DATE(ar_inner.login_time AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata') = $2::date AND ar_inner.organization_id = $3
+          ORDER BY ar_inner.employee_id, ar_inner.id ASC
         ) ar ON u.id = ar.employee_id
+        LEFT JOIN LATERAL (
+          SELECT
+            SUM(CASE
+              WHEN ap.completed_at IS NOT NULL THEN ap.duration_seconds
+              ELSE EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - ap.started_at))::integer
+            END)::integer AS periods_total_seconds,
+            COUNT(*)::integer AS total_periods
+          FROM attendance_periods ap
+          WHERE ap.attendance_id = ar.ar_id
+        ) ap_sum ON true
         WHERE es.user_id = $1
           AND es.organization_id = $3
           AND u.organization_id = $3
@@ -160,11 +177,15 @@ export async function GET(req: Request) {
                   'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')    AS attendance_marked_at,
           TO_CHAR(ar.logout_time  AT TIME ZONE 'UTC' AT TIME ZONE 'UTC',
                   'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')    AS attendance_completed_at,
-          CASE WHEN ar.login_time IS NOT NULL THEN
-            EXTRACT(EPOCH FROM (
-              COALESCE(ar.logout_time, CURRENT_TIMESTAMP) - ar.login_time
-            ))::integer
+          CASE WHEN ar.submitted_at IS NOT NULL THEN
+            COALESCE(
+              ap_sum.periods_total_seconds,
+              EXTRACT(EPOCH FROM (
+                COALESCE(ar.logout_time, CURRENT_TIMESTAMP) - (ar.submitted_at AT TIME ZONE 'UTC')
+              ))::integer
+            )
           END                                          AS attendance_span_seconds,
+          COALESCE(ap_sum.total_periods, 0)            AS total_periods,
           EXTRACT(EPOCH FROM (
             COALESCE(
               CASE WHEN es.is_active THEN NOW() ELSE es.session_end END,
@@ -175,11 +196,24 @@ export async function GET(req: Request) {
         FROM employee_sessions es
         JOIN users u ON u.id = es.user_id
         LEFT JOIN (
-          SELECT DISTINCT ON (employee_id) employee_id, attendance_status, working_track, submitted_at, logout_time, login_time
-          FROM attendance_records
-          WHERE DATE(login_time AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata') = $2::date AND organization_id = $3
-          ORDER BY employee_id, id ASC
+          SELECT DISTINCT ON (ar_inner.employee_id)
+            ar_inner.employee_id, ar_inner.attendance_status, ar_inner.working_track,
+            ar_inner.submitted_at, ar_inner.logout_time, ar_inner.login_time,
+            ar_inner.id AS ar_id
+          FROM attendance_records ar_inner
+          WHERE DATE(ar_inner.login_time AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata') = $2::date AND ar_inner.organization_id = $3
+          ORDER BY ar_inner.employee_id, ar_inner.id ASC
         ) ar ON u.id = ar.employee_id
+        LEFT JOIN LATERAL (
+          SELECT
+            SUM(CASE
+              WHEN ap.completed_at IS NOT NULL THEN ap.duration_seconds
+              ELSE EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - ap.started_at))::integer
+            END)::integer AS periods_total_seconds,
+            COUNT(*)::integer AS total_periods
+          FROM attendance_periods ap
+          WHERE ap.attendance_id = ar.ar_id
+        ) ap_sum ON true
         -- Name matching is ambiguous ACROSS tenants as well as within one, so the
         -- organization predicate is what keeps a same-named user in another tenant
         -- out of this employee's own session list.

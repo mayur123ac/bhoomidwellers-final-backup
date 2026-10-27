@@ -156,6 +156,9 @@ import {
     FaSyncAlt,
     FaPhoneAlt,
     FaFilter,
+    FaSlidersH,
+    FaGripVertical,
+    FaUndo,
 } from "react-icons/fa";
 import type { BolnaStatusResponse } from "@/types/bolna.types";
 import {
@@ -263,8 +266,6 @@ export type EnquiryOverviewSectionProps = {
 
 /* ───────────────── helpers ───────────────── */
 
-
-
 const txt = (v: any, fallback = "—") => (isBlank(v) ? fallback : String(v));
 
 const propTypeOf = (l: Lead) => {
@@ -287,6 +288,7 @@ const assignedInfo = (l: Lead, siteHeads?: any[]) => {
     return { name, role };
 };
 const COLS_STORAGE_KEY = "bd:overview:hiddenCols:v2";
+const COL_ORDER_STORAGE_KEY = "bd:overview:colOrder:v1";
 
 /* ───────────────── column definitions ─────────────────
    Order follows the redesign spec; every column that existed before is
@@ -856,10 +858,108 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
         }
     };
 
+    /* ── column reordering (persisted) ── */
+    const defaultColOrder = useMemo(() => COLUMNS.map((c) => c.key), []);
+    const [colOrder, setColOrder] = useState<string[]>(defaultColOrder);
+    const [isCustomizing, setIsCustomizing] = useState(false);
+
+    useEffect(() => {
+        try {
+            const saved = localStorage.getItem(COL_ORDER_STORAGE_KEY);
+            if (saved) {
+                const parsed = JSON.parse(saved) as string[];
+                // Validate parsed elements against current COLUMNS
+                const validSaved = parsed.filter((k) => COLUMNS.some((c) => c.key === k));
+                // Append any newly added columns missing from saved layout
+                const missing = defaultColOrder.filter((k) => !validSaved.includes(k));
+                setColOrder([...validSaved, ...missing]);
+            }
+        } catch {
+            /* ignore */
+        }
+    }, [defaultColOrder]);
+
+    const persistColOrder = (next: string[]) => {
+        setColOrder(next);
+        try {
+            localStorage.setItem(COL_ORDER_STORAGE_KEY, JSON.stringify(next));
+        } catch {
+            /* ignore */
+        }
+    };
+
+    const orderedColumns = useMemo(() => {
+        return colOrder
+            .map((key) => COLUMNS.find((c) => c.key === key))
+            .filter(Boolean) as Column[];
+    }, [colOrder]);
+
     const visibleColumns = useMemo(
-        () => COLUMNS.filter((c) => c.locked || !hiddenCols.has(c.key)),
-        [hiddenCols]
+        () => orderedColumns.filter((c) => c.locked || !hiddenCols.has(c.key)),
+        [orderedColumns, hiddenCols]
     );
+
+    /* ── drag and drop state ── */
+    const [draggedCol, setDraggedCol] = useState<string | null>(null);
+    const [dragOverCol, setDragOverCol] = useState<string | null>(null);
+
+    const handleDragStart = (e: React.DragEvent | React.TouchEvent, colKey: string) => {
+        setDraggedCol(colKey);
+    };
+
+    const handleDragOver = (e: React.DragEvent, colKey: string) => {
+        e.preventDefault(); // Necessary to allow dropping
+        if (colKey !== dragOverCol) {
+            setDragOverCol(colKey);
+        }
+    };
+
+    const handleDrop = (e: React.DragEvent, targetKey: string) => {
+        e.preventDefault();
+        if (draggedCol && draggedCol !== targetKey) {
+            const oldIdx = colOrder.indexOf(draggedCol);
+            const newIdx = colOrder.indexOf(targetKey);
+            const newOrder = [...colOrder];
+            newOrder.splice(oldIdx, 1);
+            newOrder.splice(newIdx, 0, draggedCol);
+            persistColOrder(newOrder);
+        }
+        setDraggedCol(null);
+        setDragOverCol(null);
+    };
+
+    const handleDragEnd = () => {
+        setDraggedCol(null);
+        setDragOverCol(null);
+    };
+
+    // Basic touch support for swapping
+    const handleTouchMove = (e: React.TouchEvent) => {
+        if (!isCustomizing || !draggedCol) return;
+        const touch = e.touches[0];
+        const target = document.elementFromPoint(touch.clientX, touch.clientY);
+        const targetTh = target?.closest("th[data-colkey]");
+        if (targetTh) {
+            const targetKey = targetTh.getAttribute("data-colkey");
+            if (targetKey && targetKey !== dragOverCol) {
+                setDragOverCol(targetKey);
+            }
+        }
+    };
+
+    const handleTouchEnd = () => {
+        if (!isCustomizing) return;
+        if (draggedCol && dragOverCol && draggedCol !== dragOverCol) {
+            const oldIdx = colOrder.indexOf(draggedCol);
+            const newIdx = colOrder.indexOf(dragOverCol);
+            const newOrder = [...colOrder];
+            newOrder.splice(oldIdx, 1);
+            newOrder.splice(newIdx, 0, draggedCol);
+            persistColOrder(newOrder);
+        }
+        setDraggedCol(null);
+        setDragOverCol(null);
+    };
 
     /* ── sorting ── */
     const [sortKey, setSortKey] = useState<string | null>("lead_no");
@@ -875,7 +975,6 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
         }
     };
 
-    // Kept for backward-compat (unused after header-click refactor but safe to keep)
     const toggleSort = (key: string) => {
         const col = COLUMNS.find((c) => c.key === key);
         if (!col?.sortValue) return;
@@ -1138,6 +1237,31 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
 
                     {/* right */}
                     <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap sm:ml-auto mobile-compact-toolbar">
+                        <ToolbarButton
+                            onClick={() => setIsCustomizing(!isCustomizing)}
+                            icon={<FaSlidersH className="text-[10px] sm:text-[11px]" />}
+                            isDark={isDark}
+                            active={isCustomizing}
+                            title="Customize column layout"
+                        >
+                            <span className="hidden sm:inline">{isCustomizing ? "Done" : "Customize"}</span>
+                        </ToolbarButton>
+
+                        {isCustomizing && (
+                            <ToolbarButton
+                                onClick={() => {
+                                    setColOrder(defaultColOrder);
+                                    persistColOrder(defaultColOrder);
+                                    setIsCustomizing(false);
+                                }}
+                                icon={<FaUndo className="text-[10px] sm:text-[11px]" />}
+                                isDark={isDark}
+                                title="Reset layout to default"
+                            >
+                                <span className="hidden sm:inline">Reset</span>
+                            </ToolbarButton>
+                        )}
+
                         <ColumnSelector
                             columns={COLUMNS.map((c) => ({ key: c.key, label: c.label, locked: c.locked }))}
                             hidden={hiddenCols}
@@ -1204,27 +1328,6 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
                         <option value="active">Active only</option>
                         <option value="lost">Lost only</option>
                     </select>
-
-                    {/* <select
-                        value={overviewSearchColumn}
-                        onChange={(e) => setOverviewSearchColumn(e.target.value)}
-                        className={`h-7 sm:h-8 px-1.5 sm:px-2.5 rounded-md sm:rounded-lg text-[10px] sm:text-xs font-bold outline-none border cursor-pointer transition-colors ${theme.select}`}
-                        title="Restrict search to one column"
-                    >
-                        <option value="all">Search: all columns</option>
-                        <option value="lead_no">Sr. No.</option>
-                        <option value="name">Name</option>
-                        <option value="prop_type">Property Type</option>
-                        <option value="budget">Budget</option>
-                        <option value="source">Source</option>
-                        <option value="cp_name">CP Name</option>
-                        <option value="cp_company">CP Company</option>
-                        <option value="cp_phone">CP Phone</option>
-                        <option value="status">Status</option>
-                        <option value="interest">Interest</option>
-                        <option value="site_visit">Site Visit</option>
-                        <option value="assigned_to">Assigned To</option>
-                    </select> */}
 
                     <div className={`w-px h-4 sm:h-5 ${isDark ? "bg-white/10" : "bg-gray-200"}`} />
 
@@ -1347,33 +1450,68 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
                                         (columnFilters.get(col.key)?.size ?? 0) > 0;
                                     const isOpen = openFilter?.colKey === col.key;
 
+                                    const isBeingDragged = draggedCol === col.key;
+                                    const isDropTarget = dragOverCol === col.key && draggedCol !== col.key;
+                                    const draggedIdx = draggedCol ? colOrder.indexOf(draggedCol) : -1;
+                                    const dropIdx = colOrder.indexOf(col.key);
+
+                                    // Determine edge highlighting based on drag direction
+                                    const dropIndicatorClass = isDropTarget
+                                        ? draggedIdx < dropIdx
+                                            ? "shadow-[-2px_0_0_#d946a8_inset] bg-[#9E217B]/10"
+                                            : "shadow-[2px_0_0_#d946a8_inset] bg-[#9E217B]/10"
+                                        : "";
+
                                     return (
                                         <th
                                             key={col.key}
+                                            data-colkey={col.key}
+                                            draggable={isCustomizing}
+                                            onDragStart={isCustomizing ? (e) => handleDragStart(e, col.key) : undefined}
+                                            onDragOver={isCustomizing ? (e) => handleDragOver(e, col.key) : undefined}
+                                            onDrop={isCustomizing ? (e) => handleDrop(e, col.key) : undefined}
+                                            onDragEnd={isCustomizing ? handleDragEnd : undefined}
+                                            onTouchStart={isCustomizing ? (e) => handleDragStart(e, col.key) : undefined}
+                                            onTouchMove={isCustomizing ? handleTouchMove : undefined}
+                                            onTouchEnd={isCustomizing ? handleTouchEnd : undefined}
+                                            onMouseDown={(e) => {
+                                                if (isCustomizing) e.stopPropagation(); // Prevent DraggableTableContainer from horizontal scrolling
+                                            }}
                                             className={`
-                group px-2 py-2 sm:px-3 sm:py-3 whitespace-nowrap border-b
-                text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.05em] sm:tracking-[0.09em]
-                ${col.minWidth}
-                ${isDark ? "border-white/[0.08]" : "border-gray-300"}
-                ${col.align === "right" ? "text-right" : col.align === "center" ? "text-center" : "text-left"}
-            `}
+                        group px-2 py-2 sm:px-3 sm:py-3 whitespace-nowrap border-b transition-all duration-150
+                        text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.05em] sm:tracking-[0.09em]
+                        ${col.minWidth}
+                        ${isDark ? "border-white/[0.08]" : "border-gray-300"}
+                        ${col.align === "right" ? "text-right" : col.align === "center" ? "text-center" : "text-left"}
+                        ${isCustomizing ? "cursor-grab active:cursor-grabbing touch-none select-none hover:bg-black/5 dark:hover:bg-white/5" : ""}
+                        ${isBeingDragged ? "opacity-30 bg-black/10 dark:bg-white/10" : ""}
+                        ${dropIndicatorClass}
+                      `}
                                         >
                                             <span
-                                                className={`inline-flex items-center gap-1 sm:gap-1.5 ${col.align === "right"
-                                                    ? "flex-row-reverse"
-                                                    : col.align === "center"
-                                                        ? "justify-center w-full"
-                                                        : ""
+                                                className={`inline-flex items-center gap-1 sm:gap-1.5 ${isCustomizing ? "pointer-events-none" : ""
+                                                    } ${col.align === "right"
+                                                        ? "flex-row-reverse"
+                                                        : col.align === "center"
+                                                            ? "justify-center w-full"
+                                                            : ""
                                                     }`}
                                             >
+                                                {/* Drag Handle Indicator */}
+                                                {isCustomizing && (
+                                                    <span className="mr-1 opacity-50 hover:opacity-100 transition-opacity">
+                                                        <FaGripVertical />
+                                                    </span>
+                                                )}
+
                                                 {/* Label */}
                                                 <span>{col.label}</span>
 
                                                 {/* Sort indicator */}
-                                                {sortable && dir && <SortIcon dir={dir} />}
+                                                {!isCustomizing && sortable && dir && <SortIcon dir={dir} />}
 
                                                 {/* Filter/sort icon button */}
-                                                {filterable && (
+                                                {!isCustomizing && filterable && (
                                                     <button
                                                         type="button"
                                                         aria-label={`Filter ${col.label}`}
@@ -1392,11 +1530,11 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
                                                             }
                                                         }}
                                                         className={`
-                            relative inline-flex items-center justify-center
-                            w-[18px] h-[18px] rounded-[5px]
-                            transition-all duration-150
-                            focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#d946a8]
-                            ${isOpen
+                              relative inline-flex items-center justify-center
+                              w-[18px] h-[18px] rounded-[5px]
+                              transition-all duration-150
+                              focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#d946a8]
+                              ${isOpen
                                                                 ? isDark
                                                                     ? "bg-[#9E217B]/30 text-[#e879c4]"
                                                                     : "bg-[#9E217B]/20 text-[#7A1A5F]"
@@ -1405,10 +1543,10 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
                                                                         ? "bg-[#9E217B]/20 text-[#d946a8]"
                                                                         : "bg-[#9E217B]/15 text-[#7A1A5F]"
                                                                     : isDark
-                                                                        ? "text-gray-400 hover:bg-white/[0.08] hover:text-gray-200" // <-- Removed opacity classes
-                                                                        : "text-gray-700 hover:bg-gray-200/70 hover:text-gray-900" // <-- Removed opacity classes & made base color darker
+                                                                        ? "text-gray-400 hover:bg-white/[0.08] hover:text-gray-200"
+                                                                        : "text-gray-700 hover:bg-gray-200/70 hover:text-gray-900"
                                                             }
-                        `}
+                            `}
                                                     >
                                                         <FaFilter className="text-[7px]" />
 

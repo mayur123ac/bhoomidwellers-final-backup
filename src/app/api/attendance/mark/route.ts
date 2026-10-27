@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
                 message: "Attendance already marked for today",
                 employeeId: targetUserId,
                 status: existing[0].attendance_status,
-                timeIn: existing[0].login_time,
+                timeIn: existing[0].submitted_at,
                 markedAt: existing[0].submitted_at,
             }, { status: 200 });
         }
@@ -111,6 +111,23 @@ export async function POST(req: NextRequest) {
             }, { status: 200 });
         }
 
+        // Create the first attendance period.
+        // started_at = submitted_at reinterpreted as UTC TIMESTAMPTZ.
+        // ON CONFLICT guards against duplicate period if this INSERT races or retries.
+        try {
+            await query(`
+                INSERT INTO attendance_periods (attendance_id, organization_id, employee_id, period_number, started_at)
+                SELECT $1, $2, $3, 1, submitted_at AT TIME ZONE 'UTC'
+                FROM attendance_records WHERE id = $1
+                ON CONFLICT (attendance_id, period_number) DO NOTHING
+            `, [result[0].id, orgId, targetUserId]);
+        } catch (periodErr) {
+            // Period creation failure is non-fatal: the attendance record is
+            // already written. Log and continue — the remark flow degrades
+            // gracefully (status route falls back to span-based calculation).
+            console.error("attendance_periods INSERT failed (non-fatal):", periodErr);
+        }
+
         // Push the punch to Admin/Site Head immediately — without this, their
         // Live Activity tracker only picks up the new login_time/attendance_status
         // on their next manual refresh, since heartbeats don't carry these fields.
@@ -121,7 +138,7 @@ export async function POST(req: NextRequest) {
             success: true,
             employeeId: targetUserId,
             status: result[0].attendance_status,
-            timeIn: result[0].login_time,
+            timeIn: result[0].submitted_at,
             markedAt: result[0].submitted_at,
             data: result[0],
         });

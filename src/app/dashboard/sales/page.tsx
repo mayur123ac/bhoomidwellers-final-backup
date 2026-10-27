@@ -30,7 +30,7 @@ import {
 } from "lucide-react";
 import { FiUser, FiHelpCircle, FiLogOut, FiChevronRight } from "react-icons/fi";
 import {
-  FaThLarge, FaCog, FaFileInvoice,
+  FaThLarge, FaCog, FaFileInvoice, FaSlidersH, FaUndo, FaGripVertical,
   FaChevronLeft, FaChevronDown, FaCheckCircle, FaPaperPlane, FaTimes, FaPhoneAlt,
   FaCalendarAlt, FaUserCircle, FaMicrophone, FaWhatsapp, FaRobot,
   FaEyeSlash, FaEye, FaSearch, FaUniversity, FaUsers, FaFileAlt, FaCheck,
@@ -1412,7 +1412,6 @@ function SalesManagerView({
     setHiddenDbCols(next);
     try { localStorage.setItem(SM_DB_COLS_KEY, JSON.stringify([...next])); } catch { /* ignore */ }
   };
-  const visibleDbCols = SM_DB_COLUMNS.filter(c => c.locked || !hiddenDbCols.has(c.key));
   const downloadCSV = (data: any[], filename: string) => {
     if (!data?.length) return;
     const headers = Object.keys(data[0]);
@@ -2224,7 +2223,89 @@ function SalesManagerView({
   // ── Shared input class for forms ──
   const formInput = `w-full rounded-lg px-4 py-2 text-sm outline-none transition-colors border ${t.inputInner} ${t.text} ${t.inputFocus}`;
   const formSelect = `w-full rounded-lg px-4 py-2 text-sm sm:py-2.5 outline-none cursor-pointer border ${t.inputInner} ${t.text} ${t.inputFocus}`;
+  /* ── Column Reordering State & Persistence ── */
+  const defaultColOrder = useMemo(() => SM_DB_COLUMNS.map((c) => c.key), []);
+  const [colOrder, setColOrder] = useState<string[]>(defaultColOrder);
+  const [isCustomizing, setIsCustomizing] = useState(false);
 
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("sm_db_colOrder:v1");
+      if (saved) {
+        const parsed = JSON.parse(saved) as string[];
+        const validSaved = parsed.filter((k) => SM_DB_COLUMNS.some((c) => c.key === k));
+        const missing = defaultColOrder.filter((k) => !validSaved.includes(k));
+        setColOrder([...validSaved, ...missing]);
+      }
+    } catch { /* ignore */ }
+  }, [defaultColOrder]);
+
+  const persistColOrder = (next: string[]) => {
+    setColOrder(next);
+    try {
+      localStorage.setItem("sm_db_colOrder:v1", JSON.stringify(next));
+    } catch { /* ignore */ }
+  };
+
+  /* ── Drag & Drop Handlers ── */
+  const [draggedCol, setDraggedCol] = useState<string | null>(null);
+  const [dragOverCol, setDragOverCol] = useState<string | null>(null);
+
+  const handleDragStart = (e: React.DragEvent | React.TouchEvent, colKey: string) => setDraggedCol(colKey);
+  const handleDragOver = (e: React.DragEvent, colKey: string) => {
+    e.preventDefault();
+    if (colKey !== dragOverCol) setDragOverCol(colKey);
+  };
+  const handleDrop = (e: React.DragEvent, targetKey: string) => {
+    e.preventDefault();
+    if (draggedCol && draggedCol !== targetKey) {
+      const oldIdx = colOrder.indexOf(draggedCol);
+      const newIdx = colOrder.indexOf(targetKey);
+      const newOrder = [...colOrder];
+      newOrder.splice(oldIdx, 1);
+      newOrder.splice(newIdx, 0, draggedCol);
+      persistColOrder(newOrder);
+    }
+    setDraggedCol(null);
+    setDragOverCol(null);
+  };
+  const handleDragEnd = () => { setDraggedCol(null); setDragOverCol(null); };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isCustomizing || !draggedCol) return;
+    const touch = e.touches[0];
+    const target = document.elementFromPoint(touch.clientX, touch.clientY);
+    const targetTh = target?.closest("th[data-colkey]");
+    if (targetTh) {
+      const targetKey = targetTh.getAttribute("data-colkey");
+      if (targetKey && targetKey !== dragOverCol) setDragOverCol(targetKey);
+    }
+  };
+  const handleTouchEnd = () => {
+    if (!isCustomizing) return;
+    if (draggedCol && dragOverCol && draggedCol !== dragOverCol) {
+      const oldIdx = colOrder.indexOf(draggedCol);
+      const newIdx = colOrder.indexOf(dragOverCol);
+      const newOrder = [...colOrder];
+      newOrder.splice(oldIdx, 1);
+      newOrder.splice(newIdx, 0, draggedCol);
+      persistColOrder(newOrder);
+    }
+    setDraggedCol(null);
+    setDragOverCol(null);
+  };
+
+  /* Replace your existing visibleDbCols with these two: */
+  // ✅ KEEP THIS NEW DEFINITION
+  const orderedDbCols = useMemo(() => {
+    return colOrder
+      .map((key) => SM_DB_COLUMNS.find((c) => c.key === key))
+      .filter(Boolean) as typeof SM_DB_COLUMNS;
+  }, [colOrder]);
+
+  const visibleDbCols = useMemo(() => {
+    return orderedDbCols.filter((c) => c.locked || !hiddenDbCols.has(c.key));
+  }, [orderedDbCols, hiddenDbCols]);
   return (
     <div className="flex-1 flex flex-col h-full relative">
       {/* Toast */}
@@ -2320,6 +2401,7 @@ function SalesManagerView({
             {!isLoading && <DashboardAnalytics leads={baseManagerLeads} isDark={isDark} t={t} />}
 
             {/* Overview table */}
+            {/* Overview table */}
             <div className={`rounded-[2rem] border shadow-sm overflow-hidden flex flex-col ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-[#FAFAFD] border-slate-200/60'}`}>
 
               {/* ── Toolbar row 1: title + search + actions ── */}
@@ -2343,6 +2425,31 @@ function SalesManagerView({
                 </div>
 
                 <div className="flex items-center gap-2 flex-wrap sm:ml-auto">
+                  <ToolbarButton
+                    onClick={() => setIsCustomizing(!isCustomizing)}
+                    icon={<FaSlidersH className="text-[11px]" />}
+                    isDark={isDark}
+                    active={isCustomizing}
+                    title="Customize column layout"
+                  >
+                    <span className="hidden sm:inline">{isCustomizing ? "Done" : "Customize"}</span>
+                  </ToolbarButton>
+
+                  {isCustomizing && (
+                    <ToolbarButton
+                      onClick={() => {
+                        setColOrder(defaultColOrder);
+                        persistColOrder(defaultColOrder);
+                        setIsCustomizing(false);
+                      }}
+                      icon={<FaUndo className="text-[11px]" />}
+                      isDark={isDark}
+                      title="Reset layout to default"
+                    >
+                      <span className="hidden sm:inline">Reset</span>
+                    </ToolbarButton>
+                  )}
+
                   <ColumnSelector
                     columns={SM_DB_COLUMNS.map(c => ({ key: c.key, label: c.label, locked: c.locked }))}
                     hidden={hiddenDbCols}
@@ -2436,36 +2543,77 @@ function SalesManagerView({
                       {visibleDbCols.map(col => {
                         const isFiltered = !!(dbColFilters[col.key]);
                         const isSorted = dbColSort?.key === col.key;
+
+                        const isBeingDragged = draggedCol === col.key;
+                        const isDropTarget = dragOverCol === col.key && draggedCol !== col.key;
+                        const draggedIdx = draggedCol ? colOrder.indexOf(draggedCol) : -1;
+                        const dropIdx = colOrder.indexOf(col.key);
+
+                        const dropIndicatorClass = isDropTarget
+                          ? draggedIdx < dropIdx
+                            ? "shadow-[-2px_0_0_#B01A79_inset] bg-[#B01A79]/10"
+                            : "shadow-[2px_0_0_#B01A79_inset] bg-[#B01A79]/10"
+                          : "";
+
                         return (
                           <th
                             key={col.key}
-                            className={`px-3 sm:px-4 py-3 text-[10px] sm:text-[11px] font-bold uppercase tracking-wider border-b relative ${isDark ? 'border-slate-800 text-slate-400' : 'border-slate-200 text-[#475569]'}`}
+                            data-colkey={col.key}
+                            draggable={isCustomizing}
+                            onDragStart={isCustomizing ? (e) => handleDragStart(e, col.key) : undefined}
+                            onDragOver={isCustomizing ? (e) => handleDragOver(e, col.key) : undefined}
+                            onDrop={isCustomizing ? (e) => handleDrop(e, col.key) : undefined}
+                            onDragEnd={isCustomizing ? handleDragEnd : undefined}
+                            onTouchStart={isCustomizing ? (e) => handleDragStart(e, col.key) : undefined}
+                            onTouchMove={isCustomizing ? handleTouchMove : undefined}
+                            onTouchEnd={isCustomizing ? handleTouchEnd : undefined}
+                            className={`px-3 sm:px-4 py-3 text-[10px] sm:text-[11px] font-bold uppercase tracking-wider border-b relative transition-all duration-150
+                  ${isDark ? 'border-slate-800 text-slate-400' : 'border-slate-200 text-[#475569]'}
+                  ${isCustomizing ? "cursor-grab active:cursor-grabbing touch-none select-none hover:bg-black/5 dark:hover:bg-white/5" : ""}
+                  ${isBeingDragged ? "opacity-30 bg-black/10 dark:bg-white/10" : ""}
+                  ${dropIndicatorClass}
+                `}
                           >
-                            <button
-                              type="button"
-                              onClick={e => { e.stopPropagation(); setOpenDbFilterCol(prev => prev === col.key ? null : col.key); }}
-                              className={`group flex items-center gap-1.5 whitespace-nowrap transition-colors ${isFiltered || isSorted
-                                ? 'text-[#B01A79]'
-                                : isDark ? 'text-slate-400 hover:text-slate-200' : 'text-[#475569] hover:text-slate-700'
-                                }`}
-                              title={`Filter / Sort by ${col.label}`}
-                            >
-                              {col.label}
-                              <span className={`inline-flex items-center justify-center w-4 h-4 rounded transition-colors ${isFiltered || isSorted
-                                ? 'bg-[#B01A79]/15 text-[#B01A79]'
-                                : isDark ? 'text-slate-600 group-hover:text-slate-400' : 'text-slate-300 group-hover:text-slate-500'
-                                }`}>
-                                {isSorted
-                                  ? (dbColSort?.direction === 'asc' ? <FaSortAlphaDown className="w-2.5 h-2.5" /> : <FaSortAlphaUp className="w-2.5 h-2.5" />)
-                                  : <FaFilter className="w-2 h-2" />
-                                }
-                              </span>
-                              {isFiltered && (
-                                <span className="w-1.5 h-1.5 rounded-full bg-[#B01A79] inline-block" />
+                            <div className={`flex items-center gap-1.5 ${isCustomizing ? "pointer-events-none" : ""}`}>
+                              {isCustomizing && (
+                                <span className="opacity-50 hover:opacity-100 transition-opacity">
+                                  <FaGripVertical />
+                                </span>
                               )}
-                            </button>
 
-                            {openDbFilterCol === col.key && (
+                              <button
+                                type="button"
+                                onClick={e => {
+                                  if (isCustomizing) return;
+                                  e.stopPropagation();
+                                  setOpenDbFilterCol(prev => prev === col.key ? null : col.key);
+                                }}
+                                disabled={isCustomizing}
+                                className={`group flex items-center gap-1.5 whitespace-nowrap transition-colors ${isFiltered || isSorted
+                                  ? 'text-[#B01A79]'
+                                  : isDark ? 'text-slate-400 hover:text-slate-200' : 'text-[#475569] hover:text-slate-700'
+                                  }`}
+                                title={`Filter / Sort by ${col.label}`}
+                              >
+                                {col.label}
+                                {!isCustomizing && (
+                                  <span className={`inline-flex items-center justify-center w-4 h-4 rounded transition-colors ${isFiltered || isSorted
+                                    ? 'bg-[#B01A79]/15 text-[#B01A79]'
+                                    : isDark ? 'text-slate-600 group-hover:text-slate-400' : 'text-slate-300 group-hover:text-slate-500'
+                                    }`}>
+                                    {isSorted
+                                      ? (dbColSort?.direction === 'asc' ? <FaSortAlphaDown className="w-2.5 h-2.5" /> : <FaSortAlphaUp className="w-2.5 h-2.5" />)
+                                      : <FaFilter className="w-2 h-2" />
+                                    }
+                                  </span>
+                                )}
+                                {isFiltered && !isCustomizing && (
+                                  <span className="w-1.5 h-1.5 rounded-full bg-[#B01A79] inline-block" />
+                                )}
+                              </button>
+                            </div>
+
+                            {openDbFilterCol === col.key && !isCustomizing && (
                               <SharedColumnFilterDropdown
                                 column={col}
                                 data={filteredDatabaseLeadsUnsorted.map((l: any) => ({ [col.key]: getLeadValueForCol(l, col.key) }))}
@@ -2513,68 +2661,100 @@ function SalesManagerView({
                                 setMainView("detail");
                                 setSubView("detail");
                               }}>
-                              <td className={`px-3 sm:px-4 py-3 text-[11px] sm:text-sm font-bold ${t.accentText}`}>
-                                #{lead.sr_no || lead.id}
-                              </td>
-                              <td className={`px-3 sm:px-4 py-3 ${t.text}`}>
-                                <div className="flex flex-col gap-1.5">
-                                  <span className="font-bold text-[13px] leading-none">{lead.name}</span>
-                                  <div className="flex items-center gap-1.5">
-                                    {isRevisit && (
-                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border border-[rgba(5,150,105,0.3)] text-[#059669] bg-[rgba(5,150,105,0.1)] w-fit">
-                                        REVISIT
-                                      </span>
-                                    )}
-                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border border-[rgba(100,116,139,0.25)] text-[#64748B] bg-[rgba(100,116,139,0.06)] w-fit">
-                                      {(lead.visitNumber ?? 1)} {(lead.visitNumber ?? 1) === 1 ? "VISIT" : "VISITS"}
-                                    </span>
-                                    {isNGD && (
-                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border border-[rgba(234,88,12,0.3)] text-[#EA580C] bg-[rgba(234,88,12,0.1)] w-fit">
-                                        NGD
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              </td>
-                              {!hiddenDbCols.has("prop_type") && <td className={`px-3 sm:px-4 py-3 text-[12px] sm:text-[13px] font-medium ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{lead.propType || lead.configuration || "Pending"}</td>}
-                              {!hiddenDbCols.has("budget") && <td className={`px-3 sm:px-4 py-3 text-[12px] sm:text-[13px] font-bold ${isDark ? "text-emerald-400" : "text-[#039953]"}`}>{lead.salesBudget}</td>}
-                              {!hiddenDbCols.has("source") && <td className={`px-3 sm:px-4 py-3 text-[11px] sm:text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{lead.source || "—"}</td>}
-                              {!hiddenDbCols.has("cp_name") && <td className={`px-3 sm:px-4 py-3 text-[12px] sm:text-[13px] font-medium ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{lead.cpName || lead.cp_name || "—"}</td>}
-                              {!hiddenDbCols.has("cp_company") && <td className={`px-3 sm:px-4 py-3 text-[12px] sm:text-[13px] font-medium ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{lead.cpCompany || lead.cp_company || "—"}</td>}
-                              {!hiddenDbCols.has("cp_phone") && <td className={`px-3 sm:px-4 py-3 font-mono text-[11px] sm:text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{lead.cpPhone || lead.cp_phone || "—"}</td>}
-                              {!hiddenDbCols.has("status") && <td className="px-3 sm:px-4 py-3">
-                                <span className={`px-2 py-1 rounded-full text-[9px] sm:text-[10px] font-bold uppercase tracking-wide border ${isLost
-                                  ? t.statusLost
-                                  : isNGD
-                                    ? t.statusNGD
-                                    : getStatusStyle(lead.status)
-                                  }`}>{isLost ? "LOST" : isNGD ? "NGD" : isClosed ? "CLOSED" : (lead.status || "Assigned")}</span>
-                              </td>}
-                              {!hiddenDbCols.has("lost_status") && <td className="px-3 sm:px-4 py-3">
-                                {isLost ? (
-                                  <span className={`px-2 py-1 rounded-full text-[9px] sm:text-[10px] font-bold uppercase border inline-flex items-center gap-1 ${t.statusLost}`}>
-                                    <Ghost className="w-3 h-3" /> Lost Lead
-                                  </span>
-                                ) : <span className={`text-[11px] sm:text-xs font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Active</span>}
-                              </td>}
-                              {!hiddenDbCols.has("interest") && <td className="px-3 sm:px-4 py-3">
-                                {lead.leadInterestStatus && lead.leadInterestStatus !== "Pending"
-                                  ? <InterestBadge status={lead.leadInterestStatus} size="sm" />
-                                  : <span className={`text-[11px] sm:text-xs italic ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>—</span>}
-                              </td>}
-                              {!hiddenDbCols.has("date_created") && <td className={`px-3 sm:px-4 py-3 text-[11px] sm:text-xs font-medium whitespace-normal min-w-[100px] sm:min-w-[120px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                                {formatDate(lead.created_at)}
-                              </td>}
-                              {!hiddenDbCols.has("backdated") && <td className={`px-3 sm:px-4 py-3 text-[11px] sm:text-xs font-medium whitespace-normal min-w-[100px] sm:min-w-[120px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                                {lead.auto_date_enabled === false && lead.enquiry_date ? formatDate(lead.enquiry_date).split(",")[0] : "-"}
-                              </td>}
-                              {!hiddenDbCols.has("site_visit") && <td className="px-3 sm:px-4 py-3">
-                                {lead.mongoVisitDate ? (
-                                  <span className="text-[#F49A25] font-semibold whitespace-nowrap text-[11px] sm:text-xs">{formatDate(lead.mongoVisitDate).split(",")[0]}</span>
-                                ) : (
-                                  <span className={`text-[11px] sm:text-xs italic ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>Pending</span>
-                                )}
-                              </td>}
+
+                              {visibleDbCols.map((col) => {
+                                // Refactored switch block mapping your exact hardcoded columns to the dynamic visibleDbCols loop
+                                switch (col.key) {
+                                  case 'lead_no':
+                                  case 'sr_no': // fallback in case your key is sr_no
+                                    return (
+                                      <td key={col.key} className={`px-3 sm:px-4 py-3 text-[11px] sm:text-sm font-bold ${t.accentText}`}>
+                                        #{lead.sr_no || lead.id}
+                                      </td>
+                                    );
+                                  case 'name':
+                                    return (
+                                      <td key={col.key} className={`px-3 sm:px-4 py-3 ${t.text}`}>
+                                        <div className="flex flex-col gap-1.5">
+                                          <span className="font-bold text-[13px] leading-none">{lead.name}</span>
+                                          <div className="flex items-center gap-1.5">
+                                            {isRevisit && (
+                                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border border-[rgba(5,150,105,0.3)] text-[#059669] bg-[rgba(5,150,105,0.1)] w-fit">
+                                                REVISIT
+                                              </span>
+                                            )}
+                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border border-[rgba(100,116,139,0.25)] text-[#64748B] bg-[rgba(100,116,139,0.06)] w-fit">
+                                              {(lead.visitNumber ?? 1)} {(lead.visitNumber ?? 1) === 1 ? "VISIT" : "VISITS"}
+                                            </span>
+                                            {isNGD && (
+                                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border border-[rgba(234,88,12,0.3)] text-[#EA580C] bg-[rgba(234,88,12,0.1)] w-fit">
+                                                NGD
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </td>
+                                    );
+                                  case 'prop_type':
+                                    return <td key={col.key} className={`px-3 sm:px-4 py-3 text-[12px] sm:text-[13px] font-medium ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{lead.propType || lead.configuration || "Pending"}</td>;
+                                  case 'budget':
+                                    return <td key={col.key} className={`px-3 sm:px-4 py-3 text-[12px] sm:text-[13px] font-bold ${isDark ? "text-emerald-400" : "text-[#039953]"}`}>{lead.salesBudget}</td>;
+                                  case 'source':
+                                    return <td key={col.key} className={`px-3 sm:px-4 py-3 text-[11px] sm:text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{lead.source || "—"}</td>;
+                                  case 'cp_name':
+                                    return <td key={col.key} className={`px-3 sm:px-4 py-3 text-[12px] sm:text-[13px] font-medium ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{lead.cpName || lead.cp_name || "—"}</td>;
+                                  case 'cp_company':
+                                    return <td key={col.key} className={`px-3 sm:px-4 py-3 text-[12px] sm:text-[13px] font-medium ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{lead.cpCompany || lead.cp_company || "—"}</td>;
+                                  case 'cp_phone':
+                                    return <td key={col.key} className={`px-3 sm:px-4 py-3 font-mono text-[11px] sm:text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{lead.cpPhone || lead.cp_phone || "—"}</td>;
+                                  case 'status':
+                                    return (
+                                      <td key={col.key} className="px-3 sm:px-4 py-3">
+                                        <span className={`px-2 py-1 rounded-full text-[9px] sm:text-[10px] font-bold uppercase tracking-wide border ${isLost
+                                          ? t.statusLost
+                                          : isNGD
+                                            ? t.statusNGD
+                                            : getStatusStyle(lead.status)
+                                          }`}>{isLost ? "LOST" : isNGD ? "NGD" : isClosed ? "CLOSED" : (lead.status || "Assigned")}</span>
+                                      </td>
+                                    );
+                                  case 'lost_status':
+                                    return (
+                                      <td key={col.key} className="px-3 sm:px-4 py-3">
+                                        {isLost ? (
+                                          <span className={`px-2 py-1 rounded-full text-[9px] sm:text-[10px] font-bold uppercase border inline-flex items-center gap-1 ${t.statusLost}`}>
+                                            <Ghost className="w-3 h-3" /> Lost Lead
+                                          </span>
+                                        ) : <span className={`text-[11px] sm:text-xs font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Active</span>}
+                                      </td>
+                                    );
+                                  case 'interest':
+                                    return (
+                                      <td key={col.key} className="px-3 sm:px-4 py-3">
+                                        {lead.leadInterestStatus && lead.leadInterestStatus !== "Pending"
+                                          ? <InterestBadge status={lead.leadInterestStatus} size="sm" />
+                                          : <span className={`text-[11px] sm:text-xs italic ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>—</span>}
+                                      </td>
+                                    );
+                                  case 'date_created':
+                                    return <td key={col.key} className={`px-3 sm:px-4 py-3 text-[11px] sm:text-xs font-medium whitespace-normal min-w-[100px] sm:min-w-[120px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{formatDate(lead.created_at)}</td>;
+                                  case 'backdated':
+                                    return <td key={col.key} className={`px-3 sm:px-4 py-3 text-[11px] sm:text-xs font-medium whitespace-normal min-w-[100px] sm:min-w-[120px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{lead.auto_date_enabled === false && lead.enquiry_date ? formatDate(lead.enquiry_date).split(",")[0] : "-"}</td>;
+                                  case 'site_visit':
+                                    return (
+                                      <td key={col.key} className="px-3 sm:px-4 py-3">
+                                        {lead.mongoVisitDate ? (
+                                          <span className="text-[#F49A25] font-semibold whitespace-nowrap text-[11px] sm:text-xs">{formatDate(lead.mongoVisitDate).split(",")[0]}</span>
+                                        ) : (
+                                          <span className={`text-[11px] sm:text-xs italic ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>Pending</span>
+                                        )}
+                                      </td>
+                                    );
+                                  default:
+                                    return <td key={col.key} className="px-3 sm:px-4 py-3">—</td>;
+                                }
+                              })}
+
                               {isAdmin && (
                                 <td className="px-3 sm:px-4 py-3" onClick={e => e.stopPropagation()}>
                                   <button

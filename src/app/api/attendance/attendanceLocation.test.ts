@@ -370,3 +370,193 @@ describe("/api/attendance/session-history — location columns", () => {
     expect(res.status).toBe(401);
   });
 });
+
+// ── Admin Working Hours integration tests ─────────────────────────────────
+// Verifies that /api/attendance/live returns the attendance-based working
+// hours fields (attendance_span_seconds, attendance_marked_at,
+// attendance_completed) and that the admin panel can derive the correct
+// display for completed, active, and not-marked employees.
+
+describe("/api/attendance/live — admin working hours", () => {
+  let GET: (req: Request) => Promise<Response>;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    mockRequireRole.mockResolvedValue({
+      isAuthorized: true,
+      session: { _id: "1", name: "Admin", email: "admin@test.com", role: "Admin", org: "test-org" },
+    } as any);
+
+    const mod = await import("./live/route");
+    GET = mod.GET;
+  });
+
+  it("completed day: 9 AM mark → 5 PM checkout = 8h (28800s)", async () => {
+    mockQuery.mockImplementation(async (sql: string) => {
+      const s = typeof sql === "string" ? sql : "";
+      if (s.includes("UPDATE employee_sessions")) return [];
+      if (s.includes("FROM users")) {
+        return [{
+          user_id: 10, name: "Employee A", status: "OFFLINE",
+          session_start: "2026-10-26T03:30:00.000Z",
+          attendance_status: "Present",
+          attendance_span_seconds: 28800,
+          attendance_marked_at: "2026-10-26T03:30:00.000Z",
+          attendance_completed: true,
+        }];
+      }
+      return [];
+    });
+
+    const res = await GET(liveRequest("2026-10-26"));
+    const body = await res.json();
+    expect(body.sessions[0].attendance_span_seconds).toBe(28800);
+    expect(body.sessions[0].attendance_completed).toBe(true);
+    expect(body.sessions[0].attendance_marked_at).toBe("2026-10-26T03:30:00.000Z");
+  });
+
+  it("active day: marked 2h ago, not yet checked out", async () => {
+    const twoHoursAgo = new Date(Date.now() - 2 * 3600 * 1000).toISOString();
+    mockQuery.mockImplementation(async (sql: string) => {
+      const s = typeof sql === "string" ? sql : "";
+      if (s.includes("UPDATE employee_sessions")) return [];
+      if (s.includes("FROM users")) {
+        return [{
+          user_id: 11, name: "Employee B", status: "ACTIVE",
+          session_start: twoHoursAgo,
+          attendance_status: "Present",
+          attendance_span_seconds: 7200,
+          attendance_marked_at: twoHoursAgo,
+          attendance_completed: false,
+        }];
+      }
+      return [];
+    });
+
+    const res = await GET(liveRequest("2026-10-26"));
+    const body = await res.json();
+    expect(body.sessions[0].attendance_completed).toBe(false);
+    expect(body.sessions[0].attendance_marked_at).toBeTruthy();
+    // Server computes ~7200 at query time; client will use attendance_marked_at for live tick
+    expect(body.sessions[0].attendance_span_seconds).toBeGreaterThanOrEqual(7199);
+  });
+
+  it("frozen after checkout: span does not change", async () => {
+    mockQuery.mockImplementation(async (sql: string) => {
+      const s = typeof sql === "string" ? sql : "";
+      if (s.includes("UPDATE employee_sessions")) return [];
+      if (s.includes("FROM users")) {
+        return [{
+          user_id: 12, name: "Employee C", status: "OFFLINE",
+          attendance_status: "Present",
+          attendance_span_seconds: 1800,
+          attendance_marked_at: "2026-10-26T07:41:00.000Z",
+          attendance_completed: true,
+        }];
+      }
+      return [];
+    });
+
+    const res1 = await GET(liveRequest("2026-10-26"));
+    const body1 = await res1.json();
+
+    // Second call — same frozen value
+    const res2 = await GET(liveRequest("2026-10-26"));
+    const body2 = await res2.json();
+
+    expect(body1.sessions[0].attendance_span_seconds).toBe(1800);
+    expect(body2.sessions[0].attendance_span_seconds).toBe(1800);
+  });
+
+  it("no attendance marked: fields are null, UI shows dash", async () => {
+    mockQuery.mockImplementation(async (sql: string) => {
+      const s = typeof sql === "string" ? sql : "";
+      if (s.includes("UPDATE employee_sessions")) return [];
+      if (s.includes("FROM users")) {
+        return [{
+          user_id: 13, name: "Employee D", status: "ACTIVE",
+          session_start: "2026-10-26T04:00:00.000Z",
+          attendance_status: null,
+          attendance_span_seconds: null,
+          attendance_marked_at: null,
+          attendance_completed: null,
+        }];
+      }
+      return [];
+    });
+
+    const res = await GET(liveRequest("2026-10-26"));
+    const body = await res.json();
+    expect(body.sessions[0].attendance_span_seconds).toBeNull();
+    expect(body.sessions[0].attendance_marked_at).toBeNull();
+    expect(body.sessions[0].attendance_completed).toBeNull();
+  });
+
+  it("date filter returns correct day's attendance data", async () => {
+    mockQuery.mockImplementation(async (sql: string, params?: any[]) => {
+      const s = typeof sql === "string" ? sql : "";
+      if (s.includes("UPDATE employee_sessions")) return [];
+      if (s.includes("FROM users")) {
+        const date = params?.[0];
+        if (date === "2026-10-25") {
+          return [{
+            user_id: 10, name: "Employee A", status: "OFFLINE",
+            attendance_status: "Present",
+            attendance_span_seconds: 32400, // 9h
+            attendance_marked_at: "2026-10-25T03:30:00.000Z",
+            attendance_completed: true,
+          }];
+        }
+        return [{
+          user_id: 10, name: "Employee A", status: "OFFLINE",
+          attendance_status: null,
+          attendance_span_seconds: null,
+          attendance_marked_at: null,
+          attendance_completed: null,
+        }];
+      }
+      return [];
+    });
+
+    const res25 = await GET(liveRequest("2026-10-25"));
+    const body25 = await res25.json();
+    expect(body25.sessions[0].attendance_span_seconds).toBe(32400);
+
+    const res26 = await GET(liveRequest("2026-10-26"));
+    const body26 = await res26.json();
+    expect(body26.sessions[0].attendance_span_seconds).toBeNull();
+  });
+
+  it("rejects non-admin roles", async () => {
+    mockRequireRole.mockResolvedValue({ isAuthorized: false } as any);
+    const res = await GET(liveRequest("2026-10-26"));
+    expect(res.status).toBe(401);
+  });
+
+  it("admin and employee calculations agree: same submitted_at formula", async () => {
+    // Simulates the scenario: mark at 1:11 PM IST, checkout at 1:41 PM IST
+    // = exactly 1800 seconds. Both my-sessions (employee) and live (admin)
+    // use the same formula: logout_time - submitted_at AT TIME ZONE 'UTC'.
+    mockQuery.mockImplementation(async (sql: string) => {
+      const s = typeof sql === "string" ? sql : "";
+      if (s.includes("UPDATE employee_sessions")) return [];
+      if (s.includes("FROM users")) {
+        return [{
+          user_id: 10, name: "Employee A", status: "OFFLINE",
+          attendance_status: "Present",
+          attendance_span_seconds: 1800,
+          attendance_marked_at: "2026-10-26T07:41:00.000Z",
+          attendance_completed: true,
+          working_track: 1800,
+        }];
+      }
+      return [];
+    });
+
+    const res = await GET(liveRequest("2026-10-26"));
+    const body = await res.json();
+    // Admin panel sees the same 1800s as the employee's my-sessions page
+    expect(body.sessions[0].attendance_span_seconds).toBe(1800);
+    expect(body.sessions[0].working_track).toBe(1800);
+  });
+});

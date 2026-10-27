@@ -27,8 +27,15 @@ interface AttendanceContextType {
   status: string | null;
   employeeId: number | null;
   isLoading: boolean;
+  /** Remark attendance fields */
+  canRemark: boolean;
+  currentPeriod: number;
+  totalPeriods: number;
+  completedPeriodsSeconds: number;
+  activePeriodStartedAt: string | null;
   markAttendanceOptimistic: (timeIn: string) => void;
   markDayComplete: (logoutTime: string, workingTrack?: number | null) => void;
+  remarkAttendance: () => Promise<boolean>;
   refreshAttendance: () => Promise<void>;
 }
 
@@ -42,6 +49,11 @@ export function AttendanceProvider({ children }: { children: React.ReactNode }) 
   const [status, setStatus] = useState<string | null>(null);
   const [employeeId, setEmployeeId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [canRemark, setCanRemark] = useState(false);
+  const [currentPeriod, setCurrentPeriod] = useState(0);
+  const [totalPeriods, setTotalPeriods] = useState(0);
+  const [completedPeriodsSeconds, setCompletedPeriodsSeconds] = useState(0);
+  const [activePeriodStartedAt, setActivePeriodStartedAt] = useState<string | null>(null);
 
   // Which employee the current state describes. Logout uses router.replace(), a
   // soft navigation, so this provider is never remounted when the user changes —
@@ -58,6 +70,11 @@ export function AttendanceProvider({ children }: { children: React.ReactNode }) 
     setTimeIn(null);
     setLogoutTime(null);
     setWorkingTrack(null);
+    setCanRemark(false);
+    setCurrentPeriod(0);
+    setTotalPeriods(0);
+    setCompletedPeriodsSeconds(0);
+    setActivePeriodStartedAt(null);
   }, []);
 
   const reset = useCallback(() => {
@@ -108,6 +125,11 @@ export function AttendanceProvider({ children }: { children: React.ReactNode }) 
         setTimeIn(data.timeIn || null);
         setLogoutTime(data.logoutTime || null);
         setWorkingTrack(data.workingTrack ?? null);
+        setCanRemark(data.canRemark ?? false);
+        setCurrentPeriod(data.currentPeriod ?? 0);
+        setTotalPeriods(data.totalPeriods ?? 0);
+        setCompletedPeriodsSeconds(data.completedPeriodsSeconds ?? 0);
+        setActivePeriodStartedAt(data.activePeriodStartedAt || null);
         optimisticRef.current = null;
         return;
       }
@@ -174,8 +196,37 @@ export function AttendanceProvider({ children }: { children: React.ReactNode }) 
   const markDayComplete = useCallback((newLogoutTime: string, newWorkingTrack?: number | null) => {
     setLogoutTime(newLogoutTime);
     if (newWorkingTrack != null) setWorkingTrack(newWorkingTrack);
+    setCanRemark(true);
+    setActivePeriodStartedAt(null);
     log("optimistic day-complete applied", { logoutTime: newLogoutTime, workingTrack: newWorkingTrack });
   }, []);
+
+  const remarkAttendance = useCallback(async (): Promise<boolean> => {
+    try {
+      const res = await fetch("/api/attendance/remark", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success) {
+        // Optimistic: clear logout, set active period
+        setLogoutTime(null);
+        setCanRemark(false);
+        setActivePeriodStartedAt(data.startedAt || new Date().toISOString());
+        setCurrentPeriod(data.periodNumber ?? (currentPeriod + 1));
+        setTotalPeriods((prev) => prev + 1);
+        log("remark applied", { periodNumber: data.periodNumber });
+        window.dispatchEvent(new Event("attendance-marked"));
+        await fetchStatus();
+        return true;
+      }
+      log("remark failed", data?.message);
+      return false;
+    } catch (e) {
+      console.error("Remark attendance error:", e);
+      return false;
+    }
+  }, [currentPeriod, fetchStatus]);
 
   const isDayCompleted = isMarkedPresent && !!logoutTime;
 
@@ -190,8 +241,14 @@ export function AttendanceProvider({ children }: { children: React.ReactNode }) 
         status,
         employeeId,
         isLoading,
+        canRemark,
+        currentPeriod,
+        totalPeriods,
+        completedPeriodsSeconds,
+        activePeriodStartedAt,
         markAttendanceOptimistic,
         markDayComplete,
+        remarkAttendance,
         refreshAttendance: fetchStatus,
       }}
     >

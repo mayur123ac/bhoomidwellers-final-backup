@@ -202,11 +202,10 @@ export default function AdminLeadTable({
           <button
             type="button"
             onClick={() => clearAllFilters()}
-            className={`text-[10px] sm:text-xs px-2 py-1 rounded-lg border transition-colors ${
-              isDark
+            className={`text-[10px] sm:text-xs px-2 py-1 rounded-lg border transition-colors ${isDark
                 ? "border-white/10 text-red-400 hover:bg-white/5"
                 : "border-gray-200 text-red-500 hover:bg-gray-50"
-            }`}
+              }`}
           >
             Clear column filters
           </button>
@@ -255,30 +254,27 @@ export default function AdminLeadTable({
                           e.stopPropagation();
                           setOpenFilterCol(prev => prev === col.key ? null : col.key);
                         }}
-                        className={`group flex items-center gap-1.5 whitespace-nowrap transition-colors ${
-                          isFiltered || isSorted
+                        className={`group flex items-center gap-1.5 whitespace-nowrap transition-colors ${isFiltered || isSorted
                             ? "text-[#007AFF]"
                             : isDark
-                            ? "text-slate-400 hover:text-slate-200"
-                            : "text-[#475569] hover:text-slate-700"
-                        } ${
-                          col.align === "right"
+                              ? "text-slate-400 hover:text-slate-200"
+                              : "text-[#475569] hover:text-slate-700"
+                          } ${col.align === "right"
                             ? "flex-row-reverse ml-auto"
                             : col.align === "center"
-                            ? "justify-center mx-auto"
-                            : ""
-                        }`}
+                              ? "justify-center mx-auto"
+                              : ""
+                          }`}
                         title={`Filter / Sort by ${col.label}`}
                       >
                         {col.label}
                         <span
-                          className={`inline-flex items-center justify-center w-4 h-4 rounded transition-colors ${
-                            isFiltered || isSorted
+                          className={`inline-flex items-center justify-center w-4 h-4 rounded transition-colors ${isFiltered || isSorted
                               ? "bg-[#007AFF]/10"
                               : isDark
-                              ? "text-slate-600 group-hover:text-slate-400"
-                              : "text-slate-300 group-hover:text-slate-500"
-                          }`}
+                                ? "text-slate-600 group-hover:text-slate-400"
+                                : "text-slate-300 group-hover:text-slate-500"
+                            }`}
                         >
                           {isSorted ? (
                             colSort?.direction === "asc" ? (
@@ -363,10 +359,10 @@ export default function AdminLeadTable({
                     isRevisit
                       ? "" // green tint applied via `style` below
                       : idx % 2 === 1
-                      ? isDark
-                        ? "bg-white/[0.013]"
-                        : "bg-gray-50/70"
-                      : "";
+                        ? isDark
+                          ? "bg-white/[0.013]"
+                          : "bg-gray-50/70"
+                        : "";
 
                   /*
                    * ── Hover class ───────────────────────────────────────────────
@@ -457,8 +453,8 @@ function RevisitAwareRow({
         ? "rgba(34, 197, 94, 0.13)"
         : "rgba(34, 197, 94, 0.10)"
       : isDark
-      ? "rgba(34, 197, 94, 0.08)"
-      : "rgba(34, 197, 94, 0.07)";
+        ? "rgba(34, 197, 94, 0.08)"
+        : "rgba(34, 197, 94, 0.07)";
   } else if (hovered && onRowClick) {
     bgStyle.backgroundColor = isDark
       ? "rgba(255, 255, 255, 0.04)"

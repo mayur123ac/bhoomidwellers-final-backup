@@ -28,8 +28,11 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
   const [now, setNow] = useState(Date.now());
   const [expandedRows, setExpandedRows] = useState<Record<number, boolean>>({});
   const [historyCache, setHistoryCache] = useState<Record<string, any[]>>({});
+  const [periodCache, setPeriodCache] = useState<Record<string, any[]>>({});
   const [visibleColumns, setVisibleColumns] = useState({
     activeLead: true,
+    markAttendanceTime: true,
+    markDayCompleteTime: true,
     loginDate: true,
     loginTime: true,
     location: true,
@@ -87,6 +90,12 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
     const interval = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(interval);
   }, []);
+
+  const ordinal = (n: number): string => {
+    const s = ["th", "st", "nd", "rd"];
+    const v = n % 100;
+    return n + (s[(v - 20) % 10] || s[v] || s[0]);
+  };
 
   const getLiveTimer = (start: string, end: string, isActive: boolean) => {
     const sec = computeSessionSeconds(start, end, isActive, now);
@@ -154,17 +163,26 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
     setExpandedRows(prev => ({ ...prev, [s.user_id]: !isExpanded }));
 
     const cacheKey = `${s.user_id}_${selectedDate}`;
-    if (!isExpanded && !historyCache[cacheKey]) {
-      try {
-        const res = await fetch(`/api/attendance/session-history?userId=${s.user_id}&date=${selectedDate}`);
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data.success) {
-          setHistoryCache(prev => ({ ...prev, [cacheKey]: data.sessions }));
-        }
-      } catch (err) {
-        console.error(err);
+    if (!isExpanded) {
+      // Fetch session history and period history in parallel
+      const fetches: Promise<void>[] = [];
+      if (!historyCache[cacheKey]) {
+        fetches.push(
+          fetch(`/api/attendance/session-history?userId=${s.user_id}&date=${selectedDate}`)
+            .then(res => res.ok ? res.json() : null)
+            .then(data => { if (data?.success) setHistoryCache(prev => ({ ...prev, [cacheKey]: data.sessions })); })
+            .catch(console.error)
+        );
       }
+      if (!periodCache[cacheKey] && Number(s.total_periods) >= 1) {
+        fetches.push(
+          fetch(`/api/attendance/periods?userId=${s.user_id}&date=${selectedDate}`)
+            .then(res => res.ok ? res.json() : null)
+            .then(data => { if (data?.success) setPeriodCache(prev => ({ ...prev, [cacheKey]: data.periods })); })
+            .catch(console.error)
+        );
+      }
+      await Promise.all(fetches);
     }
   };
 
@@ -306,6 +324,8 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
     { key: "status", label: "Status" },
     { key: "name", label: "Employee" },
     ...(visibleColumns.activeLead ? [{ key: "active_lead_name", label: "Active Lead" }] : []),
+    ...(visibleColumns.markAttendanceTime ? [{ key: "mark_attendance_time", label: "Mark Attendance Time" }] : []),
+    ...(visibleColumns.markDayCompleteTime ? [{ key: "mark_day_complete_time", label: "Mark Day Complete Time" }] : []),
     ...(visibleColumns.loginDate ? [{ key: "login_date", label: "Login Date", type: "date" as const }] : []),
     ...(visibleColumns.loginTime ? [{ key: "login_time", label: "Login Time" }] : []),
     ...(visibleColumns.location ? [{ key: "login_location_name", label: "Location" }] : []),
@@ -326,6 +346,8 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
     if (colKey === "login_date") return s.session_start ? new Date(s.session_start).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }) : "";
     if (colKey === "login_time") return s.session_start ? new Date(s.session_start).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' }) : "";
     if (colKey === "active_lead_name") return s.active_lead_id ? (s.active_lead_name || 'Lead') : "";
+    if (colKey === "mark_attendance_time") return s.attendance_marked_at ? new Date(s.attendance_marked_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' }) : "";
+    if (colKey === "mark_day_complete_time") return s.attendance_completed_at ? new Date(s.attendance_completed_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' }) : "";
     if (colKey === "punctuality") {
       if (!s.session_start) return "";
       const loginHour = new Date(s.session_start).getHours();
@@ -690,6 +712,24 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
                                   {s.active_lead_id ? `${s.active_lead_name || 'Lead'} (${s.active_lead_id})` : '-'}
                                 </td>
                               )}
+                              {visibleColumns.markAttendanceTime && (
+                                <td className={`px-4 py-3 font-medium text-[12px] tracking-tight ${isDark ? "text-[#EBEBF5]/80" : "text-[#333333]"}`}>
+                                  {s.attendance_marked_at
+                                    ? new Date(s.attendance_marked_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Kolkata' })
+                                    : <span className={isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}>—</span>}
+                                </td>
+                              )}
+                              {visibleColumns.markDayCompleteTime && (
+                                <td className={`px-4 py-3 font-medium text-[12px] tracking-tight ${isDark ? "text-[#EBEBF5]/80" : "text-[#333333]"}`}>
+                                  {s.attendance_completed_at
+                                    ? new Date(s.attendance_completed_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Kolkata' })
+                                    : s.attendance_marked_at && !s.attendance_completed
+                                      ? (Number(s.total_periods) > 1
+                                        ? <span className={isDark ? "text-[#0A84FF]" : "text-[#007AFF]"}>In Progress</span>
+                                        : <span className={isDark ? "text-[#32D74B]" : "text-[#34C759]"}>Active</span>)
+                                      : <span className={isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}>—</span>}
+                                </td>
+                              )}
                               {visibleColumns.loginDate && (
                                 <td className={`px-4 py-3 font-medium text-[12px] tracking-tight ${isDark ? "text-[#EBEBF5]/80" : "text-[#333333]"}`}>
                                   {s.session_start ? new Date(s.session_start).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }) : '-'}
@@ -749,21 +789,46 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
                               {visibleColumns.todayWorkingHours && (
                                 <td className={`px-4 py-3 font-mono font-medium tracking-tight text-[13px] ${isDark ? "text-[#BF5AF2]" : "text-[#AF52DE]"}`}>
                                   {(() => {
-                                    // First Login → Final Logout, computed server-side
-                                    // across all sessions. Falls back to single-session
-                                    // only when the server value is missing.
-                                    const wt = s.total_working_seconds != null
-                                      ? Number(s.total_working_seconds)
-                                      : computeSessionSeconds(s.session_start, s.session_end, !!s.session_is_active, now);
-                                    if (wt == null) return <span className={isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}>—</span>;
-                                    return <span>{formatDurationHM(wt)}</span>;
+                                    // Working Hours: uses period-based attendance_span_seconds
+                                    // from the server (sum of completed periods + active period
+                                    // elapsed). For active single-period days, a client-side
+                                    // live timer ticks from attendance_marked_at. For
+                                    // multi-period active days, the server value refreshes
+                                    // via realtime events.
+                                    if (s.attendance_marked_at) {
+                                      if (s.attendance_completed) {
+                                        // Day complete — frozen span from server
+                                        const span = Number(s.attendance_span_seconds);
+                                        return <span>{formatDurationHM(span >= 0 ? span : 0)}</span>;
+                                      }
+                                      // Active attendance
+                                      if (Number(s.total_periods) > 1) {
+                                        // Multi-period: use server-computed total (refreshed via realtime)
+                                        const span = Number(s.attendance_span_seconds);
+                                        return <span>{formatDurationHM(span >= 0 ? span : 0)}</span>;
+                                      }
+                                      // Single period: live timer from mark time
+                                      const markedMs = new Date(s.attendance_marked_at).getTime();
+                                      if (!isNaN(markedMs)) {
+                                        const sec = Math.floor((now - markedMs) / 1000);
+                                        return <span>{formatDurationHM(sec >= 0 ? sec : 0)}</span>;
+                                      }
+                                    }
+                                    return <span className={isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}>—</span>;
                                   })()}
                                 </td>
                               )}
                               <td className={`px-4 py-3 text-[12px] font-semibold tracking-tight`}>
-                                {s.attendance_status === 'Present' && <span className={isDark ? "text-[#32D74B]" : "text-[#34C759]"}>Present</span>}
-                                {s.attendance_status === 'Absent' && <span className={isDark ? "text-[#FF453A]" : "text-[#FF3B30]"}>Absent</span>}
-                                {s.attendance_status === 'Pending' && <span className={isDark ? "text-[#FF9F0A]" : "text-[#FF9500]"}>Pending</span>}
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  {s.attendance_status === 'Present' && <span className={isDark ? "text-[#32D74B]" : "text-[#34C759]"}>Present</span>}
+                                  {s.attendance_status === 'Absent' && <span className={isDark ? "text-[#FF453A]" : "text-[#FF3B30]"}>Absent</span>}
+                                  {s.attendance_status === 'Pending' && <span className={isDark ? "text-[#FF9F0A]" : "text-[#FF9500]"}>Pending</span>}
+                                  {s.attendance_status === 'Present' && Number(s.total_periods) > 1 && (
+                                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wide whitespace-nowrap ${isDark ? "bg-[#0A84FF]/15 text-[#0A84FF]" : "bg-[#E5F1FF] text-[#007AFF]"}`}>
+                                      Remarked · {ordinal(Number(s.total_periods))} period
+                                    </span>
+                                  )}
+                                </div>
                               </td>
                             </tr>
 
@@ -776,6 +841,42 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
                                   exit={{ opacity: 0, height: 0 }}
                                 >
                                   <td colSpan={14} className={`p-4 border-b ${isDark ? "border-[#38383A] bg-[#2C2C2E]/40" : "border-[#E5E5EA] bg-[#F2F2F7]/50"}`}>
+                                    {/* ── Attendance Periods ── */}
+                                    {(() => {
+                                      const periods = periodCache[`${s.user_id}_${selectedDate}`];
+                                      if (!periods || periods.length <= 1) return null;
+                                      const fmtTime = (v: string | null) => {
+                                        if (!v) return "—";
+                                        try { return new Date(v.endsWith("Z") ? v : v + "+05:30").toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" }); }
+                                        catch { return v; }
+                                      };
+                                      return (
+                                        <div className="mb-4">
+                                          <div className="mb-2 flex items-center gap-2">
+                                            <span className={`text-[11px] font-semibold uppercase tracking-wider ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>Attendance Periods</span>
+                                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${isDark ? "bg-[#0A84FF]/15 text-[#0A84FF]" : "bg-[#E5F1FF] text-[#007AFF]"}`}>{periods.length} periods</span>
+                                          </div>
+                                          <div className={`space-y-2 pl-4 border-l-2 ${isDark ? "border-[#0A84FF]/30" : "border-[#007AFF]/20"}`}>
+                                            {periods.map((p: any) => (
+                                              <div key={p.period_number} className="text-[12px] flex items-center gap-4 flex-wrap">
+                                                <span className={`font-semibold w-16 ${isDark ? "text-white" : "text-black"}`}>Period {p.period_number}</span>
+                                                <span className={isDark ? "text-[#EBEBF5]/80" : "text-[#333]"}>
+                                                  {fmtTime(p.started_at_ist)}–{p.is_completed ? fmtTime(p.completed_at_ist) : <span className={isDark ? "text-[#32D74B]" : "text-[#34C759]"}>In Progress</span>}
+                                                </span>
+                                                <span className={`font-mono ${isDark ? "text-[#BF5AF2]" : "text-[#AF52DE]"}`}>
+                                                  {formatDurationHM(Math.max(0, Number(p.effective_seconds) || 0))}
+                                                </span>
+                                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${p.is_completed ? (isDark ? "bg-[#48484A] text-[#8E8E93]" : "bg-[#E5E5EA] text-[#8E8E93]") : (isDark ? "bg-[#32D74B]/15 text-[#32D74B]" : "bg-[#EBF9EE] text-[#34C759]")}`}>
+                                                  {p.is_completed ? "Completed" : "Active"}
+                                                </span>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      );
+                                    })()}
+
+                                    {/* ── Login History (sessions) ── */}
                                     <div className="mb-3 flex items-center gap-2">
                                       <span className={`text-[11px] font-semibold uppercase tracking-wider ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>Login History — {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}</span>
                                     </div>

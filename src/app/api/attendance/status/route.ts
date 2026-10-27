@@ -46,12 +46,14 @@ export async function GET() {
                 (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date::text AS today_ist,
                 ar.id,
                 ar.login_time,
+                ar.submitted_at,
                 ar.logout_time,
                 ar.attendance_status,
                 ar.working_track
             FROM (SELECT 1) AS _
             LEFT JOIN LATERAL (
-                SELECT id, login_time, logout_time, attendance_status, working_track
+                SELECT id, login_time, logout_time, attendance_status, working_track,
+                   submitted_at AT TIME ZONE 'UTC' AS submitted_at
                 FROM attendance_records
                 WHERE employee_id = $1 AND organization_id = $2
                   AND DATE(login_time AT TIME ZONE 'Asia/Kolkata') = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date
@@ -63,15 +65,59 @@ export async function GET() {
         const row = existing[0];
         const marked = !!row && String(row.attendance_status).toLowerCase() === "present";
 
+        // Fetch period summary for today's attendance record (if any).
+        let canRemark = false;
+        let currentPeriod = 0;
+        let totalPeriods = 0;
+        let completedPeriodsSeconds = 0;
+        let activePeriodStartedAt: string | null = null;
+
+        if (row?.id) {
+            const periodRows = await query<{
+                period_number: number;
+                started_at: string | null;
+                completed_at: string | null;
+                duration_seconds: number | null;
+            }>(`
+                SELECT period_number,
+                  TO_CHAR(started_at AT TIME ZONE 'UTC',
+                          'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS started_at,
+                  completed_at,
+                  duration_seconds
+                FROM attendance_periods
+                WHERE attendance_id = $1
+                ORDER BY period_number ASC
+            `, [row.id]);
+
+            totalPeriods = periodRows.length;
+            for (const p of periodRows) {
+                if (p.completed_at) {
+                    completedPeriodsSeconds += p.duration_seconds || 0;
+                    currentPeriod = p.period_number;
+                } else {
+                    activePeriodStartedAt = p.started_at;
+                    currentPeriod = p.period_number;
+                }
+            }
+            // canRemark: attendance marked, day completed (logout set), and no active period
+            canRemark = marked && !!row.logout_time && !activePeriodStartedAt;
+        }
+
         return NextResponse.json({
             success: true,
             marked,
             employeeId: userId,
             date: row?.today_ist ?? null,
             status: row?.attendance_status ?? null,
-            timeIn: row?.login_time ?? null,
+            timeIn: row?.submitted_at ?? row?.login_time ?? null,
             logoutTime: row?.logout_time ?? null,
             workingTrack: row?.working_track ?? null,
+            // Period data for remark-aware clients
+            canRemark,
+            currentPeriod,
+            totalPeriods,
+            completedPeriodsSeconds,
+            activePeriodStartedAt,
         }, { status: 200 });
     } catch (err) {
         console.error("Attendance Status Error:", err);

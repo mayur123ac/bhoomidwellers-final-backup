@@ -256,13 +256,13 @@ const ColumnFilterDropdown: React.FC<ColumnFilterDropdownProps> = ({
       <div className={`p-2 border-t flex justify-end gap-2 ${isDark ? "border-white/[0.08] bg-white/[0.02]" : "border-gray-100 bg-gray-50"}`}>
         <button
           onClick={onClose}
-          className={`px-3 py-1.5 text-xs font-medium rounded-lg border ${isDark ? "border-white/10 text-gray-300 hover:bg-white/5" : "border-gray-200 text-gray-600 hover:bg-white"}`}
+          className={`px-3 py-1.5 text-xs font-medium rounded-lg border cursor-pointer ${isDark ? "border-white/10 text-gray-300 hover:bg-white/5" : "border-gray-200 text-gray-600 hover:bg-white"}`}
         >
           Cancel
         </button>
         <button
           onClick={handleApply}
-          className="px-3 py-1.5 text-xs font-medium rounded-lg text-white"
+          className="px-3 py-1.5 text-xs font-medium rounded-lg text-white cursor-pointer"
           style={{ backgroundColor: accent }}
         >
           OK
@@ -289,39 +289,58 @@ interface FilterableColumnHeaderProps {
   /** Extra className for the <th>. */
   className?: string;
   children?: React.ReactNode;
+  /** Forwarded to the underlying <th> for drag-and-drop column reordering. */
+  draggable?: boolean;
+  "data-colkey"?: string;
+  onDragStart?: React.DragEventHandler<HTMLTableCellElement>;
+  onDragOver?: React.DragEventHandler<HTMLTableCellElement>;
+  onDrop?: React.DragEventHandler<HTMLTableCellElement>;
+  onDragEnd?: React.DragEventHandler<HTMLTableCellElement>;
+  onTouchStart?: React.TouchEventHandler<HTMLTableCellElement>;
+  onTouchMove?: React.TouchEventHandler<HTMLTableCellElement>;
+  onTouchEnd?: React.TouchEventHandler<HTMLTableCellElement>;
 }
 
 export const FilterableColumnHeader: React.FC<FilterableColumnHeaderProps> = ({
   column, isFiltered, colSort, isOpen, onToggle, isDark,
   accent = "#007AFF", className = "", children,
+  draggable, "data-colkey": dataColkey,
+  onDragStart, onDragOver, onDrop, onDragEnd,
+  onTouchStart, onTouchMove, onTouchEnd,
 }) => {
   const isSorted = colSort?.key === column.key;
   const isActive = isFiltered || isSorted;
 
   return (
     <th
-      className={`px-3 sm:px-4 py-3 text-[10px] sm:text-[11px] font-bold uppercase tracking-wider border-b relative ${
-        isDark ? "border-slate-800 text-slate-400" : "border-slate-200 text-[#475569]"
-      } ${className}`}
+      className={`px-3 sm:px-4 py-3 text-[10px] sm:text-[11px] font-bold uppercase tracking-wider border-b relative ${isDark ? "border-slate-800 text-slate-400" : "border-slate-200 text-[#475569]"
+        } ${className}`}
+      draggable={draggable}
+      data-colkey={dataColkey}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      onDragEnd={onDragEnd}
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
     >
       <button
         type="button"
         onClick={e => { e.stopPropagation(); onToggle(); }}
-        className={`group flex items-center gap-1.5 whitespace-nowrap transition-colors ${
-          isActive
-            ? ""
-            : isDark ? "text-slate-400 hover:text-slate-200" : "text-[#475569] hover:text-slate-700"
-        }`}
+        className={`group flex items-center gap-1.5 whitespace-nowrap transition-colors ${isActive
+          ? ""
+          : isDark ? "text-slate-400 hover:text-slate-200" : "text-[#475569] hover:text-slate-700"
+          }`}
         style={isActive ? { color: accent } : undefined}
         title={`Filter / Sort by ${column.label}`}
       >
         {column.label}
         <span
-          className={`inline-flex items-center justify-center w-4 h-4 rounded transition-colors ${
-            isActive
-              ? ""
-              : isDark ? "text-slate-600 group-hover:text-slate-400" : "text-slate-300 group-hover:text-slate-500"
-          }`}
+          className={`inline-flex items-center justify-center w-4 h-4 rounded transition-colors ${isActive
+            ? ""
+            : isDark ? "text-slate-600 group-hover:text-slate-400" : "text-slate-300 group-hover:text-slate-500"
+            }`}
           style={isActive ? { backgroundColor: `${accent}22`, color: accent } : undefined}
         >
           {isSorted
