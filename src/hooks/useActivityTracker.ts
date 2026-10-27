@@ -152,7 +152,8 @@ export function useActivityTracker() {
           /Schedule .*?Site Visit/.test(flatText) ||
           flatText.includes("Editing Sales Details") ||
           flatText.includes("Editing Loan Details") ||
-          /Lead assigned to .*? Status:/.test(flatText);
+          /Lead assigned to .*? Status:/.test(flatText) ||
+          flatText.includes("New Enquiry — Assigned to");
 
         // Only now, and only when a match is possible, take the reflow hit. The
         // newline-dependent patterns (siteVisitMatch, idNameMatch) genuinely need
@@ -169,7 +170,7 @@ export function useActivityTracker() {
         const siteVisitMatch = bodyText.match(/Schedule .*?Site Visit\nLead #(\d+) - (.*?)\n/);
         const editSalesMatch = bodyText.includes("Editing Sales Details");
         const editLoanMatch = bodyText.includes("Editing Loan Details");
-        
+
         // Determine Action
         if (waMatch) { action = "WhatsApp Action"; leadId = waMatch[1]; }
         else if (transferMatch) { action = "Transferring Lead"; leadId = transferMatch[1]; }
@@ -179,11 +180,11 @@ export function useActivityTracker() {
         else if (siteVisitMatch) { action = "Scheduling Site Visit"; leadId = siteVisitMatch[1]; leadName = siteVisitMatch[2]; }
         else if (editSalesMatch) { action = "Editing Sales Form"; }
         else if (editLoanMatch) { action = "Editing Loan Form"; }
-        
+
         // If no modal is open, check if a lead is currently being viewed in the main panel
         if (action === "Viewing Dashboard") {
-          // Look for standard lead panel signatures
-          const leadPanelMatch = bodyText.match(/Lead assigned to .*? Status:/);
+          // Look for standard lead panel signatures (new: enquiry details bubble, old: "Lead assigned to ... Status:")
+          const leadPanelMatch = bodyText.match(/Lead assigned to .*? Status:/) || bodyText.match(/New Enquiry — Assigned to/);
           if (leadPanelMatch) {
              action = "Viewing Lead Details";
              // Extract ID from the top header e.g. "#123 \n John Doe"

@@ -92,6 +92,51 @@ const SalaryTab = dynamic(() => import("@/components/hr/SalaryTab"), { ssr: fals
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ORG LOGO — enquiry form header
+/** Structured enquiry details for the first "System (Front Desk)" bubble in follow-ups. */
+function EnquiryDetailsBubble({ lead, theme, isDark, formatDateFn }: { lead: any; theme: any; isDark: boolean; formatDateFn: (d: string) => string }) {
+  const rows: [string, string][] = [
+    ["Customer Name", lead.name || "N/A"],
+    ["Phone", lead.phone || "N/A"],
+    ...(lead.altPhone || lead.alt_phone ? [["Alt Phone", lead.altPhone || lead.alt_phone] as [string, string]] : []),
+    ["Email", lead.email && lead.email !== "N/A" ? lead.email : "Not Provided"],
+    ["Budget", lead.salesBudget && lead.salesBudget !== "Pending" ? lead.salesBudget : (lead.budget || "N/A")],
+    ["Configuration", lead.propType || lead.configuration || "Pending"],
+    ["Purpose", lead.useType && lead.useType !== "Pending" ? lead.useType : (lead.purpose || "N/A")],
+    ["Source", lead.source || "N/A"],
+    ...(lead.source === "Channel Partner" ? [
+      ["CP Name", lead.cpName || lead.cp_name || "N/A"] as [string, string],
+      ["CP Company", lead.cp_company || lead.cpCompany || "N/A"] as [string, string],
+      ["CP Phone", lead.cp_phone || lead.cpPhone || "N/A"] as [string, string],
+    ] : []),
+    ...(lead.source === "Referral" && lead.referral_name ? [["Referred By", lead.referral_name] as [string, string]] : []),
+    ["Location", lead.location && lead.location !== "N/A" ? lead.location : "Not Provided"],
+    ["Address", lead.address && lead.address !== "N/A" ? lead.address : "Not Provided"],
+    ["Planning to Buy", lead.planningPurchase || "Pending"],
+    ["Loan Required", lead.loanPlanned || "Pending"],
+    ["Status", lead.status || "Assigned"],
+    ["Assigned To", lead.assigned_to || "Unassigned"],
+    ...(lead.mongoVisitDate ? [["Site Visit", formatDateFn(lead.mongoVisitDate)] as [string, string]] : []),
+    ...(lead.remarks ? [["Remarks", lead.remarks] as [string, string]] : []),
+  ];
+  const labelCls = `text-[10px] font-medium ${theme.textFaint}`;
+  const valCls = `text-xs font-semibold ${theme.text}`;
+  return (
+    <div>
+      <p className={`text-xs font-bold mb-2 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>
+        📋 New Enquiry — Assigned to {lead.assigned_to || "Unassigned"}
+      </p>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+        {rows.map(([label, value]) => (
+          <div key={label} className={label === "Address" || label === "Remarks" ? "col-span-2" : ""}>
+            <p className={labelCls}>{label}</p>
+            <p className={valCls}>{value}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // Falls back to org name text if the URL is missing or the image fails to load.
 // Never renders a broken <img>: the src is only set when a URL is present, and
 // onError clears it so the text fallback takes over.
@@ -3889,7 +3934,7 @@ export default function ReceptionistDashboard() {
                                 <span className={`font-bold text-[12px] sm:text-[13px] ${t.accentText}`}>System (Front Desk)</span>
                                 <span className={`text-[9px] sm:text-[10px] font-medium ${t.textFaint}`}>{formatDate(selectedLead.created_at)}</span>
                               </div>
-                              <p className={`text-[12px] sm:text-[13px] leading-relaxed ${t.textMuted}`}>Lead assigned to {selectedLead.assigned_to}. Action required.</p>
+                              <EnquiryDetailsBubble lead={selectedLead} theme={t} isDark={isDark} formatDateFn={formatDate} />
                             </div>
                           </div>
                           {currentLeadFollowUps.map((msg: any, idx: number) => {

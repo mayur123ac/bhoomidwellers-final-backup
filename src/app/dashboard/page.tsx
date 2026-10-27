@@ -688,6 +688,52 @@ const formatLeadForExport = (l: any) => ({
   "Assigned Receptionist": l.assigned_receptionist || "N/A",
   "Created At": l.created_at ? new Date(l.created_at).toLocaleDateString("en-IN") : "N/A",
 });
+
+/** Structured enquiry details for the first "System (Front Desk)" bubble in follow-ups. */
+function EnquiryDetailsBubble({ lead, theme, isDark, formatDateFn }: { lead: any; theme: any; isDark: boolean; formatDateFn: (d: string) => string }) {
+  const rows: [string, string][] = [
+    ["Customer Name", lead.name || "N/A"],
+    ["Phone", lead.phone || "N/A"],
+    ...(lead.altPhone || lead.alt_phone ? [["Alt Phone", lead.altPhone || lead.alt_phone] as [string, string]] : []),
+    ["Email", lead.email && lead.email !== "N/A" ? lead.email : "Not Provided"],
+    ["Budget", lead.salesBudget && lead.salesBudget !== "Pending" ? lead.salesBudget : (lead.budget || "N/A")],
+    ["Configuration", lead.propType || lead.configuration || "Pending"],
+    ["Purpose", lead.useType && lead.useType !== "Pending" ? lead.useType : (lead.purpose || "N/A")],
+    ["Source", lead.source || "N/A"],
+    ...(lead.source === "Channel Partner" ? [
+      ["CP Name", lead.cpName || lead.cp_name || "N/A"] as [string, string],
+      ["CP Company", lead.cp_company || lead.cpCompany || "N/A"] as [string, string],
+      ["CP Phone", lead.cp_phone || lead.cpPhone || "N/A"] as [string, string],
+    ] : []),
+    ...(lead.source === "Referral" && lead.referral_name ? [["Referred By", lead.referral_name] as [string, string]] : []),
+    ["Location", lead.location && lead.location !== "N/A" ? lead.location : "Not Provided"],
+    ["Address", lead.address && lead.address !== "N/A" ? lead.address : "Not Provided"],
+    ["Planning to Buy", lead.planningPurchase || "Pending"],
+    ["Loan Required", lead.loanPlanned || "Pending"],
+    ["Status", lead.status || "Assigned"],
+    ["Assigned To", lead.assigned_to || "Unassigned"],
+    ...(lead.mongoVisitDate ? [["Site Visit", formatDateFn(lead.mongoVisitDate)] as [string, string]] : []),
+    ...(lead.remarks ? [["Remarks", lead.remarks] as [string, string]] : []),
+  ];
+  const labelCls = `text-[10px] font-medium ${theme.textFaint}`;
+  const valCls = `text-xs font-semibold ${theme.text}`;
+  return (
+    <div>
+      <p className={`text-xs font-bold mb-2 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>
+        📋 New Enquiry — Assigned to {lead.assigned_to || "Unassigned"}
+      </p>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+        {rows.map(([label, value]) => (
+          <div key={label} className={label === "Address" || label === "Remarks" ? "col-span-2" : ""}>
+            <p className={labelCls}>{label}</p>
+            <p className={valCls}>{value}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const maskPhone = (phone: any, userRole: string = "admin", isOwner: boolean = true) => {
   if (!phone || phone === "N/A") return "N/A";
   const c = String(phone).replace(/[^a-zA-Z0-9]/g, "");
@@ -4700,7 +4746,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                                 <span className={`font-bold text-sm ${theme.accentText}`}>System (Front Desk)</span>
                                 <span className={`text-[10px] ${theme.textFaint}`}>{formatDate(selectedLead.created_at)}</span>
                               </div>
-                              <p className={`text-sm leading-relaxed ${theme.textMuted}`}>Lead assigned to {selectedLead.assigned_to}. Action required.</p>
+                              <EnquiryDetailsBubble lead={selectedLead} theme={theme} isDark={isDark} formatDateFn={formatDate} />
                             </div>
                           </div>
                           {currentLeadFollowUps.map((msg: any, idx: number) => {
@@ -6217,7 +6263,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                                 <span className={`font-bold text-[10px] sm:text-sm ${theme.accentText}`}>System (Front Desk)</span>
                                 <span className={`text-[9px] sm:text-[10px] ${theme.textFaint}`}>{formatDate(selectedLead.created_at)}</span>
                               </div>
-                              <p className={`text-xs sm:text-sm leading-relaxed ${theme.textMuted}`}>Lead assigned to {selectedLead.assigned_to}. Action required.</p>
+                              <EnquiryDetailsBubble lead={selectedLead} theme={theme} isDark={isDark} formatDateFn={formatDate} />
                             </div>
                           </div>
                           {currentLeadFollowUps.map((msg: any, idx: number) => {
@@ -7888,7 +7934,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                                 <span className={`font-bold text-[10px] sm:text-sm ${theme.accentText}`}>System (Front Desk)</span>
                                 <span className={`text-[9px] sm:text-[10px] ${theme.textFaint}`}>{formatDate(selectedLead.created_at)}</span>
                               </div>
-                              <p className={`text-xs sm:text-sm leading-relaxed ${theme.text}`}>Lead assigned to {selectedLead.assigned_to || "Unassigned"}. Status: {selectedLead.status}</p>
+                              <EnquiryDetailsBubble lead={selectedLead} theme={theme} isDark={isDark} formatDateFn={formatDate} />
                             </div>
                           </div>
                           {currentFollowUps.length === 0

@@ -664,7 +664,7 @@ export default function RevenueIntelligenceView({ isDark, theme, user }: Props) 
               <thead className={`sticky top-0 z-10 backdrop-blur-xl shadow-sm ${isDark ? "bg-[#1C1C1E]/80 border-b border-[#38383A]" : "bg-[#F9F9F9]/80 border-b border-[#E5E5EA]"}`}>
                 <tr>
                   {REVENUE_FILTER_COLS.map((col) => {
-                    const align = ["agreementValue","ocrReceived","sanctionedAmount","disbursement","registrationAmount","balance"].includes(col.key) ? "text-right" : "text-left";
+                    const align = ["agreementValue", "ocrReceived", "sanctionedAmount", "disbursement", "registrationAmount", "balance"].includes(col.key) ? "text-right" : "text-left";
                     const isFiltered = !!revColFilters[col.key];
                     return (
                       <FilterableColumnHeader
