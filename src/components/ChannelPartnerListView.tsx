@@ -535,24 +535,22 @@ function ChannelPartnerListView({ user, isDark, t, permissions, title }: Props) 
                     <button
                       type="button"
                       onClick={e => { e.stopPropagation(); setOpenFilterCol(openFilterCol === fcol.key ? null : fcol.key); }}
-                      className={`group flex items-center gap-1.5 whitespace-nowrap transition-colors ${
-                        isActive
-                          ? "text-[#9E217B]"
-                          : isDark ? "text-inherit hover:text-slate-200" : "text-inherit hover:text-slate-700"
-                      }`}
+                      className={`group flex items-center gap-1.5 whitespace-nowrap transition-colors ${isActive
+                        ? "text-[#9E217B]"
+                        : isDark ? "text-inherit hover:text-slate-200" : "text-inherit hover:text-slate-700"
+                        }`}
                       title={`Filter / Sort by ${fcol.label}`}
                     >
                       {fcol.label}
                       <span
-                        className={`inline-flex items-center justify-center w-4 h-4 rounded transition-colors ${
-                          isActive
-                            ? "bg-[#9E217B]/15 text-[#9E217B]"
-                            : isDark ? "text-gray-600 group-hover:text-gray-400" : "text-gray-300 group-hover:text-gray-500"
-                        }`}
+                        className={`inline-flex items-center justify-center w-4 h-4 rounded transition-colors ${isActive
+                          ? "bg-[#9E217B]/15 text-[#9E217B]"
+                          : isDark ? "text-gray-600 group-hover:text-gray-400" : "text-gray-300 group-hover:text-gray-500"
+                          }`}
                       >
                         {isSorted
                           ? colSort?.direction === "asc" ? <FaSortAlphaDown className="w-2.5 h-2.5" /> : <FaSortAlphaUp className="w-2.5 h-2.5" />
-                          : <FaFilter className="w-2 h-2" />}
+                          : <FaFilter className="w-2 h-2 cursor-pointer" />}
                       </span>
                       {isFiltered && <span className="w-1.5 h-1.5 rounded-full inline-block bg-[#9E217B]" />}
                     </button>

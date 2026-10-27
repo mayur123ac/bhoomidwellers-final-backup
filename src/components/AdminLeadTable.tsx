@@ -34,6 +34,8 @@ export type ALTColumn = {
   locked?: boolean;
   defaultHidden?: boolean;
   sortValue?: (l: Lead) => string | number;
+  /** Display string for filter dropdown (falls back to sortValue then raw field). */
+  filterValue?: (l: Lead) => string | null;
   render: (l: Lead, ctx: ALTCtx) => React.ReactNode;
 };
 
@@ -154,6 +156,10 @@ export default function AdminLeadTable({
   const getDisplayValue = (lead: Lead, colKey: string): string => {
     const col = columns.find(c => c.key === colKey);
     if (!col) return "";
+    if (col.filterValue) {
+      const v = col.filterValue(lead);
+      return v === null || v === undefined ? "" : String(v);
+    }
     if (col.sortValue) {
       const v = col.sortValue(lead);
       return v === null || v === undefined ? "" : String(v);
@@ -203,8 +209,8 @@ export default function AdminLeadTable({
             type="button"
             onClick={() => clearAllFilters()}
             className={`text-[10px] sm:text-xs px-2 py-1 rounded-lg border transition-colors ${isDark
-                ? "border-white/10 text-red-400 hover:bg-white/5"
-                : "border-gray-200 text-red-500 hover:bg-gray-50"
+              ? "border-white/10 text-red-400 hover:bg-white/5"
+              : "border-gray-200 text-red-500 hover:bg-gray-50"
               }`}
           >
             Clear column filters
@@ -255,10 +261,10 @@ export default function AdminLeadTable({
                           setOpenFilterCol(prev => prev === col.key ? null : col.key);
                         }}
                         className={`group flex items-center gap-1.5 whitespace-nowrap transition-colors ${isFiltered || isSorted
-                            ? "text-[#007AFF]"
-                            : isDark
-                              ? "text-slate-400 hover:text-slate-200"
-                              : "text-[#475569] hover:text-slate-700"
+                          ? "text-[#007AFF]"
+                          : isDark
+                            ? "text-slate-400 hover:text-slate-200"
+                            : "text-[#475569] hover:text-slate-700"
                           } ${col.align === "right"
                             ? "flex-row-reverse ml-auto"
                             : col.align === "center"
@@ -270,10 +276,10 @@ export default function AdminLeadTable({
                         {col.label}
                         <span
                           className={`inline-flex items-center justify-center w-4 h-4 rounded transition-colors ${isFiltered || isSorted
-                              ? "bg-[#007AFF]/10"
-                              : isDark
-                                ? "text-slate-600 group-hover:text-slate-400"
-                                : "text-slate-300 group-hover:text-slate-500"
+                            ? "bg-[#007AFF]/10"
+                            : isDark
+                              ? "text-slate-600 group-hover:text-slate-400"
+                              : "text-slate-300 group-hover:text-slate-500"
                             }`}
                         >
                           {isSorted ? (
@@ -283,7 +289,7 @@ export default function AdminLeadTable({
                               <FaSortAlphaUp className="w-2.5 h-2.5" />
                             )
                           ) : (
-                            <FaFilter className="w-2 h-2" />
+                            <FaFilter className="w-2 h-2 cursor-pointer" />
                           )}
                         </span>
                         {isFiltered && (

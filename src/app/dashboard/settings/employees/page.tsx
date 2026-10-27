@@ -819,21 +819,19 @@ export default function EmployeesPage() {
                         <button
                           type="button"
                           onClick={(e) => { e.stopPropagation(); setOpenFilterCol(prev => prev === fc.key ? null : fc.key); }}
-                          className={`group flex items-center gap-1.5 whitespace-nowrap transition-colors ${
-                            isActive ? "text-[#007AFF]" : "hover:text-slate-700"
-                          }`}
+                          className={`group flex items-center gap-1.5 whitespace-nowrap transition-colors ${isActive ? "text-[#007AFF]" : "hover:text-slate-700"
+                            }`}
                           title={`Filter / Sort by ${fc.label}`}
                         >
                           {fc.label}
                           <span
-                            className={`inline-flex items-center justify-center w-4 h-4 rounded transition-colors ${
-                              isActive ? "bg-[#007AFF]/10 text-[#007AFF]" : "text-slate-300 group-hover:text-slate-500"
-                            }`}
+                            className={`inline-flex items-center justify-center w-4 h-4 rounded transition-colors ${isActive ? "bg-[#007AFF]/10 text-[#007AFF]" : "text-slate-300 group-hover:text-slate-500"
+                              }`}
                           >
                             {isSorted ? (
                               colSort?.direction === "asc" ? <FaSortAlphaDown className="w-2.5 h-2.5" /> : <FaSortAlphaUp className="w-2.5 h-2.5" />
                             ) : (
-                              <FaFilter className="w-2 h-2" />
+                              <FaFilter className="w-2 h-2 cursor-pointer" />
                             )}
                           </span>
                           {isFiltered && <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF] inline-block" />}
@@ -915,8 +913,8 @@ export default function EmployeesPage() {
                           {employee.status === "active"
                             ? "Active"
                             : employee.status === "pending"
-                            ? "Pending"
-                            : "Inactive"}
+                              ? "Pending"
+                              : "Inactive"}
                         </StatusBadge>
                       </td>
                       <td className="border-b py-3.5 pr-4 whitespace-nowrap crm-secondary" style={{ borderColor: T.border, color: T.muted }}>
@@ -966,8 +964,8 @@ export default function EmployeesPage() {
                                   {employee.status === "pending"
                                     ? `Sent ${formatWhen(employee.inviteSentAt)}${employee.inviteExpired ? " (expired)" : ""}`
                                     : employee.firstLoginAt
-                                    ? `First login ${formatWhen(employee.firstLoginAt)}`
-                                    : "\u2014"}
+                                      ? `First login ${formatWhen(employee.firstLoginAt)}`
+                                      : "\u2014"}
                                 </dd>
                               </div>
                             </dl>

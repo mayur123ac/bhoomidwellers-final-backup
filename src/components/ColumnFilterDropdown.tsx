@@ -1,5 +1,6 @@
 "use client";
-import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import React, { useState, useMemo, useRef, useEffect, useLayoutEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { FaFilter, FaSearch, FaSortAlphaDown, FaSortAlphaUp } from "react-icons/fa";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -79,22 +80,10 @@ export function useColumnFilters() {
   };
 }
 
-// ── Hook: useOnClickOutside ──────────────────────────────────────────────────
+// ── Constants ────────────────────────────────────────────────────────────────
 
-function useOnClickOutside(ref: React.RefObject<HTMLElement | null>, handler: () => void) {
-  useEffect(() => {
-    const listener = (event: MouseEvent | TouchEvent) => {
-      if (!ref.current || ref.current.contains(event.target as Node)) return;
-      handler();
-    };
-    document.addEventListener("mousedown", listener);
-    document.addEventListener("touchstart", listener);
-    return () => {
-      document.removeEventListener("mousedown", listener);
-      document.removeEventListener("touchstart", listener);
-    };
-  }, [ref, handler]);
-}
+const DROPDOWN_W = 256; // w-64
+const DROPDOWN_MAX_H = 420; // approximate max rendered height
 
 // ── Component: ColumnFilterDropdown ──────────────────────────────────────────
 
@@ -116,9 +105,92 @@ const ColumnFilterDropdown: React.FC<ColumnFilterDropdownProps> = ({
   column, data, activeFilter, activeSort, onApply, onSort, onClose, isDark,
   accent = "#007AFF",
 }) => {
-  const ref = useRef<HTMLDivElement>(null);
-  useOnClickOutside(ref, onClose);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const anchorRef = useRef<HTMLSpanElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
 
+  // Stable onClose ref to avoid re-registering listeners on every render
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  // ── Position the dropdown relative to the invisible anchor marker ────────
+  useLayoutEffect(() => {
+    const anchor = anchorRef.current;
+    if (!anchor) return;
+
+    const reposition = () => {
+      if (!anchor || !document.body.contains(anchor)) {
+        setCoords(null);
+        return;
+      }
+      // Use the parent <th> (or whatever positioned ancestor) as the anchor rect
+      const parentEl = anchor.closest("th") || anchor.parentElement;
+      const rect = parentEl ? parentEl.getBoundingClientRect() : anchor.getBoundingClientRect();
+
+      let top = rect.bottom + 4;
+      let left = rect.left;
+
+      // Flip up if not enough room below
+      if (top + DROPDOWN_MAX_H > window.innerHeight - 8) {
+        top = rect.top - DROPDOWN_MAX_H - 4;
+      }
+      // If flipped up goes above viewport, pin to top
+      if (top < 8) top = 8;
+
+      // Clamp horizontally
+      if (left + DROPDOWN_W > window.innerWidth - 8) {
+        left = window.innerWidth - DROPDOWN_W - 8;
+      }
+      if (left < 8) left = 8;
+
+      setCoords({ top, left });
+    };
+
+    reposition();
+
+    // Auto-focus search after positioning
+    const focusTimer = setTimeout(() => searchRef.current?.focus(), 30);
+
+    // Reposition on scroll (capture phase to catch scrollable containers) and resize
+    window.addEventListener("scroll", reposition, true);
+    window.addEventListener("resize", reposition);
+    return () => {
+      clearTimeout(focusTimer);
+      window.removeEventListener("scroll", reposition, true);
+      window.removeEventListener("resize", reposition);
+    };
+  }, []);
+
+  // ── Click-outside dismissal ──────────────────────────────────────────────
+  useEffect(() => {
+    const listener = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as Node;
+      // Click inside the portalled dropdown — keep open
+      if (dropdownRef.current?.contains(target)) return;
+      // Click on the trigger <th> or its button — let the toggle handler manage it
+      const th = anchorRef.current?.closest("th") || anchorRef.current?.parentElement;
+      if (th?.contains(target)) return;
+      onCloseRef.current();
+    };
+    document.addEventListener("mousedown", listener);
+    document.addEventListener("touchstart", listener);
+    return () => {
+      document.removeEventListener("mousedown", listener);
+      document.removeEventListener("touchstart", listener);
+    };
+  }, []);
+
+  // ── Escape key dismissal ─────────────────────────────────────────────────
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onCloseRef.current();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+
+  // ── Unique values and selection state ────────────────────────────────────
   const uniqueValues = useMemo(() => {
     const values = new Set<string>();
     data.forEach(row => {
@@ -164,6 +236,7 @@ const ColumnFilterDropdown: React.FC<ColumnFilterDropdownProps> = ({
     onClose();
   };
 
+  // ── Styles ───────────────────────────────────────────────────────────────
   const baseText = isDark ? "text-gray-200" : "text-gray-700";
   const baseBg = isDark ? "bg-[#1C1C1E] border-white/10" : "bg-white border-gray-200";
   const hoverBg = isDark ? "hover:bg-white/5" : "hover:bg-gray-50";
@@ -174,24 +247,30 @@ const ColumnFilterDropdown: React.FC<ColumnFilterDropdownProps> = ({
     return dir === "asc" ? "A to Z" : "Z to A";
   };
 
-  return (
+  // ── Render ───────────────────────────────────────────────────────────────
+  // Invisible anchor marker stays in the DOM tree (inside the <th>).
+  // The actual dropdown is portalled to document.body to escape overflow clipping.
+  const dropdown = coords ? (
     <div
-      ref={ref}
-      className={`absolute top-full left-0 mt-1 w-64 z-50 rounded-xl shadow-2xl border overflow-hidden flex flex-col text-sm font-normal normal-case ${baseBg}`}
+      ref={dropdownRef}
+      role="dialog"
+      aria-label={`Filter ${column.label}`}
       onClick={e => e.stopPropagation()}
+      style={{ position: "fixed", top: coords.top, left: coords.left, width: DROPDOWN_W, zIndex: 9999 }}
+      className={`shadow-2xl rounded-xl border overflow-hidden flex flex-col text-sm font-normal normal-case ${baseBg}`}
     >
       {/* Sort */}
       <div className={`p-2 border-b ${isDark ? "border-white/[0.08]" : "border-gray-100"}`}>
         <button
           onClick={() => { onSort("asc"); onClose(); }}
-          className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-lg ${hoverBg} ${baseText} ${activeSort?.direction === "asc" ? "font-bold" : ""}`}
+          className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-lg cursor-pointer ${hoverBg} ${baseText} ${activeSort?.direction === "asc" ? "font-bold" : ""}`}
         >
           <FaSortAlphaDown className={isDark ? "text-gray-500" : "text-gray-400"} />
           Sort {sortLabel("asc")}
         </button>
         <button
           onClick={() => { onSort("desc"); onClose(); }}
-          className={`w-full flex items-center gap-2 px-3 py-1.5 mt-1 rounded-lg ${hoverBg} ${baseText} ${activeSort?.direction === "desc" ? "font-bold" : ""}`}
+          className={`w-full flex items-center gap-2 px-3 py-1.5 mt-1 rounded-lg cursor-pointer ${hoverBg} ${baseText} ${activeSort?.direction === "desc" ? "font-bold" : ""}`}
         >
           <FaSortAlphaUp className={isDark ? "text-gray-500" : "text-gray-400"} />
           Sort {sortLabel("desc")}
@@ -199,7 +278,7 @@ const ColumnFilterDropdown: React.FC<ColumnFilterDropdownProps> = ({
         {activeSort && (
           <button
             onClick={() => { onSort(null); onClose(); }}
-            className={`w-full text-left px-9 py-1.5 mt-1 text-xs text-red-500 rounded-lg ${hoverBg}`}
+            className={`w-full text-left px-9 py-1.5 mt-1 text-xs text-red-500 rounded-lg cursor-pointer ${hoverBg}`}
           >
             Clear Sort
           </button>
@@ -211,11 +290,13 @@ const ColumnFilterDropdown: React.FC<ColumnFilterDropdownProps> = ({
         <div className={`flex items-center px-3 py-1.5 rounded-lg border ${isDark ? "bg-black/20 border-white/10" : "bg-gray-50 border-gray-200"}`}>
           <FaSearch className={`mr-2 text-xs ${isDark ? "text-gray-500" : "text-gray-400"}`} />
           <input
+            ref={searchRef}
             type="text"
             placeholder="Search..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full bg-transparent outline-none text-xs"
+            onKeyDown={e => e.key === "Escape" && setSearch("")}
+            className={`w-full bg-transparent outline-none text-xs ${isDark ? "text-gray-200 placeholder:text-gray-500" : "text-gray-700 placeholder:text-gray-400"}`}
           />
         </div>
       </div>
@@ -269,6 +350,15 @@ const ColumnFilterDropdown: React.FC<ColumnFilterDropdownProps> = ({
         </button>
       </div>
     </div>
+  ) : null;
+
+  return (
+    <>
+      {/* Invisible anchor marker — stays in the DOM tree inside the <th> so we
+          can read its viewport position via getBoundingClientRect(). */}
+      <span ref={anchorRef} className="absolute top-full left-0 w-0 h-0 pointer-events-none" aria-hidden="true" />
+      {typeof document !== "undefined" && dropdown && createPortal(dropdown, document.body)}
+    </>
   );
 };
 
@@ -345,14 +435,13 @@ export const FilterableColumnHeader: React.FC<FilterableColumnHeaderProps> = ({
         >
           {isSorted
             ? colSort?.direction === "asc" ? <FaSortAlphaDown className="w-2.5 h-2.5" /> : <FaSortAlphaUp className="w-2.5 h-2.5" />
-            : <FaFilter className="w-2 h-2" />}
+            : <FaFilter className="w-2 h-2 cursor-pointer" />}
         </span>
         {isFiltered && (
           <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ backgroundColor: accent }} />
         )}
       </button>
       {children}
-      {/* The dropdown is rendered as children — see usage pattern in tables */}
     </th>
   );
 };

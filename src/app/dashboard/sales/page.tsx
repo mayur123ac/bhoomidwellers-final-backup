@@ -1320,6 +1320,16 @@ const SM_DB_COLUMNS: { key: string; label: string; locked?: boolean; defaultHidd
   { key: "site_visit", label: "SITE VISIT", type: 'date' },
 ];
 
+/** Returns a numeric sort key for date columns (timestamp), text for others. */
+function getSortValueForCol(lead: any, key: string): string | number {
+  switch (key) {
+    case 'date_created': return lead.created_at ? new Date(lead.created_at).getTime() : 0;
+    case 'backdated': return lead.auto_date_enabled === false && lead.enquiry_date ? new Date(lead.enquiry_date).getTime() : 0;
+    case 'site_visit': return lead.mongoVisitDate ? new Date(lead.mongoVisitDate).getTime() : 0;
+    default: return getLeadValueForCol(lead, key);
+  }
+}
+
 /** Returns the display value of a lead for a given SM_DB column key. */
 function getLeadValueForCol(lead: any, key: string): string {
   switch (key) {
@@ -1334,9 +1344,9 @@ function getLeadValueForCol(lead: any, key: string): string {
     case 'status': return lead.is_lost_lead ? 'LOST' : String(lead.status || 'Assigned');
     case 'lost_status': return lead.is_lost_lead ? 'Lost Lead' : 'Active';
     case 'interest': return String(lead.leadInterestStatus || '');
-    case 'date_created': return String(lead.created_at || '');
-    case 'backdated': return lead.auto_date_enabled === false && lead.enquiry_date ? String(lead.enquiry_date) : '';
-    case 'site_visit': return String(lead.mongoVisitDate || '');
+    case 'date_created': return lead.created_at ? new Date(lead.created_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : '';
+    case 'backdated': return lead.auto_date_enabled === false && lead.enquiry_date ? new Date(lead.enquiry_date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : '';
+    case 'site_visit': return lead.mongoVisitDate ? new Date(lead.mongoVisitDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : '';
     default: return '';
   }
 }
@@ -1887,9 +1897,11 @@ function SalesManagerView({
     if (dbColSort) {
       const { key, direction } = dbColSort;
       return [...filteredDatabaseLeadsUnsorted].sort((a, b) => {
-        const av = getLeadValueForCol(a, key);
-        const bv = getLeadValueForCol(b, key);
-        const cmp = av.localeCompare(bv, undefined, { numeric: true, sensitivity: 'base' });
+        const av = getSortValueForCol(a, key);
+        const bv = getSortValueForCol(b, key);
+        const cmp = typeof av === 'number' && typeof bv === 'number'
+          ? av - bv
+          : String(av).localeCompare(String(bv), undefined, { numeric: true, sensitivity: 'base' });
         return direction === 'asc' ? cmp : -cmp;
       });
     }
@@ -2603,7 +2615,7 @@ function SalesManagerView({
                                     }`}>
                                     {isSorted
                                       ? (dbColSort?.direction === 'asc' ? <FaSortAlphaDown className="w-2.5 h-2.5" /> : <FaSortAlphaUp className="w-2.5 h-2.5" />)
-                                      : <FaFilter className="w-2 h-2" />
+                                      : <FaFilter className="w-2 h-2 cursor-pointer" />
                                     }
                                   </span>
                                 )}

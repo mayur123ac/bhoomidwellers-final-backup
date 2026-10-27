@@ -333,6 +333,12 @@ export default function RevenueIntelligenceView({ isDark, theme, user }: Props) 
     applySort: revApplySort, filterRows: revFilterRows, sortRows: revSortRows,
   } = useColumnFilters();
 
+  // Wrap column-filter apply so it also resets pagination (same as search/manager/status)
+  const revApplyFilterAndReset = useCallback(
+    (key: string, vals: Set<string> | null) => { revApplyFilter(key, vals); setPage(1); },
+    [revApplyFilter],
+  );
+
   const revGetDisplayValue = useCallback((row: Row, colKey: string): string => {
     if (colKey === "sanctionedDate") return shortDate(row.sanctionedDate);
     const v = (row as any)[colKey];
@@ -678,7 +684,7 @@ export default function RevenueIntelligenceView({ isDark, theme, user }: Props) 
                             data={revColFilterData}
                             activeFilter={revColFilters[col.key] ?? null}
                             activeSort={revColSort?.key === col.key ? revColSort : null}
-                            onApply={(vals) => revApplyFilter(col.key, vals)}
+                            onApply={(vals) => revApplyFilterAndReset(col.key, vals)}
                             onSort={(dir) => revApplySort(col.key, dir)}
                             onClose={() => setRevOpenFilterCol(null)}
                             isDark={isDark}

@@ -425,8 +425,7 @@ function useAdminData(onReminderDue?: (r: import("@/lib/followUpSync").ReminderS
         const lastReopenAt = reopenFups.length > 0 ? new Date(reopenFups[reopenFups.length - 1].createdAt).getTime() : 0;
         const closingFupsSinceReopen = closingFups.filter((f: any) => new Date(f.createdAt).getTime() > lastReopenAt);
         const closingDate = closingFupsSinceReopen.length > 0 ? closingFupsSinceReopen[closingFupsSinceReopen.length - 1].createdAt : null;
-        const sfBudget = extractField("Budget");
-        const activeBudget = sfBudget !== "Pending" ? formatBudget(sfBudget, null) : formatBudget(lead.budget, lead.budget_unit);
+        const activeBudget = extractField("Budget") !== "Pending" ? extractField("Budget") : formatBudget(lead.budget, lead.budget_unit);
 
 
         const sfLoanPlanned = extractField("Loan Planned");
@@ -437,7 +436,7 @@ function useAdminData(onReminderDue?: (r: import("@/lib/followUpSync").ReminderS
 
         return {
           ...lead,
-          propType: extractField("Property Type").replace(/bhk/gi, "BHK"),
+          propType: extractField("Property Type"),
           preferredLocation: extractField("Location"),
           salesBudget: activeBudget,
           useType: extractField("Use Type") !== "Pending" ? extractField("Use Type") : (lead.purpose || "Pending"),
@@ -2586,7 +2585,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                               }`}>
                               {isSorted
                                 ? shColSort?.direction === "asc" ? <FaSortAlphaDown className="w-2.5 h-2.5" /> : <FaSortAlphaUp className="w-2.5 h-2.5" />
-                                : <FaFilter className="w-2 h-2" />}
+                                : <FaFilter className="w-2 h-2 cursor-pointer" />}
                             </span>
                             {isFiltered && <span className={`w-1.5 h-1.5 rounded-full inline-block ${isDark ? "bg-[#d946a8]" : "bg-[#9E217B]"}`} />}
                           </button>
@@ -2805,7 +2804,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                               }`}>
                               {isSorted
                                 ? rcColSort?.direction === "asc" ? <FaSortAlphaDown className="w-2.5 h-2.5" /> : <FaSortAlphaUp className="w-2.5 h-2.5" />
-                                : <FaFilter className="w-2 h-2" />}
+                                : <FaFilter className="w-2 h-2 cursor-pointer" />}
                             </span>
                             {isFiltered && <span className={`w-1.5 h-1.5 rounded-full inline-block ${isDark ? "bg-[#00AEEF]" : "bg-[#007AFF]"}`} />}
                           </button>
@@ -3991,6 +3990,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
     {
       key: "site_visit", label: "Site Visit", minWidth: "min-w-[85px] sm:min-w-[105px]",
       sortValue: (l) => (l.mongoVisitDate ? new Date(l.mongoVisitDate).getTime() : 0),
+      filterValue: (l) => l.mongoVisitDate ? new Date(l.mongoVisitDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : null,
       render: (l, { formatDate: fd }) =>
         l.mongoVisitDate
           ? <span className="text-orange-500 font-semibold text-[11px] sm:text-xs">{fd(l.mongoVisitDate).split(",")[0]}</span>
@@ -3999,12 +3999,14 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
     {
       key: "created_at", label: "Created On", minWidth: "min-w-[95px] sm:min-w-[115px]",
       sortValue: (l) => (l.created_at ? new Date(l.created_at).getTime() : 0),
+      filterValue: (l) => l.created_at ? new Date(l.created_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : null,
       render: (l, { theme: t, formatDate: fd }) =>
         l.created_at ? <span className={`text-[11px] sm:text-xs ${t.textFaint}`}>{fd(l.created_at)}</span> : <span className="text-[11px] sm:text-xs italic opacity-35">—</span>,
     },
     {
       key: "backdated", label: "Backdated Entry", minWidth: "min-w-[100px] sm:min-w-[120px]", defaultHidden: true,
       sortValue: (l) => l.auto_date_enabled === false && l.enquiry_date ? new Date(l.enquiry_date).getTime() : 0,
+      filterValue: (l) => l.auto_date_enabled === false && l.enquiry_date ? new Date(l.enquiry_date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : null,
       render: (l, { isDark: dk, formatDate: fd }) =>
         l.auto_date_enabled === false && l.enquiry_date
           ? <span className={`inline-flex items-center px-2 py-[3px] rounded-md text-[9px] sm:text-[10px] font-bold border whitespace-nowrap ${dk ? "bg-amber-500/10 text-amber-300 border-amber-500/25" : "bg-amber-50 text-amber-700 border-amber-200"}`}>{fd(l.enquiry_date).split(",")[0]}</span>
@@ -5571,6 +5573,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
     {
       key: "site_visit", label: "Site Visit", minWidth: "min-w-[85px] sm:min-w-[105px]",
       sortValue: (l) => (l.mongoVisitDate ? new Date(l.mongoVisitDate).getTime() : 0),
+      filterValue: (l) => l.mongoVisitDate ? new Date(l.mongoVisitDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : null,
       render: (l, { formatDate: fd }) =>
         l.mongoVisitDate
           ? <span className="text-orange-500 font-semibold text-[11px] sm:text-xs">{fd(l.mongoVisitDate).split(",")[0]}</span>
@@ -5579,12 +5582,14 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
     {
       key: "created_at", label: "Created On", minWidth: "min-w-[95px] sm:min-w-[115px]",
       sortValue: (l) => (l.created_at ? new Date(l.created_at).getTime() : 0),
+      filterValue: (l) => l.created_at ? new Date(l.created_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : null,
       render: (l, { theme: t, formatDate: fd }) =>
         l.created_at ? <span className={`text-[11px] sm:text-xs ${t.textFaint}`}>{fd(l.created_at)}</span> : <span className="text-[11px] sm:text-xs italic opacity-35">—</span>,
     },
     {
       key: "backdated", label: "Backdated Entry", minWidth: "min-w-[100px] sm:min-w-[120px]", defaultHidden: true,
       sortValue: (l) => l.auto_date_enabled === false && l.enquiry_date ? new Date(l.enquiry_date).getTime() : 0,
+      filterValue: (l) => l.auto_date_enabled === false && l.enquiry_date ? new Date(l.enquiry_date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : null,
       render: (l, { isDark: dk, formatDate: fd }) =>
         l.auto_date_enabled === false && l.enquiry_date
           ? <span className={`inline-flex items-center px-2 py-[3px] rounded-md text-[9px] sm:text-[10px] font-bold border whitespace-nowrap ${dk ? "bg-amber-500/10 text-amber-300 border-amber-500/25" : "bg-amber-50 text-amber-700 border-amber-200"}`}>{fd(l.enquiry_date).split(",")[0]}</span>
@@ -7083,6 +7088,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
     {
       key: "site_visit", label: "Site Visit", minWidth: "min-w-[85px] sm:min-w-[105px]",
       sortValue: (l) => (l.mongoVisitDate ? new Date(l.mongoVisitDate).getTime() : 0),
+      filterValue: (l) => l.mongoVisitDate ? new Date(l.mongoVisitDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : null,
       render: (l, { formatDate: fd }) =>
         l.mongoVisitDate
           ? <span className="text-orange-500 font-semibold text-[11px] sm:text-xs">{fd(l.mongoVisitDate).split(",")[0]}</span>
@@ -7091,12 +7097,14 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
     {
       key: "created_at", label: "Created On", minWidth: "min-w-[95px] sm:min-w-[115px]",
       sortValue: (l) => (l.created_at ? new Date(l.created_at).getTime() : 0),
+      filterValue: (l) => l.created_at ? new Date(l.created_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : null,
       render: (l, { theme: t, formatDate: fd }) =>
         l.created_at ? <span className={`text-[11px] sm:text-xs ${t.textFaint}`}>{fd(l.created_at)}</span> : <span className="text-[11px] sm:text-xs italic opacity-35">—</span>,
     },
     {
       key: "backdated", label: "Backdated Entry", minWidth: "min-w-[100px] sm:min-w-[120px]", defaultHidden: true,
       sortValue: (l) => l.auto_date_enabled === false && l.enquiry_date ? new Date(l.enquiry_date).getTime() : 0,
+      filterValue: (l) => l.auto_date_enabled === false && l.enquiry_date ? new Date(l.enquiry_date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : null,
       render: (l, { isDark: dk, formatDate: fd }) =>
         l.auto_date_enabled === false && l.enquiry_date
           ? <span className={`inline-flex items-center px-2 py-[3px] rounded-md text-[9px] sm:text-[10px] font-bold border whitespace-nowrap ${dk ? "bg-amber-500/10 text-amber-300 border-amber-500/25" : "bg-amber-50 text-amber-700 border-amber-200"}`}>{fd(l.enquiry_date).split(",")[0]}</span>

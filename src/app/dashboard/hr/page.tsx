@@ -569,7 +569,7 @@ export default function HRDashboard() {
                                       >
                                         {isSorted
                                           ? wfColSort?.direction === "asc" ? <FaSortAlphaDown className="w-2.5 h-2.5" /> : <FaSortAlphaUp className="w-2.5 h-2.5" />
-                                          : <FaFilter className="w-2 h-2" />}
+                                          : <FaFilter className="w-2 h-2 cursor-pointer" />}
                                       </span>
                                       {isFiltered && <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF] inline-block" />}
                                     </button>

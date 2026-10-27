@@ -662,7 +662,7 @@ export function ColumnSelector({
                         </span>
                         <button
                             onClick={onReset}
-                            className="text-[10px] font-bold text-[#00AEEF] hover:underline"
+                            className="text-[10px] font-bold text-[#00AEEF] hover:underline cursor-pointer"
                         >
                             Reset
                         </button>
@@ -1110,7 +1110,7 @@ export function ColumnFilterDropdown({
                                 selectAllFiltered();
                             }
                         }}
-                        className={`text-[10px] font-bold ${isDark ? "text-[#00AEEF] hover:text-[#7dd3fc]" : "text-[#0284c7] hover:text-[#0369a1]"
+                        className={`text-[10px] cursor-pointer font-bold ${isDark ? "text-[#00AEEF] hover:text-[#7dd3fc]" : "text-[#0284c7] hover:text-[#0369a1]"
                             }`}
                     >
                         {allMatchSelected ? "Deselect all" : "Select all"}
@@ -1118,7 +1118,7 @@ export function ColumnFilterDropdown({
                     {someSelected && (
                         <button
                             onClick={clearAll}
-                            className={`text-[10px] font-bold ${isDark ? "text-gray-400 hover:text-gray-200" : "text-gray-400 hover:text-gray-700"
+                            className={`text-[10px] font-bold cursor-pointer ${isDark ? "text-gray-400 hover:text-gray-200" : "text-gray-400 hover:text-gray-700"
                                 }`}
                         >
                             Clear ({draft.size})
@@ -1168,7 +1168,7 @@ export function ColumnFilterDropdown({
                     }`}>
                     <button
                         onClick={handleCancel}
-                        className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-colors border ${isDark
+                        className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer border ${isDark
                             ? "border-white/10 text-gray-300 hover:bg-white/[0.07]"
                             : "border-gray-200 text-gray-600 hover:bg-gray-100"
                             }`}
@@ -1177,7 +1177,7 @@ export function ColumnFilterDropdown({
                     </button>
                     <button
                         onClick={handleOk}
-                        className="px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-[#9E217B] text-white hover:bg-[#b82b91] transition-colors"
+                        className="px-3 py-1.5 rounded-lg text-[11px] font-semibold cursor-pointer bg-[#9E217B] text-white hover:bg-[#b82b91] transition-colors"
                     >
                         OK
                         {draft.size > 0 && (

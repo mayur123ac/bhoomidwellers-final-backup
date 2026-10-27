@@ -837,7 +837,7 @@ export default function SiteVisitOverview({
                       color: showFilters || hasFilters ? "#d946a8" : isDark ? "#aaa" : "#6B7280",
                       border: showFilters || hasFilters ? "1px solid rgba(158,33,123,0.35)" : isDark ? "1px solid #333" : "1px solid #E5E7EB",
                     }}>
-                    <FaFilter style={{ fontSize: 10 }} /> Filter {hasFilters ? "●" : ""}
+                    <FaFilter style={{ fontSize: 10, cursor: "pointer" }} /> Filter {hasFilters ? "●" : ""}
                   </button>
                   <div className="flex flex-1 sm:flex-none rounded-md sm:rounded-xl overflow-hidden" style={{ border: isDark ? "1px solid #333" : "1px solid #E5E7EB" }}>
                     {(["month", "week", "day"] as const).map(v => (

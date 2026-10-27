@@ -683,7 +683,7 @@ export default function EmployeesPage() {
     if (activeSection === "callers") fetchCallerData();
   }, [activeSection]);
 
-  const handleLogout = () => { cleanupPushOnLogout().catch(() => {}); clearCrmSession(); router.replace("/"); };
+  const handleLogout = () => { cleanupPushOnLogout().catch(() => { }); clearCrmSession(); router.replace("/"); };
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   // ── Employee API ──
   // ✅ Add error feedback to fetchRoles
@@ -1552,22 +1552,20 @@ export default function EmployeesPage() {
                               <button
                                 type="button"
                                 onClick={e => { e.stopPropagation(); setEmpOpenFilterCol(prev => prev === col.key ? null : col.key); }}
-                                className={`group flex items-center gap-1.5 whitespace-nowrap transition-colors ${
-                                  isActive ? "" : isDark ? "text-[#8E8E93] hover:text-gray-200" : "text-[#8E8E93] hover:text-gray-700"
-                                }`}
+                                className={`group flex items-center gap-1.5 whitespace-nowrap transition-colors ${isActive ? "" : isDark ? "text-[#8E8E93] hover:text-gray-200" : "text-[#8E8E93] hover:text-gray-700"
+                                  }`}
                                 style={isActive ? { color: "#007AFF" } : undefined}
                                 title={`Filter / Sort by ${col.label}`}
                               >
                                 {col.label}
                                 <span
-                                  className={`inline-flex items-center justify-center w-4 h-4 rounded transition-colors ${
-                                    isActive ? "" : isDark ? "text-[#48484A] group-hover:text-gray-400" : "text-gray-300 group-hover:text-gray-500"
-                                  }`}
+                                  className={`inline-flex items-center justify-center w-4 h-4 rounded transition-colors ${isActive ? "" : isDark ? "text-[#48484A] group-hover:text-gray-400" : "text-gray-300 group-hover:text-gray-500"
+                                    }`}
                                   style={isActive ? { backgroundColor: "#007AFF22", color: "#007AFF" } : undefined}
                                 >
                                   {isSorted
                                     ? empColSort?.direction === "asc" ? <FaSortAlphaDown className="w-2.5 h-2.5" /> : <FaSortAlphaUp className="w-2.5 h-2.5" />
-                                    : <FaFilter className="w-2 h-2" />}
+                                    : <FaFilter className="w-2 h-2 cursor-pointer" />}
                                 </span>
                                 {isFiltered && <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF] inline-block" />}
                               </button>
@@ -1698,11 +1696,10 @@ export default function EmployeesPage() {
                                         }
                                       } catch { }
                                     }}
-                                    className={`relative inline-flex h-[22px] w-[40px] items-center rounded-full transition-colors cursor-pointer ${
-                                      isOn
-                                        ? "bg-[#34C759]"
-                                        : isDark ? "bg-[#48484A]" : "bg-[#D1D1D6]"
-                                    }`}
+                                    className={`relative inline-flex h-[22px] w-[40px] items-center rounded-full transition-colors cursor-pointer ${isOn
+                                      ? "bg-[#34C759]"
+                                      : isDark ? "bg-[#48484A]" : "bg-[#D1D1D6]"
+                                      }`}
                                     title={isOn ? "Exception enabled — can receive leads without submitting sales form" : "Exception disabled — must submit sales form before next lead"}
                                   >
                                     <span className={`inline-block h-[18px] w-[18px] rounded-full bg-white shadow-sm transition-transform ${isOn ? "translate-x-[20px]" : "translate-x-[2px]"}`} />
@@ -2135,22 +2132,20 @@ export default function EmployeesPage() {
                                     <button
                                       type="button"
                                       onClick={e => { e.stopPropagation(); setCsfOpenFilterCol(prev => prev === col.key ? null : col.key); }}
-                                      className={`group flex items-center gap-1.5 whitespace-nowrap transition-colors ${
-                                        isActive ? "" : isDark ? "text-gray-500 hover:text-gray-200" : "text-[#6B7280] hover:text-gray-700"
-                                      }`}
+                                      className={`group flex items-center gap-1.5 whitespace-nowrap transition-colors ${isActive ? "" : isDark ? "text-gray-500 hover:text-gray-200" : "text-[#6B7280] hover:text-gray-700"
+                                        }`}
                                       style={isActive ? { color: "#007AFF" } : undefined}
                                       title={`Filter / Sort by ${col.label}`}
                                     >
                                       {col.label}
                                       <span
-                                        className={`inline-flex items-center justify-center w-4 h-4 rounded transition-colors ${
-                                          isActive ? "" : isDark ? "text-[#48484A] group-hover:text-gray-400" : "text-gray-300 group-hover:text-gray-500"
-                                        }`}
+                                        className={`inline-flex items-center justify-center w-4 h-4 rounded transition-colors ${isActive ? "" : isDark ? "text-[#48484A] group-hover:text-gray-400" : "text-gray-300 group-hover:text-gray-500"
+                                          }`}
                                         style={isActive ? { backgroundColor: "#007AFF22", color: "#007AFF" } : undefined}
                                       >
                                         {isSorted
                                           ? csfColSort?.direction === "asc" ? <FaSortAlphaDown className="w-2.5 h-2.5" /> : <FaSortAlphaUp className="w-2.5 h-2.5" />
-                                          : <FaFilter className="w-2 h-2" />}
+                                          : <FaFilter className="w-2 h-2 cursor-pointer" />}
                                       </span>
                                       {isFiltered && <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF] inline-block" />}
                                     </button>
@@ -2276,22 +2271,20 @@ export default function EmployeesPage() {
                                   <button
                                     type="button"
                                     onClick={e => { e.stopPropagation(); setAclOpenFilterCol(prev => prev === col.key ? null : col.key); }}
-                                    className={`group flex items-center gap-1.5 whitespace-nowrap transition-colors ${
-                                      isActive ? "" : isDark ? "text-gray-500 hover:text-gray-200" : "text-[#6B7280] hover:text-gray-700"
-                                    }`}
+                                    className={`group flex items-center gap-1.5 whitespace-nowrap transition-colors ${isActive ? "" : isDark ? "text-gray-500 hover:text-gray-200" : "text-[#6B7280] hover:text-gray-700"
+                                      }`}
                                     style={isActive ? { color: "#007AFF" } : undefined}
                                     title={`Filter / Sort by ${col.label}`}
                                   >
                                     {col.label}
                                     <span
-                                      className={`inline-flex items-center justify-center w-4 h-4 rounded transition-colors ${
-                                        isActive ? "" : isDark ? "text-[#48484A] group-hover:text-gray-400" : "text-gray-300 group-hover:text-gray-500"
-                                      }`}
+                                      className={`inline-flex items-center justify-center w-4 h-4 rounded transition-colors ${isActive ? "" : isDark ? "text-[#48484A] group-hover:text-gray-400" : "text-gray-300 group-hover:text-gray-500"
+                                        }`}
                                       style={isActive ? { backgroundColor: "#007AFF22", color: "#007AFF" } : undefined}
                                     >
                                       {isSorted
                                         ? aclColSort?.direction === "asc" ? <FaSortAlphaDown className="w-2.5 h-2.5" /> : <FaSortAlphaUp className="w-2.5 h-2.5" />
-                                        : <FaFilter className="w-2 h-2" />}
+                                        : <FaFilter className="w-2 h-2 cursor-pointer" />}
                                     </span>
                                     {isFiltered && <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF] inline-block" />}
                                   </button>

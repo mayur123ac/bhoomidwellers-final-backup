@@ -1533,6 +1533,7 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
                               relative inline-flex items-center justify-center
                               w-[18px] h-[18px] rounded-[5px]
                               transition-all duration-150
+                              cursor-pointer
                               focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#d946a8]
                               ${isOpen
                                                                 ? isDark
@@ -1548,7 +1549,7 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
                                                             }
                             `}
                                                     >
-                                                        <FaFilter className="text-[7px]" />
+                                                        <FaFilter className="text-[7px] cursor-pointer" />
 
                                                         {/* Active filter dot */}
                                                         {hasColFilter && (
