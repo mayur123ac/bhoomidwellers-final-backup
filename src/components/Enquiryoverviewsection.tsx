@@ -1280,11 +1280,11 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
 
                         <ToolbarButton
                             onClick={() =>
-                                downloadCSV(allLeads.map(formatLeadForExport), "Overall_Enquiries.csv")
+                                downloadCSV(sortedLeads.map(formatLeadForExport), "Overall_Enquiries.csv")
                             }
                             icon={<FaDownload className="text-[10px] sm:text-[11px]" />}
                             isDark={isDark}
-                            title="Download all leads as CSV"
+                            title="Download filtered leads as CSV"
                         >
                             <span className="hidden sm:inline">Export</span>
                         </ToolbarButton>

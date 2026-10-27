@@ -1,4 +1,4 @@
-﻿//LiveActivityView.tsx
+//LiveActivityView.tsx
 "use client";
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -640,35 +640,38 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
                       {LIVE_FILTER_COLS.map((col) => {
                         const isFiltered = !!liveColFilters[col.key];
                         return (
-                          <FilterableColumnHeader
-                            key={col.key}
-                            column={col}
-                            isFiltered={isFiltered}
-                            colSort={liveColSort}
-                            isOpen={liveOpenFilterCol === col.key}
-                            onToggle={() => setLiveOpenFilterCol(prev => prev === col.key ? null : col.key)}
-                            isDark={isDark}
-                            accent="#007AFF"
-                            className="px-4 py-3"
-                          >
-                            {liveOpenFilterCol === col.key && (
-                              <ColumnFilterDropdown
-                                column={col}
-                                data={liveColFilterData}
-                                activeFilter={liveColFilters[col.key] ?? null}
-                                activeSort={liveColSort?.key === col.key ? liveColSort : null}
-                                onApply={(vals) => liveApplyFilter(col.key, vals)}
-                                onSort={(dir) => liveApplySort(col.key, dir)}
-                                onClose={() => setLiveOpenFilterCol(null)}
-                                isDark={isDark}
-                                accent="#007AFF"
-                              />
+                          <React.Fragment key={col.key}>
+                            <FilterableColumnHeader
+                              column={col}
+                              isFiltered={isFiltered}
+                              colSort={liveColSort}
+                              isOpen={liveOpenFilterCol === col.key}
+                              onToggle={() => setLiveOpenFilterCol(prev => prev === col.key ? null : col.key)}
+                              isDark={isDark}
+                              accent="#007AFF"
+                              className="px-4 py-3"
+                            >
+                              {liveOpenFilterCol === col.key && (
+                                <ColumnFilterDropdown
+                                  column={col}
+                                  data={liveColFilterData}
+                                  activeFilter={liveColFilters[col.key] ?? null}
+                                  activeSort={liveColSort?.key === col.key ? liveColSort : null}
+                                  onApply={(vals) => liveApplyFilter(col.key, vals)}
+                                  onSort={(dir) => liveApplySort(col.key, dir)}
+                                  onClose={() => setLiveOpenFilterCol(null)}
+                                  isDark={isDark}
+                                  accent="#007AFF"
+                                />
+                              )}
+                            </FilterableColumnHeader>
+                            {col.key === "mark_day_complete_time" && visibleColumns.todayWorkingHours && (
+                              <th className="px-4 py-3">Working Hours</th>
                             )}
-                          </FilterableColumnHeader>
+                          </React.Fragment>
                         );
                       })}
                       {visibleColumns.liveTimer && <th className="px-4 py-3">Live Timer</th>}
-                      {visibleColumns.todayWorkingHours && <th className="px-4 py-3">Working Hours</th>}
                       <th className="px-4 py-3">Attendance</th>
                     </tr>
                   </thead>
@@ -730,6 +733,38 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
                                       : <span className={isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}>—</span>}
                                 </td>
                               )}
+                              {visibleColumns.todayWorkingHours && (
+                                <td className={`px-4 py-3 font-mono font-medium tracking-tight text-[13px] ${isDark ? "text-[#BF5AF2]" : "text-[#AF52DE]"}`}>
+                                  {(() => {
+                                    // Working Hours: uses period-based attendance_span_seconds
+                                    // from the server (sum of completed periods + active period
+                                    // elapsed). For active single-period days, a client-side
+                                    // live timer ticks from attendance_marked_at. For
+                                    // multi-period active days, the server value refreshes
+                                    // via realtime events.
+                                    if (s.attendance_marked_at) {
+                                      if (s.attendance_completed) {
+                                        // Day complete — frozen span from server
+                                        const span = Number(s.attendance_span_seconds);
+                                        return <span>{formatDurationHM(span >= 0 ? span : 0)}</span>;
+                                      }
+                                      // Active attendance
+                                      if (Number(s.total_periods) > 1) {
+                                        // Multi-period: use server-computed total (refreshed via realtime)
+                                        const span = Number(s.attendance_span_seconds);
+                                        return <span>{formatDurationHM(span >= 0 ? span : 0)}</span>;
+                                      }
+                                      // Single period: live timer from mark time
+                                      const markedMs = new Date(s.attendance_marked_at).getTime();
+                                      if (!isNaN(markedMs)) {
+                                        const sec = Math.floor((now - markedMs) / 1000);
+                                        return <span>{formatDurationHM(sec >= 0 ? sec : 0)}</span>;
+                                      }
+                                    }
+                                    return <span className={isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}>—</span>;
+                                  })()}
+                                </td>
+                              )}
                               {visibleColumns.loginDate && (
                                 <td className={`px-4 py-3 font-medium text-[12px] tracking-tight ${isDark ? "text-[#EBEBF5]/80" : "text-[#333333]"}`}>
                                   {s.session_start ? new Date(s.session_start).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }) : '-'}
@@ -786,38 +821,7 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
                                   </button>
                                 </td>
                               )}
-                              {visibleColumns.todayWorkingHours && (
-                                <td className={`px-4 py-3 font-mono font-medium tracking-tight text-[13px] ${isDark ? "text-[#BF5AF2]" : "text-[#AF52DE]"}`}>
-                                  {(() => {
-                                    // Working Hours: uses period-based attendance_span_seconds
-                                    // from the server (sum of completed periods + active period
-                                    // elapsed). For active single-period days, a client-side
-                                    // live timer ticks from attendance_marked_at. For
-                                    // multi-period active days, the server value refreshes
-                                    // via realtime events.
-                                    if (s.attendance_marked_at) {
-                                      if (s.attendance_completed) {
-                                        // Day complete — frozen span from server
-                                        const span = Number(s.attendance_span_seconds);
-                                        return <span>{formatDurationHM(span >= 0 ? span : 0)}</span>;
-                                      }
-                                      // Active attendance
-                                      if (Number(s.total_periods) > 1) {
-                                        // Multi-period: use server-computed total (refreshed via realtime)
-                                        const span = Number(s.attendance_span_seconds);
-                                        return <span>{formatDurationHM(span >= 0 ? span : 0)}</span>;
-                                      }
-                                      // Single period: live timer from mark time
-                                      const markedMs = new Date(s.attendance_marked_at).getTime();
-                                      if (!isNaN(markedMs)) {
-                                        const sec = Math.floor((now - markedMs) / 1000);
-                                        return <span>{formatDurationHM(sec >= 0 ? sec : 0)}</span>;
-                                      }
-                                    }
-                                    return <span className={isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}>—</span>;
-                                  })()}
-                                </td>
-                              )}
+
                               <td className={`px-4 py-3 text-[12px] font-semibold tracking-tight`}>
                                 <div className="flex items-center gap-1.5 flex-wrap">
                                   {s.attendance_status === 'Present' && <span className={isDark ? "text-[#32D74B]" : "text-[#34C759]"}>Present</span>}

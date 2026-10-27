@@ -2486,8 +2486,8 @@ function SalesManagerView({
                       "Status": l.status || "Assigned",
                       "Lost": l.is_lost_lead ? "Yes" : "No",
                       "Interest": l.leadInterestStatus || "",
-                      "Date Created": l.created_at || "",
-                      "Site Visit": l.mongoVisitDate || "",
+                      "Date Created": l.created_at ? new Date(l.created_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "",
+                      "Site Visit": l.mongoVisitDate ? new Date(l.mongoVisitDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "",
                     })), "SM_Leads_Database.csv")}
                     variant="export"
                     icon={<FaDownload className="text-[11px]" />}

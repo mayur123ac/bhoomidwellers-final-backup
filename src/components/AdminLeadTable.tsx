@@ -56,6 +56,9 @@ export type AdminLeadTableProps = {
   onRowClick?: (lead: Lead) => void;
   /** Extra elements rendered in the toolbar row, after the column selector. */
   toolbarExtra?: React.ReactNode;
+  /** Ref that receives the final filtered+sorted rows (after column filters).
+   *  Lets the parent export exactly the data the table is rendering. */
+  filteredRef?: React.MutableRefObject<Lead[]>;
 };
 
 /* ───────── helpers ───────── */
@@ -94,6 +97,7 @@ export default function AdminLeadTable({
   formatDate,
   onRowClick,
   toolbarExtra,
+  filteredRef,
 }: AdminLeadTableProps) {
   /* ── column visibility ── */
   const [hiddenCols, setHiddenCols] = useState<Set<string>>(
@@ -181,6 +185,11 @@ export default function AdminLeadTable({
     result = sortRows(result, getDisplayValue);
     return result;
   }, [sorted, filterRows, sortRows, columns]);
+
+  // Surface filtered data to parent for export
+  useEffect(() => {
+    if (filteredRef) filteredRef.current = colFiltered;
+  }, [colFiltered, filteredRef]);
 
   /* ── ctx ── */
   const ctx: ALTCtx = { theme, isDark, formatDate };

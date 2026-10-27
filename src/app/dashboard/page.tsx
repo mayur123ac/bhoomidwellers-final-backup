@@ -2547,7 +2547,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                 </div>
                 <div className="flex items-center justify-between sm:justify-start gap-3">
                   <button
-                    onClick={() => downloadCSV(activeSiteHeadLeads.map(formatLeadForExport), `${selectedSiteHeadName}_Leads.csv`)}
+                    onClick={() => downloadCSV(shFinalLeads.map(formatLeadForExport), `${selectedSiteHeadName}_Leads.csv`)}
                     className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 text-[11px] sm:text-xs font-bold border rounded-lg transition-colors hover:opacity-80 whitespace-nowrap ${isDark ? 'bg-[#222] border-[#333] text-white' : 'bg-white border-indigo-200 text-indigo-600'}`}
                   >
                     <FaDownload size={12} /> Export
@@ -2765,7 +2765,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                 </div>
                 <div className="flex flex-wrap items-center justify-between sm:justify-start gap-2 sm:gap-3">
                   <button
-                    onClick={() => downloadCSV(recepAllLeads.map(formatLeadForExport), `${selectedReceptionistName}_Leads.csv`)}
+                    onClick={() => downloadCSV(rcFinalLeads.map(formatLeadForExport), `${selectedReceptionistName}_Leads.csv`)}
                     className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 text-[11px] sm:text-xs font-bold border rounded-lg transition-colors hover:opacity-80 whitespace-nowrap ${isDark ? 'bg-[#222] border-[#333] text-white' : 'bg-white border-indigo-200 text-indigo-600'}`}
                   >
                     <FaDownload size={12} /> Export
@@ -2973,7 +2973,7 @@ function DashboardOverview({ managers, siteHeads, allLeads, isLoading, user, the
                 </div>
                 <div className="flex items-center justify-between sm:justify-start gap-3">
                   <button
-                    onClick={() => downloadCSV(activeManagerLeads.map(formatLeadForExport), `${selectedManagerName}_Leads.csv`)}
+                    onClick={() => downloadCSV(mgFinalLeads.map(formatLeadForExport), `${selectedManagerName}_Leads.csv`)}
                     className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 text-[11px] sm:text-xs font-bold border rounded-lg transition-colors hover:opacity-80 whitespace-nowrap ${isDark ? 'bg-[#222] border-[#333] text-white' : 'bg-white border-indigo-200 text-indigo-600'}`}
                   >
                     <FaDownload size={12} /> Export
@@ -3251,6 +3251,7 @@ function useInventoryDeepLink({ openLeadId, allLeads, onOpenLeadHandled, open }:
 }
 
 function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, refetch, appendFollowUp, reconcileFollowUp, removeFollowUp, theme, isDark, openLeadId, onOpenLeadHandled, onDrillBack }: any) {
+  const smTableFilteredRef = useRef<any[]>([]);
   const canDeleteFollowUps = useFollowUpDeletionPermission(adminUser?.role);
   const [deletingFollowUpId, setDeletingFollowUpId] = useState<string | null>(null);
   const [confirmDeleteFollowUpId, setConfirmDeleteFollowUpId] = useState<string | null>(null);
@@ -4187,7 +4188,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                         </>
                       )}
                       <button
-                        onClick={() => downloadCSV((activeSection === "assignedTable" ? assignedLeads : closedLeads).map(formatLeadForExport), `SiteHead_${activeSection}.csv`)}
+                        onClick={() => downloadCSV(smTableFilteredRef.current.map(formatLeadForExport), `SM_${activeSection}.csv`)}
                         className={`flex items-center gap-1.5 sm:gap-2 px-2.5 py-1.5 sm:px-4 sm:py-2 text-[10px] sm:text-xs font-bold border rounded-lg transition-colors hover:opacity-80 ${isDark ? 'bg-[#222] border-[#333] text-white' : 'bg-white border-indigo-200 text-indigo-600'}`}
                       >
                         <FaDownload size={12} className="sm:w-[14px] sm:h-[14px]" /> Export to CSV
@@ -4202,6 +4203,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                     isDark={isDark}
                     isLoading={isLoading}
                     formatDate={formatDate}
+                    filteredRef={smTableFilteredRef}
                     onRowClick={(lead) => { isDrillEntryRef.current = false; setSelectedLead(lead); setSubView("detail"); prefillSalesForm(lead); setShowSalesForm(false); setShowLoanForm(false); }}
                   />
 
@@ -4871,6 +4873,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
 // ADMIN SITE HEAD VIEW
 // ============================================================================
 function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUser, refetch, appendFollowUp, reconcileFollowUp, removeFollowUp, theme, isDark, onDrillBack }: any) {
+  const shTableFilteredRef = useRef<any[]>([]);
   const canDeleteFollowUps = useFollowUpDeletionPermission(adminUser?.role);
   const [deletingFollowUpId, setDeletingFollowUpId] = useState<string | null>(null);
   const [confirmDeleteFollowUpId, setConfirmDeleteFollowUpId] = useState<string | null>(null);
@@ -5777,7 +5780,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                         </>
                       )}
                       <button
-                        onClick={() => downloadCSV((activeSection === "assignedTable" ? assignedLeads : closedLeads).map(formatLeadForExport), `SiteHead_${activeSection}.csv`)}
+                        onClick={() => downloadCSV(shTableFilteredRef.current.map(formatLeadForExport), `SiteHead_${activeSection}.csv`)}
                         className={`flex items-center gap-1.5 sm:gap-2 px-2.5 py-1.5 sm:px-4 sm:py-2 text-[10px] sm:text-xs font-bold border rounded-lg transition-colors hover:opacity-80 ${isDark ? 'bg-[#222] border-[#333] text-white' : 'bg-white border-indigo-200 text-indigo-600'}`}
                       >
                         <FaDownload size={12} className="sm:w-[14px] sm:h-[14px]" /> Export to CSV
@@ -5792,6 +5795,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                     isDark={isDark}
                     isLoading={isLoading}
                     formatDate={formatDate}
+                    filteredRef={shTableFilteredRef}
                     onRowClick={(lead) => { isDrillEntryRef.current = false; setSelectedLead(lead); setSubView("detail"); prefillSalesForm(lead); setShowSalesForm(false); setShowLoanForm(false); }}
                   />
 
@@ -6350,6 +6354,9 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
 // RECEPTIONIST VIEW
 // ============================================================================
 function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refetch, appendFollowUp, reconcileFollowUp, removeFollowUp, theme, isDark, adminUser }: any) {
+  const recEnqFilteredRef = useRef<any[]>([]);
+  const recAssignFilteredRef = useRef<any[]>([]);
+  const recClosedFilteredRef = useRef<any[]>([]);
   const canDeleteFollowUps = useFollowUpDeletionPermission(adminUser?.role);
   const [deletingFollowUpId, setDeletingFollowUpId] = useState<string | null>(null);
   const [confirmDeleteFollowUpId, setConfirmDeleteFollowUpId] = useState<string | null>(null);
@@ -8004,7 +8011,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                               <p className={`text-[10px] sm:text-xs ${theme.textFaint}`}>All walk-in forms in the system — {allEnquiries.length} total</p>
                             </div>
                           </div>
-                          <button onClick={() => downloadCSV(allEnquiries.map(formatLeadForExport), "All_Enquiries.csv")} className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-[10px] sm:text-xs font-bold border rounded-lg hover:opacity-80 transition-colors ${isDark ? 'bg-[#222] border-[#333] text-white' : 'bg-white border-indigo-200 text-[#9E217B]'}`}><FaDownload /> Export</button>
+                          <button onClick={() => downloadCSV(recEnqFilteredRef.current.map(formatLeadForExport), "All_Enquiries.csv")} className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-[10px] sm:text-xs font-bold border rounded-lg hover:opacity-80 transition-colors ${isDark ? 'bg-[#222] border-[#333] text-white' : 'bg-white border-indigo-200 text-[#9E217B]'}`}><FaDownload /> Export</button>
                         </div>
                         <AdminLeadTable
                           leads={allEnquiries}
@@ -8014,6 +8021,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                           isDark={isDark}
                           isLoading={isLoading}
                           formatDate={formatDate}
+                          filteredRef={recEnqFilteredRef}
                         />
                       </div>
                     )}
@@ -8026,7 +8034,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                             <h3 className={`font-bold text-sm sm:text-base ${theme.text}`}>Assigned Lead Table</h3>
                             <p className={`text-[10px] sm:text-xs ${theme.textFaint}`}>Leads assigned to {recepName}</p>
                           </div>
-                          <button onClick={() => downloadCSV((assignedTableFilter === "working" ? assignedLeads.filter((l: any) => l.status !== "Closing" && l.status !== "Closed" && !l.closingDate) : assignedLeads).map(formatLeadForExport), "Assigned_Leads.csv")} className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-[10px] sm:text-xs font-bold border rounded-lg hover:opacity-80 transition-colors ${isDark ? 'bg-[#222] border-[#333] text-white' : 'bg-white border-indigo-200 text-[#9E217B]'}`}><FaDownload /> Export</button>
+                          <button onClick={() => downloadCSV(recAssignFilteredRef.current.map(formatLeadForExport), "Assigned_Leads.csv")} className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-[10px] sm:text-xs font-bold border rounded-lg hover:opacity-80 transition-colors ${isDark ? 'bg-[#222] border-[#333] text-white' : 'bg-white border-indigo-200 text-[#9E217B]'}`}><FaDownload /> Export</button>
                           <div className={`ml-auto flex items-center gap-1 sm:gap-2 p-1 rounded-xl border ${theme.tableWrap}`}>
                             <button onClick={() => setAssignedTableFilter("working")} className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-[10px] sm:text-xs font-bold transition-all cursor-pointer ${assignedTableFilter === "working" ? "bg-[#9E217B] text-white shadow-md" : `${theme.textMuted} hover:opacity-80`}`}>
                               🔄 Working Leads <span className={`ml-1 sm:ml-1.5 text-[9px] px-1 sm:px-1.5 py-0.5 rounded-full font-black ${assignedTableFilter === "working" ? "bg-white/20 text-white" : isDark ? "bg-[#333] text-gray-300" : "bg-gray-100 text-gray-600"}`}>{assignedLeads.filter((l: any) => l.status !== "Closing" && l.status !== "Closed" && !l.closingDate).length}</span>
@@ -8053,6 +8061,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                           isDark={isDark}
                           isLoading={isLoading}
                           formatDate={formatDate}
+                          filteredRef={recAssignFilteredRef}
                           onRowClick={(lead) => { setIsEnquiryView(false); setSelectedLead(lead); setSubView("detail"); prefillSalesForm(lead); setShowSalesForm(false); setShowLoanForm(false); }}
                         />
                       </div>
@@ -8066,7 +8075,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                           <span className="text-base sm:text-lg">✅</span>
                           <div><h3 className={`font-bold text-sm sm:text-base ${theme.text}`}>Closed Leads by Receptionist</h3><p className={`text-[10px] sm:text-xs ${theme.textFaint}`}>Leads closed by {recepName}</p></div>
                           <div className="ml-auto flex items-center gap-2 sm:gap-3">
-                            <button onClick={() => downloadCSV(closedLeads.map(formatLeadForExport), "Closed_Leads.csv")} className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-[10px] sm:text-xs font-bold border rounded-lg hover:opacity-80 transition-colors ${isDark ? 'bg-[#222] border-[#333] text-white' : 'bg-white border-indigo-200 text-[#9E217B]'}`}><FaDownload /> Export</button>
+                            <button onClick={() => downloadCSV(recClosedFilteredRef.current.map(formatLeadForExport), "Closed_Leads.csv")} className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-[10px] sm:text-xs font-bold border rounded-lg hover:opacity-80 transition-colors ${isDark ? 'bg-[#222] border-[#333] text-white' : 'bg-white border-indigo-200 text-[#9E217B]'}`}><FaDownload /> Export</button>
                             <span className={`text-[10px] sm:text-xs px-2 sm:px-3 py-1 rounded-full border font-bold ${isDark ? "text-yellow-400 border-yellow-500/30 bg-yellow-500/10" : "text-amber-700 border-amber-200 bg-amber-50"}`}>{closedLeads.length} closed</span>
                           </div>
                         </div>
@@ -8078,6 +8087,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                           isDark={isDark}
                           isLoading={isLoading}
                           formatDate={formatDate}
+                          filteredRef={recClosedFilteredRef}
                           onRowClick={(lead) => { setIsEnquiryView(false); setSelectedLead(lead); setSubView("detail"); prefillSalesForm(lead); setShowSalesForm(false); setShowLoanForm(false); }}
                         />
                       </div>
