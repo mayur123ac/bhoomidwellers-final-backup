@@ -605,14 +605,15 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
                             <span className={`absolute top-[2px] left-[2px] w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-300 ease-in-out ${localTiming.flexible ? "translate-x-5" : "translate-x-0"}`} />
                           </button>
                         </div>
-                        <div className={`space-y-3 transition-opacity ${localTiming.flexible ? "opacity-50 pointer-events-none" : "opacity-100"}`}>
-                          <div>
+                        <div className="space-y-3">
+                          <div className={`transition-opacity ${localTiming.flexible ? "opacity-50 pointer-events-none" : "opacity-100"}`}>
                             <label className={`text-[11px] font-semibold uppercase tracking-wider mb-1 block ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>Login Time</label>
                             <input type="time" value={localTiming.loginTime} onChange={e => updateWorkingHours({ ...localTiming, loginTime: e.target.value })} disabled={localTiming.flexible} className={`w-full px-3 py-2 rounded-lg text-[13px] font-medium focus:outline-none focus:ring-2 focus:ring-[#007AFF] transition-all border ${isDark ? "bg-[#2C2C2E] border-[#38383A] text-white" : "bg-[#F2F2F7] border-[#E5E5EA] text-black"}`} />
                           </div>
                           <div>
                             <label className={`text-[11px] font-semibold uppercase tracking-wider mb-1 block ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>Logout Time</label>
-                            <input type="time" value={localTiming.logoutTime} onChange={e => updateWorkingHours({ ...localTiming, logoutTime: e.target.value })} disabled={localTiming.flexible} className={`w-full px-3 py-2 rounded-lg text-[13px] font-medium focus:outline-none focus:ring-2 focus:ring-[#007AFF] transition-all border ${isDark ? "bg-[#2C2C2E] border-[#38383A] text-white" : "bg-[#F2F2F7] border-[#E5E5EA] text-black"}`} />
+                            <input type="time" value={localTiming.logoutTime} onChange={e => updateWorkingHours({ ...localTiming, logoutTime: e.target.value })} className={`w-full px-3 py-2 rounded-lg text-[13px] font-medium focus:outline-none focus:ring-2 focus:ring-[#007AFF] transition-all border ${isDark ? "bg-[#2C2C2E] border-[#38383A] text-white" : "bg-[#F2F2F7] border-[#E5E5EA] text-black"}`} />
+                            {localTiming.flexible && <p className={`text-[10px] mt-1 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>Auto day-complete at this time</p>}
                           </div>
                         </div>
                         <button

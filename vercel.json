@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/attendance/auto-complete?mode=scheduled",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/attendance/auto-complete?mode=endofday",
       "schedule": "28 18 * * *"
     }
