@@ -38,6 +38,7 @@ import CrmUpdatesNotification from "@/components/CrmUpdatesNotification";
 import WhatsAppConversationPanel from "@/components/whatsapp/WhatsAppConversationPanel";
 import LostLeadModal from "@/components/LostLeadModal";
 import { updateLeadLostState, useLostLeadEvents } from "@/lib/lostLeadSync";
+import { useLeadFollowUpPolling, useMergeLeadFollowUps } from "@/lib/followUpSync";
 // The notification queue. Built and organization-scoped on the server — see
 // lib/notifications/feed.ts for why it is no longer derived in this file.
 import { useNotificationFeed, openNotificationLead, type CrmNotification } from "@/lib/hooks/useNotificationFeed";
@@ -1074,6 +1075,8 @@ export default function ReceptionistDashboard() {
   // Tracks which tab the back button should return to from the detail view.
   const [detailReturnTab, setDetailReturnTab] = useState<string>("recep-leads");
   const [selectedLead, setSelectedLead] = useState<any>(null);
+  const mergeLeadFollowUps = useMergeLeadFollowUps(setFollowUps);
+  useLeadFollowUpPolling(selectedLead?.id, mergeLeadFollowUps);
 
   // If the "assigned" tab is showing but there's no detail to display (e.g. the
   // cards sub-view), redirect to the return tab. Assigned Forms cards have been

@@ -66,7 +66,7 @@ import {
   updateLeadRestoreState,
   useLostLeadEvents,
 } from "@/lib/lostLeadSync";
-import { useFollowUpEvents, type FollowUpSSEPayload, type FollowUpReadSSEPayload, type FollowUpDeletedSSEPayload } from "@/lib/followUpSync";
+import { useFollowUpEvents, useLeadFollowUpPolling, useMergeLeadFollowUps, type FollowUpSSEPayload, type FollowUpReadSSEPayload, type FollowUpDeletedSSEPayload } from "@/lib/followUpSync";
 import { useFollowUpDeletionPermission } from "@/lib/hooks/useFollowUpDeletionPermission";
 import dynamic from "next/dynamic";
 import AttendanceView from "@/components/AttendanceView";
@@ -611,7 +611,9 @@ function useAdminData(onReminderDue?: (r: import("@/lib/followUpSync").ReminderS
 
   useFollowUpEvents(handleSSEFollowUp, handleSSEReadReceipt, fetchAdminData, handleSSEReminderDue, handleSSEFollowUpDeleted);
 
-  return { managers, receptionists, siteHeads, allLeads, followUps, fupsByLead, isLoading, refetch: fetchAdminData, appendFollowUp, reconcileFollowUp, removeFollowUp };
+  const mergeLeadFollowUps = useMergeLeadFollowUps(setFollowUps, setFupsByLead);
+
+  return { managers, receptionists, siteHeads, allLeads, followUps, fupsByLead, isLoading, refetch: fetchAdminData, appendFollowUp, reconcileFollowUp, removeFollowUp, mergeLeadFollowUps };
 }
 
 // ============================================================================
@@ -863,7 +865,7 @@ function AdminAtlasDashboardContent() {
   const [notifCount, setNotifCount] = useState(0);
   const theme = useMemo(() => buildTheme(isDark), [isDark]);
   const { overdueReminders, visible: showOverduePopup, dismissAll: dismissOverduePopup, markComplete: markReminderComplete, pushReminder } = useOverdueReminders();
-  const { managers, receptionists, siteHeads, allLeads, followUps, isLoading, refetch, appendFollowUp, reconcileFollowUp, removeFollowUp } = useAdminData(pushReminder);
+  const { managers, receptionists, siteHeads, allLeads, followUps, isLoading, refetch, appendFollowUp, reconcileFollowUp, removeFollowUp, mergeLeadFollowUps } = useAdminData(pushReminder);
 
   // ── Helper to get accurate Creator Name & Role ──
   const getCreatorInfo = (lead: any) => {
@@ -1466,7 +1468,7 @@ function AdminAtlasDashboardContent() {
             )
           )} */}
 
-          {activeView === "sales" && <AdminSalesView managers={managers} allLeads={allLeads} followUps={followUps} isLoading={isLoading} adminUser={user} refetch={refetch} appendFollowUp={appendFollowUp} reconcileFollowUp={reconcileFollowUp} removeFollowUp={removeFollowUp} theme={theme} isDark={isDark} openLeadId={invOpenLeadId} onOpenLeadHandled={() => setInvOpenLeadId(null)} onDrillBack={drillReturnRef.current ? () => { const rv = drillReturnRef.current!; drillReturnRef.current = null; setActiveView(rv); } : undefined} />}
+          {activeView === "sales" && <AdminSalesView managers={managers} allLeads={allLeads} followUps={followUps} isLoading={isLoading} adminUser={user} refetch={refetch} appendFollowUp={appendFollowUp} reconcileFollowUp={reconcileFollowUp} removeFollowUp={removeFollowUp} mergeLeadFollowUps={mergeLeadFollowUps} theme={theme} isDark={isDark} openLeadId={invOpenLeadId} onOpenLeadHandled={() => setInvOpenLeadId(null)} onDrillBack={drillReturnRef.current ? () => { const rv = drillReturnRef.current!; drillReturnRef.current = null; setActiveView(rv); } : undefined} />}
 
           {/* 👇 NEW: Passing onFocusModeChange to allow the internal component to trigger Fullscreen Focus Mode 👇 */}
           {activeView === "site_head" && (
@@ -1480,6 +1482,7 @@ function AdminAtlasDashboardContent() {
               appendFollowUp={appendFollowUp}
               reconcileFollowUp={reconcileFollowUp}
               removeFollowUp={removeFollowUp}
+              mergeLeadFollowUps={mergeLeadFollowUps}
               theme={theme}
               isDark={isDark}
               onFocusModeChange={setIsFocusMode}
@@ -1490,7 +1493,7 @@ function AdminAtlasDashboardContent() {
           {activeView === "site_visit_overview" && <SiteVisitOverview className="" managers={managers} receptionists={receptionists} allLeads={allLeads} siteHeads={siteHeads} adminUser={user} theme={theme} isDark={isDark} />}
 
           {activeView === "receptionist" && (
-            <ReceptionistView receptionists={receptionists} allLeads={allLeads} followUps={followUps} isLoading={isLoading} refetch={refetch} appendFollowUp={appendFollowUp} reconcileFollowUp={reconcileFollowUp} removeFollowUp={removeFollowUp} adminUser={user} theme={theme} isDark={isDark} />
+            <ReceptionistView receptionists={receptionists} allLeads={allLeads} followUps={followUps} isLoading={isLoading} refetch={refetch} appendFollowUp={appendFollowUp} reconcileFollowUp={reconcileFollowUp} removeFollowUp={removeFollowUp} mergeLeadFollowUps={mergeLeadFollowUps} adminUser={user} theme={theme} isDark={isDark} />
           )}
 
           {activeView === "attendance" && (
@@ -3296,7 +3299,7 @@ function useInventoryDeepLink({ openLeadId, allLeads, onOpenLeadHandled, open }:
   }, [openLeadId, allLeads]);
 }
 
-function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, refetch, appendFollowUp, reconcileFollowUp, removeFollowUp, theme, isDark, openLeadId, onOpenLeadHandled, onDrillBack }: any) {
+function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, refetch, appendFollowUp, reconcileFollowUp, removeFollowUp, mergeLeadFollowUps, theme, isDark, openLeadId, onOpenLeadHandled, onDrillBack }: any) {
   const smTableFilteredRef = useRef<any[]>([]);
   const canDeleteFollowUps = useFollowUpDeletionPermission(adminUser?.role);
   const [deletingFollowUpId, setDeletingFollowUpId] = useState<string | null>(null);
@@ -3347,6 +3350,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
   const [activeSection, setActiveSection] = useState<"assignedTable" | "closed">("assignedTable");
   const [subView, setSubView] = useState<"list" | "detail">("list");
   const [selectedLead, setSelectedLead] = useState<any>(null);
+  useLeadFollowUpPolling(selectedLead?.id, mergeLeadFollowUps);
   // Tracks whether the current detail view was entered via a cross-tab drill
   // (Inventory deep-link or Dashboard Overview). When true, the back button
   // navigates to the originating tab instead of the manager's leads list.
@@ -4918,7 +4922,7 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
 // ============================================================================
 // ADMIN SITE HEAD VIEW
 // ============================================================================
-function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUser, refetch, appendFollowUp, reconcileFollowUp, removeFollowUp, theme, isDark, onDrillBack }: any) {
+function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUser, refetch, appendFollowUp, reconcileFollowUp, removeFollowUp, mergeLeadFollowUps, theme, isDark, onDrillBack }: any) {
   const shTableFilteredRef = useRef<any[]>([]);
   const canDeleteFollowUps = useFollowUpDeletionPermission(adminUser?.role);
   const [deletingFollowUpId, setDeletingFollowUpId] = useState<string | null>(null);
@@ -4947,6 +4951,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
   const [activeSection, setActiveSection] = useState<"assignedTable" | "closed">("assignedTable");
   const [subView, setSubView] = useState<"list" | "detail">("list");
   const [selectedLead, setSelectedLead] = useState<any>(null);
+  useLeadFollowUpPolling(selectedLead?.id, mergeLeadFollowUps);
   const isDrillEntryRef = useRef(false);
   const [detailTab, setDetailTab] = useState<"personal" | "loan">("personal");
   const [isClosingModalOpen, setIsClosingModalOpen] = useState(false);
@@ -6399,7 +6404,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
 // ============================================================================
 // RECEPTIONIST VIEW
 // ============================================================================
-function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refetch, appendFollowUp, reconcileFollowUp, removeFollowUp, theme, isDark, adminUser }: any) {
+function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refetch, appendFollowUp, reconcileFollowUp, removeFollowUp, mergeLeadFollowUps, theme, isDark, adminUser }: any) {
   const recEnqFilteredRef = useRef<any[]>([]);
   const recAssignFilteredRef = useRef<any[]>([]);
   const recClosedFilteredRef = useRef<any[]>([]);
@@ -6431,6 +6436,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
   const [activeSection, setActiveSection] = useState<"enquiries" | "assignedTable" | "closed">("enquiries");
   const [subView, setSubView] = useState<"list" | "detail">("list");
   const [selectedLead, setSelectedLead] = useState<any>(null);
+  useLeadFollowUpPolling(selectedLead?.id, mergeLeadFollowUps);
   const followUpEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 

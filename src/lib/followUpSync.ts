@@ -6,7 +6,7 @@
 // Realtime Broadcast. The hook signature is preserved so every dashboard
 // caller works without changes.
 
-import { useEffect, useRef, useMemo } from "react";
+import { useEffect, useRef, useMemo, useCallback } from "react";
 import { useRealtimeOrg } from "./supabase/useRealtimeOrg";
 
 export type FollowUpSSEPayload = {
@@ -131,4 +131,85 @@ export function useFollowUpEvents(
     }, 2000);
     return () => clearTimeout(timer);
   }, []);
+}
+
+// ── Lead-scoped follow-up polling ───────────────────────────────────────────
+//
+// Reliable fallback for cross-user real-time delivery. When a lead's detail
+// panel is open, polls that single lead's follow-ups via the indexed
+// ?lead_id= query (0.03 ms on the server). Stops immediately when the lead
+// is deselected. This ensures new messages appear within a few seconds even
+// when Supabase Realtime is not delivering events.
+
+const LEAD_POLL_INTERVAL_MS = 8_000;
+
+/**
+ * Poll follow-ups for a single lead at a short interval.
+ *
+ * @param leadId   — the currently-selected lead's ID (null/undefined = off)
+ * @param onUpdate — called with (leadId, serverFollowUps[]) on each successful poll
+ */
+export function useLeadFollowUpPolling(
+  leadId: string | number | null | undefined,
+  onUpdate: (leadId: string, followUps: FollowUpSSEPayload[]) => void,
+) {
+  const onUpdateRef = useRef(onUpdate);
+  onUpdateRef.current = onUpdate;
+
+  useEffect(() => {
+    if (!leadId) return;
+    let active = true;
+    const lid = String(leadId);
+
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/followups?lead_id=${lid}`);
+        if (!res.ok || !active) return;
+        const json = await res.json();
+        if (active && json.success && Array.isArray(json.data)) {
+          onUpdateRef.current(lid, json.data);
+        }
+      } catch { /* network errors are harmless — next poll retries */ }
+    };
+
+    const timer = setInterval(poll, LEAD_POLL_INTERVAL_MS);
+    return () => { active = false; clearInterval(timer); };
+  }, [leadId]);
+}
+
+/**
+ * Build a stable merge callback for lead-scoped polling.
+ *
+ * Replaces the follow-ups for one lead with fresh server data while
+ * preserving any in-flight optimistic entries (_status === "sending").
+ */
+export function useMergeLeadFollowUps(
+  setFollowUps: React.Dispatch<React.SetStateAction<any[]>>,
+  setFupsByLead?: React.Dispatch<React.SetStateAction<Map<string, any[]>>>,
+) {
+  return useCallback((lid: string, serverData: any[]) => {
+    const serverIds = new Set(serverData.map((f: any) => String(f._id)));
+
+    setFollowUps(prev => {
+      const otherLeads = prev.filter(f => String(f.leadId) !== lid);
+      // Preserve optimistic entries not yet confirmed by the server
+      const optimistic = prev.filter(f =>
+        String(f.leadId) === lid &&
+        f._status === "sending" &&
+        !serverIds.has(String(f._id))
+      );
+      return [...otherLeads, ...serverData, ...optimistic];
+    });
+
+    setFupsByLead?.(prev => {
+      const next = new Map(prev);
+      const existing = next.get(lid) ?? [];
+      const optimistic = existing.filter((f: any) =>
+        f._status === "sending" &&
+        !serverIds.has(String(f._id))
+      );
+      next.set(lid, [...serverData, ...optimistic]);
+      return next;
+    });
+  }, [setFollowUps, setFupsByLead]);
 }

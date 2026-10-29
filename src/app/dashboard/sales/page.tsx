@@ -69,7 +69,7 @@ import CallingButtons from "@/components/CallingButtons";
 import ManualCallBubble from "@/components/ManualCallBubble";
 // import ActivityTimeline from "@/components/ActivityTimeline";
 import { handleMarkLostLead as markLostLeadApi, restoreLostLead, updateLeadLostState, useLostLeadEvents } from "@/lib/lostLeadSync";
-import { useFollowUpEvents, type FollowUpSSEPayload, type FollowUpReadSSEPayload, type FollowUpDeletedSSEPayload } from "@/lib/followUpSync";
+import { useFollowUpEvents, useLeadFollowUpPolling, useMergeLeadFollowUps, type FollowUpSSEPayload, type FollowUpReadSSEPayload, type FollowUpDeletedSSEPayload } from "@/lib/followUpSync";
 import { useFollowUpDeletionPermission } from "@/lib/hooks/useFollowUpDeletionPermission";
 
 import AttendanceTimerWidget from "@/components/AttendanceTimerWidget";
@@ -560,6 +560,9 @@ function useAdminData(onReminderDue?: (r: import("@/lib/followUpSync").ReminderS
 
   useFollowUpEvents(handleSSEFollowUp, handleSSEReadReceipt, fetchAdminData, handleSSEReminderDue, handleSSEFollowUpDeleted);
 
+  // Sales page derives fupsByLead via useMemo, so only setFollowUps is needed.
+  const mergeLeadFollowUps = useMergeLeadFollowUps(setFollowUps);
+
   const reconcileFollowUp = useCallback((clientMessageId: string, serverData: any | null) => {
     setFollowUps(prev => prev.map(f =>
       f._clientMessageId === clientMessageId
@@ -572,7 +575,7 @@ function useAdminData(onReminderDue?: (r: import("@/lib/followUpSync").ReminderS
     setFollowUps(prev => prev.filter(f => f._clientMessageId !== clientMessageId));
   }, []);
 
-  return { managers, receptionists, allLeads, followUps, isLoading, refetch: fetchAdminData, appendFollowUp, reconcileFollowUp, removeFollowUp };
+  return { managers, receptionists, allLeads, followUps, isLoading, refetch: fetchAdminData, appendFollowUp, reconcileFollowUp, removeFollowUp, mergeLeadFollowUps };
 }
 
 // ============================================================================
@@ -649,7 +652,7 @@ export default function SalesDashboard() {
   }, []);
 
   const { overdueReminders, visible: showOverduePopup, dismissAll: dismissOverduePopup, markComplete: markReminderComplete, pushReminder } = useOverdueReminders();
-  const { managers, receptionists, allLeads, followUps, isLoading, refetch, appendFollowUp, reconcileFollowUp, removeFollowUp } = useAdminData(pushReminder);
+  const { managers, receptionists, allLeads, followUps, isLoading, refetch, appendFollowUp, reconcileFollowUp, removeFollowUp, mergeLeadFollowUps } = useAdminData(pushReminder);
 
   // Settings → Additional Features. Read once here and passed down, rather than
   // called again inside SalesManagerView, so the two never disagree mid-render.
@@ -1097,7 +1100,7 @@ export default function SalesDashboard() {
           {(activeView === "sales" || activeView === "overview" || activeView === "forms" || activeView === "detail" || activeView === "closed-leads") ? (
             <SalesManagerView
               managers={managers} allLeads={allLeads} followUps={followUps}
-              isLoading={isLoading} adminUser={user} refetch={refetch} appendFollowUp={appendFollowUp} reconcileFollowUp={reconcileFollowUp} removeFollowUp={removeFollowUp}
+              isLoading={isLoading} adminUser={user} refetch={refetch} appendFollowUp={appendFollowUp} reconcileFollowUp={reconcileFollowUp} removeFollowUp={removeFollowUp} mergeLeadFollowUps={mergeLeadFollowUps}
               initialView={activeView} setMainView={setActiveView}
               isDark={isDark} t={t}
               featurePrefs={featurePrefs}
@@ -1397,7 +1400,7 @@ function getLeadValueForCol(lead: any, key: string): string {
 }
 
 function SalesManagerView({
-  managers, allLeads, followUps, isLoading, adminUser, refetch, appendFollowUp, reconcileFollowUp, removeFollowUp,
+  managers, allLeads, followUps, isLoading, adminUser, refetch, appendFollowUp, reconcileFollowUp, removeFollowUp, mergeLeadFollowUps,
   initialView, setMainView, isDark, t, featurePrefs,
   pendingLeadOpen, onPendingLeadOpenHandled,        // ← NEW
   navigateFromSummary,
@@ -1442,6 +1445,7 @@ function SalesManagerView({
   );
   const returnView = useDetailReturnView(initialView, "detail", "forms");
   const [selectedLead, setSelectedLead] = useState<any>(null);
+  useLeadFollowUpPolling(selectedLead?.id, mergeLeadFollowUps);
   const [searchTerm, setSearchTerm] = useState("");
   const [searchClosed, setSearchClosed] = useState("");
   const [leadStatusFilter, setLeadStatusFilter] = useState<"all" | "active" | "lost">("all");
