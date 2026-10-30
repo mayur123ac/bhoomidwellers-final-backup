@@ -5,11 +5,38 @@
 // One private channel per organization. Token refresh is handled by the shared
 // realtimeTokenManager so that multiple hooks on the same page share a single
 // /api/auth/realtime-token refresh loop instead of each running their own.
+//
+// Mobile (Capacitor): Android WebView does not reliably fire
+// `document.visibilitychange` when the app resumes from background.
+// We additionally listen to Capacitor's `App.appStateChange` event to
+// ensure the WebSocket is torn down and re-established on app resume.
 
 import { useEffect, useRef, useCallback } from "react";
 import { supabase } from "./client";
 import { subscribe, unsubscribe, refreshNow } from "./realtimeTokenManager";
 import type { RealtimeChannel } from "@supabase/supabase-js";
+
+// ── Capacitor foreground helper (duplicated from followUpSync to avoid
+//    circular imports — both modules are leaf consumers of @capacitor/app) ──
+
+type CapCleanup = (() => void) | null;
+
+function onCapacitorForeground(cb: () => void): CapCleanup {
+  if (typeof window === "undefined") return null;
+  try {
+    const { Capacitor } = require("@capacitor/core");
+    if (!Capacitor.isNativePlatform()) return null;
+  } catch { return null; }
+
+  let handle: { remove: () => Promise<void> } | null = null;
+  import("@capacitor/app").then(({ App }) => {
+    App.addListener("appStateChange", ({ isActive }) => {
+      if (isActive) cb();
+    }).then(h => { handle = h; });
+  }).catch(() => {});
+
+  return () => { handle?.remove(); };
+}
 
 type EventHandler = (payload: Record<string, unknown>) => void;
 
@@ -70,9 +97,11 @@ export function useRealtimeOrg({ organizationId, events, enabled = true }: UseRe
 
     connect();
 
-    // Reconnect on visibility change (Capacitor / mobile background)
-    const onVisibility = () => {
-      if (document.visibilityState !== "visible" || cancelledRef.current) return;
+    // Reconnect on visibility change or Capacitor app resume.
+    // Android WebView does not reliably fire visibilitychange on app resume,
+    // so the Capacitor appStateChange listener is the reliable mobile signal.
+    const reconnect = () => {
+      if (cancelledRef.current) return;
       cleanupChannel();
       // refreshNow() re-auths the shared Supabase client; only one call
       // per visibility change actually hits the API because the manager
@@ -81,13 +110,21 @@ export function useRealtimeOrg({ organizationId, events, enabled = true }: UseRe
         if (!cancelledRef.current) connect();
       });
     };
+
+    const onVisibility = () => {
+      if (document.visibilityState !== "visible") return;
+      reconnect();
+    };
     document.addEventListener("visibilitychange", onVisibility);
+
+    const cleanupCap = onCapacitorForeground(reconnect);
 
     return () => {
       cancelledRef.current = true;
       cleanupChannel();
       unsubscribe();
       document.removeEventListener("visibilitychange", onVisibility);
+      cleanupCap?.();
     };
   }, [organizationId, enabled, cleanupChannel]);
 }

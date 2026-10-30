@@ -5,9 +5,41 @@
 // Migrated from SSE (EventSource → /api/followups/events) to Supabase
 // Realtime Broadcast. The hook signature is preserved so every dashboard
 // caller works without changes.
+//
+// Mobile (Capacitor): `visibilitychange` does not reliably fire on
+// Android WebView when the app returns from background. The Capacitor
+// `App.addListener("appStateChange")` fires reliably on both platforms
+// and is used as an additional foreground signal alongside visibilitychange.
 
 import { useEffect, useRef, useMemo, useCallback } from "react";
 import { useRealtimeOrg } from "./supabase/useRealtimeOrg";
+
+// ── Capacitor foreground helper ─────────────────────────────────────────────
+//
+// Dynamically imports @capacitor/app only on native so the web bundle does
+// not pay for it and non-Capacitor builds never reference the module.
+
+type ForegroundCleanup = (() => void) | null;
+
+function onCapacitorForeground(cb: () => void): ForegroundCleanup {
+  // Quick bail on web (SSR or plain browser)
+  if (typeof window === "undefined") return null;
+  try {
+    // Capacitor.isNativePlatform is synchronous and safe to call at import time
+    const { Capacitor } = require("@capacitor/core");
+    if (!Capacitor.isNativePlatform()) return null;
+  } catch { return null; }
+
+  let handle: { remove: () => Promise<void> } | null = null;
+
+  import("@capacitor/app").then(({ App }) => {
+    App.addListener("appStateChange", ({ isActive }) => {
+      if (isActive) cb();
+    }).then(h => { handle = h; });
+  }).catch(() => {});
+
+  return () => { handle?.remove(); };
+}
 
 export type FollowUpSSEPayload = {
   _id: string;
@@ -125,11 +157,30 @@ export function useFollowUpEvents(
 
   // Run a one-time fallback sync on mount to catch anything missed before
   // the realtime channel was established (same purpose as the SSE onopen sync).
+  // Also sync on visibility change (tab refocus / mobile resume) to catch
+  // messages that arrived while the tab was backgrounded.
+  //
+  // On Android Capacitor, visibilitychange may not fire when the app returns
+  // from background, so we also listen to Capacitor's appStateChange event.
   useEffect(() => {
     const timer = setTimeout(() => {
       onFallbackRef.current?.();
     }, 2000);
-    return () => clearTimeout(timer);
+
+    const doSync = () => { onFallbackRef.current?.(); };
+
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") doSync();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
+    const cleanupCap = onCapacitorForeground(doSync);
+
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
+      cleanupCap?.();
+    };
   }, []);
 }
 
@@ -141,10 +192,13 @@ export function useFollowUpEvents(
 // is deselected. This ensures new messages appear within a few seconds even
 // when Supabase Realtime is not delivering events.
 
-const LEAD_POLL_INTERVAL_MS = 8_000;
+const LEAD_POLL_INTERVAL_MS = 4_000;
 
 /**
  * Poll follow-ups for a single lead at a short interval.
+ *
+ * Polls immediately on lead selection (no 4 s wait for the first update),
+ * then every LEAD_POLL_INTERVAL_MS while the lead stays selected.
  *
  * @param leadId   — the currently-selected lead's ID (null/undefined = off)
  * @param onUpdate — called with (leadId, serverFollowUps[]) on each successful poll
@@ -172,8 +226,28 @@ export function useLeadFollowUpPolling(
       } catch { /* network errors are harmless — next poll retries */ }
     };
 
+    // Immediate first poll so the conversation is up-to-date on open
+    poll();
     const timer = setInterval(poll, LEAD_POLL_INTERVAL_MS);
-    return () => { active = false; clearInterval(timer); };
+
+    // Catch up on messages missed while the tab was in the background.
+    // On Android WebView, visibilitychange does not always fire on app resume
+    // so we also listen to Capacitor's appStateChange as a reliable signal.
+    const foregroundPoll = () => { if (active) poll(); };
+
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") foregroundPoll();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
+    const cleanupCap = onCapacitorForeground(foregroundPoll);
+
+    return () => {
+      active = false;
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
+      cleanupCap?.();
+    };
   }, [leadId]);
 }
 

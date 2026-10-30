@@ -38,7 +38,7 @@ import CrmUpdatesNotification from "@/components/CrmUpdatesNotification";
 import WhatsAppConversationPanel from "@/components/whatsapp/WhatsAppConversationPanel";
 import LostLeadModal from "@/components/LostLeadModal";
 import { updateLeadLostState, useLostLeadEvents } from "@/lib/lostLeadSync";
-import { useLeadFollowUpPolling, useMergeLeadFollowUps } from "@/lib/followUpSync";
+import { useFollowUpEvents, useLeadFollowUpPolling, useMergeLeadFollowUps, type FollowUpSSEPayload } from "@/lib/followUpSync";
 // The notification queue. Built and organization-scoped on the server — see
 // lib/notifications/feed.ts for why it is no longer derived in this file.
 import { useNotificationFeed, openNotificationLead, type CrmNotification } from "@/lib/hooks/useNotificationFeed";
@@ -1078,6 +1078,26 @@ export default function ReceptionistDashboard() {
   const mergeLeadFollowUps = useMergeLeadFollowUps(setFollowUps);
   useLeadFollowUpPolling(selectedLead?.id, mergeLeadFollowUps);
 
+  // Supabase Realtime: append incoming follow-ups from other users instantly.
+  // Reconcile optimistic entries (own messages) and deduplicate server echoes.
+  const handleRealtimeFollowUp = useCallback((fu: FollowUpSSEPayload) => {
+    setFollowUps(prev => {
+      if (fu.clientMessageId) {
+        const hasOptimistic = prev.some(f => f._clientMessageId === fu.clientMessageId);
+        if (hasOptimistic) {
+          return prev.map(f => f._clientMessageId === fu.clientMessageId ? { ...fu, _status: "sent" } : f);
+        }
+      }
+      if (prev.some(f => String(f._id) === String(fu._id))) return prev;
+      return [...prev, fu];
+    });
+  }, []);
+  // fetchFollowUps is declared later; use a ref so the fallback-sync callback
+  // is always the latest version without introducing a declaration-order issue.
+  const fetchFollowUpsRef = useRef<() => void>(() => {});
+  const fallbackSync = useCallback(() => { fetchFollowUpsRef.current(); }, []);
+  useFollowUpEvents(handleRealtimeFollowUp, undefined, fallbackSync);
+
   // If the "assigned" tab is showing but there's no detail to display (e.g. the
   // cards sub-view), redirect to the return tab. Assigned Forms cards have been
   // removed from the Receptionist panel.
@@ -1449,6 +1469,7 @@ export default function ReceptionistDashboard() {
       }
     } catch (e) { console.error("fetchFollowUps error", e); }
   };
+  fetchFollowUpsRef.current = fetchFollowUps;
 
   const initialLoad = async () => {
     setIsFetchingEnquiries(true);
@@ -2250,9 +2271,26 @@ export default function ReceptionistDashboard() {
   const handleSendCustomNote = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customNote.trim() || !selectedLead) return;
-    const nm = { leadId: String(selectedLead.id), salesManagerName: user.name, createdBy: "receptionist", message: customNote, siteVisitDate: null, createdAt: new Date().toISOString() };
+    const clientMessageId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const optimistic: any = {
+      _id: clientMessageId, leadId: String(selectedLead.id), salesManagerName: user.name, createdBy: "receptionist",
+      message: customNote, siteVisitDate: null, createdAt: new Date().toISOString(),
+      followUpType: "note", createdByRole: null, sentToRole: null, sentToUserId: null,
+      parentFollowUpId: null, readAt: null, _status: "sending", _clientMessageId: clientMessageId,
+    };
     setCustomNote("");
-    try { await fetch("/api/followups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(nm) }); fetchFollowUps(); } catch (e) { console.error(e); }
+    setFollowUps(prev => [...prev, optimistic]);
+    try {
+      const res = await fetch("/api/followups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ leadId: String(selectedLead.id), salesManagerName: user.name, createdBy: "receptionist", message: optimistic.message, siteVisitDate: null, clientMessageId }) });
+      const json = await res.json().catch(() => null);
+      setFollowUps(prev => prev.map(f =>
+        f._clientMessageId === clientMessageId
+          ? (json?.success && json.data ? { ...json.data, _status: "sent" } : { ...f, _status: "failed" })
+          : f
+      ));
+    } catch {
+      setFollowUps(prev => prev.map(f => f._clientMessageId === clientMessageId ? { ...f, _status: "failed" } : f));
+    }
   };
 
   const handleSalesFormSubmit = async (e: React.FormEvent) => {

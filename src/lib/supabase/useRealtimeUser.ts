@@ -7,11 +7,30 @@
 // Supabase RLS policy enforces that only the JWT owner can subscribe.
 //
 // Token refresh is handled by the shared realtimeTokenManager.
+//
+// Mobile: Also listens to Capacitor appStateChange for reliable reconnection.
 
 import { useEffect, useRef, useCallback } from "react";
 import { supabase } from "./client";
 import { subscribe, unsubscribe, refreshNow } from "./realtimeTokenManager";
 import type { RealtimeChannel } from "@supabase/supabase-js";
+
+// Capacitor foreground helper — same as useRealtimeOrg (avoids circular import)
+type CapCleanup = (() => void) | null;
+function onCapacitorForeground(cb: () => void): CapCleanup {
+  if (typeof window === "undefined") return null;
+  try {
+    const { Capacitor } = require("@capacitor/core");
+    if (!Capacitor.isNativePlatform()) return null;
+  } catch { return null; }
+  let handle: { remove: () => Promise<void> } | null = null;
+  import("@capacitor/app").then(({ App }) => {
+    App.addListener("appStateChange", ({ isActive }) => {
+      if (isActive) cb();
+    }).then(h => { handle = h; });
+  }).catch(() => {});
+  return () => { handle?.remove(); };
+}
 
 type EventHandler = (payload: Record<string, unknown>) => void;
 
@@ -61,20 +80,28 @@ export function useRealtimeUser({ organizationId, userId, events, enabled = true
 
     connect();
 
-    const onVisibility = () => {
-      if (document.visibilityState !== "visible" || cancelledRef.current) return;
+    const reconnect = () => {
+      if (cancelledRef.current) return;
       cleanupChannel();
       refreshNow().then(() => {
         if (!cancelledRef.current) connect();
       });
     };
+
+    const onVisibility = () => {
+      if (document.visibilityState !== "visible") return;
+      reconnect();
+    };
     document.addEventListener("visibilitychange", onVisibility);
+
+    const cleanupCap = onCapacitorForeground(reconnect);
 
     return () => {
       cancelledRef.current = true;
       cleanupChannel();
       unsubscribe();
       document.removeEventListener("visibilitychange", onVisibility);
+      cleanupCap?.();
     };
   }, [organizationId, userId, enabled, cleanupChannel]);
 }
