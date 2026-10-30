@@ -622,6 +622,17 @@ export async function deleteLeadDatabaseRecords(
     clearedLiveStateRows = result.rowCount ?? 0;
   }
 
+  // Clear the self-referencing FK: other leads whose returning_from_lead_id
+  // points to this lead would block the DELETE with NO ACTION. NULL them out
+  // so the referencing leads are preserved but no longer point at the deleted lead.
+  if (await tableHasColumn(client, "walkin_enquiries", "returning_from_lead_id")) {
+    const rfResult = await client.query(
+      "UPDATE walkin_enquiries SET returning_from_lead_id = NULL WHERE returning_from_lead_id = $1",
+      [leadId]
+    );
+    deletedRecords["walkin_enquiries.returning_from_lead_id_nulled"] = rfResult.rowCount ?? 0;
+  }
+
   const leadDeleteResult = await client.query(
     "DELETE FROM walkin_enquiries WHERE id = $1 AND organization_id = $2",
     [leadId, orgId]
