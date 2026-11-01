@@ -91,10 +91,15 @@ export async function POST() {
       });
     }
 
-    // Complete the active attendance period (if one exists).
-    // duration_seconds = elapsed time from period start to now.
-    // The partial UNIQUE index ensures at most one active period per attendance.
+    // Wrap period + record completion in a transaction for atomicity.
+    let logoutTime: string;
+    let workingTrack: number | null;
+
+    await query("BEGIN");
     try {
+      // Complete the active attendance period (if one exists).
+      // duration_seconds = elapsed time from period start to now.
+      // The partial UNIQUE index ensures at most one active period per attendance.
       await query(
         `UPDATE attendance_periods
             SET completed_at     = CURRENT_TIMESTAMP,
@@ -103,32 +108,35 @@ export async function POST() {
           WHERE attendance_id = $1 AND completed_at IS NULL`,
         [record.id]
       );
-    } catch (periodErr) {
-      // Non-fatal: the attendance_records update below is the critical path.
-      console.error("attendance_periods complete failed (non-fatal):", periodErr);
+
+      // Write logout_time, working_track, and completion_source atomically.
+      // working_track = logout_time − submitted_at: the gross attendance span
+      // from "Mark Attendance" click to "Done for the Day" click. With multiple
+      // periods this includes break time; the net working hours live in the
+      // attendance_periods rows (SUM of duration_seconds).
+      //
+      // submitted_at is TIMESTAMP (no timezone) on Neon, stored as UTC wall-clock.
+      // `submitted_at AT TIME ZONE 'UTC'` reinterprets it as a TIMESTAMPTZ, so the
+      // subtraction (TIMESTAMPTZ − TIMESTAMPTZ → INTERVAL) is timezone-safe
+      // regardless of the DB session's own timezone setting.
+      const updated = await query<{ logout_time: string; working_track: number }>(
+        `UPDATE attendance_records
+            SET logout_time        = CURRENT_TIMESTAMP,
+                working_track      = EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - (submitted_at AT TIME ZONE 'UTC')))::integer,
+                completion_source  = 'manual'
+          WHERE id = $1 AND organization_id = $2
+          RETURNING logout_time, working_track`,
+        [record.id, orgId]
+      );
+
+      await query("COMMIT");
+
+      logoutTime = updated[0]?.logout_time ?? new Date().toISOString();
+      workingTrack = updated[0]?.working_track ?? null;
+    } catch (txErr) {
+      try { await query("ROLLBACK"); } catch { /* ignore rollback errors */ }
+      throw txErr;
     }
-
-    // Write logout_time and working_track atomically.
-    // working_track = logout_time − submitted_at: the gross attendance span
-    // from "Mark Attendance" click to "Done for the Day" click. With multiple
-    // periods this includes break time; the net working hours live in the
-    // attendance_periods rows (SUM of duration_seconds).
-    //
-    // submitted_at is TIMESTAMP (no timezone) on Neon, stored as UTC wall-clock.
-    // `submitted_at AT TIME ZONE 'UTC'` reinterprets it as a TIMESTAMPTZ, so the
-    // subtraction (TIMESTAMPTZ − TIMESTAMPTZ → INTERVAL) is timezone-safe
-    // regardless of the DB session's own timezone setting.
-    const updated = await query<{ logout_time: string; working_track: number }>(
-      `UPDATE attendance_records
-          SET logout_time   = CURRENT_TIMESTAMP,
-              working_track = EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - (submitted_at AT TIME ZONE 'UTC')))::integer
-        WHERE id = $1 AND organization_id = $2
-        RETURNING logout_time, working_track`,
-      [record.id, orgId]
-    );
-
-    const logoutTime = updated[0]?.logout_time ?? new Date().toISOString();
-    const workingTrack: number | null = updated[0]?.working_track ?? null;
 
     // Broadcast so admin/site-head Live Activity view reflects the checkout.
     broadcastEvent(orgId, { type: "ATTENDANCE_SYNC", userId }, ["admin", "site_head"]);

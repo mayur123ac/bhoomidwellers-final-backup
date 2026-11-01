@@ -36,6 +36,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getServerSession } from "@/lib/serverAuth";
 import { safeEqual } from "@/lib/whatsapp-client";
+import { broadcastEvent } from "@/lib/eventBus";
+import { broadcastToOrg } from "@/lib/supabase/broadcast";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -105,6 +107,12 @@ export interface AutoCompleteOptions {
    * safety-net behavior).
    */
   organizationId?: string;
+
+  /**
+   * The completion source label written to attendance_records.completion_source.
+   * Values: 'scheduled' | 'endofday' | 'midnight'.
+   */
+  completionSource?: string;
 }
 
 /**
@@ -121,6 +129,7 @@ export async function autoCompleteAttendance(
   const start = Date.now();
   const completionTimeIst = options?.completionTimeIst ?? null;
   const organizationId = options?.organizationId ?? null;
+  const completionSource = options?.completionSource ?? (completionTimeIst ? "endofday" : "midnight");
 
   const dateResult = await query<{
     target_date: string;
@@ -229,19 +238,29 @@ export async function autoCompleteAttendance(
     report.periodsCompleted = periodsResult.length;
 
     // Step 2: Complete the attendance_records themselves.
-    const recordsResult = await query<{ id: number }>(`
+    const recordsResult = await query<{ id: number; organization_id: string }>(`
       UPDATE attendance_records
-      SET logout_time   = $2::timestamptz,
-          working_track = EXTRACT(EPOCH FROM ($2::timestamptz - (submitted_at AT TIME ZONE 'UTC')))::integer
+      SET logout_time        = $2::timestamptz,
+          working_track      = EXTRACT(EPOCH FROM ($2::timestamptz - (submitted_at AT TIME ZONE 'UTC')))::integer,
+          completion_source  = $4
       WHERE logout_time IS NULL
         AND DATE(login_time AT TIME ZONE 'Asia/Kolkata') = $1::date
         AND ($3::uuid IS NULL OR organization_id = $3::uuid)
-      RETURNING id
-    `, [targetDate, completionBoundary, organizationId]);
+      RETURNING id, organization_id
+    `, [targetDate, completionBoundary, organizationId, completionSource]);
 
     report.completed = recordsResult.length;
 
     await query("COMMIT");
+
+    // Broadcast attendance sync to affected orgs so admin Live Activity refreshes.
+    if (recordsResult.length > 0) {
+      const affectedOrgIds = [...new Set(recordsResult.map(r => r.organization_id))];
+      for (const oid of affectedOrgIds) {
+        broadcastEvent(oid, { type: "ATTENDANCE_SYNC", source: "auto-complete" }, ["admin", "site_head"]);
+        broadcastToOrg(oid, "activity.attendance_sync", { type: "ATTENDANCE_SYNC", source: "auto-complete" });
+      }
+    }
 
     // Count records already completed (manually or by a prior run).
     const skippedResult = await query<{ count: string }>(`
@@ -346,6 +365,7 @@ export async function evaluateScheduledCompletions(): Promise<ScheduledReport> {
       const report = await autoCompleteAttendance(org.today_ist, {
         completionTimeIst: shiftEndNormalized,
         organizationId: org.organization_id,
+        completionSource: "scheduled",
       });
 
       result.details.push({
@@ -425,7 +445,9 @@ async function handle(req: NextRequest) {
     // ── End-of-day mode: all-org 23:58 IST safety net ──
     // ── Midnight mode (default): yesterday backfill ──
     const options: AutoCompleteOptions | undefined =
-      mode === "endofday" ? { completionTimeIst: "23:58:00" } : undefined;
+      mode === "endofday"
+        ? { completionTimeIst: "23:58:00", completionSource: "endofday" }
+        : { completionSource: "midnight" };
 
     const report = await autoCompleteAttendance(dateParam, options);
     return NextResponse.json({

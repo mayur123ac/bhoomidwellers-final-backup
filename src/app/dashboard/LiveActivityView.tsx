@@ -1,4 +1,4 @@
-//LiveActivityView.tsx
+﻿//LiveActivityView.tsx
 "use client";
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -401,7 +401,7 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
   const isFutureDate = selectedDate > todayStr;
 
   return (
-    <div className={`flex flex-col h-full overflow-hidden p-4 sm:p-8 font-sans antialiased overflow-x-hidden ${isDark ? "bg-[#000000]" : "bg-[#F2F2F7]"}`}>
+    <div className={`flex flex-col h-full overflow-hidden p-4 sm:p-8 font-sans antialiased overflow-x-hidden ${isDark ? "bg-[#121212]" : "bg-[#F2F2F7]"}`}>
 
       {/* SMART ALERTS PANEL (Floating Top Center) */}
       <AnimatePresence>
