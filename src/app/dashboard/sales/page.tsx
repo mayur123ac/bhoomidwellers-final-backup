@@ -1642,10 +1642,10 @@ function SalesManagerView({
     return () => { cancelled = true; };
   }, [selectedLead?.id, selectedLead?.lead_classification]);
 
-  // Fetch the full visit chain when Admin or Site Head opens a lead.
+  // Fetch the full visit chain for the selected lead (backend enforces authorization).
   const isSiteHeadUser = String(adminUser?.role || "").toLowerCase().replace(/_/g, " ") === "site head";
   useEffect(() => {
-    if (!selectedLead?.id || (!isAdmin && !isSiteHeadUser)) return;
+    if (!selectedLead?.id) return;
     let cancelled = false;
     setIsLoadingChain(true);
     fetch(`/api/leads/${selectedLead.id}/visit-chain`)
@@ -3611,8 +3611,8 @@ function SalesManagerView({
                         </div>
                       )}
 
-                      {/* ── Visit History accordion (Admin / Site Head only) ── */}
-                      {(isAdmin || isSiteHeadUser) && visitChain && visitChain.totalVisits >= 1 && (
+                      {/* ── Visit History accordion ── */}
+                      {visitChain && visitChain.totalVisits >= 1 && (
                         <div className={`rounded-xl border overflow-hidden ${isDark ? "border-[rgba(100,116,139,0.30)]" : "border-[rgba(100,116,139,0.25)]"}`}>
                           {/* Panel header */}
                           <div className={`px-4 py-3 flex items-center justify-between ${isDark ? "bg-[rgba(100,116,139,0.10)]" : "bg-[rgba(100,116,139,0.06)]"}`}>

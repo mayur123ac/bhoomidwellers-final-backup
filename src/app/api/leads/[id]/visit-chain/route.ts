@@ -3,10 +3,10 @@
 // Returns the full visit chain for a lead — all historical visits in order,
 // from the original (visit 1) through to the current (visit N).
 //
-// Authorization:  Admin and Site Head only.
-//   Sales Manager:     403 — uses existing /api/leads/:id/revisit-history
-//   Receptionist:      403 — sees count badge only (from list API)
-//   Sourcing Manager:  403
+// Authorization:
+//   Admin / Site Head:       always allowed
+//   Assigned Sales Manager:  allowed (assigned_to_user_id must match session)
+//   All others:              403
 //
 // Security:
 //   - No phone numbers returned. Chain entries carry only non-sensitive
@@ -16,7 +16,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getOrganizationId } from "@/lib/tenantContext";
-import { requireSession } from "@/lib/serverAuth";
+import { requireSession, getSessionUserId } from "@/lib/serverAuth";
 import { normalizeRole } from "@/lib/cpRbac";
 import { getLeadVisitChain } from "@/lib/visitChain";
 
@@ -31,15 +31,6 @@ export async function GET(
     if (!gate.ok) return gate.response;
     const { session } = gate;
 
-    // Role gate: Admin and Site Head only.
-    const role = normalizeRole(session.role);
-    if (role !== "admin" && role !== "site head") {
-      return NextResponse.json(
-        { success: false, message: "Forbidden." },
-        { status: 403 }
-      );
-    }
-
     const { id } = await params;
     const leadId = parseInt(id, 10);
     if (!Number.isFinite(leadId)) {
@@ -51,16 +42,37 @@ export async function GET(
 
     const orgId = await getOrganizationId();
 
-    // Verify the lead exists in this org before traversing the chain.
-    const exists = await query(
-      `SELECT id FROM walkin_enquiries WHERE id = $1 AND organization_id = $2 LIMIT 1`,
+    // Fetch the lead (tenant-scoped) — needed both for existence check and SM authorization.
+    const rows = await query(
+      `SELECT id, assigned_to, assigned_to_user_id
+       FROM walkin_enquiries WHERE id = $1 AND organization_id = $2 LIMIT 1`,
       [leadId, orgId]
     );
-    if (exists.length === 0) {
+    if (rows.length === 0) {
       return NextResponse.json(
         { success: false, message: "Lead not found." },
         { status: 404 }
       );
+    }
+
+    // Authorization: Admin/Site Head always; assigned SM allowed; all others denied.
+    const role = normalizeRole(session.role);
+    const isAdmin = role === "admin";
+    const isSiteHead = role === "site head";
+
+    if (!isAdmin && !isSiteHead) {
+      const current = rows[0];
+      const sessionUserId = getSessionUserId(session);
+      const isAssignedSM = current.assigned_to_user_id != null && sessionUserId != null
+        ? Number(current.assigned_to_user_id) === sessionUserId
+        : session.name === current.assigned_to;
+
+      if (!isAssignedSM) {
+        return NextResponse.json(
+          { success: false, message: "Forbidden." },
+          { status: 403 }
+        );
+      }
     }
 
     const result = await getLeadVisitChain(leadId, orgId);
