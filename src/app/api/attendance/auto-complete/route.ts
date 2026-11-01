@@ -5,7 +5,7 @@
 //
 // Three modes:
 //
-//   1. **Scheduled** (mode=scheduled) — runs every 5 minutes via Vercel cron.
+//   1. **Scheduled** (mode=scheduled) — runs every 5 minutes via external cron.
 //      Reads each org's `organization_settings.shift_end` (+ flexible flag).
 //      For every org whose configured shift_end has passed in IST today,
 //      completes open attendance records with logout_time = shift_end IST.
@@ -18,8 +18,8 @@
 //      Completes the PREVIOUS IST day's records with logout_time = midnight
 //      boundary (00:00:00 next day IST).
 //
-// Auth: Vercel CRON_SECRET (Authorization: Bearer), shared VERIFY_TOKEN
-// (x-cron-token header), or admin session cookie.
+// Auth: Vercel CRON_SECRET (Authorization: Bearer), dedicated
+// ATTENDANCE_CRON_TOKEN (x-cron-token header), or admin session cookie.
 //
 // GET and POST both work (cron services frequently only issue GET).
 //
@@ -35,7 +35,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getServerSession } from "@/lib/serverAuth";
-import { getVerifyToken } from "@/config/whatsapp.config";
 import { safeEqual } from "@/lib/whatsapp-client";
 
 export const runtime = "nodejs";
@@ -51,9 +50,13 @@ async function authorize(req: NextRequest): Promise<{ ok: boolean; via?: string 
     return { ok: true, via: "vercel-cron" };
   }
 
-  // 2. Shared secret in x-cron-token header (constant-time comparison)
+  // 2. Dedicated attendance cron token in x-cron-token header (constant-time comparison).
+  //    ATTENDANCE_CRON_TOKEN is a server-side secret used exclusively by the external
+  //    scheduler for attendance auto-completion. It is separate from VERIFY_TOKEN
+  //    (WhatsApp/reminders/sweep) so that exposing it to a third-party cron service
+  //    does not compromise other endpoint authentication.
   const header = req.headers.get("x-cron-token");
-  const expected = getVerifyToken();
+  const expected = process.env.ATTENDANCE_CRON_TOKEN;
   if (header && expected && safeEqual(header, expected)) return { ok: true, via: "token" };
 
   // 3. Admin session cookie (for manual trigger from browser)
