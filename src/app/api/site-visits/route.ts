@@ -1,9 +1,10 @@
 //api/site-visits
 import { NextResponse } from "next/server";
-import { query } from "@/lib/db";
+import { query, transaction } from "@/lib/db";
 import { getOrganizationId } from "@/lib/tenantContext";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 import { pushSiteVisit } from "@/lib/fcm/feedPushHandler";
+import { insertOutboxEvent, buildEventKey } from "@/lib/dealStageOutbox";
 
 export async function GET(req: Request) {
   try {
@@ -14,10 +15,10 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const leadId = searchParams.get("lead_id");
 
-    // ✅ Lead-specific history — fetch ALL visits, not just today's
+    // Lead-specific history — fetch ALL visits, not just today's
     if (leadId) {
       const rows = await query(
-        `SELECT * FROM public.site_visits 
+        `SELECT * FROM public.site_visits
          WHERE lead_id = $1 AND organization_id = $2
          ORDER BY visit_date ASC`,
         [leadId, await getOrganizationId()]
@@ -25,7 +26,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ success: true, data: rows });
     }
 
-    // ✅ Dashboard: today's visits — use IST-aware UTC window
+    // Dashboard: today's visits — use IST-aware UTC window
     const now = new Date();
     const todayStr = new Date(now.getTime() + 5.5 * 60 * 60 * 1000)
       .toISOString()
@@ -68,69 +69,85 @@ export async function POST(req: Request) {
       );
     }
 
-    // 🔒 Final-state lock guard
-    const leadRows = await query<{ status: string; is_lost_lead: boolean; name: string; assigned_to: string | null }>(
-      `SELECT status, is_lost_lead, name, assigned_to FROM public.walkin_enquiries WHERE id = $1 AND organization_id = $2`,
-      [lead_id, await getOrganizationId()]
-    );
-    const lead = leadRows[0];
-    if (!lead) {
+    const orgId = await getOrganizationId();
+
+    const result = await transaction(async (client) => {
+      // Lead check — inside transaction so the row state is consistent with
+      // the INSERT below.
+      const leadRows = await client.query<{ status: string; is_lost_lead: boolean; name: string; assigned_to: string | null }>(
+        `SELECT status, is_lost_lead, name, assigned_to FROM public.walkin_enquiries WHERE id = $1 AND organization_id = $2`,
+        [lead_id, orgId]
+      );
+      const lead = leadRows.rows[0];
+      if (!lead) {
+        return { error: "Lead not found", status: 404 } as const;
+      }
+      if (lead.status === "Closing" || lead.is_lost_lead) {
+        return { error: "Closed or Lost leads cannot be modified.", status: 403 } as const;
+      }
+
+      // Note: We allow scheduling in the past so admins can log visits that already occurred.
+
+      // Prevent duplicate on same datetime
+      const existing = await client.query(
+        `SELECT id FROM public.site_visits
+         WHERE lead_id = $1 AND visit_date = $2 AND status != 'cancelled'
+           AND organization_id = $3`,
+        [lead_id, visit_date, orgId]
+      );
+      if (existing.rows.length > 0) {
+        return { error: "A visit already exists at this date/time", status: 409 } as const;
+      }
+
+      const insertRes = await client.query(
+        `INSERT INTO public.site_visits (lead_id, visit_date, created_by, created_by_id, role, status, notes, organization_id)
+         VALUES ($1, $2, $3, $7, $4, 'scheduled', $5, $6)
+         RETURNING *`,
+        [lead_id, visit_date, created_by, role || "Sales Manager", notes || "", orgId, gate.userId]
+      );
+      const newVisit = insertRes.rows[0];
+
+      // Deal stage hook: site visit scheduled → Site Visit stage
+      await insertOutboxEvent(client, {
+        lead_id: Number(lead_id),
+        event_type: "site_visit_scheduled",
+        event_ts: newVisit.created_at,
+        event_key: buildEventKey("site_visit_scheduled", "site_visits", newVisit.id),
+        actor_id: gate.userId,
+        payload: { source: "site_visit_form", visit_date },
+        organization_id: orgId,
+      });
+
+      // Log the scheduling as a follow-up
+      await client.query(
+        `INSERT INTO follow_ups (lead_id, message, created_by_name, created_by_id, organization_id) VALUES ($1, $2, $3, $5, $4)`,
+        [lead_id, `Site Visit Scheduled for ${new Date(visit_date).toLocaleString("en-IN")}`, created_by, orgId, gate.userId]
+      );
+
+      return { newVisit, lead } as const;
+    });
+
+    // Handle early-return error cases from within the transaction
+    if ("error" in result) {
       return NextResponse.json(
-        { success: false, message: "Lead not found" },
-        { status: 404 }
+        { success: false, message: result.error },
+        { status: result.status }
       );
     }
-    if (lead.status === "Closing" || lead.is_lost_lead) {
-      return NextResponse.json(
-        { success: false, message: "Closed or Lost leads cannot be modified." },
-        { status: 403 }
-      );
-    }
 
-    // Note: We allow scheduling in the past so admins can log visits that already occurred.
-
-    // Prevent duplicate on same datetime
-    const existing = await query(
-      `SELECT id FROM public.site_visits 
-       WHERE lead_id = $1 AND visit_date = $2 AND status != 'cancelled'
-         AND organization_id = $3`,
-      [lead_id, visit_date, await getOrganizationId()]
-    );
-    if (existing.length > 0) {
-      return NextResponse.json(
-        { success: false, message: "A visit already exists at this date/time" },
-        { status: 409 }
-      );
-    }
-
-    const result = await query(
-      `INSERT INTO public.site_visits (lead_id, visit_date, created_by, created_by_id, role, status, notes, organization_id)
-       VALUES ($1, $2, $3, $7, $4, 'scheduled', $5, $6)
-       RETURNING *`,
-      [lead_id, visit_date, created_by, role || "Sales Manager", notes || "", await getOrganizationId(), gate.userId]
-    );
-
-    const newVisit = result[0];
-
-    // Log the scheduling as a follow-up
-    const svOrgId = await getOrganizationId();
-    await query(
-      `INSERT INTO follow_ups (lead_id, message, created_by_name, created_by_id, organization_id) VALUES ($1, $2, $3, $5, $4)`,
-      [lead_id, `Site Visit Scheduled for ${new Date(visit_date).toLocaleString("en-IN")}`, created_by, svOrgId, gate.userId]
-    );
-
-    // Push notification to the assigned sales manager (if any)
-    if (lead.assigned_to) {
+    // Push notification AFTER transaction commit — external network call must
+    // not hold the database connection open.
+    if (result.lead.assigned_to) {
       const smRows = await query<{ id: number }>(
         `SELECT id FROM users WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) AND organization_id = $2 AND is_active = true ORDER BY id LIMIT 1`,
-        [lead.assigned_to, svOrgId],
+        [result.lead.assigned_to, orgId],
       );
       if (smRows.length > 0) {
-        pushSiteVisit(svOrgId, smRows[0].id, { id: lead_id, name: lead.name }, visit_date).catch(() => {});
+        pushSiteVisit(orgId, smRows[0].id, { id: lead_id, name: result.lead.name }, visit_date).catch(() => {});
       }
     }
 
-    return NextResponse.json({ success: true, data: newVisit });
+    return NextResponse.json({ success: true, data: result.newVisit });
   } catch (err: any) {
     return NextResponse.json({ success: false, message: err.message }, { status: 500 });
   }
@@ -166,62 +183,84 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ success: false, message: "Missing id" }, { status: 400 });
     }
 
-    const fields: string[] = [];
-    const values: any[] = [];
-    let idx = 1;
+    const orgId = await getOrganizationId();
 
-    if (status !== undefined) {
-      fields.push(`status = $${idx++}`);
-      values.push(status);
-    }
-    if (notes !== undefined) {
-      fields.push(`notes = $${idx++}`);
-      values.push(notes);
-    }
-    if (visit_date !== undefined) {
-      fields.push(`visit_date = $${idx++}`);
-      values.push(visit_date);
-    }
+    const updatedVisit = await transaction(async (client) => {
+      const fields: string[] = [];
+      const values: any[] = [];
+      let idx = 1;
 
-    if (fields.length === 0) {
+      if (status !== undefined) {
+        fields.push(`status = $${idx++}`);
+        values.push(status);
+      }
+      if (notes !== undefined) {
+        fields.push(`notes = $${idx++}`);
+        values.push(notes);
+      }
+      if (visit_date !== undefined) {
+        fields.push(`visit_date = $${idx++}`);
+        values.push(visit_date);
+      }
+
+      if (fields.length === 0) {
+        return null; // sentinel for "nothing to update"
+      }
+
+      // id comes from the request; organization_id is appended after it so the
+      // dynamic SET clause's placeholder numbering is untouched.
+      values.push(id);
+      values.push(orgId);
+      const result = await client.query(
+        `UPDATE public.site_visits SET ${fields.join(", ")} WHERE id = $${idx} AND organization_id = $${idx + 1} RETURNING *`,
+        values
+      );
+
+      const visit = result.rows[0];
+      if (!visit) return undefined; // sentinel for "not found"
+
+      if (status && ["completed", "cancelled", "rescheduled"].includes(status)) {
+        const message = `Site Visit marked as ${status.charAt(0).toUpperCase() + status.slice(1)}`;
+        await client.query(
+          `INSERT INTO follow_ups (lead_id, message, created_by_name, created_by_id, organization_id) VALUES ($1, $2, $3, $5, $4)`,
+          [visit.lead_id, message, "Admin", orgId, gate.userId]
+        );
+
+        if (status === "completed") {
+          await client.query(
+            `UPDATE public.walkin_enquiries SET status = 'Site Visit Done' WHERE id = $1 AND status != 'Closing' AND is_lost_lead = false AND organization_id = $2`,
+            [visit.lead_id, orgId]
+          );
+          await client.query(
+            `UPDATE public.site_visits SET completed_at = NOW() WHERE id = $1 AND completed_at IS NULL`,
+            [id]
+          );
+
+          // Deal stage hook: site visit completed → Negotiation stage
+          await insertOutboxEvent(client, {
+            lead_id: Number(visit.lead_id),
+            event_type: "site_visit_completed",
+            event_ts: new Date().toISOString(),
+            event_key: buildEventKey("site_visit_completed", "site_visits", Number(id)),
+            actor_id: gate.userId,
+            payload: { source: "site_visit_patch" },
+            organization_id: orgId,
+          });
+        }
+      }
+
+      return visit;
+    });
+
+    if (updatedVisit === null) {
       return NextResponse.json({ success: false, message: "Nothing to update" }, { status: 400 });
     }
 
-    // id comes from the request; organization_id is appended after it so the
-    // dynamic SET clause's placeholder numbering is untouched.
-    values.push(id);
-    values.push(await getOrganizationId());
-    const result = await query(
-      `UPDATE public.site_visits SET ${fields.join(", ")} WHERE id = $${idx} AND organization_id = $${idx + 1} RETURNING *`,
-      values
-    );
-
-    const updatedVisit = result[0];
-
-    if (!updatedVisit) {
+    if (updatedVisit === undefined) {
       return NextResponse.json(
         { success: false, message: "Site visit not found. It may be a legacy record; please reschedule it to create a proper entry." },
         { status: 404 }
       );
-    }
-
-    if (status && ["completed", "cancelled", "rescheduled"].includes(status)) {
-      const message = `Site Visit marked as ${status.charAt(0).toUpperCase() + status.slice(1)}`;
-      await query(
-        `INSERT INTO follow_ups (lead_id, message, created_by_name, created_by_id, organization_id) VALUES ($1, $2, $3, $5, $4)`,
-        [updatedVisit.lead_id, message, "Admin", await getOrganizationId(), gate.userId]
-      );
-      
-      if (status === "completed") {
-        await query(
-          `UPDATE public.walkin_enquiries SET status = 'Site Visit Done' WHERE id = $1 AND status != 'Closing' AND is_lost_lead = false AND organization_id = $2`,
-          [updatedVisit.lead_id, await getOrganizationId()]
-        );
-        await query(
-          `UPDATE public.site_visits SET completed_at = NOW() WHERE id = $1 AND completed_at IS NULL`,
-          [id]
-        );
-      }
     }
 
     return NextResponse.json({ success: true, data: updatedVisit });

@@ -11,6 +11,7 @@ import { resolveStampDutyRate, resolveRegistrationFeeRate, calcStampDuty } from 
 import { fetchBookingById } from "@/lib/bookingQuery";
 import { buildFinancialSnapshot, BookingNotFoundError, fmtINR } from "@/lib/buildFinancialSnapshot";
 import { computeFinancialObligation } from "@/lib/financialObligationEngine";
+import { insertOutboxEvent, buildEventKey } from "@/lib/dealStageOutbox";
 
 export const dynamic = "force-dynamic";
 
@@ -542,10 +543,14 @@ export async function PUT(
       const isCancelAction = (cancelStatus === "Cancelled" && cur !== "Cancelled");
       const isReactivate = (cancelStatus === "Confirmed" && cur === "Cancelled");
       const isEditCancel = (editCancellation && cur === "Cancelled");
+      // Phase 5.2: Recovery path for bookings stuck as 'Pending' after
+      // Transaction 2 failure. Admin-only, confirms the booking if inventory
+      // is still booked for it.
+      const isPendingRecovery = (cancelStatus === "Confirmed" && cur === "Pending");
 
-      // Cancellation management (cancel / reactivate / edit-details) is admin-only,
-      // enforced here regardless of what the UI shows.
-      if ((isCancelAction || isReactivate || isEditCancel) && (user_role || "").trim().toLowerCase() !== "admin") {
+      // Cancellation management (cancel / reactivate / edit-details / pending recovery)
+      // is admin-only, enforced here regardless of what the UI shows.
+      if ((isCancelAction || isReactivate || isEditCancel || isPendingRecovery) && (user_role || "").trim().toLowerCase() !== "admin") {
         throw Object.assign(new Error("Only Admin can manage booking cancellations."), { httpStatus: 403 });
       }
 
@@ -625,10 +630,98 @@ export async function PUT(
            VALUES ($1, $2, $3, $4, $5)`,
           [Number(id), user_name, user_role, JSON.stringify({ booking_status: { from: "Cancelled", to: "Confirmed" }, action: "reactivated" }), orgId],
         );
+
+        // Deal stage hook: reactivated booking → Booked stage
+        // currentData.lead_id comes from the SELECT at line 165 (tenant-scoped).
+        if (currentData.lead_id) {
+          await insertOutboxEvent(client, {
+            lead_id: Number(currentData.lead_id),
+            event_type: "booking_confirmed",
+            event_ts: new Date().toISOString(),
+            event_key: buildEventKey("booking_confirmed", "booking_applications", Number(id)),
+            actor_id: sessionUserId ?? null,
+            payload: { source: "booking_reactivate", booking_id: Number(id) },
+            organization_id: orgId,
+          });
+        }
+
         // No re-read here. This row was fetched, shipped across the wire and then
         // discarded — the response is built by fetchBookingById() after commit,
         // and `updatedRow` is only ever a fallback for a booking that vanished
         // between commit and read. One wasted 121-column round trip per save.
+        return { id: Number(id) };
+      }
+
+      // ── (B2) Pending Recovery: Pending → Confirmed. Admin-only recovery for
+      // bookings stuck as 'Pending' because Transaction 2 failed during creation.
+      // Verifies inventory is still booked for this booking before confirming.
+      if (isPendingRecovery) {
+        // Verify inventory is still held by this booking.
+        // FOR UPDATE locks the row to prevent concurrent cancel/reassign (TOCTOU).
+        const invCheck = await client.query(
+          `SELECT id FROM inventory_units
+            WHERE booking_id = $1 AND organization_id = $2
+              AND status = 'booked' AND deleted_at IS NULL
+            LIMIT 1
+            FOR UPDATE`,
+          [Number(id), orgId],
+        );
+        if (invCheck.rows.length === 0) {
+          throw Object.assign(
+            new Error(
+              `No inventory unit is booked for booking #${id}. Cannot confirm — ` +
+              `investigate inventory state before retrying.`,
+            ),
+            { httpStatus: 409 },
+          );
+        }
+
+        // Conditional UPDATE: only flip Pending → Confirmed. RETURNING
+        // confirms exactly one row was updated. If 0 rows: another request
+        // already recovered this booking — idempotent no-op.
+        const recoveryRes = await client.query<{ id: number }>(
+          `UPDATE booking_applications
+              SET booking_status = 'Confirmed', confirmed_at = NOW(), updated_at = NOW()
+            WHERE id = $1 AND organization_id = $2 AND booking_status = 'Pending'
+            RETURNING id`,
+          [Number(id), orgId],
+        );
+
+        if (recoveryRes.rows.length === 0) {
+          // Already recovered by a concurrent request — no-op.
+          return { id: Number(id) };
+        }
+
+        // Close the lead
+        if (currentData.lead_id) {
+          await client.query(
+            `UPDATE walkin_enquiries SET status = 'Closed'
+              WHERE id = $1 AND organization_id = $2`,
+            [Number(currentData.lead_id), orgId],
+          );
+        }
+
+        await client.query(
+          `INSERT INTO booking_history (booking_id, updated_by, user_role, changed_fields, organization_id)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [Number(id), user_name, user_role,
+           JSON.stringify({ booking_status: { from: "Pending", to: "Confirmed" }, action: "pending_recovery" }),
+           orgId],
+        );
+
+        // Deal stage hook: recovered booking → Booked stage
+        if (currentData.lead_id) {
+          await insertOutboxEvent(client, {
+            lead_id: Number(currentData.lead_id),
+            event_type: "booking_confirmed",
+            event_ts: new Date().toISOString(),
+            event_key: buildEventKey("booking_confirmed", "booking_applications", Number(id)),
+            actor_id: sessionUserId ?? null,
+            payload: { source: "pending_recovery", booking_id: Number(id) },
+            organization_id: orgId,
+          });
+        }
+
         return { id: Number(id) };
       }
 

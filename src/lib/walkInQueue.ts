@@ -14,6 +14,7 @@
 // receptionist submissions for the same SM do not race.
 
 import type { PoolClient } from "pg";
+import { insertOutboxEvent, buildEventKey } from "@/lib/dealStageOutbox";
 
 /**
  * Returns true when the SM has no outstanding unreworked receptionist lead,
@@ -107,6 +108,17 @@ export async function processQueueForManager(
              'Walk-in sequential queue assignment', $3)`,
     [lead_id, smName, orgId]
   );
+
+  // Deal stage hook: the lead is now assigned from the queue.
+  await insertOutboxEvent(client, {
+    lead_id,
+    event_type: "lead_assigned_from_queue",
+    event_ts: new Date().toISOString(),
+    event_key: buildEventKey("lead_assigned_from_queue", "walkin_enquiries", lead_id),
+    actor_id: smUserId,
+    payload: { source: "walk_in_queue", queue_id },
+    organization_id: orgId,
+  });
 
   return lead_id;
 }

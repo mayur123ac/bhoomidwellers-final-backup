@@ -13,6 +13,7 @@ import { jsonCompressed } from "@/lib/apiResponse";
 import { resolvePhones } from "@/lib/phoneAccess";
 import { broadcastToOrg } from "@/lib/supabase/broadcast";
 import { pushNewLead } from "@/lib/fcm/feedPushHandler";
+import { insertOutboxEvent, buildEventKey } from "@/lib/dealStageOutbox";
 import { batchGetVisitDepths } from "@/lib/visitChain";
 import { EmailService } from "@/lib/email/EmailService";
 import { isValidRecipient } from "@/lib/email/types";
@@ -758,6 +759,20 @@ export async function POST(req: Request) {
            ON CONFLICT (lead_id) DO NOTHING`,
           [orgId, newId, assignedToUserId, assignedTo]
         );
+      }
+
+      // Deal stage hook: record the lead_assigned event when directly assigned
+      // (queued leads get their event when processQueueForManager assigns them).
+      if (effectiveAssignedToId && !isQueuedAssignment) {
+        await insertOutboxEvent(client, {
+          lead_id: newId,
+          event_type: "lead_assigned",
+          event_ts: new Date().toISOString(),
+          event_key: buildEventKey("lead_assigned", "walkin_enquiries", newId),
+          actor_id: actorUserId ?? null,
+          payload: { source: "receptionist_form" },
+          organization_id: orgId,
+        });
       }
 
       const finalRes = await client.query(

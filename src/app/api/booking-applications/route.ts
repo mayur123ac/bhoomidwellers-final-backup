@@ -11,6 +11,7 @@ import { resolveStampDutyRate, resolveRegistrationFeeRate, calcStampDuty } from 
 // Single definition of the fully-joined booking shape, shared by GET, POST and
 // the PUT in [id]/route.ts — see lib/bookingQuery.ts for why.
 import { BOOKING_SELECT_SQL, BOOKING_LIST_SQL, fetchBookingById } from "@/lib/bookingQuery";
+import { insertOutboxEvent, buildEventKey } from "@/lib/dealStageOutbox";
 
 export const dynamic = "force-dynamic";
 
@@ -772,6 +773,22 @@ export async function POST(req: NextRequest) {
         property_type, floor_number, flat_number, carpet_area,
       });
 
+      // ── Deal stage hook: booking initiated → Sales stage ──────────────────
+      // The booking is created as 'Pending' inside this transaction. This is the
+      // "booking initiated" business event. The lead_id is required for the stage
+      // pipeline; bookings without a lead (if that is ever allowed) skip this.
+      if (lead_id) {
+        await insertOutboxEvent(client, {
+          lead_id: Number(lead_id),
+          event_type: "booking_initiated",
+          event_ts: new Date().toISOString(),
+          event_key: buildEventKey("booking_initiated", "booking_applications", newId),
+          actor_id: gate.userId,
+          payload: { source: "booking_form", booking_id: newId },
+          organization_id: orgId,
+        });
+      }
+
       // ── CP commission accrual ────────────────────────────────────────────
       // Only when the booking inherited a channel partner AND the form asked for
       // it. Deliberately NON-FATAL, unlike the inventory sync above: the most
@@ -828,19 +845,74 @@ export async function POST(req: NextRequest) {
     });
     const _tTxn = Date.now();
 
-    // ── Post-commit ──────────────────────────────────────────────────────────
-    // Status flip and lead closure folded into ONE statement. They were two
-    // sequential UPDATEs, each its own round trip; a CTE makes it one. Both
-    // predicates are unchanged, including the organization scope on each table.
-    await query(
-      `WITH confirmed AS (
-         UPDATE booking_applications SET booking_status = 'Confirmed'
-          WHERE id = $1 AND organization_id = $3
-       )
-       UPDATE walkin_enquiries SET status = 'Closed'
-        WHERE id = $2 AND organization_id = $3`,
-      [result.id, lead_id, orgId],
-    );
+    // ── Post-commit: confirm booking + close lead + deal stage event ────────
+    // Wrapped in a transaction so the booking_confirmed outbox event is atomic
+    // with the status flip. Previously a bare CTE — if the CTE failed, the
+    // booking stayed 'Pending' with no Booked stage (Scenario G in the docs).
+    // Now: if this transaction fails, no confirmation occurs and the booking
+    // remains 'Pending'. The booking_initiated event (Sales stage) was already
+    // committed in the main transaction above.
+    //
+    // Phase 5.2: verify affected rows and inventory state before emitting the
+    // booking_confirmed event. The CTE now uses RETURNING to confirm the UPDATE
+    // actually flipped a row, and the inventory unit must still be 'booked' for
+    // this booking (guards against a race where another request cancelled/stole
+    // the unit between Transaction 1 and Transaction 2).
+    await transaction(async (client) => {
+      // Verify inventory is still booked for this booking before confirming.
+      // A cancelled or reassigned unit means the booking should NOT be confirmed.
+      // FOR UPDATE locks the row to prevent a concurrent cancel/reassign between
+      // this check and the confirmation UPDATE below (TOCTOU guard).
+      const invCheck = await client.query(
+        `SELECT id FROM inventory_units
+          WHERE booking_id = $1 AND organization_id = $2
+            AND status = 'booked' AND deleted_at IS NULL
+          LIMIT 1
+          FOR UPDATE`,
+        [result.id, orgId],
+      );
+      if (invCheck.rows.length === 0) {
+        throw new Error(
+          `Inventory unit for booking #${result.id} is no longer booked. ` +
+          `Confirmation aborted — booking remains Pending.`,
+        );
+      }
+
+      // Confirm the booking, using RETURNING to verify the UPDATE hit a row.
+      const confirmRes = await client.query<{ id: number }>(
+        `UPDATE booking_applications
+            SET booking_status = 'Confirmed', confirmed_at = NOW()
+          WHERE id = $1 AND organization_id = $2 AND booking_status = 'Pending'
+          RETURNING id`,
+        [result.id, orgId],
+      );
+
+      if (confirmRes.rows.length === 0) {
+        // Row was already confirmed (concurrent request) or doesn't exist.
+        // Either way, no outbox event — idempotent no-op.
+        return;
+      }
+
+      // Close the lead (best-effort — the lead may not exist in edge cases).
+      await client.query(
+        `UPDATE walkin_enquiries SET status = 'Closed'
+          WHERE id = $1 AND organization_id = $2`,
+        [lead_id, orgId],
+      );
+
+      // Deal stage hook: booking confirmed → Booked stage
+      if (lead_id) {
+        await insertOutboxEvent(client, {
+          lead_id: Number(lead_id),
+          event_type: "booking_confirmed",
+          event_ts: new Date().toISOString(),
+          event_key: buildEventKey("booking_confirmed", "booking_applications", result.id),
+          actor_id: gate.userId,
+          payload: { source: "booking_post_confirm", booking_id: result.id },
+          organization_id: orgId,
+        });
+      }
+    });
 
     // Documents: uploaded to R2 and recorded now, outside any transaction. A
     // document that fails to upload is reported, not silently dropped, and never

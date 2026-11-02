@@ -4,6 +4,7 @@ import { requireSession } from "@/lib/serverAuth";
 import { getOrganizationId } from "@/lib/tenantContext";
 import { broadcastFollowUp, type FollowUpPayload } from "@/lib/followUpEvents";
 import { broadcastToOrg } from "@/lib/supabase/broadcast";
+import { insertOutboxEvent, buildEventKey } from "@/lib/dealStageOutbox";
 
 export async function POST(
   req: NextRequest,
@@ -113,6 +114,17 @@ export async function POST(
       );
 
       const followUpId = fuRows.rows[0].id;
+
+      // Deal stage hook: call completed → Contacted stage
+      await insertOutboxEvent(client, {
+        lead_id: session.lead_id!,
+        event_type: "call_completed",
+        event_ts: fuRows.rows[0].created_at,
+        event_key: buildEventKey("call_completed", "follow_ups", followUpId),
+        actor_id: gate.userId,
+        payload: { source: "call_session", call_session_id: sessionId },
+        organization_id: orgId,
+      });
 
       // Update call session
       await client.query(

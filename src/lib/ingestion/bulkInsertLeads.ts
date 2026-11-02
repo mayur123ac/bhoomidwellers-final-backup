@@ -4,6 +4,7 @@
 import { transaction, recalculateSrNos } from "@/lib/db";
 import { getOrganizationId } from "@/lib/tenantContext";
 import { isChannelPartnerSource, resolveChannelPartnerId } from "@/lib/cpCommissionEngine";
+import { insertOutboxEvent, buildEventKey } from "@/lib/dealStageOutbox";
 import type { ParsedLead } from "./parseLeadSheet";
 
 export interface BulkInsertParams {
@@ -170,6 +171,19 @@ export async function bulkInsertLeads(
            VALUES ($1, $2, $3, $4, NULL, $5)`,
           [leadId, feedback, clamp(uploadedByName, 150), row.enquiry_date, orgId]
         );
+      }
+
+      // Deal stage hook: bulk-imported lead assigned to SM
+      if (assignedToUserId) {
+        await insertOutboxEvent(client, {
+          lead_id: leadId,
+          event_type: "lead_assigned_bulk",
+          event_ts: row.enquiry_date || new Date().toISOString(),
+          event_key: buildEventKey("lead_assigned_bulk", "walkin_enquiries", leadId),
+          actor_id: null,
+          payload: { source: "bulk_import" },
+          organization_id: orgId,
+        });
       }
     }
 

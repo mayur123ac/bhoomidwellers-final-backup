@@ -10,6 +10,7 @@ import { transaction } from "@/lib/db";
 import { getOrganizationId } from "@/lib/tenantContext";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 import { processQueueForManager } from "@/lib/walkInQueue";
+import { insertOutboxEvent, buildEventKey } from "@/lib/dealStageOutbox";
 
 type SalesFormFields = {
   propertyType?: string;
@@ -114,6 +115,17 @@ export async function POST(req: Request) {
         [String(leadId), message, authorName, visitDate, orgId, gate.userId]
       );
 
+      // Deal stage hook: sales form submitted → Contacted stage
+      await insertOutboxEvent(client, {
+        lead_id: Number(leadId),
+        event_type: "sales_form_submitted",
+        event_ts: followUpRes.rows[0].created_at,
+        event_key: buildEventKey("sales_form_submitted", "follow_ups", followUpRes.rows[0].id),
+        actor_id: gate.userId,
+        payload: { source: "sales_form" },
+        organization_id: orgId,
+      });
+
       // 2️⃣ Normalized columns + status, in the same UPDATE.
       // Also stamp sales_form_submitted_at on the FIRST submission (COALESCE
       // makes it immutable — a second form submit keeps the original timestamp).
@@ -167,11 +179,23 @@ export async function POST(req: Request) {
       // 3️⃣ One site_visits row when a visit is scheduled. No extra follow-up —
       // the row above already records it.
       if (visitDate) {
-        await client.query(
+        const svRes = await client.query(
           `INSERT INTO site_visits (lead_id, visit_date, created_by, created_by_id, role, status, notes, organization_id)
-           VALUES ($1, $2, $3, $7, $4, 'scheduled', $5, $6)`,
+           VALUES ($1, $2, $3, $7, $4, 'scheduled', $5, $6)
+           RETURNING id, created_at`,
           [leadId, visitDate, authorName, "Sales Manager", "Scheduled via Salesform", orgId, gate.userId]
         );
+
+        // Deal stage hook: site visit scheduled via salesform → Site Visit stage
+        await insertOutboxEvent(client, {
+          lead_id: Number(leadId),
+          event_type: "site_visit_scheduled_via_salesform",
+          event_ts: svRes.rows[0].created_at,
+          event_key: buildEventKey("site_visit_scheduled_via_salesform", "site_visits", svRes.rows[0].id),
+          actor_id: gate.userId,
+          payload: { source: "sales_form", visit_date: visitDate },
+          organization_id: orgId,
+        });
       }
 
       return { followUp: followUpRes.rows[0] };
