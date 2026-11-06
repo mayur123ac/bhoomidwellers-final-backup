@@ -36,6 +36,13 @@ const EVENT_TO_STAGE: Record<string, { stage: string; ordinal: number }> = {
   site_visit_completed:              { stage: "Negotiation", ordinal: 4 },
   booking_initiated:                 { stage: "Sales",       ordinal: 5 },
   booking_confirmed:                 { stage: "Booked",      ordinal: 6 },
+  // Manual progression — one event type per target stage
+  manual_advance_1:                  { stage: "Fresh",       ordinal: 1 },
+  manual_advance_2:                  { stage: "Contacted",   ordinal: 2 },
+  manual_advance_3:                  { stage: "Site Visit",  ordinal: 3 },
+  manual_advance_4:                  { stage: "Negotiation", ordinal: 4 },
+  manual_advance_5:                  { stage: "Sales",       ordinal: 5 },
+  manual_advance_6:                  { stage: "Booked",      ordinal: 6 },
 };
 
 // ---------------------------------------------------------------------------
@@ -255,6 +262,9 @@ export interface StageDuration {
   transition_type: "ACTUAL" | "INFERRED";
   duration_ms: number | null; // null for the last (current) stage
   duration_clamped: boolean;  // true if raw duration was negative (clamped to 0)
+  source_event: string;
+  triggered_by: number | null;
+  source_table: string | null;
 }
 
 export function computeStageDurations(rows: StageHistoryRow[]): StageDuration[] {
@@ -282,6 +292,9 @@ export function computeStageDurations(rows: StageHistoryRow[]): StageDuration[] 
       transition_type: row.transition_type,
       duration_ms,
       duration_clamped,
+      source_event: row.source_event,
+      triggered_by: row.triggered_by,
+      source_table: row.source_table,
     };
   });
 }

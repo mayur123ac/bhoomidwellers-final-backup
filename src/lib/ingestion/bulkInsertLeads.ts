@@ -181,7 +181,7 @@ export async function bulkInsertLeads(
           event_ts: row.enquiry_date || new Date().toISOString(),
           event_key: buildEventKey("lead_assigned_bulk", "walkin_enquiries", leadId),
           actor_id: null,
-          payload: { source: "bulk_import" },
+          payload: { source: "bulk_import", source_table: "walkin_enquiries", source_record_id: leadId },
           organization_id: orgId,
         });
       }

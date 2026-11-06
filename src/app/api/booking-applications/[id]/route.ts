@@ -640,7 +640,7 @@ export async function PUT(
             event_ts: new Date().toISOString(),
             event_key: buildEventKey("booking_confirmed", "booking_applications", Number(id)),
             actor_id: sessionUserId ?? null,
-            payload: { source: "booking_reactivate", booking_id: Number(id) },
+            payload: { source: "booking_reactivate", source_table: "booking_applications", source_record_id: Number(id) },
             organization_id: orgId,
           });
         }
@@ -717,7 +717,7 @@ export async function PUT(
             event_ts: new Date().toISOString(),
             event_key: buildEventKey("booking_confirmed", "booking_applications", Number(id)),
             actor_id: sessionUserId ?? null,
-            payload: { source: "pending_recovery", booking_id: Number(id) },
+            payload: { source: "pending_recovery", source_table: "booking_applications", source_record_id: Number(id) },
             organization_id: orgId,
           });
         }

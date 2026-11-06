@@ -122,7 +122,7 @@ export async function POST(req: Request) {
         event_ts: followUpRes.rows[0].created_at,
         event_key: buildEventKey("sales_form_submitted", "follow_ups", followUpRes.rows[0].id),
         actor_id: gate.userId,
-        payload: { source: "sales_form" },
+        payload: { source: "sales_form", source_table: "follow_ups", source_record_id: followUpRes.rows[0].id },
         organization_id: orgId,
       });
 
@@ -193,7 +193,7 @@ export async function POST(req: Request) {
           event_ts: svRes.rows[0].created_at,
           event_key: buildEventKey("site_visit_scheduled_via_salesform", "site_visits", svRes.rows[0].id),
           actor_id: gate.userId,
-          payload: { source: "sales_form", visit_date: visitDate },
+          payload: { source: "sales_form", source_table: "site_visits", source_record_id: svRes.rows[0].id, visit_date: visitDate },
           organization_id: orgId,
         });
       }

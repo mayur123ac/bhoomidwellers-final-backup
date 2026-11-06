@@ -38,7 +38,6 @@ import CrmUpdatesNotification from "@/components/CrmUpdatesNotification";
 import WhatsAppConversationPanel from "@/components/whatsapp/WhatsAppConversationPanel";
 import LostLeadModal from "@/components/LostLeadModal";
 import { updateLeadLostState, useLostLeadEvents } from "@/lib/lostLeadSync";
-import { useFollowUpEvents, useLeadFollowUpPolling, useMergeLeadFollowUps, type FollowUpSSEPayload } from "@/lib/followUpSync";
 // The notification queue. Built and organization-scoped on the server — see
 // lib/notifications/feed.ts for why it is no longer derived in this file.
 import { useNotificationFeed, openNotificationLead, type CrmNotification } from "@/lib/hooks/useNotificationFeed";
@@ -93,51 +92,6 @@ const SalaryTab = dynamic(() => import("@/components/hr/SalaryTab"), { ssr: fals
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ORG LOGO — enquiry form header
-/** Structured enquiry details for the first "System (Front Desk)" bubble in follow-ups. */
-function EnquiryDetailsBubble({ lead, theme, isDark, formatDateFn }: { lead: any; theme: any; isDark: boolean; formatDateFn: (d: string) => string }) {
-  const rows: [string, string][] = [
-    ["Customer Name", lead.name || "N/A"],
-    ["Phone", lead.phone || "N/A"],
-    ...(lead.altPhone || lead.alt_phone ? [["Alt Phone", lead.altPhone || lead.alt_phone] as [string, string]] : []),
-    ["Email", lead.email && lead.email !== "N/A" ? lead.email : "Not Provided"],
-    ["Budget", lead.salesBudget && lead.salesBudget !== "Pending" ? lead.salesBudget : (lead.budget || "N/A")],
-    ["Configuration", lead.propType || lead.configuration || "Pending"],
-    ["Purpose", lead.useType && lead.useType !== "Pending" ? lead.useType : (lead.purpose || "N/A")],
-    ["Source", lead.source || "N/A"],
-    ...(lead.source === "Channel Partner" ? [
-      ["CP Name", lead.cpName || lead.cp_name || "N/A"] as [string, string],
-      ["CP Company", lead.cp_company || lead.cpCompany || "N/A"] as [string, string],
-      ["CP Phone", lead.cp_phone || lead.cpPhone || "N/A"] as [string, string],
-    ] : []),
-    ...(lead.source === "Referral" && lead.referral_name ? [["Referred By", lead.referral_name] as [string, string]] : []),
-    ["Location", lead.location && lead.location !== "N/A" ? lead.location : "Not Provided"],
-    ["Address", lead.address && lead.address !== "N/A" ? lead.address : "Not Provided"],
-    ["Planning to Buy", lead.planningPurchase || "Pending"],
-    ["Loan Required", lead.loanPlanned || "Pending"],
-    ["Status", lead.status || "Assigned"],
-    ["Assigned To", lead.assigned_to || "Unassigned"],
-    ...(lead.mongoVisitDate ? [["Site Visit", formatDateFn(lead.mongoVisitDate)] as [string, string]] : []),
-    ...(lead.remarks ? [["Remarks", lead.remarks] as [string, string]] : []),
-  ];
-  const labelCls = `text-[10px] font-medium ${theme.textFaint}`;
-  const valCls = `text-xs font-semibold ${theme.text}`;
-  return (
-    <div>
-      <p className={`text-xs font-bold mb-2 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>
-        📋 New Enquiry — Assigned to {lead.assigned_to || "Unassigned"}
-      </p>
-      <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
-        {rows.map(([label, value]) => (
-          <div key={label} className={label === "Address" || label === "Remarks" ? "col-span-2" : ""}>
-            <p className={labelCls}>{label}</p>
-            <p className={valCls}>{value}</p>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 // Falls back to org name text if the URL is missing or the image fails to load.
 // Never renders a broken <img>: the src is only set when a URL is present, and
 // onError clears it so the text fallback takes over.
@@ -237,23 +191,8 @@ function DraggableTableContainer({ children, className, isDark }: { children: Re
   );
 }
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 20;
 const CARDS_PER_PAGE = 20;
-
-// Maps ALL_LEADS_COLUMNS keys to the API's SORTABLE_COLUMNS keys.
-// Columns absent from this map are not sortable server-side.
-const COL_SORT_MAP: Record<string, string> = {
-  lead_no:      "lead_no",
-  client_name:  "name",
-  source:       "source",
-  cp_name:      "cp_name",
-  cp_company:   "cp_company",
-  budget:       "budget",
-  phone:        "phone",
-  date_created: "created_at",
-  backdated:    "enquiry_date",
-  sales_manager:"assigned_to",
-};
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -588,26 +527,21 @@ const ALL_LEADS_COLUMNS: { key: string; label: string; locked?: boolean; type?: 
   { key: "sales_manager", label: "Sales Manager", type: 'text' },
 ];
 
-/** Returns a comparable display value for a receptionist lead by ALL_LEADS_COLUMNS key.
- *  Works for both fetchPage-normalised rows (camelCase aliases set) and raw
- *  statsLeads rows (snake_case DB columns only), so column filters and sort work
- *  identically regardless of which dataset the lead came from. */
+/** Returns a comparable display value for a receptionist lead by ALL_LEADS_COLUMNS key. */
 function getLeadValueForColRecep(lead: any, key: string): string {
   switch (key) {
-    case 'lead_no':      return String(lead.sr_no || lead.id || '');
-    case 'client_name':  return String(lead.name || '');
-    case 'source':       return String(lead.source || '');
-    case 'cp_name':      return String(lead.cp_name || '');
-    case 'cp_company':   return String(lead.cp_company || '');
-    case 'cp_phone':     return String(lead.cp_phone || '');
-    case 'budget':       return String(lead.salesBudget || lead.budget || '');
-    case 'phone':        return String(lead.phone || '');
-    // altPhone is set by fetchPage; statsLeads rows carry alt_phone directly.
-    case 'alt_phone':    return String(lead.altPhone || lead.alt_phone || '');
+    case 'lead_no': return String(lead.sr_no || lead.id || '');
+    case 'client_name': return String(lead.name || '');
+    case 'source': return String(lead.source || '');
+    case 'cp_name': return String(lead.cp_name || '');
+    case 'cp_company': return String(lead.cp_company || '');
+    case 'cp_phone': return String(lead.cp_phone || '');
+    case 'budget': return String(lead.salesBudget || lead.budget || '');
+    case 'phone': return String(lead.phone || '');
+    case 'alt_phone': return String(lead.altPhone || lead.alt_phone || '');
     case 'date_created': return String(lead.date || '');
-    case 'backdated':    return (lead.autoDateEnabled ?? lead.auto_date_enabled) === false && (lead.enquiryDate || lead.enquiry_date) ? String(lead.enquiryDate || lead.enquiry_date) : '';
-    // assignedTo is set by fetchPage; statsLeads rows carry assigned_to directly.
-    case 'sales_manager': return String(lead.assignedTo || lead.assigned_to || '');
+    case 'backdated': return lead.autoDateEnabled === false && lead.enquiryDate ? String(lead.enquiryDate) : '';
+    case 'sales_manager': return String(lead.assignedTo || '');
     default: return '';
   }
 }
@@ -1050,15 +984,10 @@ export default function ReceptionistDashboard() {
   const [followUps, setFollowUps] = useState<any[]>([]);
   const [isFetchingEnquiries, setIsFetchingEnquiries] = useState(true);
   const [totalCount, setTotalCount] = useState(0);
-  // Explicit page-based navigation replaces infinite scroll.
-  const [frontDeskPage, setFrontDeskPage] = useState(1);
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [searchRecep, setSearchRecep] = useState("");
-  // Full org-level lead dataset used exclusively for analytics stats and
-  // column-filter option lists. Fetched once on mount (and on refetch) with
-  // a high limit so charts are always accurate, independent of which page
-  // the Front Desk Log table is showing.
-  const [statsLeads, setStatsLeads] = useState<any[]>([]);
-  const [isFetchingStats, setIsFetchingStats] = useState(false);
 
   // ── Overview chart state ──
   const [chartMode1, setChartMode1] = useState<"today" | "monthly" | "3months" | "6months" | "yearly" | "inception">("today");
@@ -1075,28 +1004,6 @@ export default function ReceptionistDashboard() {
   // Tracks which tab the back button should return to from the detail view.
   const [detailReturnTab, setDetailReturnTab] = useState<string>("recep-leads");
   const [selectedLead, setSelectedLead] = useState<any>(null);
-  const mergeLeadFollowUps = useMergeLeadFollowUps(setFollowUps);
-  useLeadFollowUpPolling(selectedLead?.id, mergeLeadFollowUps);
-
-  // Supabase Realtime: append incoming follow-ups from other users instantly.
-  // Reconcile optimistic entries (own messages) and deduplicate server echoes.
-  const handleRealtimeFollowUp = useCallback((fu: FollowUpSSEPayload) => {
-    setFollowUps(prev => {
-      if (fu.clientMessageId) {
-        const hasOptimistic = prev.some(f => f._clientMessageId === fu.clientMessageId);
-        if (hasOptimistic) {
-          return prev.map(f => f._clientMessageId === fu.clientMessageId ? { ...fu, _status: "sent" } : f);
-        }
-      }
-      if (prev.some(f => String(f._id) === String(fu._id))) return prev;
-      return [...prev, fu];
-    });
-  }, []);
-  // fetchFollowUps is declared later; use a ref so the fallback-sync callback
-  // is always the latest version without introducing a declaration-order issue.
-  const fetchFollowUpsRef = useRef<() => void>(() => {});
-  const fallbackSync = useCallback(() => { fetchFollowUpsRef.current(); }, []);
-  useFollowUpEvents(handleRealtimeFollowUp, undefined, fallbackSync);
 
   // If the "assigned" tab is showing but there's no detail to display (e.g. the
   // cards sub-view), redirect to the return tab. Assigned Forms cards have been
@@ -1245,6 +1152,8 @@ export default function ReceptionistDashboard() {
   // a scroll sentinel. BhoomiAiPanel owns its own conversation, so none of it
   // belongs to this page any more.
 
+  const tableSentinelRef = useRef<HTMLDivElement>(null);
+
   // ─────────────────────────────────────────────────────────────────────────
   // DATE CONSTANTS
   // ─────────────────────────────────────────────────────────────────────────
@@ -1336,7 +1245,16 @@ export default function ReceptionistDashboard() {
     return cleanupBackGuard;
   }, [router]);
 
-  // Infinite scroll removed — the Front Desk Log now uses explicit page controls.
+  // Infinite scroll: table
+  useEffect(() => {
+    const sentinel = tableSentinelRef.current;
+    if (!sentinel) return;
+    const obs = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting && hasMore && !isLoadingMore && !isFetchingEnquiries) loadMore();
+    }, { threshold: 0.1 });
+    obs.observe(sentinel);
+    return () => obs.disconnect();
+  }, [hasMore, isLoadingMore, isFetchingEnquiries, offset]);
   // Assigned forms cards pagination
   useEffect(() => {
     const sentinel = assignedSentinelRef.current;
@@ -1385,27 +1303,16 @@ export default function ReceptionistDashboard() {
      had happened to load far enough down the list first. searchColumn=basic
      matches exactly the three fields this queue has always searched — name,
      phone and lead number — so the results are the same set, just drawn from the
-     whole organization instead of the current page.
-
-     sortKeyApi and sortDir are forwarded straight to the API's SORTABLE_COLUMNS
-     mechanism so ORDER BY happens in SQL, not in a client-side Array.sort over a
-     partial page. */
-  const fetchPage = async (
-    page: number,
-    search = "",
-    sortKeyApi?: string,
-    sortDirApi?: "asc" | "desc",
-  ) => {
+     whole organization instead of the current page. */
+  const fetchPage = async (currentOffset: number, append: boolean, search = "") => {
     try {
-      const offset = (page - 1) * PAGE_SIZE;
-      const qs = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) });
+      const qs = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(currentOffset) });
       if (search.trim()) { qs.set("q", search.trim()); qs.set("searchColumn", "basic"); }
-      if (sortKeyApi) { qs.set("sortKey", sortKeyApi); qs.set("sortDir", sortDirApi ?? "desc"); }
       const res = await fetch(`/api/walkin_enquiries?${qs.toString()}`);
       if (!res.ok) return;
       const json = await res.json();
       const dataArray: any[] = Array.isArray(json) ? json : (json.data ?? []);
-      const total: number = json.total ?? dataArray.length;
+      const total: number = json.total ?? (append ? totalCount : dataArray.length);
       const formatted = dataArray.map((item: any) => ({
         ...item,
         // For queued leads assigned_to is NULL; surface the intended SM name
@@ -1421,43 +1328,15 @@ export default function ReceptionistDashboard() {
         autoDateEnabled: item.auto_date_enabled ?? true,
         status: (item.status === "Routed" || item.status === "ROUTED" ? "Assigned" : item.status) || "Assigned",
       }));
-      // Always replace — never append. Pagination is explicit now.
-      setEnquiries(formatted);
+      setEnquiries(prev => {
+        const base = append ? prev : [];
+        const merged = [...base, ...formatted];
+        const seen = new Set<string>();
+        return merged.filter(e => { const k = String(e.id); if (seen.has(k)) return false; seen.add(k); return true; });
+      });
       setTotalCount(total);
+      setHasMore(formatted.length === PAGE_SIZE && (currentOffset + PAGE_SIZE) < total);
     } catch (e) { console.error("fetchPage error", e); }
-  };
-
-  /* fetchStatsLeads fetches the complete org lead set (up to 10 000 rows) once
-     per session refresh. It does NOT use pagination — it is solely for:
-       • Analytics tab charts (config breakdown, source pie, manager counts)
-       • Stats cards (enquiriesToday, enquiriesYear, returningLeadsCount …)
-       • Column-filter option lists (so checkbox values reflect the full org,
-         not just the 25 rows currently shown in the table)
-     The same row normalization as fetchPage is applied so field names are
-     consistent across both datasets. noCount=1 saves a COUNT(*) round-trip. */
-  const fetchStatsLeads = async () => {
-    setIsFetchingStats(true);
-    try {
-      const res = await fetch("/api/walkin_enquiries?limit=10000&offset=0&noCount=1");
-      if (!res.ok) return;
-      const json = await res.json();
-      const dataArray: any[] = Array.isArray(json) ? json : (json.data ?? []);
-      const normalized = dataArray.map((item: any) => ({
-        ...item,
-        assignedTo: item.assigned_to
-          || (item.pending_sm_name ? `Pending — ${item.pending_sm_name}` : "Unassigned"),
-        assignedReceptionist: item.assigned_receptionist || null,
-        altPhone: item.alt_phone,
-        pinCode: item.pin_code,
-        city: item.city,
-        date: formatDate(item.created_at),
-        enquiryDate: item.enquiry_date || item.created_at,
-        autoDateEnabled: item.auto_date_enabled ?? true,
-        status: (item.status === "Routed" || item.status === "ROUTED" ? "Assigned" : item.status) || "Assigned",
-      }));
-      setStatsLeads(normalized);
-    } catch (e) { console.error("fetchStatsLeads error", e); }
-    finally { setIsFetchingStats(false); }
   };
 
   const fetchFollowUps = async () => {
@@ -1469,32 +1348,43 @@ export default function ReceptionistDashboard() {
       }
     } catch (e) { console.error("fetchFollowUps error", e); }
   };
-  fetchFollowUpsRef.current = fetchFollowUps;
 
   const initialLoad = async () => {
     setIsFetchingEnquiries(true);
-    setFrontDeskPage(1);
-    // fetchPage and fetchStatsLeads are independent — run both in parallel.
-    // fetchPage fills the first page of the table; fetchStatsLeads fills the
-    // full dataset used by analytics and column-filter option lists.
-    await Promise.all([
-      fetchPage(1, searchRecep),
-      fetchStatsLeads(),
-    ]);
+    setOffset(0); setHasMore(true);
+    // Do NOT clear enquiries before the fetch completes. fetchPage with
+    // append=false replaces the list atomically when the data arrives, so
+    // existingCPs stays populated during the round-trip and the CP Company
+    // autocomplete remains usable for a second enquiry opened immediately
+    // after the first one is submitted.
+    await fetchPage(0, false, searchRecep);
     setIsFetchingEnquiries(false);
   };
 
-  /* Re-query from the top when the search term settles. Debounced so a single
-     word costs one round-trip rather than one per keystroke.
-     The leading didMountSearch guard keeps this from firing a duplicate first
+  const loadMore = useCallback(async () => {
+    if (isLoadingMore || !hasMore) return;
+    setIsLoadingMore(true);
+    const next = offset + PAGE_SIZE;
+    setOffset(next);
+    // The search term goes with every page, so "load more" keeps paging through
+    // the FILTERED set rather than reverting to the unfiltered list.
+    await fetchPage(next, true, searchRecep);
+    setIsLoadingMore(false);
+  }, [isLoadingMore, hasMore, offset, searchRecep]);
+
+  /* Re-query from the top when the search term settles. Debounced, because this
+     runs on a keystroke and each pass is a round trip; 300 ms is below the point
+     where typing feels laggy and well above a fast typist's inter-key gap, so a
+     word costs one request rather than one per letter.
+
+     The leading `didMountSearch` guard keeps this from firing a duplicate first
      page on mount, which initialLoad has already fetched. */
   const didMountSearch = useRef(false);
   useEffect(() => {
     if (!didMountSearch.current) { didMountSearch.current = true; return; }
     const id = setTimeout(() => {
-      setFrontDeskPage(1);
-      const apiKey = rcpColSort ? COL_SORT_MAP[rcpColSort.key] : undefined;
-      fetchPage(1, searchRecep, apiKey, rcpColSort?.direction);
+      setOffset(0); setHasMore(true);
+      fetchPage(0, false, searchRecep);
     }, 300);
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1859,8 +1749,6 @@ export default function ReceptionistDashboard() {
 
   const refetchAll = async () => {
     await Promise.all([initialLoad(), fetchFollowUps(), fetchMyAssignedLeads(user.name)]);
-    // initialLoad already calls fetchStatsLeads; the parallel call above means
-    // stats data is refreshed together with the table on every manual refresh.
   };
 
   // ── Lost / restored leads, live ─────────────────────────────────────────────
@@ -1880,8 +1768,6 @@ export default function ReceptionistDashboard() {
   const applyLostLeadUpdate = useCallback((updatedLead: any) => {
     setEnquiries(prev => updateLeadLostState(prev, updatedLead));
     setDirectAssignedLeads(prev => updateLeadLostState(prev, updatedLead));
-    // Keep the full stats dataset consistent so analytics counts don't lag.
-    setStatsLeads(prev => updateLeadLostState(prev, updatedLead));
     setSelectedLead((prev: any) =>
       prev && String(prev.id) === String(updatedLead?.id) ? { ...prev, ...updatedLead } : prev
     );
@@ -2242,11 +2128,8 @@ export default function ReceptionistDashboard() {
   };
 
   const existingCPs = useMemo(() => {
-    // Use the full org dataset so CP autocomplete covers all existing partners,
-    // not just those on the current page.
-    const src = statsLeads.length > 0 ? statsLeads : mergedLeads;
     const map = new Map();
-    src.forEach((l: any) => {
+    mergedLeads.forEach((l: any) => {
       if (l.source === "Channel Partner" && l.cp_company && l.cp_company !== "N/A") {
         if (!map.has(l.cp_company)) {
           map.set(l.cp_company, { company: l.cp_company, phone: l.cp_phone || "" });
@@ -2254,7 +2137,7 @@ export default function ReceptionistDashboard() {
       }
     });
     return Array.from(map.values());
-  }, [statsLeads, mergedLeads]);
+  }, [mergedLeads]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // SALES WORKFLOW ACTIONS
@@ -2271,26 +2154,9 @@ export default function ReceptionistDashboard() {
   const handleSendCustomNote = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customNote.trim() || !selectedLead) return;
-    const clientMessageId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-    const optimistic: any = {
-      _id: clientMessageId, leadId: String(selectedLead.id), salesManagerName: user.name, createdBy: "receptionist",
-      message: customNote, siteVisitDate: null, createdAt: new Date().toISOString(),
-      followUpType: "note", createdByRole: null, sentToRole: null, sentToUserId: null,
-      parentFollowUpId: null, readAt: null, _status: "sending", _clientMessageId: clientMessageId,
-    };
+    const nm = { leadId: String(selectedLead.id), salesManagerName: user.name, createdBy: "receptionist", message: customNote, siteVisitDate: null, createdAt: new Date().toISOString() };
     setCustomNote("");
-    setFollowUps(prev => [...prev, optimistic]);
-    try {
-      const res = await fetch("/api/followups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ leadId: String(selectedLead.id), salesManagerName: user.name, createdBy: "receptionist", message: optimistic.message, siteVisitDate: null, clientMessageId }) });
-      const json = await res.json().catch(() => null);
-      setFollowUps(prev => prev.map(f =>
-        f._clientMessageId === clientMessageId
-          ? (json?.success && json.data ? { ...json.data, _status: "sent" } : { ...f, _status: "failed" })
-          : f
-      ));
-    } catch {
-      setFollowUps(prev => prev.map(f => f._clientMessageId === clientMessageId ? { ...f, _status: "failed" } : f));
-    }
+    try { await fetch("/api/followups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(nm) }); fetchFollowUps(); } catch (e) { console.error(e); }
   };
 
   const handleSalesFormSubmit = async (e: React.FormEvent) => {
@@ -2412,47 +2278,15 @@ export default function ReceptionistDashboard() {
   // ─────────────────────────────────────────────────────────────────────────
   // FILTERED SETS
   // ─────────────────────────────────────────────────────────────────────────
-  /* ── Front Desk Log display pipeline ─────────────────────────────────────
-   *
-   * Two modes depending on whether column filters are active:
-   *
-   * NORMAL MODE (no column filters):
-   *   • `enquiries` holds exactly one server-side page (PAGE_SIZE rows).
-   *   • The API already applied search and ORDER BY, so no client sort needed.
-   *   • `mergedLeads` is the follow-up-enriched version of that page.
-   *   • Pagination controls let the user navigate pages explicitly.
-   *
-   * COLUMN-FILTER MODE (one or more column filters active):
-   *   • We switch to `statsLeads`, the complete org dataset fetched on mount.
-   *   • The text search and column filters are both applied client-side against
-   *     the full set, so no rows are silently excluded.
-   *   • Pagination is suppressed; the result is shown in full with a count badge.
-   *   • Sort is also applied client-side so ordering is consistent.
-   *
-   * This satisfies the requirement to "resolve derived-field filtering
-   * explicitly rather than silently filtering only the current page."
-   */
-  const hasColFilters = Object.values(rcpColFilters).some(v => v !== null);
+  const receptionistLeadsBase = mergedLeads.filter((e: any) =>
+    (e.name || "").toLowerCase().includes(searchRecep.toLowerCase()) ||
+    String(e.sr_no || e.id).includes(searchRecep) ||
+    (e.phone || "").includes(searchRecep)
+  );
 
-  // receptionistLeadsFiltered: the full filtered set used for column-filter mode
-  // and for building the checkbox option lists shown in the filter dropdown.
+  // Apply column-header checkbox filters
   const receptionistLeadsFiltered = useMemo(() => {
-    if (!hasColFilters) return mergedLeads;      // normal mode: already filtered by server
-
-    // Start from the complete dataset.
-    let leads: any[] = statsLeads;
-
-    // Re-apply text search client-side (statsLeads is unfiltered by search).
-    if (searchRecep.trim()) {
-      const lq = searchRecep.toLowerCase();
-      leads = leads.filter((l: any) =>
-        (l.name || "").toLowerCase().includes(lq) ||
-        String(l.sr_no || l.id).includes(searchRecep) ||
-        (l.phone || "").includes(searchRecep)
-      );
-    }
-
-    // Apply column checkbox filters against the full set.
+    let leads = receptionistLeadsBase;
     for (const [colKey, allowedVals] of Object.entries(rcpColFilters)) {
       if (!allowedVals) continue;
       leads = leads.filter((l: any) => {
@@ -2462,15 +2296,10 @@ export default function ReceptionistDashboard() {
       });
     }
     return leads;
-  }, [mergedLeads, statsLeads, hasColFilters, searchRecep, rcpColFilters]);
+  }, [receptionistLeadsBase, rcpColFilters]);
 
-  // receptionistLeads: the final array rendered by the table.
+  // Apply column-level sort (falls back to default sr_no desc)
   const receptionistLeads = useMemo(() => {
-    if (!hasColFilters) {
-      // Normal mode: server already sorted the page. No client sort.
-      return receptionistLeadsFiltered;
-    }
-    // Column-filter mode: sort the complete filtered set client-side.
     if (rcpColSort) {
       const { key, direction } = rcpColSort;
       return [...receptionistLeadsFiltered].sort((a, b) => {
@@ -2481,7 +2310,7 @@ export default function ReceptionistDashboard() {
       });
     }
     return [...receptionistLeadsFiltered].sort((a: any, b: any) => (Number(b.sr_no) || 0) - (Number(a.sr_no) || 0));
-  }, [receptionistLeadsFiltered, hasColFilters, rcpColSort]);
+  }, [receptionistLeadsFiltered, rcpColSort]);
 
   const filteredAssigned = myAssignedLeads.filter((l: any) =>
     (l.name || "").toLowerCase().includes(searchAssigned.toLowerCase()) ||
@@ -2520,76 +2349,71 @@ export default function ReceptionistDashboard() {
     return CONFIG_KEYS.includes(c) ? c : "Other";
   };
 
-  // All chart data uses statsLeads (full org dataset) — not the paginated page.
   const configTodayBarData = useMemo(() => {
-    const filtered = statsLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= todayStart);
+    const filtered = mergedLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= todayStart);
     const cc: Record<string, number> = {}; CONFIG_KEYS.forEach(k => (cc[k] = 0));
     filtered.forEach((item: any) => { cc[bucketConfig(item.configuration)]++; });
     return CONFIG_KEYS.map((name, i) => ({ name, count: cc[name], color: t.chartColors[i % t.chartColors.length] })).filter(d => d.count > 0);
-  }, [statsLeads, todayStart, t.chartColors]);
+  }, [mergedLeads, todayStart, t.chartColors]);
 
   const configMonthlyBarData = useMemo(() => {
-    const filtered = statsLeads.filter((e: any) => { if (!e.created_at) return false; const d = new Date(e.created_at); return d.getMonth() === configChartMonth && d.getFullYear() === dateNow.getFullYear(); });
+    const filtered = mergedLeads.filter((e: any) => { if (!e.created_at) return false; const d = new Date(e.created_at); return d.getMonth() === configChartMonth && d.getFullYear() === dateNow.getFullYear(); });
     const cc: Record<string, number> = {}; CONFIG_KEYS.forEach(k => (cc[k] = 0));
     filtered.forEach((item: any) => { cc[bucketConfig(item.configuration)]++; });
     return CONFIG_KEYS.map((name, i) => ({ name, count: cc[name], color: t.chartColors[i % t.chartColors.length] })).filter(d => d.count > 0);
-  }, [statsLeads, configChartMonth, isDark]);
+  }, [mergedLeads, configChartMonth, isDark]);
 
   const configInceptionBarData = useMemo(() => {
     const cc: Record<string, number> = {}; CONFIG_KEYS.forEach(k => (cc[k] = 0));
-    statsLeads.forEach((item: any) => { cc[bucketConfig(item.configuration)]++; });
+    mergedLeads.forEach((item: any) => { cc[bucketConfig(item.configuration)]++; });
     return CONFIG_KEYS.map((name, i) => ({ name, count: cc[name], color: t.chartColors[i % t.chartColors.length] })).filter(d => d.count > 0);
-  }, [statsLeads, t.chartColors]);
+  }, [mergedLeads, t.chartColors]);
 
   const buildMonthStackedData = (numMonths: number) => {
-    return Array.from({ length: numMonths }, (_, i) => numMonths - 1 - i).map(monthOffset => {
-      const d = new Date(dateNow.getFullYear(), dateNow.getMonth() - monthOffset, 1);
+    return Array.from({ length: numMonths }, (_, i) => numMonths - 1 - i).map(offset => {
+      const d = new Date(dateNow.getFullYear(), dateNow.getMonth() - offset, 1);
       const monthIdx = d.getMonth(); const year = d.getFullYear();
-      const filtered = statsLeads.filter((e: any) => { if (!e.created_at) return false; const dd = new Date(e.created_at); return dd.getMonth() === monthIdx && dd.getFullYear() === year; });
+      const filtered = mergedLeads.filter((e: any) => { if (!e.created_at) return false; const dd = new Date(e.created_at); return dd.getMonth() === monthIdx && dd.getFullYear() === year; });
       const entry: Record<string, any> = { month: MONTH_NAMES[monthIdx].slice(0, 3) };
       CONFIG_KEYS.forEach(k => { entry[k] = filtered.filter((e: any) => bucketConfig(e.configuration) === k).length; });
       return entry;
     });
   };
 
-  const config3MonthBarData = useMemo(() => buildMonthStackedData(3), [statsLeads]);
-  const config6MonthBarData = useMemo(() => buildMonthStackedData(6), [statsLeads]);
-  const configYearlyBarData = useMemo(() => buildMonthStackedData(12), [statsLeads]);
+  const config3MonthBarData = useMemo(() => buildMonthStackedData(3), [mergedLeads]);
+  const config6MonthBarData = useMemo(() => buildMonthStackedData(6), [mergedLeads]);
+  const configYearlyBarData = useMemo(() => buildMonthStackedData(12), [mergedLeads]);
 
-  // Analytics stats — all derived from statsLeads (full org dataset), not from
-  // the paginated enquiries page. This ensures chart numbers are always accurate
-  // regardless of which table page is currently visible.
-  const enquiriesToday = useMemo(() => statsLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= todayStart).length, [statsLeads]);
-  const returningLeadsCount = useMemo(() => statsLeads.filter((e: any) => e.lead_classification === "RETURNING_LEAD").length, [statsLeads]);
-  const monthlyEnquiriesSelected = useMemo(() => statsLeads.filter((e: any) => { if (!e.created_at) return false; const d = new Date(e.created_at); return d.getMonth() === selectedMonthCard && d.getFullYear() === dateNow.getFullYear(); }).length, [statsLeads, selectedMonthCard]);
-  const enquiries3Months = useMemo(() => statsLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= threeMonthsAgo).length, [statsLeads]);
-  const enquiries6Months = useMemo(() => statsLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= sixMonthsAgo).length, [statsLeads]);
-  const enquiriesYear = useMemo(() => statsLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= yearStart).length, [statsLeads]);
+  const enquiriesToday = useMemo(() => mergedLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= todayStart).length, [mergedLeads]);
+  const returningLeadsCount = useMemo(() => mergedLeads.filter((e: any) => e.lead_classification === "RETURNING_LEAD").length, [mergedLeads]);
+  const monthlyEnquiriesSelected = useMemo(() => mergedLeads.filter((e: any) => { if (!e.created_at) return false; const d = new Date(e.created_at); return d.getMonth() === selectedMonthCard && d.getFullYear() === dateNow.getFullYear(); }).length, [mergedLeads, selectedMonthCard]);
+  const enquiries3Months = useMemo(() => mergedLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= threeMonthsAgo).length, [mergedLeads]);
+  const enquiries6Months = useMemo(() => mergedLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= sixMonthsAgo).length, [mergedLeads]);
+  const enquiriesYear = useMemo(() => mergedLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= yearStart).length, [mergedLeads]);
 
   const managerLeadCountsFiltered = useMemo(() => {
-    let filtered = statsLeads;
-    if (card3Mode === "today") filtered = statsLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= todayStart);
-    else if (card3Mode === "monthly") filtered = statsLeads.filter((e: any) => { if (!e.created_at) return false; const d = new Date(e.created_at); return d.getMonth() === card3Month && d.getFullYear() === dateNow.getFullYear(); });
-    else if (card3Mode === "3months") filtered = statsLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= threeMonthsAgo);
-    else if (card3Mode === "6months") filtered = statsLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= sixMonthsAgo);
-    else if (card3Mode === "yearly") filtered = statsLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= yearStart);
+    let filtered = mergedLeads;
+    if (card3Mode === "today") filtered = mergedLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= todayStart);
+    else if (card3Mode === "monthly") filtered = mergedLeads.filter((e: any) => { if (!e.created_at) return false; const d = new Date(e.created_at); return d.getMonth() === card3Month && d.getFullYear() === dateNow.getFullYear(); });
+    else if (card3Mode === "3months") filtered = mergedLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= threeMonthsAgo);
+    else if (card3Mode === "6months") filtered = mergedLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= sixMonthsAgo);
+    else if (card3Mode === "yearly") filtered = mergedLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= yearStart);
     const c: Record<string, number> = {};
-    // Use assignedTo (set by normalization) falling back to assigned_to.
-    filtered.forEach((e: any) => { const m = e.assignedTo || e.assigned_to || "Unassigned"; c[m] = (c[m] || 0) + 1; });
+    filtered.forEach((e: any) => { const m = e.assignedTo || "Unassigned"; c[m] = (c[m] || 0) + 1; });
     return Object.entries(c).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
-  }, [statsLeads, card3Mode, card3Month]);
+  }, [mergedLeads, card3Mode, card3Month]);
 
   const sourceDataFiltered = useMemo(() => {
-    let filtered = statsLeads;
-    if (card4Mode === "today") filtered = statsLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= todayStart);
-    else if (card4Mode === "monthly") filtered = statsLeads.filter((e: any) => { if (!e.created_at) return false; const d = new Date(e.created_at); return d.getMonth() === card4Month && d.getFullYear() === dateNow.getFullYear(); });
-    else if (card4Mode === "3months") filtered = statsLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= threeMonthsAgo);
-    else if (card4Mode === "6months") filtered = statsLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= sixMonthsAgo);
-    else if (card4Mode === "yearly") filtered = statsLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= yearStart);
+    let filtered = mergedLeads;
+    if (card4Mode === "today") filtered = mergedLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= todayStart);
+    else if (card4Mode === "monthly") filtered = mergedLeads.filter((e: any) => { if (!e.created_at) return false; const d = new Date(e.created_at); return d.getMonth() === card4Month && d.getFullYear() === dateNow.getFullYear(); });
+    else if (card4Mode === "3months") filtered = mergedLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= threeMonthsAgo);
+    else if (card4Mode === "6months") filtered = mergedLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= sixMonthsAgo);
+    else if (card4Mode === "yearly") filtered = mergedLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= yearStart);
     const counts: Record<string, number> = {}; LEAD_SOURCES.forEach(s => counts[s] = 0);
     filtered.forEach((e: any) => { const s = String(e.source || "Others").trim(); if (counts[s] !== undefined) counts[s]++; else counts["Others"] = (counts["Others"] || 0) + 1; });
     return LEAD_SOURCES.map((name, i) => ({ name, count: counts[name], color: t.chartColors[i % t.chartColors.length] })).filter(d => d.count > 0).sort((a, b) => b.count - a.count);
-  }, [statsLeads, card4Mode, card4Month, t.chartColors]);
+  }, [mergedLeads, card4Mode, card4Month, t.chartColors]);
 
   const isConfigChartEmpty = (() => {
     if (chartMode1 === "today") return configTodayBarData.length === 0;
@@ -2611,6 +2435,15 @@ export default function ReceptionistDashboard() {
   // ─────────────────────────────────────────────────────────────────────────
   // LOADERS
   // ─────────────────────────────────────────────────────────────────────────
+  const LoaderRow = () => (
+    <tr><td colSpan={9} className="p-6 text-center">
+      <div className={`flex items-center justify-center gap-3 text-sm ${t.textMuted}`}>
+        <div className="flex gap-1">{[0, 150, 300].map(d => <span key={d} className={`w-2 h-2 rounded-full animate-bounce ${isDark ? "bg-[#9E217B]" : "bg-[#00AEEF]"}`} style={{ animationDelay: `${d}ms` }} />)}</div>
+        Loading more…
+      </div>
+    </td></tr>
+  );
+
   const CardsLoader = () => (
     <div className={`col-span-full flex items-center justify-center gap-3 text-sm py-10 ${t.textMuted}`}>
       <div className="flex gap-1.5">{[0, 150, 300].map(d => <span key={d} className={`w-2 h-2 rounded-full animate-bounce ${isDark ? "bg-[#9E217B]" : "bg-[#00AEEF]"}`} style={{ animationDelay: `${d}ms` }} />)}</div>
@@ -3081,12 +2914,12 @@ export default function ReceptionistDashboard() {
                     </h2>
                     <span
                       className={`text-[10px] md:text-[11px] font-medium px-2.5 py-0.5 rounded-full tabular-nums tracking-wide ${isDark ? "bg-white/10 text-gray-300" : "bg-black/5 text-gray-600"}`}
-                      title={hasColFilters ? `${receptionistLeads.length} of ${totalCount} (column filters active — showing complete filtered set)` : `${totalCount} total leads`}
+                      title={receptionistLeads.length !== totalCount ? `${receptionistLeads.length} of ${totalCount} leads loaded` : undefined}
                     >
-                      {hasColFilters
-                        ? receptionistLeads.length.toLocaleString("en-IN")
-                        : totalCount.toLocaleString("en-IN")
-                      }
+                      {receptionistLeads.length.toLocaleString("en-IN")}
+                      {receptionistLeads.length !== totalCount && (
+                        <span className="opacity-50"> / {Number(totalCount || 0).toLocaleString("en-IN")}</span>
+                      )}
                     </span>
                   </div>
 
@@ -3107,39 +2940,24 @@ export default function ReceptionistDashboard() {
                       isDark={isDark}
                     />
                     <ToolbarButton
-                      onClick={() => {
-                        // Export the complete org-level dataset, not just the current page.
-                        // When column filters are active use the already-filtered receptionistLeads
-                        // (which is derived from statsLeads). Otherwise export all of statsLeads
-                        // matching the current text search.
-                        const exportSource = hasColFilters
-                          ? receptionistLeads
-                          : statsLeads.filter((l: any) => {
-                              if (!searchRecep.trim()) return true;
-                              const lq = searchRecep.toLowerCase();
-                              return (l.name || "").toLowerCase().includes(lq) ||
-                                String(l.sr_no || l.id).includes(searchRecep) ||
-                                (l.phone || "").includes(searchRecep);
-                            });
-                        downloadRecepCSV(exportSource.map((l: any) => ({
-                          "Sr. No.": l.sr_no || l.id,
-                          "Client Name": l.name,
-                          "Source": l.source || "",
-                          "CP Name": l.cp_name || "",
-                          "CP Company": l.cp_company || "",
-                          "CP Phone": l.cp_phone || "",
-                          "Budget": l.salesBudget || l.budget || "",
-                          "Phone": l.phone || "",
-                          "Alt. Phone": l.altPhone || l.alt_phone || "",
-                          "Date Created": l.date || "",
-                          "Backdated Entry": (l.autoDateEnabled ?? l.auto_date_enabled) === false && (l.enquiryDate || l.enquiry_date) ? formatDate(l.enquiryDate || l.enquiry_date).split(",")[0] : "",
-                          "Sales Manager": l.assignedTo || l.assigned_to || "",
-                        })), `all-leads-${new Date().toISOString().slice(0, 10)}.csv`);
-                      }}
+                      onClick={() => downloadRecepCSV(receptionistLeads.map((l: any) => ({
+                        "Sr. No.": l.sr_no || l.id,
+                        "Client Name": l.name,
+                        "Source": l.source || "",
+                        "CP Name": l.cp_name || "",
+                        "CP Company": l.cp_company || "",
+                        "CP Phone": l.cp_phone || "",
+                        "Budget": l.salesBudget || l.budget || "",
+                        "Phone": l.phone || "",
+                        "Alt. Phone": l.altPhone || "",
+                        "Date Created": l.date || "",
+                        "Backdated Entry": l.autoDateEnabled === false && l.enquiryDate ? formatDate(l.enquiryDate).split(",")[0] : "",
+                        "Sales Manager": l.assignedTo || "",
+                      })), `all-leads-${new Date().toISOString().slice(0, 10)}.csv`)}
                       icon={<FaDownload className="text-[11px] sm:text-xs" />}
                       isDark={isDark}
                       variant="export"
-                      title="Export CSV (complete dataset)"
+                      title="Export CSV"
                     >
                       <span className="hidden sm:inline">Export</span>
                     </ToolbarButton>
@@ -3200,7 +3018,7 @@ export default function ReceptionistDashboard() {
                                   }`}>
                                   {isSorted
                                     ? (rcpColSort?.direction === 'asc' ? <FaSortAlphaDown className="w-2.5 h-2.5" /> : <FaSortAlphaUp className="w-2.5 h-2.5" />)
-                                    : <FaFilter className="w-2 h-2" />
+                                    : <FaFilter className="w-2 h-2 cursor-pointer" />
                                   }
                                 </span>
                                 {isFiltered && <span className={`w-1.5 h-1.5 rounded-full inline-block ${isDark ? 'bg-[#0A84FF]' : 'bg-[#007AFF]'}`} />}
@@ -3209,31 +3027,11 @@ export default function ReceptionistDashboard() {
                               {openRcpFilterCol === col.key && (
                                 <RcpColumnFilterDropdown
                                   column={col}
-                                  // Use the FULL org dataset for option values so the
-                                  // checkbox list shows every value that exists, not just
-                                  // the values on the current page.
-                                  data={(statsLeads.length > 0 ? statsLeads : receptionistLeadsFiltered).map((l: any) => ({ [col.key]: getLeadValueForColRecep(l, col.key) }))}
+                                  data={receptionistLeadsFiltered.map((l: any) => ({ [col.key]: getLeadValueForColRecep(l, col.key) }))}
                                   activeFilter={rcpColFilters[col.key] ?? null}
                                   activeSort={rcpColSort?.key === col.key ? rcpColSort : null}
-                                  onApply={vals => {
-                                    setRcpColFilters(prev => ({ ...prev, [col.key]: vals }));
-                                    // Applying a column filter clears the page (column-filter
-                                    // mode bypasses pagination and uses the full statsLeads set).
-                                    setFrontDeskPage(1);
-                                  }}
-                                  onSort={dir => {
-                                    const newSort = dir ? { key: col.key, direction: dir } : null;
-                                    setRcpColSort(newSort);
-                                    // If the column has a server-side sort key, refetch from
-                                    // page 1 so ORDER BY runs in SQL over the full dataset.
-                                    const apiKey = newSort ? COL_SORT_MAP[newSort.key] : undefined;
-                                    if (apiKey) {
-                                      setFrontDeskPage(1);
-                                      fetchPage(1, searchRecep, apiKey, dir ?? "desc");
-                                    }
-                                    // Columns without a server sort key use client-side sort
-                                    // in column-filter mode (statsLeads is already in memory).
-                                  }}
+                                  onApply={vals => setRcpColFilters(prev => ({ ...prev, [col.key]: vals }))}
+                                  onSort={dir => setRcpColSort(dir ? { key: col.key, direction: dir } : null)}
                                   onClose={() => setOpenRcpFilterCol(null)}
                                   isDark={isDark}
                                 />
@@ -3344,7 +3142,6 @@ export default function ReceptionistDashboard() {
                                   const r = await contactFieldSave(enquiry.id, "phone", val);
                                   if (!r.success) throw new Error(r.message);
                                   setEnquiries(prev => prev.map(e => e.id === enquiry.id ? { ...e, phone: val } : e));
-                                  setStatsLeads(prev => prev.map(e => e.id === enquiry.id ? { ...e, phone: val } : e));
                                   showToast("Contact details updated successfully.");
                                 }}
                               />
@@ -3364,7 +3161,6 @@ export default function ReceptionistDashboard() {
                                   const r = await contactFieldSave(enquiry.id, "alt_phone", val);
                                   if (!r.success) throw new Error(r.message);
                                   setEnquiries(prev => prev.map(e => e.id === enquiry.id ? { ...e, altPhone: val, alt_phone: val } : e));
-                                  setStatsLeads(prev => prev.map(e => e.id === enquiry.id ? { ...e, altPhone: val, alt_phone: val } : e));
                                   showToast("Contact details updated successfully.");
                                 }}
                               />
@@ -3397,69 +3193,20 @@ export default function ReceptionistDashboard() {
                         </tr>
                       ))}
 
+                      {isLoadingMore && <LoaderRow />}
+
+                      {!hasMore && !isFetchingEnquiries && receptionistLeads.length > 0 && (
+                        <tr>
+                          <td colSpan={visibleAllLeadsCols.length} className={`px-4 py-8 text-center text-[13px] ${isDark ? "text-gray-500" : "text-gray-400"}`}>
+                            All {totalCount} records loaded
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
+
+                  <div ref={tableSentinelRef} className="h-px w-full pointer-events-none" aria-hidden="true" />
                 </DraggableTableContainer>
-
-                {/* ── Pagination bar ────────────────────────────────────────────── */}
-                {!hasColFilters && totalCount > 0 && (() => {
-                  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
-                  const start = (frontDeskPage - 1) * PAGE_SIZE + 1;
-                  const end = Math.min(frontDeskPage * PAGE_SIZE, totalCount);
-                  const apiKey = rcpColSort ? COL_SORT_MAP[rcpColSort.key] : undefined;
-                  return (
-                    <div className={`flex items-center justify-between px-4 py-3 border-t text-[12px] ${isDark ? "border-white/10 text-gray-400" : "border-gray-200/60 text-gray-500"}`}>
-                      <span className="tabular-nums">
-                        {isFetchingEnquiries ? "Loading…" : `${start}–${end} of ${totalCount.toLocaleString("en-IN")}`}
-                      </span>
-                      <div className="flex items-center gap-1">
-                        <button
-                          disabled={frontDeskPage <= 1 || isFetchingEnquiries}
-                          onClick={() => {
-                            const p = frontDeskPage - 1;
-                            setFrontDeskPage(p);
-                            fetchPage(p, searchRecep, apiKey, rcpColSort?.direction);
-                          }}
-                          className={`px-3 py-1.5 rounded-lg font-medium transition-colors ${isDark ? "bg-white/10 hover:bg-white/15 disabled:opacity-30 text-gray-300" : "bg-black/5 hover:bg-black/10 disabled:opacity-30 text-gray-700"} disabled:cursor-not-allowed`}
-                        >
-                          ← Prev
-                        </button>
-                        <span className={`px-3 py-1.5 rounded-lg font-medium tabular-nums ${isDark ? "bg-[#0A84FF]/10 text-[#0A84FF]" : "bg-[#007AFF]/10 text-[#007AFF]"}`}>
-                          {frontDeskPage} / {totalPages}
-                        </span>
-                        <button
-                          disabled={frontDeskPage >= totalPages || isFetchingEnquiries}
-                          onClick={() => {
-                            const p = frontDeskPage + 1;
-                            setFrontDeskPage(p);
-                            fetchPage(p, searchRecep, apiKey, rcpColSort?.direction);
-                          }}
-                          className={`px-3 py-1.5 rounded-lg font-medium transition-colors ${isDark ? "bg-white/10 hover:bg-white/15 disabled:opacity-30 text-gray-300" : "bg-black/5 hover:bg-black/10 disabled:opacity-30 text-gray-700"} disabled:cursor-not-allowed`}
-                        >
-                          Next →
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                {/* Column-filter mode: show a banner instead of pagination */}
-                {hasColFilters && receptionistLeads.length > 0 && (
-                  <div className={`flex items-center justify-between px-4 py-3 border-t text-[12px] ${isDark ? "border-white/10 text-gray-400" : "border-gray-200/60 text-gray-500"}`}>
-                    <span>
-                      Showing all <span className="font-semibold tabular-nums">{receptionistLeads.length.toLocaleString("en-IN")}</span> matching leads
-                      <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide ${isDark ? "bg-[#0A84FF]/15 text-[#0A84FF]" : "bg-[#007AFF]/10 text-[#007AFF]"}`}>
-                        Filtered
-                      </span>
-                    </span>
-                    <button
-                      onClick={() => setRcpColFilters({})}
-                      className={`text-[11px] font-medium underline underline-offset-2 ${isDark ? "text-gray-400 hover:text-gray-200" : "text-gray-500 hover:text-gray-800"}`}
-                    >
-                      Clear all column filters
-                    </button>
-                  </div>
-                )}
               </div>
             </div>
           )}
@@ -3517,7 +3264,7 @@ export default function ReceptionistDashboard() {
                     </div>
                   </div>
 
-                  {isFetchingStats ? (
+                  {isFetchingEnquiries ? (
                     <div className={`flex-1 flex items-center justify-center text-sm font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'} min-h-[230px]`}>Calculating…</div>
                   ) : isConfigChartEmpty ? (
                     <div className={`w-full h-[230px] mt-4 flex flex-col items-center justify-center rounded-[1.5rem] border-2 border-dashed ${isDark ? "border-slate-800" : "border-slate-200/80"}`}>
@@ -3567,7 +3314,7 @@ export default function ReceptionistDashboard() {
                     </div>
                   </div>
 
-                  {isFetchingStats ? (
+                  {isFetchingEnquiries ? (
                     <div className={`flex-1 flex items-center justify-center text-sm font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'} min-h-[230px]`}>Calculating…</div>
                   ) : sourceDataFiltered.length === 0 ? (
                     <div className={`w-full h-[230px] mt-4 flex items-center justify-center rounded-[1.5rem] border-2 border-dashed ${isDark ? "border-slate-800" : "border-slate-200/80"}`}>
@@ -3586,13 +3333,13 @@ export default function ReceptionistDashboard() {
                     <h2 className={`text-[17px] sm:text-lg font-bold tracking-tight ${t.text}`}>Enquiry Details</h2>
                     <div className="flex items-center flex-wrap gap-2">
                       <button onClick={() => {
-                        let f = statsLeads;
-                        if (card2Mode === "today") f = statsLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= todayStart);
-                        else if (card2Mode === "monthly") f = statsLeads.filter((e: any) => e.created_at && new Date(e.created_at).getMonth() === selectedMonthCard && new Date(e.created_at).getFullYear() === dateNow.getFullYear());
-                        else if (card2Mode === "3months") f = statsLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= threeMonthsAgo);
-                        else if (card2Mode === "6months") f = statsLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= sixMonthsAgo);
-                        else if (card2Mode === "yearly") f = statsLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= yearStart);
-                        downloadCSV(f.map((e: any) => ({ "Sr. No.": e.sr_no || e.id, "Client Name": e.name, "Budget": e.salesBudget || e.budget || "N/A", "Configuration": e.configuration || "N/A", "Purpose": e.purpose || "N/A", "Source": e.source || "N/A", "Date": e.date || e.created_at, "Assigned To": e.assignedTo || e.assigned_to || "Unassigned" })), `Enquiries_${card2Mode}.csv`);
+                        let f = mergedLeads;
+                        if (card2Mode === "today") f = mergedLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= todayStart);
+                        else if (card2Mode === "monthly") f = mergedLeads.filter((e: any) => e.created_at && new Date(e.created_at).getMonth() === selectedMonthCard && new Date(e.created_at).getFullYear() === dateNow.getFullYear());
+                        else if (card2Mode === "3months") f = mergedLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= threeMonthsAgo);
+                        else if (card2Mode === "6months") f = mergedLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= sixMonthsAgo);
+                        else if (card2Mode === "yearly") f = mergedLeads.filter((e: any) => e.created_at && new Date(e.created_at) >= yearStart);
+                        downloadCSV(f.map((e: any) => ({ "Sr. No.": e.sr_no || e.id, "Client Name": e.name, "Budget": e.salesBudget || "N/A", "Configuration": e.configuration || "N/A", "Purpose": e.purpose || "N/A", "Source": e.source || "N/A", "Date": e.date, "Assigned To": e.assignedTo || "Unassigned" })), `Enquiries_${card2Mode}.csv`);
                       }} className={`w-8 h-8 flex items-center justify-center rounded-full border transition-colors ${isDark ? 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 shadow-sm'}`} title="Export CSV"><FaDownload size={12} /></button>
                       <select value={card2Mode} onChange={e => setCard2Mode(e.target.value as any)} className={`text-xs font-semibold px-3 py-1.5 rounded-full border outline-none cursor-pointer transition-colors ${isDark ? 'bg-slate-800 border-slate-700 text-slate-200' : 'bg-white border-slate-200 text-slate-700 shadow-sm'}`}>
                         <option value="today">Today</option><option value="monthly">Monthly</option>
@@ -3614,7 +3361,7 @@ export default function ReceptionistDashboard() {
                       )}
                     </div>
                     <p className={`text-5xl sm:text-6xl font-black leading-none tracking-tight ${isDark ? "text-purple-400" : "text-[#B01A79]"}`}>
-                      {isFetchingStats ? "…" :
+                      {isFetchingEnquiries ? "…" :
                         card2Mode === "today" ? enquiriesToday :
                           card2Mode === "monthly" ? monthlyEnquiriesSelected :
                             card2Mode === "3months" ? enquiries3Months :
@@ -3679,7 +3426,7 @@ export default function ReceptionistDashboard() {
                         </tr>
                       </thead>
                       <tbody className={`divide-y ${isDark ? 'divide-slate-800/60' : 'divide-slate-100'}`}>
-                        {isFetchingStats ? (
+                        {isFetchingEnquiries ? (
                           <tr><td colSpan={2} className={`text-center py-6 text-[13px] font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Loading...</td></tr>
                         ) : managerLeadCountsFiltered.length === 0 ? (
                           <tr><td colSpan={2} className={`text-center py-6 text-[13px] font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>No data for this period</td></tr>
@@ -4142,7 +3889,7 @@ export default function ReceptionistDashboard() {
                                 <span className={`font-bold text-[12px] sm:text-[13px] ${t.accentText}`}>System (Front Desk)</span>
                                 <span className={`text-[9px] sm:text-[10px] font-medium ${t.textFaint}`}>{formatDate(selectedLead.created_at)}</span>
                               </div>
-                              <EnquiryDetailsBubble lead={selectedLead} theme={t} isDark={isDark} formatDateFn={formatDate} />
+                              <p className={`text-[12px] sm:text-[13px] leading-relaxed ${t.textMuted}`}>Lead assigned to {selectedLead.assigned_to}. Action required.</p>
                             </div>
                           </div>
                           {currentLeadFollowUps.map((msg: any, idx: number) => {

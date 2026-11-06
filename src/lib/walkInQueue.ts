@@ -116,7 +116,7 @@ export async function processQueueForManager(
     event_ts: new Date().toISOString(),
     event_key: buildEventKey("lead_assigned_from_queue", "walkin_enquiries", lead_id),
     actor_id: smUserId,
-    payload: { source: "walk_in_queue", queue_id },
+    payload: { source: "walk_in_queue", source_table: "walkin_enquiries", source_record_id: lead_id, queue_id },
     organization_id: orgId,
   });
 

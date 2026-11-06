@@ -140,7 +140,6 @@ export default function SearchableSelect({
           onKeyDown={handleKeyDown}
           onFocus={() => { if (!disabled) { setOpen(true); setHighlighted(0); } }}
           onBlur={() => { setOpen(false); setQuery(""); }}
-
           autoComplete="off"
           className={`flex-1 p-3 outline-none bg-transparent ${t.text} placeholder:text-gray-400 ${disabled ? "cursor-not-allowed" : ""}`}
           aria-label={ariaLabel}

@@ -784,7 +784,7 @@ export async function POST(req: NextRequest) {
           event_ts: new Date().toISOString(),
           event_key: buildEventKey("booking_initiated", "booking_applications", newId),
           actor_id: gate.userId,
-          payload: { source: "booking_form", booking_id: newId },
+          payload: { source: "booking_form", source_table: "booking_applications", source_record_id: newId },
           organization_id: orgId,
         });
       }
@@ -908,7 +908,7 @@ export async function POST(req: NextRequest) {
           event_ts: new Date().toISOString(),
           event_key: buildEventKey("booking_confirmed", "booking_applications", result.id),
           actor_id: gate.userId,
-          payload: { source: "booking_post_confirm", booking_id: result.id },
+          payload: { source: "booking_post_confirm", source_table: "booking_applications", source_record_id: result.id },
           organization_id: orgId,
         });
       }

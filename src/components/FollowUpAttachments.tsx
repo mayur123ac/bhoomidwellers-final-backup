@@ -66,7 +66,7 @@ export default function FollowUpAttachments({
       .then((j) => {
         if (j.success) setAttachments(j.data ?? []);
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setLoading(false));
   }, [followUpId, prefetched]);
 
@@ -83,7 +83,7 @@ export default function FollowUpAttachments({
             setImageUrls(prev => ({ ...prev, [att.id]: j.url }));
           }
         })
-        .catch(() => {});
+        .catch(() => { });
     });
   }, [attachments]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -236,12 +236,12 @@ export default function FollowUpAttachments({
                 cloud storage. The follow-up message will remain. This action cannot be undone.
               </p>
             </div>
-            <div className="flex gap-2 px-5 py-3 border-t border-gray-100 bg-gray-50">
+            <div className="flex gap-2 px-5 py-3 border-t border-gray-100 bg-gray-50 cursor-pointer">
               <button
                 type="button"
                 onClick={() => setConfirmDelete(null)}
                 disabled={deleting}
-                className="flex-1 px-3 py-2 text-xs font-bold rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-100 transition"
+                className="flex-1 cursor-pointer px-3 py-2 text-xs font-bold rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-100 transition"
               >
                 Cancel
               </button>
@@ -249,7 +249,7 @@ export default function FollowUpAttachments({
                 type="button"
                 onClick={handleDelete}
                 disabled={deleting}
-                className="flex-1 px-3 py-2 text-xs font-bold rounded-xl bg-red-600 text-white hover:bg-red-700 transition flex items-center justify-center gap-1.5"
+                className="flex-1 px-3 cursor-pointer py-2 text-xs font-bold rounded-xl bg-red-600 text-white hover:bg-red-700 transition flex items-center justify-center gap-1.5"
               >
                 {deleting ? (
                   <span className="animate-pulse">Deleting...</span>

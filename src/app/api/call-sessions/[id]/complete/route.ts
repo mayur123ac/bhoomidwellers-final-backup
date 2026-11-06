@@ -122,7 +122,7 @@ export async function POST(
         event_ts: fuRows.rows[0].created_at,
         event_key: buildEventKey("call_completed", "follow_ups", followUpId),
         actor_id: gate.userId,
-        payload: { source: "call_session", call_session_id: sessionId },
+        payload: { source: "call_session", source_table: "follow_ups", source_record_id: followUpId, call_session_id: sessionId },
         organization_id: orgId,
       });
 

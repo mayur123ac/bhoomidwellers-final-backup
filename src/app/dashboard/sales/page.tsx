@@ -45,6 +45,7 @@ import FollowUpComposer from "@/components/FollowUpComposer";
 import WhatsAppConversationPanel from "@/components/whatsapp/WhatsAppConversationPanel";
 import InlineContactField from "@/components/InlineContactField";
 import { contactFieldSave } from "@/lib/contactFieldSave";
+import { LeadDetailsPanel, LeadDetailsLayout } from "@/components/leads";
 import UploadLeadSheet from "@/components/UploadLeadSheet";
 import SelfUploadLeadSheet from "@/components/SelfUploadLeadSheet";
 import LoginTimerWidget from "@/components/LoginTimerWidget";
@@ -213,10 +214,10 @@ function buildTheme(isDark: boolean) {
 
     // ── Cards (Hover color and shadow only, no size increase) ──
     card: isDark
-      ? "bg-[#1a1a1a] border border-[#2a2a2a] transition-all duration-300 hover:border-[#d946a8]/50 hover:bg-[#1e1e1e] hover:shadow-2xl hover:shadow-[#d946a8]/20 flex flex-col h-full"
-      : "bg-gradient-to-r from-[#f1f5ff] via-[#eef2ff] to-[#f5f3ff] border border-indigo-300 transition-all duration-300 hover:border-[#9E217B]/50 hover:shadow-2xl hover:shadow-[#9E217B]/20 flex flex-col h-full",
+      ? "bg-[#1a1a1a] border border-[#2a2a2a] transition-all duration-300 hover:border-[#d946a8]/50 hover:bg-[#1e1e1e] hover:shadow-2xl hover:shadow-[#d946a8]/20"
+      : "bg-gradient-to-r from-[#f1f5ff] via-[#eef2ff] to-[#f5f3ff] border border-indigo-300 transition-all duration-300 hover:border-[#9E217B]/50 hover:shadow-2xl hover:shadow-[#9E217B]/20",
     cardGlass: isDark ? {} : { boxShadow: "0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(158,33,123,0.07), 0 12px 28px rgba(0,0,0,0.08)" },
-    cardClosing: isDark ? "bg-yellow-900/10 border-yellow-500/30 transition-all duration-300 hover:border-yellow-400/60 hover:shadow-2xl hover:shadow-yellow-500/20 flex flex-col h-full" : "bg-amber-50 border-amber-200 transition-all duration-300 hover:border-amber-400/60 hover:shadow-2xl hover:shadow-[0_0_20px_4px_rgba(251,191,36,0.15)] flex flex-col h-full",
+    cardClosing: isDark ? "bg-yellow-900/10 border-yellow-500/30 transition-all duration-300 hover:border-yellow-400/60 hover:shadow-2xl hover:shadow-yellow-500/20" : "bg-amber-50 border-amber-200 transition-all duration-300 hover:border-amber-400/60 hover:shadow-2xl hover:shadow-[0_0_20px_4px_rgba(251,191,36,0.15)]",
 
     // ── Tables ──
     tableWrap: isDark ? "bg-[#1a1a1a] border-[#2a2a2a]" : "bg-white border border-indigo-300",
@@ -323,8 +324,8 @@ function buildTheme(isDark: boolean) {
     statusCompleted: isDark ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/10" : "text-emerald-700 border-emerald-300 bg-emerald-50",
     statusLost: isDark ? "text-red-300 border-red-500/30 bg-red-950/30" : "text-red-700 border-red-300 bg-red-50",
     statusNGD: "bg-[rgba(251,146,60,0.12)] text-[#F97316] border border-[rgba(249,115,22,0.4)]",
-    cardLost: isDark ? "bg-[#171717] border border-red-900/25 opacity-70 grayscale saturate-50 transition-all duration-300 hover:opacity-90 hover:border-red-500/30 flex flex-col h-full" : "bg-slate-100 border border-red-200 opacity-75 grayscale saturate-50 transition-all duration-300 hover:opacity-90 hover:border-red-300 flex flex-col h-full",
-    cardNGD: "bg-[rgba(249,115,22,0.06)] border border-[rgba(249,115,22,0.35)] hover:border-[#F97316] shadow-[0_4px_12px_rgba(249,115,22,0.12)] transition-all duration-300 flex flex-col h-full",
+    cardLost: isDark ? "bg-[#171717] border border-red-900/25 opacity-70 grayscale saturate-50 transition-all duration-300 hover:opacity-90 hover:border-red-500/30" : "bg-slate-100 border border-red-200 opacity-75 grayscale saturate-50 transition-all duration-300 hover:opacity-90 hover:border-red-300",
+    cardNGD: "bg-[rgba(249,115,22,0.06)] border border-[rgba(249,115,22,0.35)] hover:border-[#F97316] shadow-[0_4px_12px_rgba(249,115,22,0.12)] transition-all duration-300",
     rowLost: isDark ? "bg-[#151515]/80 text-gray-500 opacity-75 grayscale" : "bg-slate-100/80 text-slate-500 opacity-80 grayscale",
     rowNGD: "bg-[rgba(249,115,22,0.03)]",
 
@@ -1096,7 +1097,7 @@ export default function SalesDashboard() {
           </div>
         </AppHeader>
 
-        <main className={`flex-1 overflow-hidden custom-scrollbar ${t.mainBg} ${activeView === "assistant" ? "p-0" : "flex flex-col h-full overflow-y-auto gap-4 p-4 sm:p-6 font-sans antialiased"}`}>
+        <main className={`flex-1 custom-scrollbar ${t.mainBg} ${activeView === "assistant" ? "overflow-hidden p-0" : "overflow-x-hidden overflow-y-auto flex flex-col gap-4 p-4 sm:p-6 font-sans antialiased"}`}>
           {(activeView === "sales" || activeView === "overview" || activeView === "forms" || activeView === "detail" || activeView === "closed-leads") ? (
             <SalesManagerView
               managers={managers} allLeads={allLeads} followUps={followUps}
@@ -1656,7 +1657,7 @@ function SalesManagerView({
       .catch(() => { })
       .finally(() => { if (!cancelled) setIsLoadingChain(false); });
     return () => { cancelled = true; };
-  }, [selectedLead?.id, isAdmin, isSiteHeadUser]);
+  }, [selectedLead?.id]);
 
   // Mark internal messages as read when the conversation is opened.
   useEffect(() => {
@@ -2368,7 +2369,7 @@ function SalesManagerView({
     return orderedDbCols.filter((c) => c.locked || !hiddenDbCols.has(c.key));
   }, [orderedDbCols, hiddenDbCols]);
   return (
-    <div className="flex-1 flex flex-col h-full relative">
+    <div className="flex-1 flex flex-col min-h-0 relative">
       {/* Toast */}
       {toastMsg && (
         <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[100] px-4 sm:px-3 py-3 rounded-xl shadow-lg flex items-center gap-3 sm:gap-2 animate-fadeIn border ${toastMsg.color === "green"
@@ -2382,7 +2383,7 @@ function SalesManagerView({
         </div>
       )}
 
-      <main className="flex-1 overflow-y-auto custom-scrollbar">
+      <main className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
 
         {/* ── OVERVIEW ── */}
         {subView === "overview" && (
@@ -3160,7 +3161,7 @@ function SalesManagerView({
         {/* ── DETAIL ── */}
         {subView === "detail" && selectedLead && (
           bookingData && showBookingView ? (
-            <div className="animate-fadeIn w-full h-[calc(100vh-130px)] overflow-hidden bg-transparent flex flex-col">
+            <div className="animate-fadeIn w-full h-[20vh] overflow-hidden bg-transparent flex flex-col">
               <div className="flex items-center justify-between p-2 shrink-0 border-b border-white/10 shadow-sm" style={t.cardGlass}>
                 <button onClick={() => setShowBookingView(false)} className={`px-4 py-1.5 text-xs font-bold flex items-center gap-1.5 border rounded-lg transition-colors cursor-pointer shadow-sm ${t.textMuted} ${t.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}>
                   <FaChevronLeft /> Back to Lead Details
@@ -3197,850 +3198,220 @@ function SalesManagerView({
               </div>
             </div>
           ) : (
-            <div className="animate-fadeIn w-full flex flex-col gap-2 pb-1">
-              {/* Detail header — single row on desktop, collapsible actions on mobile */}
-              <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-xl border p-2.5 sm:p-2 shadow-sm flex-shrink-0 transition-colors ${selectedLead.is_lost_lead ? t.cardLost : t.card}`} style={t.cardGlass}>
-
-                {/* Back + Lead Name + Mobile Toggle */}
-                <div className="flex items-center justify-between w-full sm:w-auto gap-2">
-                  <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-                    <button
-                      onClick={() => { setMainView(returnView); }}
-                      className={`w-8 h-8 sm:w-9 sm:h-9 flex flex-shrink-0 items-center justify-center border rounded-lg sm:rounded-xl transition-all cursor-pointer active:scale-95 shadow-sm ${t.textMuted} ${t.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-gray-50"}`}
-                      aria-label="Back to previous view"
-                    >
-                      <FaChevronLeft className="text-[10px] sm:text-sm" />
-                    </button>
-
-                    <h1 className={`text-sm sm:text-base lg:text-lg font-bold flex flex-wrap items-center gap-1.5 sm:gap-2 min-w-0 ${t.text}`}>
-                      <span className={`flex-shrink-0 ${t.accentText}`}>
-                        #{selectedLead.sr_no || selectedLead.id}
-                      </span>
-                      <span>{selectedLead.name}</span>
-                      {selectedLead.status === "Closing" && (
-                        <span className={`text-[9px] sm:text-[11px] font-bold px-2 py-0.5 rounded-md border flex items-center gap-1.5 flex-shrink-0 tracking-wide uppercase ${t.statusClosing}`}>
-                          <FaHandshake className="text-[10px] sm:text-[11px]" /> Closing
-                        </span>
-                      )}
-                      {selectedLead.is_lost_lead && (
-                        <span className={`text-[9px] sm:text-[11px] font-bold px-2 py-0.5 rounded-md border flex items-center gap-1.5 flex-shrink-0 tracking-wide uppercase ${t.statusLost}`}>
-                          <Ghost className="w-3 h-3" /> Lost
-                        </span>
-                      )}
-                      {selectedLead.lead_classification === "RETURNING_LEAD" && (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border border-[rgba(5,150,105,0.45)] text-[#059669] bg-[rgba(5,150,105,0.12)] w-fit">
-                          REVISIT
-                        </span>
-                      )}
-                    </h1>
-                    {/* Show Previous Lead Data toggle — visible as soon as the lead is a revisit */}
-                    {/* {selectedLead.lead_classification === "RETURNING_LEAD" && (
-                      <button
-                        type="button"
-                        onClick={() => setShowPrevLead(v => !v)}
-                        disabled={isLoadingRevisit && !revisitHistory}
-                        className={`hidden sm:flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1 rounded-lg border transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-wait ${showPrevLead ? "border-[rgba(5,150,105,0.5)] text-[#059669] bg-[rgba(5,150,105,0.10)]" : `${t.tableBorder} ${t.textMuted} ${isDark ? "hover:bg-white/5" : "hover:bg-black/5"}`}`}
-                      >
-                        {isLoadingRevisit && !revisitHistory
-                          ? <span>Loading history…</span>
-                          : <span>{showPrevLead ? "Hide" : "Show"} Previous Lead</span>
-                        }
-                      </button>
-                    )} */}
-                  </div>
-
-                  {/* MOBILE TOGGLE BUTTON — collapsed by default on small screens */}
-                  <button
-                    onClick={() => setShowMobileActions(!showMobileActions)}
-                    className={`sm:hidden w-8 h-8 flex-shrink-0 flex items-center justify-center border rounded-lg transition-colors shadow-sm ${showMobileActions ? t.btnPrimary : `${t.textMuted} ${t.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}`}
-                  >
-                    <FaChevronDown className={`text-[10px] transition-transform duration-200 ${showMobileActions ? "rotate-180" : ""}`} />
-                  </button>
-                </div>
-
-                {/* ACTION BUTTONS: Hidden on mobile unless toggled open. Always visible on sm+ */}
-                <div className={`gap-1.5 sm:gap-2 flex-wrap justify-start sm:justify-end mt-1 sm:mt-0 w-full sm:w-auto ${showMobileActions ? "flex animate-fadeIn" : "hidden sm:flex"}`}>
-
-                  {/* Booking Action */}
-                  <button
-                    onClick={bookingData ? () => openBookingView(selectedLead.id) : undefined}
-                    disabled={!bookingData}
-                    title={!bookingData ? "Booking Form has not been submitted yet." : undefined}
-                    className={`font-bold px-2 py-1.5 sm:px-3 sm:py-0.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center gap-1 sm:gap-1.5 transition-all shadow-sm min-w-[80px] sm:min-w-[110px] min-h-[36px] sm:min-h-0 flex-1 sm:flex-none whitespace-nowrap ${bookingData
-                      ? "cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white hover:shadow-md active:scale-[0.98]"
-                      : "opacity-50 cursor-not-allowed bg-indigo-400 text-white"
-                      }`}
-                  >
-                    <FaEye className="text-[10px]" /> Booking
-                  </button>
-
-                  {/* Lead Locked State (Read Only / Restore / Reopen) */}
-                  {isLeadLocked ? (
-                    <>
-                      <span className={`text-[10px] sm:text-[11px] font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md border flex items-center justify-center gap-1 sm:gap-1.5 min-h-[36px] sm:min-h-0 flex-1 sm:flex-none whitespace-nowrap ${selectedLead.is_lost_lead ? t.statusLost : t.statusClosing}`}>
-                        {selectedLead.is_lost_lead ? <Ghost className="w-3.5 h-3.5" /> : <FaCheckCircle className="text-[10px] sm:text-xs" />}
-                        Read Only
-                      </span>
-
-                      {selectedLead.is_lost_lead ? (
-                        <button
-                          onClick={handleRestoreLead}
-                          disabled={isSavingLost}
-                          className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center gap-1 sm:gap-1.5 transition-all shadow-sm active:scale-[0.98] min-h-[36px] sm:min-h-0 flex-1 sm:flex-none whitespace-nowrap ${t.btnPrimary} disabled:opacity-60 disabled:cursor-not-allowed`}
-                        >
-                          <FaCheckCircle className="text-[10px]" /> Restore
-                        </button>
-                      ) : (
-                        <button
-                          onClick={handleReopenLead}
-                          disabled={isReopening}
-                          className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center gap-1 sm:gap-1.5 transition-all shadow-sm active:scale-[0.98] min-h-[36px] sm:min-h-0 flex-1 sm:flex-none whitespace-nowrap ${t.btnPrimary} disabled:opacity-60 disabled:cursor-not-allowed`}
-                        >
-                          ↩️ Reopen
-                        </button>
-                      )}
-                    </>
-                  ) : (
-                    /* Active Lead Actions (Sales, Loan, Lost, Closing) */
-                    !showSalesForm && !showLoanForm && (
-                      <>
-                        <button
-                          onClick={() => {
-                            prefillSalesForm(); setShowSalesForm(true); setShowLoanForm(false);
-                            emitActivity({ type: 'LEAD_INTERACTION', action: 'Editing Closing Form', leadId: selectedLead?.id, leadName: selectedLead?.name, module: 'Sales Form' });
-                          }}
-                          className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center gap-1 sm:gap-1.5 transition-all active:scale-[0.98] shadow-sm min-w-[80px] sm:min-w-[110px] min-h-[36px] sm:min-h-0 flex-1 sm:flex-none whitespace-nowrap ${t.btnPrimary} ${isDark ? "shadow-purple-900/20" : "shadow-[#00AEEF]/10"}`}
-                        >
-                          <FaFileInvoice className="text-[10px]" /> Fill Salesform
-                        </button>
-
-                        <button
-                          onClick={() => {
-                            setShowLoanForm(true); setShowSalesForm(false);
-                            emitActivity({ type: 'LEAD_INTERACTION', action: 'Editing Loan Form', leadId: selectedLead?.id, leadName: selectedLead?.name, module: 'Loan Form' });
-                          }}
-                          className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center gap-1 sm:gap-1.5 transition-all active:scale-[0.98] shadow-sm min-w-[80px] sm:min-w-[110px] min-h-[36px] sm:min-h-0 flex-1 sm:flex-none whitespace-nowrap ${t.btnSecondary} ${isDark ? "shadow-blue-900/20" : "shadow-[#00AEEF]/10"}`}
-                        >
-                          <FaUniversity className="text-[10px]" /> Track Loan
-                        </button>
-
-                        <button
-                          onClick={openLostLeadModal}
-                          className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center gap-1 sm:gap-1.5 transition-all active:scale-[0.98] shadow-sm min-w-[80px] sm:min-w-[110px] min-h-[36px] sm:min-h-0 flex-1 sm:flex-none whitespace-nowrap ${t.btnDanger}`}
-                        >
-                          <AlertTriangle className="w-3.5 h-3.5" /> Lost Lead
-                        </button>
-
-                        <button
-                          onClick={() => setIsClosingModalOpen(true)}
-                          className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center gap-1 sm:gap-1.5 transition-all active:scale-[0.98] shadow-sm min-w-[80px] sm:min-w-[110px] min-h-[36px] sm:min-h-0 flex-1 sm:flex-none whitespace-nowrap ${t.btnWarning} shadow-amber-600/10`}
-                        >
-                          <FaHandshake className="text-[10px]" /> Mark Closing
-                        </button>
-                      </>
-                    )
-                  )}
-
-                  {/* Admin Delete Action */}
-                  {isAdmin && (
-                    <button
-                      type="button"
-                      onClick={() => openPermanentDeleteDialog()}
-                      className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center gap-1 sm:gap-1.5 transition-all active:scale-[0.98] shadow-sm min-w-[80px] sm:min-w-[110px] min-h-[36px] sm:min-h-0 flex-1 sm:flex-none whitespace-nowrap ${isDark
-                        ? "bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500 hover:text-white"
-                        : "bg-red-50 text-red-600 border border-red-100 hover:bg-red-600 hover:border-red-600 hover:text-white"
-                        }`}
-                    >
-                      <Trash2 className="w-3.5 h-3.5" /> Delete Lead
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* TWO-COLUMN BODY */}
-              {/* THREE-PART BODY: Lead Info · Follow-ups · AI Assistant (collapsible) */}
-              <div className="flex flex-col lg:flex-row gap-2 lg:gap-3 items-start lg:items-stretch">
-
-                {/* LEFT PANEL */}
-                <div className="flex flex-col gap-3 w-full lg:w-0 lg:flex-1 lg:min-w-0">
-                  {showSalesForm ? (
-                    <div className={`rounded-xl border p-3 sm:p-3 shadow-xl overflow-y-auto custom-scrollbar flex flex-col max-h-[85vh] lg:max-h-[calc(100vh-190px)] ${t.modalCard}`} style={t.modalGlass}>
-                      <div className={`flex justify-between items-center mb-4 border-b pb-3 ${t.tableBorder}`}>
-                        <div>
-                          <h3 className={`text-base sm:text-lg font-bold ${t.text}`}>Sales Data Form</h3>
-                          <p className={`text-xs mt-0.5 ${t.accentText}`}>For Lead #{selectedLead.sr_no || selectedLead.id}</p>
-                        </div>
-                        <button type="button" onClick={() => setShowSalesForm(false)} className={`p-2 ${t.textMuted} hover:text-red-500`}><FaTimes /></button>
-                      </div>
-                      <form onSubmit={handleSalesFormSubmit} className="flex flex-col gap-2 flex-1">
-                        <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Property Type?</label><input type="text" placeholder="e.g. 1BHK, 2BHK" value={salesForm.propertyType} onChange={e => setSalesForm({ ...salesForm, propertyType: e.target.value.toUpperCase() })} className={formInput} /></div>
-                        <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Preferred Location?</label><input type="text" placeholder="e.g. Dombivali, Kalyan" value={salesForm.location} onChange={e => setSalesForm({ ...salesForm, location: e.target.value })} className={formInput} /></div>
-                        <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Approximate Budget?</label><input type="text" placeholder="e.g. 5 cr" value={salesForm.budget} onChange={e => setSalesForm({ ...salesForm, budget: e.target.value.toUpperCase() })} className={formInput} /></div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Self-use or Investment?</label><select value={salesForm.useType} onChange={e => setSalesForm({ ...salesForm, useType: e.target.value })} className={formSelect}><option value="">Select</option><option>Self Use</option><option>Investment</option></select></div>
-                          <div><label className={`text-xs mb-1 block ${t.textMuted}`}>Planning to Purchase?</label><select value={salesForm.purchaseDate} onChange={e => setSalesForm({ ...salesForm, purchaseDate: e.target.value })} className={formSelect}><option value="">Select</option><option>Immediate</option><option>Next 3 Months</option></select></div>
-                        </div>
-                        <div className={`border-t pt-3 mt-1 ${t.tableBorder}`}>
-                          <label className={`block text-xs font-bold mb-1.5 ${t.accentText}`}>Lead Interest Status *</label>
-                          <select required value={salesForm.leadStatus} onChange={e => setSalesForm({ ...salesForm, leadStatus: e.target.value })} className={formSelect}><option value="" disabled>Select Status</option><option>Interested</option><option>Not Interested</option><option>NON GENUINE DEMAND (NGD)</option></select>
-                        </div>
-                        <div className={`border-t pt-3 mt-1 ${t.tableBorder}`}>
-                          <label className={`block text-xs font-bold mb-1.5 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}>Loan Planned?</label>
-                          <select required value={salesForm.loanPlanned} onChange={e => setSalesForm({ ...salesForm, loanPlanned: e.target.value })} className={formSelect}><option value="" disabled>Select Option</option><option>Yes</option><option>No</option><option>Not Sure</option></select>
-                        </div>
-                        <div className={`mt-2 border-t pt-3 ${t.tableBorder}`}>
-                          <label className="text-xs text-orange-400 font-bold mb-1.5 block">Schedule a Site Visit?</label>
-                          <input ref={inputRef} type="datetime-local" value={salesForm.siteVisit} onChange={e => setSalesForm({ ...salesForm, siteVisit: e.target.value })} onClick={() => inputRef.current?.showPicker()} className={`${formInput} focus:border-orange-500`} />
-
-                        </div>
-                        <button type="submit" disabled={isSubmittingSalesForm} className={`mt-auto w-full font-bold py-3 sm:py-3.5 rounded-xl shadow-md transition-colors flex-shrink-0 disabled:opacity-60 disabled:cursor-not-allowed ${t.btnPrimary}`}>
-                          {isSubmittingSalesForm ? "Submitting..." : "Submit Salesform"}
-                        </button>
-                      </form>
-                    </div>
-                  ) : showLoanForm ? (
-                    <LoanDealForm
-                      lead={selectedLead}
-                      booking={loanDealBooking}
-                      loanUpdate={loanDealLatest}
-                      user={adminUser}
-                      isDark={isDark}
-                      t={t}
-                      onCancel={() => setShowLoanForm(false)}
-                      onSuccess={() => {
-                        setShowLoanForm(false);
-                        setToastMsg({ title: `Loan & deal data saved for ${selectedLead.name}`, icon: <FaCheckCircle />, color: "blue" });
-                        setTimeout(() => setToastMsg(null), 3000);
-                        fetchLoanDealData(selectedLead.id);
-                        refetch();
-                      }}
-                    />
-                  ) : (
-                    <div className="flex flex-col gap-3 animate-fadeIn">
-
-                      {/* ── "Show Previous Lead Data" mobile toggle ── */}
-                      {selectedLead.lead_classification === "RETURNING_LEAD" && (
-                        <button
-                          type="button"
-                          onClick={() => setShowPrevLead(v => !v)}
-                          disabled={isLoadingRevisit && !revisitHistory}
-                          className={`
-                                hidden sm:flex
-                                items-center gap-1.5
-                                px-3 py-1.5
-                                rounded-md
-                                border
-                                text-[11px] font-semibold
-                                transition-all duration-200
-                                cursor-pointer
-                                shadow-sm
-                                disabled:opacity-50
-                                disabled:cursor-wait
-
-                                ${showPrevLead
-                              ? "bg-[#059669] border-[#059669] text-white shadow-[0_1px_5px_rgba(5,150,105,0.25)]"
-                              : isDark
-                                ? "bg-white/[0.04] border-white/10 text-slate-300 hover:bg-white/[0.08] hover:border-white/20 hover:text-white"
-                                : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300 hover:text-slate-900"
-                            }
-                         ` }
-                        >
-                          <svg
-                            className="w-3.5 h-3.5 shrink-0"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          >
-                            <path d="M3 12a9 9 0 1 0 3-6.7" />
-                            <path d="M3 4v5h5" />
-                            <path d="M12 7v5l3 2" />
-                          </svg>
-
-                          <span>
-                            {showPrevLead ? "Hide History" : "View History"}
+            <LeadDetailsLayout isDark={isDark} theme={t} className="animate-fadeIn">
+              <LeadDetailsPanel
+                lead={selectedLead}
+                onLeadUpdate={(updater) => setSelectedLead(updater)}
+                currentUser={{ id: adminUser?._id || adminUser?.id, name: adminUser?.name, email: adminUser?.email, role: adminUser?.role || "sales_manager" }}
+                permissions={{
+                  canEditContact: false,
+                  canEditPhone: false,
+                  canFillSalesform: !isLeadLocked,
+                  canTrackLoan: !isLeadLocked,
+                  canMarkClosing: !isLeadLocked,
+                  canMarkLost: !isLeadLocked,
+                  canRestoreLead: false,
+                  canReopenLead: false,
+                  canViewBooking: true,
+                  canCreateBooking: true,
+                  canDeleteLead: false,
+                  canAdvanceStage: false,
+                  canSendFollowUp: true,
+                  canDeleteFollowUp: canDeleteFollowUps,
+                  canCall: true,
+                  canWhatsApp: true,
+                }}
+                isDark={isDark}
+                theme={t}
+                onBack={() => { setSubView("cards"); setShowSalesForm(false); setShowLoanForm(false); }}
+                followUps={currentLeadFollowUps}
+                bookingData={bookingData}
+                loanDealBooking={loanDealBooking}
+                loanDealLatest={loanDealLatest}
+                attView={attView}
+                onRefetch={refetch}
+                onShowToast={(msg) => { setToastMsg({ title: msg, icon: <FaCheckCircle />, color: "green" }); setTimeout(() => setToastMsg(null), 3500); }}
+                fetchLoanDealData={fetchLoanDealData}
+                onSendFollowUp={handleSendCustomNote}
+                onDeleteFollowUp={handleDeleteFollowUp}
+                onRetryFollowUp={(msg: any) => { setCustomNote(msg.message); removeFollowUp(msg._clientMessageId, String(msg.leadId)); }}
+                canDeleteFollowUps={canDeleteFollowUps}
+                deletingFollowUpId={deletingFollowUpId}
+                customNote={customNote}
+                setCustomNote={setCustomNote}
+                onOpenBookingView={() => openBookingView(selectedLead.id)}
+                onOpenBookingForm={() => setIsClosingModalOpen(true)}
+                onOpenLostModal={() => openLostLeadModal()}
+                onOpenReminderModal={() => setShowReminderModal(true)}
+                onOpenWhatsApp={() => setIsWaModalOpen(true)}
+                onRestore={() => handleRestoreLead()}
+                onReopen={handleReopenLead}
+                showSalesForm={showSalesForm}
+                setShowSalesForm={setShowSalesForm}
+                salesForm={salesForm}
+                setSalesForm={setSalesForm}
+                onSubmitSalesForm={handleSalesFormSubmit}
+                inputRef={inputRef}
+                showLoanForm={showLoanForm}
+                setShowLoanForm={setShowLoanForm}
+                showCallingButtons
+                isReturningLead={selectedLead.lead_classification === "RETURNING_LEAD"}
+                showPrevLead={showPrevLead}
+                onTogglePrevLead={() => setShowPrevLead(v => !v)}
+                isLoadingRevisit={isLoadingRevisit}
+                revisitHistory={revisitHistory}
+                renderRevisitPanel={() => (
+                  <>
+                    {visitChain && visitChain.totalVisits >= 1 && (
+                      <div className={`rounded-xl border overflow-hidden mb-2 ${isDark ? "border-[rgba(100,116,139,0.30)]" : "border-[rgba(100,116,139,0.25)]"}`}>
+                        <div className={`px-4 py-3 flex items-center justify-between ${isDark ? "bg-[rgba(100,116,139,0.10)]" : "bg-[rgba(100,116,139,0.06)]"}`}>
+                          <span className="text-[13px] font-bold text-[#64748B] uppercase tracking-wider">Visit History</span>
+                          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border border-[rgba(100,116,139,0.4)] text-[#64748B]">
+                            {visitChain.totalVisits} {visitChain.totalVisits === 1 ? "VISIT" : "VISITS"} TOTAL
                           </span>
-
-                          <svg
-                            className={`w-3 h-3 transition-transform duration-200 ${showPrevLead ? "rotate-180" : ""
-                              }`}
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          >
-                            <path d="m6 9 6 6 6-6" />
-                          </svg>
-
-                          {isLoadingRevisit && !revisitHistory
-                            ? "Loading history…"
-                            : showPrevLead ? "Hide Previous Lead Data" : "Show Previous Lead Data"
-                          }
-                        </button>
-                      )}
-
-                      {/* ── Historical context panel (READ-ONLY) ── */}
-                      {selectedLead.lead_classification === "RETURNING_LEAD" && showPrevLead && (
-                        <div className={`rounded-xl border overflow-hidden ${isDark ? "border-[rgba(5,150,105,0.40)]" : "border-[rgba(5,150,105,0.35)]"}`}>
-                          {/* Panel header */}
-                          <div className={`px-4 py-3 flex items-center justify-between ${isDark ? "bg-[rgba(5,150,105,0.18)]" : "bg-[rgba(5,150,105,0.10)]"}`}>
-                            <div className="flex items-center gap-2">
-                              <span className="text-[#059669] text-base font-bold">↩</span>
-                              <span className="text-[13px] font-bold text-[#059669]">PREVIOUS LEAD — HISTORICAL DATA</span>
-                            </div>
-                            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border border-[rgba(5,150,105,0.4)] text-[#059669]`}>READ ONLY</span>
-                          </div>
-
-                          {isLoadingRevisit && !revisitHistory ? (
-                            <div className="p-4"><p className={`text-xs text-center py-2 ${t.textFaint}`}>Loading previous visit data…</p></div>
-                          ) : !revisitHistory ? (
-                            <div className="p-4"><p className={`text-xs ${t.textFaint}`}>No previous visit history found or you are not authorized to view it.</p></div>
-                          ) : (
-                            <div className={`p-4 flex flex-col gap-4 ${isDark ? "bg-[rgba(5,150,105,0.05)]" : "bg-[rgba(5,150,105,0.03)]"}`}>
-
-                              {/* Previous Enquiry Summary */}
-                              <div>
-                                <p className="text-[10px] font-bold uppercase tracking-wider text-[#059669] mb-2">Previous Enquiry</p>
-                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[12px]">
-                                  <div><p className={`text-[10px] font-medium mb-0.5 ${t.textFaint}`}>Previous Visit Date</p><p className={`font-semibold ${t.text}`}>{new Date(revisitHistory.previousLead.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</p></div>
-                                  <div><p className={`text-[10px] font-medium mb-0.5 ${t.textFaint}`}>Previously Managed By</p><p className={`font-semibold ${t.text}`}>{revisitHistory.previousLead.assigned_to || "—"}</p></div>
-                                  <div><p className={`text-[10px] font-medium mb-0.5 ${t.textFaint}`}>Phone</p><p className={`font-semibold font-mono ${t.text}`}>{revisitHistory.previousLead.phone || "—"}</p></div>
-                                  <div><p className={`text-[10px] font-medium mb-0.5 ${t.textFaint}`}>Lead Status</p><p className={`font-semibold ${t.text}`}>{revisitHistory.previousLead.status || "—"}</p></div>
-                                  <div><p className={`text-[10px] font-medium mb-0.5 ${t.textFaint}`}>Interest Status</p><p className={`font-semibold ${t.text}`}>{revisitHistory.previousLead.lead_interest_status || "Pending"}</p></div>
-                                  <div><p className={`text-[10px] font-medium mb-0.5 ${t.textFaint}`}>Budget</p><p className={`font-semibold ${isDark ? "text-green-400" : "text-emerald-700"}`}>{revisitHistory.previousLead.budget || "—"}</p></div>
-                                  {revisitHistory.previousLead.is_lost_lead && (
-                                    <div className="col-span-2 sm:col-span-3">
-                                      <p className={`text-[10px] font-medium mb-0.5 ${t.textFaint}`}>Lost Lead Reason</p>
-                                      <p className={`font-semibold text-red-400`}>{revisitHistory.previousLead.lost_lead_reason || "No reason recorded."}</p>
-                                    </div>
-                                  )}
-                                  {revisitHistory.previousLead.closing_date && (
-                                    <div><p className={`text-[10px] font-medium mb-0.5 ${t.textFaint}`}>Closing Date</p><p className={`font-semibold ${t.text}`}>{formatDate(revisitHistory.previousLead.closing_date)}</p></div>
-                                  )}
-                                </div>
-                              </div>
-
-                              {/* Historical Sales Form */}
-                              <div className={`border-t pt-3 ${t.tableBorder}`}>
-                                <p className="text-[10px] font-bold uppercase tracking-wider text-[#059669] mb-2">Sales Form (Previous Visit)</p>
-                                {revisitHistory.historicalSalesForm ? (
-                                  <div className={`rounded-lg p-3 border text-[11px] whitespace-pre-wrap leading-relaxed ${isDark ? "bg-[rgba(5,150,105,0.06)] border-[rgba(5,150,105,0.20)] text-gray-300" : "bg-white border-[rgba(5,150,105,0.20)] text-gray-700"}`}>
-                                    {revisitHistory.historicalSalesForm.replace("📝 Detailed Salesform Submitted:\n", "").trim()}
-                                  </div>
-                                ) : (
-                                  <p className={`text-[11px] italic ${t.textFaint}`}>No previous Sales Form data available.</p>
-                                )}
-                              </div>
-
-                              {/* Historical Loan */}
-                              <div className={`border-t pt-3 ${t.tableBorder}`}>
-                                <p className="text-[10px] font-bold uppercase tracking-wider text-[#059669] mb-2">Loan (Previous Visit)</p>
-                                {revisitHistory.loan.length > 0 ? (
-                                  <div className="flex flex-col gap-2">
-                                    {revisitHistory.loan.map((l: any, idx: number) => (
-                                      <div key={l.id ?? idx} className={`rounded-lg p-3 border text-[11px] ${isDark ? "bg-[rgba(5,150,105,0.06)] border-[rgba(5,150,105,0.20)]" : "bg-white border-[rgba(5,150,105,0.20)]"}`}>
-                                        <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                                          <div><span className={`${t.textFaint}`}>Status: </span><span className={`font-semibold ${t.text}`}>{l.status || "—"}</span></div>
-                                          <div><span className={`${t.textFaint}`}>Loan Required: </span><span className={`font-semibold ${t.text}`}>{l.loanRequired || "—"}</span></div>
-                                          {l.bankName && <div><span className={`${t.textFaint}`}>Bank: </span><span className={`font-semibold ${t.text}`}>{l.bankName}</span></div>}
-                                          {l.amountRequested && <div><span className={`${t.textFaint}`}>Amount Requested: </span><span className={`font-semibold ${t.text}`}>₹{Number(l.amountRequested).toLocaleString("en-IN")}</span></div>}
-                                          {l.amountApproved && <div><span className={`${t.textFaint}`}>Amount Approved: </span><span className={`font-semibold ${t.text}`}>₹{Number(l.amountApproved).toLocaleString("en-IN")}</span></div>}
-                                          {l.cibil && <div><span className={`${t.textFaint}`}>CIBIL: </span><span className={`font-semibold ${t.text}`}>{l.cibil}</span></div>}
-                                          {l.empType && <div><span className={`${t.textFaint}`}>Employment: </span><span className={`font-semibold ${t.text}`}>{l.empType}</span></div>}
-                                          {l.income && <div><span className={`${t.textFaint}`}>Income: </span><span className={`font-semibold ${t.text}`}>₹{Number(l.income).toLocaleString("en-IN")}</span></div>}
-                                          {l.salesManagerName && <div><span className={`${t.textFaint}`}>Updated by: </span><span className={`font-semibold ${t.text}`}>{l.salesManagerName}</span></div>}
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                ) : (
-                                  <p className={`text-[11px] italic ${t.textFaint}`}>No previous Loan data available.</p>
-                                )}
-                              </div>
-
-                              {/* Historical Booking */}
-                              <div className={`border-t pt-3 ${t.tableBorder}`}>
-                                <p className="text-[10px] font-bold uppercase tracking-wider text-[#059669] mb-2">Booking (Previous Visit)</p>
-                                {revisitHistory.booking ? (
-                                  <div className={`rounded-lg p-3 border text-[11px] ${isDark ? "bg-[rgba(5,150,105,0.06)] border-[rgba(5,150,105,0.20)]" : "bg-white border-[rgba(5,150,105,0.20)]"}`}>
-                                    <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                                      {revisitHistory.booking.bookingNumber && <div><span className={`${t.textFaint}`}>Booking #: </span><span className={`font-semibold ${t.text}`}>{revisitHistory.booking.bookingNumber}</span></div>}
-                                      {revisitHistory.booking.bookingStatus && <div><span className={`${t.textFaint}`}>Status: </span><span className={`font-semibold ${t.text}`}>{revisitHistory.booking.bookingStatus}</span></div>}
-                                      {revisitHistory.booking.projectName && <div><span className={`${t.textFaint}`}>Project: </span><span className={`font-semibold ${t.text}`}>{revisitHistory.booking.projectName}</span></div>}
-                                      {revisitHistory.booking.flatNumber && <div><span className={`${t.textFaint}`}>Flat: </span><span className={`font-semibold ${t.text}`}>{revisitHistory.booking.flatNumber}</span></div>}
-                                      {revisitHistory.booking.agreementValue && <div><span className={`${t.textFaint}`}>Agreement Value: </span><span className={`font-semibold ${t.text}`}>₹{Number(revisitHistory.booking.agreementValue).toLocaleString("en-IN")}</span></div>}
-                                      {revisitHistory.booking.bookingAmount && <div><span className={`${t.textFaint}`}>Booking Amount: </span><span className={`font-semibold ${t.text}`}>₹{Number(revisitHistory.booking.bookingAmount).toLocaleString("en-IN")}</span></div>}
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <p className={`text-[11px] italic ${t.textFaint}`}>No previous Booking available.</p>
-                                )}
-                              </div>
-
-                              {/* Historical Follow-ups */}
-                              <div className={`border-t pt-3 ${t.tableBorder}`}>
-                                <p className="text-[10px] font-bold uppercase tracking-wider text-[#059669] mb-2">
-                                  Historical Notes — before {new Date(revisitHistory.cutoffAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
-                                </p>
-                                {revisitHistory.followUps.length > 0 ? (
-                                  <div className="flex flex-col gap-2 max-h-[320px] overflow-y-auto custom-scrollbar pr-1">
-                                    {revisitHistory.followUps.map((f: any) => (
-                                      <div key={f.id} className={`rounded-lg p-2.5 border ${isDark ? "bg-[rgba(5,150,105,0.06)] border-[rgba(5,150,105,0.15)]" : "bg-white border-[rgba(5,150,105,0.18)]"}`}>
-                                        <div className="flex justify-between items-start mb-1 gap-2">
-                                          <span className="text-[11px] font-semibold text-[#059669]">{f.createdByName || "—"}</span>
-                                          <span className={`text-[10px] flex-shrink-0 ${t.textFaint}`}>{new Date(f.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>
-                                        </div>
-                                        <p className={`text-[11px] leading-relaxed whitespace-pre-wrap ${t.textMuted}`}>{f.message}</p>
-                                      </div>
-                                    ))}
-                                  </div>
-                                ) : (
-                                  <p className={`text-[11px] italic ${t.textFaint}`}>No historical notes before the revisit date.</p>
-                                )}
-                              </div>
-
-                              <p className={`text-[10px] italic text-center ${t.textFaint}`}>
-                                READ ONLY — All data above is from the previous visit. New notes, Sales Form, Loan, and Booking belong to the current Revisit lead.
-                              </p>
-                            </div>
-                          )}
                         </div>
-                      )}
-
-                      {/* ── Visit History accordion ── */}
-                      {visitChain && visitChain.totalVisits >= 1 && (
-                        <div className={`rounded-xl border overflow-hidden ${isDark ? "border-[rgba(100,116,139,0.30)]" : "border-[rgba(100,116,139,0.25)]"}`}>
-                          {/* Panel header */}
-                          <div className={`px-4 py-3 flex items-center justify-between ${isDark ? "bg-[rgba(100,116,139,0.10)]" : "bg-[rgba(100,116,139,0.06)]"}`}>
-                            <div className="flex items-center gap-2">
-                              <span className="text-[13px] font-bold text-[#64748B] uppercase tracking-wider">Visit History</span>
-                            </div>
-                            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border border-[rgba(100,116,139,0.4)] text-[#64748B]`}>
-                              {visitChain.totalVisits} {visitChain.totalVisits === 1 ? "VISIT" : "VISITS"} TOTAL
-                            </span>
-                          </div>
-
-                          {isLoadingChain ? (
-                            <div className="p-4"><p className={`text-xs text-center py-2 ${t.textFaint}`}>Loading visit history…</p></div>
-                          ) : (
-                            <div className={`divide-y ${t.tableDivide}`}>
-                              {visitChain.visits.map((visit, i) => {
-                                const isCurrent = visit.visitNumber === visitChain.currentVisitNumber;
-                                const isExpanded = expandedVisitIdx === i;
-                                // To expand visit at index i: call revisit-history on visits[i+1].leadId
-                                // (the child that points back to this visit via returning_from_lead_id).
-                                const childLeadId = visitChain.visits[i + 1]?.leadId ?? null;
-                                const handleExpand = () => {
-                                  const next = isExpanded ? null : i;
-                                  setExpandedVisitIdx(next);
-                                  // Lazy-load detail for historical visits (not current).
-                                  if (!isCurrent && !isExpanded && childLeadId && !visitDetailCache[childLeadId] && !loadingVisitDetail[childLeadId]) {
-                                    setLoadingVisitDetail(prev => ({ ...prev, [childLeadId]: true }));
-                                    fetch(`/api/leads/${childLeadId}/revisit-history`)
-                                      .then(r => r.json())
-                                      .then(json => {
-                                        if (json.success && json.hasHistory) {
-                                          setVisitDetailCache(prev => ({ ...prev, [childLeadId]: json }));
-                                        }
-                                      })
-                                      .catch(() => { })
-                                      .finally(() => setLoadingVisitDetail(prev => ({ ...prev, [childLeadId]: false })));
-                                  }
-                                };
-                                return (
-                                  <div key={visit.leadId}>
-                                    {/* Row summary */}
-                                    <button
-                                      type="button"
-                                      onClick={handleExpand}
-                                      className={`w-full text-left px-4 py-2.5 flex items-center gap-2 transition-colors cursor-pointer ${isDark ? "hover:bg-white/[0.04]" : "hover:bg-black/[0.02]"}`}
-                                    >
-                                      <span className={`text-[10px] transition-transform duration-150 ${t.textFaint} ${isExpanded ? "rotate-90" : ""}`}>▸</span>
-                                      <span className={`text-[11px] font-bold ${t.textFaint}`}>Visit {visit.visitNumber}</span>
-                                      <span className={`text-[11px] ${t.textMuted}`}>·</span>
-                                      <span className={`text-[11px] ${t.textMuted}`}>
-                                        {new Date(visit.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
-                                      </span>
-                                      <span className={`text-[11px] ${t.textMuted}`}>·</span>
-                                      <span className={`text-[11px] font-medium truncate ${t.text}`}>{visit.assignedTo || "—"}</span>
-                                      <div className="ml-auto flex items-center gap-1.5 flex-shrink-0">
-                                        {visit.leadClassification === "RETURNING_LEAD" && (
-                                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border border-[rgba(5,150,105,0.45)] text-[#059669] bg-[rgba(5,150,105,0.12)] w-fit">
-                                            REVISIT
-                                          </span>
-                                        )}
-                                        {isCurrent && (
-                                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider border border-[rgba(100,116,139,0.45)] text-[#64748B] bg-[rgba(100,116,139,0.12)]">
-                                            CURRENT
-                                          </span>
-                                        )}
-                                      </div>
-                                    </button>
-
-                                    {/* Expanded detail */}
-                                    {isExpanded && (
-                                      <div className={`px-4 pb-4 pt-2 ${isDark ? "bg-[rgba(100,116,139,0.05)]" : "bg-[rgba(100,116,139,0.03)]"}`}>
-                                        <div className={`rounded-lg border overflow-hidden ${isDark ? "border-[rgba(100,116,139,0.25)]" : "border-[rgba(100,116,139,0.20)]"}`}>
-                                          {/* Detail header */}
-                                          <div className={`px-3 py-2 flex items-center justify-between ${isDark ? "bg-[rgba(100,116,139,0.12)]" : "bg-[rgba(100,116,139,0.08)]"}`}>
-                                            <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748B]">VISIT {visit.visitNumber}</span>
-                                            {!isCurrent && <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border border-[rgba(100,116,139,0.4)] text-[#64748B]`}>READ ONLY</span>}
+                        {isLoadingChain ? (
+                          <div className="p-4"><p className={`text-xs text-center py-2 ${t.textFaint}`}>Loading visit history…</p></div>
+                        ) : (
+                          <div className={`divide-y ${t.tableDivide}`}>
+                            {visitChain.visits.map((visit: any, i: number) => {
+                              const isCurrent = visit.visitNumber === visitChain.currentVisitNumber;
+                              const isExpanded = expandedVisitIdx === i;
+                              const childLeadId = visitChain.visits[i + 1]?.leadId ?? null;
+                              const handleExpand = () => {
+                                const next = isExpanded ? null : i;
+                                setExpandedVisitIdx(next);
+                                if (!isCurrent && !isExpanded && childLeadId && !visitDetailCache[childLeadId] && !loadingVisitDetail[childLeadId]) {
+                                  setLoadingVisitDetail((prev: any) => ({ ...prev, [childLeadId]: true }));
+                                  fetch(`/api/leads/${childLeadId}/revisit-history`)
+                                    .then(r => r.json())
+                                    .then((json: any) => { if (json.success && json.hasHistory) setVisitDetailCache((prev: any) => ({ ...prev, [childLeadId]: json })); })
+                                    .catch(() => { })
+                                    .finally(() => setLoadingVisitDetail((prev: any) => ({ ...prev, [childLeadId]: false })));
+                                }
+                              };
+                              return (
+                                <div key={visit.leadId}>
+                                  <button type="button" onClick={handleExpand} className={`w-full text-left px-4 py-2.5 flex items-center gap-2 transition-colors cursor-pointer ${isDark ? "hover:bg-white/[0.04]" : "hover:bg-black/[0.02]"}`}>
+                                    <span className={`text-[10px] transition-transform duration-150 ${t.textFaint} ${isExpanded ? "rotate-90" : ""}`}>▸</span>
+                                    <span className={`text-[11px] font-bold ${t.textFaint}`}>Visit {visit.visitNumber}</span>
+                                    <span className={`text-[11px] ${t.textMuted}`}>·</span>
+                                    <span className={`text-[11px] ${t.textMuted}`}>{new Date(visit.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</span>
+                                    <span className={`text-[11px] ${t.textMuted}`}>·</span>
+                                    <span className={`text-[11px] font-medium truncate ${t.text}`}>{visit.assignedTo || "—"}</span>
+                                    <div className="ml-auto flex items-center gap-1.5 flex-shrink-0">
+                                      {visit.leadClassification === "RETURNING_LEAD" && (
+                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border border-[rgba(5,150,105,0.45)] text-[#059669] bg-[rgba(5,150,105,0.12)] w-fit">REVISIT</span>
+                                      )}
+                                      {isCurrent && (
+                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider border border-[rgba(100,116,139,0.45)] text-[#64748B] bg-[rgba(100,116,139,0.12)]">CURRENT</span>
+                                      )}
+                                    </div>
+                                  </button>
+                                  {isExpanded && (
+                                    <div className={`px-4 pb-4 pt-2 ${isDark ? "bg-[rgba(100,116,139,0.05)]" : "bg-[rgba(100,116,139,0.03)]"}`}>
+                                      <div className={`rounded-lg border overflow-hidden ${isDark ? "border-[rgba(100,116,139,0.25)]" : "border-[rgba(100,116,139,0.20)]"}`}>
+                                        <div className={`px-3 py-2 flex items-center justify-between ${isDark ? "bg-[rgba(100,116,139,0.12)]" : "bg-[rgba(100,116,139,0.08)]"}`}>
+                                          <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748B]">VISIT {visit.visitNumber}</span>
+                                          {!isCurrent && <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border border-[rgba(100,116,139,0.4)] text-[#64748B]">READ ONLY</span>}
+                                        </div>
+                                        <div className="p-3 flex flex-col gap-3">
+                                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px]">
+                                            <div><p className={`text-[9px] font-medium mb-0.5 ${t.textFaint}`}>Date</p><p className={`font-semibold ${t.text}`}>{new Date(visit.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</p></div>
+                                            <div><p className={`text-[9px] font-medium mb-0.5 ${t.textFaint}`}>Assigned To</p><p className={`font-semibold ${t.text}`}>{visit.assignedTo || "—"}</p></div>
+                                            <div><p className={`text-[9px] font-medium mb-0.5 ${t.textFaint}`}>Status</p><p className={`font-semibold ${t.text}`}>{visit.status || "—"}</p></div>
+                                            <div><p className={`text-[9px] font-medium mb-0.5 ${t.textFaint}`}>Classification</p><p className={`font-semibold ${t.text}`}>{visit.leadClassification}</p></div>
+                                            {visit.srNo && <div><p className={`text-[9px] font-medium mb-0.5 ${t.textFaint}`}>Lead #</p><p className={`font-semibold ${t.text}`}>#{visit.srNo}</p></div>}
                                           </div>
-
-                                          <div className="p-3 flex flex-col gap-3">
-                                            {/* Basic metadata — always available */}
-                                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px]">
-                                              <div><p className={`text-[9px] font-medium mb-0.5 ${t.textFaint}`}>Date</p><p className={`font-semibold ${t.text}`}>{new Date(visit.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</p></div>
-                                              <div><p className={`text-[9px] font-medium mb-0.5 ${t.textFaint}`}>Assigned To</p><p className={`font-semibold ${t.text}`}>{visit.assignedTo || "—"}</p></div>
-                                              <div><p className={`text-[9px] font-medium mb-0.5 ${t.textFaint}`}>Status</p><p className={`font-semibold ${t.text}`}>{visit.status || "—"}</p></div>
-                                              <div><p className={`text-[9px] font-medium mb-0.5 ${t.textFaint}`}>Classification</p><p className={`font-semibold ${t.text}`}>{visit.leadClassification}</p></div>
-                                              {visit.srNo && <div><p className={`text-[9px] font-medium mb-0.5 ${t.textFaint}`}>Lead #</p><p className={`font-semibold ${t.text}`}>#{visit.srNo}</p></div>}
-                                            </div>
-
-                                            {isCurrent ? (
-                                              <p className={`text-[10px] italic text-center ${t.textFaint}`}>Current lead — see main panel for full details.</p>
-                                            ) : childLeadId && loadingVisitDetail[childLeadId] ? (
-                                              <p className={`text-[10px] text-center ${t.textFaint}`}>Loading historical data…</p>
-                                            ) : childLeadId && visitDetailCache[childLeadId] ? (() => {
-                                              const hist = visitDetailCache[childLeadId];
-                                              return (
-                                                <div className="flex flex-col gap-3">
-                                                  {/* Historical Follow-ups */}
-                                                  {hist.followUps?.length > 0 && (
-                                                    <div className={`border-t pt-2 ${t.tableBorder}`}>
-                                                      <p className="text-[9px] font-bold uppercase tracking-wider text-[#64748B] mb-1.5">Historical Notes ({hist.followUps.length})</p>
-                                                      <div className="flex flex-col gap-1.5 max-h-[200px] overflow-y-auto custom-scrollbar pr-1">
-                                                        {hist.followUps.map((f: any) => (
-                                                          <div key={f.id} className={`rounded-lg p-2 border ${isDark ? "bg-[rgba(100,116,139,0.06)] border-[rgba(100,116,139,0.15)]" : "bg-white border-[rgba(100,116,139,0.18)]"}`}>
-                                                            <div className="flex justify-between items-start mb-0.5 gap-2">
-                                                              <span className="text-[10px] font-semibold text-[#64748B]">{f.createdByName || "—"}</span>
-                                                              <span className={`text-[9px] flex-shrink-0 ${t.textFaint}`}>{new Date(f.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>
-                                                            </div>
-                                                            <p className={`text-[10px] leading-relaxed whitespace-pre-wrap ${t.textMuted}`}>{f.message}</p>
+                                          {isCurrent ? (
+                                            <p className={`text-[10px] italic text-center ${t.textFaint}`}>Current lead — see main panel for full details.</p>
+                                          ) : childLeadId && loadingVisitDetail[childLeadId] ? (
+                                            <p className={`text-[10px] text-center ${t.textFaint}`}>Loading historical data…</p>
+                                          ) : childLeadId && visitDetailCache[childLeadId] ? (() => {
+                                            const hist = visitDetailCache[childLeadId];
+                                            return (
+                                              <div className="flex flex-col gap-3">
+                                                {hist.followUps?.length > 0 && (
+                                                  <div className={`border-t pt-2 ${t.tableBorder}`}>
+                                                    <p className="text-[9px] font-bold uppercase tracking-wider text-[#64748B] mb-1.5">Historical Notes ({hist.followUps.length})</p>
+                                                    <div className="flex flex-col gap-1.5 max-h-[200px] overflow-y-auto custom-scrollbar pr-1">
+                                                      {hist.followUps.map((f: any) => (
+                                                        <div key={f.id} className={`rounded-lg p-2 border ${isDark ? "bg-[rgba(100,116,139,0.06)] border-[rgba(100,116,139,0.15)]" : "bg-white border-[rgba(100,116,139,0.18)]"}`}>
+                                                          <div className="flex justify-between items-start mb-0.5 gap-2">
+                                                            <span className="text-[10px] font-semibold text-[#64748B]">{f.createdByName || "—"}</span>
+                                                            <span className={`text-[9px] flex-shrink-0 ${t.textFaint}`}>{new Date(f.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>
                                                           </div>
-                                                        ))}
-                                                      </div>
-                                                    </div>
-                                                  )}
-
-                                                  {/* Historical Sales Form */}
-                                                  {hist.historicalSalesForm && (
-                                                    <div className={`border-t pt-2 ${t.tableBorder}`}>
-                                                      <p className="text-[9px] font-bold uppercase tracking-wider text-[#64748B] mb-1.5">Sales Form (Historical)</p>
-                                                      <div className={`rounded-lg p-2 border text-[10px] whitespace-pre-wrap leading-relaxed ${isDark ? "bg-[rgba(100,116,139,0.06)] border-[rgba(100,116,139,0.20)] text-gray-300" : "bg-white border-[rgba(100,116,139,0.20)] text-gray-700"}`}>
-                                                        {hist.historicalSalesForm.replace("📝 Detailed Salesform Submitted:\n", "").trim()}
-                                                      </div>
-                                                    </div>
-                                                  )}
-
-                                                  {/* Historical Loan */}
-                                                  {hist.loan?.length > 0 && (
-                                                    <div className={`border-t pt-2 ${t.tableBorder}`}>
-                                                      <p className="text-[9px] font-bold uppercase tracking-wider text-[#64748B] mb-1.5">Loan (Historical)</p>
-                                                      {hist.loan.map((l: any, idx: number) => (
-                                                        <div key={l.id ?? idx} className={`rounded-lg p-2 border text-[10px] mb-1.5 ${isDark ? "bg-[rgba(100,116,139,0.06)] border-[rgba(100,116,139,0.20)]" : "bg-white border-[rgba(100,116,139,0.20)]"}`}>
-                                                          <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
-                                                            <div><span className={`${t.textFaint}`}>Status: </span><span className={`font-semibold ${t.text}`}>{l.status || "—"}</span></div>
-                                                            {l.bankName && <div><span className={`${t.textFaint}`}>Bank: </span><span className={`font-semibold ${t.text}`}>{l.bankName}</span></div>}
-                                                            {l.amountRequested && <div><span className={`${t.textFaint}`}>Requested: </span><span className={`font-semibold ${t.text}`}>₹{Number(l.amountRequested).toLocaleString("en-IN")}</span></div>}
-                                                            {l.cibil && <div><span className={`${t.textFaint}`}>CIBIL: </span><span className={`font-semibold ${t.text}`}>{l.cibil}</span></div>}
-                                                          </div>
+                                                          <p className={`text-[10px] leading-relaxed whitespace-pre-wrap ${t.textMuted}`}>{f.message}</p>
                                                         </div>
                                                       ))}
                                                     </div>
-                                                  )}
-
-                                                  {/* Historical Booking */}
-                                                  {hist.booking && (
-                                                    <div className={`border-t pt-2 ${t.tableBorder}`}>
-                                                      <p className="text-[9px] font-bold uppercase tracking-wider text-[#64748B] mb-1.5">Booking (Historical)</p>
-                                                      <div className={`rounded-lg p-2 border text-[10px] ${isDark ? "bg-[rgba(100,116,139,0.06)] border-[rgba(100,116,139,0.20)]" : "bg-white border-[rgba(100,116,139,0.20)]"}`}>
+                                                  </div>
+                                                )}
+                                                {hist.historicalSalesForm && (
+                                                  <div className={`border-t pt-2 ${t.tableBorder}`}>
+                                                    <p className="text-[9px] font-bold uppercase tracking-wider text-[#64748B] mb-1.5">Sales Form (Historical)</p>
+                                                    <div className={`rounded-lg p-2 border text-[10px] whitespace-pre-wrap leading-relaxed ${isDark ? "bg-[rgba(100,116,139,0.06)] border-[rgba(100,116,139,0.20)] text-gray-300" : "bg-white border-[rgba(100,116,139,0.20)] text-gray-700"}`}>
+                                                      {hist.historicalSalesForm.replace("📝 Detailed Salesform Submitted:\n", "").trim()}
+                                                    </div>
+                                                  </div>
+                                                )}
+                                                {hist.loan?.length > 0 && (
+                                                  <div className={`border-t pt-2 ${t.tableBorder}`}>
+                                                    <p className="text-[9px] font-bold uppercase tracking-wider text-[#64748B] mb-1.5">Loan (Historical)</p>
+                                                    {hist.loan.map((l: any, idx: number) => (
+                                                      <div key={l.id ?? idx} className={`rounded-lg p-2 border text-[10px] mb-1.5 ${isDark ? "bg-[rgba(100,116,139,0.06)] border-[rgba(100,116,139,0.20)]" : "bg-white border-[rgba(100,116,139,0.20)]"}`}>
                                                         <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
-                                                          {hist.booking.bookingNumber && <div><span className={`${t.textFaint}`}>Booking #: </span><span className={`font-semibold ${t.text}`}>{hist.booking.bookingNumber}</span></div>}
-                                                          {hist.booking.bookingStatus && <div><span className={`${t.textFaint}`}>Status: </span><span className={`font-semibold ${t.text}`}>{hist.booking.bookingStatus}</span></div>}
-                                                          {hist.booking.projectName && <div><span className={`${t.textFaint}`}>Project: </span><span className={`font-semibold ${t.text}`}>{hist.booking.projectName}</span></div>}
-                                                          {hist.booking.flatNumber && <div><span className={`${t.textFaint}`}>Flat: </span><span className={`font-semibold ${t.text}`}>{hist.booking.flatNumber}</span></div>}
+                                                          <div><span className={`${t.textFaint}`}>Status: </span><span className={`font-semibold ${t.text}`}>{l.status || "—"}</span></div>
+                                                          {l.bankName && <div><span className={`${t.textFaint}`}>Bank: </span><span className={`font-semibold ${t.text}`}>{l.bankName}</span></div>}
+                                                          {l.amountRequested && <div><span className={`${t.textFaint}`}>Requested: </span><span className={`font-semibold ${t.text}`}>₹{Number(l.amountRequested).toLocaleString("en-IN")}</span></div>}
+                                                          {l.cibil && <div><span className={`${t.textFaint}`}>CIBIL: </span><span className={`font-semibold ${t.text}`}>{l.cibil}</span></div>}
                                                         </div>
                                                       </div>
+                                                    ))}
+                                                  </div>
+                                                )}
+                                                {hist.booking && (
+                                                  <div className={`border-t pt-2 ${t.tableBorder}`}>
+                                                    <p className="text-[9px] font-bold uppercase tracking-wider text-[#64748B] mb-1.5">Booking (Historical)</p>
+                                                    <div className={`rounded-lg p-2 border text-[10px] ${isDark ? "bg-[rgba(100,116,139,0.06)] border-[rgba(100,116,139,0.20)]" : "bg-white border-[rgba(100,116,139,0.20)]"}`}>
+                                                      <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
+                                                        {hist.booking.bookingNumber && <div><span className={`${t.textFaint}`}>Booking #: </span><span className={`font-semibold ${t.text}`}>{hist.booking.bookingNumber}</span></div>}
+                                                        {hist.booking.bookingStatus && <div><span className={`${t.textFaint}`}>Status: </span><span className={`font-semibold ${t.text}`}>{hist.booking.bookingStatus}</span></div>}
+                                                        {hist.booking.projectName && <div><span className={`${t.textFaint}`}>Project: </span><span className={`font-semibold ${t.text}`}>{hist.booking.projectName}</span></div>}
+                                                        {hist.booking.flatNumber && <div><span className={`${t.textFaint}`}>Flat: </span><span className={`font-semibold ${t.text}`}>{hist.booking.flatNumber}</span></div>}
+                                                      </div>
                                                     </div>
-                                                  )}
-
-                                                  {(!hist.followUps?.length && !hist.historicalSalesForm && !hist.loan?.length && !hist.booking) && (
-                                                    <p className={`text-[10px] italic text-center ${t.textFaint}`}>No historical data recorded for this visit.</p>
-                                                  )}
-                                                </div>
-                                              );
-                                            })() : !isCurrent ? (
-                                              <p className={`text-[10px] italic text-center ${t.textFaint}`}>No historical detail available.</p>
-                                            ) : null}
-                                          </div>
+                                                  </div>
+                                                )}
+                                                {(!hist.followUps?.length && !hist.historicalSalesForm && !hist.loan?.length && !hist.booking) && (
+                                                  <p className={`text-[10px] italic text-center ${t.textFaint}`}>No historical data recorded for this visit.</p>
+                                                )}
+                                              </div>
+                                            );
+                                          })() : !isCurrent ? (
+                                            <p className={`text-[10px] italic text-center ${t.textFaint}`}>No historical detail available.</p>
+                                          ) : null}
                                         </div>
                                       </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Tab switcher */}
-                      <div className={`flex items-center gap-2 border p-1.5 rounded-xl flex-shrink-0 ${t.tableWrap}`}>
-                        <button onClick={() => setDetailTab("personal")} className={`flex-1 py-2 text-xs sm:text-sm font-bold rounded-lg transition-colors cursor-pointer ${detailTab === "personal" ? t.btnPrimary : `${t.textMuted} ${isDark ? "hover:text-white hover:bg-[#222]" : "hover:text-[#1A1A1A] hover:bg-[#F1F5F9]"}`}`}>Personal Info</button>
-                        <button onClick={() => setDetailTab("loan")} className={`flex-1 py-2 text-xs sm:text-sm font-bold rounded-lg transition-colors cursor-pointer ${detailTab === "loan" ? t.btnSecondary : `${t.textMuted} ${isDark ? "hover:text-white hover:bg-[#222]" : "hover:text-[#1A1A1A] hover:bg-[#F1F5F9]"}`}`}>Loan Tracking</button>
-                      </div>
-
-                      <div className={`overflow-y-auto custom-scrollbar rounded-xl p-3 sm:p-6 shadow-lg border max-h-[100vh] lg:max-h-[calc(100vh-225px)] ${t.chatPanel}`} style={t.chatPanelGl}>
-                        {detailTab === "personal" ? (
-                          <div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 sm:gap-y-4 gap-x-4 text-xs sm:text-sm">
-                              <InlineContactField label="Email" value={selectedLead.email} fieldType="email" isDark={isDark} theme={t} canEdit={["admin", "sales manager", "site head", "site_head"].includes(adminUser?.role?.toLowerCase() || "")} onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "email", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, email: val || "N/A" })); }} />
-                              <InlineContactField label="Phone" value={selectedLead.phone} fieldType="tel" isDark={isDark} theme={t} canEdit={["admin", "sales manager", "site head", "site_head"].includes(adminUser?.role?.toLowerCase() || "")} mono onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "phone", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, phone: val })); }} />
-                              <InlineContactField label="Alt Phone" value={selectedLead.altPhone ?? selectedLead.alt_phone} fieldType="tel" isDark={isDark} theme={t} canEdit={["admin", "sales manager", "site head", "site_head"].includes(adminUser?.role?.toLowerCase() || "")} mono onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "alt_phone", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, altPhone: val, alt_phone: val })); }} />
-                              <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Lead Interest</p>{selectedLead.leadInterestStatus && selectedLead.leadInterestStatus !== "Pending" ? <InterestBadge status={selectedLead.leadInterestStatus} /> : <p className={`font-semibold ${t.text}`}>Pending</p>}</div>
-                              <div className="col-span-1"><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Loan Status</p>{selectedLead.loanStatus && selectedLead.loanStatus !== "N/A" ? <div className="w-fit"><LoanStatusBadge status={selectedLead.loanStatus} /></div> : <p className={`font-semibold ${t.text}`}>N/A</p>}</div>
-                              <div className="col-span-1"><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Backdated Entry</p><p className={`font-semibold ${t.text}`}>{selectedLead.auto_date_enabled === false && selectedLead.enquiry_date ? formatDate(selectedLead.enquiry_date).split(",")[0] : "Null"}</p></div>
-                              <div className="col-span-1 sm:col-span-2"><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Residential Address</p><p className={`font-semibold ${t.text}`}>{selectedLead.address && selectedLead.address !== "N/A" ? selectedLead.address : "Not Provided"}</p></div>
-                              <div className="col-span-1 sm:col-span-2"><InlineContactField label="Location" value={selectedLead.location} fieldType="text" isDark={isDark} theme={t} canEdit={["admin", "sales manager", "site head", "site_head"].includes(adminUser?.role?.toLowerCase() || "")} onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "location", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, location: val || "N/A" })); }} /></div>
-                              <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Budget</p><p className={`font-bold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{selectedLead.salesBudget !== "Pending" ? selectedLead.salesBudget : selectedLead.budget}</p></div>
-                              <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Property Type</p><p className={`font-semibold ${t.text}`}>{selectedLead.propType || selectedLead.configuration || "Pending"}</p></div>
-                              <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Type of Use</p><p className={`font-semibold ${t.text}`}>{selectedLead.useType !== "Pending" ? selectedLead.useType : (selectedLead.purpose || "N/A")}</p></div>
-                              <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Planning to Buy?</p><p className={`font-semibold ${t.text}`}>{selectedLead.planningPurchase || "Pending"}</p></div>
-                              <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Loan Required?</p><p className={`font-semibold ${t.text}`}>{loanDealLatest?.loan_required || selectedLead.loanPlanned || "Pending"}</p></div>
-                              <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Status</p><span className={`text-xs sm:text-sm font-bold ${getStatusStyle(selectedLead.status)}`}>{selectedLead.status || "Assigned"}</span></div>
-                            </div>
-                            {selectedLead.is_lost_lead && (
-                              <div className={`mt-4 border rounded-xl p-3 sm:p-3 ${t.statusLost}`}>
-                                <h3 className="crm-eyebrow mb-2 flex items-center gap-2">
-                                  <Ghost className="w-3.5 h-3.5" /> Lost Lead Record
-                                </h3>
-                                <p className={`text-xs sm:text-sm leading-relaxed ${t.textMuted}`}>{selectedLead.lost_lead_reason || "No reason recorded."}</p>
-                                <p className={`text-[10px] mt-2 ${t.textFaint}`}>
-                                  Marked by {selectedLead.lost_lead_marked_by || "Unknown"} on {selectedLead.lost_lead_marked_at ? formatDate(selectedLead.lost_lead_marked_at) : "-"}
-                                </p>
-                              </div>
-                            )}
-                            <div className={`mt-4 border rounded-xl p-3 sm:p-3 ${t.settingsBg}`} style={t.settingsBgGl}>
-                              <h3 className={`crm-eyebrow mb-2 sm:mb-3 border-b pb-2 ${t.sectionTitle} ${t.sectionBorder}`}>
-                                {selectedLead.source && selectedLead.source !== "N/A" ? `${selectedLead.source} Data` : "Source Data"}
-                              </h3>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Primary Source</p><p className={`font-medium text-xs sm:text-sm ${t.text}`}>{selectedLead.source || "N/A"}</p></div>
-                                {selectedLead.source === "Others" && (<div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>Specified Name</p><p className={`font-medium text-xs sm:text-sm ${t.text}`}>{selectedLead.sourceOther}</p></div>)}
-                              </div>
-                              {selectedLead.source === "Channel Partner" ? (
-                                <div className={`mt-3 pt-3 border-t grid grid-cols-1 sm:grid-cols-3 gap-3 ${t.tableBorder}`}>
-                                  {[
-                                    { label: "CP Name", val: selectedLead.cpName },
-                                    { label: "CP Company", val: selectedLead.cpCompany },
-                                    { label: "CP Phone", val: selectedLead.cpPhone }
-                                  ].map(({ label, val }) => (
-                                    <div key={label}>
-                                      <p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>
-                                        {label}
-                                      </p>
-                                      <p className={`font-medium text-xs sm:text-sm break-all ${t.text}`}>
-                                        {val || "N/A"}
-                                      </p>
                                     </div>
-                                  ))}
+                                  )}
                                 </div>
-                              ) : selectedLead.source === "Referral" && selectedLead.referral_name ? (
-                                <div className={`mt-3 pt-3 border-t grid grid-cols-1 sm:grid-cols-3 gap-3 ${t.tableBorder}`}>
-                                  <div>
-                                    <p className={`text-[10px] sm:text-xs font-medium mb-1 ${t.textFaint}`}>
-                                      Referred By
-                                    </p>
-                                    <p className={`font-medium text-xs sm:text-sm break-all ${t.text}`}>
-                                      {selectedLead.referral_name}
-                                    </p>
-                                  </div>
-                                </div>
-                              ) : (selectedLead.status === "NON GENUINE DEMAND (NGD)" || selectedLead.leadStatus === "NON GENUINE DEMAND (NGD)" || selectedLead.leadInterestStatus === "NON GENUINE DEMAND (NGD)") ? (
-                                <span className={`text-[10px] sm:text-[11px] font-bold px-2 sm:px-3 py-1 rounded-full border flex items-center gap-1.5 flex-shrink-0 ${t.statusNGD}`}>
-                                  NON GENUINE DEMAND
-                                </span>
-                              ) : null}
-                            </div>
+                              );
+                            })}
                           </div>
-                        ) : (selectedLead.status === "NON GENUINE DEMAND (NGD)" || selectedLead.leadStatus === "NON GENUINE DEMAND (NGD)" || selectedLead.leadInterestStatus === "NON GENUINE DEMAND (NGD)") ? (
-                          <span className={`text-[10px] sm:text-[11px] font-bold px-2 sm:px-3 py-1 rounded-full border flex items-center gap-1.5 flex-shrink-0 ${t.statusNGD}`}>
-                            NON GENUINE DEMAND
-                          </span>
-                        ) : (
-                          <LoanDealView lead={selectedLead} booking={loanDealBooking} loanUpdate={loanDealLatest} isDark={isDark} t={t} />
                         )}
-                        {/* Site Visit History — with gap */}
-                        <div className="mt-3">
-                          <SiteVisitScheduler
-                            lead={selectedLead}
-                            adminUser={adminUser}
-                            isDark={isDark}
-                            t={t}
-                            onSuccess={refetch}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Contact actions. Sits where the Twilio "Browser Call"
-                      tile used to be, so the call affordance stays in the
-                      place users already reach for. Self-gating: the widget
-                      renders nothing when Bolna is unconfigured, and the
-                      WhatsApp button below is unaffected either way. */}
-                      {/* <div className="flex-shrink-0 mb-3">
-                        <BolnaCallWidget
-                          leadId={Number(selectedLead.id)}
-                          leadName={selectedLead.name}
-                          phone={selectedLead.phone}
-                          userData={{ project: selectedLead.propType || selectedLead.configuration }}
-                          compact
-                        />
-                      </div> */}
-
-                      {/* Two columns now that Manual Call and AI Call join the
-                      WhatsApp tile. */}
-                      <div className="grid grid-cols-2 gap-3 flex-shrink-0">
-                        <button className={`border flex flex-col items-center justify-center py-3 rounded-xl transition-all cursor-pointer gap-1 ${isDark ? "bg-[#9E217B]/10 border-[#9E217B]/30 hover:bg-[#9E217B] text-[#d946a8] hover:text-white" : "bg-[#9E217B]/10 border-[#9E217B]/30 hover:bg-[#9E217B] text-[#9E217B] hover:text-white"}`}>
-                          <FaMicrophone className="text-lg" /><span className="font-bold text-[10px]">Browser Call</span>
-                        </button>
-                        <button
-                          onClick={() => setIsWaModalOpen(true)}
-                          className="bg-green-600/10 border border-green-500/30 hover:bg-green-600 text-green-400 hover:text-white flex flex-col items-center justify-center py-2 sm:py-3 rounded-xl transition-all cursor-pointer gap-1 min-h-[48px]">
-                          <FaWhatsapp className="text-lg sm:text-lg" />
-                          <span className="font-bold text-[10px]">WhatsApp</span>
-                        </button>
-                        <CallingButtons
-                          leadId={Number(selectedLead.id)}
-                          phone={selectedLead.phone}
-                          leadName={selectedLead.name}
-                          isDark
-                          iconClass="text-lg"
-                          paddingClass="py-3"
-                        />
-
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* RIGHT PANEL: FOLLOW-UPS */}
-                <div className={`flex flex-col rounded-xl overflow-hidden shadow-2xl border h-[560px] lg:h-[calc(100vh-150px)] lg:sticky lg:top-4 w-full lg:w-0 lg:flex-1 ${t.chatPanel}`} style={t.chatPanelGl}>
-                  <div className={`flex-1 p-3 sm:p-6 overflow-y-auto custom-scrollbar flex flex-col gap-2 sm:gap-3 ${t.chatArea}`}>
-                    {/* System message */}
-                    <div className="flex justify-start">
-                      <div className={`rounded-xl rounded-tl-none p-3 sm:p-3 max-w-[90%] sm:max-w-[85%] shadow-md ${t.fupSalesform}`}>
-                        <div className={`flex justify-between items-start sm:items-center mb-2 gap-2 sm:gap-3 flex-col sm:flex-row`}>
-                          <span className={`font-bold text-xs sm:text-sm ${t.accentText}`}>System (Front Desk)</span>
-                          <span className={`text-[9px] sm:text-[10px] ${t.textFaint}`}>{formatDate(selectedLead.created_at)}</span>
-                        </div>
-                        <EnquiryDetailsBubble lead={selectedLead} theme={t} isDark={isDark} formatDateFn={formatDate} />
-                      </div>
-                    </div>
-                    {currentLeadFollowUps.map((msg: any, idx: number) => {
-                      const isLoan = msg.message.includes("🏦 Loan Update");
-                      const isSF = msg.message.includes("📝 Detailed Salesform Submitted");
-                      const isClosing = msg.message.includes("✅ Lead Marked as Closing");
-                      const isWA = msg.message.includes("📱 WhatsApp sent by");
-                      const bubbleCls = isLoan ? t.fupLoan : isSF ? t.fupSalesform : isClosing ? t.fupClosing : t.fupDefault;
-                      return (
-                        <div key={idx} className="flex justify-start">
-                          <div className={`rounded-xl rounded-tl-none p-3 sm:p-3 max-w-[90%] sm:max-w-[85%] shadow-lg ${bubbleCls}`}>
-                            <div className="flex justify-between items-start sm:items-center mb-2 sm:mb-3 gap-2 sm:gap-3 flex-col sm:flex-row">
-                              <span className={`font-bold text-xs sm:text-sm ${t.text}`}>{msg.createdBy === "admin" ? `${msg.salesManagerName || "Admin"} (Admin)` : msg.salesManagerName}</span>
-                              <span className={`text-[9px] sm:text-[10px] ${t.textFaint} flex items-center gap-1`}>
-                                {formatDate(msg.createdAt)}
-                                {(msg.followUpType === "internal_message" || msg.followUpType === "sm_reply") && msg._status !== "sending" && msg._status !== "failed" && (
-                                  msg.readAt
-                                    ? <span className="text-blue-500 font-bold ml-0.5" title="Read">&#10003;&#10003;</span>
-                                    : <span className="opacity-60 ml-0.5" title="Sent">&#10003;</span>
-                                )}
-                              </span>
-                            </div>
-                            {msg.followUpType === "call" ? (
-                              <ManualCallBubble message={msg.message} createdAt={msg.createdAt} textClass={t.textMuted} onRecordingDeleted={refetch} />
-                            ) : (
-                              <p className={`text-xs sm:text-sm whitespace-pre-wrap leading-relaxed break-words ${t.textMuted}`}>{msg.message}</p>
-                            )}
-                            <FollowUpAttachments followUpId={Number(msg._id)} textClass={t.textMuted} onDeleted={refetch} />
-
-                            {canDeleteFollowUps && msg._id && msg._status !== "sending" && msg._status !== "failed" && (
-                              <button
-                                type="button"
-                                disabled={deletingFollowUpId === String(msg._id)}
-                                onClick={() => setConfirmDeleteFollowUpId(String(msg._id))}
-                                className={`mt-1 text-[9px] font-medium transition-opacity ${isDark ? "text-red-400 hover:text-red-300" : "text-red-500 hover:text-red-600"} disabled:opacity-40`}
-                              >
-                                {deletingFollowUpId === String(msg._id) ? "Deleting…" : "Delete"}
-                              </button>
-                            )}
-
-                            {/* Optimistic UI status indicators */}
-                            {msg._status === "sending" && (
-                              <span className="text-[9px] text-yellow-500 mt-1 block">Sending...</span>
-                            )}
-                            {msg._status === "failed" && (
-                              <span className="text-[9px] text-red-500 mt-1 flex items-center gap-1">
-                                Failed to send
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setCustomNote(msg.message);
-                                    removeFollowUp(msg._clientMessageId);
-                                  }}
-                                  className="underline hover:text-red-400"
-                                >
-                                  Retry
-                                </button>
-                              </span>
-                            )}
-
-                            {/* Log Reply button — only on WhatsApp messages */}
-                            {isWA && (
-                              <button
-                                onClick={() => {
-                                  setCustomNote(`📲 WhatsApp Reply from ${selectedLead.name}: `);
-                                  setTimeout(() => inputRef.current?.focus(), 50);
-                                }}
-                                className="mt-2 text-[10px] font-bold text-green-500 hover:text-green-400 border border-green-500/30 hover:border-green-400/50 bg-green-500/5 hover:bg-green-500/10 px-3 py-1 rounded-full transition-all flex items-center gap-1"
-                              >
-                                <FaWhatsapp className="text-[9px]" /> Log their reply
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                    {confirmDeleteFollowUpId && (
-                      <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60">
-                        <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl overflow-hidden mx-4">
-                          <div className="px-5 py-4 border-b border-gray-100">
-                            <h3 className="font-bold text-sm text-gray-900">Delete follow-up?</h3>
-                          </div>
-                          <div className="px-5 py-4">
-                            <p className="text-sm text-gray-600 leading-relaxed">This will permanently delete this follow-up note and any attached files from storage. This action cannot be undone.</p>
-                          </div>
-                          <div className="flex gap-2 px-5 py-3 border-t border-gray-100 bg-gray-50">
-                            <button type="button" onClick={() => setConfirmDeleteFollowUpId(null)} className="flex-1 px-3 py-2 text-xs font-bold rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-100 transition">Cancel</button>
-                            <button type="button" onClick={() => { handleDeleteFollowUp(confirmDeleteFollowUpId!); setConfirmDeleteFollowUpId(null); }} className="flex-1 px-3 py-2 text-xs font-bold rounded-xl bg-red-600 text-white hover:bg-red-700 transition">Delete</button>
-                          </div>
-                        </div>
                       </div>
                     )}
-                    <div ref={followUpEndRef} />
+                  </>
+                )}
+                renderAfterPersonalInfo={() => (
+                  <div className="mt-3">
+                    <SiteVisitScheduler lead={selectedLead} adminUser={adminUser} isDark={isDark} t={t} onSuccess={refetch} />
                   </div>
-                  {/* Composer stays open on closed/lost leads — notes are a record of
-                  what happened, not an edit to the deal. The Salesform/Loan/Closing
-                  buttons above remain gated on isLeadLocked. */}
-                  <FollowUpComposer value={customNote} onChange={setCustomNote} onSubmit={handleSendCustomNote} pendingFiles={attView.pendingFiles} fileError={attView.fileError} onAddFiles={attView.addFiles} onRemoveFile={attView.removeFile} onReminderClick={() => setShowReminderModal(true)} isDark={isDark} theme={t} placeholder="Add follow-up note..." headerGlass={t.headerGlass} />
-                </div>
-
-              </div>{/* end three-part body */}
-            </div>
+                )}
+                formatDate={formatDate}
+              />
+            </LeadDetailsLayout>
 
           )
         )}

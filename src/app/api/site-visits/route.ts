@@ -114,7 +114,7 @@ export async function POST(req: Request) {
         event_ts: newVisit.created_at,
         event_key: buildEventKey("site_visit_scheduled", "site_visits", newVisit.id),
         actor_id: gate.userId,
-        payload: { source: "site_visit_form", visit_date },
+        payload: { source: "site_visit_form", source_table: "site_visits", source_record_id: newVisit.id, visit_date },
         organization_id: orgId,
       });
 
@@ -243,7 +243,7 @@ export async function PATCH(req: Request) {
             event_ts: new Date().toISOString(),
             event_key: buildEventKey("site_visit_completed", "site_visits", Number(id)),
             actor_id: gate.userId,
-            payload: { source: "site_visit_patch" },
+            payload: { source: "site_visit_patch", source_table: "site_visits", source_record_id: Number(id) },
             organization_id: orgId,
           });
         }

@@ -159,7 +159,7 @@ export default function BookingApplicationView({
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
           {[
-            { label: "Lead No.", val: `#${booking.lead_sr_no || lead?.sr_no || booking.lead_id}` },
+            { label: "Sr. No.", val: `#${booking.lead_sr_no || lead?.sr_no || booking.lead_id}` },
             { label: "Application Date", val: formatDate(booking.application_date) },
             // Flat/Unit line removed — now in breadcrumb above
             { label: "Consideration Value", val: formatCurrencyDisplay(booking.consideration_value) },

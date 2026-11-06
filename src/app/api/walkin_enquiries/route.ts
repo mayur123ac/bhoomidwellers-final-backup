@@ -770,7 +770,7 @@ export async function POST(req: Request) {
           event_ts: new Date().toISOString(),
           event_key: buildEventKey("lead_assigned", "walkin_enquiries", newId),
           actor_id: actorUserId ?? null,
-          payload: { source: "receptionist_form" },
+          payload: { source: "receptionist_form", source_table: "walkin_enquiries", source_record_id: newId },
           organization_id: orgId,
         });
       }

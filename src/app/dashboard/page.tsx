@@ -58,6 +58,7 @@ import CallingButtons from "@/components/CallingButtons";
 import ManualCallBubble from "@/components/ManualCallBubble";
 import EmployeePerformancePanel from "@/components/EmployeePerformancePanel";
 import { contactFieldSave } from "@/lib/contactFieldSave";
+import { LeadDetailsPanel, LeadDetailsLayout } from "@/components/leads";
 // import ActivityTimeline from "@/components/ActivityTimeline";
 import {
   handleMarkLostLead as markLostLeadApi,
@@ -253,7 +254,7 @@ function buildTheme(isDark: boolean) {
     lostLeadRow: isDark ? "opacity-50" : "opacity-50 bg-gray-50/50",
     statusNGD: "bg-[rgba(251,146,60,0.12)] text-[#F97316] border border-[rgba(249,115,22,0.4)]",
     cardLost: isDark ? "bg-[#171717] border border-red-900/25 opacity-70 grayscale saturate-50 hover:opacity-90 hover:border-red-500/30" : "bg-slate-100 border border-red-200 opacity-75 grayscale saturate-50 hover:opacity-90 hover:border-red-300",
-    cardNGD: "bg-[rgba(249,115,22,0.06)] border border-[rgba(249,115,22,0.35)] hover:border-[#F97316] shadow-[0_4px_12px_rgba(249,115,22,0.12)] transition-all duration-300 flex flex-col h-full",
+    cardNGD: "bg-[rgba(249,115,22,0.06)] border border-[rgba(249,115,22,0.35)] hover:border-[#F97316] shadow-[0_4px_12px_rgba(249,115,22,0.12)] transition-all duration-300",
     rowLost: isDark ? "bg-[#151515]/80 text-gray-500 opacity-75 grayscale" : "bg-slate-100/80 text-slate-500 opacity-80 grayscale",
     rowNGD: "bg-[rgba(249,115,22,0.03)]",
     scroll: isDark ? "scrollbar-dark" : "scrollbar-light",
@@ -1386,7 +1387,7 @@ function AdminAtlasDashboardContent() {
           </AppHeader>
         )}
 
-        <main className={`flex-1 px-3 py-3 overflow-y-auto transition-colors duration-300 ${theme.mainBg}`}>
+        <main className={`flex-1 px-0 py-0 overflow-y-auto transition-colors duration-300 ${theme.mainBg}`}>
           {activeView === "ai" && <BhoomiAiPanel isDark={isDark} t={theme} user={user} />}
 
           {activeView === "dashboard" && <DashboardOverview refetch={refetch} managers={managers} siteHeads={siteHeads} allLeads={allLeads} isLoading={isLoading} user={user} theme={theme} isDark={isDark} receptionists={receptionists} followUps={followUps} onNavigateToSales={(lead: any) => {
@@ -3453,10 +3454,6 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
     (followUps || []).filter((f: any) => String(f.leadId) === String(selectedLead?.id)),
     [followUps, selectedLead]);
   const isLeadLocked = !!selectedLead && (selectedLead.status === "Closing" || selectedLead.status === "Closed" || !!selectedLead.closingDate || !!selectedLead.is_lost_lead);
-  useEffect(() => {
-    if (subView === "detail") followUpEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [currentLeadFollowUps, subView, detailTab]);
-
   // Reset revisit state when selected lead changes
   useEffect(() => {
     setShowPrevLead(false);
@@ -4168,9 +4165,9 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
             <p>Select a Sales Manager from the left sidebar.</p>
           </div>
         ) : (
-          <div className="flex-1 flex flex-col h-full min-h-0 overflow-hidden">
+          <div className="flex-1 flex flex-col h-full min-h-0">
             {/* Sub-header */}
-            <div className={`p-3 border-b flex justify-between items-center shadow-sm z-10 flex-shrink-0 gap-1 ${theme.header}`} style={theme.headerGlass}>
+            {/* <div className={`p-3 border-b flex justify-between items-center shadow-sm z-10 flex-shrink-0 gap-1 ${theme.header}`} style={theme.headerGlass}>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => {
@@ -4192,12 +4189,20 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
               <span className={`text-xs px-3 py-1 rounded-full border font-bold flex items-center gap-1.5 ${isDark ? "text-green-400 border-green-500/30 bg-green-500/10" : "text-green-700 border-green-200 bg-green-50"}`}>
                 🟢 Live Sync
               </span>
-            </div>
+            </div> */}
 
             {/* ── LIST VIEW (Stats + Tables) ── */}
             {subView === "list" && (
               <div className={`flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-4 ${theme.scroll}`}>
                 <div className="animate-fadeIn space-y-3 sm:space-y-4 max-w-10xl mx-auto">
+
+                  <button
+                    type="button"
+                    onClick={() => { setSelectedManager(null); setSubView("list"); setSelectedLead(null); }}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] sm:text-xs font-bold transition-colors cursor-pointer ${theme.textMuted} ${theme.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}
+                  >
+                    <FaChevronLeft className="text-[10px]" /> Back to Managers
+                  </button>
 
                   {/* Tabs / Stats Row */}
                   <div className="grid grid-cols-2 gap-2 sm:gap-3">
@@ -4283,546 +4288,251 @@ function AdminSalesView({ managers, allLeads, followUps, isLoading, adminUser, r
                 </div>
               ) : (
                 <div className={`flex-1 overflow-y-auto p-3 ${theme.scroll}`}>
-                  <div className="animate-fadeIn max-w-[1600px] mx-auto flex flex-col h-[calc(100vh-130px)]">
-                    {/* Detail header — sticky compact action bar */}
-                    <div className={`sticky top-0 z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-0 rounded-xl border p-2 shadow-sm flex-shrink-0 ${selectedLead.is_lost_lead ? theme.cardLost : theme.card}`} style={theme.cardGlass}>
-
-                      {/* TITLE ROW: Back Button, Name, and Mobile Toggle */}
-                      <div className="flex items-center justify-between w-full sm:w-auto gap-2">
-                        <div className="flex items-center gap-1.5 sm:gap-2">
-                          <button onClick={() => {
-                            if (isDrillEntryRef.current && onDrillBack) { isDrillEntryRef.current = false; onDrillBack(); }
-                            else { setSubView("list"); setShowSalesForm(false); setShowLoanForm(false); }
-                          }} className={`w-8 h-8 sm:w-9 sm:h-9 flex-shrink-0 flex items-center justify-center border rounded-lg sm:rounded-xl transition-colors cursor-pointer shadow-sm ${theme.textMuted} ${theme.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}>
-                            <FaChevronLeft className="text-[10px] sm:text-xs" />
-                          </button>
-                          <h1 className={`text-sm sm:text-base lg:text-lg font-bold flex flex-wrap items-center gap-1.5 sm:gap-2 ${theme.text}`}>
-                            <span className={isDark ? "text-[#9E217B]" : "text-[#9E217B]"}>#{selectedLead.sr_no || selectedLead.id}</span>
-                            <span>{selectedLead.name}</span>
-                            {selectedLead.status === "Closing" && (
-                              <span className={`text-[9px] sm:text-[11px] font-bold px-2 py-0.5 sm:px-3 sm:py-1 rounded-full border flex items-center gap-1 sm:gap-1.5 ${theme.statusClosing}`}>
-                                <FaHandshake className="text-[10px] sm:text-xs" /> Closing
-                              </span>
-                            )}
-                            {selectedLead.is_lost_lead ? (
-                              <span className={`text-[9px] sm:text-[11px] font-bold px-2 py-0.5 sm:px-3 sm:py-1 rounded-full border flex items-center gap-1 sm:gap-1.5 ${theme.statusLost}`}>
-                                <FaEyeSlash className="text-[10px] sm:text-xs" /> Lost Lead
-                              </span>
-                            ) : (selectedLead.status === "NON GENUINE DEMAND (NGD)" || selectedLead.leadStatus === "NON GENUINE DEMAND (NGD)" || selectedLead.leadInterestStatus === "NON GENUINE DEMAND (NGD)") ? (
-                              <span className={`text-[9px] sm:text-[11px] font-bold px-2 py-0.5 sm:px-3 sm:py-1 rounded-full border flex items-center gap-1 sm:gap-1.5 ${theme.statusNGD}`}>
-                                NON GENUINE DEMAND
-                              </span>
-                            ) : null}
-                            {selectedLead.lead_classification === "RETURNING_LEAD" && (
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border border-[rgba(5,150,105,0.45)] text-[#059669] bg-[rgba(5,150,105,0.12)] w-fit">
-                                REVISIT
-                              </span>
-                            )}
-                          </h1>
-                          {selectedLead.lead_classification === "RETURNING_LEAD" && (
-                            <button
-                              type="button"
-                              onClick={() => setShowPrevLead(v => !v)}
-                              disabled={isLoadingRevisit && !revisitHistory}
-                              className={`hidden sm:flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1 rounded-lg border transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-wait ${showPrevLead ? "border-[rgba(5,150,105,0.5)] text-[#059669] bg-[rgba(5,150,105,0.10)]" : `${theme.tableBorder} ${theme.textMuted} ${isDark ? "hover:bg-white/5" : "hover:bg-black/5"}`}`}
-                            >
-                              {isLoadingRevisit && !revisitHistory ? "Loading history…" : `${showPrevLead ? "Hide" : "Show"} Previous Lead`}
-                            </button>
-                          )}
-                        </div>
-
-                        {/* MOBILE TOGGLE BUTTON (Hidden on Desktop) */}
-                        <button
-                          onClick={() => setShowMobileActions(!showMobileActions)}
-                          className={`sm:hidden w-8 h-8 flex-shrink-0 flex items-center justify-center border rounded-lg transition-colors shadow-sm ${showMobileActions ? theme.btnPrimary : `${theme.textMuted} ${theme.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}`}
-                        >
-                          <FaChevronDown className={`text-[10px] transition-transform duration-200 ${showMobileActions ? "rotate-180" : ""}`} />
-                        </button>
-                      </div>
-
-                      {/* ACTION BUTTONS: Hidden on mobile unless toggled open. Always visible on sm+ */}
-                      <div className={`gap-1.5 sm:gap-2 flex-wrap justify-start sm:justify-end mt-1 sm:mt-0 w-full sm:w-auto ${showMobileActions ? "flex animate-fadeIn" : "hidden sm:flex"}`}>
-                        {bookingData ? (
-                          <button onClick={() => openBookingView(selectedLead.id)} className="font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center flex-1 sm:flex-none min-w-[110px] sm:min-w-[130px] gap-1 sm:gap-1.5 transition-colors cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm whitespace-nowrap">
-                            <FaEye />Booking Form
-                          </button>
-                        ) : (
-                          <button disabled title="Booking Form has not been submitted yet." className="font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center flex-1 sm:flex-none min-w-[110px] sm:min-w-[130px] gap-1 sm:gap-1.5 transition-colors opacity-50 cursor-not-allowed bg-indigo-400 text-white shadow-sm whitespace-nowrap">
-                            <FaEye />Booking Form
-                          </button>
-                        )}
-                        {isLeadLocked ? (
-                          <>
-                            <span className={`text-[9px] sm:text-[11px] font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md border flex items-center justify-center flex-1 sm:flex-none min-w-[110px] sm:min-w-[130px] gap-1 sm:gap-1.5 whitespace-nowrap ${selectedLead.is_lost_lead ? theme.statusLost : theme.statusClosing}`}>
-                              {selectedLead.is_lost_lead ? <><FaEyeSlash className="text-[10px] sm:text-xs" /> Lost Lead • Read Only</> : <><FaCheckCircle className="text-[10px] sm:text-xs" /> Lead Closed • Read Only</>}
+                  <LeadDetailsLayout isDark={isDark} theme={theme} className="animate-fadeIn max-w-[1600px] mx-auto">
+                    <LeadDetailsPanel
+                      lead={selectedLead}
+                      onLeadUpdate={(updater) => setSelectedLead(updater)}
+                      currentUser={{ id: adminUser?.id, name: adminUser?.name, email: adminUser?.email, role: adminUser?.role || "admin" }}
+                      permissions={{
+                        canEditContact: adminUser?.role?.toLowerCase() === "admin",
+                        canEditPhone: adminUser?.role?.toLowerCase() === "admin",
+                        canFillSalesform: true,
+                        canTrackLoan: true,
+                        canMarkClosing: !isLeadLocked,
+                        canMarkLost: !isLeadLocked,
+                        canRestoreLead: true,
+                        canReopenLead: true,
+                        canViewBooking: true,
+                        canCreateBooking: true,
+                        canDeleteLead: false,
+                        canAdvanceStage: true,
+                        canSendFollowUp: true,
+                        canDeleteFollowUp: canDeleteFollowUps,
+                        canCall: true,
+                        canWhatsApp: true,
+                      }}
+                      isDark={isDark}
+                      theme={theme}
+                      onBack={() => {
+                        if (isDrillEntryRef.current && onDrillBack) { isDrillEntryRef.current = false; onDrillBack(); }
+                        else { setSubView("list"); setShowSalesForm(false); setShowLoanForm(false); }
+                      }}
+                      followUps={currentLeadFollowUps}
+                      bookingData={bookingData}
+                      loanDealBooking={loanDealBooking}
+                      loanDealLatest={loanDealLatest}
+                      attView={attView}
+                      onRefetch={refetch}
+                      onShowToast={(msg) => showToast(msg)}
+                      fetchLoanDealData={fetchLoanDealData}
+                      onSendFollowUp={handleSendCustomNote}
+                      onDeleteFollowUp={handleDeleteFollowUp}
+                      onRetryFollowUp={(msg: any) => { setCustomNote(msg.message); removeFollowUp(msg._clientMessageId, String(msg.leadId)); }}
+                      canDeleteFollowUps={canDeleteFollowUps}
+                      deletingFollowUpId={deletingFollowUpId}
+                      customNote={customNote}
+                      setCustomNote={setCustomNote}
+                      onOpenBookingView={() => openBookingView(selectedLead.id)}
+                      onOpenBookingForm={() => setIsClosingModalOpen(true)}
+                      onOpenLostModal={() => openLostLeadModal()}
+                      onOpenReminderModal={() => setShowReminderModal(true)}
+                      onOpenWhatsApp={() => setIsWaModalOpen(true)}
+                      onRestore={() => handleRestoreLead()}
+                      onReopen={handleReopenLead}
+                      showSalesForm={showSalesForm}
+                      setShowSalesForm={setShowSalesForm}
+                      salesForm={salesForm}
+                      setSalesForm={setSalesForm}
+                      onSubmitSalesForm={handleSalesFormSubmit}
+                      inputRef={inputRef}
+                      showLoanForm={showLoanForm}
+                      setShowLoanForm={setShowLoanForm}
+                      showCallingButtons
+                      isReturningLead={selectedLead.lead_classification === "RETURNING_LEAD"}
+                      showPrevLead={showPrevLead}
+                      onTogglePrevLead={() => setShowPrevLead(v => !v)}
+                      isLoadingRevisit={isLoadingRevisit}
+                      revisitHistory={displayedHistory}
+                      renderRevisitPanel={() => (
+                        <div className={`rounded-xl border shadow-sm mb-4 flex-shrink-0 overflow-hidden transition-colors ${isDark ? "bg-[#1C1C1E] border-white/10" : "bg-white border-gray-200"}`}>
+                          {/* Header */}
+                          <div className={`px-5 py-3.5 border-b flex items-center justify-between ${isDark ? "border-white/10 bg-black/20" : "border-gray-100 bg-gray-50/50"}`}>
+                            <div className="flex items-center gap-2.5">
+                              <div className={`p-1.5 rounded-md ${isDark ? "text-blue-400" : "text-blue-600"}`}>
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
+                              </div>
+                              <h3 className={`text-[14px] font-semibold tracking-tight ${isDark ? "text-white" : "text-gray-900"}`}>Visit History</h3>
+                            </div>
+                            <span className={`text-[9px] sm:text-[11px] font-bold px-2 py-0.5 rounded-md border flex items-center gap-1.5 flex-shrink-0 tracking-wide uppercase border-[rgba(5,150,105,0.45)] text-[#059669] bg-[rgba(5,150,105,0.15)]`}>
+                              Read Only
                             </span>
-                            {selectedLead.is_lost_lead ? (
-                              <button onClick={() => handleRestoreLead()} disabled={isSavingLost} className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center flex-1 sm:flex-none min-w-[110px] sm:min-w-[130px] gap-1 sm:gap-1.5 transition-colors cursor-pointer ${theme.btnPrimary} disabled:opacity-60 whitespace-nowrap`}>
-                                <FaCheckCircle /> Restore Lead
-                              </button>
-                            ) : (
-                              <button onClick={handleReopenLead} disabled={isReopening} className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center flex-1 sm:flex-none min-w-[110px] sm:min-w-[130px] gap-1 sm:gap-1.5 transition-colors cursor-pointer ${theme.btnPrimary} disabled:opacity-60 whitespace-nowrap`}>
-                                ↩️ Reopen Lead
-                              </button>
-                            )}
-                          </>
-                        ) : (
-                          !showSalesForm && !showLoanForm && (
-                            <>
-                              <button onClick={() => { prefillSalesForm(); setShowSalesForm(true); setShowLoanForm(false); }} className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center flex-1 sm:flex-none min-w-[110px] sm:min-w-[130px] gap-1 sm:gap-1.5 transition-colors cursor-pointer ${theme.btnPrimary} whitespace-nowrap`}>
-                                <FaFileInvoice /> Fill Salesform
-                              </button>
-                              <button onClick={() => { setShowLoanForm(true); setShowSalesForm(false); }} className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center flex-1 sm:flex-none min-w-[110px] sm:min-w-[130px] gap-1 sm:gap-1.5 transition-colors cursor-pointer ${theme.btnSecondary} whitespace-nowrap`}>
-                                <FaUsers /> Track Loan
-                              </button>
-                              <button onClick={() => setIsClosingModalOpen(true)} className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center flex-1 sm:flex-none min-w-[110px] sm:min-w-[130px] gap-1 sm:gap-1.5 transition-colors cursor-pointer ${theme.btnWarning} whitespace-nowrap`}>
-                                <FaHandshake /> Mark Closing
-                              </button>
-                              <button onClick={() => openLostLeadModal()} className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center flex-1 sm:flex-none min-w-[110px] sm:min-w-[130px] gap-1 sm:gap-1.5 transition-colors cursor-pointer ${theme.btnDanger} whitespace-nowrap`}>
-                                <FaEyeSlash /> Lost Lead
-                              </button>
-                              {/* <button onClick={() => { setTransferTarget(""); setTransferNote(""); setIsTransferModalOpen(true); }} className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center flex-1 sm:flex-none min-w-[110px] sm:min-w-[130px] gap-1 sm:gap-1.5 transition-colors cursor-pointer ${isDark ? "bg-purple-600 hover:bg-purple-500 text-white" : "bg-purple-600 hover:bg-purple-700 text-white"} whitespace-nowrap`}>
-                                <FaExchangeAlt /> Transfer
-                              </button> */}
-                            </>
-                          )
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="mb-3 flex-shrink-0">
-                      <BolnaCallWidget
-                        leadId={Number(selectedLead.id)}
-                        leadName={selectedLead.name}
-                        phone={selectedLead.phone}
-                        userData={{ project: selectedLead.propType || selectedLead.configuration }}
-                        compact
-                      />
-                    </div>
-
-                    {/* ── Revisit: mobile toggle + historical panel ── */}
-                    {selectedLead.lead_classification === "RETURNING_LEAD" && (
-                      <button
-                        type="button"
-                        onClick={() => setShowPrevLead(v => !v)}
-                        disabled={isLoadingRevisit && !revisitHistory}
-                        className={`sm:hidden flex items-center justify-center gap-1.5 text-[11px] font-semibold px-3 py-2 rounded-lg border transition-colors cursor-pointer w-full mb-2 disabled:opacity-50 disabled:cursor-wait ${showPrevLead ? "border-[rgba(5,150,105,0.5)] text-[#059669] bg-[rgba(5,150,105,0.10)]" : `${theme.tableBorder} ${theme.textMuted}`}`}
-                      >
-                        {isLoadingRevisit && !revisitHistory ? "Loading history…" : showPrevLead ? "Hide Previous Lead Data" : "Show Previous Lead Data"}
-                      </button>
-                    )}
-
-                    {selectedLead.lead_classification === "RETURNING_LEAD" && showPrevLead && (
-                      <div className={`rounded-xl border shadow-sm mb-4 flex-shrink-0 overflow-hidden transition-colors ${isDark ? "bg-[#1C1C1E] border-white/10" : "bg-white border-gray-200"}`}>
-
-                        {/* Header */}
-                        <div className={`px-5 py-3.5 border-b flex items-center justify-between ${isDark ? "border-white/10 bg-black/20" : "border-gray-100 bg-gray-50/50"}`}>
-                          <div className="flex items-center gap-2.5">
-                            <div className={`p-1.5 rounded-md ${isDark ? "text-blue-400" : "text-blue-600"}`}>
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
-                            </div>
-                            <h3 className={`text-[14px] font-semibold tracking-tight ${isDark ? "text-white" : "text-gray-900"}`}>Visit History</h3>
                           </div>
-                          <span className={`text-[9px] sm:text-[11px] font-bold px-2 py-0.5 rounded-md border flex items-center gap-1.5 flex-shrink-0 tracking-wide uppercase border-[rgba(5,150,105,0.45)] text-[#059669] bg-[rgba(5,150,105,0.15)]`}>
-                            Read Only
-                          </span>
-                        </div>
 
-                        {/* Timeline / Stepper Area */}
-                        <div className={`px-6 py-5 flex items-center overflow-x-auto custom-scrollbar border-b ${isDark ? "border-white/10 bg-[#1C1C1E]" : "border-gray-100 bg-white"}`}>
-                          {visitChain && visitChain.visits.map((v: any, i: number) => {
-                            const isLast = i === visitChain.visits.length - 1;
-                            const isSelected = selectedVisitIdx === i;
-                            const isCompleted = !isLast;
-
-                            return (
-                              <div key={v.leadId || i} className="flex items-center shrink-0">
-                                <div
-                                  onClick={() => !isLast && handleSelectVisit(i)}
-                                  className={`flex flex-col p-4 rounded-xl border min-w-[150px] transition-all duration-200 ${!isLast ? "cursor-pointer" : "cursor-default opacity-90"
-                                    } ${isSelected
-                                      ? (isDark ? "bg-blue-500/10 border-blue-400/50" : "bg-blue-50/50 border-blue-300 shadow-[0_1px_2px_rgba(59,130,246,0.05)]")
-                                      : (isDark ? "bg-white/[0.02] border-white/10 hover:bg-white/[0.04]" : "bg-white border-gray-200 hover:border-gray-300")
-                                    }`}
-                                >
-                                  <div className="flex items-center gap-2 mb-1.5">
-                                    {isCompleted ? (
-                                      <div className="w-[18px] h-[18px] rounded-full bg-[#10B981] flex items-center justify-center text-white shrink-0">
-                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
-                                      </div>
-                                    ) : (
-                                      <div className={`w-[18px] h-[18px] rounded-full border-2 flex items-center justify-center shrink-0 ${isDark ? "border-blue-400" : "border-blue-600"}`}>
-                                        <div className={`w-1.5 h-1.5 rounded-full ${isDark ? "bg-blue-400" : "bg-blue-600"}`} />
-                                      </div>
-                                    )}
-                                    <span className={`text-[13px] font-semibold tracking-tight ${isDark ? "text-gray-200" : "text-gray-900"}`}>
-                                      Visit {v.visitNumber}
+                          {/* Timeline / Stepper Area */}
+                          <div className={`px-6 py-5 flex items-center overflow-x-auto custom-scrollbar border-b ${isDark ? "border-white/10 bg-[#1C1C1E]" : "border-gray-100 bg-white"}`}>
+                            {visitChain && visitChain.visits.map((v: any, i: number) => {
+                              const isLast = i === visitChain.visits.length - 1;
+                              const isSelected = selectedVisitIdx === i;
+                              const isCompleted = !isLast;
+                              return (
+                                <div key={v.leadId || i} className="flex items-center shrink-0">
+                                  <div
+                                    onClick={() => !isLast && handleSelectVisit(i)}
+                                    className={`flex flex-col p-4 rounded-xl border min-w-[150px] transition-all duration-200 ${!isLast ? "cursor-pointer" : "cursor-default opacity-90"
+                                      } ${isSelected
+                                        ? (isDark ? "bg-blue-500/10 border-blue-400/50" : "bg-blue-50/50 border-blue-300 shadow-[0_1px_2px_rgba(59,130,246,0.05)]")
+                                        : (isDark ? "bg-white/[0.02] border-white/10 hover:bg-white/[0.04]" : "bg-white border-gray-200 hover:border-gray-300")
+                                      }`}
+                                  >
+                                    <div className="flex items-center gap-2 mb-1.5">
+                                      {isCompleted ? (
+                                        <div className="w-[18px] h-[18px] rounded-full bg-[#10B981] flex items-center justify-center text-white shrink-0">
+                                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+                                        </div>
+                                      ) : (
+                                        <div className={`w-[18px] h-[18px] rounded-full border-2 flex items-center justify-center shrink-0 ${isDark ? "border-blue-400" : "border-blue-600"}`}>
+                                          <div className={`w-1.5 h-1.5 rounded-full ${isDark ? "bg-blue-400" : "bg-blue-600"}`} />
+                                        </div>
+                                      )}
+                                      <span className={`text-[13px] font-semibold tracking-tight ${isDark ? "text-gray-200" : "text-gray-900"}`}>
+                                        Visit {v.visitNumber}
+                                      </span>
+                                    </div>
+                                    <span className={`text-[11px] mb-3 ml-6 font-medium ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                                      {new Date(v.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
                                     </span>
-                                  </div>
-
-                                  <span className={`text-[11px] mb-3 ml-6 font-medium ${isDark ? "text-gray-400" : "text-gray-500"}`}>
-                                    {new Date(v.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
-                                  </span>
-
-                                  <div className="ml-6">
-                                    {isCompleted ? (
-                                      <span className={`text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded w-fit ${isDark ? "bg-emerald-500/20 text-emerald-400" : "bg-emerald-100 text-emerald-700"}`}>
-                                        Completed
-                                      </span>
-                                    ) : (
-                                      <span className={`text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded w-fit ${isDark ? "bg-blue-500/20 text-blue-400" : "bg-blue-100 text-blue-700"}`}>
-                                        Current
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-
-                                {/* Connecting Line */}
-                                {!isLast && (
-                                  <div className={`h-[1px] w-8 flex-shrink-0 ${isDark ? "bg-white/10" : "bg-gray-200"}`} />
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-
-                        {/* Detailed History View */}
-                        <div className={`p-6 md:p-8 ${isDark ? "bg-[#1C1C1E]" : "bg-gray-50/30"}`}>
-                          {(isLoadingRevisit && !displayedHistory) || isLoadingSelectedVisit ? (
-                            <div className="flex justify-center py-4">
-                              <p className={`text-[13px] flex items-center gap-2 font-medium ${isDark ? "text-gray-400" : "text-gray-500"}`}>
-                                <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                                Loading visit data…
-                              </p>
-                            </div>
-                          ) : !displayedHistory ? (
-                            <p className={`text-[13px] font-medium ${isDark ? "text-gray-400" : "text-gray-500"}`}>
-                              No previous visit history found or you are not authorized to view it.
-                            </p>
-                          ) : (
-                            <div className="flex flex-col gap-8">
-
-                              {/* Core Enquiry Details */}
-                              <div>
-                                <h4 className={`text-[11px] font-bold uppercase tracking-widest mb-5 ${isDark ? "text-[#9E217B]" : "text-[#9E217B]"}`}>
-                                  {visitChain && selectedVisitIdx !== null ? `Key Details — Visit ${visitChain.visits[selectedVisitIdx].visitNumber}` : "Key Details"}
-                                </h4>
-                                <div className="grid grid-cols-2 md:grid-cols-3 gap-y-6 gap-x-4">
-                                  {[
-                                    { label: "Visit Date", val: new Date(displayedHistory.previousLead.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) },
-                                    { label: "Managed By", val: displayedHistory.previousLead.assigned_to || "—" },
-                                    { label: "Phone", val: displayedHistory.previousLead.phone || "—", isMono: true },
-                                    { label: "Interest Status", val: displayedHistory.previousLead.lead_interest_status || "Pending" },
-                                    { label: "Budget", val: displayedHistory.previousLead.budget || "—", color: isDark ? "text-green-400" : "text-[#10B981]" },
-                                    { label: "Lead Status", val: displayedHistory.previousLead.status || "—" },
-                                    ...(displayedHistory.previousLead.closing_date ? [{ label: "Closing Date", val: formatDate(displayedHistory.previousLead.closing_date) }] : [])
-                                  ].map(({ label, val, isMono, color }) => (
-                                    <div key={label}>
-                                      <p className={`text-[10px] font-medium uppercase tracking-widest mb-1.5 opacity-70 ${isDark ? "text-gray-400" : "text-gray-500"}`}>{label}</p>
-                                      <p className={`text-[13px] font-semibold tracking-tight ${isMono ? "font-mono" : ""} ${color || (isDark ? "text-gray-200" : "text-gray-900")}`}>{val}</p>
+                                    <div className="ml-6">
+                                      {isCompleted ? (
+                                        <span className={`text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded w-fit ${isDark ? "bg-emerald-500/20 text-emerald-400" : "bg-emerald-100 text-emerald-700"}`}>Completed</span>
+                                      ) : (
+                                        <span className={`text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded w-fit ${isDark ? "bg-blue-500/20 text-blue-400" : "bg-blue-100 text-blue-700"}`}>Current</span>
+                                      )}
                                     </div>
-                                  ))}
-                                </div>
-
-                                {displayedHistory.previousLead.is_lost_lead && (
-                                  <div className="mt-6 p-4 rounded-xl bg-red-50 dark:bg-red-500/10 border border-red-100 dark:border-red-500/20">
-                                    <p className="text-[10px] font-bold uppercase tracking-widest mb-1.5 text-red-600 dark:text-red-400">Lost Lead Reason</p>
-                                    <p className="text-[13px] font-medium text-red-800 dark:text-red-200">{displayedHistory.previousLead.lost_lead_reason || "No reason recorded."}</p>
                                   </div>
-                                )}
-                              </div>
-
-                              {/* Modular Cards for Forms, Loans, and Bookings */}
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-
-                                {/* Sales Form Card */}
-                                <div className={`rounded-xl border p-5 flex flex-col ${isDark ? "bg-[#1C1C1E] border-white/40" : "bg-white border-gray-300"}`}>
-                                  <h5 className={`text-[11px] font-bold uppercase tracking-widest mb-4 flex items-center gap-2 ${isDark ? "text-[#9E217B]" : "text-[#9E217B]"}`}>
-                                    <svg className="w-4 h-4 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                                    Sales Form Summary
-                                  </h5>
-                                  {displayedHistory.historicalSalesForm ? (
-                                    <div className={`text-[12px] font-medium whitespace-pre-wrap leading-relaxed flex-1 ${isDark ? "text-gray-300" : "text-gray-700"}`}>
-                                      {displayedHistory.historicalSalesForm.replace("📝 Detailed Salesform Submitted:\n", "").trim()}
-                                    </div>
-                                  ) : (
-                                    <p className={`text-[12px] italic flex-1 flex items-center ${isDark ? "text-gray-500" : "text-gray-400"}`}>No Sales Form data available.</p>
-                                  )}
+                                  {!isLast && <div className={`h-[1px] w-8 flex-shrink-0 ${isDark ? "bg-white/10" : "bg-gray-200"}`} />}
                                 </div>
-
-                                <div className="flex flex-col gap-5">
-                                  {/* Loan Card */}
-                                  <div className={`rounded-xl border p-5 flex-1 ${isDark ? "bg-[#1C1C1E] border-white/10" : "bg-white border-gray-300"}`}>
-                                    <h5 className={`text-[11px] font-bold uppercase tracking-widest mb-4 flex items-center gap-2 ${isDark ? "text-[#00AAEF]" : "text-[#00AAEF]"}`}>
-                                      <svg className="w-4 h-4 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z" /></svg>
-                                      Loan Details
-                                    </h5>
-                                    {displayedHistory.loan.length > 0 ? (
-                                      <div className="flex flex-col gap-4">
-                                        {displayedHistory.loan.map((l: any, idx: number) => (
-                                          <div key={l.id ?? idx} className="grid grid-cols-2 gap-y-4 gap-x-4">
-                                            <div><p className={`text-[10px] font-medium uppercase tracking-widest mb-1.5 opacity-70 ${isDark ? "text-gray-400" : "text-gray-500"}`}>Status</p><p className={`text-[12px] font-semibold ${isDark ? "text-gray-200" : "text-gray-900"}`}>{l.status || "—"}</p></div>
-                                            <div><p className={`text-[10px] font-medium uppercase tracking-widest mb-1.5 opacity-70 ${isDark ? "text-gray-400" : "text-gray-500"}`}>Bank</p><p className={`text-[12px] font-semibold ${isDark ? "text-gray-200" : "text-gray-900"}`}>{l.bankName || "—"}</p></div>
-                                            {l.amountRequested && <div><p className={`text-[10px] font-medium uppercase tracking-widest mb-1.5 opacity-70 ${isDark ? "text-gray-400" : "text-gray-500"}`}>Requested</p><p className={`text-[12px] font-semibold ${isDark ? "text-gray-200" : "text-gray-900"}`}>₹{Number(l.amountRequested).toLocaleString("en-IN")}</p></div>}
-                                            {l.amountApproved && <div><p className={`text-[10px] font-medium uppercase tracking-widest mb-1.5 opacity-70 ${isDark ? "text-gray-400" : "text-gray-500"}`}>Approved</p><p className={`text-[12px] font-semibold ${isDark ? "text-[#32D74B]" : "text-[#10B981]"}`}>₹{Number(l.amountApproved).toLocaleString("en-IN")}</p></div>}
-                                            {l.cibil && <div><p className={`text-[10px] font-medium uppercase tracking-widest mb-1.5 opacity-70 ${isDark ? "text-gray-400" : "text-gray-500"}`}>CIBIL</p><p className={`text-[12px] font-semibold ${isDark ? "text-gray-200" : "text-gray-900"}`}>{l.cibil}</p></div>}
-                                            {l.empType && <div><p className={`text-[10px] font-medium uppercase tracking-widest mb-1.5 opacity-70 ${isDark ? "text-gray-400" : "text-gray-500"}`}>Employment</p><p className={`text-[12px] font-semibold ${isDark ? "text-gray-200" : "text-gray-900"}`}>{l.empType}</p></div>}
-                                          </div>
-                                        ))}
-                                      </div>
-                                    ) : (
-                                      <p className={`text-[12px] italic flex items-center ${isDark ? "text-gray-500" : "text-gray-400"}`}>No Loan data available.</p>
-                                    )}
-                                  </div>
-
-                                  {/* Booking Card */}
-                                  {displayedHistory.booking && (
-                                    <div className={`rounded-xl border p-5 shadow-sm flex-1 ${isDark ? "bg-[#1C1C1E] border-white/10" : "bg-white border-gray-200"}`}>
-                                      <h5 className={`text-[11px] font-bold uppercase tracking-widest mb-4 flex items-center gap-2 ${isDark ? "text-gray-400" : "text-gray-500"}`}>
-                                        <svg className="w-4 h-4 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
-                                        Booking Details
-                                      </h5>
-                                      <div className="grid grid-cols-2 gap-y-4 gap-x-4 text-[12px]">
-                                        {displayedHistory.booking.bookingNumber && <div><p className={`text-[10px] font-medium uppercase tracking-widest mb-1.5 opacity-70 ${isDark ? "text-gray-400" : "text-gray-500"}`}>Booking #</p><p className={`font-semibold font-mono ${isDark ? "text-gray-200" : "text-gray-900"}`}>{displayedHistory.booking.bookingNumber}</p></div>}
-                                        {displayedHistory.booking.bookingStatus && <div><p className={`text-[10px] font-medium uppercase tracking-widest mb-1.5 opacity-70 ${isDark ? "text-gray-400" : "text-gray-500"}`}>Status</p><p className={`font-semibold ${isDark ? "text-amber-400" : "text-amber-600"}`}>{displayedHistory.booking.bookingStatus}</p></div>}
-                                        {displayedHistory.booking.projectName && <div><p className={`text-[10px] font-medium uppercase tracking-widest mb-1.5 opacity-70 ${isDark ? "text-gray-400" : "text-gray-500"}`}>Project</p><p className={`font-semibold ${isDark ? "text-gray-200" : "text-gray-900"}`}>{displayedHistory.booking.projectName}</p></div>}
-                                        {displayedHistory.booking.flatNumber && <div><p className={`text-[10px] font-medium uppercase tracking-widest mb-1.5 opacity-70 ${isDark ? "text-gray-400" : "text-gray-500"}`}>Flat</p><p className={`font-semibold ${isDark ? "text-gray-200" : "text-gray-900"}`}>{displayedHistory.booking.flatNumber}</p></div>}
-                                        {displayedHistory.booking.agreementValue && <div><p className={`text-[10px] font-medium uppercase tracking-widest mb-1.5 opacity-70 ${isDark ? "text-gray-400" : "text-gray-500"}`}>Agreement</p><p className={`font-semibold ${isDark ? "text-gray-200" : "text-gray-900"}`}>₹{Number(displayedHistory.booking.agreementValue).toLocaleString("en-IN")}</p></div>}
-                                        {displayedHistory.booking.bookingAmount && <div><p className={`text-[10px] font-medium uppercase tracking-widest mb-1.5 opacity-70 ${isDark ? "text-gray-400" : "text-gray-500"}`}>Paid</p><p className={`font-semibold ${isDark ? "text-gray-200" : "text-gray-900"}`}>₹{Number(displayedHistory.booking.bookingAmount).toLocaleString("en-IN")}</p></div>}
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="flex flex-col lg:flex-row gap-2 flex-1 min-h-[100vh] pb-2">
-                      <div className="w-full lg:w-[45%] xl:w-[45%] flex flex-col gap-3 h-full pb-2">
-                        {showSalesForm ? (
-                          <div className={`rounded-xl border p-3 shadow-xl flex-1 overflow-y-auto custom-scrollbar flex flex-col ${theme.modalCard}`} style={theme.modalGlass}>
-                            <div className={`flex justify-between items-center mb-3 border-b pb-2 ${theme.tableBorder}`}>
-                              <div>
-                                <h3 className={`text-base font-bold ${theme.text}`}>Sales Data Form</h3>
-                                <p className={`text-xs mt-0.5 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>Admin override — Lead #{selectedLead.id}</p>
-                              </div>
-                              <button type="button" onClick={() => setShowSalesForm(false)} className={`p-1 ${theme.textMuted} hover:text-red-500`}><FaTimes /></button>
-                            </div>
-                            <form onSubmit={handleSalesFormSubmit} className="flex flex-col gap-2 flex-1">
-                              <div className="grid grid-cols-2 gap-3">
-                                <div><label className={`text-xs mb-1 block ${theme.textMuted}`}>Property Type?</label><input type="text" placeholder="e.g. 1BHK, 2BHK" value={salesForm.propertyType} onChange={e => setSalesForm({ ...salesForm, propertyType: e.target.value.toUpperCase() })} className={formInput} /></div>
-                                <div><label className={`text-xs mb-1 block ${theme.textMuted}`}>Preferred Location?</label><input type="text" placeholder="e.g. Dombivali, Kalyan" value={salesForm.location} onChange={e => setSalesForm({ ...salesForm, location: e.target.value })} className={formInput} /></div>
-                              </div>
-                              <div className="grid grid-cols-2 gap-3">
-                                <div><label className={`text-xs mb-1 block ${theme.textMuted}`}>Approximate Budget?</label><input type="text" placeholder="e.g. 5 cr" value={salesForm.budget} onChange={e => setSalesForm({ ...salesForm, budget: e.target.value.toUpperCase() })} className={formInput} /></div>
-                                <div><label className={`text-xs mb-1 block ${theme.textMuted}`}>Self-use or Investment?</label>
-                                  <select value={salesForm.useType} onChange={e => setSalesForm({ ...salesForm, useType: e.target.value })} className={formSelect}><option value="">Select</option><option>Self Use</option><option>Investment</option></select>
-                                </div>
-                              </div>
-                              <div className="grid grid-cols-2 gap-3">
-                                <div><label className={`text-xs mb-1 block ${theme.textMuted}`}>Planning to Purchase?</label>
-                                  <select value={salesForm.purchaseDate} onChange={e => setSalesForm({ ...salesForm, purchaseDate: e.target.value })} className={formSelect}><option value="">Select</option><option>Immediate</option><option>Next 3 Months</option></select>
-                                </div>
-                                <div><label className={`text-xs mb-1 block ${theme.textMuted}`}>Loan Planned?</label>
-                                  <select required value={salesForm.loanPlanned} onChange={e => setSalesForm({ ...salesForm, loanPlanned: e.target.value })} className={formSelect}><option value="" disabled>Select Option</option><option>Yes</option><option>No</option><option>Not Sure</option></select>
-                                </div>
-                              </div>
-                              <div className={`border-t pt-2 ${theme.tableBorder}`}>
-                                <label className={`block text-xs font-bold mb-1 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>Lead Interest Status *</label>
-                                <select required value={salesForm.leadStatus} onChange={e => setSalesForm({ ...salesForm, leadStatus: e.target.value })} className={formSelect}><option value="" disabled>Select Status</option><option>Interested</option><option>Not Interested</option><option>NON GENUINE DEMAND (NGD)</option></select>
-                              </div>
-                              <div className={`border-t pt-2 ${theme.tableBorder}`}>
-                                <label className="text-xs text-orange-400 font-bold mb-1 block">Schedule a Site Visit?</label>
-                                <input ref={inputRef} type="datetime-local" value={salesForm.siteVisit} onChange={e => setSalesForm({ ...salesForm, siteVisit: e.target.value })} onClick={() => inputRef.current?.showPicker()} className={`${formInput} focus:border-orange-500`} />
-                              </div>
-                              <button type="submit" className={`mt-auto w-full font-bold py-2.5 rounded-xl transition-colors text-xs ${theme.btnPrimary}`}>Submit Salesform</button>
-                            </form>
+                              );
+                            })}
                           </div>
 
-                        ) : showLoanForm ? (
-                          <LoanDealForm
-                            lead={selectedLead}
-                            booking={loanDealBooking}
-                            loanUpdate={loanDealLatest}
-                            user={adminUser}
-                            isDark={isDark}
-                            t={theme}
-                            onCancel={() => setShowLoanForm(false)}
-                            onSuccess={() => {
-                              setShowLoanForm(false);
-                              showToast(`Loan & deal data saved for ${selectedLead.name}`);
-                              fetchLoanDealData(selectedLead.id);
-                              refetch();
-                            }}
-                          />
-                        ) : (
-                          <div className="flex flex-col h-full animate-fadeIn">
-                            <div className={`flex items-center gap-2 mb-3 border p-1.5 rounded-xl flex-shrink-0 ${theme.tableWrap}`}>
-                              <button onClick={() => setDetailTab("personal")} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors cursor-pointer ${detailTab === "personal" ? theme.btnPrimary : `${theme.textMuted} hover:opacity-80`}`}>Personal Information</button>
-                              <button onClick={() => setDetailTab("loan")} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors cursor-pointer ${detailTab === "loan" ? theme.btnSecondary : `${theme.textMuted} hover:opacity-80`}`}>Loan Tracking</button>
-                            </div>
-                            <div className={`flex-1 overflow-y-auto custom-scrollbar rounded-xl p-3 shadow-lg border ${theme.chatPanel}`} style={theme.chatPanelGl}>
-                              {detailTab === "personal" ? (
+                          {/* Detailed History View */}
+                          <div className={`p-6 md:p-8 ${isDark ? "bg-[#1C1C1E]" : "bg-gray-50/30"}`}>
+                            {(isLoadingRevisit && !displayedHistory) || isLoadingSelectedVisit ? (
+                              <div className="flex justify-center py-4">
+                                <p className={`text-[13px] flex items-center gap-2 font-medium ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                                  <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                  Loading visit data…
+                                </p>
+                              </div>
+                            ) : !displayedHistory ? (
+                              <p className={`text-[13px] font-medium ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                                No previous visit history found or you are not authorized to view it.
+                              </p>
+                            ) : (
+                              <div className="flex flex-col gap-8">
+                                {/* Core Enquiry Details */}
                                 <div>
-                                  <div className="grid grid-cols-2 gap-y-3 gap-x-2 text-sm">
-                                    <InlineContactField label="Email" value={selectedLead.email} fieldType="email" isDark={isDark} theme={theme} canEdit={adminUser?.role?.toLowerCase() === "admin"} onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "email", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, email: val || "N/A" })); showToast("Contact details updated successfully."); }} />
-                                    <InlineContactField label="Phone" value={selectedLead.phone} fieldType="tel" isDark={isDark} theme={theme} canEdit={adminUser?.role?.toLowerCase() === "admin"} mono onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "phone", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, phone: val })); showToast("Contact details updated successfully."); }} />
-                                    <InlineContactField label="Alt Phone" value={selectedLead.altPhone ?? selectedLead.alt_phone} fieldType="tel" isDark={isDark} theme={theme} canEdit={adminUser?.role?.toLowerCase() === "admin"} mono onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "alt_phone", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, altPhone: val, alt_phone: val })); showToast("Contact details updated successfully."); }} />
-                                    <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Lead Interest</p>{selectedLead.leadInterestStatus && selectedLead.leadInterestStatus !== "Pending" ? <InterestBadge status={selectedLead.leadInterestStatus} isDark={isDark} /> : <p className={`font-semibold ${theme.text}`}>Pending</p>}</div>
-                                    <div className="col-span-1"><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Loan Status</p>{selectedLead.loanStatus && selectedLead.loanStatus !== "N/A" ? <div className="w-fit"><LoanStatusBadge status={selectedLead.loanStatus} isDark={isDark} /></div> : <p className={`font-semibold ${theme.text}`}>N/A</p>}</div>
-                                    <div className="col-span-1"><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Backdated Entry</p><p className={`font-semibold ${theme.text}`}>{selectedLead.auto_date_enabled === false && selectedLead.enquiry_date ? formatDate(selectedLead.enquiry_date).split(",")[0] : "Null"}</p></div>
-                                    <div className="col-span-2"><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Residential Address</p><p className={`font-semibold ${theme.text}`}>{selectedLead.address && selectedLead.address !== "N/A" ? selectedLead.address : "Not Provided"}</p></div>
-                                    <div className="col-span-2"><InlineContactField label="Location" value={selectedLead.location} fieldType="text" isDark={isDark} theme={theme} canEdit={adminUser?.role?.toLowerCase() === "admin"} onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "location", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, location: val || "N/A" })); showToast("Contact details updated successfully."); }} /></div>
-                                    <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Budget</p><p className={`font-bold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{selectedLead.salesBudget !== "Pending" ? selectedLead.salesBudget : selectedLead.budget}</p></div>
-                                    <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Property Type</p><p className={`font-semibold ${theme.text}`}>{selectedLead.propType || "Pending"}</p></div>
-                                    <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Type of Use</p><p className={`font-semibold ${theme.text}`}>{selectedLead.useType !== "Pending" ? selectedLead.useType : (selectedLead.purpose || "N/A")}</p></div>
-                                    <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Planning to Buy?</p><p className={`font-semibold ${theme.text}`}>{selectedLead.planningPurchase || "Pending"}</p></div>
-                                    <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Loan Required?</p><p className={`font-semibold ${theme.text}`}>{loanDealLatest?.loan_required || selectedLead.loanPlanned || "Pending"}</p></div>
-                                    <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Status</p><span className={`text-sm font-bold ${selectedLead.status === "Closing" ? "text-amber-500" : selectedLead.status === "Visit Scheduled" ? "text-orange-400" : theme.accentText}`}>{selectedLead.status || "Assigned"}</span></div>
-                                    <div className={`col-span-2 p-3 rounded-xl border ${theme.settingsBg}`} style={theme.settingsBgGl}>
-                                      <p className={`crm-eyebrow mb-0.5 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>📍 Site Visit Date</p>
-                                      <p className={`text-base font-black ${theme.text}`}>{selectedLead.mongoVisitDate ? formatDate(selectedLead.mongoVisitDate) : "Not Scheduled"}</p>
-                                    </div>
-                                    {selectedLead.is_lost_lead && (
-                                      <div className={`col-span-2 p-3 rounded-xl border ${theme.statusLost}`}>
-                                        <p className="crm-eyebrow mb-1">Lost Lead Record</p>
-                                        <p className={`text-sm leading-relaxed ${theme.textMuted}`}>{selectedLead.lost_lead_reason || "No reason recorded."}</p>
-                                        <p className={`text-[10px] mt-2 ${theme.textFaint}`}>Marked by {selectedLead.lost_lead_marked_by || "Unknown"} on {selectedLead.lost_lead_marked_at ? formatDate(selectedLead.lost_lead_marked_at) : "-"}</p>
+                                  <h4 className={`text-[11px] font-bold uppercase tracking-widest mb-5 ${isDark ? "text-[#9E217B]" : "text-[#9E217B]"}`}>
+                                    {visitChain && selectedVisitIdx !== null ? `Key Details — Visit ${visitChain.visits[selectedVisitIdx].visitNumber}` : "Key Details"}
+                                  </h4>
+                                  <div className="grid grid-cols-2 md:grid-cols-3 gap-y-6 gap-x-4">
+                                    {[
+                                      { label: "Visit Date", val: new Date(displayedHistory.previousLead.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) },
+                                      { label: "Managed By", val: displayedHistory.previousLead.assigned_to || "—" },
+                                      { label: "Phone", val: displayedHistory.previousLead.phone || "—", isMono: true },
+                                      { label: "Interest Status", val: displayedHistory.previousLead.lead_interest_status || "Pending" },
+                                      { label: "Budget", val: displayedHistory.previousLead.budget || "—", color: isDark ? "text-green-400" : "text-[#10B981]" },
+                                      { label: "Lead Status", val: displayedHistory.previousLead.status || "—" },
+                                      ...(displayedHistory.previousLead.closing_date ? [{ label: "Closing Date", val: formatDate(displayedHistory.previousLead.closing_date) }] : [])
+                                    ].map(({ label, val, isMono, color }: any) => (
+                                      <div key={label}>
+                                        <p className={`text-[10px] font-medium uppercase tracking-widest mb-1.5 opacity-70 ${isDark ? "text-gray-400" : "text-gray-500"}`}>{label}</p>
+                                        <p className={`text-[13px] font-semibold tracking-tight ${isMono ? "font-mono" : ""} ${color || (isDark ? "text-gray-200" : "text-gray-900")}`}>{val}</p>
                                       </div>
+                                    ))}
+                                  </div>
+                                  {displayedHistory.previousLead.is_lost_lead && (
+                                    <div className="mt-6 p-4 rounded-xl bg-red-50 dark:bg-red-500/10 border border-red-100 dark:border-red-500/20">
+                                      <p className="text-[10px] font-bold uppercase tracking-widest mb-1.5 text-red-600 dark:text-red-400">Lost Lead Reason</p>
+                                      <p className="text-[13px] font-medium text-red-800 dark:text-red-200">{displayedHistory.previousLead.lost_lead_reason || "No reason recorded."}</p>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Modular Cards */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                  {/* Sales Form Card */}
+                                  <div className={`rounded-xl border p-5 flex flex-col ${isDark ? "bg-[#1C1C1E] border-white/40" : "bg-white border-gray-300"}`}>
+                                    <h5 className={`text-[11px] font-bold uppercase tracking-widest mb-4 flex items-center gap-2 ${isDark ? "text-[#9E217B]" : "text-[#9E217B]"}`}>
+                                      <svg className="w-4 h-4 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                                      Sales Form Summary
+                                    </h5>
+                                    {displayedHistory.historicalSalesForm ? (
+                                      <div className={`text-[12px] font-medium whitespace-pre-wrap leading-relaxed flex-1 ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+                                        {displayedHistory.historicalSalesForm.replace("📝 Detailed Salesform Submitted:\n", "").trim()}
+                                      </div>
+                                    ) : (
+                                      <p className={`text-[12px] italic flex-1 flex items-center ${isDark ? "text-gray-500" : "text-gray-400"}`}>No Sales Form data available.</p>
                                     )}
                                   </div>
-                                  <div className={`mt-3 border rounded-xl p-3 ${theme.settingsBg}`} style={theme.settingsBgGl}>
-                                    <h3 className={`crm-eyebrow mb-2 border-b pb-2 ${theme.sectionTitle} ${theme.sectionBorder}`}>
-                                      {selectedLead.source && selectedLead.source !== "N/A" ? `${selectedLead.source} Data` : "Source Data"}
-                                    </h3>
-                                    <div className="grid grid-cols-2 gap-2">
-                                      <div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Primary Source</p><p className={`font-medium text-sm ${theme.text}`}>{selectedLead.source || "N/A"}</p></div>
-                                      {selectedLead.source === "Others" && (<div><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Specified Name</p><p className={`font-medium text-sm ${theme.text}`}>{selectedLead.sourceOther}</p></div>)}
+
+                                  <div className="flex flex-col gap-5">
+                                    {/* Loan Card */}
+                                    <div className={`rounded-xl border p-5 flex-1 ${isDark ? "bg-[#1C1C1E] border-white/10" : "bg-white border-gray-300"}`}>
+                                      <h5 className={`text-[11px] font-bold uppercase tracking-widest mb-4 flex items-center gap-2 ${isDark ? "text-[#00AAEF]" : "text-[#00AAEF]"}`}>
+                                        <svg className="w-4 h-4 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z" /></svg>
+                                        Loan Details
+                                      </h5>
+                                      {displayedHistory.loan.length > 0 ? (
+                                        <div className="flex flex-col gap-4">
+                                          {displayedHistory.loan.map((l: any, idx: number) => (
+                                            <div key={l.id ?? idx} className="grid grid-cols-2 gap-y-4 gap-x-4">
+                                              <div><p className={`text-[10px] font-medium uppercase tracking-widest mb-1.5 opacity-70 ${isDark ? "text-gray-400" : "text-gray-500"}`}>Status</p><p className={`text-[12px] font-semibold ${isDark ? "text-gray-200" : "text-gray-900"}`}>{l.status || "—"}</p></div>
+                                              <div><p className={`text-[10px] font-medium uppercase tracking-widest mb-1.5 opacity-70 ${isDark ? "text-gray-400" : "text-gray-500"}`}>Bank</p><p className={`text-[12px] font-semibold ${isDark ? "text-gray-200" : "text-gray-900"}`}>{l.bankName || "—"}</p></div>
+                                              {l.amountRequested && <div><p className={`text-[10px] font-medium uppercase tracking-widest mb-1.5 opacity-70 ${isDark ? "text-gray-400" : "text-gray-500"}`}>Requested</p><p className={`text-[12px] font-semibold ${isDark ? "text-gray-200" : "text-gray-900"}`}>₹{Number(l.amountRequested).toLocaleString("en-IN")}</p></div>}
+                                              {l.amountApproved && <div><p className={`text-[10px] font-medium uppercase tracking-widest mb-1.5 opacity-70 ${isDark ? "text-gray-400" : "text-gray-500"}`}>Approved</p><p className={`text-[12px] font-semibold ${isDark ? "text-[#32D74B]" : "text-[#10B981]"}`}>₹{Number(l.amountApproved).toLocaleString("en-IN")}</p></div>}
+                                              {l.cibil && <div><p className={`text-[10px] font-medium uppercase tracking-widest mb-1.5 opacity-70 ${isDark ? "text-gray-400" : "text-gray-500"}`}>CIBIL</p><p className={`text-[12px] font-semibold ${isDark ? "text-gray-200" : "text-gray-900"}`}>{l.cibil}</p></div>}
+                                              {l.empType && <div><p className={`text-[10px] font-medium uppercase tracking-widest mb-1.5 opacity-70 ${isDark ? "text-gray-400" : "text-gray-500"}`}>Employment</p><p className={`text-[12px] font-semibold ${isDark ? "text-gray-200" : "text-gray-900"}`}>{l.empType}</p></div>}
+                                            </div>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <p className={`text-[12px] italic flex items-center ${isDark ? "text-gray-500" : "text-gray-400"}`}>No Loan data available.</p>
+                                      )}
                                     </div>
 
-                                    {selectedLead.source === "Channel Partner" ? (
-                                      <div className={`mt-2 pt-2 border-t grid grid-cols-1 sm:grid-cols-3 gap-3 ${theme.tableBorder}`}>
-                                        {[{ label: "CP Name", val: selectedLead.cpName || selectedLead.cp_name }, { label: "CP Company", val: selectedLead.cp_company || selectedLead.cpCompany }, { label: "CP Phone", val: selectedLead.cp_phone || selectedLead.cpPhone }].map(({ label, val }) => (
-                                          <div key={label}><p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>{label}</p><p className={`font-medium text-sm ${theme.text}`}>{val || "N/A"}</p></div>
-                                        ))}
-                                      </div>
-                                    ) : selectedLead.source === "Referral" && selectedLead.referral_name ? (
-                                      <div className={`mt-2 pt-2 border-t grid grid-cols-1 sm:grid-cols-3 gap-3 ${theme.tableBorder}`}>
-                                        <div>
-                                          <p className={`text-xs font-medium mb-1 ${theme.textFaint}`}>Referred By</p>
-                                          <p className={`font-medium text-sm ${theme.text}`}>{selectedLead.referral_name}</p>
+                                    {/* Booking Card */}
+                                    {displayedHistory.booking && (
+                                      <div className={`rounded-xl border p-5 shadow-sm flex-1 ${isDark ? "bg-[#1C1C1E] border-white/10" : "bg-white border-gray-200"}`}>
+                                        <h5 className={`text-[11px] font-bold uppercase tracking-widest mb-4 flex items-center gap-2 ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                                          <svg className="w-4 h-4 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
+                                          Booking Details
+                                        </h5>
+                                        <div className="grid grid-cols-2 gap-y-4 gap-x-4 text-[12px]">
+                                          {displayedHistory.booking.bookingNumber && <div><p className={`text-[10px] font-medium uppercase tracking-widest mb-1.5 opacity-70 ${isDark ? "text-gray-400" : "text-gray-500"}`}>Booking #</p><p className={`font-semibold font-mono ${isDark ? "text-gray-200" : "text-gray-900"}`}>{displayedHistory.booking.bookingNumber}</p></div>}
+                                          {displayedHistory.booking.bookingStatus && <div><p className={`text-[10px] font-medium uppercase tracking-widest mb-1.5 opacity-70 ${isDark ? "text-gray-400" : "text-gray-500"}`}>Status</p><p className={`font-semibold ${isDark ? "text-amber-400" : "text-amber-600"}`}>{displayedHistory.booking.bookingStatus}</p></div>}
+                                          {displayedHistory.booking.projectName && <div><p className={`text-[10px] font-medium uppercase tracking-widest mb-1.5 opacity-70 ${isDark ? "text-gray-400" : "text-gray-500"}`}>Project</p><p className={`font-semibold ${isDark ? "text-gray-200" : "text-gray-900"}`}>{displayedHistory.booking.projectName}</p></div>}
+                                          {displayedHistory.booking.flatNumber && <div><p className={`text-[10px] font-medium uppercase tracking-widest mb-1.5 opacity-70 ${isDark ? "text-gray-400" : "text-gray-500"}`}>Flat</p><p className={`font-semibold ${isDark ? "text-gray-200" : "text-gray-900"}`}>{displayedHistory.booking.flatNumber}</p></div>}
+                                          {displayedHistory.booking.agreementValue && <div><p className={`text-[10px] font-medium uppercase tracking-widest mb-1.5 opacity-70 ${isDark ? "text-gray-400" : "text-gray-500"}`}>Agreement</p><p className={`font-semibold ${isDark ? "text-gray-200" : "text-gray-900"}`}>₹{Number(displayedHistory.booking.agreementValue).toLocaleString("en-IN")}</p></div>}
+                                          {displayedHistory.booking.bookingAmount && <div><p className={`text-[10px] font-medium uppercase tracking-widest mb-1.5 opacity-70 ${isDark ? "text-gray-400" : "text-gray-500"}`}>Paid</p><p className={`font-semibold ${isDark ? "text-gray-200" : "text-gray-900"}`}>₹{Number(displayedHistory.booking.bookingAmount).toLocaleString("en-IN")}</p></div>}
                                         </div>
                                       </div>
-                                    ) : null}
-                                  </div>
-                                  <div className="mt-3">
-                                    <SiteVisitScheduler
-                                      lead={selectedLead}
-                                      adminUser={adminUser}
-                                      isDark={isDark}
-                                      theme={theme}
-                                      onSuccess={refetch}
-                                    />
+                                    )}
                                   </div>
                                 </div>
-                              ) : (
-                                <LoanDealView lead={selectedLead} booking={loanDealBooking} loanUpdate={loanDealLatest} isDark={isDark} t={theme} />
-                              )}
-                            </div>
-                            <div className="grid grid-cols-2 gap-2 mt-1 flex-shrink-0">
-                              <button className={`border flex flex-col items-center justify-center py-2.5 rounded-xl transition-all cursor-pointer gap-1 ${isDark ? "bg-[#9E217B]/10 border-[#9E217B]/30 hover:bg-[#9E217B] text-[#d946a8] hover:text-white" : "bg-[#9E217B]/10 border-[#9E217B]/30 hover:bg-[#9E217B] text-[#9E217B] hover:text-white"}`}><FaMicrophone className="text-base" /><span className="font-bold text-[10px]">Browser Call</span></button>
-                              <button onClick={() => setIsWaModalOpen(true)} className="bg-green-600/10 border border-green-500/30 hover:bg-green-600 text-green-400 hover:text-white flex flex-col items-center justify-center py-2.5 rounded-xl transition-all cursor-pointer gap-1"><FaWhatsapp className="text-base" /><span className="font-bold text-[10px]">WhatsApp</span></button>
-                              <CallingButtons leadId={selectedLead?.id ?? null} phone={selectedLead?.phone} leadName={selectedLead?.name} isDark={isDark} iconClass="text-base" paddingClass="py-2.5" />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* RIGHT PANEL: FOLLOW-UPS — 65% on small laptops (lg), 60% on desktop (xl) */}
-                      <div className={`w-full lg:w-[58%] xl:w-[55%] flex flex-col rounded-xl overflow-hidden shadow-2xl min-h-[500px] lg:h-full lg:min-h-0 border ${theme.chatPanel}`} style={theme.chatPanelGl}>
-                        <div className={`flex-1 p-6 overflow-y-auto custom-scrollbar flex flex-col gap-4 ${theme.chatArea}`}>
-                          <div className="flex justify-start">
-                            <div className={`rounded-xl rounded-tl-none p-3 max-w-[85%] shadow-md ${theme.fupSalesform}`}>
-                              <div className={`flex justify-between items-center mb-2 gap-3`}>
-                                <span className={`font-bold text-sm ${theme.accentText}`}>System (Front Desk)</span>
-                                <span className={`text-[10px] ${theme.textFaint}`}>{formatDate(selectedLead.created_at)}</span>
                               </div>
-                              <EnquiryDetailsBubble lead={selectedLead} theme={theme} isDark={isDark} formatDateFn={formatDate} />
-                            </div>
+                            )}
                           </div>
-                          {currentLeadFollowUps.map((msg: any, idx: number) => {
-                            const isLoan = msg.message?.includes("🏦 Loan Update");
-                            const isSF = msg.message?.includes("📝 Detailed Salesform Submitted");
-                            const isClosing = msg.message?.includes("✅ Lead Marked as Closing");
-                            const isTransfer = msg.message?.includes("🔄 Lead Transferred");
-                            const bubble = isLoan ? theme.fupLoan : isSF ? theme.fupSalesform : isClosing ? theme.fupClosing : isTransfer ? theme.fupTransfer : theme.fupDefault;
-                            return (
-                              <div key={idx} className="flex justify-start">
-                                <div className={`rounded-xl rounded-tl-none p-3 max-w-[90%] shadow-md ${bubble}`}>
-                                  <div className="flex justify-between items-center mb-2 gap-3">
-                                    <span className={`font-bold text-sm ${theme.text}`}>
-                                      {msg.createdBy === "admin" ? `${msg.salesManagerName || "Admin"} (Admin)` : msg.salesManagerName}
-                                    </span>
-                                    <span className={`text-[10px] flex-shrink-0 flex items-center gap-1 ${theme.textFaint}`}>
-                                      {formatDate(msg.createdAt)}
-                                      {(msg.followUpType === "internal_message" || msg.followUpType === "sm_reply") && msg._status !== "sending" && msg._status !== "failed" && (
-                                        msg.readAt
-                                          ? <span className="text-blue-500 font-bold ml-0.5" title="Read">&#10003;&#10003;</span>
-                                          : <span className="opacity-60 ml-0.5" title="Sent">&#10003;</span>
-                                      )}
-                                    </span>
-                                  </div>
-                                  {msg.followUpType === "call" ? (
-                                    <ManualCallBubble message={msg.message} createdAt={msg.createdAt} textClass={theme.textMuted} onRecordingDeleted={refetch} />
-                                  ) : (
-                                    <p className={`text-sm whitespace-pre-wrap leading-relaxed ${theme.textMuted}`}>{msg.message}</p>
-                                  )}
-                                  <FollowUpAttachments followUpId={Number(msg._id)} textClass={theme.textMuted} onDeleted={refetch} />
-                                  {canDeleteFollowUps && msg._id && msg._status !== "sending" && msg._status !== "failed" && (
-                                    <button
-                                      type="button"
-                                      disabled={deletingFollowUpId === String(msg._id)}
-                                      onClick={() => setConfirmDeleteFollowUpId(String(msg._id))}
-                                      className={`mt-1 text-[9px] font-medium transition-opacity ${isDark ? "text-red-400 hover:text-red-300" : "text-red-500 hover:text-red-600"} disabled:opacity-40`}
-                                    >
-                                      {deletingFollowUpId === String(msg._id) ? "Deleting…" : "Delete"}
-                                    </button>
-                                  )}
-                                  {msg._status === "sending" && <span className="text-[9px] text-yellow-500 mt-1 block">Sending...</span>}
-                                  {msg._status === "failed" && (
-                                    <span className="text-[9px] text-red-500 mt-1 flex items-center gap-1">Failed to send
-                                      <button type="button" onClick={() => { setCustomNote(msg.message); removeFollowUp(msg._clientMessageId, String(msg.leadId)); }} className="underline hover:text-red-400">Retry</button>
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
-                          <div ref={followUpEndRef} />
                         </div>
-                        {confirmDeleteFollowUpId && (
-                          <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60">
-                            <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl overflow-hidden mx-4">
-                              <div className="px-5 py-4 border-b border-gray-100">
-                                <h3 className="font-bold text-sm text-gray-900">Delete follow-up?</h3>
-                              </div>
-                              <div className="px-5 py-4">
-                                <p className="text-sm text-gray-600 leading-relaxed">This will permanently delete this follow-up note and any attached files from storage. This action cannot be undone.</p>
-                              </div>
-                              <div className="flex gap-2 px-5 py-3 border-t border-gray-100 bg-gray-50">
-                                <button type="button" onClick={() => setConfirmDeleteFollowUpId(null)} className="flex-1 px-3 py-2 text-xs font-bold rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-100 transition">Cancel</button>
-                                <button type="button" onClick={() => { handleDeleteFollowUp(confirmDeleteFollowUpId!); setConfirmDeleteFollowUpId(null); }} className="flex-1 px-3 py-2 text-xs font-bold rounded-xl bg-red-600 text-white hover:bg-red-700 transition">Delete</button>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                        <FollowUpComposer value={customNote} onChange={setCustomNote} onSubmit={handleSendCustomNote} pendingFiles={attView.pendingFiles} fileError={attView.fileError} onAddFiles={attView.addFiles} onRemoveFile={attView.removeFile} onReminderClick={() => setShowReminderModal(true)} isDark={isDark} theme={theme} placeholder="Add admin note..." size="compact" headerGlass={theme.headerGlass} />
-                      </div>
-                    </div>
-                  </div>
+                      )}
+                      renderAfterPersonalInfo={() => (
+                        <div className="mt-3">
+                          <SiteVisitScheduler lead={selectedLead} adminUser={adminUser} isDark={isDark} theme={theme} onSuccess={refetch} />
+                        </div>
+                      )}
+                      formatDate={formatDate}
+                    />
+                  </LeadDetailsLayout>
                 </div>
               )
             )}
@@ -5225,10 +4935,6 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
     [followUps, selectedLead]);
 
   const isLeadLocked = !!selectedLead && (selectedLead.status === "Closing" || selectedLead.status === "Closed" || !!selectedLead.closingDate || !!selectedLead.is_lost_lead);
-
-  useEffect(() => {
-    if (subView === "detail") followUpEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [currentLeadFollowUps, subView, detailTab]);
 
   // Enrich Leads with Follow-up Data (Copied exact logic from ReceptionistView)
   const mergedLeads = useMemo(() => {
@@ -5763,7 +5469,7 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
           <div className="flex-1 flex flex-col h-full overflow-hidden">
             {/* Sub-header */}
             {/* Sub-header */}
-            <div className={`p-2 border-b flex justify-between items-center shadow-sm z-10 flex-shrink-0 gap-2 ${theme.header}`} style={theme.headerGlass}>
+            {/* <div className={`p-2 border-b flex justify-between items-center shadow-sm z-10 flex-shrink-0 gap-2 ${theme.header}`} style={theme.headerGlass}>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => {
@@ -5785,12 +5491,20 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
               <span className={`text-xs px-3 py-1 rounded-full border font-bold flex items-center gap-1.5 ${isDark ? "text-green-400 border-green-500/30 bg-green-500/10" : "text-green-700 border-green-200 bg-green-50"}`}>
                 🟢 Live Sync
               </span>
-            </div>
+            </div> */}
 
             {/* ── LIST VIEW (Stats + Tables) ── */}
             {subView === "list" && (
               <div className={`flex-1 overflow-y-auto custom-scrollbar p-2 sm:p-4 ${theme.scroll}`}>
                 <div className="animate-fadeIn space-y-3 sm:space-y-4 max-w-10xl mx-auto">
+
+                  <button
+                    type="button"
+                    onClick={() => { setSelectedSiteHead(null); setSubView("list"); setSelectedLead(null); }}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] sm:text-xs font-bold transition-colors cursor-pointer ${theme.textMuted} ${theme.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}
+                  >
+                    <FaChevronLeft className="text-[10px]" /> Back to Site Heads
+                  </button>
 
                   {/* Tabs / Stats Row */}
                   <div className="grid grid-cols-2 gap-2 sm:gap-3">
@@ -5876,145 +5590,139 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                 </div>
               ) : (
                 <div className={`flex-1 overflow-y-auto p-2 ${theme.scroll}`}>
-                  <div className="animate-fadeIn max-w-[1600px] mx-auto flex flex-col h-[calc(100vh-130px)]">
-
-                    {/* Detail header with Mobile Toggle */}
-                    <div className={`sticky top-0 z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-0 rounded-xl border p-2 shadow-sm flex-shrink-0 ${selectedLead.is_lost_lead ? theme.cardLost : theme.card}`} style={theme.cardGlass}>
-                      <div className="flex items-center justify-between w-full sm:w-auto gap-2">
-                        <div className="flex items-center gap-1.5 sm:gap-2">
-                          <button onClick={() => {
-                            if (isDrillEntryRef.current && onDrillBack) { isDrillEntryRef.current = false; onDrillBack(); }
-                            else { setSubView("list"); setShowSalesForm(false); setShowLoanForm(false); }
-                          }} className={`w-8 h-8 sm:w-9 sm:h-9 flex-shrink-0 flex items-center justify-center border rounded-lg sm:rounded-xl transition-colors cursor-pointer shadow-sm ${theme.textMuted} ${theme.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}>
-                            <FaChevronLeft className="text-[10px] sm:text-xs" />
-                          </button>
-                          <h1 className={`text-sm sm:text-base lg:text-lg font-bold flex flex-wrap items-center gap-1.5 sm:gap-2 ${theme.text}`}>
-                            <span className={isDark ? "text-[#9E217B]" : "text-[#9E217B]"}>#{selectedLead.sr_no || selectedLead.id}</span>
-                            <span>{selectedLead.name}</span>
-                            {selectedLead.status === "Closing" && (
-                              <span className={`text-[9px] sm:text-[11px] font-bold px-2 py-0.5 sm:px-3 sm:py-1 rounded-full border flex items-center gap-1 sm:gap-1.5 ${theme.statusClosing}`}><FaHandshake className="text-[10px] sm:text-xs" /> Closing</span>
-                            )}
-                            {selectedLead.is_lost_lead ? (
-                              <span className={`text-[9px] sm:text-[11px] font-bold px-2 py-0.5 sm:px-3 sm:py-1 rounded-full border flex items-center gap-1 sm:gap-1.5 ${theme.statusLost}`}><FaEyeSlash className="text-[10px] sm:text-xs" /> Lost Lead</span>
-                            ) : (selectedLead.status === "NON GENUINE DEMAND (NGD)" || selectedLead.leadStatus === "NON GENUINE DEMAND (NGD)" || selectedLead.leadInterestStatus === "NON GENUINE DEMAND (NGD)") ? (
-                              <span className={`text-[9px] sm:text-[11px] font-bold px-2 py-0.5 sm:px-3 sm:py-1 rounded-full border flex items-center gap-1 sm:gap-1.5 ${theme.statusNGD}`}>NON GENUINE DEMAND</span>
-                            ) : null}
-                            {selectedLead.lead_classification === "RETURNING_LEAD" && (
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border border-[rgba(5,150,105,0.45)] text-[#059669] bg-[rgba(5,150,105,0.12)] w-fit">
-                                REVISIT
-                              </span>
-                            )}
-                          </h1>
-                          {selectedLead.lead_classification === "RETURNING_LEAD" && (
-                            <button
-                              type="button"
-                              onClick={() => setShowPrevLead(v => !v)}
-                              disabled={isLoadingRevisit && !revisitHistory}
-                              className={`hidden sm:flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1 rounded-lg border transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-wait ${showPrevLead ? "border-[rgba(5,150,105,0.5)] text-[#059669] bg-[rgba(5,150,105,0.10)]" : `${theme.tableBorder} ${theme.textMuted} ${isDark ? "hover:bg-white/5" : "hover:bg-black/5"}`}`}
-                            >
-                              {isLoadingRevisit && !revisitHistory ? "Loading history…" : `${showPrevLead ? "Hide" : "Show"} Previous Lead`}
-                            </button>
-                          )}
-                        </div>
-                        <button onClick={() => setShowMobileActions(!showMobileActions)} className={`sm:hidden w-8 h-8 flex-shrink-0 flex items-center justify-center border rounded-lg transition-colors shadow-sm ${showMobileActions ? theme.btnPrimary : `${theme.textMuted} ${theme.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}`}>
-                          <FaChevronDown className={`text-[10px] transition-transform duration-200 ${showMobileActions ? "rotate-180" : ""}`} />
-                        </button>
-                      </div>
-
-                      <div className={`gap-1.5 sm:gap-2 flex-wrap justify-start sm:justify-end mt-1 sm:mt-0 w-full sm:w-auto pl-9 sm:pl-0 ${showMobileActions ? "flex animate-fadeIn" : "hidden sm:flex"}`}>
-                        {bookingData ? (
-                          <button onClick={() => openBookingView(selectedLead.id)} className="font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center flex-1 sm:flex-none min-w-[110px] sm:min-w-[130px] gap-1 sm:gap-1.5 transition-colors cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm whitespace-nowrap">
-                            <FaEye />Booking Form
-                          </button>
-                        ) : (
-                          <button disabled title="Booking Form has not been submitted yet." className="font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center flex-1 sm:flex-none min-w-[110px] sm:min-w-[130px] gap-1 sm:gap-1.5 transition-colors opacity-50 cursor-not-allowed bg-indigo-400 text-white shadow-sm whitespace-nowrap">
-                            <FaEye />Booking Form
-                          </button>
-                        )}
-                        {isLeadLocked ? (
-                          <>
-                            <span className={`text-[9px] sm:text-[11px] font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md border flex items-center justify-center flex-1 sm:flex-none min-w-[110px] sm:min-w-[130px] gap-1 sm:gap-1.5 whitespace-nowrap ${selectedLead.is_lost_lead ? theme.statusLost : theme.statusClosing}`}>
-                              {selectedLead.is_lost_lead ? <><FaEyeSlash className="text-[10px] sm:text-xs" /> Lost Lead • Read Only</> : <><FaCheckCircle className="text-[10px] sm:text-xs" /> Lead Closed • Read Only</>}
-                            </span>
-                            {selectedLead.is_lost_lead ? (
-                              <button onClick={() => handleRestoreLead()} disabled={isSavingLost} className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center flex-1 sm:flex-none min-w-[110px] sm:min-w-[130px] gap-1 sm:gap-1.5 transition-colors cursor-pointer ${theme.btnPrimary} disabled:opacity-60 whitespace-nowrap`}>
-                                <FaCheckCircle /> Restore Lead
-                              </button>
-                            ) : (
-                              <button onClick={handleReopenLead} disabled={isReopening} className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center flex-1 sm:flex-none min-w-[110px] sm:min-w-[130px] gap-1 sm:gap-1.5 transition-colors cursor-pointer ${theme.btnPrimary} disabled:opacity-60 whitespace-nowrap`}>
-                                ↩️ Reopen Lead
-                              </button>
-                            )}
-                          </>
-                        ) : (
-                          !showSalesForm && !showLoanForm && (
-                            <>
-                              <button onClick={() => { prefillSalesForm(); setShowSalesForm(true); setShowLoanForm(false); }} className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center flex-1 sm:flex-none min-w-[110px] sm:min-w-[130px] gap-1 sm:gap-1.5 transition-colors cursor-pointer ${theme.btnPrimary} whitespace-nowrap`}>
-                                <FaFileInvoice /> Fill Salesform
-                              </button>
-                              <button onClick={() => { setShowLoanForm(true); setShowSalesForm(false); }} className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center flex-1 sm:flex-none min-w-[110px] sm:min-w-[130px] gap-1 sm:gap-1.5 transition-colors cursor-pointer ${theme.btnSecondary} whitespace-nowrap`}>
-                                <FaUniversity /> Track Loan
-                              </button>
-                              <button onClick={() => setIsClosingModalOpen(true)} className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center flex-1 sm:flex-none min-w-[110px] sm:min-w-[130px] gap-1 sm:gap-1.5 transition-colors cursor-pointer ${theme.btnWarning} whitespace-nowrap`}>
-                                <FaHandshake /> Mark Closing
-                              </button>
-                              <button onClick={() => openLostLeadModal()} className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center flex-1 sm:flex-none min-w-[110px] sm:min-w-[130px] gap-1 sm:gap-1.5 transition-colors cursor-pointer ${theme.btnDanger} whitespace-nowrap`}>
-                                <FaEyeSlash /> Lost Lead
-                              </button>
-                              {/* <button onClick={() => { setTransferTarget(""); setTransferNote(""); setIsTransferModalOpen(true); }} className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center flex-1 sm:flex-none min-w-[110px] sm:min-w-[130px] gap-1 sm:gap-1.5 transition-colors cursor-pointer ${isDark ? "bg-purple-600 hover:bg-purple-500 text-white" : "bg-purple-600 hover:bg-purple-700 text-white"} whitespace-nowrap`}>
-                                <FaExchangeAlt /> Transfer
-                              </button> */}
-                            </>
-                          )
-                        )}
-                      </div>
-                    </div>
-
-                    {/* ── Revisit: mobile toggle + historical panel ── */}
-                    {selectedLead.lead_classification === "RETURNING_LEAD" && (
-                      <button
-                        type="button"
-                        onClick={() => setShowPrevLead(v => !v)}
-                        disabled={isLoadingRevisit && !revisitHistory}
-                        className={`sm:hidden flex items-center justify-center gap-1.5 text-[11px] font-semibold px-3 py-2 rounded-lg border transition-colors cursor-pointer w-full mb-2 mt-2 disabled:opacity-50 disabled:cursor-wait ${showPrevLead ? "border-[rgba(5,150,105,0.5)] text-[#059669] bg-[rgba(5,150,105,0.10)]" : `${theme.tableBorder} ${theme.textMuted}`}`}
-                      >
-                        {isLoadingRevisit && !revisitHistory ? "Loading history…" : showPrevLead ? "Hide Previous Lead Data" : "Show Previous Lead Data"}
-                      </button>
-                    )}
-                    {selectedLead.lead_classification === "RETURNING_LEAD" && showPrevLead && (
-                      <div className={`rounded-xl border overflow-hidden mb-3 mt-2 flex-shrink-0 ${isDark ? "border-[rgba(5,150,105,0.40)]" : "border-[rgba(5,150,105,0.35)]"}`}>
-                        <div className={`px-4 py-3 flex flex-col gap-2 ${isDark ? "bg-[rgba(5,150,105,0.18)]" : "bg-[rgba(5,150,105,0.10)]"}`}>
-                          <div className="flex items-center justify-between">
-                            <span className="text-[11px] font-bold uppercase tracking-widest text-[#059669]">Visit History</span>
-                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border border-[rgba(5,150,105,0.4)] text-[#059669]">READ ONLY</span>
-                          </div>
-                          {visitChainSH && visitChainSH.visits.length > 1 && (
-                            <div className="flex flex-wrap gap-1.5">
-                              {visitChainSH.visits.slice(0, -1).map((v: any, i: number) => (
-                                <button
-                                  key={v.leadId}
-                                  type="button"
-                                  onClick={() => handleSelectVisitSH(i)}
-                                  className={`text-[10px] font-semibold px-2.5 py-1 rounded-md border transition-colors cursor-pointer ${selectedVisitIdxSH === i ? "border-[rgba(5,150,105,0.6)] text-[#059669] bg-[rgba(5,150,105,0.15)]" : `${theme.tableBorder} ${theme.textMuted} ${isDark ? "hover:bg-white/5" : "hover:bg-black/5"}`}`}
-                                >
-                                  Visit {v.visitNumber} · {new Date(v.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
-                                </button>
-                              ))}
-                              <span className={`text-[10px] font-semibold px-2.5 py-1 rounded-md border ${theme.tableBorder} ${theme.textFaint} opacity-60`}>
-                                Visit {visitChainSH.visits[visitChainSH.visits.length - 1].visitNumber} (Current)
-                              </span>
+                  <LeadDetailsLayout isDark={isDark} theme={theme} className="animate-fadeIn max-w-[1600px] mx-auto">
+                    <LeadDetailsPanel
+                      lead={selectedLead}
+                      onLeadUpdate={(updater) => setSelectedLead(updater)}
+                      currentUser={{ id: adminUser?.id, name: adminUser?.name, email: adminUser?.email, role: adminUser?.role || "admin" }}
+                      permissions={{
+                        canEditContact: adminUser?.role?.toLowerCase() === "admin",
+                        canEditPhone: adminUser?.role?.toLowerCase() === "admin",
+                        canFillSalesform: true,
+                        canTrackLoan: true,
+                        canMarkClosing: !isLeadLocked,
+                        canMarkLost: !isLeadLocked,
+                        canRestoreLead: true,
+                        canReopenLead: true,
+                        canViewBooking: true,
+                        canCreateBooking: true,
+                        canDeleteLead: false,
+                        canAdvanceStage: true,
+                        canSendFollowUp: true,
+                        canDeleteFollowUp: canDeleteFollowUps,
+                        canCall: true,
+                        canWhatsApp: true,
+                      }}
+                      isDark={isDark}
+                      theme={theme}
+                      onBack={() => {
+                        if (isDrillEntryRef.current && onDrillBack) { isDrillEntryRef.current = false; onDrillBack(); }
+                        else { setSubView("list"); setShowSalesForm(false); setShowLoanForm(false); }
+                      }}
+                      followUps={currentLeadFollowUps}
+                      bookingData={bookingData}
+                      loanDealBooking={loanDealBooking}
+                      loanDealLatest={loanDealLatest}
+                      attView={attView}
+                      onRefetch={refetch}
+                      onShowToast={(msg) => showToast(msg)}
+                      fetchLoanDealData={fetchLoanDealData}
+                      onSendFollowUp={handleSendCustomNote}
+                      onDeleteFollowUp={handleDeleteFollowUp}
+                      onRetryFollowUp={(msg: any) => { setCustomNote(msg.message); removeFollowUp(msg._clientMessageId, String(msg.leadId)); }}
+                      canDeleteFollowUps={canDeleteFollowUps}
+                      deletingFollowUpId={deletingFollowUpId}
+                      customNote={customNote}
+                      setCustomNote={setCustomNote}
+                      onOpenBookingView={() => openBookingView(selectedLead.id)}
+                      onOpenBookingForm={() => setIsClosingModalOpen(true)}
+                      onOpenLostModal={() => openLostLeadModal()}
+                      onOpenReminderModal={() => setShowReminderModal(true)}
+                      onOpenWhatsApp={() => setIsWaModalOpen(true)}
+                      onRestore={() => handleRestoreLead()}
+                      onReopen={handleReopenLead}
+                      showSalesForm={showSalesForm}
+                      setShowSalesForm={setShowSalesForm}
+                      salesForm={salesForm}
+                      setSalesForm={setSalesForm}
+                      onSubmitSalesForm={handleSalesFormSubmit}
+                      inputRef={inputRef}
+                      showLoanForm={showLoanForm}
+                      setShowLoanForm={setShowLoanForm}
+                      showCallingButtons
+                      isReturningLead={selectedLead.lead_classification === "RETURNING_LEAD"}
+                      showPrevLead={showPrevLead}
+                      onTogglePrevLead={() => setShowPrevLead(v => !v)}
+                      isLoadingRevisit={isLoadingRevisit}
+                      revisitHistory={displayedHistorySH}
+                      renderRevisitPanel={() => (
+                        <div className={`rounded-xl border shadow-sm mb-4 flex-shrink-0 overflow-hidden transition-colors ${isDark ? "bg-[#1C1C1E] border-white/10" : "bg-white border-gray-200"}`}>
+                          <div className={`px-5 py-3.5 border-b flex items-center justify-between ${isDark ? "border-white/10 bg-black/20" : "border-gray-100 bg-gray-50/50"}`}>
+                            <div className="flex items-center gap-2.5">
+                              <div className={`p-1.5 rounded-md ${isDark ? "text-blue-400" : "text-blue-600"}`}>
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
+                              </div>
+                              <h3 className={`text-[14px] font-semibold tracking-tight ${isDark ? "text-white" : "text-gray-900"}`}>Visit History</h3>
                             </div>
-                          )}
-                        </div>
-                        {(isLoadingRevisit && !displayedHistorySH) || isLoadingSelectedVisitSH ? (
-                          <div className="p-4"><p className={`text-xs text-center py-2 ${theme.textFaint}`}>Loading visit data…</p></div>
-                        ) : !displayedHistorySH ? (
-                          <div className="p-4"><p className={`text-xs ${theme.textFaint}`}>No previous visit history found or you are not authorized to view it.</p></div>
-                        ) : (
-                          <div className={`p-4 flex flex-col gap-4 ${isDark ? "bg-[rgba(5,150,105,0.05)]" : "bg-[rgba(5,150,105,0.03)]"}`}>
-                            <div>
-                              <p className="text-[10px] font-bold uppercase tracking-wider text-[#059669] mb-2">{visitChainSH && selectedVisitIdxSH !== null ? `Visit ${visitChainSH.visits[selectedVisitIdxSH].visitNumber} Enquiry` : "Previous Enquiry"}</p>
-                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[12px]">
+                            <span className="text-[9px] sm:text-[11px] font-bold px-2 py-0.5 rounded-md border flex items-center gap-1.5 flex-shrink-0 tracking-wide uppercase border-[rgba(5,150,105,0.45)] text-[#059669] bg-[rgba(5,150,105,0.15)]">
+                              Read Only
+                            </span>
+                          </div>
+                          <div className={`px-6 py-5 flex items-center overflow-x-auto custom-scrollbar border-b ${isDark ? "border-white/10 bg-[#1C1C1E]" : "border-gray-100 bg-white"}`}>
+                            {visitChainSH && visitChainSH.visits.map((v: any, i: number) => {
+                              const isLast = i === visitChainSH.visits.length - 1;
+                              const isSelected = selectedVisitIdxSH === i;
+                              const isCompleted = !isLast;
+                              return (
+                                <div key={v.leadId || i} className="flex items-center shrink-0">
+                                  <div
+                                    onClick={() => !isLast && handleSelectVisitSH(i)}
+                                    className={`flex flex-col p-4 rounded-xl border min-w-[150px] transition-all duration-200 ${!isLast ? "cursor-pointer" : "cursor-default opacity-90"
+                                      } ${isSelected
+                                        ? (isDark ? "bg-blue-500/10 border-blue-400/50" : "bg-blue-50/50 border-blue-300 shadow-[0_1px_2px_rgba(59,130,246,0.05)]")
+                                        : (isDark ? "bg-white/[0.02] border-white/10 hover:bg-white/[0.04]" : "bg-white border-gray-200 hover:border-gray-300")
+                                      }`}
+                                  >
+                                    <div className="flex items-center gap-2 mb-1.5">
+                                      {isCompleted ? (
+                                        <div className="w-[18px] h-[18px] rounded-full bg-[#10B981] flex items-center justify-center text-white shrink-0">
+                                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+                                        </div>
+                                      ) : (
+                                        <div className={`w-[18px] h-[18px] rounded-full border-2 flex items-center justify-center shrink-0 ${isDark ? "border-blue-400" : "border-blue-600"}`}>
+                                          <div className={`w-1.5 h-1.5 rounded-full ${isDark ? "bg-blue-400" : "bg-blue-600"}`} />
+                                        </div>
+                                      )}
+                                      <span className={`text-[13px] font-semibold tracking-tight ${isDark ? "text-gray-200" : "text-gray-900"}`}>Visit {v.visitNumber}</span>
+                                    </div>
+                                    <span className={`text-[11px] mb-3 ml-6 font-medium ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                                      {new Date(v.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                                    </span>
+                                    <div className="ml-6">
+                                      {isCompleted ? (
+                                        <span className={`text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded w-fit ${isDark ? "bg-emerald-500/20 text-emerald-400" : "bg-emerald-100 text-emerald-700"}`}>Completed</span>
+                                      ) : (
+                                        <span className={`text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded w-fit ${isDark ? "bg-blue-500/20 text-blue-400" : "bg-blue-100 text-blue-700"}`}>Current</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  {!isLast && <div className={`h-[1px] w-8 flex-shrink-0 ${isDark ? "bg-white/10" : "bg-gray-200"}`} />}
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <div className={`p-6 md:p-8 ${isDark ? "bg-[#1C1C1E]" : "bg-gray-50/30"}`}>
+                            {(isLoadingRevisit && !displayedHistorySH) || isLoadingSelectedVisitSH ? (
+                              <div className="flex justify-center py-4">
+                                <p className={`text-[13px] flex items-center gap-2 font-medium ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                                  <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                  Loading visit data…
+                                </p>
+                              </div>
+                            ) : !displayedHistorySH ? (
+                              <p className={`text-[13px] font-medium ${isDark ? "text-gray-400" : "text-gray-500"}`}>No previous visit history found.</p>
+                            ) : (
+                              <div className="grid grid-cols-2 md:grid-cols-3 gap-y-4 gap-x-3">
                                 <div><p className={`text-[10px] font-medium mb-0.5 ${theme.textFaint}`}>Visit Date</p><p className={`font-semibold ${theme.text}`}>{new Date(displayedHistorySH.previousLead.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</p></div>
                                 <div><p className={`text-[10px] font-medium mb-0.5 ${theme.textFaint}`}>Managed By</p><p className={`font-semibold ${theme.text}`}>{displayedHistorySH.previousLead.assigned_to || "—"}</p></div>
                                 <div><p className={`text-[10px] font-medium mb-0.5 ${theme.textFaint}`}>Phone</p><p className={`font-semibold font-mono ${theme.text}`}>{displayedHistorySH.previousLead.phone || "—"}</p></div>
@@ -6022,325 +5730,24 @@ function AdminSiteHeadView({ siteHeads, allLeads, followUps, isLoading, adminUse
                                 <div><p className={`text-[10px] font-medium mb-0.5 ${theme.textFaint}`}>Interest Status</p><p className={`font-semibold ${theme.text}`}>{displayedHistorySH.previousLead.lead_interest_status || "Pending"}</p></div>
                                 <div><p className={`text-[10px] font-medium mb-0.5 ${theme.textFaint}`}>Budget</p><p className={`font-semibold ${isDark ? "text-green-400" : "text-emerald-700"}`}>{displayedHistorySH.previousLead.budget || "—"}</p></div>
                                 {displayedHistorySH.previousLead.is_lost_lead && (
-                                  <div className="col-span-2 sm:col-span-3">
-                                    <p className={`text-[10px] font-medium mb-0.5 ${theme.textFaint}`}>Lost Lead Reason</p>
-                                    <p className="font-semibold text-red-400">{displayedHistorySH.previousLead.lost_lead_reason || "No reason recorded."}</p>
+                                  <div className="col-span-2 md:col-span-3 mt-2 p-3 rounded-xl bg-red-50 dark:bg-red-500/10 border border-red-100 dark:border-red-500/20">
+                                    <p className="text-[10px] font-bold uppercase tracking-widest mb-1 text-red-600 dark:text-red-400">Lost Lead Reason</p>
+                                    <p className="text-[12px] font-medium text-red-800 dark:text-red-200">{displayedHistorySH.previousLead.lost_lead_reason || "No reason recorded."}</p>
                                   </div>
                                 )}
-                                {displayedHistorySH.previousLead.closing_date && (
-                                  <div><p className={`text-[10px] font-medium mb-0.5 ${theme.textFaint}`}>Closing Date</p><p className={`font-semibold ${theme.text}`}>{formatDate(displayedHistorySH.previousLead.closing_date)}</p></div>
-                                )}
                               </div>
-                            </div>
-                            <div className={`border-t pt-3 ${theme.tableBorder}`}>
-                              <p className="text-[10px] font-bold uppercase tracking-wider text-[#059669] mb-2">Sales Form</p>
-                              {displayedHistorySH.historicalSalesForm ? (
-                                <div className={`rounded-lg p-3 border text-[11px] whitespace-pre-wrap leading-relaxed ${isDark ? "bg-[rgba(5,150,105,0.06)] border-[rgba(5,150,105,0.20)] text-gray-300" : "bg-white border-[rgba(5,150,105,0.20)] text-gray-700"}`}>
-                                  {displayedHistorySH.historicalSalesForm.replace("📝 Detailed Salesform Submitted:\n", "").trim()}
-                                </div>
-                              ) : (
-                                <p className={`text-[11px] italic ${theme.textFaint}`}>No Sales Form data available.</p>
-                              )}
-                            </div>
-                            <div className={`border-t pt-3 ${theme.tableBorder}`}>
-                              <p className="text-[10px] font-bold uppercase tracking-wider text-[#059669] mb-2">Loan</p>
-                              {displayedHistorySH.loan.length > 0 ? (
-                                <div className="flex flex-col gap-2">
-                                  {displayedHistorySH.loan.map((l: any, idx: number) => (
-                                    <div key={l.id ?? idx} className={`rounded-lg p-3 border text-[11px] ${isDark ? "bg-[rgba(5,150,105,0.06)] border-[rgba(5,150,105,0.20)]" : "bg-white border-[rgba(5,150,105,0.20)]"}`}>
-                                      <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                                        <div><span className={theme.textFaint}>Status: </span><span className={`font-semibold ${theme.text}`}>{l.status || "—"}</span></div>
-                                        <div><span className={theme.textFaint}>Bank: </span><span className={`font-semibold ${theme.text}`}>{l.bankName || "—"}</span></div>
-                                        {l.amountRequested && <div><span className={theme.textFaint}>Requested: </span><span className={`font-semibold ${theme.text}`}>₹{Number(l.amountRequested).toLocaleString("en-IN")}</span></div>}
-                                        {l.amountApproved && <div><span className={theme.textFaint}>Approved: </span><span className={`font-semibold ${theme.text}`}>₹{Number(l.amountApproved).toLocaleString("en-IN")}</span></div>}
-                                        {l.cibil && <div><span className={theme.textFaint}>CIBIL: </span><span className={`font-semibold ${theme.text}`}>{l.cibil}</span></div>}
-                                        {l.empType && <div><span className={theme.textFaint}>Employment: </span><span className={`font-semibold ${theme.text}`}>{l.empType}</span></div>}
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : (
-                                <p className={`text-[11px] italic ${theme.textFaint}`}>No Loan data available.</p>
-                              )}
-                            </div>
-                            <div className={`border-t pt-3 ${theme.tableBorder}`}>
-                              <p className="text-[10px] font-bold uppercase tracking-wider text-[#059669] mb-2">Booking</p>
-                              {displayedHistorySH.booking ? (
-                                <div className={`rounded-lg p-3 border text-[11px] ${isDark ? "bg-[rgba(5,150,105,0.06)] border-[rgba(5,150,105,0.20)]" : "bg-white border-[rgba(5,150,105,0.20)]"}`}>
-                                  <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                                    {displayedHistorySH.booking.bookingNumber && <div><span className={theme.textFaint}>Booking #: </span><span className={`font-semibold ${theme.text}`}>{displayedHistorySH.booking.bookingNumber}</span></div>}
-                                    {displayedHistorySH.booking.bookingStatus && <div><span className={theme.textFaint}>Status: </span><span className={`font-semibold ${theme.text}`}>{displayedHistorySH.booking.bookingStatus}</span></div>}
-                                    {displayedHistorySH.booking.projectName && <div><span className={theme.textFaint}>Project: </span><span className={`font-semibold ${theme.text}`}>{displayedHistorySH.booking.projectName}</span></div>}
-                                    {displayedHistorySH.booking.flatNumber && <div><span className={theme.textFaint}>Flat: </span><span className={`font-semibold ${theme.text}`}>{displayedHistorySH.booking.flatNumber}</span></div>}
-                                    {displayedHistorySH.booking.agreementValue && <div><span className={theme.textFaint}>Agreement Value: </span><span className={`font-semibold ${theme.text}`}>₹{Number(displayedHistorySH.booking.agreementValue).toLocaleString("en-IN")}</span></div>}
-                                    {displayedHistorySH.booking.bookingAmount && <div><span className={theme.textFaint}>Booking Amount: </span><span className={`font-semibold ${theme.text}`}>₹{Number(displayedHistorySH.booking.bookingAmount).toLocaleString("en-IN")}</span></div>}
-                                  </div>
-                                </div>
-                              ) : (
-                                <p className={`text-[11px] italic ${theme.textFaint}`}>No Booking available.</p>
-                              )}
-                            </div>
-                            <div className={`border-t pt-3 ${theme.tableBorder}`}>
-                              <p className="text-[10px] font-bold uppercase tracking-wider text-[#059669] mb-2">
-                                Historical Notes — before {new Date(displayedHistorySH.cutoffAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
-                              </p>
-                              {displayedHistorySH.followUps.length > 0 ? (
-                                <div className="flex flex-col gap-2 max-h-[280px] overflow-y-auto custom-scrollbar pr-1">
-                                  {displayedHistorySH.followUps.map((f: any) => (
-                                    <div key={f.id} className={`rounded-lg p-2.5 border ${isDark ? "bg-[rgba(5,150,105,0.06)] border-[rgba(5,150,105,0.15)]" : "bg-white border-[rgba(5,150,105,0.18)]"}`}>
-                                      <div className="flex justify-between items-start mb-1 gap-2">
-                                        <span className="text-[11px] font-semibold text-[#059669]">{f.createdByName || "—"}</span>
-                                        <span className={`text-[10px] flex-shrink-0 ${theme.textFaint}`}>{new Date(f.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>
-                                      </div>
-                                      <p className={`text-[11px] leading-relaxed whitespace-pre-wrap ${theme.textMuted}`}>{f.message}</p>
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : (
-                                <p className={`text-[11px] italic ${theme.textFaint}`}>No historical notes before the revisit date.</p>
-                              )}
-                            </div>
-                            <p className={`text-[10px] italic text-center ${theme.textFaint}`}>
-                              READ ONLY — All data above is from a previous visit. New notes, Sales Form, Loan, and Booking belong to the current Revisit lead.
-                            </p>
+                            )}
                           </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* AI voice calling */}
-                    {/* <div className="mb-2 mt-2 flex-shrink-0">
-                      <BolnaCallWidget
-                        leadId={Number(selectedLead.id)}
-                        leadName={selectedLead.name}
-                        phone={selectedLead.phone}
-                        userData={{ project: selectedLead.propType || selectedLead.configuration }}
-                        compact
-                      />
-                    </div> */}
-
-                    <div className="flex flex-col lg:flex-row gap-2 flex-1 min-h-[80vh] pb-2 mt-2">
-                      {/* LEFT PANEL */}
-                      <div className="w-full lg:w-[45%] flex flex-col gap-3 h-full pb-2">
-                        {showSalesForm ? (
-                          <div className={`rounded-xl border p-5 shadow-xl flex-1 overflow-y-auto custom-scrollbar flex flex-col ${theme.modalCard}`} style={theme.modalGlass}>
-                            <div className={`flex justify-between items-center mb-4 border-b pb-3 ${theme.tableBorder}`}>
-                              <div>
-                                <h3 className={`text-base font-bold ${theme.text}`}>Sales Data Form</h3>
-                                <p className={`text-xs mt-0.5 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>Admin override — Lead #{selectedLead.id}</p>
-                              </div>
-                              <button type="button" onClick={() => setShowSalesForm(false)} className={`p-1 ${theme.textMuted} hover:text-red-500`}><FaTimes /></button>
-                            </div>
-                            <form onSubmit={handleSalesFormSubmit} className="flex flex-col gap-2 flex-1">
-                              <div><label className={`text-xs mb-1 block ${theme.textMuted}`}>Property Type?</label><input type="text" placeholder="e.g. 1BHK, 2BHK" value={salesForm.propertyType} onChange={e => setSalesForm({ ...salesForm, propertyType: e.target.value.toUpperCase() })} className={formInput} /></div>
-                              <div><label className={`text-xs mb-1 block ${theme.textMuted}`}>Preferred Location?</label><input type="text" placeholder="e.g. Dombivali, Kalyan" value={salesForm.location} onChange={e => setSalesForm({ ...salesForm, location: e.target.value })} className={formInput} /></div>
-                              <div><label className={`text-xs mb-1 block ${theme.textMuted}`}>Approximate Budget?</label><input type="text" placeholder="e.g. 5 cr" value={salesForm.budget} onChange={e => setSalesForm({ ...salesForm, budget: e.target.value.toUpperCase() })} className={formInput} /></div>
-                              <div className="grid grid-cols-2 gap-3">
-                                <div><label className={`text-xs mb-1 block ${theme.textMuted}`}>Self-use or Investment?</label>
-                                  <select value={salesForm.useType} onChange={e => setSalesForm({ ...salesForm, useType: e.target.value })} className={formSelect}><option value="">Select</option><option>Self Use</option><option>Investment</option></select>
-                                </div>
-                                <div><label className={`text-xs mb-1 block ${theme.textMuted}`}>Planning to Purchase?</label>
-                                  <select value={salesForm.purchaseDate} onChange={e => setSalesForm({ ...salesForm, purchaseDate: e.target.value })} className={formSelect}><option value="">Select</option><option>Immediate</option><option>Next 3 Months</option></select>
-                                </div>
-                              </div>
-                              <div className={`border-t pt-3 ${theme.tableBorder}`}>
-                                <label className={`block text-xs font-bold mb-1.5 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>Lead Interest Status *</label>
-                                <select required value={salesForm.leadStatus} onChange={e => setSalesForm({ ...salesForm, leadStatus: e.target.value })} className={formSelect}><option value="" disabled>Select Status</option><option>Interested</option><option>Not Interested</option><option>NON GENUINE DEMAND (NGD)</option></select>
-                              </div>
-                              <div className={`border-t pt-3 ${theme.tableBorder}`}>
-                                <label className={`block text-xs font-bold mb-1.5 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>Loan Planned?</label>
-                                <select required value={salesForm.loanPlanned} onChange={e => setSalesForm({ ...salesForm, loanPlanned: e.target.value })} className={formSelect}><option value="" disabled>Select Option</option><option>Yes</option><option>No</option><option>Not Sure</option></select>
-                              </div>
-                              <div className={`border-t pt-3 ${theme.tableBorder}`}>
-                                <label className="text-xs text-orange-400 font-bold mb-1.5 block">Schedule a Site Visit?</label>
-                                <input ref={inputRef} type="datetime-local" value={salesForm.siteVisit} onChange={e => setSalesForm({ ...salesForm, siteVisit: e.target.value })} onClick={() => inputRef.current?.showPicker()} className={`${formInput} focus:border-orange-500`} />
-                              </div>
-                              <button type="submit" className={`mt-auto w-full font-bold py-3 rounded-xl transition-colors ${theme.btnPrimary}`}>Submit Salesform</button>
-                            </form>
-                          </div>
-
-                        ) : showLoanForm ? (
-                          <LoanDealForm
-                            lead={selectedLead}
-                            booking={loanDealBooking}
-                            loanUpdate={loanDealLatest}
-                            user={adminUser}
-                            isDark={isDark}
-                            t={theme}
-                            onCancel={() => setShowLoanForm(false)}
-                            onSuccess={() => {
-                              setShowLoanForm(false);
-                              showToast(`Loan & deal data saved for ${selectedLead.name}`);
-                              fetchLoanDealData(selectedLead.id);
-                              refetch();
-                            }}
-                          />
-                        ) : (
-                          <div className="flex flex-col h-full animate-fadeIn">
-                            <div className={`flex items-center gap-2 mb-1 border p-1.5 rounded-xl flex-shrink-0 ${theme.tableWrap}`}>
-                              <button onClick={() => setDetailTab("personal")} className={`flex-1 py-1.5 sm:py-2 text-xs sm:text-sm font-bold rounded-lg transition-colors cursor-pointer ${detailTab === "personal" ? theme.btnPrimary : `${theme.textMuted} hover:opacity-80`}`}>Personal Information</button>
-                              <button onClick={() => setDetailTab("loan")} className={`flex-1 py-1.5 sm:py-2 text-xs sm:text-sm font-bold rounded-lg transition-colors cursor-pointer ${detailTab === "loan" ? theme.btnSecondary : `${theme.textMuted} hover:opacity-80`}`}>Loan Tracking</button>
-                            </div>
-                            <div className={`flex-1 overflow-y-auto custom-scrollbar rounded-xl p-3 sm:p-6 pt-2 sm:pt-4 pb-4 shadow-lg border ${theme.chatPanel}`} style={theme.chatPanelGl}>
-                              {detailTab === "personal" ? (
-                                <div>
-                                  <div className="grid grid-cols-2 gap-y-3 gap-x-2 sm:gap-x-4 text-xs sm:text-sm">
-                                    <InlineContactField label="Email" value={selectedLead.email} fieldType="email" isDark={isDark} theme={theme} canEdit={adminUser?.role?.toLowerCase() === "admin"} onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "email", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, email: val || "N/A" })); showToast("Contact details updated successfully."); }} />
-                                    <InlineContactField label="Phone" value={selectedLead.phone} fieldType="tel" isDark={isDark} theme={theme} canEdit={adminUser?.role?.toLowerCase() === "admin"} mono onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "phone", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, phone: val })); showToast("Contact details updated successfully."); }} />
-                                    <InlineContactField label="Alt Phone" value={selectedLead.altPhone ?? selectedLead.alt_phone} fieldType="tel" isDark={isDark} theme={theme} canEdit={adminUser?.role?.toLowerCase() === "admin"} mono onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "alt_phone", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, altPhone: val, alt_phone: val })); showToast("Contact details updated successfully."); }} />
-                                    <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${theme.textFaint}`}>Lead Interest</p>{selectedLead.leadInterestStatus && selectedLead.leadInterestStatus !== "Pending" ? <InterestBadge status={selectedLead.leadInterestStatus} isDark={isDark} /> : <p className={`font-semibold ${theme.text}`}>Pending</p>}</div>
-                                    <div className="col-span-1"><p className={`text-[10px] sm:text-xs font-medium mb-1 ${theme.textFaint}`}>Loan Status</p>{selectedLead.loanStatus && selectedLead.loanStatus !== "N/A" ? <div className="w-fit"><LoanStatusBadge status={selectedLead.loanStatus} isDark={isDark} /></div> : <p className={`font-semibold ${theme.text}`}>N/A</p>}</div>
-                                    <div className="col-span-1"><p className={`text-[10px] sm:text-xs font-medium mb-1 ${theme.textFaint}`}>Backdated Entry</p><p className={`font-semibold ${theme.text}`}>{selectedLead.auto_date_enabled === false && selectedLead.enquiry_date ? formatDate(selectedLead.enquiry_date).split(",")[0] : "Null"}</p></div>
-                                    <div className="col-span-2"><p className={`text-[10px] sm:text-xs font-medium mb-1 ${theme.textFaint}`}>Residential Address</p><p className={`font-semibold ${theme.text}`}>{selectedLead.address && selectedLead.address !== "N/A" ? selectedLead.address : "Not Provided"}</p></div>
-                                    <div className="col-span-2"><InlineContactField label="Location" value={selectedLead.location} fieldType="text" isDark={isDark} theme={theme} canEdit={adminUser?.role?.toLowerCase() === "admin"} onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "location", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, location: val || "N/A" })); showToast("Contact details updated successfully."); }} /></div>
-                                    <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${theme.textFaint}`}>Budget</p><p className={`font-bold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{selectedLead.salesBudget !== "Pending" ? selectedLead.salesBudget : selectedLead.budget}</p></div>
-                                    <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${theme.textFaint}`}>Property Type</p><p className={`font-semibold ${theme.text}`}>{selectedLead.propType || "Pending"}</p></div>
-                                    <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${theme.textFaint}`}>Type of Use</p><p className={`font-semibold ${theme.text}`}>{selectedLead.useType !== "Pending" ? selectedLead.useType : (selectedLead.purpose || "N/A")}</p></div>
-                                    <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${theme.textFaint}`}>Planning to Buy?</p><p className={`font-semibold ${theme.text}`}>{selectedLead.planningPurchase || "Pending"}</p></div>
-                                    <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${theme.textFaint}`}>Loan Required?</p><p className={`font-semibold ${theme.text}`}>{loanDealLatest?.loan_required || selectedLead.loanPlanned || "Pending"}</p></div>
-                                    <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${theme.textFaint}`}>Status</p><span className={`text-[10px] sm:text-sm font-bold ${selectedLead.status === "Closing" ? "text-amber-500" : selectedLead.status === "Visit Scheduled" ? "text-orange-400" : theme.accentText}`}>{selectedLead.status || "Assigned"}</span></div>
-                                    <div className={`col-span-2 p-3 sm:p-5 rounded-xl border ${theme.settingsBg}`} style={theme.settingsBgGl}>
-                                      <p className={`crm-eyebrow mb-0.5 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>📍 Site Visit Date</p>
-                                      <p className={`text-sm sm:text-base font-black ${theme.text}`}>{selectedLead.mongoVisitDate ? formatDate(selectedLead.mongoVisitDate) : "Not Scheduled"}</p>
-                                    </div>
-                                    {selectedLead.is_lost_lead && (
-                                      <div className={`col-span-2 p-3 sm:p-5 rounded-xl border ${theme.statusLost}`}>
-                                        <p className="crm-eyebrow mb-1">Lost Lead Record</p>
-                                        <p className={`text-xs sm:text-sm leading-relaxed ${theme.textMuted}`}>{selectedLead.lost_lead_reason || "No reason recorded."}</p>
-                                        <p className={`text-[9px] sm:text-[10px] mt-2 ${theme.textFaint}`}>Marked by {selectedLead.lost_lead_marked_by || "Unknown"} on {selectedLead.lost_lead_marked_at ? formatDate(selectedLead.lost_lead_marked_at) : "-"}</p>
-                                      </div>
-                                    )}
-                                  </div>
-                                  <div className={`mt-3 border rounded-xl p-3 sm:p-5 ${theme.settingsBg}`} style={theme.settingsBgGl}>
-                                    <h3 className={`crm-eyebrow mb-2 border-b pb-2 ${theme.sectionTitle} ${theme.sectionBorder}`}>
-                                      {selectedLead.source && selectedLead.source !== "N/A" ? `${selectedLead.source} Data` : "Source Data"}
-                                    </h3>
-                                    <div className="grid grid-cols-2 gap-2">
-                                      <div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${theme.textFaint}`}>Primary Source</p><p className={`font-medium text-xs sm:text-sm ${theme.text}`}>{selectedLead.source || "N/A"}</p></div>
-                                      {selectedLead.source === "Others" && (<div><p className={`text-[10px] sm:text-xs font-medium mb-1 ${theme.textFaint}`}>Specified Name</p><p className={`font-medium text-xs sm:text-sm ${theme.text}`}>{selectedLead.sourceOther}</p></div>)}
-                                    </div>
-
-                                    {selectedLead.source === "Channel Partner" ? (
-                                      <div className={`mt-2 pt-2 border-t grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 ${theme.tableBorder}`}>
-                                        {[{ label: "CP Name", val: selectedLead.cpName || selectedLead.cp_name }, { label: "CP Company", val: selectedLead.cp_company || selectedLead.cpCompany }, { label: "CP Phone", val: selectedLead.cp_phone || selectedLead.cpPhone }].map(({ label, val }) => (
-                                          <div key={label}><p className={`text-[10px] sm:text-xs font-medium mb-1 ${theme.textFaint}`}>{label}</p><p className={`font-medium text-xs sm:text-sm ${theme.text}`}>{val || "N/A"}</p></div>
-                                        ))}
-                                      </div>
-                                    ) : selectedLead.source === "Referral" && selectedLead.referral_name ? (
-                                      <div className={`mt-2 pt-2 border-t grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 ${theme.tableBorder}`}>
-                                        <div>
-                                          <p className={`text-[10px] sm:text-xs font-medium mb-1 ${theme.textFaint}`}>Referred By</p>
-                                          <p className={`font-medium text-xs sm:text-sm ${theme.text}`}>{selectedLead.referral_name}</p>
-                                        </div>
-                                      </div>
-                                    ) : null}
-                                  </div>
-                                  <div className="mt-3">
-                                    <SiteVisitScheduler
-                                      lead={selectedLead}
-                                      adminUser={adminUser}
-                                      isDark={isDark}
-                                      theme={theme}
-                                      onSuccess={refetch}
-                                    />
-                                  </div>
-                                </div>
-                              ) : (
-                                <LoanDealView lead={selectedLead} booking={loanDealBooking} loanUpdate={loanDealLatest} isDark={isDark} t={theme} />
-                              )}
-                            </div>
-                            <div className="grid grid-cols-2 gap-2 sm:gap-3 mt-2 flex-shrink-0">
-                              <button className={`border flex flex-col items-center justify-center py-2 sm:py-3 rounded-xl transition-all cursor-pointer gap-1 ${isDark ? "bg-[#9E217B]/10 border-[#9E217B]/30 hover:bg-[#9E217B] text-[#d946a8] hover:text-white" : "bg-[#9E217B]/10 border-[#9E217B]/30 hover:bg-[#9E217B] text-[#9E217B] hover:text-white"}`}><FaMicrophone className="text-sm sm:text-lg" /><span className="font-bold text-[9px] sm:text-[10px]">Browser Call</span></button>
-                              <button onClick={() => setIsWaModalOpen(true)} className="bg-green-600/10 border border-green-500/30 hover:bg-green-600 text-green-400 hover:text-white flex flex-col items-center justify-center py-2 sm:py-3 rounded-xl transition-all cursor-pointer gap-1"><FaWhatsapp className="text-sm sm:text-lg" /><span className="font-bold text-[9px] sm:text-[10px]">WhatsApp</span></button>
-                              <CallingButtons leadId={selectedLead?.id ?? null} phone={selectedLead?.phone} leadName={selectedLead?.name} isDark={isDark} iconClass="text-sm sm:text-lg" paddingClass="py-2 sm:py-3" />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* RIGHT PANEL: FOLLOW-UPS (Scrollable and stacked on mobile) */}
-                      <div className={`w-full lg:w-[60%] flex flex-col rounded-xl overflow-hidden shadow-2xl min-h-[500px] lg:h-full lg:min-h-0 border ${theme.chatPanel}`} style={theme.chatPanelGl}>
-                        <div className={`flex-1 p-3 sm:p-6 overflow-y-auto custom-scrollbar flex flex-col gap-4 sm:gap-3 ${theme.chatArea}`}>
-                          {/* System message */}
-                          <div className="flex justify-start">
-                            <div className={`rounded-xl rounded-tl-none p-3 sm:p-5 max-w-[90%] sm:max-w-[85%] shadow-md ${theme.fupSalesform}`}>
-                              <div className={`flex justify-between items-center mb-2 gap-2 sm:gap-3`}>
-                                <span className={`font-bold text-[10px] sm:text-sm ${theme.accentText}`}>System (Front Desk)</span>
-                                <span className={`text-[9px] sm:text-[10px] ${theme.textFaint}`}>{formatDate(selectedLead.created_at)}</span>
-                              </div>
-                              <EnquiryDetailsBubble lead={selectedLead} theme={theme} isDark={isDark} formatDateFn={formatDate} />
-                            </div>
-                          </div>
-                          {currentLeadFollowUps.map((msg: any, idx: number) => {
-                            const isLoan = msg.message?.includes("🏦 Loan Update");
-                            const isSF = msg.message?.includes("📝 Detailed Salesform Submitted");
-                            const isClosing = msg.message?.includes("✅ Lead Marked as Closing");
-                            const isTransfer = msg.message?.includes("🔄 Lead Transferred");
-                            const bubble = isLoan ? theme.fupLoan : isSF ? theme.fupSalesform : isClosing ? theme.fupClosing : isTransfer ? theme.fupTransfer : theme.fupDefault;
-                            return (
-                              <div key={idx} className="flex justify-start">
-                                <div className={`rounded-xl rounded-tl-none p-3 sm:p-5 max-w-[95%] sm:max-w-[90%] shadow-md ${bubble}`}>
-                                  <div className="flex justify-between items-center mb-1 sm:mb-2 gap-2 sm:gap-3">
-                                    <span className={`font-bold text-xs sm:text-sm ${theme.text}`}>
-                                      {msg.createdBy === "admin" ? `${msg.salesManagerName || "Admin"} (Admin)` : msg.salesManagerName}
-                                    </span>
-                                    <span className={`text-[9px] sm:text-[10px] flex-shrink-0 flex items-center gap-1 ${theme.textFaint}`}>
-                                      {formatDate(msg.createdAt)}
-                                      {(msg.followUpType === "internal_message" || msg.followUpType === "sm_reply") && msg._status !== "sending" && msg._status !== "failed" && (
-                                        msg.readAt
-                                          ? <span className="text-blue-500 font-bold ml-0.5" title="Read">&#10003;&#10003;</span>
-                                          : <span className="opacity-60 ml-0.5" title="Sent">&#10003;</span>
-                                      )}
-                                    </span>
-                                  </div>
-                                  {msg.followUpType === "call" ? (
-                                    <ManualCallBubble message={msg.message} createdAt={msg.createdAt} textClass={theme.textMuted} onRecordingDeleted={refetch} />
-                                  ) : (
-                                    <p className={`text-xs sm:text-sm whitespace-pre-wrap leading-relaxed ${theme.textMuted}`}>{msg.message}</p>
-                                  )}
-                                  <FollowUpAttachments followUpId={Number(msg._id)} textClass={theme.textMuted} onDeleted={refetch} />
-                                  {canDeleteFollowUps && msg._id && msg._status !== "sending" && msg._status !== "failed" && (
-                                    <button
-                                      type="button"
-                                      disabled={deletingFollowUpId === String(msg._id)}
-                                      onClick={() => setConfirmDeleteFollowUpId(String(msg._id))}
-                                      className={`mt-1 text-[9px] font-medium transition-opacity ${isDark ? "text-red-400 hover:text-red-300" : "text-red-500 hover:text-red-600"} disabled:opacity-40`}
-                                    >
-                                      {deletingFollowUpId === String(msg._id) ? "Deleting…" : "Delete"}
-                                    </button>
-                                  )}
-                                  {msg._status === "sending" && <span className="text-[9px] text-yellow-500 mt-1 block">Sending...</span>}
-                                  {msg._status === "failed" && (
-                                    <span className="text-[9px] text-red-500 mt-1 flex items-center gap-1">Failed to send
-                                      <button type="button" onClick={() => { setCustomNote(msg.message); removeFollowUp(msg._clientMessageId, String(msg.leadId)); }} className="underline hover:text-red-400">Retry</button>
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
-                          <div ref={followUpEndRef} />
                         </div>
-                        {confirmDeleteFollowUpId && (
-                          <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60">
-                            <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl overflow-hidden mx-4">
-                              <div className="px-5 py-4 border-b border-gray-100">
-                                <h3 className="font-bold text-sm text-gray-900">Delete follow-up?</h3>
-                              </div>
-                              <div className="px-5 py-4">
-                                <p className="text-sm text-gray-600 leading-relaxed">This will permanently delete this follow-up note and any attached files from storage. This action cannot be undone.</p>
-                              </div>
-                              <div className="flex gap-2 px-5 py-3 border-t border-gray-100 bg-gray-50">
-                                <button type="button" onClick={() => setConfirmDeleteFollowUpId(null)} className="flex-1 px-3 py-2 text-xs font-bold rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-100 transition">Cancel</button>
-                                <button type="button" onClick={() => { handleDeleteFollowUp(confirmDeleteFollowUpId!); setConfirmDeleteFollowUpId(null); }} className="flex-1 px-3 py-2 text-xs font-bold rounded-xl bg-red-600 text-white hover:bg-red-700 transition">Delete</button>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                        <FollowUpComposer value={customNote} onChange={setCustomNote} onSubmit={handleSendCustomNote} pendingFiles={attView.pendingFiles} fileError={attView.fileError} onAddFiles={attView.addFiles} onRemoveFile={attView.removeFile} onReminderClick={() => setShowReminderModal(true)} isDark={isDark} theme={theme} placeholder="Add admin note..." headerGlass={theme.headerGlass} />
-                      </div>
-                    </div>
-                  </div>
+                      )}
+                      renderAfterPersonalInfo={() => (
+                        <div className="mt-3">
+                          <SiteVisitScheduler lead={selectedLead} adminUser={adminUser} isDark={isDark} theme={theme} onSuccess={refetch} />
+                        </div>
+                      )}
+                      formatDate={formatDate}
+                    />
+                  </LeadDetailsLayout>
                 </div>
               )
             )}
@@ -7376,22 +6783,22 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
         ) : (
           <div className="flex-1 flex flex-col h-full overflow-hidden">
             {/* Sub-header */}
-            <div className={`p-2 sm:p-3 border-b flex justify-between items-center shadow-sm z-10 flex-shrink-0 gap-2 ${theme.header}`} style={theme.headerGlass}>
+            {/* <div className={`p-2 sm:p-3 border-b flex justify-between items-center shadow-sm z-10 flex-shrink-0 gap-2 ${theme.header}`} style={theme.headerGlass}>
               <div>
                 <h2 className={`text-md sm:text-lg font-bold flex items-center gap-2 ${theme.text}`}>
                   <FaClipboardList className={isDark ? "text-[#d946a8]" : "text-[#9E217B]"} />
                   {selectedReceptionist.name}'s Dashboard
                 </h2>
-                {/* <p className={`text-[10px] sm:text-xs mt-0.5 sm:mt-1 ${theme.textFaint}`}>
+                <p className={`text-[10px] sm:text-xs mt-0.5 sm:mt-1 ${theme.textFaint}`}>
                   {subView === "detail" ? `Viewing lead details · Admin acting on behalf of ${selectedReceptionist.name}` : "Admin view — monitor receptionist activity across all sections"}
-                </p> */}
+                </p>
               </div>
               {subView === "list" && (
                 <span className={`text-[10px] sm:text-xs px-2 py-1 sm:px-3 sm:py-1 rounded-full border font-bold flex items-center gap-1 sm:gap-1.5 ${isDark ? "text-green-400 border-green-500/30 bg-green-500/10" : "text-green-700 border-green-200 bg-green-50"}`}>
                   🟢 Live Sync
                 </span>
               )}
-            </div>
+            </div> */}
 
             {/* ── DETAIL VIEW (enquiry-style, read-only) ── */}
             {subView === "detail" && selectedLead && isEnquiryView && (
@@ -7512,175 +6919,136 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                 </div>
               ) : (
                 <div className={`flex-1 overflow-y-auto p-2 sm:p-2 ${theme.scroll}`}>
-                  <div className="animate-fadeIn max-w-full mx-auto flex flex-col min-h-full lg:h-[calc(100vh-130px)]">
-                    {(() => {
-                      const isNGD = selectedLead.status === "NON GENUINE DEMAND (NGD)" || selectedLead.leadStatus === "NON GENUINE DEMAND (NGD)" || selectedLead.leadInterestStatus === "NON GENUINE DEMAND (NGD)";
-                      return (
-                        <div className={`sticky top-0 z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-1 rounded-xl border p-2 shadow-sm flex-shrink-0 ${selectedLead.is_lost_lead ? theme.cardLost : isNGD ? theme.cardNGD : theme.card}`} style={theme.cardGlass}>
-                          <div className="flex items-center justify-between w-full sm:w-auto gap-2">
-                            <div className="flex items-center gap-1.5 sm:gap-2">
-                              <button onClick={() => { setSubView("list"); setSelectedLead(null); setIsEnquiryView(false); setShowSalesForm(false); setShowLoanForm(false); }}
-                                className={`w-8 h-8 sm:w-9 sm:h-9 flex-shrink-0 flex items-center justify-center border rounded-lg sm:rounded-xl transition-colors cursor-pointer shadow-sm ${theme.textMuted} ${theme.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}>
-                                <FaChevronLeft className="text-[10px] sm:text-xs" />
-                              </button>
-                              <h1 className={`text-sm sm:text-base lg:text-lg font-bold flex flex-wrap items-center gap-1.5 sm:gap-2 ${theme.text}`}>
-                                <span className={isDark ? "text-[#9E217B]" : "text-[#9E217B]"}>#{selectedLead.sr_no || selectedLead.id}</span>
-                                <span>{selectedLead.name}</span>
-                                <span className={`text-[9px] sm:text-[10px] px-1.5 py-0.5 sm:px-2 sm:py-0.5 rounded-full border ${theme.settingsBg} ${theme.textFaint}`}>
-                                  {selectedLead.assigned_receptionist || selectedReceptionist?.name}
-                                </span>
-                                {selectedLead.status === "Closing" && (
-                                  <span className={`text-[9px] sm:text-[11px] font-bold px-2 py-0.5 sm:px-3 sm:py-1 rounded-full border ${isDark ? "text-yellow-400 border-yellow-500/40 bg-yellow-500/10" : "text-amber-600 border-amber-400/50 bg-amber-50"}`}>
-                                    <FaHandshake className="inline mr-1 text-[9px] sm:text-[10px]" />Closing
-                                  </span>
-                                )}
-                                {selectedLead.is_lost_lead && (
-                                  <span className={`text-[9px] sm:text-[11px] font-bold px-2 py-0.5 sm:px-3 sm:py-1 rounded-full border flex items-center gap-1 sm:gap-1.5 ${theme.statusLost}`}>
-                                    <FaEyeSlash className="text-[10px] sm:text-xs" /> Lost Lead
-                                  </span>
-                                )}
-                                {!selectedLead.is_lost_lead && isNGD && (
-                                  <span className={`text-[9px] sm:text-[11px] font-bold px-2 py-0.5 sm:px-3 sm:py-1 rounded-full border flex items-center gap-1 sm:gap-1.5 ${theme.statusNGD}`}>
-                                    NON GENUINE DEMAND
-                                  </span>
-                                )}
-                                {selectedLead.lead_classification === "RETURNING_LEAD" && (
-
-                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border border-[rgba(5,150,105,0.45)] text-[#059669] bg-[rgba(5,150,105,0.12)] w-fit">
-                                    REVISIT
-                                  </span>
-                                )}
-                              </h1>
-                              {selectedLead.lead_classification === "RETURNING_LEAD" && (
-                                <button
-                                  type="button"
-                                  onClick={() => setShowPrevLead(v => !v)}
-                                  disabled={isLoadingRevisit && !revisitHistory}
-                                  className={`hidden sm:flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1 rounded-lg border transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-wait ${showPrevLead ? "border-[rgba(5,150,105,0.5)] text-[#059669] bg-[rgba(5,150,105,0.10)]" : `${theme.tableBorder} ${theme.textMuted} ${isDark ? "hover:bg-white/5" : "hover:bg-black/5"}`}`}
-                                >
-                                  {isLoadingRevisit && !revisitHistory ? "Loading history…" : `${showPrevLead ? "Hide" : "Show"} Previous Lead`}
-                                </button>
-                              )}
+                  <LeadDetailsLayout isDark={isDark} theme={theme} className="animate-fadeIn max-w-[1600px] mx-auto">
+                    <LeadDetailsPanel
+                      lead={selectedLead}
+                      onLeadUpdate={(updater) => setSelectedLead(updater)}
+                      currentUser={{ id: adminUser?.id, name: adminUser?.name, email: adminUser?.email, role: adminUser?.role || "admin" }}
+                      permissions={{
+                        canEditContact: adminUser?.role?.toLowerCase() === "admin",
+                        canEditPhone: adminUser?.role?.toLowerCase() === "admin",
+                        canFillSalesform: true,
+                        canTrackLoan: true,
+                        canMarkClosing: !isLeadLocked,
+                        canMarkLost: !isLeadLocked,
+                        canRestoreLead: true,
+                        canReopenLead: true,
+                        canViewBooking: true,
+                        canCreateBooking: true,
+                        canDeleteLead: false,
+                        canAdvanceStage: false,
+                        canSendFollowUp: true,
+                        canDeleteFollowUp: canDeleteFollowUps,
+                        canCall: true,
+                        canWhatsApp: true,
+                      }}
+                      isDark={isDark}
+                      theme={theme}
+                      onBack={() => { setSubView("list"); setShowSalesForm(false); setShowLoanForm(false); }}
+                      followUps={currentFollowUps}
+                      bookingData={bookingData}
+                      loanDealBooking={loanDealBooking}
+                      loanDealLatest={loanDealLatest}
+                      attView={attView}
+                      onRefetch={refetch}
+                      onShowToast={(msg) => showToast(msg)}
+                      fetchLoanDealData={fetchLoanDealData}
+                      onSendFollowUp={handleSendCustomNote}
+                      onDeleteFollowUp={handleDeleteFollowUp}
+                      onRetryFollowUp={(msg: any) => { setCustomNote(msg.message); removeFollowUp(msg._clientMessageId, String(msg.leadId)); }}
+                      canDeleteFollowUps={canDeleteFollowUps}
+                      deletingFollowUpId={deletingFollowUpId}
+                      customNote={customNote}
+                      setCustomNote={setCustomNote}
+                      onOpenBookingView={() => openBookingView(selectedLead.id)}
+                      onOpenBookingForm={() => setIsClosingModalOpen(true)}
+                      onOpenLostModal={() => openLostLeadModal()}
+                      onOpenReminderModal={() => setShowReminderModal(true)}
+                      onOpenWhatsApp={() => setIsWaModalOpen(true)}
+                      onRestore={() => handleRestoreLead()}
+                      onReopen={handleReopenLead}
+                      showSalesForm={showSalesForm}
+                      setShowSalesForm={setShowSalesForm}
+                      salesForm={salesForm}
+                      setSalesForm={setSalesForm}
+                      onSubmitSalesForm={handleSalesFormSubmit}
+                      inputRef={inputRef}
+                      showLoanForm={showLoanForm}
+                      setShowLoanForm={setShowLoanForm}
+                      showCallingButtons
+                      isReturningLead={selectedLead.lead_classification === "RETURNING_LEAD"}
+                      showPrevLead={showPrevLead}
+                      onTogglePrevLead={() => setShowPrevLead(v => !v)}
+                      isLoadingRevisit={isLoadingRevisit}
+                      revisitHistory={displayedHistoryRV}
+                      renderRevisitPanel={() => (
+                        <div className={`rounded-xl border shadow-sm mb-4 flex-shrink-0 overflow-hidden transition-colors ${isDark ? "bg-[#1C1C1E] border-white/10" : "bg-white border-gray-200"}`}>
+                          <div className={`px-5 py-3.5 border-b flex items-center justify-between ${isDark ? "border-white/10 bg-black/20" : "border-gray-100 bg-gray-50/50"}`}>
+                            <div className="flex items-center gap-2.5">
+                              <div className={`p-1.5 rounded-md ${isDark ? "text-blue-400" : "text-blue-600"}`}>
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
+                              </div>
+                              <h3 className={`text-[14px] font-semibold tracking-tight ${isDark ? "text-white" : "text-gray-900"}`}>Visit History</h3>
                             </div>
-                            <button onClick={() => setShowMobileActions(!showMobileActions)} className={`sm:hidden w-8 h-8 flex-shrink-0 flex items-center justify-center border rounded-lg transition-colors shadow-sm ${showMobileActions ? theme.btnPrimary : `${theme.textMuted} ${theme.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}`}>
-                              <FaChevronDown className={`text-[10px] transition-transform duration-200 ${showMobileActions ? "rotate-180" : ""}`} />
-                            </button>
+                            <span className="text-[9px] sm:text-[11px] font-bold px-2 py-0.5 rounded-md border flex items-center gap-1.5 flex-shrink-0 tracking-wide uppercase border-[rgba(5,150,105,0.45)] text-[#059669] bg-[rgba(5,150,105,0.15)]">
+                              Read Only
+                            </span>
                           </div>
-
-                          <div className={`gap-1.5 sm:gap-2 flex-wrap justify-start sm:justify-end mt-1 sm:mt-0 w-full sm:w-auto pl-9 sm:pl-0 ${showMobileActions ? "flex animate-fadeIn" : "hidden sm:flex"}`}>
-                            {bookingData ? (
-                              <button onClick={() => openBookingView(selectedLead.id)} className="font-bold px-2 py-1 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center flex-1 sm:flex-none min-w-[110px] sm:min-w-[130px] gap-1 sm:gap-1.5 transition-colors cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm whitespace-nowrap">
-                                <FaEye /> View Booking Form
-                              </button>
+                          <div className={`px-6 py-5 flex items-center overflow-x-auto custom-scrollbar border-b ${isDark ? "border-white/10 bg-[#1C1C1E]" : "border-gray-100 bg-white"}`}>
+                            {visitChainRV && visitChainRV.visits.map((v: any, i: number) => {
+                              const isLast = i === visitChainRV.visits.length - 1;
+                              const isSelected = selectedVisitIdxRV === i;
+                              const isCompleted = !isLast;
+                              return (
+                                <div key={v.leadId || i} className="flex items-center shrink-0">
+                                  <div
+                                    onClick={() => !isLast && handleSelectVisitRV(i)}
+                                    className={`flex flex-col p-4 rounded-xl border min-w-[150px] transition-all duration-200 ${!isLast ? "cursor-pointer" : "cursor-default opacity-90"
+                                      } ${isSelected
+                                        ? (isDark ? "bg-blue-500/10 border-blue-400/50" : "bg-blue-50/50 border-blue-300 shadow-[0_1px_2px_rgba(59,130,246,0.05)]")
+                                        : (isDark ? "bg-white/[0.02] border-white/10 hover:bg-white/[0.04]" : "bg-white border-gray-200 hover:border-gray-300")
+                                      }`}
+                                  >
+                                    <div className="flex items-center gap-2 mb-1.5">
+                                      {isCompleted ? (
+                                        <div className="w-[18px] h-[18px] rounded-full bg-[#10B981] flex items-center justify-center text-white shrink-0">
+                                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+                                        </div>
+                                      ) : (
+                                        <div className={`w-[18px] h-[18px] rounded-full border-2 flex items-center justify-center shrink-0 ${isDark ? "border-blue-400" : "border-blue-600"}`}>
+                                          <div className={`w-1.5 h-1.5 rounded-full ${isDark ? "bg-blue-400" : "bg-blue-600"}`} />
+                                        </div>
+                                      )}
+                                      <span className={`text-[13px] font-semibold tracking-tight ${isDark ? "text-gray-200" : "text-gray-900"}`}>Visit {v.visitNumber}</span>
+                                    </div>
+                                    <span className={`text-[11px] mb-3 ml-6 font-medium ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                                      {new Date(v.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                                    </span>
+                                    <div className="ml-6">
+                                      {isCompleted ? (
+                                        <span className={`text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded w-fit ${isDark ? "bg-emerald-500/20 text-emerald-400" : "bg-emerald-100 text-emerald-700"}`}>Completed</span>
+                                      ) : (
+                                        <span className={`text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded w-fit ${isDark ? "bg-blue-500/20 text-blue-400" : "bg-blue-100 text-blue-700"}`}>Current</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  {!isLast && <div className={`h-[1px] w-8 flex-shrink-0 ${isDark ? "bg-white/10" : "bg-gray-200"}`} />}
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <div className={`p-6 md:p-8 ${isDark ? "bg-[#1C1C1E]" : "bg-gray-50/30"}`}>
+                            {(isLoadingRevisit && !displayedHistoryRV) || isLoadingSelectedVisitRV ? (
+                              <div className="flex justify-center py-4">
+                                <p className={`text-[13px] flex items-center gap-2 font-medium ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                                  <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                  Loading visit data…
+                                </p>
+                              </div>
+                            ) : !displayedHistoryRV ? (
+                              <p className={`text-[13px] font-medium ${isDark ? "text-gray-400" : "text-gray-500"}`}>No previous visit history found.</p>
                             ) : (
-                              <button disabled title="Booking Form has not been submitted yet." className="font-bold px-2 py-1 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center flex-1 sm:flex-none min-w-[110px] sm:min-w-[130px] gap-1 sm:gap-1.5 transition-colors opacity-50 cursor-not-allowed bg-indigo-400 text-white shadow-sm whitespace-nowrap">
-                                <FaEye /> View Booking Form
-                              </button>
-                            )}
-                            {isLeadLocked ? (
-                              <>
-                                <span className={`text-[9px] sm:text-[11px] font-bold px-2 py-1 sm:px-3 sm:py-1 rounded-full border flex items-center justify-center flex-1 sm:flex-none min-w-[110px] sm:min-w-[130px] gap-1 sm:gap-1.5 whitespace-nowrap ${selectedLead.is_lost_lead ? theme.statusLost : theme.statusClosing}`}>
-                                  {selectedLead.is_lost_lead ? <><FaEyeSlash className="text-[10px] sm:text-xs" /> Lost Lead • Read Only</> : <><FaCheckCircle className="text-[10px] sm:text-xs" /> Lead Closed • Read Only</>}
-                                </span>
-                                {selectedLead.is_lost_lead ? (
-                                  <button onClick={() => handleRestoreLead()} disabled={isSavingLost}
-                                    className={`font-bold px-2 py-1 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center flex-1 sm:flex-none min-w-[110px] sm:min-w-[130px] gap-1 sm:gap-1.5 transition-colors cursor-pointer ${theme.btnPrimary} disabled:opacity-60 whitespace-nowrap`}>
-                                    <FaCheckCircle /> Restore Lead
-                                  </button>
-                                ) : (
-                                  <button onClick={handleReopenLead} disabled={isReopening}
-                                    className={`font-bold px-2 py-1 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center flex-1 sm:flex-none min-w-[110px] sm:min-w-[130px] gap-1 sm:gap-1.5 transition-colors cursor-pointer ${theme.btnPrimary} disabled:opacity-60 whitespace-nowrap`}>
-                                    ↩️ Reopen Lead
-                                  </button>
-                                )}
-                              </>
-                            ) : (
-                              !showSalesForm && !showLoanForm && (
-                                <>
-                                  <button onClick={() => { prefillSalesForm(); setShowSalesForm(true); setShowLoanForm(false); }}
-                                    className={`font-bold px-2 py-1 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center flex-1 sm:flex-none min-w-[110px] sm:min-w-[130px] gap-1 sm:gap-1.5 transition-colors cursor-pointer ${theme.btnPrimary} whitespace-nowrap`}>
-                                    <FaFileInvoice /> Fill Salesform
-                                  </button>
-                                  <button onClick={() => { setShowLoanForm(true); setShowSalesForm(false); }}
-                                    className={`font-bold px-2 py-1 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center flex-1 sm:flex-none min-w-[110px] sm:min-w-[130px] gap-1 sm:gap-1.5 transition-colors cursor-pointer ${theme.btnSecondary} whitespace-nowrap`}>
-                                    <FaUniversity /> Track Loan
-                                  </button>
-                                  <button onClick={() => setIsClosingModalOpen(true)}
-                                    className={`font-bold px-2 py-1 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center flex-1 sm:flex-none min-w-[110px] sm:min-w-[130px] gap-1 sm:gap-1.5 transition-colors cursor-pointer ${theme.btnWarning} whitespace-nowrap`}>
-                                    <FaHandshake /> Mark Closing
-                                  </button>
-                                  <button onClick={() => openLostLeadModal()}
-                                    className={`font-bold px-2 py-1 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center flex-1 sm:flex-none min-w-[110px] sm:min-w-[130px] gap-1 sm:gap-1.5 transition-colors cursor-pointer ${theme.btnDanger} whitespace-nowrap`}>
-                                    <FaEyeSlash /> Lost Lead
-                                  </button>
-                                  <button onClick={() => { setTransferTarget(""); setTransferNote(""); setIsTransferModalOpen(true); }}
-                                    className={`font-bold px-2 py-1 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center flex-1 sm:flex-none min-w-[110px] sm:min-w-[130px] gap-1 sm:gap-1.5 transition-colors cursor-pointer ${isDark ? "bg-purple-600 hover:bg-purple-500 text-white" : "bg-purple-600 hover:bg-purple-700 text-white"} whitespace-nowrap`}>
-                                    <FaExchangeAlt /> Transfer
-                                  </button>
-                                </>
-                              )
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })()}
-
-                    {/* AI voice calling */}
-                    {/* <div className="mb-2 mt-1 sm:mt-2 flex-shrink-0">
-                      <BolnaCallWidget
-                        leadId={Number(selectedLead.id)}
-                        leadName={selectedLead.name}
-                        phone={selectedLead.phone}
-                        userData={{ project: selectedLead.propType || selectedLead.configuration }}
-                        compact
-                      />
-                    </div> */}
-
-                    {/* ── Revisit: mobile toggle + historical panel ── */}
-                    {selectedLead.lead_classification === "RETURNING_LEAD" && (
-                      <button
-                        type="button"
-                        onClick={() => setShowPrevLead(v => !v)}
-                        disabled={isLoadingRevisit && !revisitHistory}
-                        className={`sm:hidden flex items-center justify-center gap-1.5 text-[11px] font-semibold px-3 py-2 rounded-lg border transition-colors cursor-pointer w-full mb-2 disabled:opacity-50 disabled:cursor-wait ${showPrevLead ? "border-[rgba(5,150,105,0.5)] text-[#059669] bg-[rgba(5,150,105,0.10)]" : `${theme.tableBorder} ${theme.textMuted}`}`}
-                      >
-                        {isLoadingRevisit && !revisitHistory ? "Loading history…" : showPrevLead ? "Hide Previous Lead Data" : "Show Previous Lead Data"}
-                      </button>
-                    )}
-                    {selectedLead.lead_classification === "RETURNING_LEAD" && showPrevLead && (
-                      <div className={`rounded-xl border overflow-hidden mb-3 flex-shrink-0 ${isDark ? "border-[rgba(5,150,105,0.40)]" : "border-[rgba(5,150,105,0.35)]"}`}>
-                        <div className={`px-4 py-3 flex flex-col gap-2 ${isDark ? "bg-[rgba(5,150,105,0.18)]" : "bg-[rgba(5,150,105,0.10)]"}`}>
-                          <div className="flex items-center justify-between">
-                            <span className="text-[11px] font-bold uppercase tracking-widest text-[#059669]">Visit History</span>
-                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border border-[rgba(5,150,105,0.4)] text-[#059669]">READ ONLY</span>
-                          </div>
-                          {visitChainRV && visitChainRV.visits.length > 1 && (
-                            <div className="flex flex-wrap gap-1.5">
-                              {visitChainRV.visits.slice(0, -1).map((v: any, i: number) => (
-                                <button
-                                  key={v.leadId}
-                                  type="button"
-                                  onClick={() => handleSelectVisitRV(i)}
-                                  className={`text-[10px] font-semibold px-2.5 py-1 rounded-md border transition-colors cursor-pointer ${selectedVisitIdxRV === i ? "border-[rgba(5,150,105,0.6)] text-[#059669] bg-[rgba(5,150,105,0.15)]" : `${theme.tableBorder} ${theme.textMuted} ${isDark ? "hover:bg-white/5" : "hover:bg-black/5"}`}`}
-                                >
-                                  Visit {v.visitNumber} · {new Date(v.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
-                                </button>
-                              ))}
-                              <span className={`text-[10px] font-semibold px-2.5 py-1 rounded-md border ${theme.tableBorder} ${theme.textFaint} opacity-60`}>
-                                Visit {visitChainRV.visits[visitChainRV.visits.length - 1].visitNumber} (Current)
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                        {(isLoadingRevisit && !displayedHistoryRV) || isLoadingSelectedVisitRV ? (
-                          <div className="p-4"><p className={`text-xs text-center py-2 ${theme.textFaint}`}>Loading visit data…</p></div>
-                        ) : !displayedHistoryRV ? (
-                          <div className="p-4"><p className={`text-xs ${theme.textFaint}`}>No previous visit history found or you are not authorized to view it.</p></div>
-                        ) : (
-                          <div className={`p-4 flex flex-col gap-4 ${isDark ? "bg-[rgba(5,150,105,0.05)]" : "bg-[rgba(5,150,105,0.03)]"}`}>
-                            <div>
-                              <p className="text-[10px] font-bold uppercase tracking-wider text-[#059669] mb-2">{visitChainRV && selectedVisitIdxRV !== null ? `Visit ${visitChainRV.visits[selectedVisitIdxRV].visitNumber} Enquiry` : "Previous Enquiry"}</p>
-                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[12px]">
+                              <div className="grid grid-cols-2 md:grid-cols-3 gap-y-4 gap-x-3">
                                 <div><p className={`text-[10px] font-medium mb-0.5 ${theme.textFaint}`}>Visit Date</p><p className={`font-semibold ${theme.text}`}>{new Date(displayedHistoryRV.previousLead.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</p></div>
                                 <div><p className={`text-[10px] font-medium mb-0.5 ${theme.textFaint}`}>Managed By</p><p className={`font-semibold ${theme.text}`}>{displayedHistoryRV.previousLead.assigned_to || "—"}</p></div>
                                 <div><p className={`text-[10px] font-medium mb-0.5 ${theme.textFaint}`}>Phone</p><p className={`font-semibold font-mono ${theme.text}`}>{displayedHistoryRV.previousLead.phone || "—"}</p></div>
@@ -7688,330 +7056,24 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                                 <div><p className={`text-[10px] font-medium mb-0.5 ${theme.textFaint}`}>Interest Status</p><p className={`font-semibold ${theme.text}`}>{displayedHistoryRV.previousLead.lead_interest_status || "Pending"}</p></div>
                                 <div><p className={`text-[10px] font-medium mb-0.5 ${theme.textFaint}`}>Budget</p><p className={`font-semibold ${isDark ? "text-green-400" : "text-emerald-700"}`}>{displayedHistoryRV.previousLead.budget || "—"}</p></div>
                                 {displayedHistoryRV.previousLead.is_lost_lead && (
-                                  <div className="col-span-2 sm:col-span-3">
-                                    <p className={`text-[10px] font-medium mb-0.5 ${theme.textFaint}`}>Lost Lead Reason</p>
-                                    <p className="font-semibold text-red-400">{displayedHistoryRV.previousLead.lost_lead_reason || "No reason recorded."}</p>
+                                  <div className="col-span-2 md:col-span-3 mt-2 p-3 rounded-xl bg-red-50 dark:bg-red-500/10 border border-red-100 dark:border-red-500/20">
+                                    <p className="text-[10px] font-bold uppercase tracking-widest mb-1 text-red-600 dark:text-red-400">Lost Lead Reason</p>
+                                    <p className="text-[12px] font-medium text-red-800 dark:text-red-200">{displayedHistoryRV.previousLead.lost_lead_reason || "No reason recorded."}</p>
                                   </div>
                                 )}
-                                {displayedHistoryRV.previousLead.closing_date && (
-                                  <div><p className={`text-[10px] font-medium mb-0.5 ${theme.textFaint}`}>Closing Date</p><p className={`font-semibold ${theme.text}`}>{formatDate(displayedHistoryRV.previousLead.closing_date)}</p></div>
-                                )}
                               </div>
-                            </div>
-                            <div className={`border-t pt-3 ${theme.tableBorder}`}>
-                              <p className="text-[10px] font-bold uppercase tracking-wider text-[#059669] mb-2">Sales Form</p>
-                              {displayedHistoryRV.historicalSalesForm ? (
-                                <div className={`rounded-lg p-3 border text-[11px] whitespace-pre-wrap leading-relaxed ${isDark ? "bg-[rgba(5,150,105,0.06)] border-[rgba(5,150,105,0.20)] text-gray-300" : "bg-white border-[rgba(5,150,105,0.20)] text-gray-700"}`}>
-                                  {displayedHistoryRV.historicalSalesForm.replace("📝 Detailed Salesform Submitted:\n", "").trim()}
-                                </div>
-                              ) : (
-                                <p className={`text-[11px] italic ${theme.textFaint}`}>No Sales Form data available.</p>
-                              )}
-                            </div>
-                            <div className={`border-t pt-3 ${theme.tableBorder}`}>
-                              <p className="text-[10px] font-bold uppercase tracking-wider text-[#059669] mb-2">Loan</p>
-                              {displayedHistoryRV.loan.length > 0 ? (
-                                <div className="flex flex-col gap-2">
-                                  {displayedHistoryRV.loan.map((l: any, idx: number) => (
-                                    <div key={l.id ?? idx} className={`rounded-lg p-3 border text-[11px] ${isDark ? "bg-[rgba(5,150,105,0.06)] border-[rgba(5,150,105,0.20)]" : "bg-white border-[rgba(5,150,105,0.20)]"}`}>
-                                      <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                                        <div><span className={theme.textFaint}>Status: </span><span className={`font-semibold ${theme.text}`}>{l.status || "—"}</span></div>
-                                        <div><span className={theme.textFaint}>Bank: </span><span className={`font-semibold ${theme.text}`}>{l.bankName || "—"}</span></div>
-                                        {l.amountRequested && <div><span className={theme.textFaint}>Requested: </span><span className={`font-semibold ${theme.text}`}>₹{Number(l.amountRequested).toLocaleString("en-IN")}</span></div>}
-                                        {l.amountApproved && <div><span className={theme.textFaint}>Approved: </span><span className={`font-semibold ${theme.text}`}>₹{Number(l.amountApproved).toLocaleString("en-IN")}</span></div>}
-                                        {l.cibil && <div><span className={theme.textFaint}>CIBIL: </span><span className={`font-semibold ${theme.text}`}>{l.cibil}</span></div>}
-                                        {l.empType && <div><span className={theme.textFaint}>Employment: </span><span className={`font-semibold ${theme.text}`}>{l.empType}</span></div>}
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : (
-                                <p className={`text-[11px] italic ${theme.textFaint}`}>No Loan data available.</p>
-                              )}
-                            </div>
-                            <div className={`border-t pt-3 ${theme.tableBorder}`}>
-                              <p className="text-[10px] font-bold uppercase tracking-wider text-[#059669] mb-2">Booking</p>
-                              {displayedHistoryRV.booking ? (
-                                <div className={`rounded-lg p-3 border text-[11px] ${isDark ? "bg-[rgba(5,150,105,0.06)] border-[rgba(5,150,105,0.20)]" : "bg-white border-[rgba(5,150,105,0.20)]"}`}>
-                                  <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                                    {displayedHistoryRV.booking.bookingNumber && <div><span className={theme.textFaint}>Booking #: </span><span className={`font-semibold ${theme.text}`}>{displayedHistoryRV.booking.bookingNumber}</span></div>}
-                                    {displayedHistoryRV.booking.bookingStatus && <div><span className={theme.textFaint}>Status: </span><span className={`font-semibold ${theme.text}`}>{displayedHistoryRV.booking.bookingStatus}</span></div>}
-                                    {displayedHistoryRV.booking.projectName && <div><span className={theme.textFaint}>Project: </span><span className={`font-semibold ${theme.text}`}>{displayedHistoryRV.booking.projectName}</span></div>}
-                                    {displayedHistoryRV.booking.flatNumber && <div><span className={theme.textFaint}>Flat: </span><span className={`font-semibold ${theme.text}`}>{displayedHistoryRV.booking.flatNumber}</span></div>}
-                                    {displayedHistoryRV.booking.agreementValue && <div><span className={theme.textFaint}>Agreement Value: </span><span className={`font-semibold ${theme.text}`}>₹{Number(displayedHistoryRV.booking.agreementValue).toLocaleString("en-IN")}</span></div>}
-                                    {displayedHistoryRV.booking.bookingAmount && <div><span className={theme.textFaint}>Booking Amount: </span><span className={`font-semibold ${theme.text}`}>₹{Number(displayedHistoryRV.booking.bookingAmount).toLocaleString("en-IN")}</span></div>}
-                                  </div>
-                                </div>
-                              ) : (
-                                <p className={`text-[11px] italic ${theme.textFaint}`}>No Booking available.</p>
-                              )}
-                            </div>
-                            <div className={`border-t pt-3 ${theme.tableBorder}`}>
-                              <p className="text-[10px] font-bold uppercase tracking-wider text-[#059669] mb-2">
-                                Historical Notes — before {new Date(displayedHistoryRV.cutoffAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
-                              </p>
-                              {displayedHistoryRV.followUps.length > 0 ? (
-                                <div className="flex flex-col gap-2 max-h-[280px] overflow-y-auto custom-scrollbar pr-1">
-                                  {displayedHistoryRV.followUps.map((f: any) => (
-                                    <div key={f.id} className={`rounded-lg p-2.5 border ${isDark ? "bg-[rgba(5,150,105,0.06)] border-[rgba(5,150,105,0.15)]" : "bg-white border-[rgba(5,150,105,0.18)]"}`}>
-                                      <div className="flex justify-between items-start mb-1 gap-2">
-                                        <span className="text-[11px] font-semibold text-[#059669]">{f.createdByName || "—"}</span>
-                                        <span className={`text-[10px] flex-shrink-0 ${theme.textFaint}`}>{new Date(f.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>
-                                      </div>
-                                      <p className={`text-[11px] leading-relaxed whitespace-pre-wrap ${theme.textMuted}`}>{f.message}</p>
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : (
-                                <p className={`text-[11px] italic ${theme.textFaint}`}>No historical notes before the revisit date.</p>
-                              )}
-                            </div>
-                            <p className={`text-[10px] italic text-center ${theme.textFaint}`}>
-                              READ ONLY — All data above is from a previous visit. New notes, Sales Form, Loan, and Booking belong to the current Revisit lead.
-                            </p>
+                            )}
                           </div>
-                        )}
-                      </div>
-                    )}
-
-                    <div className="flex flex-col lg:flex-row gap-2 sm:gap-3 flex-1 min-h-0 pb-2 w-full">
-                      {/* LEFT PANEL */}
-                      <div className="w-full lg:w-[50%] flex flex-col gap-2 lg:h-full pb-2 min-h-0">
-                        {showSalesForm ? (
-                          <div className={`rounded-xl border p-3 sm:p-5 shadow-xl flex flex-col lg:h-full ${theme.modalCard} ${theme.scroll}`}
-                            style={{ ...theme.modalGlass, overflowY: "auto", scrollbarWidth: "thin" }}>
-                            <div className={`flex justify-between items-center mb-3 sm:mb-4 border-b pb-2 sm:pb-3 ${theme.tableBorder}`}>
-                              <div>
-                                <h3 className={`text-base sm:text-lg font-bold ${theme.text}`}>Sales Data Form</h3>
-                                <p className={`text-[10px] sm:text-xs mt-0.5 ${theme.accentText}`}>Admin override — Lead #{selectedLead.id}</p>
-                              </div>
-                              <button type="button" onClick={() => setShowSalesForm(false)} className={`p-1 ${theme.textMuted}`}><FaTimes /></button>
-                            </div>
-                            <form onSubmit={handleSalesFormSubmit} className="flex flex-col gap-2 flex-1">
-                              {[{ label: "Property Type?", key: "propertyType", ph: "e.g. 1BHK, 2BHK" }, { label: "Preferred Location?", key: "location", ph: "e.g. Dombivali, Kalyan" }, { label: "Approximate Budget?", key: "budget", ph: "e.g. 5 cr" }].map(f => (
-                                <div key={f.key}><label className={`text-[10px] sm:text-xs mb-1 block ${theme.textMuted}`}>{f.label}</label>
-                                  <input type="text" placeholder={f.ph} value={(salesForm as any)[f.key]} onChange={e => setSalesForm({ ...salesForm, [f.key]: e.target.value })} className={`w-full rounded-lg px-3 py-2 sm:px-4 sm:py-2 text-[10px] sm:text-sm outline-none ${theme.inputInner} ${theme.text} ${theme.inputFocus}`} />
-                                </div>
-                              ))}
-                              <div className="grid grid-cols-2 gap-2 sm:gap-3">
-                                <div><label className={`text-[10px] sm:text-xs mb-1 block ${theme.textMuted}`}>Self-use or Investment?</label>
-                                  <select value={salesForm.useType} onChange={e => setSalesForm({ ...salesForm, useType: e.target.value })} className={`w-full rounded-lg px-2 py-1.5 sm:px-4 sm:py-2 text-[10px] sm:text-sm outline-none ${theme.select}`}>
-                                    <option value="">Select</option><option>Self Use</option><option>Investment</option>
-                                  </select>
-                                </div>
-                                <div><label className={`text-[10px] sm:text-xs mb-1 block ${theme.textMuted}`}>Planning to Purchase?</label>
-                                  <select value={salesForm.purchaseDate} onChange={e => setSalesForm({ ...salesForm, purchaseDate: e.target.value })} className={`w-full rounded-lg px-2 py-1.5 sm:px-4 sm:py-2 text-[10px] sm:text-sm outline-none ${theme.select}`}>
-                                    <option value="">Select</option><option>Immediate</option><option>Next 3 Months</option>
-                                  </select>
-                                </div>
-                              </div>
-                              <div className={`border-t pt-2 sm:pt-3 mt-1 ${theme.tableBorder}`}>
-                                <label className={`block text-[10px] sm:text-xs font-bold mb-1 sm:mb-1.5 ${theme.accentText}`}>Lead Interest Status *</label>
-                                <select required value={salesForm.leadStatus} onChange={e => setSalesForm({ ...salesForm, leadStatus: e.target.value })} className={`w-full rounded-lg px-3 py-2 sm:px-4 sm:py-2 text-[10px] sm:text-sm outline-none cursor-pointer ${theme.select}`}>
-                                  <option value="" disabled>Select Status</option><option>Interested</option><option>Not Interested</option><option>NON GENUINE DEMAND (NGD)</option>
-                                </select>
-                              </div>
-                              <div className={`border-t pt-2 sm:pt-3 mt-1 ${theme.tableBorder}`}>
-                                <label className={`block text-[10px] sm:text-xs font-bold mb-1 sm:mb-1.5 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>Loan Planned?</label>
-                                <select required value={salesForm.loanPlanned} onChange={e => setSalesForm({ ...salesForm, loanPlanned: e.target.value })} className={`w-full rounded-lg px-3 py-2 sm:px-4 sm:py-2 text-[10px] sm:text-sm outline-none cursor-pointer ${theme.select}`}>
-                                  <option value="" disabled>Select Option</option><option>Yes</option><option>No</option><option>Not Sure</option>
-                                </select>
-                              </div>
-                              <div className={`mt-2 border-t pt-2 sm:pt-3 ${theme.tableBorder}`}>
-                                <label className="text-[10px] sm:text-xs text-orange-500 font-bold mb-1 sm:mb-1.5 block">Schedule a Site Visit?</label>
-                                <input ref={inputRef} type="datetime-local" value={salesForm.siteVisit} onChange={e => setSalesForm({ ...salesForm, siteVisit: e.target.value })} onClick={() => inputRef.current?.showPicker()} className={`w-full rounded-lg px-3 py-2 sm:px-4 sm:py-2.5 text-[10px] sm:text-sm outline-none ${theme.inputInner} ${theme.text} focus:border-orange-500`} />
-                              </div>
-                              <button type="submit" className={`mt-auto w-full font-bold py-2.5 sm:py-3.5 text-xs sm:text-sm rounded-xl transition-colors flex-shrink-0 ${theme.btnPrimary}`}>Submit Salesform</button>
-                            </form>
-                          </div>
-                        ) : showLoanForm ? (
-                          <LoanDealForm
-                            lead={selectedLead}
-                            booking={loanDealBooking}
-                            loanUpdate={loanDealLatest}
-                            user={adminUser}
-                            isDark={isDark}
-                            t={theme}
-                            onCancel={() => setShowLoanForm(false)}
-                            onSuccess={() => {
-                              setShowLoanForm(false);
-                              showToast(`Loan & deal data saved for ${selectedLead.name}`);
-                              fetchLoanDealData(selectedLead.id);
-                              refetch();
-                            }}
-                          />
-                        ) : (
-                          <div className="flex flex-col lg:h-full animate-fadeIn">
-                            <div className={`flex items-center gap-1 sm:gap-2 mb-1 sm:mb-1 p-1 sm:p-1.5 rounded-xl flex-shrink-0 ${theme.tableWrap}`}>
-                              <button onClick={() => setDetailTab("personal")} className={`flex-1 py-1.5 sm:py-2 text-[10px] sm:text-sm font-bold rounded-lg transition-colors cursor-pointer ${detailTab === "personal" ? theme.btnPrimary : `${theme.textMuted} hover:opacity-80`}`}>Personal Information</button>
-                              <button onClick={() => setDetailTab("loan")} className={`flex-1 py-1.5 sm:py-2 text-[10px] sm:text-sm font-bold rounded-lg transition-colors cursor-pointer ${detailTab === "loan" ? theme.btnSecondary : `${theme.textMuted} hover:opacity-80`}`}>Loan Tracking</button>
-                            </div>
-                            <div className={`flex-1 overflow-y-auto custom-scrollbar rounded-xl p-3 sm:p-6 pt-2 min-h-[68vh] sm:pt-4 pb-4 shadow-lg border ${theme.chatPanel}`} style={theme.chatPanelGl}>
-                              {detailTab === "personal" ? (
-                                <div>
-                                  <div className="grid grid-cols-2 gap-y-4 sm:gap-y-6 gap-x-2 sm:gap-x-4 text-xs sm:text-sm">
-                                    <InlineContactField label="Email" value={selectedLead.email} fieldType="email" isDark={isDark} theme={theme} canEdit={adminUser?.role?.toLowerCase() === "admin"} onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "email", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, email: val || "N/A" })); showToast("Contact details updated successfully."); }} />
-                                    <InlineContactField label="Phone" value={selectedLead.phone} fieldType="tel" isDark={isDark} theme={theme} canEdit={adminUser?.role?.toLowerCase() === "admin"} mono onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "phone", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, phone: val })); showToast("Contact details updated successfully."); }} />
-                                    <InlineContactField label="Alt Phone" value={selectedLead.altPhone ?? selectedLead.alt_phone} fieldType="tel" isDark={isDark} theme={theme} canEdit={adminUser?.role?.toLowerCase() === "admin"} mono onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "alt_phone", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, altPhone: val, alt_phone: val })); showToast("Contact details updated successfully."); }} />
-                                    <div><p className={`text-[10px] sm:text-xs font-medium mb-0.5 sm:mb-1 ${theme.textMuted}`}>Lead Interest</p>
-                                      {selectedLead.leadInterestStatus && selectedLead.leadInterestStatus !== "Pending" ? <InterestBadge status={selectedLead.leadInterestStatus} isDark={isDark} /> : <p className={`font-semibold ${theme.text}`}>Pending</p>}
-                                    </div>
-                                    <div className="col-span-1"><p className={`text-[10px] sm:text-xs font-medium mb-0.5 sm:mb-1 ${theme.textMuted}`}>Loan Status</p>
-                                      {selectedLead.loanStatus && selectedLead.loanStatus !== "N/A" ? <div className="w-fit"><LoanStatusBadge status={selectedLead.loanStatus} isDark={isDark} /></div> : <p className={`font-semibold ${theme.text}`}>N/A</p>}
-                                    </div>
-                                    <div className="col-span-1"><p className={`text-[10px] sm:text-xs font-medium mb-0.5 sm:mb-1 ${theme.textMuted}`}>Backdated Entry</p><p className={`font-semibold ${theme.text}`}>{selectedLead.auto_date_enabled === false && selectedLead.enquiry_date ? formatDate(selectedLead.enquiry_date).split(",")[0] : "Null"}</p></div>
-                                    <div className="col-span-2"><p className={`text-[10px] sm:text-xs font-medium mb-0.5 sm:mb-1 ${theme.textMuted}`}>Residential Address</p><p className={`font-semibold ${theme.text}`}>{selectedLead.address && selectedLead.address !== "N/A" ? selectedLead.address : "Not Provided"}</p></div>
-                                    <div className="col-span-2"><InlineContactField label="Location" value={selectedLead.location} fieldType="text" isDark={isDark} theme={theme} canEdit={adminUser?.role?.toLowerCase() === "admin"} onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "location", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, location: val || "N/A" })); showToast("Contact details updated successfully."); }} /></div>
-                                    <div><p className={`text-[10px] sm:text-xs font-medium mb-0.5 sm:mb-1 ${theme.textMuted}`}>Budget</p><p className="text-green-500 font-bold">{selectedLead.salesBudget && selectedLead.salesBudget !== "Pending" ? selectedLead.salesBudget : selectedLead.budget}</p></div>
-                                    <div><p className={`text-[10px] sm:text-xs font-medium mb-0.5 sm:mb-1 ${theme.textMuted}`}>Property Type</p><p className={`font-semibold ${theme.text}`}>{selectedLead.propType || "Pending"}</p></div>
-                                    <div><p className={`text-[10px] sm:text-xs font-medium mb-0.5 sm:mb-1 ${theme.textMuted}`}>Type of Use</p><p className={`font-semibold ${theme.text}`}>{selectedLead.useType && selectedLead.useType !== "Pending" ? selectedLead.useType : (selectedLead.purpose || "N/A")}</p></div>
-                                    <div><p className={`text-[10px] sm:text-xs font-medium mb-0.5 sm:mb-1 ${theme.textMuted}`}>Planning to Buy?</p><p className={`font-semibold ${theme.text}`}>{selectedLead.planningPurchase || "Pending"}</p></div>
-                                    <div><p className={`text-[10px] sm:text-xs font-medium mb-0.5 sm:mb-1 ${theme.textMuted}`}>Loan Required?</p><p className={`font-semibold ${theme.text}`}>{loanDealLatest?.loan_required || selectedLead.loanPlanned || "Pending"}</p></div>
-                                    <div><p className={`text-[10px] sm:text-xs font-medium mb-0.5 sm:mb-1 ${theme.textMuted}`}>Status</p><p className={`font-semibold ${theme.accentText}`}>{selectedLead.status || "Assigned"}</p></div>
-                                    <div className={`col-span-2 p-3 sm:p-5 rounded-xl border ${isDark ? "border-[#9E217B]/20" : "border-[#9E217B]/20"} ${theme.settingsBg}`}>
-                                      <p className={`crm-eyebrow mb-0.5 sm:mb-1 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>📍 Site Visit Date</p>
-                                      <p className={`text-base sm:text-lg font-black ${theme.text}`}>{selectedLead.mongoVisitDate ? new Date(selectedLead.mongoVisitDate).toLocaleString("en-IN") : "Not Scheduled"}</p>
-                                    </div>
-                                    {selectedLead.closingDate && (
-                                      <div className={`col-span-2 p-3 sm:p-5 rounded-xl border ${isDark ? "bg-yellow-900/10 border-yellow-500/20" : "bg-amber-50 border-amber-200"}`}>
-                                        <p className="text-[10px] sm:text-xs font-bold text-amber-500 uppercase mb-0.5 sm:mb-1">Closing Date</p>
-                                        <p className={`text-base sm:text-lg font-black ${theme.text}`}>{new Date(selectedLead.closingDate).toLocaleString("en-IN")}</p>
-                                      </div>
-                                    )}
-                                  </div>
-                                  <div className={`mt-3 border rounded-xl p-3 sm:p-5 ${theme.settingsBg}`} style={theme.settingsBgGl}>
-                                    <h3 className={`crm-eyebrow mb-2 border-b pb-2 ${theme.sectionTitle} ${theme.sectionBorder}`}>
-                                      {selectedLead.source && selectedLead.source !== "N/A" ? `${selectedLead.source} Data` : "Source Data"}
-                                    </h3>
-                                    <div className="grid grid-cols-2 gap-2">
-                                      <div><p className={`text-[10px] sm:text-xs font-medium mb-0.5 sm:mb-1 ${theme.textFaint}`}>Primary Source</p><p className={`font-medium text-xs sm:text-sm ${theme.text}`}>{selectedLead.source || "N/A"}</p></div>
-                                      {selectedLead.source === "Others" && (<div><p className={`text-[10px] sm:text-xs font-medium mb-0.5 sm:mb-1 ${theme.textFaint}`}>Specified Name</p><p className={`font-medium text-xs sm:text-sm ${theme.text}`}>{selectedLead.sourceOther}</p></div>)}
-                                    </div>
-
-                                    {selectedLead.source === "Channel Partner" ? (
-                                      <div className={`mt-2 pt-2 border-t grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 ${theme.tableBorder}`}>
-                                        {[{ label: "CP Name", val: selectedLead.cpName || selectedLead.cp_name }, { label: "CP Company", val: selectedLead.cp_company || selectedLead.cpCompany }, { label: "CP Phone", val: selectedLead.cp_phone || selectedLead.cpPhone }].map(({ label, val }) => (
-                                          <div key={label}><p className={`text-[10px] sm:text-xs font-medium mb-0.5 sm:mb-1 ${theme.textFaint}`}>{label}</p><p className={`font-medium text-xs sm:text-sm ${theme.text}`}>{val || "N/A"}</p></div>
-                                        ))}
-                                      </div>
-                                    ) : selectedLead.source === "Referral" && selectedLead.referral_name ? (
-                                      <div className={`mt-2 pt-2 border-t grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 ${theme.tableBorder}`}>
-                                        <div>
-                                          <p className={`text-[10px] sm:text-xs font-medium mb-0.5 sm:mb-1 ${theme.textFaint}`}>Referred By</p>
-                                          <p className={`font-medium text-xs sm:text-sm ${theme.text}`}>{selectedLead.referral_name}</p>
-                                        </div>
-                                      </div>
-                                    ) : null}
-                                  </div>
-                                  <div className="mt-3">
-                                    <SiteVisitScheduler
-                                      lead={selectedLead}
-                                      adminUser={adminUser}
-                                      isDark={isDark}
-                                      theme={theme}
-                                      onSuccess={refetch}
-                                    />
-                                  </div>
-                                </div>
-                              ) : (
-                                <LoanDealView lead={selectedLead} booking={loanDealBooking} loanUpdate={loanDealLatest} isDark={isDark} t={theme} />
-                              )}
-                            </div>
-                            <div className="grid grid-cols-2 gap-2 sm:gap-3 mt-1 sm:mt-2 flex-shrink-0">
-                              <button className={`border flex flex-col items-center justify-center py-2 sm:py-3 rounded-xl transition-all cursor-pointer gap-1 ${isDark ? "bg-[#9E217B]/10 border-[#9E217B]/30 hover:bg-[#9E217B] text-[#d946a8] hover:text-white" : "bg-[#9E217B]/10 border-[#9E217B]/30 hover:bg-[#9E217B] text-[#9E217B] hover:text-white"}`}>
-                                <FaMicrophone className="text-sm sm:text-lg" /><span className="font-bold text-[9px] sm:text-[10px]">Browser Call</span>
-                              </button>
-                              <button onClick={() => setIsWaModalOpen(true)} className="bg-green-50 dark:bg-green-600/10 border border-green-200 dark:border-green-500/30 hover:bg-green-100 dark:hover:bg-green-600 text-green-600 dark:text-green-400 flex flex-col items-center justify-center py-2 sm:py-3 rounded-xl transition-all cursor-pointer gap-1">
-                                <FaWhatsapp className="text-sm sm:text-lg" /><span className="font-bold text-[9px] sm:text-[10px]">WhatsApp</span>
-                              </button>
-                              <CallingButtons leadId={selectedLead?.id ?? null} phone={selectedLead?.phone} leadName={selectedLead?.name} isDark={isDark} iconClass="text-sm sm:text-lg" paddingClass="py-2 sm:py-3" />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* RIGHT PANEL: Follow-ups panel (Scrollable and Stacked on Mobile) */}
-                      <div className={`w-full lg:w-[50%] flex flex-col border rounded-xl overflow-hidden shadow-2xl min-h-[500px] lg:h-full lg:min-h-0 ${theme.chatPanel}`} style={theme.chatPanelGl}>
-                        <div className={`p-3 sm:p-6 flex flex-col gap-2 sm:gap-3 flex-1 ${theme.chatArea} ${theme.scroll}`}
-                          style={{ overflowY: "auto", scrollbarWidth: "thin" }}>
-                          <div className="flex justify-start">
-                            <div className={`border rounded-xl rounded-tl-none p-3 sm:p-5 max-w-[90%] sm:max-w-[85%] shadow-md ${theme.fupDefault}`}>
-                              <div className="flex justify-between items-center mb-1 sm:mb-2 gap-2 sm:gap-3">
-                                <span className={`font-bold text-[10px] sm:text-sm ${theme.accentText}`}>System (Front Desk)</span>
-                                <span className={`text-[9px] sm:text-[10px] ${theme.textFaint}`}>{formatDate(selectedLead.created_at)}</span>
-                              </div>
-                              <EnquiryDetailsBubble lead={selectedLead} theme={theme} isDark={isDark} formatDateFn={formatDate} />
-                            </div>
-                          </div>
-                          {currentFollowUps.length === 0
-                            ? <p className={`text-center text-xs sm:text-sm py-6 sm:py-8 ${theme.textFaint}`}>No follow-up history yet.</p>
-                            : currentFollowUps.map((msg: any, idx: number) => {
-                              const isLoan = msg.message?.includes("🏦 Loan Update");
-                              const isSF = msg.message?.includes("📝 Detailed Salesform Submitted");
-                              const isClosing = msg.message?.includes("✅ Lead Marked as Closing");
-                              const bubble = isLoan ? theme.fupLoan : isSF ? theme.fupSalesform : isClosing ? theme.fupClosing : theme.fupDefault;
-                              return (
-                                <div key={idx} className="flex justify-start">
-                                  <div className={`rounded-xl rounded-tl-none p-3 sm:p-5 max-w-[95%] sm:max-w-[85%] shadow-lg ${bubble}`}>
-                                    <div className="flex justify-between items-center mb-1 sm:mb-3 gap-2 sm:gap-3">
-                                      <span className={`font-bold text-xs sm:text-sm ${theme.text}`}>{msg.createdBy === "admin" ? `${msg.salesManagerName || "Admin"} (Admin)` : msg.createdBy === "receptionist" ? `${msg.salesManagerName} (Receptionist)` : msg.salesManagerName}</span>
-                                      <span className={`text-[9px] sm:text-[10px] flex items-center gap-1 ${theme.textFaint}`}>
-                                        {formatDate(msg.createdAt)}
-                                        {(msg.followUpType === "internal_message" || msg.followUpType === "sm_reply") && msg._status !== "sending" && msg._status !== "failed" && (
-                                          msg.readAt
-                                            ? <span className="text-blue-500 font-bold ml-0.5" title="Read">&#10003;&#10003;</span>
-                                            : <span className="opacity-60 ml-0.5" title="Sent">&#10003;</span>
-                                        )}
-                                      </span>
-                                    </div>
-                                    {msg.followUpType === "call" ? (
-                                      <ManualCallBubble message={msg.message} createdAt={msg.createdAt} textClass={theme.text} onRecordingDeleted={refetch} />
-                                    ) : (
-                                      <p className={`text-xs sm:text-sm whitespace-pre-wrap leading-relaxed ${theme.text}`}>{msg.message}</p>
-                                    )}
-                                    <FollowUpAttachments followUpId={Number(msg._id)} textClass={theme.text} onDeleted={refetch} />
-                                    {canDeleteFollowUps && msg._id && msg._status !== "sending" && msg._status !== "failed" && (
-                                      <button
-                                        type="button"
-                                        disabled={deletingFollowUpId === String(msg._id)}
-                                        onClick={() => setConfirmDeleteFollowUpId(String(msg._id))}
-                                        className={`mt-1 text-[9px] font-medium transition-opacity ${isDark ? "text-red-400 hover:text-red-300" : "text-red-500 hover:text-red-600"} disabled:opacity-40`}
-                                      >
-                                        {deletingFollowUpId === String(msg._id) ? "Deleting…" : "Delete"}
-                                      </button>
-                                    )}
-                                    {msg._status === "sending" && <span className="text-[9px] text-yellow-500 mt-1 block">Sending...</span>}
-                                    {msg._status === "failed" && (
-                                      <span className="text-[9px] text-red-500 mt-1 flex items-center gap-1">Failed to send
-                                        <button type="button" onClick={() => { setCustomNote(msg.message); removeFollowUp(msg._clientMessageId, String(msg.leadId)); }} className="underline hover:text-red-400">Retry</button>
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          <div ref={followUpEndRef} />
                         </div>
-                        {confirmDeleteFollowUpId && (
-                          <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60">
-                            <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl overflow-hidden mx-4">
-                              <div className="px-5 py-4 border-b border-gray-100">
-                                <h3 className="font-bold text-sm text-gray-900">Delete follow-up?</h3>
-                              </div>
-                              <div className="px-5 py-4">
-                                <p className="text-sm text-gray-600 leading-relaxed">This will permanently delete this follow-up note and any attached files from storage. This action cannot be undone.</p>
-                              </div>
-                              <div className="flex gap-2 px-5 py-3 border-t border-gray-100 bg-gray-50">
-                                <button type="button" onClick={() => setConfirmDeleteFollowUpId(null)} className="flex-1 px-3 py-2 text-xs font-bold rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-100 transition">Cancel</button>
-                                <button type="button" onClick={() => { handleDeleteFollowUp(confirmDeleteFollowUpId!); setConfirmDeleteFollowUpId(null); }} className="flex-1 px-3 py-2 text-xs font-bold rounded-xl bg-red-600 text-white hover:bg-red-700 transition">Delete</button>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                        <FollowUpComposer value={customNote} onChange={setCustomNote} onSubmit={handleSendCustomNote} pendingFiles={attView.pendingFiles} fileError={attView.fileError} onAddFiles={attView.addFiles} onRemoveFile={attView.removeFile} onReminderClick={() => setShowReminderModal(true)} isDark={isDark} theme={theme} placeholder="Add admin note..." />
-                      </div>
-                    </div>
-                  </div>
+                      )}
+                      renderAfterPersonalInfo={() => (
+                        <div className="mt-3">
+                          <SiteVisitScheduler lead={selectedLead} adminUser={adminUser} isDark={isDark} theme={theme} onSuccess={refetch} />
+                        </div>
+                      )}
+                      formatDate={formatDate}
+                    />
+                  </LeadDetailsLayout>
                 </div>
               )
             )}
@@ -8020,6 +7082,13 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
             {subView === "list" && (
               <div className={`flex-1 overflow-y-auto p-2 sm:p-4 ${theme.scroll}`}>
                 <div className="animate-fadeIn space-y-3 sm:space-y-4">
+                  <button
+                    type="button"
+                    onClick={() => { setSelectedReceptionist(null); setSubView("list"); setSelectedLead(null); setIsEnquiryView(false); }}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] sm:text-xs font-bold transition-colors cursor-pointer ${theme.textMuted} ${theme.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}
+                  >
+                    <FaChevronLeft className="text-[10px]" /> Back to Receptionists
+                  </button>
                   {/* Stats row */}
                   <div className="grid grid-cols-3 gap-2">
                     {sections.map(sec => (
