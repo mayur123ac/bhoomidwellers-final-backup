@@ -4,14 +4,13 @@
 // can never show numbers the subsequent POST would reject. No transaction: nothing
 // is written.
 import { NextRequest, NextResponse } from "next/server";
-import { getPool } from "@/lib/db";
+import { transaction } from "@/lib/db";
 import { previewCPCommission, previewCommissionForPartner, CPCommissionError } from "@/lib/cpCommissionEngine";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
-  const client = await getPool().connect();
   try {
     const gate = await requireSession();
     if (!gate.ok) return gate.response;
@@ -35,13 +34,17 @@ export async function POST(req: NextRequest) {
     const cpId = Number(body.channelPartnerId ?? body.channel_partner_id);
 
     if (bookingId && !Number.isNaN(bookingId)) {
-      const data = await previewCPCommission(client, bookingId, override);
+      const data = await transaction(async (client) =>
+        previewCPCommission(client, bookingId, override)
+      );
       return NextResponse.json({ success: true, data }, { status: 200 });
     }
 
     if (cpId && !Number.isNaN(cpId)) {
       const agreementValue = body.agreementValue ?? body.agreement_value ?? null;
-      const data = await previewCommissionForPartner(client, cpId, agreementValue, override);
+      const data = await transaction(async (client) =>
+        previewCommissionForPartner(client, cpId, agreementValue, override)
+      );
       return NextResponse.json({ success: true, data }, { status: 200 });
     }
 
@@ -58,7 +61,5 @@ export async function POST(req: NextRequest) {
     }
     console.error("[POST /api/cp-commissions/preview]", err);
     return NextResponse.json({ success: false, message: err.message }, { status: 500 });
-  } finally {
-    client.release();
   }
 }

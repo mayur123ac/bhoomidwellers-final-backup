@@ -24,8 +24,17 @@ import {
   IoBusinessOutline,
   IoCheckmarkCircleOutline,
   IoListOutline,
-  IoChevronForwardOutline
+  IoChevronForwardOutline,
+  IoImageOutline,
+  IoDownloadOutline,
+  IoCloudUploadOutline,
+  IoTrashOutline,
 } from "react-icons/io5";
+import {
+  isImageMime, formatFileSize, fileExtLabel,
+  ALLOWED_MIME_TYPES, MAX_FILE_SIZE, MAX_FILES_PER_SEND,
+} from "@/lib/cpChatAttachments";
+import dynamic from "next/dynamic";
 import BookingApplicationView from "./BookingApplicationView";
 import { useCpResource } from "@/lib/hooks/useCpResource";
 import {
@@ -34,6 +43,8 @@ import {
   CpChatDetailsSkeleton,
   CpChatCardListSkeleton,
 } from "./cp/CpSkeletons";
+
+const CpCameraCapture = dynamic(() => import("./cp/CpCameraCapture"), { ssr: false });
 
 /** Who generated a message, resolved server-side from the persisted creator. */
 type Sender = {
@@ -51,6 +62,23 @@ type Sender = {
  * event kinds are projected by the API from the authoritative tables and carry
  * only the fields a Channel Partner is allowed to see.
  */
+/** Attachment metadata returned by the API. */
+type ChatAttachment = {
+  key: string;
+  name: string;
+  type: string;
+  size: number;
+  url: string;
+};
+
+/** Location metadata from camera capture. */
+type CaptureLocation = {
+  latitude: number;
+  longitude: number;
+  accuracy: number | null;
+  captureTimestamp: string | null;
+};
+
 type ChatItem = {
   id: string;
   ts: number;
@@ -80,6 +108,14 @@ type ChatItem = {
   gps?: string;
   notes?: string;
   hasPhoto?: boolean;
+  // attachment
+  attachment?: ChatAttachment | null;
+  /** Grouped attachments (assembled client-side from consecutive attachment rows). */
+  _groupedAttachments?: ChatAttachment[];
+  /** Upload progress (0-100) for pending messages */
+  uploadProgress?: number;
+  /** Location metadata from camera capture */
+  captureLocation?: CaptureLocation | null;
 };
 
 const ts = (v: any) => (v ? new Date(v).getTime() : 0);
@@ -151,9 +187,63 @@ const NO_PARTNERS: PartnerRailRow[] = [];
  * API's allow-list, and there is still no drill-through to the booking form or
  * the lead record.
  */
+/** Inline image preview with lightbox click. */
+function AttachmentImage({ att, isDark, onLightbox }: {
+  att: ChatAttachment; isDark: boolean; onLightbox: (url: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onLightbox(att.url)}
+      className="block rounded-xl overflow-hidden max-w-[280px] hover:opacity-90 transition-opacity cursor-pointer"
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={att.url}
+        alt={att.name}
+        loading="lazy"
+        className="w-full h-auto max-h-[300px] object-cover rounded-xl"
+      />
+    </button>
+  );
+}
+
+/** Document attachment card. */
+function AttachmentDoc({ att, isDark, cpId }: {
+  att: ChatAttachment; isDark: boolean; cpId?: number;
+}) {
+  const bgSubtle = isDark ? "bg-[#2C2C2E]" : "bg-[#F2F2F7]";
+  const textPrimary = isDark ? "text-white" : "text-[#1D1D1F]";
+  const textSecondary = isDark ? "text-[#98989D]" : "text-[#86868B]";
+  const ext = fileExtLabel(att.name);
+  const extColor = ext === "PDF" ? "text-red-500" : ext === "DOC" || ext === "DOCX" ? "text-blue-500" : "text-green-600";
+
+  return (
+    <div className={`flex items-center gap-3 rounded-xl p-3 min-w-[200px] max-w-[300px] ${bgSubtle}`}>
+      <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${isDark ? "bg-[#38383A]" : "bg-[#E5E5EA]"}`}>
+        <span className={`text-[11px] font-bold ${extColor}`}>{ext}</span>
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className={`text-[13px] font-medium truncate ${textPrimary}`}>{att.name}</p>
+        <p className={`text-[11px] ${textSecondary}`}>{ext} &middot; {formatFileSize(att.size)}</p>
+      </div>
+      <a
+        href={att.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        download={att.name}
+        className={`flex-shrink-0 p-1.5 rounded-full transition-colors ${isDark ? "hover:bg-white/10" : "hover:bg-black/5"} ${textSecondary}`}
+        onClick={e => e.stopPropagation()}
+      >
+        <IoDownloadOutline size={16} />
+      </a>
+    </div>
+  );
+}
+
 const ChatMessage = React.memo(function ChatMessage({
-  m, newDay, isDark,
-}: { m: ChatItem; newDay: boolean; isDark: boolean }) {
+  m, newDay, isDark, onLightbox, cpId,
+}: { m: ChatItem; newDay: boolean; isDark: boolean; onLightbox: (url: string) => void; cpId?: number }) {
   const bgPanel = isDark ? "bg-[#1C1C1E]" : "bg-[#FFFFFF]";
   const bgSubtle = isDark ? "bg-[#2C2C2E]" : "bg-[#F2F2F7]";
   const borderSubtle = isDark ? "border-[#38383A]" : "border-[#E5E5EA]";
@@ -161,6 +251,13 @@ const ChatMessage = React.memo(function ChatMessage({
   const textSecondary = isDark ? "text-[#98989D]" : "text-[#86868B]";
   const accentBg = isDark ? "bg-[#FF3797]" : "bg-[#9E217B]";
   const rowStyles = { labelCls: textSecondary, valueCls: textPrimary };
+
+  // Collect all attachments (single or grouped)
+  const attachments: ChatAttachment[] = m._groupedAttachments
+    || (m.attachment ? [m.attachment] : []);
+  const images = attachments.filter(a => isImageMime(a.type));
+  const docs = attachments.filter(a => !isImageMime(a.type));
+  const hasAttachments = attachments.length > 0;
 
   return (
     <div className="w-full">
@@ -175,22 +272,80 @@ const ChatMessage = React.memo(function ChatMessage({
       {m.kind === "text" || m.kind === "attachment" ? (
         <div className={`flex w-full ${m.mine ? "justify-end" : "justify-start"} group`}>
           <div className={`max-w-[75%] flex flex-col ${m.mine ? "items-end" : "items-start"}`}>
-            {/* Attribution: Role · Employee Name, above every
-                incoming message. Suppressed on your own
-                messages, where it would only repeat you. */}
             {!m.mine && m.sender?.label && (
               <span className={`text-[11px] font-medium mb-1 px-1 ${toneOf(m.sender).text}`}>
                 {m.sender.label}
               </span>
             )}
-            <div className={`px-4 py-2.5 flex flex-col relative ${m.mine
-              ? `rounded-2xl rounded-tr-sm ${accentBg} text-white`
+
+            {/* Upload progress */}
+            {m.pending && m.uploadProgress != null && m.uploadProgress < 100 && (
+              <div className={`w-full mb-1 rounded-full h-1 overflow-hidden ${isDark ? "bg-[#38383A]" : "bg-[#E5E5EA]"}`}>
+                <div
+                  className={`h-full rounded-full transition-all ${isDark ? "bg-[#FF3797]" : "bg-[#9E217B]"}`}
+                  style={{ width: `${m.uploadProgress}%` }}
+                />
+              </div>
+            )}
+
+            <div className={`flex flex-col relative overflow-hidden ${m.mine
+              ? `rounded-2xl rounded-tr-sm ${hasAttachments && images.length > 0 ? '' : accentBg} text-white`
               : `rounded-2xl rounded-tl-sm ${isDark ? 'bg-[#2C2C2E] text-white' : 'bg-[#E5E5EA] text-[#1D1D1F]'}`
               }`} style={{ opacity: m.pending ? 0.6 : 1 }}>
-              <p className="text-[15px] leading-snug whitespace-pre-wrap break-words">
-                {m.text}
-              </p>
-              <div className={`self-end flex items-center gap-1 text-[10px] mt-1 ${m.mine ? 'text-white/70' : textSecondary}`}>
+
+              {/* Image attachments */}
+              {images.length > 0 && (
+                <div className={`${images.length === 1 ? '' : 'grid gap-1'} ${
+                  images.length === 2 ? 'grid-cols-2' :
+                  images.length >= 3 ? 'grid-cols-2' : ''
+                } ${m.mine ? accentBg : ''}`}
+                style={{ padding: images.length > 0 ? '3px' : undefined }}
+                >
+                  {images.map((img, i) => (
+                    <AttachmentImage key={img.key || i} att={img} isDark={isDark} onLightbox={onLightbox} />
+                  ))}
+                </div>
+              )}
+
+              {/* Document attachments */}
+              {docs.length > 0 && (
+                <div className={`flex flex-col gap-1.5 ${images.length > 0 ? 'px-3 pt-2' : 'px-3 pt-2.5'} ${!m.text ? 'pb-1' : ''}`}>
+                  {docs.map((doc, i) => (
+                    <AttachmentDoc key={doc.key || i} att={doc} isDark={isDark} cpId={cpId} />
+                  ))}
+                </div>
+              )}
+
+              {/* Text content */}
+              {m.text ? (
+                <div className={`${hasAttachments ? 'px-4 pt-2 pb-2.5' : 'px-4 py-2.5'} ${
+                  !hasAttachments && m.mine ? accentBg : ''
+                }`}>
+                  <p className="text-[15px] leading-snug whitespace-pre-wrap break-words">
+                    {m.text}
+                  </p>
+                </div>
+              ) : null}
+
+              {/* Location metadata */}
+              {m.captureLocation && (
+                <div className={`px-4 pt-1.5 flex items-center gap-1.5 text-[10px] ${m.mine ? 'text-white/60' : textSecondary}`}>
+                  <IoLocationOutline size={10} />
+                  <a
+                    href={`https://maps.google.com/?q=${m.captureLocation.latitude},${m.captureLocation.longitude}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:underline"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    {m.captureLocation.latitude.toFixed(5)}, {m.captureLocation.longitude.toFixed(5)}
+                    {m.captureLocation.accuracy != null && m.captureLocation.accuracy < 100 && ` (~${Math.round(m.captureLocation.accuracy)}m)`}
+                  </a>
+                </div>
+              )}
+
+              {/* Timestamp footer */}
+              <div className={`px-4 pb-2 ${!m.text && !hasAttachments && !m.captureLocation ? 'pt-2' : ''} self-end flex items-center gap-1 text-[10px] ${m.mine ? 'text-white/70' : textSecondary}`}>
                 <span>{m.pending ? "Sending..." : fmtClock(m.ts)}</span>
                 {m.mine && !m.pending && <IoCheckmarkDoneOutline size={12} />}
               </div>
@@ -198,10 +353,7 @@ const ChatMessage = React.memo(function ChatMessage({
           </div>
         </div>
       ) : (
-        /* CRM event card. Every field rendered below comes
-           from the API's allow-list — there is no drill-through
-           to the full booking form or lead record, because
-           those carry phone, PAN, Aadhaar and money. */
+        /* CRM event card — unchanged */
         <div className="flex justify-center my-4 w-full">
           <div className={`w-full max-w-sm rounded-2xl p-4 flex flex-col gap-3 shadow-sm border ${bgPanel} ${borderSubtle}`}>
             <div className="flex items-center gap-3">
@@ -241,9 +393,6 @@ const ChatMessage = React.memo(function ChatMessage({
                   {m.notes && <Row label="Notes" value={m.notes} {...rowStyles} />}
                 </>
               )}
-
-              {/* SITE VISIT UPDATE — customer, lead, status,
-                  feedback. No phone, no email, nothing else. */}
               {m.kind === "customer_update" && (
                 <>
                   <Row label="Customer" value={m.customer} {...rowStyles} />
@@ -252,8 +401,6 @@ const ChatMessage = React.memo(function ChatMessage({
                   <Row label="Feedback" value={m.feedback} {...rowStyles} />
                 </>
               )}
-
-              {/* BOOKING CARD — the approved fields only. */}
               {m.kind === "booking_update" && (
                 <>
                   <Row label="Booking ID" value={m.bookingNo} {...rowStyles} />
@@ -287,27 +434,98 @@ const ChatMessage = React.memo(function ChatMessage({
  * `onSend` rejects when the message did not go: the draft is put back so
  * nothing typed is lost, which is what the panel used to do.
  */
+/** Staged file for attachment preview. */
+type StagedFile = {
+  file: File;
+  id: string;
+  previewUrl?: string;
+};
+
 const Composer = React.memo(function Composer({
-  isDark, onSend,
+  isDark, onSend, onSendWithFiles, onOpenCamera,
 }: {
   isDark: boolean;
   onSend: (text: string) => Promise<void>;
+  onSendWithFiles: (text: string, files: File[]) => Promise<void>;
+  onOpenCamera: () => void;
 }) {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState("");
+  const [staged, setStaged] = useState<StagedFile[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   const bgApp = isDark ? "bg-[#000000]" : "bg-[#F5F5F7]";
   const bgPanel = isDark ? "bg-[#1C1C1E]" : "bg-[#FFFFFF]";
+  const bgSubtle = isDark ? "bg-[#2C2C2E]" : "bg-[#F2F2F7]";
   const borderSubtle = isDark ? "border-[#38383A]" : "border-[#E5E5EA]";
   const textPrimary = isDark ? "text-white" : "text-[#1D1D1F]";
+  const textSecondary = isDark ? "text-[#98989D]" : "text-[#86868B]";
+
+  const addFiles = useCallback((fileList: FileList | null) => {
+    if (!fileList) return;
+    const incoming = Array.from(fileList);
+    const errors: string[] = [];
+
+    setStaged(prev => {
+      const total = prev.length + incoming.length;
+      if (total > MAX_FILES_PER_SEND) {
+        errors.push(`Maximum ${MAX_FILES_PER_SEND} files at a time.`);
+        return prev;
+      }
+      const added: StagedFile[] = [];
+      for (const file of incoming) {
+        if (file.size > MAX_FILE_SIZE) {
+          errors.push(`"${file.name}" exceeds 10 MB.`);
+          continue;
+        }
+        if (!ALLOWED_MIME_TYPES.has(file.type)) {
+          errors.push(`"${file.name}" is not a supported file type.`);
+          continue;
+        }
+        const previewUrl = isImageMime(file.type) ? URL.createObjectURL(file) : undefined;
+        added.push({ file, id: `${Date.now()}_${Math.random().toString(36).slice(2)}`, previewUrl });
+      }
+      if (errors.length > 0) setSendError(errors.join(" "));
+      return [...prev, ...added];
+    });
+  }, []);
+
+  const removeStaged = useCallback((id: string) => {
+    setStaged(prev => {
+      const item = prev.find(s => s.id === id);
+      if (item?.previewUrl) URL.revokeObjectURL(item.previewUrl);
+      return prev.filter(s => s.id !== id);
+    });
+  }, []);
+
+  // Cleanup blob URLs on unmount
+  useEffect(() => {
+    return () => {
+      staged.forEach(s => { if (s.previewUrl) URL.revokeObjectURL(s.previewUrl); });
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const canSend = (draft.trim() || staged.length > 0) && !sending;
 
   const submit = async () => {
+    if (!canSend) return;
     const text = draft.trim();
-    if (!text || sending) return;
+    const files = staged.map(s => s.file);
     setDraft(""); setSending(true); setSendError("");
+
+    // Clear staged files (revoke URLs)
+    staged.forEach(s => { if (s.previewUrl) URL.revokeObjectURL(s.previewUrl); });
+    setStaged([]);
+
     try {
-      await onSend(text);
+      if (files.length > 0) {
+        await onSendWithFiles(text, files);
+      } else {
+        await onSend(text);
+      }
     } catch (e: any) {
       setDraft(text);
       setSendError(e?.message || "Message could not be sent.");
@@ -321,9 +539,87 @@ const Composer = React.memo(function Composer({
       {sendError && (
         <p className="text-[11px] mb-2 text-red-500 font-medium ml-2">{sendError}</p>
       )}
-      {/* iMessage style composer pill. No longer gated on the partner
-          having an enquiry — messages are partner-scoped now. */}
+
+      {/* Staged files preview strip */}
+      {staged.length > 0 && (
+        <div className={`flex gap-2 mb-2 overflow-x-auto pb-1 custom-scrollbar`}>
+          {staged.map(s => (
+            <div
+              key={s.id}
+              className={`relative flex-shrink-0 rounded-xl overflow-hidden border ${borderSubtle} ${bgSubtle}`}
+            >
+              {s.previewUrl ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img src={s.previewUrl} alt={s.file.name}
+                  className="w-20 h-20 object-cover" />
+              ) : (
+                <div className="w-20 h-20 flex flex-col items-center justify-center px-1">
+                  <span className="text-[10px] font-bold text-blue-500">{fileExtLabel(s.file.name)}</span>
+                  <span className={`text-[9px] mt-0.5 truncate max-w-full ${textSecondary}`}>{s.file.name}</span>
+                </div>
+              )}
+              <button
+                onClick={() => removeStaged(s.id)}
+                className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80"
+              >
+                <IoCloseOutline size={12} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Composer pill */}
       <div className={`flex items-end gap-2 rounded-3xl px-3 py-1.5 transition-all border ${bgPanel} ${borderSubtle}`}>
+        {/* Attachment button */}
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={sending}
+          className={`flex items-center justify-center w-8 h-8 self-center rounded-full transition-colors ${textSecondary} ${isDark ? "hover:bg-white/10" : "hover:bg-black/5"} disabled:opacity-40`}
+          title="Attach files"
+        >
+          <IoAttachOutline size={18} />
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept=".jpg,.jpeg,.png,.webp,.gif,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
+          className="hidden"
+          onChange={e => { addFiles(e.target.files); e.target.value = ""; }}
+        />
+
+        {/* Photo button */}
+        <button
+          type="button"
+          onClick={() => imageInputRef.current?.click()}
+          disabled={sending}
+          className={`flex items-center justify-center w-8 h-8 self-center rounded-full transition-colors ${textSecondary} ${isDark ? "hover:bg-white/10" : "hover:bg-black/5"} disabled:opacity-40`}
+          title="Send photos"
+        >
+          <IoImageOutline size={18} />
+        </button>
+        <input
+          ref={imageInputRef}
+          type="file"
+          multiple
+          accept="image/jpeg,image/png,image/webp,image/gif"
+          className="hidden"
+          onChange={e => { addFiles(e.target.files); e.target.value = ""; }}
+        />
+
+        {/* Camera button */}
+        <button
+          type="button"
+          onClick={onOpenCamera}
+          disabled={sending}
+          className={`flex items-center justify-center w-8 h-8 self-center rounded-full transition-colors ${textSecondary} ${isDark ? "hover:bg-white/10" : "hover:bg-black/5"} disabled:opacity-40`}
+          title="Take photo"
+        >
+          <IoCameraOutline size={18} />
+        </button>
+
         <textarea
           rows={1} value={draft}
           disabled={sending}
@@ -333,8 +629,8 @@ const Composer = React.memo(function Composer({
           className={`flex-1 bg-transparent outline-none resize-none text-[15px] max-h-24 py-2 disabled:cursor-not-allowed leading-snug ${textPrimary} placeholder:text-[#86868B]`}
         />
 
-        <button onClick={submit} disabled={!draft.trim() || sending}
-          className={`flex items-center justify-center w-8 h-8 self-center rounded-full text-white transition-all ${!draft.trim() || sending
+        <button onClick={submit} disabled={!canSend}
+          className={`flex items-center justify-center w-8 h-8 self-center rounded-full text-white transition-all ${!canSend
             ? "bg-[#D1D1D6] dark:bg-[#38383A]"
             : "bg-[#007AFF] hover:scale-105"
             }`}>
@@ -378,6 +674,8 @@ function CpChatPanel({
   // them — an event card carries its approved fields and nothing more.
   const [viewBooking, setViewBooking] = useState<any>(null);
   const [viewEnquiry, setViewEnquiry] = useState<any>(null);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
   // --- Style Tokens (Apple-inspired) ---
@@ -492,10 +790,41 @@ function CpChatPanel({
   // Memoised: copying and re-sorting the whole thread on every render made every
   // composer keystroke O(n log n), and produced a new array identity each time,
   // which is what the scroll-to-bottom effect below keys off.
-  const thread: ChatItem[] = useMemo(
-    () => [...(chat?.messages || []), ...pending].sort((a: ChatItem, b: ChatItem) => a.ts - b.ts),
-    [chat?.messages, pending]
-  );
+  const thread: ChatItem[] = useMemo(() => {
+    const sorted = [...(chat?.messages || []), ...pending].sort(
+      (a: ChatItem, b: ChatItem) => a.ts - b.ts
+    );
+
+    // Group consecutive attachment messages from the same sender (within 2s)
+    // into one visual item with _groupedAttachments.
+    const grouped: ChatItem[] = [];
+    for (let i = 0; i < sorted.length; i++) {
+      const m = sorted[i];
+      if (m.kind === "attachment" && m.attachment && !m.pending) {
+        // Check if previous grouped item can absorb this one
+        const prev = grouped.length > 0 ? grouped[grouped.length - 1] : null;
+        if (
+          prev &&
+          prev.kind === "attachment" &&
+          prev.mine === m.mine &&
+          (prev as any).senderUserId != null &&
+          (prev as any).senderUserId === (m as any).senderUserId &&
+          Math.abs(prev.ts - m.ts) < 2000
+        ) {
+          // Merge into previous group
+          if (!prev._groupedAttachments) {
+            prev._groupedAttachments = prev.attachment ? [prev.attachment] : [];
+          }
+          prev._groupedAttachments.push(m.attachment);
+          // Append text if this row carries text too
+          if (m.text && !prev.text) prev.text = m.text;
+          continue;
+        }
+      }
+      grouped.push({ ...m });
+    }
+    return grouped;
+  }, [chat?.messages, pending]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -531,6 +860,80 @@ function CpChatPanel({
     } catch (e: any) {
       setPending(p => p.filter(m => m.id !== optimistic.id));
       throw new Error(e?.message || "Message could not be sent.");
+    }
+  }, [cpId, user?.name, fetchChat]);
+
+  /** Send a message with file attachments via multipart/form-data. */
+  const sendWithFiles = useCallback(async (text: string, files: File[]) => {
+    if (cpId == null) return;
+    const optimisticId = `p${Date.now()}`;
+    const optimistic: ChatItem = {
+      id: optimisticId, ts: Date.now(), kind: "attachment",
+      sender: { role: "", name: user?.name || "You", label: user?.name || "You", tone: "magenta", system: false },
+      mine: true, text: text || `Sending ${files.length} file${files.length > 1 ? "s" : ""}...`,
+      pending: true, uploadProgress: 0,
+    };
+    setPending(p => [...p, optimistic]);
+
+    try {
+      const formData = new FormData();
+      if (text) formData.append("text", text);
+      for (const file of files) formData.append("files", file);
+
+      const res = await fetch(`/api/channel-partners/${cpId}/chat`, {
+        method: "POST",
+        body: formData,
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.message || "Upload failed.");
+      await fetchChat(cpId);
+    } catch (e: any) {
+      setPending(p => p.filter(m => m.id !== optimisticId));
+      throw new Error(e?.message || "Files could not be sent.");
+    }
+  }, [cpId, user?.name, fetchChat]);
+
+  /** Send a camera-captured photo with GPS metadata via the dedicated attachments API. */
+  const sendWithCamera = useCallback(async (result: {
+    originalFile: File; watermarkedFile: File; previewUrl: string;
+    location: { latitude: number; longitude: number; accuracy: number; timestamp: number; address: string | null } | null;
+    captureTimestampISO: string; employeeName: string;
+  }) => {
+    if (cpId == null) return;
+    setCameraOpen(false);
+
+    const optimisticId = `p${Date.now()}`;
+    const optimistic: ChatItem = {
+      id: optimisticId, ts: Date.now(), kind: "attachment",
+      sender: { role: "", name: user?.name || "You", label: user?.name || "You", tone: "magenta", system: false },
+      mine: true, text: "", pending: true, uploadProgress: 0,
+    };
+    setPending(p => [...p, optimistic]);
+
+    try {
+      const formData = new FormData();
+      // Send both original and watermarked files
+      formData.append("files", result.watermarkedFile);
+      formData.append("originalFile", result.originalFile);
+      formData.append("captureTimestamp", result.captureTimestampISO);
+      if (result.location) {
+        formData.append("latitude", String(result.location.latitude));
+        formData.append("longitude", String(result.location.longitude));
+        formData.append("accuracy", String(result.location.accuracy));
+      }
+
+      const res = await fetch(`/api/channel-partners/${cpId}/chat/attachments`, {
+        method: "POST",
+        body: formData,
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.message || "Upload failed.");
+      // Revoke the preview blob URL
+      if (result.previewUrl) URL.revokeObjectURL(result.previewUrl);
+      await fetchChat(cpId);
+    } catch (e: any) {
+      setPending(p => p.filter(m => m.id !== optimisticId));
+      console.error("[sendWithCamera]", e?.message);
     }
   }, [cpId, user?.name, fetchChat]);
 
@@ -895,7 +1298,7 @@ function CpChatPanel({
                     {thread.map((m, i) => {
                       const prev = thread[i - 1];
                       const newDay = !prev || fmtDay(prev.ts) !== fmtDay(m.ts);
-                      return <ChatMessage key={m.id} m={m} newDay={newDay} isDark={isDark} />;
+                      return <ChatMessage key={m.id} m={m} newDay={newDay} isDark={isDark} onLightbox={setLightboxUrl} cpId={cpId ?? undefined} />;
                     })}
                     <div ref={endRef} className="h-4" />
                   </div>
@@ -938,7 +1341,7 @@ function CpChatPanel({
             </div>
 
             {/* COMPOSER — owns its own draft; see <Composer> above. */}
-            {activeTab === "chat" && <Composer isDark={isDark} onSend={send} />}
+            {activeTab === "chat" && <Composer isDark={isDark} onSend={send} onSendWithFiles={sendWithFiles} onOpenCamera={() => setCameraOpen(true)} />}
           </>
         )}
       </div>
@@ -1051,6 +1454,60 @@ function CpChatPanel({
                     {viewEnquiry.status || "New"}
                   </span>
                 </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Camera Capture Overlay */}
+      {cameraOpen && cpId && (
+        <CpCameraCapture
+          isDark={isDark}
+          employeeName={user?.name || "Employee"}
+          onCapture={sendWithCamera}
+          onClose={() => setCameraOpen(false)}
+        />
+      )}
+
+      {/* Image Lightbox */}
+      <AnimatePresence>
+        {lightboxUrl && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[300] flex items-center justify-center bg-black/80 backdrop-blur-sm cursor-pointer"
+            onClick={() => setLightboxUrl(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
+              transition={{ duration: 0.2 }}
+              className="relative max-w-[90vw] max-h-[90vh]"
+              onClick={e => e.stopPropagation()}
+            >
+              <button
+                onClick={() => setLightboxUrl(null)}
+                className="absolute -top-3 -right-3 z-10 w-8 h-8 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80 transition-colors"
+              >
+                <IoCloseOutline size={20} />
+              </button>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={lightboxUrl}
+                alt="Preview"
+                className="max-w-[90vw] max-h-[90vh] object-contain rounded-xl"
+              />
+              <div className="absolute bottom-3 right-3">
+                <a
+                  href={lightboxUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  download
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 text-white text-[12px] font-medium hover:bg-black/80 transition-colors"
+                  onClick={e => e.stopPropagation()}
+                >
+                  <IoDownloadOutline size={14} />
+                  Download
+                </a>
               </div>
             </motion.div>
           </motion.div>

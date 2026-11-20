@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import {
   FaUser, FaCoins,
   FaDesktop, FaWhatsapp,
@@ -93,7 +93,89 @@ export interface LeadDetailsPanelProps extends LeadDetailsTheme {
 
   formatDate: (d: string) => string;
 }
+function BudgetField({
+  value,
+  onChange,
+  className,
+  isDark,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  className: string;
+  isDark: boolean;
+}) {
+  // Parse existing range value: "40 LAKH - 1 CRORE" or legacy "40LAC"
+  const parseExisting = (raw: string) => {
+    const s = String(raw || "");
+    if (s.includes(" - ")) {
+      const [l, r] = s.split(" - ").map(p => p.trim());
+      const pMin = l.match(/^(\d+)\s*(LAKH|LAC|CRORE|CR)/i);
+      const pMax = r.match(/^(\d+)\s*(LAKH|LAC|CRORE|CR)/i);
+      return {
+        minD: pMin?.[1] || "", minU: /cr/i.test(pMin?.[2] || "") ? "CR" as const : "LAC" as const,
+        maxD: pMax?.[1] || "", maxU: /cr/i.test(pMax?.[2] || "") ? "CR" as const : "LAC" as const,
+      };
+    }
+    const d = (s.match(/^\d+/)?.[0] ?? "").slice(0, 3);
+    const u = /cr/i.test(s) ? "CR" as const : "LAC" as const;
+    return { minD: d, minU: u, maxD: "", maxU: u };
+  };
 
+  const init = parseExisting(value);
+  const [minDigits, setMinDigits] = useState(init.minD);
+  const [minUnit, setMinUnit] = useState(init.minU);
+  const [maxDigits, setMaxDigits] = useState(init.maxD);
+  const [maxUnit, setMaxUnit] = useState(init.maxU);
+
+  const compose = (mnD: string, mnU: string, mxD: string, mxU: string) => {
+    const uLabel = (u: string) => u === "CR" ? "CRORE" : "LAKH";
+    const minStr = mnD ? `${mnD} ${uLabel(mnU)}` : "";
+    const maxStr = mxD ? `${mxD} ${uLabel(mxU)}` : "";
+    if (minStr && maxStr && minStr !== maxStr) return `${minStr} - ${maxStr}`;
+    return minStr || maxStr || "";
+  };
+
+  const labelCls = `block text-[9px] font-bold mb-0.5 ${isDark ? "text-[#d946a8]/70" : "text-[#9E217B]/70"}`;
+  const selectCls = `absolute right-1 top-1/2 -translate-y-1/2 h-[calc(100%-6px)] rounded-md px-2 text-[10px] font-bold outline-none cursor-pointer border-l ${isDark
+    ? "bg-transparent text-[#d946a8] border-white/10"
+    : "bg-transparent text-[#9E217B] border-gray-200"
+    }`;
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div>
+        <span className={labelCls}>Min Budget *</span>
+        <div className="relative">
+          <input required type="text" inputMode="numeric" maxLength={3}
+            value={minDigits}
+            onChange={(e) => { const d = e.target.value.replace(/\D/g, "").slice(0, 3); setMinDigits(d); onChange(compose(d, minUnit, maxDigits, maxUnit)); }}
+            placeholder="00" className={`${className} pr-20`}
+          />
+          <select value={minUnit} aria-label="Min budget unit"
+            onChange={(e) => { const u = e.target.value as "LAC" | "CR"; setMinUnit(u); onChange(compose(minDigits, u, maxDigits, maxUnit)); }}
+            className={selectCls}>
+            <option value="LAC">Lakh</option><option value="CR">Crore</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <span className={labelCls}>Max Budget</span>
+        <div className="relative">
+          <input type="text" inputMode="numeric" maxLength={3}
+            value={maxDigits}
+            onChange={(e) => { const d = e.target.value.replace(/\D/g, "").slice(0, 3); setMaxDigits(d); onChange(compose(minDigits, minUnit, d, maxUnit)); }}
+            placeholder="00" className={`${className} pr-20`}
+          />
+          <select value={maxUnit} aria-label="Max budget unit"
+            onChange={(e) => { const u = e.target.value as "LAC" | "CR"; setMaxUnit(u); onChange(compose(minDigits, minUnit, maxDigits, u)); }}
+            className={selectCls}>
+            <option value="LAC">Lakh</option><option value="CR">Crore</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  );
+}
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -125,22 +207,12 @@ export default function LeadDetailsPanel(props: LeadDetailsPanelProps) {
   // change (sales form submit, site visit schedule, etc.) so the pipeline re-fetches.
   const dealStageRefreshKey = followUps.length;
 
-  // Fetch deal stage data for the header score ring (reuses existing API endpoint)
+  // Deal stage score for the header ring — populated by DealStageTimeline's
+  // onDataLoaded callback, eliminating the previous duplicate API fetch.
   const [dealStageData, setDealStageData] = useState<DealScoreData | null>(null);
-  const fetchDealStageScore = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/leads/${lead.id}/deal-stage`);
-      if (!res.ok) return;
-      const json = await res.json();
-      if (json.success) {
-        setDealStageData({ tracked: !!json.tracked, currentOrdinal: json.currentOrdinal ?? 0 });
-      }
-    } catch { /* header score is non-critical */ }
-  }, [lead.id]);
-
-  useEffect(() => {
-    fetchDealStageScore();
-  }, [fetchDealStageScore, dealStageRefreshKey]);
+  const handleDealStageLoaded = useCallback((data: { tracked: boolean; currentOrdinal: number }) => {
+    setDealStageData({ tracked: data.tracked, currentOrdinal: data.currentOrdinal });
+  }, []);
 
   const formInput = `w-full text-xs rounded-lg px-3 py-2 ${theme.inputBg} ${theme.inputFocus} ${theme.text} outline-none`;
   const formSelect = `w-full text-xs rounded-lg px-3 py-2 ${theme.inputBg} ${theme.inputFocus} ${theme.text} outline-none`;
@@ -246,7 +318,12 @@ export default function LeadDetailsPanel(props: LeadDetailsPanelProps) {
                 </div>
                 <div>
                   <label className={`block text-[10px] font-bold mb-1 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>Budget *</label>
-                  <input required value={salesForm.budget} onChange={(e) => setSalesForm({ ...salesForm, budget: e.target.value })} className={formInput} placeholder="Budget" />
+                  <BudgetField
+                    value={salesForm.budget}
+                    onChange={(v) => setSalesForm({ ...salesForm, budget: v })}
+                    className={formInput}
+                    isDark={isDark}
+                  />
                 </div>
                 <div>
                   <label className={`block text-[10px] font-bold mb-1 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>Type of Use *</label>
@@ -271,6 +348,10 @@ export default function LeadDetailsPanel(props: LeadDetailsPanelProps) {
                   <select required value={salesForm.leadStatus} onChange={(e) => setSalesForm({ ...salesForm, leadStatus: e.target.value })} className={formSelect}>
                     <option value="" disabled>Select Status</option><option>Interested</option><option>Not Interested</option><option>NON GENUINE DEMAND (NGD)</option>
                   </select>
+                </div>
+                <div className={`border-t pt-2 ${theme.tableBorder}`}>
+                  <label className={`block text-xs font-bold mb-1 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"}`}>Remark</label>
+                  <textarea value={salesForm.remark ?? ""} onChange={(e) => setSalesForm({ ...salesForm, remark: e.target.value })} placeholder="Any additional notes..." className={`${formInput} focus:border-orange-500`} />
                 </div>
                 <div className={`border-t pt-2 ${theme.tableBorder}`}>
                   <label className="text-xs text-orange-400 font-bold mb-1 block">Schedule a Site Visit?</label>
@@ -325,6 +406,7 @@ export default function LeadDetailsPanel(props: LeadDetailsPanelProps) {
                     lead={lead}
                     permissions={permissions}
                     loanDealLatest={loanDealLatest}
+                    currentUser={currentUser}
                     isDark={isDark}
                     theme={theme}
                     onLeadUpdate={onLeadUpdate}
@@ -429,6 +511,7 @@ export default function LeadDetailsPanel(props: LeadDetailsPanelProps) {
                 theme={theme}
                 userRole={currentUser.role}
                 refreshKey={dealStageRefreshKey}
+                onDataLoaded={handleDealStageLoaded}
               />
             )}
           </div>

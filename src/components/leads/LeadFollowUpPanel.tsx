@@ -32,6 +32,7 @@ function EnquiryDetailsBubble({ lead, theme, isDark, formatDate }: { lead: any; 
     { label: "Channel Partner", val: lead.cpName || lead.cp_name },
     { label: "CP Company", val: lead.cp_company || lead.cpCompany },
     { label: "CP Phone", val: lead.cp_phone || lead.cpPhone },
+    { label: "Site Location", val: lead.site_location_name || null },
     { label: "Preferred Location", val: lead.location && lead.location !== "N/A" ? lead.location : null },
     { label: "Residential Address", val: lead.address && lead.address !== "N/A" ? lead.address : null },
     { label: "Lead Interest", val: lead.leadInterestStatus },
@@ -252,10 +253,10 @@ export default function LeadFollowUpPanel({
         value={customNote}
         onChange={setCustomNote}
         onSubmit={onSendNote}
-        pendingFiles={attView.pendingFiles}
-        fileError={attView.fileError}
-        onAddFiles={attView.addFiles}
-        onRemoveFile={attView.removeFile}
+        pendingFiles={attView?.pendingFiles ?? []}
+        fileError={attView?.fileError ?? null}
+        onAddFiles={attView?.addFiles}
+        onRemoveFile={attView?.removeFile}
         onReminderClick={onReminderClick}
         isDark={isDark}
         theme={theme}

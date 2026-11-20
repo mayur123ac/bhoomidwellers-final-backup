@@ -47,6 +47,24 @@ export async function GET() {
   }
 }
 
+// ── Approved roles for assignment ─────────────────────────────────────────────
+// Only these roles may be assigned through the employee management UI.
+// The comparison is case-insensitive and whitespace-trimmed.
+const APPROVED_ROLES = [
+  "Admin",
+  "Sales Manager",
+  "Site Head",
+  "Receptionist",
+  "Sourcing Manager",
+  "Human Resources",
+];
+
+function isApprovedRole(role: string | undefined | null): boolean {
+  if (!role) return false;
+  const normalized = role.trim().toLowerCase();
+  return APPROVED_ROLES.some(r => r.toLowerCase() === normalized);
+}
+
 // ── POST: Add new employee ────────────────────────────────────────────────────
 export async function POST(req: Request) {
   try {
@@ -56,6 +74,14 @@ export async function POST(req: Request) {
     }
 
     const { name, username, email, password, role } = await req.json();
+
+    // Server-side enforcement: reject unapproved roles
+    if (!isApprovedRole(role)) {
+      return NextResponse.json(
+        { message: `Role "${role}" is not an approved role. Allowed roles: ${APPROVED_ROLES.join(", ")}.` },
+        { status: 400 }
+      );
+    }
 
     // Check email conflict
     const emailCheck = await query(
@@ -183,7 +209,16 @@ export async function PUT(req: Request) {
       if (name) { setClauses.push(`name = $${p++}`); values.push(name); }
       if (username) { setClauses.push(`username = $${p++}`); values.push(username.trim()); }
       if (email) { setClauses.push(`email = $${p++}`); values.push(email.trim().toLowerCase()); }
-      if (role) { setClauses.push(`role = $${p++}`); values.push(role); }
+      if (role) {
+        // Server-side enforcement: reject unapproved roles on edit
+        if (!isApprovedRole(role)) {
+          return NextResponse.json(
+            { message: `Role "${role}" is not an approved role. Allowed roles: ${APPROVED_ROLES.join(", ")}.` },
+            { status: 400 }
+          );
+        }
+        setClauses.push(`role = $${p++}`); values.push(role);
+      }
 
       if (setClauses.length === 0) {
         return NextResponse.json({ message: "No fields to update." }, { status: 400 });

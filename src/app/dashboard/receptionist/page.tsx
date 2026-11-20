@@ -11,11 +11,12 @@ import {
   SkeletonRows,
   EmptyState,
 } from "@/components/Tableui"; // adjust path to match where Tableui.tsx actually lives
+import { FaMapMarkerAlt } from "react-icons/fa";
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { clearCrmSession, getStoredCrmUser, installLoggedOutBackGuard } from "@/lib/authSession";
 import { cleanupPushOnLogout } from "@/lib/pushNotifications";
-import { formatBudget } from "@/lib/formatBudget";
+import { formatBudget, composeBudgetString } from "@/lib/formatBudget";
 import { useCrmTheme } from "@/lib/hooks/useCrmTheme";
 import { useDetailReturnView } from "@/lib/hooks/useDetailReturnView";
 import { motion, AnimatePresence } from "framer-motion";
@@ -66,6 +67,7 @@ import LoanDealForm from "@/components/LoanDealForm";
 import LoanDealView from "@/components/LoanDealView";
 import BolnaCallWidget from "@/components/BolnaCallWidget";
 import CallingButtons from "@/components/CallingButtons";
+import { LeadDetailsPanel, LeadDetailsLayout } from "@/components/leads";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import UserAvatar from "@/components/UserAvatar";
 import AppHeader from "@/components/AppHeader";
@@ -221,7 +223,7 @@ const RECEPTIONIST_CONTEXT: Record<string, string> = {
 };
 
 const LEAD_SOURCES = [
-  "Advertisement", "Referral", "Exhibition", "Channel Partner", "Website", "Call Center", "Others"
+  "Direct Walk-in", "Advertisement", "Referral", "Exhibition", "Channel Partner", "Website", "Call Center", "Others"
 ];
 
 // Full standardised Indian real-estate configuration list.
@@ -515,6 +517,7 @@ const ALL_LEADS_COLS_KEY = "bd:recep:all-leads:hiddenCols:v1";
 const ALL_LEADS_COLUMNS: { key: string; label: string; locked?: boolean; type?: 'text' | 'number' | 'date' }[] = [
   { key: "lead_no", label: "Sr. No.", locked: true, type: 'number' },
   { key: "client_name", label: "Client Name", locked: true, type: 'text' },
+  { key: "site_location", label: "Site Location" },
   { key: "source", label: "Source", type: 'text' },
   { key: "cp_name", label: "CP Name", type: 'text' },
   { key: "cp_company", label: "CP Company", type: 'text' },
@@ -532,6 +535,7 @@ function getLeadValueForColRecep(lead: any, key: string): string {
   switch (key) {
     case 'lead_no': return String(lead.sr_no || lead.id || '');
     case 'client_name': return String(lead.name || '');
+    case "site_location": return String(lead.siteLocationName || "");
     case 'source': return String(lead.source || '');
     case 'cp_name': return String(lead.cp_name || '');
     case 'cp_company': return String(lead.cp_company || '');
@@ -864,7 +868,7 @@ export default function ReceptionistDashboard() {
   const getTodayString = () => new Date().toISOString().split("T")[0];
   const [enquiryForm, setEnquiryForm] = useState({
     fullName: "", mobile: "", altMobile: "", email: "", address: "", pinCode: "", city: "",
-    occupation: "", organization: "", budget: "", budgetUnit: "lakh", configuration: "",
+    occupation: "", organization: "", budgetMin: "", budgetMinUnit: "lakh", budgetMax: "", budgetMaxUnit: "lakh", configuration: "",
     purpose: "", source: "", assignedTo: "", loanPlanned: "", sourceOther: "", referralName: "",
     budgetNotDisclosed: false,
     cpDetails: { name: "", company: "", phone: "" },
@@ -872,7 +876,35 @@ export default function ReceptionistDashboard() {
     preferredLocation: "",
     selfAssign: false,
     enquiryDate: getTodayString(),
+    siteLocationId: "",      // FK to site_locations table
   });
+  // ── Site Locations (org-scoped dropdown) ──
+  const [siteLocations, setSiteLocations] = useState<{ id: number; name: string; display_name: string | null; is_default: boolean }[]>([]);
+  const [siteLocationsLoading, setSiteLocationsLoading] = useState(true);
+  const [siteLocationsError, setSiteLocationsError] = useState(false);
+  const fetchSiteLocations = useCallback(() => {
+    setSiteLocationsLoading(true);
+    setSiteLocationsError(false);
+    fetch("/api/site-locations")
+      .then(r => r.json())
+      .then(d => {
+        if (d.success && Array.isArray(d.locations)) {
+          setSiteLocations(d.locations);
+          setEnquiryForm(prev => {
+            if (!prev.siteLocationId) {
+              const def = d.locations.find((l: any) => l.is_default);
+              return def ? { ...prev, siteLocationId: String(def.id) } : prev;
+            }
+            return prev;
+          });
+        } else {
+          setSiteLocationsError(true);
+        }
+      })
+      .catch(() => setSiteLocationsError(true))
+      .finally(() => setSiteLocationsLoading(false));
+  }, []);
+  useEffect(() => { fetchSiteLocations(); }, [fetchSiteLocations]);
   // ── Auto Date toggle (persisted in sessionStorage) ──
   const [autoDate, setAutoDate] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
@@ -1877,65 +1909,76 @@ export default function ReceptionistDashboard() {
   // ─────────────────────────────────────────────────────────────────────────
   // MERGED LEADS (enrich with follow-up data, same as Sales Manager)
   // ─────────────────────────────────────────────────────────────────────────
+  // Shared enrichment: derives salesform fields, loan status, visit dates,
+  // closing state from follow-up messages. Applied to both enquiries (table)
+  // and directAssignedLeads (receptionist leads tab) so selectedLead always
+  // has the full enriched shape regardless of which list it came from.
+  const enrichLead = useCallback((lead: any) => {
+    const lf = followUps.filter((f: any) => String(f.leadId) === String(lead.id));
+    const salesForms = lf.filter((f: any) => f.message?.includes("Detailed Salesform Submitted"));
+    const latestMsg = salesForms.length > 0 ? salesForms[salesForms.length - 1].message : "";
+    const g = (field: string) => { if (!latestMsg) return "Pending"; const m = latestMsg.match(new RegExp(`• ${field}: (.*)`)); return m ? m[1].trim() : "Pending"; };
+
+    const loanUpdates = lf.filter((f: any) => f.message?.includes("🏦 Loan Update:"));
+    let loanStatus = "N/A", loanAmtReq = "N/A", loanAmtApp = "N/A";
+    if (loanUpdates.length > 0) {
+      const msg = loanUpdates[loanUpdates.length - 1].message;
+      const mS = msg.match(/• Status: (.*)/); if (mS) loanStatus = mS[1].trim();
+      const mR = msg.match(/• Amount Requested: (.*)/); if (mR) loanAmtReq = mR[1].trim();
+      const mA = msg.match(/• Amount Approved: (.*)/); if (mA) loanAmtApp = mA[1].trim();
+    }
+
+    const visitsWithDate = lf.filter((f: any) => f.siteVisitDate?.trim());
+    const mongoVisitDate = visitsWithDate.length > 0 ? visitsWithDate[visitsWithDate.length - 1].siteVisitDate : null;
+    const closingFups = lf.filter((f: any) => f.message?.includes("✅ Lead Marked as Closing"));
+    const reopenFups = lf.filter((f: any) => f.message?.includes("↩️ Lead Reopened"));
+    const lastReopenAt = reopenFups.length > 0 ? new Date(reopenFups[reopenFups.length - 1].createdAt).getTime() : 0;
+    const closingFupsSinceReopen = closingFups.filter((f: any) => new Date(f.createdAt).getTime() > lastReopenAt);
+    const closingDate = closingFupsSinceReopen.length > 0 ? closingFupsSinceReopen[closingFupsSinceReopen.length - 1].createdAt : null;
+    const sfBudget = g("Budget");
+    const activeBudget = (sfBudget !== "Pending" && sfBudget !== "N/A")
+      ? sfBudget
+      : formatBudget(lead.budget, lead.budget_unit);
+
+    const siteLoc = siteLocations.find((s: any) => String(s.id) === String(lead.site_location_id));
+    return {
+      ...lead,
+      siteLocationName:
+        lead.site_location_name ||
+        (siteLoc ? (siteLoc.display_name || siteLoc.name) : ""),
+      propType: (g("Property Type") !== "Pending" && g("Property Type") !== "N/A")
+        ? g("Property Type")
+        : (lead.configuration && lead.configuration !== "N/A" ? lead.configuration : "Pending"),
+      salesBudget: activeBudget,
+      budgetUnit: lead.budget_unit ?? null,
+      useType: (g("Use Type") !== "Pending" && g("Use Type") !== "N/A")
+        ? g("Use Type")
+        : (lead.purpose || "Pending"),
+      planningPurchase: g("Planning to Purchase"),
+      loanPlanned: g("Loan Planned") !== "Pending" ? g("Loan Planned") : (lead.loan_planned || "Pending"),
+      leadInterestStatus: g("Lead Status"),
+      loanStatus, loanAmtReq, loanAmtApp,
+      mongoVisitDate, closingDate,
+      status: lead.status === "Closing" ? "Closing" : mongoVisitDate ? "Visit Scheduled" : lead.status,
+    };
+  }, [followUps, siteLocations]);
+
   const mergedLeads = useMemo(() => {
-    return enquiries.map((lead: any) => {
-      const lf = followUps.filter((f: any) => String(f.leadId) === String(lead.id));
-      const salesForms = lf.filter((f: any) => f.message?.includes("Detailed Salesform Submitted"));
-      const latestMsg = salesForms.length > 0 ? salesForms[salesForms.length - 1].message : "";
-      const g = (field: string) => { if (!latestMsg) return "Pending"; const m = latestMsg.match(new RegExp(`• ${field}: (.*)`)); return m ? m[1].trim() : "Pending"; };
-
-      const loanUpdates = lf.filter((f: any) => f.message?.includes("🏦 Loan Update:"));
-      let loanStatus = "N/A", loanAmtReq = "N/A", loanAmtApp = "N/A";
-      if (loanUpdates.length > 0) {
-        const msg = loanUpdates[loanUpdates.length - 1].message;
-        const mS = msg.match(/• Status: (.*)/); if (mS) loanStatus = mS[1].trim();
-        const mR = msg.match(/• Amount Requested: (.*)/); if (mR) loanAmtReq = mR[1].trim();
-        const mA = msg.match(/• Amount Approved: (.*)/); if (mA) loanAmtApp = mA[1].trim();
-      }
-
-      const visitsWithDate = lf.filter((f: any) => f.siteVisitDate?.trim());
-      const mongoVisitDate = visitsWithDate.length > 0 ? visitsWithDate[visitsWithDate.length - 1].siteVisitDate : null;
-      const closingFups = lf.filter((f: any) => f.message?.includes("✅ Lead Marked as Closing"));
-      const reopenFups = lf.filter((f: any) => f.message?.includes("↩️ Lead Reopened"));
-      const lastReopenAt = reopenFups.length > 0 ? new Date(reopenFups[reopenFups.length - 1].createdAt).getTime() : 0;
-      const closingFupsSinceReopen = closingFups.filter((f: any) => new Date(f.createdAt).getTime() > lastReopenAt);
-      const closingDate = closingFupsSinceReopen.length > 0 ? closingFupsSinceReopen[closingFupsSinceReopen.length - 1].createdAt : null;
-      const sfBudget = g("Budget");
-      const activeBudget = (sfBudget !== "Pending" && sfBudget !== "N/A")
-        ? sfBudget
-        : formatBudget(lead.budget, lead.budget_unit);
-
-      return {
-        ...lead,
-        propType: (g("Property Type") !== "Pending" && g("Property Type") !== "N/A")
-          ? g("Property Type")
-          : (lead.configuration && lead.configuration !== "N/A" ? lead.configuration : "Pending"),
-        salesBudget: activeBudget,
-        budgetUnit: lead.budget_unit ?? null,
-        useType: (g("Use Type") !== "Pending" && g("Use Type") !== "N/A")
-          ? g("Use Type")
-          : (lead.purpose || "Pending"),
-        planningPurchase: g("Planning to Purchase"),
-        loanPlanned: g("Loan Planned") !== "Pending" ? g("Loan Planned") : (lead.loan_planned || "Pending"),
-        leadInterestStatus: g("Lead Status"),
-        loanStatus, loanAmtReq, loanAmtApp,
-        mongoVisitDate, closingDate,
-        status: lead.status === "Closing" ? "Closing" : mongoVisitDate ? "Visit Scheduled" : lead.status,
-      };
-    });
-  }, [enquiries, followUps]);
+    return enquiries.map(enrichLead);
+  }, [enquiries, enrichLead]);
 
   // myAssignedLeads: sourced from directAssignedLeads (fetched directly from DB
   // via /api/receptionist/assigned + /api/receptionist/leads) rather than from
   // the paginated enquiries list. This fixes the bug where leads transferred to
   // this receptionist were invisible because they fell outside the loaded page.
   // Closing/closed leads are excluded here; closedLeads handles those separately.
+  // Now enriched with follow-up data so lead details show salesform fields.
   const myAssignedLeads = useMemo(() =>
-    directAssignedLeads.filter((l: any) =>
+    directAssignedLeads.map(enrichLead).filter((l: any) =>
       l.status !== "Closing" &&
       !l.closingDate
     )
-    , [directAssignedLeads]);
+    , [directAssignedLeads, enrichLead]);
 
   const currentLeadFollowUps = useMemo(() =>
     followUps.filter((f: any) => String(f.leadId) === String(selectedLead?.id))
@@ -1962,10 +2005,10 @@ export default function ReceptionistDashboard() {
   // Closed leads = status Closing OR has a closing follow-up
   // Also sourced from directAssignedLeads so transferred leads are included.
   const closedLeads = useMemo(() =>
-    directAssignedLeads.filter((l: any) =>
+    directAssignedLeads.map(enrichLead).filter((l: any) =>
       l.status === "Closing" || !!l.closingDate
     )
-    , [directAssignedLeads]);
+    , [directAssignedLeads, enrichLead]);
 
   const filteredClosedLeads = closedLeads.filter((l: any) =>
     (l.name || "").toLowerCase().includes(searchClosedLeads.toLowerCase()) ||
@@ -2037,8 +2080,10 @@ export default function ReceptionistDashboard() {
       city: enquiryForm.city || null,
       occupation: enquiryForm.occupation || "N/A",
       organization: enquiryForm.organization || "N/A",
-      budget: enquiryForm.budgetNotDisclosed ? "Not Disclosed" : (enquiryForm.budget || "Pending"),
-      budget_unit: enquiryForm.budgetNotDisclosed ? null : (enquiryForm.budget ? enquiryForm.budgetUnit : null),
+      budget: enquiryForm.budgetNotDisclosed
+        ? "Not Disclosed"
+        : (composeBudgetString(enquiryForm.budgetMin, enquiryForm.budgetMinUnit, enquiryForm.budgetMax, enquiryForm.budgetMaxUnit) || "Pending"),
+      budget_unit: null,
       configuration: enquiryForm.configuration || "N/A",
       purpose: enquiryForm.purpose || "N/A",
       source: enquiryForm.source,
@@ -2050,6 +2095,7 @@ export default function ReceptionistDashboard() {
       cp_company: enquiryForm.source === "Channel Partner" ? enquiryForm.cpDetails.company : null,
       cp_phone: enquiryForm.source === "Channel Partner" ? enquiryForm.cpDetails.phone : null,
       preferred_location: enquiryForm.preferredLocation || null,
+      site_location_id: enquiryForm.siteLocationId ? Number(enquiryForm.siteLocationId) : null,
       // Only sent for CP enquiries — the server leaves assigned_at/by NULL when this
       // is null, so a non-CP lead never looks like it has a sourcing assignment.
       sourcing_manager_id: enquiryForm.source === "Channel Partner" && enquiryForm.sourcingManagerId
@@ -2109,8 +2155,10 @@ export default function ReceptionistDashboard() {
         setSelectedCandidate(null);
         setIsRevisit(false);
         setEnquiryForm({
-          fullName: "", mobile: "", altMobile: "", email: "", address: "", pinCode: "", city: "", occupation: "", organization: "", budget: "",
-          budgetUnit: "lakh", configuration: "", purpose: "", source: "", assignedTo: "", loanPlanned: "", sourceOther: "", referralName: "", budgetNotDisclosed: false, cpDetails: { name: "", company: "", phone: "" }, sourcingManagerId: "", preferredLocation: "", selfAssign: false, enquiryDate: getTodayString()
+          fullName: "", mobile: "", altMobile: "", email: "", address: "", pinCode: "", city: "", occupation: "", organization: "",
+          budgetMin: "", budgetMinUnit: "lakh", budgetMax: "", budgetMaxUnit: "lakh",
+          configuration: "", purpose: "", source: "", assignedTo: "", loanPlanned: "", sourceOther: "", referralName: "", budgetNotDisclosed: false, cpDetails: { name: "", company: "", phone: "" }, sourcingManagerId: "", preferredLocation: "", selfAssign: false, enquiryDate: getTodayString(),
+          siteLocationId: siteLocations.find(l => l.is_default)?.id?.toString() || ""
         });
         refetchAll();
         fetchSalesManagers();
@@ -2943,6 +2991,7 @@ export default function ReceptionistDashboard() {
                       onClick={() => downloadRecepCSV(receptionistLeads.map((l: any) => ({
                         "Sr. No.": l.sr_no || l.id,
                         "Client Name": l.name,
+                        "Site Location": l.siteLocationName || "",
                         "Source": l.source || "",
                         "CP Name": l.cp_name || "",
                         "CP Company": l.cp_company || "",
@@ -3095,6 +3144,13 @@ export default function ReceptionistDashboard() {
                               </div>
                             </div>
                           </td>
+
+                          {/* Site Location */}
+                          {!hiddenAllLeadsCols.has("site_location") && (
+                            <td className={`px-4 py-3 text-[13px] ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                              {enquiry.siteLocationName || <span className="opacity-30">—</span>}
+                            </td>
+                          )}
 
                           {/* Source */}
                           {!hiddenAllLeadsCols.has("source") && (
@@ -3507,6 +3563,10 @@ export default function ReceptionistDashboard() {
                               <p className={`text-[10px] sm:text-[11px] md:text-xs font-medium mb-1 sm:mb-1.5 ${t.textFaint}`}>City</p>
                               <p className={`font-medium text-xs sm:text-[13px] md:text-sm ${t.text}`}>{selectedLead.city || "N/A"}</p>
                             </div>
+                            <div>
+                              <p className={`text-[10px] sm:text-[11px] md:text-xs font-medium mb-1 sm:mb-1.5 ${t.textFaint}`}>Site Location</p>
+                              <p className={`font-medium text-xs sm:text-[13px] md:text-sm ${t.text}`}>{selectedLead.site_location_name || "Not Provided"}</p>
+                            </div>
                             <div className="sm:col-span-2">
                               <p className={`text-[10px] sm:text-[11px] md:text-xs font-medium mb-1 sm:mb-1.5 ${t.textFaint}`}>Preferred Location</p>
                               <p className={`font-medium text-xs sm:text-[13px] md:text-sm ${t.text}`}>{selectedLead.preferred_location || "N/A"}</p>
@@ -3636,294 +3696,68 @@ export default function ReceptionistDashboard() {
                     />
                   </div>
                 ) : (
-                  <div className="animate-fadeIn w-full mx-auto flex flex-col min-h-screen lg:min-h-0 lg:h-[calc(100vh-130px)] pb-10 lg:pb-0">
-                    {/* Detail header */}
-                    <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 rounded-xl border border-gray-200 p-2.5 sm:p-2 shadow-sm flex-shrink-0 ${t.card}`} style={t.cardGlass}>
-                      {/* Back + Lead Name + Mobile Toggle */}
-                      <div className="flex items-center justify-between w-full sm:w-auto gap-2">
-                        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-                          <button onClick={() => { setAssignedSubView("cards"); setActiveTab(detailReturnTab); }} className={`w-8 h-8 sm:w-9 sm:h-9 flex-shrink-0 flex items-center justify-center border border-gray-200 rounded-lg sm:rounded-xl transition-colors cursor-pointer shadow-lg ${t.textMuted} ${t.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}><FaChevronLeft className="text-[10px] sm:text-xs" /></button>
-                          <h1 className={`text-sm sm:text-base lg:text-lg font-bold flex flex-wrap items-center gap-1.5 sm:gap-2 min-w-0 ${t.text}`}>
-                            <span className={` ${isDark ? "text-[#9E217B]" : "text-[#9E217B]"}`}>#{selectedLead.sr_no || selectedLead.id}</span>
-                            <span>{selectedLead.name}</span>
-                            {selectedLead.status === "Closing" && (
-                              <span className={`text-[9px] sm:text-[11px] font-bold px-2 py-0.5 sm:px-3 sm:py-1 rounded-full border flex items-center gap-1 sm:gap-1.5 shadow-sm ${t.statusClosing}`}><FaHandshake className="text-[10px] sm:text-xs" /> Closing</span>
-                            )}
-                          </h1>
-                        </div>
-
-                        {/* MOBILE TOGGLE BUTTON — collapsed by default on small screens */}
-                        <button
-                          onClick={() => setShowMobileActions(!showMobileActions)}
-                          className={`sm:hidden w-8 h-8 flex-shrink-0 flex items-center justify-center border rounded-lg transition-colors shadow-sm ${showMobileActions ? t.btnPrimary : `${t.textMuted} ${t.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}`}
-                        >
-                          <FaChevronDown className={`text-[10px] transition-transform duration-200 ${showMobileActions ? "rotate-180" : ""}`} />
-                        </button>
-                      </div>
-
-                      {/* ACTION BUTTONS: Hidden on mobile unless toggled open. Always visible on sm+ */}
-                      <div className={`gap-1.5 sm:gap-2 flex-wrap justify-start sm:justify-end mt-1 sm:mt-0 w-full sm:w-auto ${showMobileActions ? "flex animate-fadeIn" : "hidden sm:flex"}`}>
-                        {isLeadLocked ? (
-                          <>
-                            <span className={`text-[11px] sm:text-xs font-bold px-3 py-2 sm:py-1.5 rounded-xl sm:rounded-full border flex-1 sm:flex-none text-center justify-center flex items-center gap-2 shadow-sm min-h-[44px] sm:min-h-0 ${selectedLead.is_lost_lead ? "bg-red-500/10 border-red-500/40 text-red-500" : "bg-yellow-500/10 border-yellow-500/40 text-yellow-500"}`}>
-                              {selectedLead.is_lost_lead ? "❌ Lost Lead • Read Only" : "✅ Lead Closed • Read Only"}
-                            </span>
-                            {selectedLead.is_lost_lead ? (
-                              <button onClick={handleRestoreLead} disabled={isSavingLost}
-                                className={`font-bold px-3 py-2 sm:py-1.5 rounded-xl text-[13px] sm:text-sm flex-1 sm:flex-none flex justify-center items-center gap-2 transition-colors cursor-pointer disabled:opacity-60 shadow-lg min-h-[44px] sm:min-h-0 ${t.btnPrimary}`}>
-                                {isSavingLost ? "Restoring…" : <><FaCheckCircle /> Restore Lead</>}
-                              </button>
-                            ) : (
-                              <button onClick={handleReopenLead} disabled={isReopening}
-                                className={`font-bold px-3 py-2 sm:py-1.5 rounded-xl text-[13px] sm:text-sm flex-1 sm:flex-none flex justify-center items-center gap-2 transition-colors cursor-pointer disabled:opacity-60 shadow-sm min-h-[44px] sm:min-h-0 ${isDark ? "bg-blue-600 hover:bg-blue-700 text-white" : "bg-blue-500 hover:bg-blue-600 text-white"}`}>
-                                {isReopening ? "Reopening…" : "↩️ Reopen Lead"}
-                              </button>
-                            )}
-                          </>
-                        ) : (
-                          !showSalesForm && !showLoanForm && (
-                            <>
-                              <button onClick={() => { prefillSalesForm(); setShowSalesForm(true); setShowLoanForm(false); }}
-                                className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center gap-1 sm:gap-1.5 flex-1 sm:flex-none min-w-[80px] sm:min-w-[110px] min-h-[36px] sm:min-h-0 transition-colors cursor-pointer shadow-lg whitespace-nowrap ${t.btnPrimary}`}>
-                                <FaFileInvoice className="text-[10px]" /> Salesform
-                              </button>
-                              <button onClick={() => { setShowLoanForm(true); setShowSalesForm(false); }}
-                                className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center gap-1 sm:gap-1.5 flex-1 sm:flex-none min-w-[80px] sm:min-w-[110px] min-h-[36px] sm:min-h-0 transition-colors cursor-pointer shadow-sm whitespace-nowrap ${t.btnSecondary}`}>
-                                <FaUniversity className="text-[10px]" /> Track Loan
-                              </button>
-                              {selectedLead.status !== "Closing" && !selectedLead.is_lost_lead && (
-                                <button onClick={() => setIsClosingModalOpen(true)}
-                                  className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center gap-1 sm:gap-1.5 flex-1 sm:flex-none min-w-[80px] sm:min-w-[110px] min-h-[36px] sm:min-h-0 transition-colors cursor-pointer shadow-sm whitespace-nowrap ${t.btnWarning}`}>
-                                  <FaHandshake className="text-[10px]" /> Mark Closing
-                                </button>
-                              )}
-                              {!selectedLead.is_lost_lead && (
-                                <button onClick={openLostLeadModal}
-                                  className={`font-bold px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs flex items-center justify-center gap-1 sm:gap-1.5 flex-1 sm:flex-none min-w-[80px] sm:min-w-[110px] min-h-[36px] sm:min-h-0 transition-colors cursor-pointer shadow-sm whitespace-nowrap ${t.btnDanger}`}>
-                                  <AlertTriangle className="w-3.5 h-3.5" /> Mark Lost
-                                </button>
-                              )}
-                              {/* Transfer button removed (P0-3) */}
-                            </>
-                          )
-                        )}
-                      </div>
-                    </div>
-
-                    {/* AI voice calling. Self-gating: renders nothing at all when
-                        Bolna is unconfigured, so it needs no capability guard here. */}
-                    {/* <div className="mb-3 flex-shrink-0">
-                      <BolnaCallWidget
-                        leadId={Number(selectedLead.id)}
-                        leadName={selectedLead.name}
-                        phone={selectedLead.phone}
-                        userData={{ project: selectedLead.propType || selectedLead.configuration }}
-                        compact
+                  <div className={`flex-1 overflow-y-auto p-3 ${t.scroll || ""}`}>
+                    <LeadDetailsLayout isDark={isDark} theme={t} className="animate-fadeIn max-w-[1600px] mx-auto">
+                      <LeadDetailsPanel
+                        lead={selectedLead}
+                        onLeadUpdate={(updater) => setSelectedLead(updater)}
+                        currentUser={{ id: user?.id, name: user?.name, email: user?.email, role: user?.role || "receptionist" }}
+                        permissions={{
+                          canEditContact: user?.role?.toLowerCase() === "admin" || user?.role?.toLowerCase() === "receptionist",
+                          canEditPhone: user?.role?.toLowerCase() === "admin",
+                          canFillSalesform: true,
+                          canTrackLoan: true,
+                          canMarkClosing: !isLeadLocked,
+                          canMarkLost: !isLeadLocked,
+                          canRestoreLead: true,
+                          canReopenLead: true,
+                          canViewBooking: true,
+                          canCreateBooking: false,
+                          canDeleteLead: false,
+                          canAdvanceStage: false,
+                          canSendFollowUp: true,
+                          canDeleteFollowUp: false,
+                          canCall: true,
+                          canWhatsApp: true,
+                          canEditFields: false,
+                        }}
+                        isDark={isDark}
+                        theme={t}
+                        onBack={() => { setAssignedSubView("cards"); setActiveTab(detailReturnTab); }}
+                        followUps={currentLeadFollowUps}
+                        bookingData={bookingData}
+                        loanDealBooking={loanDealBooking}
+                        loanDealLatest={loanDealLatest}
+                        attView={null}
+                        onRefetch={refetchAll}
+                        onShowToast={(msg) => showToast(msg)}
+                        fetchLoanDealData={fetchLoanDealData}
+                        onSendFollowUp={handleSendCustomNote}
+                        onDeleteFollowUp={() => { }}
+                        onRetryFollowUp={() => { }}
+                        canDeleteFollowUps={false}
+                        deletingFollowUpId={null}
+                        customNote={customNote}
+                        setCustomNote={setCustomNote}
+                        onOpenBookingView={() => { }}
+                        onOpenBookingForm={() => setIsClosingModalOpen(true)}
+                        onOpenLostModal={openLostLeadModal}
+                        onOpenReminderModal={() => { }}
+                        onOpenWhatsApp={() => setIsWaModalOpen(true)}
+                        onRestore={handleRestoreLead}
+                        onReopen={handleReopenLead}
+                        showSalesForm={showSalesForm}
+                        setShowSalesForm={setShowSalesForm}
+                        salesForm={salesForm}
+                        setSalesForm={setSalesForm}
+                        onSubmitSalesForm={handleSalesFormSubmit}
+                        inputRef={inputRef}
+                        showLoanForm={showLoanForm}
+                        setShowLoanForm={setShowLoanForm}
+                        showCallingButtons
+                        formatDate={formatDate}
                       />
-                    </div> */}
-
-                    <div className="flex flex-col lg:flex-row gap-3 lg:gap-4 flex-1 lg:min-h-[calc(100vh-120px)] pb-2">
-                      {/* LEFT PANEL */}
-                      <div className="w-full lg:w-[50%] flex flex-col gap-2 sm:gap-3 min-h-[500px] lg:h-full pb-2">
-                        {showSalesForm ? (
-                          <div className={`rounded-xl sm:rounded-2xl border p-4 sm:p-5 shadow-lg flex-1 overflow-y-auto custom-scrollbar flex flex-col ${t.modalCard}`} style={t.modalGlass}>
-                            <div className={`flex justify-between items-center mb-4 border-b pb-3 ${t.tableBorder}`}>
-                              <div>
-                                <h3 className={`text-base sm:text-lg font-bold ${t.text}`}>Sales Data Form</h3>
-                                <p className={`text-[10px] sm:text-[11px] mt-0.5 font-medium ${t.accentText}`}>For Lead #{selectedLead.sr_no || selectedLead.id}</p>
-                              </div>
-                              <button type="button" onClick={() => setShowSalesForm(false)} className={`p-1.5 sm:p-2 rounded-lg bg-black/5 dark:bg-white/5 transition-colors ${t.textMuted} hover:text-red-500`}><FaTimes className="text-sm" /></button>
-                            </div>
-                            <form onSubmit={handleSalesFormSubmit} className="flex flex-col gap-3 sm:gap-4 flex-1">
-                              <div><label className={`crm-eyebrow mb-1.5 block ${t.textMuted}`}>Property Type?</label><input type="text" placeholder="e.g. 1BHK, 2BHK" value={salesForm.propertyType} onChange={e => setSalesForm({ ...salesForm, propertyType: e.target.value.toUpperCase() })} className={formInput} /></div>
-                              <div><label className={`crm-eyebrow mb-1.5 block ${t.textMuted}`}>Preferred Location?</label><input type="text" placeholder="e.g. Dombivali, Kalyan" value={salesForm.location} onChange={e => setSalesForm({ ...salesForm, location: e.target.value })} className={formInput} /></div>
-                              <div><label className={`crm-eyebrow mb-1.5 block ${t.textMuted}`}>Approximate Budget?</label><input type="text" placeholder="e.g. 5 cr" value={salesForm.budget} onChange={e => setSalesForm({ ...salesForm, budget: e.target.value.toUpperCase() })} className={formInput} /></div>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                                <div><label className={`crm-eyebrow mb-1.5 block ${t.textMuted}`}>Self-use or Investment?</label><select value={salesForm.useType} onChange={e => setSalesForm({ ...salesForm, useType: e.target.value })} className={formSelect}><option value="">Select</option><option>Self Use</option><option>Investment</option></select></div>
-                                <div><label className={`crm-eyebrow mb-1.5 block ${t.textMuted}`}>Planning to Purchase?</label><select value={salesForm.purchaseDate} onChange={e => setSalesForm({ ...salesForm, purchaseDate: e.target.value })} className={formSelect}><option value="">Select</option><option>Immediate</option><option>Next 3 Months</option></select></div>
-                              </div>
-                              <div className={`border-t pt-3 sm:pt-4 mt-1 ${t.tableBorder}`}>
-                                <label className={`block crm-eyebrow mb-2 ${t.accentText}`}>Lead Interest Status *</label>
-                                <select required value={salesForm.leadStatus} onChange={e => setSalesForm({ ...salesForm, leadStatus: e.target.value })} className={formSelect}><option value="" disabled>Select Status</option><option>Interested</option><option>Not Interested</option><option>NON GENUINE DEMAND (NGD)</option></select>
-                              </div>
-                              <div className={`border-t pt-3 sm:pt-4 mt-1 ${t.tableBorder}`}>
-                                <label className={`block crm-eyebrow mb-2 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}>Loan Planned?</label>
-                                <select required value={salesForm.loanPlanned} onChange={e => setSalesForm({ ...salesForm, loanPlanned: e.target.value })} className={formSelect}><option value="" disabled>Select Option</option><option>Yes</option><option>No</option><option>Not Sure</option></select>
-                              </div>
-                              <div className={`border-t pt-3 sm:pt-4 mt-1 ${t.tableBorder}`}>
-                                <label className="crm-eyebrow text-orange-400 mb-2 block">Schedule a Site Visit?</label>
-                                <input ref={inputRef} type="datetime-local" value={salesForm.siteVisit} onChange={e => setSalesForm({ ...salesForm, siteVisit: e.target.value })} onClick={() => inputRef.current?.showPicker()} className={`${formInput} focus:border-orange-500`} />
-                              </div>
-                              <button type="submit" className={`mt-4 md:mt-auto w-full font-bold py-2.5 sm:py-3 rounded-xl shadow-md transition-colors flex-shrink-0 text-[13px] sm:text-[14px] ${t.btnPrimary}`}>Submit Salesform</button>
-                            </form>
-                          </div>
-                        ) : showLoanForm ? (
-                          <LoanDealForm
-                            lead={selectedLead}
-                            booking={loanDealBooking}
-                            loanUpdate={loanDealLatest}
-                            user={user}
-                            isDark={isDark}
-                            t={t}
-                            onCancel={() => setShowLoanForm(false)}
-                            onSuccess={() => {
-                              setShowLoanForm(false);
-                              showToast(`Loan & deal data saved for ${selectedLead.name}`, "blue");
-                              fetchLoanDealData(selectedLead.id);
-                              refetchAll();
-                            }}
-                          />
-                        ) : (
-                          <div className="flex flex-col h-full animate-fadeIn">
-                            {/* Tab switcher */}
-                            <div className={`flex flex-wrap sm:flex-nowrap items-center gap-1.5 mb-2.5 border border-gray-200 p-1 sm:p-1.5 rounded-xl flex-shrink-0 shadow-sm ${t.tableWrap}`}>
-                              <button onClick={() => setDetailTab("personal")} className={`flex-1 min-w-[45%] py-2 sm:py-2.5 text-[11px] sm:text-[12px] font-bold rounded-lg transition-colors cursor-pointer ${detailTab === "personal" ? t.btnPrimary : `${t.textMuted} ${isDark ? "hover:text-white hover:bg-[#222]" : "hover:text-[#1A1A1A] hover:bg-[#F1F5F9]"}`}`}>Personal Info</button>
-                              <button onClick={() => setDetailTab("loan")} className={`flex-1 min-w-[45%] py-2 sm:py-2.5 text-[11px] sm:text-[12px] font-bold rounded-lg transition-colors cursor-pointer ${detailTab === "loan" ? t.btnSecondary : `${t.textMuted} ${isDark ? "hover:text-white hover:bg-[#222]" : "hover:text-[#1A1A1A] hover:bg-[#F1F5F9]"}`}`}>Loan Tracking</button>
-                              {bookingData && (
-                                <button onClick={() => { setDetailTab("loan" as any); setBookingDetailTab("booking"); }} className={`w-full sm:w-auto sm:flex-1 py-2 sm:py-2.5 text-[11px] sm:text-[12px] font-bold rounded-lg transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${bookingDetailTab === "booking" && detailTab === "loan" ? (isDark ? "bg-yellow-600 text-white shadow-md" : "bg-amber-500 text-white shadow-md") : `${t.textMuted} ${isDark ? "hover:text-white hover:bg-[#222]" : "hover:text-[#1A1A1A] hover:bg-[#F1F5F9]"}`}`}>
-                                  📋 Booking App
-                                </button>
-                              )}
-                            </div>
-
-                            <div className={`flex-1 overflow-y-auto custom-scrollbar rounded-xl sm:rounded-2xl p-4 sm:p-5 shadow-lg border h-[calc(100vh-110px)] ${t.chatPanel}`} style={t.chatPanelGl}>
-                              {bookingData && bookingDetailTab === "booking" ? (
-                                <BookingApplicationView
-                                  booking={bookingData}
-                                  lead={selectedLead}
-                                  isDark={isDark}
-                                  userRole={user.role?.toLowerCase() || "receptionist"}
-                                  onApprove={undefined}
-                                  onCancel={undefined}
-                                />
-                              ) : detailTab === "personal" ? (
-                                <div>
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-4 text-[12px] sm:text-[13px]">
-                                    <InlineContactField label="Email" value={selectedLead.email} fieldType="email" isDark={isDark} theme={t} canEdit={user?.role?.toLowerCase() === "admin" || user?.role?.toLowerCase() === "receptionist"} onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "email", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, email: val || "N/A" })); showToast("Contact details updated successfully."); }} />
-                                    <InlineContactField label="Phone" value={selectedLead.phone} fieldType="tel" isDark={isDark} theme={t} canEdit={user?.role?.toLowerCase() === "admin"} mono onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "phone", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, phone: val })); showToast("Contact details updated successfully."); }} />
-                                    <InlineContactField label="Alt Phone" value={selectedLead.altPhone ?? selectedLead.alt_phone} fieldType="tel" isDark={isDark} theme={t} canEdit={user?.role?.toLowerCase() === "admin"} mono onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "alt_phone", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, altPhone: val, alt_phone: val })); showToast("Contact details updated successfully."); }} />
-                                    <div><p className={`crm-eyebrow mb-1 opacity-70 ${t.textFaint}`}>Lead Interest</p>{selectedLead.leadInterestStatus && selectedLead.leadInterestStatus !== "Pending" ? <InterestBadge status={selectedLead.leadInterestStatus} /> : <p className={`font-semibold ${t.text}`}>Pending</p>}</div>
-                                    <div><p className={`crm-eyebrow mb-1 opacity-70 ${t.textFaint}`}>Loan Status</p>{selectedLead.loanStatus && selectedLead.loanStatus !== "N/A" ? <div className="w-fit"><LoanStatusBadge status={selectedLead.loanStatus} /></div> : <p className={`font-semibold ${t.text}`}>N/A</p>}</div>
-                                    <div><p className={`crm-eyebrow mb-1 opacity-70 ${t.textFaint}`}>Backdated Entry</p><p className={`font-semibold ${t.text}`}>{selectedLead.auto_date_enabled === false && selectedLead.enquiry_date ? formatDate(selectedLead.enquiry_date).split(",")[0] : "Null"}</p></div>
-                                    <div className="col-span-1 sm:col-span-2"><p className={`crm-eyebrow mb-1 opacity-70 ${t.textFaint}`}>Residential Address</p><p className={`font-medium leading-relaxed ${t.text}`}>{selectedLead.address && selectedLead.address !== "N/A" ? selectedLead.address : "Not Provided"}</p></div>
-                                    <div><p className={`crm-eyebrow mb-1 opacity-70 ${t.textFaint}`}>Pin Code</p><p className={`font-semibold ${t.text}`}>{selectedLead.pinCode || selectedLead.pin_code || "N/A"}</p></div>
-                                    <div><p className={`crm-eyebrow mb-1 opacity-70 ${t.textFaint}`}>City</p><p className={`font-semibold ${t.text}`}>{selectedLead.city || "N/A"}</p></div>
-                                    <div className="col-span-1 sm:col-span-2"><InlineContactField label="Location" value={selectedLead.location} fieldType="text" isDark={isDark} theme={t} canEdit={user?.role?.toLowerCase() === "admin" || user?.role?.toLowerCase() === "receptionist"} onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "location", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, location: val || "N/A" })); showToast("Contact details updated successfully."); }} /></div>
-                                    <div><p className={`crm-eyebrow mb-1 opacity-70 ${t.textFaint}`}>Budget</p><p className={`font-bold ${isDark ? "text-green-400" : "text-emerald-600"}`}>{selectedLead.salesBudget !== "Pending" ? selectedLead.salesBudget : selectedLead.budget}</p></div>
-                                    <div><p className={`crm-eyebrow mb-1 opacity-70 ${t.textFaint}`}>Property Type</p><p className={`font-semibold ${t.text}`}>{selectedLead.propType || "Pending"}</p></div>
-                                    <div><p className={`crm-eyebrow mb-1 opacity-70 ${t.textFaint}`}>Type of Use</p><p className={`font-semibold ${t.text}`}>{selectedLead.useType !== "Pending" ? selectedLead.useType : (selectedLead.purpose || "N/A")}</p></div>
-                                    <div><p className={`crm-eyebrow mb-1 opacity-70 ${t.textFaint}`}>Planning to Buy?</p><p className={`font-semibold ${t.text}`}>{selectedLead.planningPurchase || "Pending"}</p></div>
-                                    <div><p className={`crm-eyebrow mb-1 opacity-70 ${t.textFaint}`}>Loan Required?</p><p className={`font-semibold ${t.text}`}>{loanDealLatest?.loan_required || selectedLead.loanPlanned || "Pending"}</p></div>
-                                    <div><p className={`crm-eyebrow mb-1 opacity-70 ${t.textFaint}`}>Status</p><span className={`text-[12px] sm:text-[13px] font-bold ${selectedLead.status === "Closing" ? "text-amber-500" : selectedLead.status === "Visit Scheduled" ? "text-orange-400" : t.accentText}`}>{selectedLead.status || "Assigned"}</span></div>
-
-                                    <div className={`col-span-1 sm:col-span-2 p-3 sm:p-4 rounded-xl border border-gray-400 shadow-sm ${t.settingsBg}`} style={t.settingsBgGl}>
-                                      <p className={`crm-eyebrow mb-1.5 ${isDark ? "text-[#00AEEF]" : "text-[#00AEEF]"}`}>📍 Site Visit Date</p>
-                                      <p className={`text-base sm:text-lg font-black ${t.text}`}>{selectedLead.mongoVisitDate ? formatDate(selectedLead.mongoVisitDate) : "Not Scheduled"}</p>
-                                    </div>
-
-                                    {/* ── Lost Lead Record ── */}
-                                    {selectedLead.is_lost_lead && (
-                                      <div className="col-span-1 sm:col-span-2 mt-2 border-2 rounded-xl p-3 sm:p-4 text-red-300 border-red-500/30 bg-red-950/30 shadow-sm">
-                                        <h3 className="crm-eyebrow mb-2 sm:mb-3 flex items-center gap-2">
-                                          <Ghost className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> Lost Lead Record
-                                        </h3>
-                                        <p className="text-[12px] sm:text-[13px] leading-relaxed">{selectedLead.lost_lead_reason || "No reason recorded."}</p>
-                                        <p className="text-[10px] sm:text-[11px] mt-2 sm:mt-3 opacity-70 text-red-200/70 font-medium">
-                                          Marked by {selectedLead.lost_lead_marked_by || "Unknown"} on {selectedLead.lost_lead_marked_at ? formatDate(selectedLead.lost_lead_marked_at) : "-"}
-                                        </p>
-                                      </div>
-                                    )}
-                                  </div>
-
-                                  <div className={`mt-4 border rounded-xl p-3 sm:p-4 ${t.settingsBg}`} style={t.settingsBgGl}>
-                                    <h3 className={`text-[10px] sm:text-[11px] font-bold uppercase tracking-widest mb-3 border-b pb-2 ${t.sectionTitle} ${t.sectionBorder}`}>Channel Partner Data</h3>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                                      <div><p className={`text-[10px] sm:text-[11px] font-medium uppercase tracking-wide mb-1 opacity-70 ${t.textFaint}`}>Primary Source</p><p className={`font-semibold text-[12px] sm:text-[13px] ${t.text}`}>{selectedLead.source || "N/A"}</p></div>
-                                      {selectedLead.source === "Others" && (<div><p className={`text-[10px] sm:text-[11px] font-medium uppercase tracking-wide mb-1 opacity-70 ${t.textFaint}`}>Specified Name</p><p className={`font-semibold text-[12px] sm:text-[13px] ${t.text}`}>{selectedLead.sourceOther}</p></div>)}
-                                    </div>
-                                    {selectedLead.source === "Channel Partner" && (
-                                      <div className={`mt-3 pt-3 border-t grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 ${t.tableBorder}`}>
-                                        {[{ label: "CP Company", val: selectedLead.cp_company || selectedLead.cpCompany }, { label: "CP Phone", val: selectedLead.cp_phone || selectedLead.cpPhone }].map(({ label, val }) => (
-                                          <div key={label}><p className={`text-[10px] sm:text-[11px] font-medium uppercase tracking-wide mb-1 opacity-70 ${t.textFaint}`}>{label}</p><p className={`font-semibold text-[12px] sm:text-[13px] ${t.text}`}>{val || "N/A"}</p></div>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              ) : (
-                                <LoanDealView lead={selectedLead} booking={loanDealBooking} loanUpdate={loanDealLatest} isDark={isDark} t={t} />
-                              )}
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-2 mt-3 sm:mt-4 flex-shrink-0">
-                              <button className={`border flex flex-col items-center justify-center py-2 sm:py-2.5 rounded-xl shadow-sm transition-all cursor-pointer gap-1 sm:gap-1.5 ${isDark ? "bg-[#00AEEF]/10 border-[#00AEEF]/30 hover:bg-[#00AEEF] text-[#00AEEF] hover:text-white" : "bg-[#00AEEF]/10 border-[#00AEEF]/30 hover:bg-[#00AEEF] text-[#00AEEF] hover:text-white"}`}>
-                                <FaMicrophone className="text-base sm:text-lg" />
-                                <span className="font-bold text-[9px] sm:text-[10px] uppercase tracking-wider">Browser Call</span>
-                              </button>
-
-                              <button onClick={() => setIsWaModalOpen(true)} className="bg-green-600/10 border border-green-500/30 hover:bg-green-600 text-green-400 hover:text-white shadow-sm flex flex-col items-center justify-center py-2 sm:py-2.5 rounded-xl transition-all cursor-pointer gap-1 sm:gap-1.5">
-                                <FaWhatsapp className="text-lg sm:text-xl" />
-                                <span className="font-bold text-[9px] sm:text-[10px] uppercase tracking-wider">WhatsApp</span>
-                              </button>
-
-                              <CallingButtons
-                                leadId={selectedLead?.id ?? null}
-                                phone={selectedLead?.phone}
-                                leadName={selectedLead?.name}
-                                isDark={isDark}
-                                iconClass="text-base sm:text-lg"
-                                paddingClass="py-2 sm:py-2.5 h-full rounded-xl"
-                              />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* RIGHT PANEL: FOLLOW-UPS */}
-                      <div className={`w-full lg:w-[50%] flex flex-col rounded-xl sm:rounded-2xl overflow-hidden shadow-lg min-h-[500px] h-[600px] lg:h-full border ${t.chatPanel}`} style={t.chatPanelGl}>
-                        <div className={`flex-1 p-3 sm:p-4 overflow-y-auto custom-scrollbar flex flex-col gap-3 sm:gap-4 ${t.chatArea}`}>
-                          {/* System message */}
-                          <div className="flex justify-start">
-                            <div className={`rounded-xl rounded-tl-none p-3 sm:p-4 max-w-[90%] sm:max-w-[85%] shadow-sm ${t.fupSalesform}`}>
-                              <div className={`flex flex-wrap justify-between items-center mb-2 gap-x-4 gap-y-0.5`}>
-                                <span className={`font-bold text-[12px] sm:text-[13px] ${t.accentText}`}>System (Front Desk)</span>
-                                <span className={`text-[9px] sm:text-[10px] font-medium ${t.textFaint}`}>{formatDate(selectedLead.created_at)}</span>
-                              </div>
-                              <p className={`text-[12px] sm:text-[13px] leading-relaxed ${t.textMuted}`}>Lead assigned to {selectedLead.assigned_to}. Action required.</p>
-                            </div>
-                          </div>
-                          {currentLeadFollowUps.map((msg: any, idx: number) => {
-                            const isLoan = msg.message.includes("🏦 Loan Update");
-                            const isSF = msg.message.includes("📝 Detailed Salesform Submitted");
-                            const isClosing = msg.message.includes("✅ Lead Marked as Closing");
-                            const bubbleCls = isLoan ? t.fupLoan : isSF ? t.fupSalesform : isClosing ? t.fupClosing : t.fupDefault;
-                            return (
-                              <div key={idx} className="flex justify-start">
-                                <div className={`rounded-xl rounded-tl-none p-3 sm:p-4 max-w-[90%] sm:max-w-[85%] shadow-sm ${bubbleCls}`}>
-                                  <div className="flex flex-wrap justify-between items-center mb-2 gap-x-4 gap-y-0.5">
-                                    <span className={`font-bold text-[12px] sm:text-[13px] ${t.text}`}>{msg.createdBy === "admin" ? `${msg.salesManagerName || "Admin"} (Admin)` : msg.salesManagerName}</span>
-                                    <span className={`text-[9px] sm:text-[10px] font-medium ${t.textFaint}`}>{formatDate(msg.createdAt)}</span>
-                                  </div>
-                                  <p className={`text-[12px] sm:text-[13px] whitespace-pre-wrap leading-relaxed ${t.textMuted}`}>{msg.message}</p>
-                                </div>
-                              </div>
-                            );
-                          })}
-                          <div ref={followUpEndRef} />
-                        </div>
-
-                        <form onSubmit={handleSendCustomNote} className={`p-3 sm:p-4 border-t flex gap-2 sm:gap-3 items-center flex-shrink-0 ${t.header} ${t.tableBorder}`} style={t.headerGlass}>
-                          <input
-                            type="text" value={customNote} onChange={e => setCustomNote(e.target.value)}
-                            placeholder="Add follow-up note..."
-                            className={`flex-1 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-[12px] sm:text-[13px] outline-none transition-colors border shadow-inner ${t.inputBg} ${t.text} ${t.inputFocus}`}
-                          />
-                          <button type="submit" className={`w-10 h-10 sm:w-11 sm:h-11 text-white rounded-xl flex items-center justify-center cursor-pointer transition-colors shadow-sm flex-shrink-0 ${isDark ? "bg-purple-600 hover:bg-purple-500" : "bg-[#00AEEF] hover:bg-[#0099d4]"}`}>
-                            <FaPaperPlane className="text-sm sm:text-base ml-[-2px]" />
-                          </button>
-                        </form>
-                      </div>
-                    </div>
+                    </LeadDetailsLayout>
                   </div>
                 )
               )}
@@ -4655,6 +4489,7 @@ export default function ReceptionistDashboard() {
                     Let's find your perfect home
                   </p>
                 </div>
+
               </div>
 
               {/* CLOSE BUTTON */}
@@ -4663,14 +4498,68 @@ export default function ReceptionistDashboard() {
               </div>
             </div>
             {/* ── FORM BODY ── */}
-            <div className="px-2 sm:px-8 py-2 overflow-y-auto custom-scrollbar flex-1">
+            <div className="px-1 sm:px-4 py-1 overflow-y-auto custom-scrollbar flex-1">
               <form id="enquiryForm" onSubmit={handleEnquirySubmit} className="space-y-8 max-w-5xl mx-auto">
 
-                {/* SECTION 1: PERSONAL DETAILS */}
+                {/* SECTION 1: SITE VISIT LOCATION (dynamic from Admin Settings) */}
+                <div className={`rounded-2xl border overflow-hidden shadow-sm ${isDark ? "border-white/10 bg-[#1A1A1A]" : "border-gray-200 bg-white"}`}>
+                  <div className="eq-section-hdr px-6 py-3.5 flex items-center gap-3">
+                    <FaMapMarkerAlt className="eq-accent text-sm" />
+                    <h3 className="text-white text-[13px] font-semibold tracking-wider uppercase">1. Site Visit Location</h3>
+                  </div>
+                  <div className="p-6">
+                    <label className={`block text-[12px] mb-2 font-semibold uppercase tracking-wider ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                      Site Location *
+                    </label>
+                    {siteLocationsLoading ? (
+                      <div className={`w-full rounded-xl px-4 py-3.5 text-[15px] border animate-pulse ${isDark ? "bg-[#242424] border-gray-700" : "bg-gray-100 border-gray-200"}`}>
+                        <span className={isDark ? "text-gray-500" : "text-gray-400"}>Loading locations...</span>
+                      </div>
+                    ) : siteLocationsError ? (
+                      <div className="flex items-center gap-2">
+                        <div className={`flex-1 rounded-xl px-4 py-3.5 text-[15px] border ${isDark ? "bg-[#242424] border-red-800 text-red-400" : "bg-red-50 border-red-200 text-red-600"}`}>
+                          Failed to load site locations.
+                        </div>
+                        <button
+                          type="button"
+                          onClick={fetchSiteLocations}
+                          className={`rounded-xl px-4 py-3.5 text-[13px] font-medium border transition-all ${isDark ? "bg-[#242424] border-gray-700 text-gray-300 hover:border-[#C5A059]" : "bg-gray-50 border-gray-200 text-gray-700 hover:border-[#18392B]"}`}
+                        >
+                          Retry
+                        </button>
+                      </div>
+                    ) : (
+                      <select
+                        value={enquiryForm.siteLocationId}
+                        onChange={e => setEnquiryForm({ ...enquiryForm, siteLocationId: e.target.value })}
+                        required
+                        className={`w-full rounded-xl px-4 py-3.5 text-[15px] outline-none transition-all border cursor-pointer appearance-none ${isDark
+                          ? "bg-[#242424] border-gray-700 text-white focus:border-[#C5A059]"
+                          : "bg-gray-50 border-gray-200 text-gray-900 focus:border-[#18392B] focus:bg-white"
+                          } focus:ring-1 focus:ring-[#C5A059]`}
+                        style={{
+                          backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='M5 7.5L10 12.5L15 7.5' stroke='%23999' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
+                          backgroundRepeat: "no-repeat",
+                          backgroundPosition: "right 16px center",
+                          paddingRight: "44px",
+                        }}
+                      >
+                        <option value="">Select Site Location</option>
+                        {siteLocations.map(loc => (
+                          <option key={loc.id} value={String(loc.id)}>
+                            {loc.display_name || loc.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                </div>
+
+                {/* SECTION 2: PERSONAL DETAILS */}
                 <div className={`rounded-2xl border overflow-hidden shadow-sm ${isDark ? "border-white/10 bg-[#1A1A1A]" : "border-gray-200 bg-white"}`}>
                   <div className="eq-section-hdr px-6 py-3.5 flex items-center gap-3">
                     <FaUser className="eq-accent text-sm" />
-                    <h3 className="text-white text-[13px] font-semibold tracking-wider uppercase">1. Personal Details</h3>
+                    <h3 className="text-white text-[13px] font-semibold tracking-wider uppercase">2. Personal Details</h3>
                   </div>
                   <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
                     <div className="md:col-span-2">
@@ -4812,12 +4701,12 @@ export default function ReceptionistDashboard() {
                   </div>
                 </div>
 
-                {/* SECTION 2: DREAM HOME PREFERENCES */}
+                {/* SECTION 3: DREAM HOME PREFERENCES */}
                 <div className={`rounded-2xl border overflow-hidden shadow-sm ${isDark ? "border-white/10 bg-[#1A1A1A]" : "border-gray-200 bg-white"}`}>
                   <div className="eq-section-hdr px-6 py-3.5 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <FaHome className="eq-accent text-sm" />
-                      <h3 className="text-white text-[13px] font-semibold tracking-wider uppercase">2. Dream Home Preferences</h3>
+                      <h3 className="text-white text-[13px] font-semibold tracking-wider uppercase">3. Dream Home Preferences</h3>
                     </div>
                     <span className="eq-accent text-[10px] hidden sm:block uppercase tracking-widest font-medium">Allow us to aid you in choosing</span>
                   </div>
@@ -4826,8 +4715,7 @@ export default function ReceptionistDashboard() {
                     <div>
                       <div className="flex items-center justify-between mb-2">
                         <label
-                          className={`block text-[12px] font-semibold uppercase tracking-wider ${isDark ? "text-gray-400" : "text-gray-500"
-                            }`}
+                          className={`block text-[12px] font-semibold uppercase tracking-wider ${isDark ? "text-gray-400" : "text-gray-500"}`}
                         >
                           Budget {!enquiryForm.budgetNotDisclosed && "*"}
                         </label>
@@ -4837,7 +4725,7 @@ export default function ReceptionistDashboard() {
                             setEnquiryForm({
                               ...enquiryForm,
                               budgetNotDisclosed: !enquiryForm.budgetNotDisclosed,
-                              budget: "",
+                              budgetMin: "", budgetMax: "",
                             })
                           }
                           className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-colors cursor-pointer ${enquiryForm.budgetNotDisclosed
@@ -4847,7 +4735,7 @@ export default function ReceptionistDashboard() {
                               : "bg-gray-50 border-gray-200 text-gray-500 hover:border-[#18392B]"
                             }`}
                         >
-                          {enquiryForm.budgetNotDisclosed ? "✓ Not Disclosed" : "Not Disclosed?"}
+                          {enquiryForm.budgetNotDisclosed ? "\u2713 Not Disclosed" : "Not Disclosed?"}
                         </button>
                       </div>
 
@@ -4861,88 +4749,113 @@ export default function ReceptionistDashboard() {
                           Customer has not disclosed a budget
                         </div>
                       ) : (
-                        <div
-                          className={`flex items-stretch w-full rounded-2xl border overflow-hidden transition-all duration-200 ${isDark
-                            ? "bg-[#242424] border-gray-700 focus-within:border-[#C5A059]"
-                            : "bg-gray-50 border-gray-200 focus-within:border-[#18392B] focus-within:bg-white"
-                            } focus-within:ring-1 focus-within:ring-[#C5A059]`}
-                        >
-                          {/* Currency */}
-                          <div
-                            className={`flex items-center pl-4 pr-2 text-[15px] font-medium ${isDark ? "text-gray-400" : "text-gray-500"
-                              }`}
-                          >
-                            ₹
-                          </div>
-
-                          {/* Amount */}
-                          <input
-                            type="number"
-                            required
-                            min="0"
-                            step="0.01"
-                            inputMode="decimal"
-                            value={enquiryForm.budget}
-                            onChange={(e) =>
-                              setEnquiryForm({
-                                ...enquiryForm,
-                                budget: e.target.value,
-                              })
-                            }
-                            className={`flex-1 min-w-0 px-2 py-3.5 text-[15px] outline-none border-none ring-0 focus:outline-none focus:border-none focus:ring-0 bg-transparent appearance-none ${isDark
-                              ? "text-white placeholder:text-gray-500"
-                              : "text-gray-900 placeholder:text-gray-400"
-                              } [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
-                            placeholder="Enter amount"
-                          />
-
-                          {/* Budget unit */}
-                          <div className="relative flex items-center">
-                            <select
-                              value={enquiryForm.budgetUnit || "lakh"}
-                              onChange={(e) =>
-                                setEnquiryForm({
-                                  ...enquiryForm,
-                                  budgetUnit: e.target.value,
-                                })
-                              }
-                              className={`h-full appearance-none border-l pl-4 pr-10 py-3.5 text-[14px] font-medium outline-none cursor-pointer ${isDark
-                                ? "bg-[#242424] text-white border-gray-700"
-                                : "bg-gray-50 text-gray-900 border-gray-200"
-                                }`}
+                        <div className="flex flex-col gap-2">
+                          {/* Minimum Budget */}
+                          <div>
+                            <span className={`text-[10px] font-semibold uppercase tracking-wider mb-1 block ${isDark ? "text-gray-500" : "text-gray-400"}`}>Minimum</span>
+                            <div
+                              className={`flex items-stretch w-full rounded-2xl border overflow-hidden transition-all duration-200 ${isDark
+                                ? "bg-[#242424] border-gray-700 focus-within:border-[#C5A059]"
+                                : "bg-gray-50 border-gray-200 focus-within:border-[#18392B] focus-within:bg-white"
+                                } focus-within:ring-1 focus-within:ring-[#C5A059]`}
                             >
-                              <option value="thousand">Thousand</option>
-                              <option value="lakh">Lakh</option>
-                              <option value="crore">Crore</option>
-                            </select>
-
-                            {/* Chevron */}
-                            <svg
-                              className={`pointer-events-none absolute right-4 w-3.5 h-3.5 ${isDark ? "text-gray-400" : "text-gray-500"
-                                }`}
-                              viewBox="0 0 20 20"
-                              fill="none"
-                              aria-hidden="true"
-                            >
-                              <path
-                                d="M5 7.5L10 12.5L15 7.5"
-                                stroke="currentColor"
-                                strokeWidth="1.8"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
+                              <div className={`flex items-center pl-4 pr-2 text-[15px] font-medium ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                                ₹
+                              </div>
+                              <input
+                                type="text"
+                                required
+                                inputMode="numeric"
+                                pattern="[0-9]{1,3}"
+                                maxLength={3}
+                                value={enquiryForm.budgetMin}
+                                onChange={(e) =>
+                                  setEnquiryForm({
+                                    ...enquiryForm,
+                                    budgetMin: e.target.value.replace(/\D/g, "").slice(0, 3),
+                                  })
+                                }
+                                className={`flex-1 min-w-0 px-2 py-3 text-[15px] outline-none border-none ring-0 focus:outline-none focus:border-none focus:ring-0 bg-transparent ${isDark
+                                  ? "text-white placeholder:text-gray-500"
+                                  : "text-gray-900 placeholder:text-gray-400"
+                                  }`}
+                                placeholder="00"
                               />
-                            </svg>
+                              <div className="relative flex items-center">
+                                <select
+                                  value={enquiryForm.budgetMinUnit || "lakh"}
+                                  onChange={(e) => setEnquiryForm({ ...enquiryForm, budgetMinUnit: e.target.value })}
+                                  className={`h-full appearance-none border-l pl-4 pr-10 py-3 text-[14px] font-medium outline-none cursor-pointer ${isDark
+                                    ? "bg-[#242424] text-white border-gray-700"
+                                    : "bg-gray-50 text-gray-900 border-gray-200"
+                                    }`}
+                                >
+                                  <option value="lakh">Lakh</option>
+                                  <option value="crore">Crore</option>
+                                </select>
+                                <svg className={`pointer-events-none absolute right-4 w-3.5 h-3.5 ${isDark ? "text-gray-400" : "text-gray-500"}`} viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                                  <path d="M5 7.5L10 12.5L15 7.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                              </div>
+                            </div>
+                          </div>
+                          {/* Maximum Budget */}
+                          <div>
+                            <span className={`text-[10px] font-semibold uppercase tracking-wider mb-1 block ${isDark ? "text-gray-500" : "text-gray-400"}`}>Maximum</span>
+                            <div
+                              className={`flex items-stretch w-full rounded-2xl border overflow-hidden transition-all duration-200 ${isDark
+                                ? "bg-[#242424] border-gray-700 focus-within:border-[#C5A059]"
+                                : "bg-gray-50 border-gray-200 focus-within:border-[#18392B] focus-within:bg-white"
+                                } focus-within:ring-1 focus-within:ring-[#C5A059]`}
+                            >
+                              <div className={`flex items-center pl-4 pr-2 text-[15px] font-medium ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                                ₹
+                              </div>
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                pattern="[0-9]{1,3}"
+                                maxLength={3}
+                                value={enquiryForm.budgetMax}
+                                onChange={(e) =>
+                                  setEnquiryForm({
+                                    ...enquiryForm,
+                                    budgetMax: e.target.value.replace(/\D/g, "").slice(0, 3),
+                                  })
+                                }
+                                className={`flex-1 min-w-0 px-2 py-3 text-[15px] outline-none border-none ring-0 focus:outline-none focus:border-none focus:ring-0 bg-transparent ${isDark
+                                  ? "text-white placeholder:text-gray-500"
+                                  : "text-gray-900 placeholder:text-gray-400"
+                                  }`}
+                                placeholder="00"
+                              />
+                              <div className="relative flex items-center">
+                                <select
+                                  value={enquiryForm.budgetMaxUnit || "lakh"}
+                                  onChange={(e) => setEnquiryForm({ ...enquiryForm, budgetMaxUnit: e.target.value })}
+                                  className={`h-full appearance-none border-l pl-4 pr-10 py-3 text-[14px] font-medium outline-none cursor-pointer ${isDark
+                                    ? "bg-[#242424] text-white border-gray-700"
+                                    : "bg-gray-50 text-gray-900 border-gray-200"
+                                    }`}
+                                >
+                                  <option value="lakh">Lakh</option>
+                                  <option value="crore">Crore</option>
+                                </select>
+                                <svg className={`pointer-events-none absolute right-4 w-3.5 h-3.5 ${isDark ? "text-gray-400" : "text-gray-500"}`} viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                                  <path d="M5 7.5L10 12.5L15 7.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                              </div>
+                            </div>
                           </div>
                         </div>
                       )}
 
                       <p
-                        className={`mt-1.5 text-[11px] ${isDark ? "text-gray-500" : "text-gray-400"
-                          }`}
+                        className={`mt-1.5 text-[11px] ${isDark ? "text-gray-500" : "text-gray-400"}`}
                       >
                         {enquiryForm.budgetNotDisclosed
                           ? "Tap \"Not Disclosed\" again to enter an amount."
-                          : "Enter the amount and select the unit."}
+                          : "Enter minimum budget. Maximum is optional."}
                       </p>
                     </div>
 
@@ -5315,16 +5228,16 @@ export default function ReceptionistDashboard() {
                   </div>
                 </div>
 
-                {/* SECTION 3: ENQUIRY SOURCE */}
+                {/* SECTION 4: ENQUIRY SOURCE */}
                 <div className={`rounded-2xl border overflow-hidden shadow-sm ${isDark ? "border-white/10 bg-[#1A1A1A]" : "border-gray-200 bg-white"}`}>
                   <div className="eq-section-hdr px-6 py-3.5 flex items-center gap-3">
                     <FaBullhorn className="eq-accent text-sm" />
-                    <h3 className="text-white text-[13px] font-semibold tracking-wider uppercase">3. Enquiry Source</h3>
+                    <h3 className="text-white text-[13px] font-semibold tracking-wider uppercase">4. Enquiry Source</h3>
                   </div>
                   <div className="p-6">
                     <label className={`block text-[12px] mb-3 font-semibold uppercase tracking-wider ${isDark ? "text-gray-400" : "text-gray-500"}`}>Source *</label>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-                      {["Advertisement", "Referral", "Exhibition", "Channel Partner", "Website", "Call Center", "Others"].map(s => (
+                      {["Direct Walk-in", "Advertisement", "Referral", "Exhibition", "Channel Partner", "Website", "Call Center", "Others"].map(s => (
                         <button
                           key={s} type="button"
                           onClick={() => {
@@ -5378,12 +5291,12 @@ export default function ReceptionistDashboard() {
                   </div>
                 </div>
 
-                {/* SECTION 4: CHANNEL PARTNER DETAILS (Conditional) */}
+                {/* SECTION 5: CHANNEL PARTNER DETAILS (Conditional) */}
                 {enquiryForm.source === "Channel Partner" && (
                   <div className={`rounded-2xl border overflow-hidden shadow-sm animate-fadeIn ${isDark ? "border-white/10 bg-[#1A1A1A]" : "border-gray-200 bg-white"}`}>
                     <div className="eq-section-hdr px-6 py-3.5 flex items-center gap-3">
                       <FaHandshake className="eq-accent text-sm" />
-                      <h3 className="text-white text-[13px] font-semibold tracking-wider uppercase">4. Channel Partner Details</h3>
+                      <h3 className="text-white text-[13px] font-semibold tracking-wider uppercase">5. Channel Partner Details</h3>
                     </div>
                     <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-6">
 

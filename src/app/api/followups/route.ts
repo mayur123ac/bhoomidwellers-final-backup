@@ -7,6 +7,7 @@ import { requireSession, requireRoles } from "@/lib/serverAuth";
 import { broadcastFollowUp, type FollowUpPayload } from "@/lib/followUpEvents";
 import { broadcastToOrg } from "@/lib/supabase/broadcast";
 import { pushFollowUp } from "@/lib/fcm/feedPushHandler";
+import { insertOutboxEvent, buildEventKey } from "@/lib/dealStageOutbox";
 
 /**
  * GET follow-ups.
@@ -395,27 +396,49 @@ export async function POST(req: Request) {
     const orgId = await getOrganizationId();
     const clientMsgId = body.clientMessageId ? String(body.clientMessageId) : null;
 
-    // ON CONFLICT on the partial unique index (organization_id, client_message_id)
-    // WHERE client_message_id IS NOT NULL. A retry with the same clientMessageId
-    // returns the existing row instead of creating a duplicate.
-    const rows = await query(
-      `INSERT INTO follow_ups (lead_id, message, created_by_name, created_by_id, site_visit_date, organization_id, client_message_id)
-       VALUES ($1, $2, $3, $7, $4, $5, $6)
-       ON CONFLICT (organization_id, client_message_id) WHERE client_message_id IS NOT NULL
-       DO UPDATE SET lead_id = follow_ups.lead_id  -- no-op, returns the existing row
-       RETURNING *`,
-      [
-        String(leadId),
-        message,
-        salesManagerName || createdBy || "sales",
-        siteVisitDate || null,
-        orgId,
-        clientMsgId,
-        gate.userId,
-      ]
-    );
+    // Wrap in a transaction so the follow-up INSERT and deal-stage outbox
+    // event are atomic. The SAVEPOINT inside insertOutboxEvent isolates
+    // processing failures from the follow-up write.
+    const m = await transaction(async (client) => {
+      // ON CONFLICT on the partial unique index (organization_id, client_message_id)
+      // WHERE client_message_id IS NOT NULL. A retry with the same clientMessageId
+      // returns the existing row instead of creating a duplicate.
+      const res = await client.query(
+        `INSERT INTO follow_ups (lead_id, message, created_by_name, created_by_id, site_visit_date, organization_id, client_message_id)
+         VALUES ($1, $2, $3, $7, $4, $5, $6)
+         ON CONFLICT (organization_id, client_message_id) WHERE client_message_id IS NOT NULL
+         DO UPDATE SET lead_id = follow_ups.lead_id  -- no-op, returns the existing row
+         RETURNING *`,
+        [
+          String(leadId),
+          message,
+          salesManagerName || createdBy || "sales",
+          siteVisitDate || null,
+          orgId,
+          clientMsgId,
+          gate.userId,
+        ]
+      );
 
-    const m = rows[0];
+      const row = res.rows[0];
+
+      // Deal stage hook: a follow-up note constitutes evidence of contact.
+      // Internal messages (receptionist ⇄ SM) are excluded — they are
+      // handled above and are NOT evidence of client contact.
+      // The SAVEPOINT inside insertOutboxEvent ensures that a processing
+      // failure does NOT roll back the follow-up insert itself.
+      await insertOutboxEvent(client, {
+        lead_id: Number(leadId),
+        event_type: "follow_up_created",
+        event_ts: row.created_at,
+        event_key: buildEventKey("follow_up_created", "follow_ups", row.id),
+        actor_id: gate.userId,
+        payload: { source_table: "follow_ups", source_record_id: row.id },
+        organization_id: orgId,
+      });
+
+      return row;
+    });
 
     const followUpData: FollowUpPayload = {
       _id: String(m.id),

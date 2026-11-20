@@ -1,8 +1,9 @@
 //api/users/site-head/route.ts
 import { getOrganizationId } from "@/lib/tenantContext";
 import { NextResponse } from "next/server";
-import { query } from "@/lib/db"; 
+import { query } from "@/lib/db";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
+import { expireStaleSessionsThrottled } from "@/lib/sessionCleanup";
 
 export async function GET(req: Request) {
   try {
@@ -20,15 +21,8 @@ export async function GET(req: Request) {
     // dropdown and the notification feed's role labels; it needs identity, not
     // credentials. Any column added to `users` later is now opt-in here.
 
-    // Expire stale sessions (no heartbeat in 5 min) — same housekeeping as
-    // /api/attendance/live and the other user-list endpoints.
-    await query(
-      `UPDATE employee_sessions
-          SET is_active = false, session_end = last_heartbeat
-        WHERE is_active = true AND organization_id = $1
-          AND EXTRACT(EPOCH FROM (NOW() - last_heartbeat)) > 300`,
-      [orgId]
-    );
+    // Expire stale sessions (throttled + sargable, shared with /attendance/live).
+    await expireStaleSessionsThrottled(orgId);
 
     const rows = await query(
       `SELECT u.id, u.name, u.email, u.username, u.role, u.is_active AS "isActive",

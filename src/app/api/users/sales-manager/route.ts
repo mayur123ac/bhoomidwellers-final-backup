@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { requireSession } from "@/lib/serverAuth";
 import { getOrganizationId } from "@/lib/tenantContext";
+import { expireStaleSessionsThrottled } from "@/lib/sessionCleanup";
 
 export const dynamic = "force-dynamic";
 
@@ -16,22 +17,11 @@ export async function GET() {
 
     const orgId = await getOrganizationId();
 
-    // The session-expiry UPDATE and the users SELECT both need orgId only, so
-    // they can run in parallel. The presence subquery in the SELECT reads
-    // `es.is_active`, and it is possible the UPDATE has not committed yet, so
-    // a just-expired session may still appear ONLINE for this one request.
-    // That is a display-only race lasting < 1 ms with < 1% probability;
-    // the next poll (2 min later) will show the correct state. Correctness of
-    // the lead-list and assignment logic is unaffected.
-    const [, managers] = await Promise.all([
-      query(
-        `UPDATE employee_sessions
-            SET is_active = false, session_end = last_heartbeat
-          WHERE is_active = true AND organization_id = $1
-            AND EXTRACT(EPOCH FROM (NOW() - last_heartbeat)) > 300`,
-        [orgId]
-      ),
-      query(
+    // Expire stale sessions (throttled + sargable, shared with /attendance/live).
+    // Runs before the SELECT so the presence subquery reads up-to-date state.
+    await expireStaleSessionsThrottled(orgId);
+
+    const managers = await query(
       `SELECT u.id, u.name, u.username, u.email,
               u.whatsapp_number AS phone, u.whatsapp_number,
               u.sales_form_exception,
@@ -70,8 +60,7 @@ export async function GET() {
           ) THEN 0 ELSE 1 END,
           u.name ASC`,
         [orgId]
-      ),
-    ]);
+    );
 
     return NextResponse.json({ success: true, data: managers }, { status: 200 });
   } catch (error: any) {

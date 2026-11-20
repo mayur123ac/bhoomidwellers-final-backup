@@ -20,6 +20,7 @@ type SalesFormFields = {
   purchaseDate?: string;
   loanPlanned?: string;
   leadStatus?: string;
+  remark?: string;
 };
 
 // Build the same human-readable "Detailed Salesform Submitted" string that the
@@ -49,6 +50,7 @@ function buildMessage(f: SalesFormFields, siteVisitDate?: string | null): string
     "• Planning to Purchase: " + (f.purchaseDate || "N/A") + "\n" +
     "• Loan Planned: " + (f.loanPlanned || "N/A") + "\n" +
     "• Lead Status: " + (f.leadStatus || "N/A") + "\n" +
+    "• Remark: " + (f.remark || "N/A") + "\n" +
     "• Site Visit Requested: " + visitLine
   );
 }
@@ -141,8 +143,9 @@ export async function POST(req: Request) {
              loan_planned_confirmed  = $6,
              lead_interest_status    = $7,
              location                = $8,
+             sales_remark            = $9,
              sales_form_submitted_at = COALESCE(sales_form_submitted_at, NOW())
-         WHERE id = $9 AND organization_id = $10`,
+         WHERE id = $10 AND organization_id = $11`,
         [
           newStatus,
           formFields.propertyType || null,
@@ -152,6 +155,7 @@ export async function POST(req: Request) {
           formFields.loanPlanned || null,
           formFields.leadStatus || null,
           formFields.location || null,
+          formFields.remark || null,
           leadId,
           orgId,
         ]

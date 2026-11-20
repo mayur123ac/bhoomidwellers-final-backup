@@ -26,6 +26,14 @@ export function formatBudget(
   // Short-circuit sentinel values
   if (b === "NOT DISCLOSED" || b === "Not Disclosed" || b === "Pending" || b === "N/A") return b;
 
+  // Range format: "40 LAKH - 1 CRORE" → "₹40 Lakh - ₹1 Crore"
+  if (b.includes(" - ")) {
+    const [left, right] = b.split(" - ").map(s => s.trim());
+    const fmtL = formatBudget(left, null);
+    const fmtR = formatBudget(right, null);
+    if (fmtL && fmtR) return `${fmtL} - ${fmtR}`;
+  }
+
   // Canonical path: unit column is set
   if (unit) {
     const u = unit.trim().toLowerCase();
@@ -78,4 +86,31 @@ export function parseBudgetString(raw: string | null | undefined): {
   }
 
   return { value: b, unit: null };
+}
+
+/**
+ * Composes a budget display string from min/max values and units.
+ *
+ * Examples:
+ *   composeBudgetString("40", "lakh", "60", "lakh")     → "40 LAKH - 60 LAKH"
+ *   composeBudgetString("40", "lakh", "1", "crore")     → "40 LAKH - 1 CRORE"
+ *   composeBudgetString("40", "lakh", "", "")            → "40 LAKH"
+ *   composeBudgetString("", "", "1", "crore")            → "1 CRORE"
+ *   composeBudgetString("40", "lakh", "40", "lakh")      → "40 LAKH"
+ *   composeBudgetString("", "", "", "")                   → ""
+ */
+export function composeBudgetString(
+  minVal: string,
+  minUnit: string,
+  maxVal: string,
+  maxUnit: string
+): string {
+  const unitLabel = (u: string) => {
+    const l = (u || "").trim().toLowerCase();
+    return l === "crore" ? "CRORE" : "LAKH";
+  };
+  const minStr = minVal ? `${minVal} ${unitLabel(minUnit)}` : "";
+  const maxStr = maxVal ? `${maxVal} ${unitLabel(maxUnit)}` : "";
+  if (minStr && maxStr && minStr !== maxStr) return `${minStr} - ${maxStr}`;
+  return minStr || maxStr || "";
 }

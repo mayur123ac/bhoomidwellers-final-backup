@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { requireRole, getSessionUserId } from "@/lib/serverAuth";
 import { getOrganizationId } from "@/lib/tenantContext";
+import { expireStaleSessionsThrottled } from "@/lib/sessionCleanup";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,11 @@ export async function GET(req: Request) {
       "site_head",
       "site head",
       "receptionist",
+      "sourcing_manager",
+      "sourcing manager",
+      "caller",
+      "telecaller",
+      "channel partner manager",
     ]);
     if (!auth.isAuthorized) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
@@ -48,14 +54,8 @@ export async function GET(req: Request) {
 
     const orgId = await getOrganizationId();
 
-    // Expire stale sessions (no heartbeat in >5 min) — same as live API, and
-    // scoped the same way: the sweep may only touch the caller's own tenant.
-    await query(`
-      UPDATE employee_sessions
-      SET is_active = false, session_end = last_heartbeat
-      WHERE is_active = true AND organization_id = $1
-        AND EXTRACT(EPOCH FROM (NOW() - last_heartbeat)) > 300
-    `, [orgId]);
+    // Expire stale sessions (throttled + sargable, shared with /attendance/live).
+    await expireStaleSessionsThrottled(orgId);
 
     // Fetch ALL sessions for this user on this date, oldest first
     let rows: any[];

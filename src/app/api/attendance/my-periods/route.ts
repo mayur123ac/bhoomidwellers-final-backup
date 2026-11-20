@@ -20,6 +20,9 @@ export async function GET(req: Request) {
       "sales manager", "sales_manager",
       "site_head", "site head",
       "receptionist",
+      "sourcing_manager", "sourcing manager",
+      "caller", "telecaller",
+      "channel partner manager",
     ]);
     if (!auth.isAuthorized) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });

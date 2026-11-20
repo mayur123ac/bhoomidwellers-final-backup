@@ -17,7 +17,6 @@ import { cleanupPushOnLogout } from "@/lib/pushNotifications";
 import { formatBudget } from "@/lib/formatBudget";
 import { useCpEnquiryVisible } from "@/lib/hooks/useCpEnquiryVisible";
 import { useCrmTheme } from "@/lib/hooks/useCrmTheme";
-import { useDetailReturnView } from "@/lib/hooks/useDetailReturnView";
 import { useShiftTiming } from "@/hooks/useShiftTiming";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -153,6 +152,7 @@ function EnquiryDetailsBubble({ lead, theme, isDark, formatDateFn }: { lead: any
       ["CP Phone", lead.cp_phone || lead.cpPhone || "N/A"] as [string, string],
     ] : []),
     ...(lead.source === "Referral" && lead.referral_name ? [["Referred By", lead.referral_name] as [string, string]] : []),
+    ["Site Location", lead.site_location_name || "Not Provided"],
     ["Location", lead.location && lead.location !== "N/A" ? lead.location : "Not Provided"],
     ["Address", lead.address && lead.address !== "N/A" ? lead.address : "Not Provided"],
     ["Planning to Buy", lead.planningPurchase || "Pending"],
@@ -455,6 +455,7 @@ function useAdminData(onReminderDue?: (r: import("@/lib/followUpSync").ReminderS
 
         return {
           ...lead,
+          siteLocationName: lead.site_location_name || "",
           propType: extractField("Property Type") !== "Pending"
             ? extractField("Property Type").replace(/bhk/gi, "BHK")
             : (lead.configuration && lead.configuration !== "N/A" ? lead.configuration : "Pending"),
@@ -1355,6 +1356,7 @@ const SM_DB_COLS_KEY = "bd:sm:db:hiddenCols:v1";
 const SM_DB_COLUMNS: { key: string; label: string; locked?: boolean; defaultHidden?: boolean; type?: 'text' | 'number' | 'date' }[] = [
   { key: "lead_no", label: "LEAD NO.", locked: true, type: 'number' },
   { key: "name", label: "NAME", locked: true, type: 'text' },
+  { key: "site_location", label: "Site Location" },
   { key: "prop_type", label: "PROP. TYPE", type: 'text' },
   { key: "budget", label: "BUDGET", type: 'text' },
   { key: "source", label: "SOURCE", type: 'text' },
@@ -1384,6 +1386,7 @@ function getLeadValueForCol(lead: any, key: string): string {
   switch (key) {
     case 'lead_no': return String(lead.sr_no || lead.id || '');
     case 'name': return String(lead.name || '');
+    case 'site_location': return String(lead.siteLocationName || '');
     case 'prop_type': return String(lead.propType || lead.configuration || 'Pending');
     case 'budget': return String(lead.salesBudget || lead.budget || '');
     case 'source': return String(lead.source || '');
@@ -1444,7 +1447,7 @@ function SalesManagerView({
   const [subView, setSubView] = useState<"overview" | "cards" | "detail" | "closed-leads">(
     initialView === "overview" ? "overview" : initialView === "detail" ? "detail" : initialView === "closed-leads" ? "closed-leads" : "cards"
   );
-  const returnView = useDetailReturnView(initialView, "detail", "forms");
+  const detailOrigin = useRef<"overview" | "cards" | "closed-leads">("cards");
   const [selectedLead, setSelectedLead] = useState<any>(null);
   useLeadFollowUpPolling(selectedLead?.id, mergeLeadFollowUps);
   const [searchTerm, setSearchTerm] = useState("");
@@ -1530,7 +1533,7 @@ function SalesManagerView({
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [showSalesForm, setShowSalesForm] = useState(false);
   const [isSubmittingSalesForm, setIsSubmittingSalesForm] = useState(false);
-  const [salesForm, setSalesForm] = useState({ propertyType: "", location: "", budget: "", useType: "", purchaseDate: "", loanPlanned: "", siteVisit: "", leadStatus: "" });
+  const [salesForm, setSalesForm] = useState({ propertyType: "", location: "", budget: "", useType: "", purchaseDate: "", loanPlanned: "", siteVisit: "", leadStatus: "", remark: "" });
   const inputRef = useRef<HTMLInputElement>(null);
   const [showLoanForm, setShowLoanForm] = useState(false);
   const [showMobileActions, setShowMobileActions] = useState(false);
@@ -1690,6 +1693,7 @@ function SalesManagerView({
     const lead = allLeads.find((l: any) => Number(l.id) === Number(pendingLeadOpen.id));
     if (lead) {
       setSelectedLead(lead);
+      detailOrigin.current = subView === "detail" ? detailOrigin.current : (subView as any);
       setMainView("detail");
       setSubView("detail");
       if (pendingLeadOpen.openBooking) setAutoOpenBooking(true);
@@ -2213,6 +2217,7 @@ function SalesManagerView({
         purchaseDate: salesForm.purchaseDate,
         loanPlanned: salesForm.loanPlanned,
         leadStatus: salesForm.leadStatus,
+        remark: salesForm.remark,
       },
       siteVisitDate: salesForm.siteVisit || null,
     };
@@ -2249,6 +2254,7 @@ function SalesManagerView({
         loanPlanned: "",
         siteVisit: "",
         leadStatus: "",
+        remark: "",
       });
       refetch();
     } catch (err) {
@@ -2263,7 +2269,7 @@ function SalesManagerView({
       setIsSubmittingSalesForm(false);
     }
   };
-  const prefillSalesForm = (targetLead?: any) => { const l = targetLead || selectedLead; if (!l) return; const fups = followUps.filter((f: any) => String(f.leadId) === String(l.id)); const sf = fups.filter((f: any) => f.message?.includes("Detailed Salesform Submitted")); if (sf.length === 0) return; const msg = sf[sf.length - 1].message; const g = (label: string) => { const m = msg.match(new RegExp(`• ${label}: (.*)`)); return m && m[1].trim() !== "N/A" ? m[1].trim() : ""; }; setSalesForm({ propertyType: g("Property Type").toUpperCase(), location: g("Location"), budget: g("Budget").toUpperCase(), useType: g("Use Type"), purchaseDate: g("Planning to Purchase"), loanPlanned: g("Loan Planned"), leadStatus: g("Lead Status"), siteVisit: "" }); };
+  const prefillSalesForm = (targetLead?: any) => { const l = targetLead || selectedLead; if (!l) return; const fups = followUps.filter((f: any) => String(f.leadId) === String(l.id)); const sf = fups.filter((f: any) => f.message?.includes("Detailed Salesform Submitted")); if (sf.length === 0) return; const msg = sf[sf.length - 1].message; const g = (label: string) => { const m = msg.match(new RegExp(`• ${label}: (.*)`)); return m && m[1].trim() !== "N/A" ? m[1].trim() : ""; }; setSalesForm({ propertyType: g("Property Type").toUpperCase(), location: g("Location"), budget: g("Budget").toUpperCase(), useType: g("Use Type"), purchaseDate: g("Planning to Purchase"), loanPlanned: g("Loan Planned"), leadStatus: g("Lead Status"), remark: g("Remark"), siteVisit: "" }); };
 
 
   const CardsLoader = () => (
@@ -2383,7 +2389,7 @@ function SalesManagerView({
         </div>
       )}
 
-      <main className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+      <main className="relative flex-1 min-h-0 overflow-y-auto custom-scrollbar">
 
         {/* ── OVERVIEW ── */}
         {subView === "overview" && (
@@ -2527,6 +2533,7 @@ function SalesManagerView({
                     onClick={() => downloadCSV(filteredDatabaseLeads.map((l: any) => ({
                       "Sr. No.": l.sr_no || l.id,
                       "Name": l.name,
+                      "Site Location": l.siteLocationName || "",
                       "Property Type": l.propType || l.configuration || "",
                       "Budget": l.salesBudget || l.budget || "",
                       "Source": l.source || "",
@@ -2720,6 +2727,7 @@ function SalesManagerView({
                               }}
                               onClick={() => {
                                 setSelectedLead(lead);
+                                detailOrigin.current = subView as any;
                                 setMainView("detail");
                                 setSubView("detail");
                               }}>
@@ -2757,6 +2765,8 @@ function SalesManagerView({
                                         </div>
                                       </td>
                                     );
+                                  case 'site_location':
+                                    return <td key={col.key} className={`px-3 sm:px-4 py-3 text-[12px] sm:text-[13px] font-medium ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{lead.siteLocationName || "—"}</td>;
                                   case 'prop_type':
                                     return <td key={col.key} className={`px-3 sm:px-4 py-3 text-[12px] sm:text-[13px] font-medium ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{lead.propType || lead.configuration || "Pending"}</td>;
                                   case 'budget':
@@ -2952,7 +2962,7 @@ function SalesManagerView({
                           key={lead.id}
                           className={`rounded-3xl p-3  sm:p-2 border shadow-sm transition-all group flex flex-col justify-between cursor-pointer h-full ${isLost ? t.cardLost : isClosing ? t.cardClosing : isNGD ? t.cardNGD : t.card}`}
                           style={t.cardGlass}
-                          onClick={() => { setSelectedLead(lead); setMainView("detail"); setSubView("detail"); }}
+                          onClick={() => { setSelectedLead(lead); detailOrigin.current = subView as any; setMainView("detail"); setSubView("detail"); }}
                         >
                           <div>
                             <div className={`flex flex-col sm:flex-row sm:justify-between items-start mb-4 pb-3 sm:mb-5 sm:pb-4 border-b gap-2 ${t.tableBorder}`}>
@@ -3098,6 +3108,7 @@ function SalesManagerView({
                           className={`group cursor-pointer transition-colors duration-200 ${isDark ? "hover:bg-slate-800/40" : "hover:bg-slate-50"}`}
                           onClick={() => {
                             setSelectedLead(lead);
+                            detailOrigin.current = subView as any;
                             setMainView("detail");
                             setSubView("detail");
                           }}
@@ -3215,15 +3226,16 @@ function SalesManagerView({
                   canViewBooking: true,
                   canCreateBooking: true,
                   canDeleteLead: false,
-                  canAdvanceStage: false,
+                  canAdvanceStage: true,
                   canSendFollowUp: true,
                   canDeleteFollowUp: canDeleteFollowUps,
                   canCall: true,
                   canWhatsApp: true,
+                  canEditFields: true,
                 }}
                 isDark={isDark}
                 theme={t}
-                onBack={() => { setSubView("cards"); setShowSalesForm(false); setShowLoanForm(false); }}
+                onBack={() => { setSubView(detailOrigin.current); setShowSalesForm(false); setShowLoanForm(false); }}
                 followUps={currentLeadFollowUps}
                 bookingData={bookingData}
                 loanDealBooking={loanDealBooking}
@@ -3433,7 +3445,7 @@ function SalesManagerView({
           onOpenLead={(leadId: number) => {
             // What the AI's [#226 Name](lead:226) links call.
             const l = allLeads.find((x: any) => Number(x.id) === Number(leadId));
-            if (l) { setSelectedLead(l); setSubView("detail"); }
+            if (l) { setSelectedLead(l); detailOrigin.current = subView === "detail" ? detailOrigin.current : (subView as any); setSubView("detail"); }
           }}
           onToggle={() => setAiPanelOpen(o => !o)}
         />

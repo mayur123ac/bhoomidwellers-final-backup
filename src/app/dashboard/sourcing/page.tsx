@@ -20,6 +20,7 @@ import {
   IoMoonOutline, IoSunnyOutline,
   IoChevronForward,
   IoWalletOutline, IoWallet,
+  IoFingerPrintOutline, IoFingerPrint,
 } from "react-icons/io5";
 
 import ChannelPartnerEnquiriesTable from "@/components/ChannelPartnerEnquiriesTable";
@@ -35,6 +36,7 @@ import { APP_HEADER_HEIGHT, APP_HEADER_PADDING } from "@/components/AppHeader";
 import LogoutConfirmDialog from "@/components/LogoutConfirmDialog";
 import dynamic from "next/dynamic";
 const SalaryTab = dynamic(() => import("@/components/hr/SalaryTab"), { ssr: false });
+const MyAttendanceNewUi = dynamic(() => import("@/components/MyAttendance NewUi"), { ssr: false });
 import PushNotificationInit from "@/components/PushNotificationInit";
 /**
  * The theme object two panels on this page are given.
@@ -53,6 +55,7 @@ const NAV_ITEMS = [
   { id: "assigned-cps", icon: IoDocumentTextOutline, activeIcon: IoDocumentText, title: "CP Linked with Leads" },
   { id: "cp-chat", icon: IoChatbubbleEllipsesOutline, activeIcon: IoChatbubbleEllipses, title: "CP Chat" },
   { id: "my-salary", icon: IoWalletOutline, activeIcon: IoWallet, title: "My Salary" },
+  { id: "my-attendance", icon: IoFingerPrintOutline, activeIcon: IoFingerPrint, title: "My Attendance" },
 ];
 
 export default function SourcingManagerDashboard() {
@@ -480,6 +483,10 @@ export default function SourcingManagerDashboard() {
 
           {activeTab === "my-salary" && (
             <SalaryTab isDark={isDark} />
+          )}
+
+          {activeTab === "my-attendance" && (
+            <MyAttendanceNewUi isDark={isDark} />
           )}
 
           {/* ════════════════════════════════════════════════════

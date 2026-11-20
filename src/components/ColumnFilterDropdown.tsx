@@ -14,13 +14,88 @@ export interface FilterableColumn {
 export type ColFilters = Record<string, Set<string> | null>;
 export type ColSort = { key: string; direction: "asc" | "desc" } | null;
 
+// ── Persist-key builder ──────────────────────────────────────────────────────
+// Consumers call this once to build the sessionStorage key from the logged-in
+// user context. Returns undefined during SSR or when no user is stored.
+
+export function buildFilterPersistKey(tableId: string): string | undefined {
+  if (typeof window === "undefined") return undefined;
+  try {
+    const raw = localStorage.getItem("crm_user");
+    if (!raw) return undefined;
+    const u = JSON.parse(raw);
+    return `crm_cf:${u.org || "0"}:${u._id || "0"}:${u.role || "x"}:${tableId}`;
+  } catch {
+    return undefined;
+  }
+}
+
+// ── Persistence helpers ──────────────────────────────────────────────────────
+
+function serializeFilters(filters: ColFilters): string {
+  const obj: Record<string, string[] | null> = {};
+  for (const [k, v] of Object.entries(filters)) {
+    obj[k] = v ? Array.from(v) : null;
+  }
+  return JSON.stringify(obj);
+}
+
+function deserializeFilters(raw: string): ColFilters {
+  try {
+    const obj = JSON.parse(raw) as Record<string, string[] | null>;
+    const result: ColFilters = {};
+    for (const [k, v] of Object.entries(obj)) {
+      result[k] = v ? new Set(v) : null;
+    }
+    return result;
+  } catch {
+    return {};
+  }
+}
+
+function readStoredState(persistKey: string): { filters: ColFilters; sort: ColSort } {
+  try {
+    const raw = sessionStorage.getItem(persistKey);
+    if (!raw) return { filters: {}, sort: null };
+    const parsed = JSON.parse(raw) as { f?: string; s?: ColSort };
+    return {
+      filters: parsed.f ? deserializeFilters(parsed.f) : {},
+      sort: parsed.s ?? null,
+    };
+  } catch {
+    return { filters: {}, sort: null };
+  }
+}
+
+function writeStoredState(persistKey: string, filters: ColFilters, sort: ColSort) {
+  try {
+    sessionStorage.setItem(persistKey, JSON.stringify({
+      f: serializeFilters(filters),
+      s: sort,
+    }));
+  } catch { /* quota exceeded — silently skip */ }
+}
+
 // ── Hook: useColumnFilters ───────────────────────────────────────────────────
 // Manages filter/sort state and provides helpers to apply them to a data array.
+// Pass an optional `persistKey` to persist filter/sort state in sessionStorage.
 
-export function useColumnFilters() {
-  const [colFilters, setColFilters] = useState<ColFilters>({});
-  const [colSort, setColSort] = useState<ColSort>(null);
+export function useColumnFilters(persistKey?: string) {
+  const [colFilters, setColFilters] = useState<ColFilters>(() => {
+    if (!persistKey || typeof window === "undefined") return {};
+    return readStoredState(persistKey).filters;
+  });
+  const [colSort, setColSort] = useState<ColSort>(() => {
+    if (!persistKey || typeof window === "undefined") return null;
+    return readStoredState(persistKey).sort;
+  });
   const [openFilterCol, setOpenFilterCol] = useState<string | null>(null);
+
+  // Sync to sessionStorage whenever filters or sort change
+  useEffect(() => {
+    if (!persistKey) return;
+    writeStoredState(persistKey, colFilters, colSort);
+  }, [persistKey, colFilters, colSort]);
 
   const applyFilter = useCallback((key: string, vals: Set<string> | null) => {
     setColFilters(prev => ({ ...prev, [key]: vals }));
@@ -33,7 +108,10 @@ export function useColumnFilters() {
   const clearAllFilters = useCallback(() => {
     setColFilters({});
     setColSort(null);
-  }, []);
+    if (persistKey) {
+      try { sessionStorage.removeItem(persistKey); } catch { /* ignore */ }
+    }
+  }, [persistKey]);
 
   /** Filter rows by all active column filters. `getDisplayValue` maps a row + column key to the string shown in the dropdown. */
   const filterRows = useCallback(

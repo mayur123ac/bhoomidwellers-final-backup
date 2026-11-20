@@ -2,8 +2,6 @@
 import { Pool, PoolClient } from "pg";
 import { createResolvingSocket } from "./dnsFallback";
 
-let pool: Pool | undefined;
-
 /**
  * Neon endpoints that are PRODUCTION and must never be opened from a developer
  * machine. Endpoint ids only — no credentials, and nothing secret: these are the
@@ -51,37 +49,53 @@ function assertNotProductionInDev(connectionString: string | undefined): void {
   );
 }
 
+// ── Pool singleton ──────────────────────────────────────────────────────────
+// Stored on globalThis so that Next.js HMR in `next dev` reuses the same pool
+// instead of creating an orphan pool on every module re-evaluation. Each orphan
+// holds up to `max` connections against Neon, which has a finite connection
+// limit. In production (serverless) globalThis is per-isolate, so this is a
+// no-op there — exactly as intended.
+const POOL_KEY = "__bd_pg_pool";
+
 export function getPool(): Pool {
-  if (!pool) {
-    assertNotProductionInDev(process.env.DATABASE_URL);
-    pool = new Pool({
-      connectionString: process.env.DATABASE_URL,
-      // ssl: { rejectUnauthorized: false }, // ← Always ON for Neon
-      max: 10,
-      idleTimeoutMillis: 30_000,
-      // 15s, not 5s. Neon suspends an idle compute, and the first connection
-      // after that has to wake it, negotiate TLS and authenticate. At 5s that
-      // race was lost often enough that the first request against a freshly
-      // started server returned `Connection terminated due to connection
-      // timeout` — surfacing on the login screen as "Login failed. Something
-      // went wrong.", while a retry seconds later succeeded.
-      //
-      // This is a ceiling, not a delay: a warm pool still connects in
-      // milliseconds and nothing waits longer than it needs to.
-      connectionTimeoutMillis: 15_000,
-      // Socket factory whose only difference from a plain net.Socket is the DNS
-      // path: the system resolver is tried first, and public resolvers are used
-      // only if it fails. Some networks refuse *.aws.neon.tech outright, which
-      // surfaces as `getaddrinfo ENOTFOUND ep-…-pooler…` on every query and
-      // looks like the database being down.
-      //
-      // The connection still uses the HOSTNAME, so SNI, certificate
-      // verification and sslmode are untouched — see lib/dnsFallback.ts for why
-      // connecting by IP instead would have meant disabling TLS verification.
-      stream: () => createResolvingSocket(),
-    });
-    pool.on("error", (err) => console.error("[DB] Pool error", err));
-  }
+  const g = globalThis as Record<string, any>;
+  if (g[POOL_KEY]) return g[POOL_KEY] as Pool;
+
+  assertNotProductionInDev(process.env.DATABASE_URL);
+  const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    // ── Pool sizing ───────────────────────────────────────────────────────
+    // Raised from 10 to 25. The overview-kpis endpoint alone fires ~20
+    // parallel queries via Promise.all; with max=10, 10 of those get a
+    // connection while the other 10 queue, and any concurrent request times
+    // out waiting. Neon's pooler (PgBouncer) supports 100+ downstream
+    // connections per endpoint, so 25 is well within limits.
+    max: 25,
+    idleTimeoutMillis: 30_000,
+    // 15s, not 5s. Neon suspends an idle compute, and the first connection
+    // after that has to wake it, negotiate TLS and authenticate. At 5s that
+    // race was lost often enough that the first request against a freshly
+    // started server returned `Connection terminated due to connection
+    // timeout` — surfacing on the login screen as "Login failed. Something
+    // went wrong.", while a retry seconds later succeeded.
+    connectionTimeoutMillis: 15_000,
+    // Safety net: no single statement should run longer than 30s. Without
+    // this, a runaway query (e.g. recursive CTE on malformed data) holds a
+    // connection indefinitely, contributing to pool starvation.
+    statement_timeout: 30_000,
+    // In serverless (Vercel), allow the pool to drain so the function can
+    // exit and be reclaimed. Without this, idle connections keep the event
+    // loop alive and the function never freezes.
+    allowExitOnIdle: true,
+    // Socket factory whose only difference from a plain net.Socket is the DNS
+    // path: the system resolver is tried first, and public resolvers are used
+    // only if it fails. Some networks refuse *.aws.neon.tech outright, which
+    // surfaces as `getaddrinfo ENOTFOUND ep-…-pooler…` on every query and
+    // looks like the database being down.
+    stream: () => createResolvingSocket(),
+  });
+  pool.on("error", (err) => console.error("[DB] Pool error", err));
+  g[POOL_KEY] = pool;
   return pool;
 }
 
@@ -105,6 +119,53 @@ function isTransientConnectError(err: unknown): boolean {
 }
 
 /**
+ * Acquire a pool client, retrying ONCE on transient connect errors.
+ *
+ * Shared by both `query()` and `transaction()` so that cold-start resilience
+ * applies everywhere, not just to plain queries.
+ */
+async function acquireClient(): Promise<{ client: PoolClient; connectMs: number; retried: boolean }> {
+  const t0 = Date.now();
+  let retried = false;
+
+  try {
+    const c0 = Date.now();
+    const client = await getPool().connect();
+    return { client, connectMs: Date.now() - c0, retried };
+  } catch (err) {
+    if (!isTransientConnectError(err)) throw err;
+    retried = true;
+    const errMsg = (err as Error).message;
+    const p = getPool();
+    console.warn(
+      `[DB] connect failed transiently (${Date.now() - t0}ms), retrying once: ${errMsg}` +
+      ` — pool(total=${p.totalCount} idle=${p.idleCount} waiting=${p.waitingCount})`
+    );
+    await new Promise((resolve) => setTimeout(resolve, 750));
+    const c0 = Date.now();
+    const client = await getPool().connect();
+    const connectMs = Date.now() - c0;
+    console.warn(`[DB] retry connect succeeded: connect=${connectMs}ms total-before-exec=${Date.now() - t0}ms`);
+    return { client, connectMs, retried };
+  }
+}
+
+/**
+ * Release a client back to the pool. If the query/transaction failed with a
+ * connection-level error, destroy the client (`release(true)`) so a broken
+ * socket is never handed to the next caller.
+ */
+function safeRelease(client: PoolClient, err?: unknown): void {
+  const destroy = err != null && isTransientConnectError(err);
+  try {
+    client.release(destroy);
+  } catch {
+    // release itself can throw if the client is already released or the
+    // underlying socket is gone. Swallow — there is nothing useful to do.
+  }
+}
+
+/**
  * Run a statement, retrying ONCE if the connection could not be established.
  *
  * ── Why the retry is around connect() only ─────────────────────────────────
@@ -115,43 +176,14 @@ function isTransientConnectError(err: unknown): boolean {
  * statement is sent — if `connect()` fails, nothing reached the database and
  * replaying is unambiguously safe. Once a client is in hand, a failure is
  * surfaced to the caller exactly as before.
- *
- * ── Why it exists ──────────────────────────────────────────────────────────
- * A Neon compute restart turned a single blip into a hard Next.js error page on
- * /super-admin, because app/super-admin/layout.tsx does a database read to
- * verify the operator and had nothing to fall back on. One retry against a
- * freshly woken compute turns that into a slightly slow page.
  */
 export async function query<T = any>(
   text: string,
   params?: any[]
 ): Promise<T[]> {
   const t0 = Date.now();
-  let connectMs = -1;
-  let retried = false;
-  let client: PoolClient;
-
-  try {
-    const c0 = Date.now();
-    client = await getPool().connect();
-    connectMs = Date.now() - c0;
-  } catch (err) {
-    if (!isTransientConnectError(err)) throw err;
-    retried = true;
-    const errMsg = (err as Error).message;
-    const p = getPool();
-    console.warn(
-      `[DB] connect failed transiently (${Date.now() - t0}ms), retrying once: ${errMsg}` +
-      ` — pool(total=${p.totalCount} idle=${p.idleCount} waiting=${p.waitingCount})`
-    );
-    // A short pause: the compute is usually mid-wake, and an immediate retry
-    // just races the same cold start again.
-    await new Promise((resolve) => setTimeout(resolve, 750));
-    const c0 = Date.now();
-    client = await getPool().connect();
-    connectMs = Date.now() - c0;
-    console.warn(`[DB] retry connect succeeded: connect=${connectMs}ms total-before-exec=${Date.now() - t0}ms`);
-  }
+  const { client, connectMs, retried } = await acquireClient();
+  let queryErr: unknown;
 
   try {
     const q0 = Date.now();
@@ -159,12 +191,7 @@ export async function query<T = any>(
     const execMs = Date.now() - q0;
     const totalMs = Date.now() - t0;
 
-    // Log slow queries. Threshold is 500 ms so the first warm request after
-    // a Neon cold-start (typically 5–15 s of connect + 1 ms of exec) is
-    // always visible, while fast queries are silent.
     if (totalMs > 500) {
-      // Truncate the query to avoid leaking data values from params. The first
-      // 80 chars of the SQL text are enough to identify the operation.
       const label = text.replace(/\s+/g, " ").trim().slice(0, 80);
       const p = getPool();
       console.warn(
@@ -176,25 +203,38 @@ export async function query<T = any>(
     }
 
     return result.rows as T[];
+  } catch (err) {
+    queryErr = err;
+    throw err;
   } finally {
-    client.release();
+    safeRelease(client, queryErr);
   }
 }
 
 export async function transaction<T>(
   fn: (client: PoolClient) => Promise<T>
 ): Promise<T> {
-  const client = await getPool().connect();
+  // acquireClient gives cold-start retry — previously transaction() had none.
+  const { client } = await acquireClient();
+  let txErr: unknown;
   try {
     await client.query("BEGIN");
     const result = await fn(client);
     await client.query("COMMIT");
     return result;
   } catch (err) {
-    await client.query("ROLLBACK");
+    txErr = err;
+    // ROLLBACK can itself throw if the connection is dead. Wrap so the
+    // ORIGINAL error is always what the caller sees, not a confusing
+    // "Connection terminated unexpectedly" from the ROLLBACK attempt.
+    try {
+      await client.query("ROLLBACK");
+    } catch (rollbackErr) {
+      console.error("[DB] ROLLBACK failed after error:", rollbackErr);
+    }
     throw err;
   } finally {
-    client.release();
+    safeRelease(client, txErr);
   }
 }
 
@@ -268,12 +308,21 @@ export async function recalculateSrNos(client?: PoolClient) {
   }
 }
 
-// Keepalive: prevent Neon from suspending the compute during active use.
+// ── Keepalive ──────────────────────────────────────────────────────────────
+// Prevents Neon from suspending the compute during active use.
+//
+// DISABLED in production (Vercel serverless): the function is frozen between
+// invocations and an interval prevents it from being reclaimed. Combined with
+// `allowExitOnIdle: true` above, the pool drains naturally in serverless.
+//
+// ENABLED in development: keeps the local dev server's Neon compute warm so
+// queries don't hit cold-start latency on every save.
+//
 // Guarded against hot-reload stacking: in `next dev`, module re-evaluation
 // would create a new interval without clearing the old one. Storing the id
 // in a global ensures at most one interval exists at any time.
 const KEEPALIVE_KEY = "__bd_db_keepalive";
-if (typeof window === "undefined") {
+if (typeof window === "undefined" && process.env.NODE_ENV !== "production") {
   const g = globalThis as Record<string, any>;
   if (g[KEEPALIVE_KEY]) clearInterval(g[KEEPALIVE_KEY]);
   g[KEEPALIVE_KEY] = setInterval(async () => {

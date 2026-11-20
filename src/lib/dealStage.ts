@@ -31,6 +31,7 @@ const EVENT_TO_STAGE: Record<string, { stage: string; ordinal: number }> = {
   lead_assigned_bulk:                { stage: "Fresh",       ordinal: 1 },
   sales_form_submitted:              { stage: "Contacted",   ordinal: 2 },
   call_completed:                    { stage: "Contacted",   ordinal: 2 },
+  follow_up_created:                 { stage: "Contacted",   ordinal: 2 },
   site_visit_scheduled:              { stage: "Site Visit",  ordinal: 3 },
   site_visit_scheduled_via_salesform:{ stage: "Site Visit",  ordinal: 3 },
   site_visit_completed:              { stage: "Negotiation", ordinal: 4 },

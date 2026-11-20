@@ -7,9 +7,10 @@ interface Props extends LeadDetailsTheme {
   leadId: number;
   userRole?: string;
   refreshKey?: number;
+  onDataLoaded?: (data: { tracked: boolean; currentOrdinal: number }) => void;
 }
 
-export default function LeadDealStagePanel({ leadId, isDark, theme, userRole, refreshKey }: Props) {
+export default function LeadDealStagePanel({ leadId, isDark, theme, userRole, refreshKey, onDataLoaded }: Props) {
   return (
     <div className="flex flex-col min-h-full">
       <style>{`
@@ -22,7 +23,7 @@ export default function LeadDealStagePanel({ leadId, isDark, theme, userRole, re
         @media (prefers-reduced-motion:reduce){.dsp-card{animation:none;transition:none}}
       `}</style>
       <div className={`dsp-card flex-1 rounded-xl p-3 sm:p-4 border ${theme.chatPanel}`} style={theme.chatPanelGl}>
-        <DealStageTimeline leadId={leadId} isDark={isDark} theme={theme} userRole={userRole} refreshKey={refreshKey} />
+        <DealStageTimeline leadId={leadId} isDark={isDark} theme={theme} userRole={userRole} refreshKey={refreshKey} onDataLoaded={onDataLoaded} />
       </div>
     </div>
   );

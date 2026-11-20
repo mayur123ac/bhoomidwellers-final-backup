@@ -33,6 +33,14 @@ import { getOrganizationId } from "@/lib/tenantContext";
 import { getServerSession, getSessionUserId } from "@/lib/serverAuth";
 import { canViewPartners, canViewAllPartners } from "@/lib/cpRbac";
 import { resolveSender, formatUnitConfig, clean } from "@/lib/cpChat";
+import { uploadBufferToR2, generatePresignedUrl } from "@/lib/r2";
+import {
+  validateFile as fuaValidateFile,
+  MAX_FILES_PER_UPLOAD as FUA_MAX_FILES,
+} from "@/lib/followUpAttachments";
+import {
+  sanitizeFileName, verifyFileSignature, MAX_TOTAL_SIZE,
+} from "@/lib/cpChatAttachments";
 
 export const dynamic = "force-dynamic";
 
@@ -72,6 +80,141 @@ async function loadPartner(cpId: number, session: any, orgId: string) {
     return { partner: null as any, denied: true };
   }
   return { partner: rows[0], denied: false };
+}
+const ISO_CURSOR = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z$/;
+// Re-read a small window behind the cursor so a row whose transaction committed
+// slightly late is never missed. The client dedupes by id.
+const DELTA_OVERLAP = "5 seconds";
+
+/** cp_chat_messages for this partner; with `since`, only rows new/edited after it. */
+async function loadPersisted(orgId: string, cpId: number, since: string | null) {
+  const sinceSql = since
+    ? `AND (m.sent_at   > $3::timestamptz - interval '${DELTA_OVERLAP}'
+         OR m.edited_at > $3::timestamptz - interval '${DELTA_OVERLAP}')`
+    : "";
+  const rows = await query(
+    `SELECT m.id, m.message_type, m.message_text, m.sent_at, m.edited_at,
+            m.sender_user_id, m.visit_id,
+            m.attachment_key, m.attachment_name, m.attachment_type, m.attachment_size,
+            u.name AS sender_name, u.role AS sender_role
+       FROM cp_chat_messages m
+       LEFT JOIN users u ON u.id = m.sender_user_id AND u.organization_id = m.organization_id
+      WHERE m.organization_id = $1 AND m.channel_partner_id = $2
+      ${sinceSql}
+      ORDER BY m.sent_at DESC
+      LIMIT ${THREAD_LIMIT}`,
+    since ? [orgId, cpId, since] : [orgId, cpId]
+  );
+  if (rows.length === 0) return rows;
+
+  // Location + watermark columns, if the migration has been applied.
+  try {
+    const meta = await query(
+      `SELECT id, capture_latitude, capture_longitude, capture_accuracy,
+              capture_timestamp, watermarked_key
+         FROM cp_chat_messages
+        WHERE organization_id = $1 AND id = ANY($2::int[])
+          AND (capture_latitude IS NOT NULL OR watermarked_key IS NOT NULL)`,
+      [orgId, rows.map((r: any) => r.id)]
+    );
+    const metaMap = new Map(meta.map((r: any) => [r.id, r]));
+    for (const row of rows) {
+      const m: any = metaMap.get(row.id);
+      if (!m) continue;
+      row._capture_latitude = m.capture_latitude;
+      row._capture_longitude = m.capture_longitude;
+      row._capture_accuracy = m.capture_accuracy;
+      row._capture_timestamp = m.capture_timestamp;
+      row._watermarked_key = m.watermarked_key;
+    }
+  } catch { /* migration not applied */ }
+  return rows;
+}
+
+/** Signs attachment URLs and maps rows to thread items. Used by full and delta reads. */
+async function toMessageItems(rows: any[], sessionUserId: any) {
+  const keys = new Set<string>();
+  for (const m of rows) {
+    if (m.attachment_key) keys.add(m.attachment_key);
+    if (m._watermarked_key) keys.add(m._watermarked_key);
+  }
+  const urlMap = new Map<string, string>();
+  await Promise.all([...keys].map(async (key) => {
+    try { const url = await generatePresignedUrl(key, 600); if (url) urlMap.set(key, url); }
+    catch { /* non-fatal */ }
+  }));
+
+  return rows.map((m) => {
+    const displayKey = m._watermarked_key || m.attachment_key;
+    const item: any = {
+      id: `m${m.id}`,
+      kind: m.message_type,
+      ts: at(m.sent_at),
+      sender: resolveSender(m.sender_role, m.sender_name),
+      senderUserId: m.sender_user_id,
+      text: m.message_text || "",
+      edited: !!m.edited_at,
+      visitId: m.visit_id,
+      attachment: m.attachment_key
+        ? {
+          key: displayKey,
+          name: m.attachment_name,
+          type: m.attachment_type,
+          size: m.attachment_size,
+          url: urlMap.get(displayKey) || urlMap.get(m.attachment_key) || "",
+        }
+        : null,
+      source: "cp_chat_messages",
+      mine: m.sender_user_id != null && m.sender_user_id === sessionUserId,
+    };
+    if (m._capture_latitude != null && m._capture_longitude != null) {
+      item.captureLocation = {
+        latitude: parseFloat(m._capture_latitude),
+        longitude: parseFloat(m._capture_longitude),
+        accuracy: m._capture_accuracy != null ? parseFloat(m._capture_accuracy) : null,
+        captureTimestamp: m._capture_timestamp || null,
+      };
+    }
+    return item;
+  });
+}
+
+/**
+ * Server clock (the next poll cursor) plus a hash of every derived CRM event
+ * source. If the hash changes, the client does one full reload; otherwise the
+ * 2-second poll only touches cp_chat_messages.
+ */
+async function threadState(orgId: string, cpId: number) {
+  const rows = await query(
+    `SELECT
+       to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS cursor,
+       md5(concat_ws('|',
+         (SELECT string_agg(v.id || ':' || coalesce(v.visit_at::text,'')
+                   || ':' || md5(coalesce(v.notes,'') || coalesce(v.person_met,'')), ',' ORDER BY v.id)
+            FROM cp_visits v
+           WHERE v.organization_id = $1 AND v.channel_partner_id = $2),
+         (SELECT string_agg(sv.id || ':' || coalesce(sv.status,'') || ':' || coalesce(sv.visit_date::text,'')
+                   || ':' || md5(coalesce(sv.notes,'')), ',' ORDER BY sv.id)
+            FROM site_visits sv
+            JOIN walkin_enquiries w ON w.id = sv.lead_id AND w.organization_id = sv.organization_id
+           WHERE sv.organization_id = $1 AND w.channel_partner_id = $2),
+         (SELECT string_agg(b.id || ':' || coalesce(b.booking_status,'')
+                   || ':' || coalesce(r.registration_status,'') || ':' || coalesce(r.updated_at::text,'')
+                   || ':' || coalesce(l.disbursement_status,'') || ':' || coalesce(l.updated_at::text,''),
+                 ',' ORDER BY b.id)
+            FROM booking_applications b
+            JOIN walkin_enquiries w ON w.id = b.lead_id AND w.organization_id = b.organization_id
+            LEFT JOIN booking_registration_details r
+                   ON r.booking_id = b.id AND r.organization_id = b.organization_id
+            LEFT JOIN booking_loan_details l
+                   ON l.booking_id = b.id AND l.organization_id = b.organization_id
+           WHERE b.organization_id = $1
+             AND (b.sourced_by_channel_partner_id = $2
+                  OR (b.sourced_by_channel_partner_id IS NULL AND w.channel_partner_id = $2)))
+       )) AS fingerprint`,
+    [orgId, cpId]
+  );
+  return rows[0] as { cursor: string; fingerprint: string };
 }
 
 export async function GET(
@@ -122,7 +265,37 @@ export async function GET(
           ORDER BY m.sent_at DESC
           LIMIT ${THREAD_LIMIT}`,
         [orgId, cpId]
-      ),
+      ).then(async (rows) => {
+        // Try to read location + watermark columns if the migration has been applied
+        try {
+          const withMeta = await query(
+            `SELECT m.id, m.capture_latitude, m.capture_longitude,
+                    m.capture_accuracy, m.capture_timestamp, m.watermarked_key
+               FROM cp_chat_messages m
+              WHERE m.organization_id = $1 AND m.channel_partner_id = $2
+                AND (m.capture_latitude IS NOT NULL OR m.watermarked_key IS NOT NULL)
+              ORDER BY m.sent_at DESC
+              LIMIT ${THREAD_LIMIT}`,
+            [orgId, cpId]
+          );
+          if (withMeta.length > 0) {
+            const metaMap = new Map(withMeta.map((r: any) => [r.id, r]));
+            for (const row of rows) {
+              const meta = metaMap.get(row.id);
+              if (meta) {
+                row._capture_latitude = meta.capture_latitude;
+                row._capture_longitude = meta.capture_longitude;
+                row._capture_accuracy = meta.capture_accuracy;
+                row._capture_timestamp = meta.capture_timestamp;
+                row._watermarked_key = meta.watermarked_key;
+              }
+            }
+          }
+        } catch {
+          // Migration not applied yet — ignore silently
+        }
+        return rows;
+      }),
 
       // ── 2. Sourcing Manager visits to this partner ─────────────────────
       query(
@@ -287,8 +460,33 @@ export async function GET(
 
     const items: any[] = [];
 
+    // Generate presigned URLs for all attachment messages in parallel.
+    // Collect both attachment_key and watermarked_key (if present) so we
+    // can serve the watermarked version in the chat while preserving the original.
+    const attachmentKeyMap = new Map<string, string>();
+    const keysToSign: string[] = [];
     for (const m of persisted) {
-      items.push({
+      if (m.attachment_key) keysToSign.push(m.attachment_key);
+      if (m._watermarked_key) keysToSign.push(m._watermarked_key);
+    }
+
+    if (keysToSign.length > 0) {
+      const uniqueKeys = [...new Set(keysToSign)];
+      const urls = await Promise.all(
+        uniqueKeys.map(async (key) => {
+          try { return { key, url: await generatePresignedUrl(key, 600) }; }
+          catch { return { key, url: "" }; }
+        })
+      );
+      for (const { key, url } of urls) {
+        if (url) attachmentKeyMap.set(key, url);
+      }
+    }
+
+    for (const m of persisted) {
+      // Prefer watermarked image for display; fall back to original
+      const displayKey = m._watermarked_key || m.attachment_key;
+      const item: any = {
         id: `m${m.id}`,
         kind: m.message_type,
         ts: at(m.sent_at),
@@ -298,10 +496,26 @@ export async function GET(
         edited: !!m.edited_at,
         visitId: m.visit_id,
         attachment: m.attachment_key
-          ? { name: m.attachment_name, type: m.attachment_type, size: m.attachment_size }
+          ? {
+            key: displayKey,
+            name: m.attachment_name,
+            type: m.attachment_type,
+            size: m.attachment_size,
+            url: attachmentKeyMap.get(displayKey) || attachmentKeyMap.get(m.attachment_key) || "",
+          }
           : null,
         source: "cp_chat_messages",
-      });
+      };
+      // Include location metadata if present
+      if (m._capture_latitude != null && m._capture_longitude != null) {
+        item.captureLocation = {
+          latitude: parseFloat(m._capture_latitude),
+          longitude: parseFloat(m._capture_longitude),
+          accuracy: m._capture_accuracy != null ? parseFloat(m._capture_accuracy) : null,
+          captureTimestamp: m._capture_timestamp || null,
+        };
+      }
+      items.push(item);
     }
 
     for (const v of cpVisits) {
@@ -462,13 +676,16 @@ export async function GET(
 }
 
 /**
- * Posts a CP-level message.
+ * Posts a CP-level message, with optional file attachments.
  *
- * Writes to cp_chat_messages and nowhere else — in particular never to
- * follow_ups, which is lead-scoped and was only ever a stand-in. organization_id
- * comes from the tenant context and sender_user_id from the verified session, so
- * neither can be supplied by the caller; the database trigger rejects the write
- * anyway if either fails to match the partner's organization.
+ * Accepts either:
+ *   - application/json: `{ text: "..." }` — text-only message (original path)
+ *   - multipart/form-data: `text` field + `files` field(s) — text with attachments
+ *
+ * Each attachment becomes its own cp_chat_messages row with message_type='attachment'.
+ * If text is provided alongside files, it goes on the first attachment row.
+ * organization_id comes from the tenant context and sender_user_id from the verified
+ * session; the database trigger rejects the write if either fails to match.
  */
 export async function POST(
   req: NextRequest,
@@ -500,18 +717,6 @@ export async function POST(
   }
 
   try {
-    const body = await req.json().catch(() => ({}));
-    const text = (body?.text ?? body?.message ?? "").toString().trim();
-    if (!text) {
-      return NextResponse.json({ success: false, message: "Message is empty." }, { status: 400 });
-    }
-    if (text.length > MAX_MESSAGE_LENGTH) {
-      return NextResponse.json(
-        { success: false, message: `Message is longer than ${MAX_MESSAGE_LENGTH} characters.` },
-        { status: 400 }
-      );
-    }
-
     const orgId = await getOrganizationId();
     const { partner, denied } = await loadPartner(cpId, session, orgId);
     if (denied) {
@@ -521,32 +726,180 @@ export async function POST(
       );
     }
 
-    const rows = await query(
-      `INSERT INTO cp_chat_messages
-         (organization_id, channel_partner_id, sender_user_id, message_type, message_text)
-       VALUES ($1, $2, $3, 'text', $4)
-       RETURNING id, sent_at`,
-      [orgId, partner.id, senderUserId, text]
-    );
+    const contentType = req.headers.get("content-type") || "";
+    const isMultipart = contentType.includes("multipart/form-data");
 
-    return NextResponse.json(
-      {
-        success: true,
-        data: {
-          id: `m${rows[0].id}`,
-          ts: at(rows[0].sent_at),
-          kind: "text",
-          text,
-          sender: resolveSender(session.role, session.name),
-          mine: true,
-          source: "cp_chat_messages",
+    // ── Text-only path (JSON) ──────────────────────────────────────────
+    if (!isMultipart) {
+      const body = await req.json().catch(() => ({}));
+      const text = (body?.text ?? body?.message ?? "").toString().trim();
+      if (!text) {
+        return NextResponse.json({ success: false, message: "Message is empty." }, { status: 400 });
+      }
+      if (text.length > MAX_MESSAGE_LENGTH) {
+        return NextResponse.json(
+          { success: false, message: `Message is longer than ${MAX_MESSAGE_LENGTH} characters.` },
+          { status: 400 }
+        );
+      }
+
+      const rows = await query(
+        `INSERT INTO cp_chat_messages
+           (organization_id, channel_partner_id, sender_user_id, message_type, message_text)
+         VALUES ($1, $2, $3, 'text', $4)
+         RETURNING id, sent_at`,
+        [orgId, partner.id, senderUserId, text]
+      );
+
+      return NextResponse.json(
+        {
+          success: true,
+          data: [{
+            id: `m${rows[0].id}`,
+            ts: at(rows[0].sent_at),
+            kind: "text",
+            text,
+            sender: resolveSender(session.role, session.name),
+            mine: true,
+            source: "cp_chat_messages",
+          }],
         },
-      },
-      { status: 201 }
-    );
+        { status: 201 }
+      );
+    }
+
+    // ── Multipart path (files + optional text) ─────────────────────────
+    const formData = await req.formData();
+    const text = (formData.get("text") as string || "").trim();
+    if (text.length > MAX_MESSAGE_LENGTH) {
+      return NextResponse.json(
+        { success: false, message: `Message is longer than ${MAX_MESSAGE_LENGTH} characters.` },
+        { status: 400 }
+      );
+    }
+
+    const files = formData.getAll("files") as File[];
+    if (files.length === 0 && !text) {
+      return NextResponse.json({ success: false, message: "No content to send." }, { status: 400 });
+    }
+    if (files.length > FUA_MAX_FILES) {
+      return NextResponse.json(
+        { success: false, message: `Maximum ${FUA_MAX_FILES} files per message.` },
+        { status: 400 }
+      );
+    }
+
+    // If only text, no files — same as JSON path
+    if (files.length === 0 && text) {
+      const rows = await query(
+        `INSERT INTO cp_chat_messages
+           (organization_id, channel_partner_id, sender_user_id, message_type, message_text)
+         VALUES ($1, $2, $3, 'text', $4)
+         RETURNING id, sent_at`,
+        [orgId, partner.id, senderUserId, text]
+      );
+      return NextResponse.json(
+        {
+          success: true,
+          data: [{
+            id: `m${rows[0].id}`,
+            ts: at(rows[0].sent_at),
+            kind: "text",
+            text,
+            sender: resolveSender(session.role, session.name),
+            mine: true,
+            source: "cp_chat_messages",
+          }],
+        },
+        { status: 201 }
+      );
+    }
+
+    // Validate all files before uploading any
+    let totalSize = 0;
+    const fileBuffers: Array<{ file: File; buffer: Buffer; sanitized: string }> = [];
+
+    for (const file of files) {
+      const err = fuaValidateFile(file.name, file.type, file.size);
+      if (err) {
+        return NextResponse.json({ success: false, message: err }, { status: 400 });
+      }
+      totalSize += file.size;
+      if (totalSize > MAX_TOTAL_SIZE) {
+        return NextResponse.json(
+          { success: false, message: "Total upload size exceeds 25 MB." },
+          { status: 400 }
+        );
+      }
+      const buffer = Buffer.from(await file.arrayBuffer());
+      // Verify magic bytes match declared MIME
+      if (!verifyFileSignature(buffer, file.type)) {
+        return NextResponse.json(
+          { success: false, message: `"${file.name}" content does not match its declared type.` },
+          { status: 400 }
+        );
+      }
+      fileBuffers.push({ file, buffer, sanitized: sanitizeFileName(file.name) });
+    }
+
+    // Upload all files to R2
+    const now = Date.now();
+    const uploadedKeys: Array<{
+      key: string; name: string; type: string; size: number; url: string;
+    }> = [];
+
+    for (let i = 0; i < fileBuffers.length; i++) {
+      const { file, buffer, sanitized } = fileBuffers[i];
+      const r2Key = `cp-chat/${orgId}/${cpId}/${now}_${i}_${sanitized}`;
+      await uploadBufferToR2(r2Key, buffer, file.type);
+      let url = "";
+      try { url = await generatePresignedUrl(r2Key, 600); } catch { /* non-fatal */ }
+      uploadedKeys.push({
+        key: r2Key,
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        url,
+      });
+    }
+
+    // Insert message rows — text on the first attachment row (if text provided)
+    const createdMessages: any[] = [];
+    const sender = resolveSender(session.role, session.name);
+
+    for (let i = 0; i < uploadedKeys.length; i++) {
+      const att = uploadedKeys[i];
+      const msgText = i === 0 && text ? text : null;
+      const rows = await query(
+        `INSERT INTO cp_chat_messages
+           (organization_id, channel_partner_id, sender_user_id,
+            message_type, message_text,
+            attachment_key, attachment_name, attachment_type, attachment_size)
+         VALUES ($1, $2, $3, 'attachment', $4, $5, $6, $7, $8)
+         RETURNING id, sent_at`,
+        [orgId, partner.id, senderUserId, msgText, att.key, att.name, att.type, att.size]
+      );
+      createdMessages.push({
+        id: `m${rows[0].id}`,
+        ts: at(rows[0].sent_at),
+        kind: "attachment",
+        text: msgText || "",
+        sender,
+        mine: true,
+        attachment: {
+          key: att.key,
+          name: att.name,
+          type: att.type,
+          size: att.size,
+          url: att.url,
+        },
+        source: "cp_chat_messages",
+      });
+    }
+
+    return NextResponse.json({ success: true, data: createdMessages }, { status: 201 });
   } catch (err: any) {
     console.error("[POST /api/channel-partners/[id]/chat]", err);
-    // The tenant trigger raises check_violation for a cross-organization write.
     if (err?.code === "23514") {
       return NextResponse.json(
         { success: false, message: "That partner belongs to another organization." },

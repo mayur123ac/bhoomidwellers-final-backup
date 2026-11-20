@@ -17,6 +17,7 @@ export interface LeadPermissions {
   canDeleteFollowUp: boolean;
   canCall: boolean;
   canWhatsApp: boolean;
+  canEditFields: boolean;
 }
 
 export interface LeadUser {

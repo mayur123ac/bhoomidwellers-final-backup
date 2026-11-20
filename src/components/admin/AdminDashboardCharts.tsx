@@ -127,7 +127,7 @@ export function DashboardAnalytics({ leads, theme, isDark }: { leads: any[]; the
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
       {/* BAR CHART */}
-      <div className={`${theme.card} rounded-3xl p-5`} style={theme.cardGlass}>
+      <div className={`rounded-3xl p-5`}>
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className={`${theme.text} font-bold text-sm flex items-center gap-2`}>
@@ -196,7 +196,7 @@ export function DashboardAnalytics({ leads, theme, isDark }: { leads: any[]; the
       </div>
 
       {/* PIE CHART */}
-      <div className={`${theme.card} rounded-3xl p-5`} style={theme.cardGlass}>
+      <div className={`rounded-3xl p-5`}>
         <div className="flex items-center justify-between mb-4">
           <h3 className={`${theme.text} font-bold text-sm flex items-center gap-2`}>
             <FaChartPie className="text-[#00AEEF] text-xs" />

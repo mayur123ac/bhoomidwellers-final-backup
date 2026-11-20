@@ -1180,10 +1180,10 @@ export default function EnquiryOverviewSection(props: EnquiryOverviewSectionProp
             <style>{`@keyframes barIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}`}</style>
 
             {/* ── Table card ── */}
-            <div className={`${theme.tableWrap} rounded-2xl sm:rounded-3xl overflow-hidden`} style={theme.tableGlass}>
+            <div className={`rounded-2xl sm:rounded-3xl overflow-hidden`}>
                 {/* ═══ Toolbar row 1: title + search + actions ═══ */}
                 <div
-                    className={`px-3 sm:px-5 pt-4 sm:pt-4 pb-2 sm:pb-3 flex flex-wrap items-center justify-between sm:justify-start gap-2 sm:gap-3 ${theme.tableHead}`}
+                    className={`px-3 sm:px-5 pt-4 sm:pt-4 pb-2 sm:pb-3 flex flex-wrap items-center justify-between sm:justify-start gap-2 sm:gap-3`}
                 >
                     {/* left */}
                     <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">

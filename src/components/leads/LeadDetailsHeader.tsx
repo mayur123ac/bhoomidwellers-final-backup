@@ -68,7 +68,7 @@ function ActionBtn({
         rounded-[10px] text-[11px] sm:text-xs font-semibold tracking-wide
         transition-all duration-200 ease-in-out
         active:scale-95 shadow-sm border border-black/5 dark:border-white/5
-        hover:opacity-90 hover:shadow
+        hover:opacity-90 hover:shadow cursor-pointer
         ${className}`}
     >
       {/* Icon always visible */}

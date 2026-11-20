@@ -7,6 +7,7 @@ import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { requireSession, requireRoles } from "@/lib/serverAuth";
 import { getOrganizationId } from "@/lib/tenantContext";
+import { expireStaleSessionsThrottled } from "@/lib/sessionCleanup";
 
 export const dynamic = "force-dynamic";
 
@@ -19,15 +20,8 @@ export async function GET() {
     // consistent with normalizeRole in @/lib/cpRbac.
     const orgId = await getOrganizationId();
 
-    // Expire stale sessions (no heartbeat in 5 min) — same housekeeping as
-    // /api/attendance/live, scoped to the caller's organization.
-    await query(
-      `UPDATE employee_sessions
-          SET is_active = false, session_end = last_heartbeat
-        WHERE is_active = true AND organization_id = $1
-          AND EXTRACT(EPOCH FROM (NOW() - last_heartbeat)) > 300`,
-      [orgId]
-    );
+    // Expire stale sessions (throttled + sargable, shared with /attendance/live).
+    await expireStaleSessionsThrottled(orgId);
 
     // Derive ONLINE / OFFLINE from whether the employee has ANY active session,
     // not just the most recent one. A user with two browser tabs whose latest

@@ -114,7 +114,7 @@ export default function SalesManagerDashboardSummary({
 
       {/* CARD 1 — TODAY'S PRIORITIES */}
       <div
-        className={`rounded-[2rem] p-5 sm:p-6 border relative overflow-hidden flex flex-col ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-[#FAFAFD] border-slate-200/60 shadow-sm'}`}
+        className={`rounded-[2rem] p-5 sm:p-6 relative overflow-hidden flex flex-col ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-[#FAFAFD] border-slate-200/60 shadow-sm'}`}
       >
         {/* Header */}
         <div className="flex items-center gap-4 mb-6">

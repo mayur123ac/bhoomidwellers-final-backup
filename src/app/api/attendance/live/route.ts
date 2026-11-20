@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { requireRole } from "@/lib/serverAuth";
 import { getOrganizationId } from "@/lib/tenantContext";
+import { expireStaleSessionsThrottled } from "@/lib/sessionCleanup";
 
 export const dynamic = 'force-dynamic';
 
@@ -26,17 +27,8 @@ export async function GET(req: Request) {
     const targetDate = queryDate || todayIst;
     const orgId = await getOrganizationId();
 
-    // 1. Automatic Session Expiration Cleanup
-    // If a session has not received a heartbeat in over 5 minutes (300 seconds), mark it inactive.
-    // Scoped to the caller's organization: this housekeeping runs inside one admin's
-    // page load, and an unscoped sweep would have that admin closing sessions that
-    // belong to other tenants entirely.
-    await query(`
-      UPDATE employee_sessions
-      SET is_active = false, session_end = last_heartbeat
-      WHERE is_active = true AND organization_id = $1
-        AND EXTRACT(EPOCH FROM (NOW() - last_heartbeat)) > 300
-    `, [orgId]);
+    // 1. Automatic Session Expiration Cleanup (throttled + sargable).
+    await expireStaleSessionsThrottled(orgId);
 
     // We join Users -> Sessions (filtered for targetDate) -> Live State (Telemetry)
     const liveSessions = await query(`

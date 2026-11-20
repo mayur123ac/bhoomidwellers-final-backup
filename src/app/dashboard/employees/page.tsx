@@ -412,7 +412,7 @@ export default function EmployeesPage() {
     switch (colKey) {
       case "name": return row.name ?? "";
       case "email": return row.email ?? "";
-      case "role": return row.role?.replace("_", " ") ?? "";
+      case "role": return getRoleDisplayName(row.role?.replace("_", " ") ?? "");
       case "status": return row.isActive ? "Active" : "Inactive";
       default: return "";
     }
@@ -433,6 +433,21 @@ export default function EmployeesPage() {
     { key: "feedback", label: "Feedback" },
     { key: "interest_status", label: "Interest" },
   ];
+
+  const allowedRoles = [
+    "Admin",
+    "Sales Manager",
+    "Site Head",
+    "Receptionist",
+    "Sourcing Manager",
+    "Human Resources"
+  ];
+
+  /** Display-name overrides: DB role name → what the user sees in dropdowns */
+  const roleDisplayNames: Record<string, string> = {
+    "Receptionist": "FrontDesk",
+  };
+  const getRoleDisplayName = (dbName: string) => roleDisplayNames[dbName] ?? dbName;
 
   const getCallerLeadDisplayValue = (row: any, colKey: string): string => {
     switch (colKey) {
@@ -1327,35 +1342,7 @@ export default function EmployeesPage() {
                 </button>
               </div>
 
-              {/* ── Add Custom Role ── */}
-              <div className={`rounded-[24px] p-6 sm:p-8 mb-6 transition-all ${isDark ? "bg-[#1C1C1E] border border-white/5 shadow-sm" : "bg-white border border-black/5 shadow-[0_4px_24px_rgba(0,0,0,0.04)]"
-                }`}>
-                <h2 className={`text-[15px] font-semibold tracking-tight mb-5 flex items-center gap-2 ${isDark ? "text-white" : "text-black"}`}>
-                  Add a Custom System Role
-                </h2>
-                <div className="flex flex-col sm:flex-row items-end gap-4">
-                  <div className="flex-1 min-w-[260px] max-w-md w-full">
-                    <label className={`block text-[11px] font-semibold uppercase tracking-wider mb-2 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>
-                      Role Name
-                    </label>
-                    <input
-                      type="text"
-                      value={newRoleInput}
-                      onChange={e => setNewRoleInput(e.target.value)}
-                      placeholder="e.g. Marketing Lead"
-                      className={`w-full px-4 py-2.5 rounded-[12px] text-[14px] font-medium tracking-tight outline-none transition-all focus:ring-2 focus:ring-[#007AFF]/50 ${isDark ? "bg-[#2C2C2E] border border-[#38383A] text-white placeholder-[#8E8E93]" : "bg-[#F2F2F7] border border-[#E5E5EA] text-black placeholder-[#8E8E93]"
-                        }`}
-                    />
-                  </div>
-                  <button
-                    onClick={handleAddNewRole}
-                    className={`text-[13px] font-semibold py-2.5 px-6 rounded-full transition-all cursor-pointer flex items-center justify-center gap-2 whitespace-nowrap active:scale-95 w-full sm:w-auto ${isDark ? "bg-[#2C2C2E] hover:bg-[#3A3A3C] text-[#9E217B]" : "bg-[#F2F2F7] hover:bg-[#E5E5EA] text-[#9E217B]"
-                      }`}
-                  >
-                    <FaPlus className="text-[12px]" /> Add to Dropdown
-                  </button>
-                </div>
-              </div>
+
 
               {/* ── Create Employee Form ── */}
               <div className={`rounded-[24px] p-6 sm:p-8 mb-6 transition-all ${isDark ? "bg-[#1C1C1E] border border-white/5 shadow-sm" : "bg-white border border-black/5 shadow-[0_4px_24px_rgba(0,0,0,0.04)]"
@@ -1372,7 +1359,7 @@ export default function EmployeesPage() {
                         <FaCheckCircle /> Employee created successfully
                       </p>
                       <p className={`text-[13px] font-medium ${isDark ? "text-white" : "text-black"}`}>
-                        {justCreated.name} &middot; {justCreated.email} &middot; {justCreated.role}
+                        {justCreated.name} &middot; {justCreated.email} &middot; {getRoleDisplayName(justCreated.role)}
                       </p>
                       <p className={`font-mono text-[12px] ${isDark ? "text-[#EBEBF5]/60" : "text-[#8E8E93]"}`}>
                         Organization: {justCreated.organization_id ?? "—"}
@@ -1440,14 +1427,45 @@ export default function EmployeesPage() {
                   <div>
                     <label className={`block text-[11px] font-semibold uppercase tracking-wider mb-2 ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>Assign Role</label>
                     <div className="relative">
-                      <select value={role} onChange={e => setRole(e.target.value)} required
-                        className={`appearance-none w-full px-4 py-2.5 rounded-[12px] text-[14px] font-medium tracking-tight outline-none transition-all focus:ring-2 focus:ring-[#007AFF]/50 cursor-pointer ${isDark ? "bg-[#2C2C2E] border border-[#38383A] text-white" : "bg-[#F2F2F7] border border-[#E5E5EA] text-black"
+                      <select
+                        value={role}
+                        onChange={e => setRole(e.target.value)}
+                        required
+                        className={`appearance-none w-full px-4 py-2.5 rounded-[12px] text-[14px] font-medium tracking-tight outline-none transition-all focus:ring-2 focus:ring-[#007AFF]/50 cursor-pointer ${isDark
+                          ? "bg-[#2C2C2E] border border-[#38383A] text-white"
+                          : "bg-[#F2F2F7] border border-[#E5E5EA] text-black"
                           }`}
                       >
                         <option value="" disabled>-- Choose Role --</option>
-                        {dbRoles.map(r => <option key={r._id} value={r.name}>{r.name}</option>)}
+
+                        {dbRoles
+                          .filter(r =>
+                            allowedRoles.some(
+                              allowed => allowed.toLowerCase() === r.name.trim().toLowerCase()
+                            )
+                          )
+                          .sort((a, b) =>
+                            allowedRoles.indexOf(
+                              allowedRoles.find(
+                                allowed => allowed.toLowerCase() === a.name.trim().toLowerCase()
+                              )!
+                            ) -
+                            allowedRoles.indexOf(
+                              allowedRoles.find(
+                                allowed => allowed.toLowerCase() === b.name.trim().toLowerCase()
+                              )!
+                            )
+                          )
+                          .map(r => (
+                            <option key={r._id} value={r.name}>
+                              {getRoleDisplayName(r.name)}
+                            </option>
+                          ))}
                       </select>
-                      <div className={`absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none ${isDark ? "text-[#8E8E93]" : "text-[#8E8E93]"}`}>▼</div>
+
+                      <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-[#8E8E93]">
+                        ▼
+                      </div>
                     </div>
                   </div>
 
@@ -1657,11 +1675,25 @@ export default function EmployeesPage() {
                                   className={`w-full px-3 py-1.5 rounded-lg text-[13px] outline-none border focus:ring-2 focus:ring-[#007AFF]/50 ${isDark ? "bg-[#1C1C1E] border-[#38383A] text-white" : "bg-white border-[#E5E5EA] text-black"
                                     }`}
                                 >
-                                  {dbRoles.map(r => <option key={r._id} value={r.name}>{r.name}</option>)}
+                                  {dbRoles
+                                    .filter(r =>
+                                      allowedRoles.some(
+                                        allowed => allowed.toLowerCase() === r.name.trim().toLowerCase()
+                                      )
+                                    )
+                                    .sort((a, b) =>
+                                      allowedRoles.findIndex(
+                                        allowed => allowed.toLowerCase() === a.name.trim().toLowerCase()
+                                      ) -
+                                      allowedRoles.findIndex(
+                                        allowed => allowed.toLowerCase() === b.name.trim().toLowerCase()
+                                      )
+                                    )
+                                    .map(r => <option key={r._id} value={r.name}>{getRoleDisplayName(r.name)}</option>)}
                                 </select>
                               ) : (
                                 <span className={`font-semibold tracking-tight text-[13px] capitalize ${isDark ? "text-white" : "text-black"}`}>
-                                  {emp.role.replace("_", " ")}
+                                  {getRoleDisplayName(emp.role.replace("_", " "))}
                                 </span>
                               )}
                             </td>

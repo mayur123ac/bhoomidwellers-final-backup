@@ -141,6 +141,9 @@ export async function PUT(
       "referral_info",
       "budget",
       "budget_unit",
+      "address",
+      "pin_code",
+      "city",
     ];
 
     const result = await transaction(async (client) => {

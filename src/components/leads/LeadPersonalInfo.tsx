@@ -1,12 +1,14 @@
 "use client";
 
+import { useState, useRef, useEffect } from "react";
 import {
   FaPhone, FaHome, FaCalendarAlt, FaDatabase, FaInfoCircle,
+  FaPencilAlt, FaCheck, FaTimes,
 } from "react-icons/fa";
 import InlineContactField from "@/components/InlineContactField";
 import type { InlineContactFieldTheme } from "@/components/InlineContactField";
 import { contactFieldSave } from "@/lib/contactFieldSave";
-import type { LeadDetailsTheme, LeadPermissions } from "./types";
+import type { LeadDetailsTheme, LeadPermissions, LeadUser } from "./types";
 
 // ---------------------------------------------------------------------------
 // Section Header — compact with accent left border
@@ -22,7 +24,7 @@ function SectionHeader({ icon, title, isDark }: { icon: React.ReactNode; title: 
 }
 
 // ---------------------------------------------------------------------------
-// Field row — label/value pair, compact
+// Field row — label/value pair, compact (read-only)
 // ---------------------------------------------------------------------------
 
 function Field({ label, value, accent, isDark, theme }: {
@@ -40,6 +42,138 @@ function Field({ label, value, accent, isDark, theme }: {
 }
 
 // ---------------------------------------------------------------------------
+// EditableField — Field with grey pencil, inline edit, auto follow-up log
+// ---------------------------------------------------------------------------
+
+function EditableField({ label, value, dbColumn, accent, isDark, theme, leadId, currentUser, canEdit, onSaved }: {
+  label: string;
+  value: string;
+  dbColumn: string;
+  accent?: boolean;
+  isDark: boolean;
+  theme: Record<string, any>;
+  leadId: number;
+  currentUser: LeadUser;
+  canEdit: boolean;
+  onSaved: (dbColumn: string, newVal: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editing) {
+      const t = setTimeout(() => inputRef.current?.focus(), 30);
+      return () => clearTimeout(t);
+    }
+  }, [editing]);
+
+  const displayValue = value && value !== "N/A" && value !== "Pending" && value !== "Not Provided" ? value : "";
+
+  function startEdit() {
+    if (!canEdit || saving) return;
+    setDraft(displayValue);
+    setError(null);
+    setEditing(true);
+  }
+
+  function cancelEdit() {
+    if (saving) return;
+    setEditing(false);
+    setError(null);
+  }
+
+  async function handleSave() {
+    const trimmed = draft.trim();
+    if (trimmed === displayValue) { setEditing(false); return; }
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/walkin_enquiries/${leadId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [dbColumn]: trimmed || null }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || json.success === false) throw new Error(json.message || "Update failed");
+
+      // Log the edit as a follow-up note
+      const now = new Date().toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true });
+      await fetch("/api/followups", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          leadId: String(leadId),
+          salesManagerName: currentUser.name || "System",
+          createdBy: currentUser.role === "admin" ? "admin" : "sales",
+          message: `✏️ ${label} — Edited ${now}`,
+          siteVisitDate: null,
+        }),
+      }).catch(() => {}); // best-effort, don't block the save
+
+      onSaved(dbColumn, trimmed);
+      setEditing(false);
+    } catch (e: any) {
+      setError(e?.message || "Update failed");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") { e.preventDefault(); handleSave(); }
+    if (e.key === "Escape") cancelEdit();
+  }
+
+  if (editing) {
+    return (
+      <div className="py-0.5 px-1 -mx-1" style={{ animation: "pi-in 180ms ease-out" }}>
+        <div className="flex items-center gap-1">
+          <span className={`text-[10px] sm:text-[11px] font-medium flex-shrink-0 ${theme.textFaint}`}>{label}</span>
+          <div className="flex-1 flex items-center gap-1 justify-end">
+            <input
+              ref={inputRef}
+              type="text"
+              value={draft}
+              onChange={e => { setDraft(e.target.value); setError(null); }}
+              onKeyDown={handleKeyDown}
+              disabled={saving}
+              maxLength={255}
+              className={`w-full min-w-0 px-1.5 py-0.5 rounded text-[11px] sm:text-xs font-semibold outline-none transition-all ${theme.text} ${isDark ? "bg-white/10 border-white/20" : "bg-black/5 border-black/10"} border ${saving ? "opacity-50" : ""} ${error ? "!border-red-500/70" : ""}`}
+            />
+            <button type="button" onClick={handleSave} disabled={saving} className={`flex-shrink-0 w-5 h-5 flex items-center justify-center rounded transition-all cursor-pointer disabled:opacity-40 ${isDark ? "text-green-400 hover:bg-green-500/20" : "text-green-600 hover:bg-green-100"}`}>
+              {saving ? <svg className="animate-spin w-2.5 h-2.5" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="3" strokeDasharray="28 56" /></svg> : <FaCheck className="text-[8px]" />}
+            </button>
+            <button type="button" onClick={cancelEdit} disabled={saving} className={`flex-shrink-0 w-5 h-5 flex items-center justify-center rounded transition-all cursor-pointer disabled:opacity-40 ${isDark ? "text-red-400 hover:bg-red-500/20" : "text-red-500 hover:bg-red-100"}`}>
+              <FaTimes className="text-[8px]" />
+            </button>
+          </div>
+        </div>
+        {error && <p className="text-[9px] text-red-400 text-right mt-0.5">{error}</p>}
+      </div>
+    );
+  }
+
+  return (
+    <div className={`flex items-baseline justify-between gap-2 py-0.5 px-1 -mx-1 rounded transition-colors duration-150 ${isDark ? "hover:bg-white/5" : "hover:bg-black/[0.04]"}`}>
+      <span className={`text-[10px] sm:text-[11px] font-medium flex-shrink-0 ${theme.textFaint}`}>{label}</span>
+      <span className="flex items-center gap-1">
+        <span className={`text-[11px] sm:text-xs font-semibold text-right truncate ${accent ? (isDark ? "text-green-400" : "text-emerald-600") : theme.text}`}>
+          {displayValue || "—"}
+        </span>
+        {canEdit && (
+          <button type="button" onClick={startEdit} title={`Edit ${label}`} className="cursor-pointer flex-shrink-0 w-4 h-4 flex items-center justify-center">
+            <FaPencilAlt className={`text-[8px] ${isDark ? "text-gray-500" : "text-gray-400"}`} />
+          </button>
+        )}
+      </span>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
 
@@ -47,6 +181,7 @@ interface Props extends LeadDetailsTheme {
   lead: any;
   permissions: LeadPermissions;
   loanDealLatest: any;
+  currentUser: LeadUser;
   onLeadUpdate: (updater: (prev: any) => any) => void;
   onShowToast: (msg: string) => void;
   showExtendedFields?: boolean;
@@ -58,7 +193,7 @@ interface Props extends LeadDetailsTheme {
 // ---------------------------------------------------------------------------
 
 export default function LeadPersonalInfo({
-  lead, permissions, loanDealLatest,
+  lead, permissions, loanDealLatest, currentUser,
   isDark, theme,
   onLeadUpdate, onShowToast,
   showExtendedFields,
@@ -71,6 +206,13 @@ export default function LeadPersonalInfo({
   };
 
   const icfTheme = theme as unknown as InlineContactFieldTheme;
+  const canEditField = permissions.canEditFields;
+  const isLocked = !!lead.is_lost_lead || lead.status === "Closing";
+
+  const handleFieldSaved = (dbColumn: string, newVal: string) => {
+    onLeadUpdate((p: any) => ({ ...p, [dbColumn]: newVal || null }));
+    onShowToast("Field updated successfully.");
+  };
 
   const formatDate = (d: string) => {
     try { return new Date(d).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true }); }
@@ -118,6 +260,7 @@ export default function LeadPersonalInfo({
             canEdit={permissions.canEditContact}
             onSave={async (val) => { await save("email", val); onLeadUpdate((p: any) => ({ ...p, email: val || "N/A" })); }}
           />
+          <Field label="Site Location" value={lead.site_location_name || "Not Provided"} isDark={isDark} theme={theme} />
         </div>
       </div>
 
@@ -127,9 +270,9 @@ export default function LeadPersonalInfo({
         <div className="flex flex-col">
           <Field label="Property Type" value={lead.propType || "Pending"} isDark={isDark} theme={theme} />
           <Field label="Type of Use" value={lead.useType !== "Pending" ? lead.useType : (lead.purpose || "N/A")} isDark={isDark} theme={theme} />
-          <Field label="Budget" value={lead.salesBudget !== "Pending" ? lead.salesBudget : lead.budget} accent isDark={isDark} theme={theme} />
+          <EditableField label="Budget" value={lead.salesBudget !== "Pending" ? lead.salesBudget : lead.budget} dbColumn="budget" accent isDark={isDark} theme={theme} leadId={lead.id} currentUser={currentUser} canEdit={canEditField && !isLocked} onSaved={handleFieldSaved} />
           <Field label="Planning to Buy" value={lead.planningPurchase || "Pending"} isDark={isDark} theme={theme} />
-          <Field label="Loan Required" value={loanDealLatest?.loan_required || lead.loanPlanned || "Pending"} isDark={isDark} theme={theme} />
+          <EditableField label="Loan Required" value={loanDealLatest?.loan_required || lead.loanPlanned || "Pending"} dbColumn="loan_planned" isDark={isDark} theme={theme} leadId={lead.id} currentUser={currentUser} canEdit={canEditField && !isLocked} onSaved={handleFieldSaved} />
           <div className="pt-1">
             <InlineContactField
               label="Location" value={lead.location} fieldType="text"
@@ -145,11 +288,11 @@ export default function LeadPersonalInfo({
       <div className={sectionCard} style={cardStyle(2)}>
         <SectionHeader icon={<FaInfoCircle className="text-[10px]" />} title="Address & Status" isDark={isDark} />
         <div className="flex flex-col">
-          <Field label="Residential Address" value={lead.address && lead.address !== "N/A" ? lead.address : "Not Provided"} isDark={isDark} theme={theme} />
+          <EditableField label="Residential Address" value={lead.address && lead.address !== "N/A" ? lead.address : "Not Provided"} dbColumn="address" isDark={isDark} theme={theme} leadId={lead.id} currentUser={currentUser} canEdit={canEditField && !isLocked} onSaved={handleFieldSaved} />
           {showExtendedFields && (
             <>
-              <Field label="Pin Code" value={lead.pinCode || lead.pin_code || "N/A"} isDark={isDark} theme={theme} />
-              <Field label="City" value={lead.city || "N/A"} isDark={isDark} theme={theme} />
+              <EditableField label="Pin Code" value={lead.pinCode || lead.pin_code || "N/A"} dbColumn="pin_code" isDark={isDark} theme={theme} leadId={lead.id} currentUser={currentUser} canEdit={canEditField && !isLocked} onSaved={handleFieldSaved} />
+              <EditableField label="City" value={lead.city || "N/A"} dbColumn="city" isDark={isDark} theme={theme} leadId={lead.id} currentUser={currentUser} canEdit={canEditField && !isLocked} onSaved={handleFieldSaved} />
             </>
           )}
           <div className={`mt-1.5 pt-1.5 border-t ${theme.tableBorder}`}>
@@ -189,14 +332,14 @@ export default function LeadPersonalInfo({
         <div className="flex flex-col">
           <Field label="Primary Source" value={lead.source || "N/A"} isDark={isDark} theme={theme} />
           {lead.source === "Others" && (
-            <Field label="Specified Name" value={lead.sourceOther} isDark={isDark} theme={theme} />
+            <EditableField label="Specified Name" value={lead.sourceOther || "N/A"} dbColumn="source_other" isDark={isDark} theme={theme} leadId={lead.id} currentUser={currentUser} canEdit={canEditField && !isLocked} onSaved={handleFieldSaved} />
           )}
         </div>
         {lead.source === "Channel Partner" ? (
           <div className={`mt-1.5 pt-1.5 border-t ${theme.tableBorder}`}>
-            <Field label="CP Name" value={lead.cpName || lead.cp_name || "N/A"} isDark={isDark} theme={theme} />
-            <Field label="CP Company" value={lead.cp_company || lead.cpCompany || "N/A"} isDark={isDark} theme={theme} />
-            <Field label="CP Phone" value={lead.cp_phone || lead.cpPhone || "N/A"} isDark={isDark} theme={theme} />
+            <EditableField label="CP Name" value={lead.cpName || lead.cp_name || "N/A"} dbColumn="cp_name" isDark={isDark} theme={theme} leadId={lead.id} currentUser={currentUser} canEdit={canEditField && !isLocked} onSaved={handleFieldSaved} />
+            <EditableField label="CP Company" value={lead.cp_company || lead.cpCompany || "N/A"} dbColumn="cp_company" isDark={isDark} theme={theme} leadId={lead.id} currentUser={currentUser} canEdit={canEditField && !isLocked} onSaved={handleFieldSaved} />
+            <EditableField label="CP Phone" value={lead.cp_phone || lead.cpPhone || "N/A"} dbColumn="cp_phone" isDark={isDark} theme={theme} leadId={lead.id} currentUser={currentUser} canEdit={canEditField && !isLocked} onSaved={handleFieldSaved} />
           </div>
         ) : lead.source === "Referral" ? (
           <div className={`mt-1.5 pt-1.5 border-t ${theme.tableBorder}`}>

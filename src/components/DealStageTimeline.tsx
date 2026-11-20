@@ -105,6 +105,7 @@ interface Props {
   theme: Record<string, any>;
   userRole?: string;
   refreshKey?: number;
+  onDataLoaded?: (data: { tracked: boolean; currentOrdinal: number }) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -126,6 +127,8 @@ const EVENT_LABELS: Record<string, string> = {
   lead_assigned_bulk: "Bulk import assignment",
   sales_form_submitted: "Sales form submitted",
   call_completed: "Manual call completed",
+  follow_up_created: "Follow-up note sent",
+  auto_seed_fresh: "Lead created",
   site_visit_scheduled: "Site visit scheduled",
   site_visit_scheduled_via_salesform: "Visit scheduled via salesform",
   site_visit_completed: "Site visit marked completed",
@@ -170,8 +173,9 @@ function formatDate(iso: string): string {
 
 function canAdvance(role?: string): boolean {
   if (!role) return false;
-  const r = role.toLowerCase();
-  return r === "admin" || r === "super admin" || r === "site head" || r === "site_head";
+  const r = role.toLowerCase().replace(/_/g, " ");
+  return r === "admin" || r === "super admin" || r === "site head"
+    || r === "sales manager" || r === "senior sales manager";
 }
 
 function getEventLabel(sourceEvent: string): string {
@@ -491,7 +495,7 @@ function StageHistoryPanel({
 // DealStageTimeline (main component)
 // ---------------------------------------------------------------------------
 
-export default function DealStageTimeline({ leadId, isDark, theme, userRole, refreshKey }: Props) {
+export default function DealStageTimeline({ leadId, isDark, theme, userRole, refreshKey, onDataLoaded }: Props) {
   const [data, setData] = useState<DealStageData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -510,6 +514,7 @@ export default function DealStageTimeline({ leadId, isDark, theme, userRole, ref
       const json = await res.json();
       if (json.success) {
         setData(json as DealStageData);
+        onDataLoaded?.({ tracked: !!json.tracked, currentOrdinal: json.currentOrdinal ?? 0 });
       } else {
         setData(null);
       }
@@ -519,7 +524,7 @@ export default function DealStageTimeline({ leadId, isDark, theme, userRole, ref
     } finally {
       setLoading(false);
     }
-  }, [leadId]);
+  }, [leadId, onDataLoaded]);
 
   useEffect(() => {
     fetchData();

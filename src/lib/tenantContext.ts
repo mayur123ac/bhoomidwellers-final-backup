@@ -42,7 +42,6 @@
 // in the MT-05 report.
 
 import type { PoolClient } from "pg";
-import { getPool } from "./db";
 
 /** Server-side tenant context. Never constructed from client input. */
 export interface TenantContext {
@@ -72,9 +71,12 @@ export function clearTenantCache(): void {
 
 async function resolveSoleOrganization(client?: PoolClient): Promise<string> {
   const sql = `SELECT id FROM public.organizations ORDER BY created_at LIMIT 2`;
+  // Route through query() (not getPool().query()) so the transient-connect
+  // retry in db.ts covers cold-start failures during tenant resolution.
+  const { query } = await import("./db");
   const rows = client
     ? (await client.query(sql)).rows
-    : (await getPool().query(sql)).rows;
+    : await query<{ id: string }>(sql);
 
   if (rows.length === 0) {
     throw new TenantResolutionError(

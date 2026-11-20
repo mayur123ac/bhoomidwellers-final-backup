@@ -802,7 +802,9 @@ function AssignedChannelPartnersView({
                                   </p>
                                   <p className={`text-[11px] ${t.textMuted}`}>
                                     <FaPhone className="inline text-[8px] mr-1" />
-                                    {e.client_phone || "no phone"}
+                                    {e.client_phone
+                                      ? `${String(e.client_phone).slice(0, 1)}${"*".repeat(Math.max(0, String(e.client_phone).length - 6))}${String(e.client_phone).slice(-4)}`
+                                      : "No phone"}
                                     {real(e.email) ? ` · ${e.email}` : ""}
                                   </p>
                                 </div>

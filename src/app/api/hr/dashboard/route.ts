@@ -18,6 +18,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { requireRoles } from "@/lib/serverAuth";
 import { getOrganizationId } from "@/lib/tenantContext";
+import { expireStaleSessionsThrottled } from "@/lib/sessionCleanup";
 
 export const dynamic = "force-dynamic";
 
@@ -56,14 +57,8 @@ export async function GET(req: NextRequest) {
     const orgId = await getOrganizationId();
     const today = todayIst();
 
-    // Expire stale sessions (mirrors /attendance/live)
-    await query(
-      `UPDATE employee_sessions
-       SET is_active = false, session_end = last_heartbeat
-       WHERE is_active = true AND organization_id = $1
-         AND EXTRACT(EPOCH FROM (NOW() - last_heartbeat)) > 300`,
-      [orgId]
-    );
+    // Expire stale sessions (throttled + sargable, shared with /attendance/live).
+    await expireStaleSessionsThrottled(orgId);
 
     // Q1: Attendance trend
     const trendRows = await query<any>(

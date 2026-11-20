@@ -191,10 +191,18 @@ export async function GET(req: Request) {
         // The UNIQUE(lead_id) constraint guarantees at most one pending row per
         // lead, so no DISTINCT or LIMIT 1 is needed on the join side.
         `SELECT w.*,
-                q.target_sm_name AS pending_sm_name
+                q.target_sm_name AS pending_sm_name,
+                COALESCE(
+                  sl.name,
+                  def_sl.name
+                ) AS site_location_name
          FROM walkin_enquiries w
          LEFT JOIN walk_in_assignment_queue q
            ON q.lead_id = w.id AND q.status = 'pending'
+         LEFT JOIN site_locations sl
+           ON sl.id = w.site_location_id
+         LEFT JOIN site_locations def_sl
+           ON def_sl.organization_id = w.organization_id AND def_sl.is_default = true
          WHERE ${where}
          ORDER BY ${orderBy}
          LIMIT ${limitParam} OFFSET ${offsetParam}`,
@@ -273,6 +281,7 @@ export async function POST(req: Request) {
       isRevisit,               // ← Explicit manual revisit flag from the receptionist checkbox
       revisitLeadId,           // ← Client-supplied previous lead id (server re-validates this)
       budget_unit,
+      site_location_id,        // ← FK to site_locations; selected in the enquiry form header
     } = body;
 
     if (!name || !phone || !assignedTo) {
@@ -426,6 +435,29 @@ export async function POST(req: Request) {
         },
         { status: 400 }
       );
+    }
+
+    // Validate site_location_id belongs to this organization (tenant isolation).
+    // If none provided, fall back to the org's configured default location.
+    let effectiveSiteLocationId: number | null = site_location_id ? Number(site_location_id) : null;
+    if (effectiveSiteLocationId) {
+      const locRows = await query(
+        `SELECT id FROM site_locations WHERE id = $1 AND organization_id = $2 LIMIT 1`,
+        [effectiveSiteLocationId, orgIdForCheck]
+      );
+      if (locRows.length === 0) {
+        return NextResponse.json(
+          { success: false, message: "Invalid site location." },
+          { status: 400 }
+        );
+      }
+    } else {
+      // No location selected — resolve org default
+      const defRows = await query<{ id: number }>(
+        `SELECT id FROM site_locations WHERE organization_id = $1 AND is_default = true LIMIT 1`,
+        [orgIdForCheck]
+      );
+      if (defRows.length > 0) effectiveSiteLocationId = defRows[0].id;
     }
 
     const rawSourcingManagerId = isCpEnquiry ? Number(sourcing_manager_id) : null;
@@ -635,7 +667,8 @@ export async function POST(req: Request) {
           organization_id,
           lead_classification, returning_from_lead_id,
           assigned_to_user_id, assigned_receptionist_user_id, overseeing_site_head_user_id,
-          budget_unit, receptionist_submitted
+          budget_unit, receptionist_submitted,
+          site_location_id
         )
         VALUES (
           $1,  $2,  $3,  $4,  $5,  $6,
@@ -651,7 +684,7 @@ export async function POST(req: Request) {
           CASE WHEN $29::int IS NULL THEN NULL ELSE $30 END,
           $31,
           $32, $33,
-          $34, $35, $36, $37, $38
+          $34, $35, $36, $37, $38, $39
         )
         RETURNING id`,
         [
@@ -700,6 +733,7 @@ export async function POST(req: Request) {
           overseeingSiteHeadUserId,           // $36 — integer FK, may be null
           budget_unit || null,                // $37
           isReceptionistToSmPath,             // $38 — true for walk-in sequential pipeline
+          effectiveSiteLocationId,                     // $39 — site location FK (default-resolved)
         ]
       );
 

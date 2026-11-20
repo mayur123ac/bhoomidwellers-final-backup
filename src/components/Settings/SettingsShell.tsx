@@ -118,6 +118,7 @@ export const NAV: { group: string; items: NavItem[] }[] = [
     group: "Control",
     items: [
       { href: "/dashboard/settings/number-control", label: "Number Control", icon: FaPhoneAlt, adminOnly: true },
+      { href: "/dashboard/settings/enquiry-form", label: "Enquiry Form", icon: FaClipboardList, adminOnly: true },
     ],
   },
   {
