@@ -192,6 +192,7 @@ export async function PATCH(
     }
     updated = rows[0];
     const dateLabel = newDate.toLocaleString("en-IN", {
+      timeZone: "Asia/Kolkata",
       day: "2-digit",
       month: "short",
       year: "numeric",

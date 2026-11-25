@@ -77,6 +77,7 @@ export default function ReminderModal({
   const handleQuickSelect = (days: number) => {
     setSelectedQuick(days);
     setMode("quick");
+    setCustomDatetime(""); // clear custom so a stale value can't confuse the user
     setError("");
   };
 
@@ -88,7 +89,18 @@ export default function ReminderModal({
     if (mode === "quick" && selectedQuick !== null) {
       remindAt = getQuickDate(selectedQuick).toISOString();
     } else if (mode === "custom" && customDatetime) {
-      const d = new Date(customDatetime);
+      // datetime-local returns "YYYY-MM-DDTHH:MM" without timezone info.
+      // new Date() with that format is browser-dependent (may be UTC or local).
+      // Parse components explicitly and construct as local time to preserve
+      // the exact hours and minutes the user selected.
+      const [datePart, timePart] = customDatetime.split("T");
+      if (!datePart || !timePart) {
+        setError("Invalid date/time.");
+        return;
+      }
+      const [yr, mo, dy] = datePart.split("-").map(Number);
+      const [hr, mn] = timePart.split(":").map(Number);
+      const d = new Date(yr, mo - 1, dy, hr, mn, 0, 0);
       if (isNaN(d.getTime())) {
         setError("Invalid date/time.");
         return;
@@ -225,6 +237,7 @@ export default function ReminderModal({
                 min={getMinDatetime()}
                 onChange={(e) => {
                   setCustomDatetime(e.target.value);
+                  setSelectedQuick(null); // ensure quick path cannot fire
                   setError("");
                 }}
                 className={`w-full rounded-xl px-4 py-3 text-sm outline-none border-2 transition-colors ${

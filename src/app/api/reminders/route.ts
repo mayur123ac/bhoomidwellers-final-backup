@@ -127,6 +127,7 @@ export async function POST(req: NextRequest) {
 
   // ── Auto-log to follow_ups ──────────────────────────────────────────────
   const dateLabel = remindAtDate.toLocaleString("en-IN", {
+    timeZone: "Asia/Kolkata",
     day: "2-digit",
     month: "short",
     year: "numeric",

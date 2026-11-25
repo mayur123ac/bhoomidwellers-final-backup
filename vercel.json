@@ -7,6 +7,10 @@
     {
       "path": "/api/attendance/auto-complete?mode=endofday",
       "schedule": "28 18 * * *"
+    },
+    {
+      "path": "/api/reminders/process",
+      "schedule": "* * * * *"
     }
   ]
 }

@@ -3,11 +3,15 @@ import { requireRoles } from "@/lib/serverAuth";
 import { query } from "@/lib/db";
 import { joinName, avatarSrc, initialsFor } from "@/lib/settingsUser";
 import { propagateUserRename } from "@/lib/renameUserReferences";
+import { createHash, randomBytes, scryptSync } from "node:crypto";
+import { EmailService } from "@/lib/email/EmailService";
+import { isMailConfigured, readSenderConfig } from "@/lib/email/config";
 
 export const dynamic = "force-dynamic";
 
 const ROLES = ["admin", "receptionist", "sales_manager", "site_head", "sourcing_manager"];
 const DEPARTMENTS = ["Sales", "Marketing", "Operations", "Finance", "HR", "IT", "Management"];
+const INVITE_EXPIRY_DAYS = 7;
 
 function deriveStatus(row: any): "active" | "pending" | "inactive" {
   if (!row.is_active) return "inactive";
@@ -32,7 +36,7 @@ function serializeEmployee(row: any) {
     firstLoginAt: row.first_login_at,
     inviteSentAt: row.invite_sent_at,
     inviteExpired: row.invite_sent_at
-      ? new Date(row.invite_sent_at).getTime() + 7 * 86_400_000 < Date.now()
+      ? new Date(row.invite_sent_at).getTime() + INVITE_EXPIRY_DAYS * 86_400_000 < Date.now()
       : false,
     deactivatedAt: row.deactivated_at,
     avatarUrl: avatarSrc(row),
@@ -41,6 +45,113 @@ function serializeEmployee(row: any) {
     reportingManagerName: row.manager_name ?? null,
     salesFormException: row.sales_form_exception ?? false,
   };
+}
+
+function hashToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+function generateInviteToken(): string {
+  return randomBytes(32).toString("base64url");
+}
+
+function hashPassword(raw: string): string {
+  const salt = randomBytes(16).toString("hex");
+  const hash = scryptSync(raw, salt, 64).toString("hex");
+  return `${salt}:${hash}`;
+}
+
+/** Verify user belongs to this admin's org. Super admins bypass the org check. */
+async function verifyOwnership(
+  userId: number,
+  orgId: string | null
+): Promise<{ owned: boolean; row?: any }> {
+  if (!orgId) {
+    // Super admin — verify user exists and is not deleted
+    const rows = await query<any>(
+      `SELECT id, organization_id FROM users WHERE id = $1 AND deleted_at IS NULL LIMIT 1`,
+      [userId]
+    );
+    return { owned: rows.length > 0, row: rows[0] };
+  }
+  const rows = await query<any>(
+    `SELECT id, organization_id FROM users
+     WHERE id = $1 AND organization_id = $2 AND deleted_at IS NULL LIMIT 1`,
+    [userId, orgId]
+  );
+  return { owned: rows.length > 0, row: rows[0] };
+}
+
+async function getOrgName(orgId: string | null): Promise<string> {
+  if (!orgId) return "Bhoomi Dwellers";
+  const rows = await query<{ name: string }>(
+    `SELECT name FROM organizations WHERE id = $1 LIMIT 1`,
+    [orgId]
+  );
+  return rows[0]?.name ?? "Bhoomi Dwellers";
+}
+
+async function sendInviteEmail(
+  employeeId: number,
+  employeeEmail: string,
+  employeeName: string,
+  role: string,
+  orgId: string | null,
+  invitedById: number,
+  invitedByName: string | null,
+  ip: string | null,
+  userAgent: string | null
+): Promise<{ delivered: boolean; token?: string }> {
+  if (!isMailConfigured()) {
+    return { delivered: false };
+  }
+
+  const token = generateInviteToken();
+  const tokenHash = hashToken(token);
+  const expiresAt = new Date(Date.now() + INVITE_EXPIRY_DAYS * 86_400_000);
+
+  // Invalidate any existing unused invitations for this user
+  await query(
+    `UPDATE employee_invitations SET consumed_at = NOW()
+     WHERE user_id = $1 AND consumed_at IS NULL`,
+    [employeeId]
+  );
+
+  // Store the invitation
+  await query(
+    `INSERT INTO employee_invitations
+       (user_id, token_hash, organization_id, invited_by, email, expires_at)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [employeeId, tokenHash, orgId, invitedById, employeeEmail, expiresAt]
+  );
+
+  const orgName = await getOrgName(orgId);
+  const appUrl = readSenderConfig().appUrl;
+  const inviteUrl = appUrl
+    ? `${appUrl}/accept-invite?token=${token}`
+    : "";
+
+  const result = await EmailService.sendEmployeeInvitation(
+    employeeEmail,
+    {
+      name: employeeName,
+      organization: orgName,
+      role,
+      inviteUrl,
+      expiryDays: INVITE_EXPIRY_DAYS,
+      invitedBy: invitedByName,
+    },
+    { userId: invitedById, ip, userAgent }
+  );
+
+  if (result.delivered) {
+    await query(
+      `UPDATE users SET invite_sent_at = NOW() WHERE id = $1`,
+      [employeeId]
+    );
+  }
+
+  return { delivered: result.delivered, token };
 }
 
 // GET /api/settings/employees
@@ -104,7 +215,6 @@ export async function GET(req: NextRequest) {
 
     const employees = rows.map(serializeEmployee);
 
-    // Counts for filter badges
     const counts = {
       all: employees.length,
       active: employees.filter((e) => e.status === "active").length,
@@ -112,7 +222,6 @@ export async function GET(req: NextRequest) {
       inactive: employees.filter((e) => e.status === "inactive").length,
     };
 
-    // Managers list for the reporting-manager dropdown
     const managerConditions = ["deleted_at IS NULL", "is_active = true"];
     const managerParams: any[] = [];
     if (orgId) {
@@ -126,9 +235,7 @@ export async function GET(req: NextRequest) {
       managerParams
     );
 
-    const inviteEmailConfigured = Boolean(
-      process.env.SMTP_HOST && process.env.SMTP_USER
-    );
+    const inviteEmailConfigured = isMailConfigured();
 
     return NextResponse.json({
       success: true,
@@ -165,7 +272,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: "Email is required." }, { status: 400 });
     }
 
-    // Check duplicate email
+    // Check duplicate email (platform-wide — email is the login identity)
     const existing = await query<any>(
       `SELECT id FROM users WHERE LOWER(email) = LOWER($1) AND deleted_at IS NULL LIMIT 1`,
       [body.email.trim()]
@@ -174,25 +281,31 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: "An employee with this email already exists." }, { status: 409 });
     }
 
-    // Generate or use provided password
-    const { scryptSync, randomBytes } = await import("node:crypto");
+    // Reporting manager must belong to the same org
+    if (body.reportingManagerId && orgId) {
+      const mgr = await verifyOwnership(body.reportingManagerId, orgId);
+      if (!mgr.owned) {
+        return NextResponse.json({ success: false, message: "Invalid reporting manager." }, { status: 400 });
+      }
+    }
+
+    // Password handling:
+    // - If sendInvite AND no password: generate a temporary one so the account
+    //   is usable via direct login as a fallback, but the primary path is the
+    //   invitation link.
+    // - If password provided: use it.
+    // - If neither invite nor password: auto-generate and return it.
     let rawPassword = body.tempPassword || body.password || "";
     let temporaryPassword: string | null = null;
 
-    if (!rawPassword && !body.sendInvite) {
-      // Auto-generate a temporary password
+    if (!rawPassword) {
       rawPassword = randomBytes(12).toString("base64url");
       temporaryPassword = rawPassword;
-    } else if (rawPassword) {
+    } else {
       temporaryPassword = rawPassword;
     }
 
-    let hashedPassword: string | null = null;
-    if (rawPassword) {
-      const salt = randomBytes(16).toString("hex");
-      const hash = scryptSync(rawPassword, salt, 64).toString("hex");
-      hashedPassword = `${salt}:${hash}`;
-    }
+    const hashedPassword = hashPassword(rawPassword);
 
     const rows = await query<any>(
       `INSERT INTO users (name, email, phone, role, department, reporting_manager_id,
@@ -212,19 +325,30 @@ export async function POST(req: NextRequest) {
       ]
     );
 
-    // Attempt to send invite email if requested
+    const newUserId = rows[0]?.id;
+
+    // Send invite email if requested — AFTER the user row exists
     let inviteDelivered = false;
-    if (body.sendInvite) {
+    if (body.sendInvite && newUserId) {
+      const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
+      const userAgent = req.headers.get("user-agent") ?? null;
+
       try {
-        const smtpHost = process.env.SMTP_HOST;
-        const smtpUser = process.env.SMTP_USER;
-        if (smtpHost && smtpUser) {
-          // Mark invite sent
-          await query(`UPDATE users SET invite_sent_at = NOW() WHERE id = $1`, [rows[0]?.id]);
-          inviteDelivered = true;
-        }
-      } catch {
-        // Email delivery is best-effort
+        const result = await sendInviteEmail(
+          newUserId,
+          body.email.trim(),
+          name,
+          body.role || "sales_manager",
+          orgId,
+          gate.userId!,
+          gate.session.name ?? null,
+          ip,
+          userAgent
+        );
+        inviteDelivered = result.delivered;
+      } catch (err: any) {
+        console.error("[POST /api/settings/employees] invite email failed:", err?.message);
+        // The employee was created; email failure is surfaced but not fatal.
       }
     }
 
@@ -232,11 +356,13 @@ export async function POST(req: NextRequest) {
       success: true,
       message: inviteDelivered
         ? "Employee created and invite sent."
-        : temporaryPassword
-          ? "Employee created with temporary password."
-          : "Employee created.",
-      id: rows[0]?.id,
-      temporaryPassword,
+        : body.sendInvite && !inviteDelivered
+          ? "Employee created but the invitation email could not be delivered. Check email configuration."
+          : temporaryPassword
+            ? "Employee created with temporary password."
+            : "Employee created.",
+      id: newUserId,
+      temporaryPassword: inviteDelivered ? null : temporaryPassword,
       inviteDelivered,
     });
   } catch (err: any) {
@@ -250,6 +376,8 @@ export async function PATCH(req: NextRequest) {
   const gate = await requireRoles(["admin", "super_admin"]);
   if (!gate.ok) return gate.response;
 
+  const orgId = gate.session.org;
+
   try {
     const body = await req.json();
 
@@ -259,10 +387,27 @@ export async function PATCH(req: NextRequest) {
       if (ids.length === 0) {
         return NextResponse.json({ success: false, message: "No employees selected." }, { status: 400 });
       }
+
+      // Verify all IDs belong to this org
+      if (orgId) {
+        const owned = await query<{ id: number }>(
+          `SELECT id FROM users WHERE id = ANY($1::int[]) AND organization_id = $2 AND deleted_at IS NULL`,
+          [ids, orgId]
+        );
+        const ownedIds = new Set(owned.map((r) => r.id));
+        const unowned = ids.filter((id: number) => !ownedIds.has(id));
+        if (unowned.length > 0) {
+          return NextResponse.json(
+            { success: false, message: `${unowned.length} employee(s) not found in your organization.` },
+            { status: 403 }
+          );
+        }
+      }
+
       await query(
         `UPDATE users SET is_active = $1, deactivated_at = CASE WHEN $1 THEN NULL ELSE NOW() END
-         WHERE id = ANY($2::int[])`,
-        [Boolean(body.isActive), ids]
+         WHERE id = ANY($2::int[])${orgId ? ` AND organization_id = $3` : ""} AND deleted_at IS NULL`,
+        orgId ? [Boolean(body.isActive), ids, orgId] : [Boolean(body.isActive), ids]
       );
       return NextResponse.json({
         success: true,
@@ -272,6 +417,11 @@ export async function PATCH(req: NextRequest) {
 
     // Set single status
     if (body.action === "setStatus" && body.id) {
+      const check = await verifyOwnership(body.id, orgId);
+      if (!check.owned) {
+        return NextResponse.json({ success: false, message: "Employee not found." }, { status: 404 });
+      }
+
       await query(
         `UPDATE users SET is_active = $1, deactivated_at = CASE WHEN $1 THEN NULL ELSE NOW() END
          WHERE id = $2`,
@@ -285,23 +435,78 @@ export async function PATCH(req: NextRequest) {
 
     // Resend invite
     if (body.action === "resendInvite" && body.id) {
-      await query(`UPDATE users SET invite_sent_at = NOW() WHERE id = $1`, [body.id]);
-      const inviteDelivered = Boolean(process.env.SMTP_HOST && process.env.SMTP_USER);
-      return NextResponse.json({
-        success: true,
-        message: inviteDelivered ? "Invite email sent." : "Invite marked as sent (email not configured).",
-        inviteDelivered,
-      });
+      const check = await verifyOwnership(body.id, orgId);
+      if (!check.owned) {
+        return NextResponse.json({ success: false, message: "Employee not found." }, { status: 404 });
+      }
+
+      // Look up the employee's email and details for the invitation
+      const empRows = await query<{ email: string; name: string; role: string }>(
+        `SELECT email, name, role FROM users WHERE id = $1 AND deleted_at IS NULL LIMIT 1`,
+        [body.id]
+      );
+      if (empRows.length === 0) {
+        return NextResponse.json({ success: false, message: "Employee not found." }, { status: 404 });
+      }
+
+      const emp = empRows[0];
+      const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
+      const userAgent = req.headers.get("user-agent") ?? null;
+
+      try {
+        const result = await sendInviteEmail(
+          body.id,
+          emp.email,
+          emp.name,
+          emp.role,
+          orgId,
+          gate.userId!,
+          gate.session.name ?? null,
+          ip,
+          userAgent
+        );
+
+        if (!result.delivered) {
+          return NextResponse.json({
+            success: false,
+            message: "Invite email could not be delivered. Check email configuration.",
+          }, { status: 503 });
+        }
+
+        return NextResponse.json({
+          success: true,
+          message: "Invite email sent.",
+          inviteDelivered: true,
+        });
+      } catch (err: any) {
+        console.error("[PATCH /api/settings/employees] resend invite failed:", err?.message);
+        return NextResponse.json({
+          success: false,
+          message: "Failed to send invite email.",
+        }, { status: 500 });
+      }
     }
 
     // Update single employee
     if (body.id) {
+      const check = await verifyOwnership(body.id, orgId);
+      if (!check.owned) {
+        return NextResponse.json({ success: false, message: "Employee not found." }, { status: 404 });
+      }
+
       const name = joinName(body.firstName, body.lastName);
       if (!name.trim()) {
         return NextResponse.json({ success: false, message: "Name is required." }, { status: 400 });
       }
 
-      // Read old name before overwriting so rename propagation has a baseline.
+      // Reporting manager must belong to the same org
+      if (body.reportingManagerId && orgId) {
+        const mgr = await verifyOwnership(body.reportingManagerId, orgId);
+        if (!mgr.owned) {
+          return NextResponse.json({ success: false, message: "Invalid reporting manager." }, { status: 400 });
+        }
+      }
+
       const existingRows = await query<{ name: string }>(
         `SELECT name FROM users WHERE id = $1 LIMIT 1`,
         [body.id]
@@ -321,11 +526,8 @@ export async function PATCH(req: NextRequest) {
       let idx = 8;
 
       if (body.password) {
-        const { scryptSync, randomBytes } = await import("node:crypto");
-        const salt = randomBytes(16).toString("hex");
-        const hash = scryptSync(body.password, salt, 64).toString("hex");
         sets.push(`password = $${idx++}`);
-        params.push(`${salt}:${hash}`);
+        params.push(hashPassword(body.password));
       }
 
       params.push(body.id);
@@ -334,7 +536,6 @@ export async function PATCH(req: NextRequest) {
         params
       );
 
-      // Keep name-keyed lead ownership in sync when the name changed.
       if (oldName && oldName.trim() !== name.trim()) {
         propagateUserRename(oldName, name).catch((e: any) =>
           console.error("[PATCH /api/settings/employees] propagateUserRename failed:", e?.message)
@@ -356,13 +557,19 @@ export async function DELETE(req: NextRequest) {
   const gate = await requireRoles(["admin", "super_admin"]);
   if (!gate.ok) return gate.response;
 
+  const orgId = gate.session.org;
+
   try {
     const body = await req.json();
     if (!body.id) {
       return NextResponse.json({ success: false, message: "Employee ID is required." }, { status: 400 });
     }
 
-    // Soft-delete
+    const check = await verifyOwnership(body.id, orgId);
+    if (!check.owned) {
+      return NextResponse.json({ success: false, message: "Employee not found." }, { status: 404 });
+    }
+
     await query(
       `UPDATE users SET deleted_at = NOW(), is_active = false, deactivated_at = NOW() WHERE id = $1`,
       [body.id]
