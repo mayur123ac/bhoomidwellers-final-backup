@@ -739,23 +739,24 @@ export default function LiveActivityView({ theme, isDark }: { theme: any; isDark
                                   {(() => {
                                     // Working Hours: uses period-based attendance_span_seconds
                                     // from the server (sum of completed periods + active period
-                                    // elapsed). For active single-period days, a client-side
-                                    // live timer ticks from attendance_marked_at. For
-                                    // multi-period active days, the server value refreshes
-                                    // via realtime events.
+                                    // elapsed). For active single-period days on TODAY, a
+                                    // client-side live timer ticks from attendance_marked_at.
+                                    // For PAST dates, always use the server-computed value
+                                    // (capped at end-of-day IST) to avoid multi-day spans.
                                     if (s.attendance_marked_at) {
-                                      if (s.attendance_completed) {
-                                        // Day complete — frozen span from server
+                                      if (s.attendance_completed || !s.is_today) {
+                                        // Day complete OR past date — frozen span from server
+                                        // (server caps unclosed records at end-of-day IST)
                                         const span = Number(s.attendance_span_seconds);
                                         return <span>{formatDurationHM(span >= 0 ? span : 0)}</span>;
                                       }
-                                      // Active attendance
+                                      // Active attendance on TODAY
                                       if (Number(s.total_periods) > 1) {
                                         // Multi-period: use server-computed total (refreshed via realtime)
                                         const span = Number(s.attendance_span_seconds);
                                         return <span>{formatDurationHM(span >= 0 ? span : 0)}</span>;
                                       }
-                                      // Single period: live timer from mark time
+                                      // Single period today: live timer from mark time
                                       const markedMs = new Date(s.attendance_marked_at).getTime();
                                       if (!isNaN(markedMs)) {
                                         const sec = Math.floor((now - markedMs) / 1000);

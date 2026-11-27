@@ -44,12 +44,16 @@ export const canManagePartners = canEditPartners;
 async function authorize(check: (role: any) => boolean) {
   const session = await getServerSession();
   if (!session?.role) {
-    return { ok: false as const, res: NextResponse.json(
-      { success: false, message: "Not signed in.", code: "UNAUTHORIZED" }, { status: 401 }) };
+    return {
+      ok: false as const, res: NextResponse.json(
+        { success: false, message: "Not signed in.", code: "UNAUTHORIZED" }, { status: 401 })
+    };
   }
   if (!check(session.role)) {
-    return { ok: false as const, res: NextResponse.json(
-      { success: false, message: "Your role cannot perform this action.", code: "FORBIDDEN" }, { status: 403 }) };
+    return {
+      ok: false as const, res: NextResponse.json(
+        { success: false, message: "Your role cannot perform this action.", code: "FORBIDDEN" }, { status: 403 })
+    };
   }
   return { ok: true as const, session };
 }
@@ -237,12 +241,12 @@ export async function POST(req: NextRequest) {
     const phoneKey = normalizeCpPhone(body.phone);
     const existingForPhone = phoneKey
       ? await query(
-          `SELECT id FROM channel_partners
+        `SELECT id FROM channel_partners
             WHERE right(regexp_replace(COALESCE(phone, ''), '\\D', '', 'g'), 10) = $1
               AND organization_id = $2
             LIMIT 1`,
-          [phoneKey, await getOrganizationId()]
-        )
+        [phoneKey, await getOrganizationId()]
+      )
       : [];
     const willUpdateExisting = existingForPhone.length > 0;
 
@@ -519,7 +523,7 @@ export async function POST(req: NextRequest) {
       result.merged &&
       !canViewAllPartners(auth.session.role) &&
       String(result.row?.assigned_sourcing_manager_id ?? "") !==
-        String(auth.session._id ?? auth.session.id ?? "");
+      String(auth.session._id ?? auth.session.id ?? "");
 
     const data = outOfScope
       ? { id: result.row.id, name: result.row.name, assigned_to_another_manager: true }

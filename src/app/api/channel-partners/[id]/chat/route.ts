@@ -31,7 +31,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getOrganizationId } from "@/lib/tenantContext";
 import { getServerSession, getSessionUserId } from "@/lib/serverAuth";
-import { canViewPartners, canViewAllPartners } from "@/lib/cpRbac";
+import { canViewPartners, canViewAllPartners, normalizeRole } from "@/lib/cpRbac";
 import { resolveSender, formatUnitConfig, clean } from "@/lib/cpChat";
 import { uploadBufferToR2, generatePresignedUrl } from "@/lib/r2";
 import {
@@ -218,7 +218,7 @@ async function threadState(orgId: string, cpId: number) {
 }
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getServerSession();
@@ -246,6 +246,25 @@ export async function GET(
         { success: false, message: `Channel partner ${id} not found.` },
         { status: 404 }
       );
+    }
+
+    // ── Delta path: ?since=<cursor> returns only new/edited messages ──
+    // loadPartner already ran above and proved access; the delta queries below
+    // are org-scoped and cannot leak data even if executed in parallel, but
+    // the sequential loadPartner check guarantees we never return delta data
+    // for a partner the caller may not see.
+    const since = req.nextUrl.searchParams.get("since");
+    if (since && ISO_CURSOR.test(since)) {
+      const sessionUserId = getSessionUserId(session);
+      const [rows, state] = await Promise.all([
+        loadPersisted(orgId, cpId, since),
+        threadState(orgId, cpId),
+      ]);
+      const messages = await toMessageItems(rows, sessionUserId);
+      return NextResponse.json({
+        success: true,
+        data: { messages, cursor: state.cursor, fingerprint: state.fingerprint },
+      });
     }
 
     const [
@@ -628,12 +647,15 @@ export async function GET(
 
     items.sort((a, b) => a.ts - b.ts);
 
+    const state = await threadState(orgId, cpId);
     const agg = about[0] || {};
     return NextResponse.json(
       {
         success: true,
         data: {
           messages: items,
+          cursor: state.cursor,
+          fingerprint: state.fingerprint,
           about: {
             profile: {
               name: partner.name,
@@ -907,5 +929,83 @@ export async function POST(
       );
     }
     return NextResponse.json({ success: false, message: err.message }, { status: 500 });
+  }
+}
+
+/**
+ * Deletes a single cp_chat_messages row. Admin-only.
+ *
+ * Body: { messageId: "<uuid>" }
+ *
+ * The DELETE is a hard delete — cp_chat_messages has no soft-delete column, and
+ * the table has no dependents (no other table references it via FK). The
+ * visit_id FK on cp_chat_messages points *to* cp_visits, so removing a message
+ * that announced a visit does not cascade to the visit itself.
+ */
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await getServerSession();
+  if (!session?.role) {
+    return NextResponse.json(
+      { success: false, message: "Not signed in." },
+      { status: 401 }
+    );
+  }
+
+  const role = normalizeRole(session.role);
+  if (role !== "admin" && role !== "super admin") {
+    return NextResponse.json(
+      { success: false, message: "Only admins can delete chat messages." },
+      { status: 403 }
+    );
+  }
+
+  const { id } = await params;
+  const cpId = Number(id);
+  if (!Number.isInteger(cpId)) {
+    return NextResponse.json(
+      { success: false, message: "Invalid partner id." },
+      { status: 400 }
+    );
+  }
+
+  try {
+    const body = await req.json().catch(() => ({}));
+    const messageId = body?.messageId;
+    if (!messageId || typeof messageId !== "string") {
+      return NextResponse.json(
+        { success: false, message: "Missing or invalid messageId." },
+        { status: 400 }
+      );
+    }
+
+    const orgId = await getOrganizationId();
+
+    // Scoped to org + CP: even a valid UUID from another org/partner returns 0 rows.
+    const result = await query(
+      `DELETE FROM cp_chat_messages
+        WHERE id = $1::uuid
+          AND organization_id = $2
+          AND channel_partner_id = $3
+        RETURNING id`,
+      [messageId, orgId, cpId]
+    );
+
+    if (result.length === 0) {
+      return NextResponse.json(
+        { success: false, message: "Message not found." },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({ success: true, message: "Message deleted." });
+  } catch (err: any) {
+    console.error("[DELETE /api/channel-partners/[id]/chat]", err);
+    return NextResponse.json(
+      { success: false, message: err.message },
+      { status: 500 }
+    );
   }
 }

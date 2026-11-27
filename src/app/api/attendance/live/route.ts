@@ -30,9 +30,15 @@ export async function GET(req: Request) {
     // 1. Automatic Session Expiration Cleanup (throttled + sargable).
     await expireStaleSessionsThrottled(orgId);
 
+    // Date ceiling: for past dates, cap at end-of-day IST (midnight next day);
+    // for today, use the current time. This prevents unclosed sessions /
+    // attendance records from accumulating hours across multiple calendar days
+    // when the auto-complete cron has not run.
+    const isToday = targetDate === todayIst;
+
     // We join Users -> Sessions (filtered for targetDate) -> Live State (Telemetry)
     const liveSessions = await query(`
-      SELECT 
+      SELECT
         u.id as user_id,
         u.name,
         u.email,
@@ -46,7 +52,7 @@ export async function GET(req: Request) {
         CASE WHEN s.is_active THEN l.idle_duration_seconds ELSE 0 END as idle_duration_seconds,
         CASE WHEN s.is_active THEN l.productivity_score ELSE 0 END as productivity_score,
         l.is_idle,
-        CASE 
+        CASE
           WHEN ar.attendance_status IS NOT NULL THEN ar.attendance_status
           WHEN s.is_active THEN 'Pending'
           ELSE 'Absent'
@@ -65,11 +71,14 @@ export async function GET(req: Request) {
         s.login_location_name,
         s.login_location_accuracy,
         sc.active_sessions_count,
-        
-        -- Per-session elapsed time (correct for both active and ended sessions)
+
+        -- Per-session elapsed time (correct for both active and ended sessions).
+        -- Capped at end-of-day for past dates so unclosed sessions don't span days.
         CASE
           WHEN s.session_start IS NULL THEN NULL
-          WHEN s.is_active THEN EXTRACT(EPOCH FROM (NOW() - s.session_start))::integer
+          WHEN s.is_active THEN EXTRACT(EPOCH FROM (
+            LEAST(NOW(), (($1::date + 1) AT TIME ZONE 'Asia/Kolkata')) - s.session_start
+          ))::integer
           WHEN s.session_end IS NOT NULL THEN EXTRACT(EPOCH FROM (s.session_end - s.session_start))::integer
           ELSE NULL
         END as session_duration_seconds,
@@ -83,6 +92,9 @@ export async function GET(req: Request) {
         -- this date.  Session-based fallback for employees who have not
         -- marked attendance.
         sw.total_working_seconds,
+        -- Whether the selected date is today (lets the client decide whether
+        -- to run its live timer or use the frozen server value).
+        $3::boolean AS is_today,
         CASE
           WHEN s.user_id IS NULL THEN 'OFFLINE'
           WHEN s.is_active = false THEN 'OFFLINE'
@@ -92,8 +104,8 @@ export async function GET(req: Request) {
       FROM users u
       LEFT JOIN (
         -- Get the most recent session for each user on targetDate
-        SELECT DISTINCT ON (user_id) * 
-        FROM employee_sessions 
+        SELECT DISTINCT ON (user_id) *
+        FROM employee_sessions
         WHERE DATE(session_start AT TIME ZONE 'Asia/Kolkata') = $1
           AND organization_id = $2
         ORDER BY user_id, session_start DESC
@@ -106,13 +118,15 @@ export async function GET(req: Request) {
         GROUP BY user_id
       ) sc ON u.id = sc.user_id
       LEFT JOIN (
-        -- Working hours = First Login → Final Logout (or NOW if still active).
+        -- Working hours = First Login → Final Logout (or capped NOW).
         -- Breaks between sessions are NOT subtracted: the client's rule is
         -- continuous first-login-to-final-logout.
+        -- LEAST caps NOW() at end-of-selected-day IST so past-date unclosed
+        -- sessions don't accumulate hours across calendar days.
         SELECT user_id,
           EXTRACT(EPOCH FROM (
             MAX(CASE
-              WHEN is_active THEN NOW()
+              WHEN is_active THEN LEAST(NOW(), (($1::date + 1) AT TIME ZONE 'Asia/Kolkata'))
               ELSE COALESCE(session_end, last_heartbeat, session_start)
             END)
             - MIN(session_start)
@@ -135,6 +149,9 @@ export async function GET(req: Request) {
         --
         -- attendance_marked_at: ISO-8601 UTC string of submitted_at for
         -- client-side live timer on active attendance days.
+        --
+        -- LEAST caps CURRENT_TIMESTAMP at end-of-selected-day IST so
+        -- unclosed records from past dates don't show multi-day spans.
         SELECT DISTINCT ON (ar_inner.employee_id)
           ar_inner.employee_id,
           ar_inner.attendance_status,
@@ -143,7 +160,9 @@ export async function GET(req: Request) {
             COALESCE(
               ap_sum.periods_total_seconds,
               EXTRACT(EPOCH FROM (
-                COALESCE(ar_inner.logout_time, CURRENT_TIMESTAMP) - (ar_inner.submitted_at AT TIME ZONE 'UTC')
+                COALESCE(ar_inner.logout_time,
+                  LEAST(CURRENT_TIMESTAMP, (($1::date + 1) AT TIME ZONE 'Asia/Kolkata'))
+                ) - (ar_inner.submitted_at AT TIME ZONE 'UTC')
               ))::integer
             )
           END AS attendance_span_seconds,
@@ -158,7 +177,10 @@ export async function GET(req: Request) {
           SELECT
             SUM(CASE
               WHEN ap.completed_at IS NOT NULL THEN ap.duration_seconds
-              ELSE EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - ap.started_at))::integer
+              ELSE EXTRACT(EPOCH FROM (
+                LEAST(CURRENT_TIMESTAMP, (($1::date + 1) AT TIME ZONE 'Asia/Kolkata'))
+                - ap.started_at
+              ))::integer
             END)::integer AS periods_total_seconds,
             COUNT(*)::integer AS total_periods
           FROM attendance_periods ap
@@ -174,7 +196,7 @@ export async function GET(req: Request) {
       -- for the same user id sorted first.
       WHERE u.is_active = true AND u.organization_id = $2
       ORDER BY l.productivity_score DESC NULLS LAST, s.session_start DESC
-    `, [targetDate, orgId]);
+    `, [targetDate, orgId, isToday]);
 
     return NextResponse.json({ sessions: liveSessions });
   } catch (error) {

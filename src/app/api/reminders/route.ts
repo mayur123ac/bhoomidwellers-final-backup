@@ -9,7 +9,7 @@
 //   - organization_id comes from the signed session via getOrganizationId()
 
 import { NextRequest, NextResponse } from "next/server";
-import { query } from "@/lib/db";
+import { query, transaction } from "@/lib/db";
 import { requireSession, getSessionUserId } from "@/lib/serverAuth";
 import { getOrganizationId } from "@/lib/tenantContext";
 import { broadcastReminderCreated, type ReminderPayload } from "@/lib/reminderEvents";
@@ -104,28 +104,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // ── INSERT reminder ─────────────────────────────────────────────────────
-  const rows = await query<any>(
-    `INSERT INTO lead_reminders
-       (lead_id, organization_id, assigned_user_id, created_by_id, created_by_name,
-        reminder_type, note, remind_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-     RETURNING *`,
-    [
-      numericLeadId,
-      orgId,
-      userId,              // assigned_user_id = session user, never from request
-      userId,              // created_by_id = session user
-      gate.session.name,   // denormalized display name
-      type,
-      trimmedNote,
-      remindAtDate.toISOString(),
-    ],
-  );
-
-  const reminder = rows[0];
-
-  // ── Auto-log to follow_ups ──────────────────────────────────────────────
+  // ── INSERT reminder + follow_up atomically ──────────────────────────────
   const dateLabel = remindAtDate.toLocaleString("en-IN", {
     timeZone: "Asia/Kolkata",
     day: "2-digit",
@@ -136,17 +115,38 @@ export async function POST(req: NextRequest) {
     hour12: true,
   });
   const noteLabel = trimmedNote ? `: ${trimmedNote}` : "";
-  await query(
-    `INSERT INTO follow_ups (lead_id, message, created_by_name, created_by_id, organization_id)
-     VALUES ($1, $2, $3, $5, $4)`,
-    [
-      numericLeadId,
-      `\uD83D\uDD14 Follow-up reminder set for ${dateLabel}${noteLabel}`,
-      gate.session.name,
-      orgId,
-      gate.userId,
-    ],
-  );
+
+  const reminder = await transaction(async (client) => {
+    const { rows } = await client.query(
+      `INSERT INTO lead_reminders
+         (lead_id, organization_id, assigned_user_id, created_by_id, created_by_name,
+          reminder_type, note, remind_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING *`,
+      [
+        numericLeadId,
+        orgId,
+        userId,              // assigned_user_id = session user, never from request
+        userId,              // created_by_id = session user
+        gate.session.name,   // denormalized display name
+        type,
+        trimmedNote,
+        remindAtDate.toISOString(),
+      ],
+    );
+    await client.query(
+      `INSERT INTO follow_ups (lead_id, message, created_by_name, created_by_id, organization_id)
+       VALUES ($1, $2, $3, $5, $4)`,
+      [
+        numericLeadId,
+        `\uD83D\uDD14 Follow-up reminder set for ${dateLabel}${noteLabel}`,
+        gate.session.name,
+        orgId,
+        gate.userId,
+      ],
+    );
+    return rows[0];
+  });
 
   // ── Broadcast SSE ───────────────────────────────────────────────────────
   const lead = leadRows[0];
@@ -182,6 +182,15 @@ export async function GET(req: NextRequest) {
   if (!gate.ok) return gate.response;
 
   const userId = getSessionUserId(gate.session);
+
+  // Fail closed: never allow reminder queries without a valid user identity.
+  if (!userId) {
+    return NextResponse.json(
+      { success: false, message: "Unauthorized: invalid session user." },
+      { status: 401 },
+    );
+  }
+
   const orgId = await getOrganizationId();
 
   const params = req.nextUrl.searchParams;
@@ -201,7 +210,7 @@ export async function GET(req: NextRequest) {
   const queryParams: any[] = [orgId];
   let paramIdx = 2;
 
-  if (onlyMine && userId) {
+  if (onlyMine) {
     conditions.push(`r.assigned_user_id = $${paramIdx}`);
     queryParams.push(userId);
     paramIdx++;
@@ -231,6 +240,20 @@ export async function GET(req: NextRequest) {
 
   const whereClause = conditions.join(" AND ");
 
+  // ── Pagination ──────────────────────────────────────────────────────────
+  const pageParam = Number(params.get("page") ?? "1");
+  const limitParam = Number(params.get("limit") ?? "50");
+  const page = Number.isFinite(pageParam) && pageParam >= 1 ? Math.floor(pageParam) : 1;
+  const limit = Number.isFinite(limitParam) && limitParam >= 1 && limitParam <= 200
+    ? Math.floor(limitParam)
+    : 50;
+  const offset = (page - 1) * limit;
+
+  queryParams.push(limit + 1); // fetch one extra to detect hasMore
+  const limitIdx = paramIdx++;
+  queryParams.push(offset);
+  const offsetIdx = paramIdx++;
+
   const rows = await query<any>(
     `SELECT r.id, r.lead_id, r.organization_id, r.assigned_user_id,
             r.created_by_id, r.created_by_name, r.reminder_type, r.note,
@@ -244,11 +267,14 @@ export async function GET(req: NextRequest) {
        JOIN users u ON u.id = r.assigned_user_id
       WHERE ${whereClause}
       ORDER BY r.remind_at ASC
-      LIMIT 200`,
+      LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
     queryParams,
   );
 
-  const data = rows.map((r: any) => ({
+  const hasMore = rows.length > limit;
+  const pagedRows = hasMore ? rows.slice(0, limit) : rows;
+
+  const data = pagedRows.map((r: any) => ({
     id: r.id,
     leadId: r.lead_id,
     leadName: r.lead_name,
@@ -272,5 +298,5 @@ export async function GET(req: NextRequest) {
     updatedAt: r.updated_at,
   }));
 
-  return NextResponse.json({ success: true, data });
+  return NextResponse.json({ success: true, data, page, hasMore });
 }

@@ -535,8 +535,6 @@ export default function EmployeesPage() {
       .finally(() => setIsFetchingManagers(false));
   }, []);
 
-  const [isEnquiryView, setIsEnquiryView] = useState(false);
-
   // 👇 2. UPDATED QUEUE & HISTORY POPULATOR (Safe SSR + Formatted Names + Follow-ups attached) 👇
   useEffect(() => {
     const checkNotifs = async () => {

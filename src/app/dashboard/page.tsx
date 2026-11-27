@@ -6329,7 +6329,6 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
         setSelectedReceptionist(recep);
         setActiveSection("assignedTable");
         setSelectedLead(drillLead);
-        setIsEnquiryView(false);
         setSubView("detail"); prefillSalesForm(drillLead); setShowSalesForm(false); setShowLoanForm(false);
       }
     } catch { }
@@ -6434,8 +6433,6 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
     }).catch(() => { })
       .finally(() => setIsFetchingManagers(false));
   }, []);
-
-  const [isEnquiryView, setIsEnquiryView] = useState(false);
 
   const currentFollowUps = useMemo(
     () => (followUps || []).filter((f: any) => String(f.leadId) === String(selectedLead?.id)),
@@ -6856,7 +6853,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
       render: (l, { isDark: dk, theme: t }) => (
         <span
           className={`font-bold text-[12px] sm:text-[13px] cursor-pointer hover:underline ${dk ? "hover:text-[#d946a8]" : "hover:text-[#9E217B]"} transition-colors ${t.text}`}
-          onClick={(e) => { e.stopPropagation(); setIsEnquiryView(true); setSelectedLead(l); setSubView("detail"); prefillSalesForm(l); setShowSalesForm(true); setShowLoanForm(false); }}
+          onClick={(e) => { e.stopPropagation(); setSelectedLead(l); setSubView("detail"); prefillSalesForm(l); setShowSalesForm(true); setShowLoanForm(false); }}
         >
           {l.name}
         </span>
@@ -6889,7 +6886,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
       render: (l, { isDark: dk }) => (
         <button
           className={`text-[10px] sm:text-xs font-bold px-2 py-1 sm:px-3 sm:py-1.5 rounded-md sm:rounded-lg cursor-pointer transition-colors ${dk ? "bg-[#9E217B] text-white hover:bg-[#b8268f]" : "bg-[#9E217B]/10 text-[#9E217B] hover:bg-[#9E217B] hover:text-white"}`}
-          onClick={(e) => { e.stopPropagation(); setIsEnquiryView(true); setSelectedLead(l); setSubView("detail"); }}
+          onClick={(e) => { e.stopPropagation(); setSelectedLead(l); setSubView("detail"); }}
         >
           View
         </button>
@@ -6922,7 +6919,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
       render: (l, { isDark: dk }) => (
         <button
           className={`text-[10px] sm:text-xs font-bold px-2 py-1 sm:px-3 sm:py-1.5 rounded-md sm:rounded-lg cursor-pointer transition-colors ${dk ? "bg-[#9E217B] text-white hover:bg-[#b8268f]" : "bg-[#9E217B]/10 text-[#9E217B] hover:bg-[#9E217B] hover:text-white"}`}
-          onClick={(e) => { e.stopPropagation(); setIsEnquiryView(false); setSelectedLead(l); setSubView("detail"); }}
+          onClick={(e) => { e.stopPropagation(); setSelectedLead(l); setSubView("detail"); }}
         >
           View
         </button>
@@ -6996,7 +6993,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
               const recepClosed = mergedLeads.filter((l: any) => l.assigned_receptionist === recep.name && (l.status === "Closing" || !!l.closingDate)).length;
               return (
                 <div key={recep.id || recep.name}
-                  onClick={() => { setSelectedReceptionist(recep); setActiveSection("enquiries"); setSubView("list"); setSelectedLead(null); setIsEnquiryView(false); }}
+                  onClick={() => { setSelectedReceptionist(recep); setActiveSection("enquiries"); setSubView("list"); setSelectedLead(null); }}
                   className={`p-5 flex items-start gap-3 cursor-pointer transition-all border-b ${theme.tableBorder}
                     ${isSelected
                       ? isDark ? "border-r-4 border-r-[#9E217B] bg-[#9E217B]/10" : "border-r-4 border-r-[#9E217B] bg-pink-50"
@@ -7069,105 +7066,8 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
               )}
             </div> */}
 
-            {/* ── DETAIL VIEW (enquiry-style, read-only) ── */}
-            {subView === "detail" && selectedLead && isEnquiryView && (
-              <div className="flex-1 overflow-y-auto p-2 sm:p-4 animate-fadeIn">
-                <div className={`flex items-center gap-2 mb-4 sm:mb-6 rounded-xl border p-2 sm:p-4 md:p-4 ${theme.card}`}>
-                  <button
-                    onClick={() => { setSubView("list"); setSelectedLead(null); setIsEnquiryView(false); }}
-                    className={`w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center border rounded-lg sm:rounded-xl transition-colors cursor-pointer ${theme.textMuted} ${theme.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}>
-                    <FaChevronLeft className="text-[10px] sm:text-sm" />
-                  </button>
-                  <h1 className={`text-sm sm:text-lg font-bold flex items-center flex-wrap gap-2 sm:gap-3 ${theme.text}`}>
-                    <span className={isDark ? "text-[#d946a8]" : "text-[#9E217B]"}>#{selectedLead.sr_no || selectedLead.id}</span>
-                    <span>{selectedLead.name}</span>
-                    <span className={`px-2 py-0.5 sm:px-3 sm:py-1 rounded-full text-[9px] sm:crm-eyebrow border ${statusCls(selectedLead.status)}`}>
-                      {selectedLead.status || "Assigned"}
-                    </span>
-                  </h1>
-                </div>
-                <div className={`rounded-xl border p-3 sm:p-6 md:p-8 ${theme.card}`} style={theme.cardGlass}>
-                  <div className={`rounded-xl p-3 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-4 mb-4 sm:mb-8 text-white ${isDark ? "bg-gradient-to-r from-[#9E217B] to-[#7a1a5e]" : "bg-gradient-to-r from-[#00AEEF] to-[#9E217B]"}`}>
-                    <div className="flex items-center gap-2 sm:gap-3">
-                      <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full border border-white/30 bg-white/20 flex items-center justify-center font-bold text-sm sm:text-base">
-                        {String(selectedLead.assigned_to || "U").charAt(0).toUpperCase()}
-                      </div>
-                      <div>
-                        <p className="text-[9px] sm:text-[10px] text-white/70 font-bold tracking-wider uppercase mb-0.5">Assigned Sales Manager</p>
-                        <p className="font-bold text-xs sm:text-base">{selectedLead.assigned_to || "Unassigned"}</p>
-                      </div>
-                    </div>
-                    <div className="sm:text-right mt-2 sm:mt-0">
-                      <p className="text-[9px] sm:text-[10px] text-white/70 uppercase tracking-wider font-bold mb-0.5">Source</p>
-                      <p className="font-semibold text-[10px] sm:text-sm flex items-center sm:justify-end gap-1.5 sm:gap-2">
-                        <FaBriefcase className="opacity-70 text-[10px]" /> {selectedLead.source || "N/A"}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-10">
-                    <div className="space-y-4">
-                      <div>
-                        <h3 className={`text-[10px] sm:text-xs font-bold border-b pb-2 mb-3 sm:mb-4 uppercase tracking-widest ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"} ${theme.tableBorder}`}>Contact Information</h3>
-                        <div className="space-y-3 sm:space-y-4">
-                          <InlineContactField label="Phone Number" value={selectedLead.phone} fieldType="tel" isDark={isDark} theme={theme} canEdit={adminUser?.role?.toLowerCase() === "admin"} mono onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "phone", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, phone: val })); showToast("Contact details updated successfully."); }} />
-                          <InlineContactField label="Alt. Phone" value={selectedLead.altPhone ?? selectedLead.alt_phone} fieldType="tel" isDark={isDark} theme={theme} canEdit={adminUser?.role?.toLowerCase() === "admin"} mono onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "alt_phone", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, altPhone: val, alt_phone: val })); showToast("Contact details updated successfully."); }} />
-                          <InlineContactField label="Email Address" value={selectedLead.email} fieldType="email" isDark={isDark} theme={theme} canEdit={adminUser?.role?.toLowerCase() === "admin"} onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "email", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, email: val || "N/A" })); showToast("Contact details updated successfully."); }} />
-                          <div>
-                            <p className={`text-[9px] sm:text-[10px] font-medium mb-0.5 sm:mb-1 ${theme.textFaint}`}>Residential Address</p>
-                            <p className={`font-medium text-[10px] sm:text-xs ${theme.text}`}>{selectedLead.address || "N/A"}</p>
-                          </div>
-                          <InlineContactField label="Location" value={selectedLead.location} fieldType="text" isDark={isDark} theme={theme} canEdit={adminUser?.role?.toLowerCase() === "admin"} onSave={async (val) => { const r = await contactFieldSave(selectedLead.id, "location", val); if (!r.success) throw new Error(r.message); setSelectedLead((p: any) => ({ ...p, location: val || "N/A" })); showToast("Contact details updated successfully."); }} />
-                        </div>
-                      </div>
-                    </div>
-                    <div className="space-y-4 mt-2 sm:mt-0">
-                      <div>
-                        <h3 className={`text-[10px] sm:text-xs font-bold border-b pb-2 mb-3 sm:mb-4 uppercase tracking-widest ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"} ${theme.tableBorder}`}>Property Requirements</h3>
-                        <div className={`rounded-xl p-3 sm:p-4 space-y-3 sm:space-y-4 border ${theme.settingsBg}`} style={theme.settingsBgGl}>
-                          <div>
-                            <p className={`text-[9px] sm:text-[10px] font-medium mb-0.5 sm:mb-1 pl-1 sm:pl-2 ${theme.textFaint}`}>Budget</p>
-                            <p className={`font-bold text-sm sm:text-base ${isDark ? "text-green-500" : "text-emerald-600"}`}>{selectedLead.salesBudget || selectedLead.budget || "N/A"}</p>
-                          </div>
-                          <div className={`grid grid-cols-2 gap-2 border-t pt-3 sm:pt-4 ${theme.tableBorder}`}>
-                            <div>
-                              <p className={`text-[9px] sm:text-[10px] font-medium mb-0.5 sm:mb-1 pl-1 sm:pl-2 ${theme.textFaint}`}>Configuration</p>
-                              <p className={`font-medium text-[10px] sm:text-xs ${theme.text}`}>{selectedLead.configuration || selectedLead.propType || "N/A"}</p>
-                            </div>
-                            <div>
-                              <p className={`text-[9px] sm:text-[10px] font-medium mb-0.5 sm:mb-1 pl-1 sm:pl-2 ${theme.textFaint}`}>Purpose</p>
-                              <p className={`font-medium text-[10px] sm:text-xs ${theme.text}`}>{selectedLead.purpose || selectedLead.useType || "N/A"}</p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      <div>
-                        <p className={`text-[9px] sm:text-[10px] font-medium mb-0.5 sm:mb-1 ${theme.textFaint}`}>Loan Planned</p>
-                        <p className={`font-semibold text-[10px] sm:text-xs ${theme.text}`}>{selectedLead.loanPlanned || selectedLead.loan_planned || "N/A"}</p>
-                      </div>
-                    </div>
-                  </div>
-                  {selectedLead.source === "Channel Partner" && (
-                    <div className={`mt-4 sm:mt-6 rounded-xl p-3 sm:p-4 border ${theme.settingsBg}`} style={theme.settingsBgGl}>
-                      <h3 className={`text-[9px] sm:text-[10px] font-bold uppercase tracking-widest mb-2 sm:mb-3 border-b pb-2 ${isDark ? "text-[#d946a8]" : "text-[#9E217B]"} ${theme.tableBorder}`}>Channel Partner Details</h3>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                        {[{ label: "CP Company", val: selectedLead.cp_company || selectedLead.cpCompany }, { label: "CP Phone", val: selectedLead.cp_phone || selectedLead.cpPhone }].map(({ label, val }) => (
-                          <div key={label}>
-                            <p className={`text-[9px] sm:text-[10px] font-medium mb-0.5 ${theme.textFaint}`}>{label}</p>
-                            <p className={`font-medium text-[10px] sm:text-xs ${theme.text}`}>{val || "N/A"}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  <div className={`mt-4 sm:mt-6 pt-3 sm:pt-4 border-t flex justify-end ${theme.tableBorder1}`}>
-                    <p className={`text-[9px] sm:text-[10px] ${theme.textFaint}`}>Created: {formatDate(selectedLead.created_at)}</p>
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* ── DETAIL VIEW (full panel with follow-ups, mirrors Sales Manager) ── */}
-            {subView === "detail" && selectedLead && !isEnquiryView && (
+            {subView === "detail" && selectedLead && (
               bookingData && showBookingView ? (
                 <div className="animate-fadeIn w-full h-[calc(100vh-130px)] overflow-hidden bg-transparent flex flex-col">
                   <div className="flex items-center p-2 shrink-0 border-b border-white/10 shadow-sm" style={theme.cardGlass}>
@@ -7354,7 +7254,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                 <div className="animate-fadeIn space-y-3 sm:space-y-4">
                   <button
                     type="button"
-                    onClick={() => { setSelectedReceptionist(null); setSubView("list"); setSelectedLead(null); setIsEnquiryView(false); }}
+                    onClick={() => { setSelectedReceptionist(null); setSubView("list"); setSelectedLead(null); }}
                     className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] sm:text-xs font-bold transition-colors cursor-pointer ${theme.textMuted} ${theme.tableBorder} ${isDark ? "bg-[#222] hover:bg-[#333]" : "bg-white hover:bg-[#F8FAFC]"}`}
                   >
                     <FaChevronLeft className="text-[10px]" /> Back to Receptionists
@@ -7453,7 +7353,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                           isLoading={isLoading}
                           formatDate={formatDate}
                           filteredRef={recAssignFilteredRef}
-                          onRowClick={(lead) => { setIsEnquiryView(false); setSelectedLead(lead); setSubView("detail"); prefillSalesForm(lead); setShowSalesForm(false); setShowLoanForm(false); }}
+                          onRowClick={(lead) => { setSelectedLead(lead); setSubView("detail"); prefillSalesForm(lead); setShowSalesForm(false); setShowLoanForm(false); }}
                         />
                       </div>
                     )}
@@ -7479,7 +7379,7 @@ function ReceptionistView({ receptionists, allLeads, followUps, isLoading, refet
                           isLoading={isLoading}
                           formatDate={formatDate}
                           filteredRef={recClosedFilteredRef}
-                          onRowClick={(lead) => { setIsEnquiryView(false); setSelectedLead(lead); setSubView("detail"); prefillSalesForm(lead); setShowSalesForm(false); setShowLoanForm(false); }}
+                          onRowClick={(lead) => { setSelectedLead(lead); setSubView("detail"); prefillSalesForm(lead); setShowSalesForm(false); setShowLoanForm(false); }}
                         />
                       </div>
                     )}

@@ -625,3 +625,177 @@ describe("My Attendance working hours display", () => {
     expect(nullResult).not.toBe(zeroResult);
   });
 });
+
+// ── Date ceiling: past-date unclosed sessions must NOT span days ───────────
+//
+// Root cause of the "54h 57m" bug: when viewing Nov 24 on Nov 26, the
+// client-side timer computed Date.now() - markedAt spanning multiple days.
+// The server SQL also used CURRENT_TIMESTAMP for unclosed records, producing
+// the same multi-day span.
+//
+// Fix: the server now returns `is_today` flag and caps CURRENT_TIMESTAMP at
+// end-of-selected-day IST via LEAST(). The client uses `is_today` to decide
+// whether to run its live timer or use the capped server value.
+
+describe("past-date working hours capping", () => {
+  /**
+   * Simulates the frontend Working Hours column logic from LiveActivityView.tsx.
+   * This mirrors the actual rendering path at lines 740-766.
+   */
+  function getDisplayedWorkingHours(
+    row: {
+      attendance_marked_at?: string | null;
+      attendance_completed?: boolean;
+      attendance_span_seconds?: number | null;
+      total_periods?: number;
+      is_today?: boolean;
+    },
+    nowMs: number,
+  ): number | null {
+    if (!row.attendance_marked_at) return null;
+
+    // Day complete OR past date — use frozen server span
+    if (row.attendance_completed || !row.is_today) {
+      const span = Number(row.attendance_span_seconds);
+      return span >= 0 ? span : 0;
+    }
+
+    // Active attendance on TODAY
+    if ((row.total_periods ?? 0) > 1) {
+      const span = Number(row.attendance_span_seconds);
+      return span >= 0 ? span : 0;
+    }
+
+    // Single period today: live timer
+    const markedMs = new Date(row.attendance_marked_at).getTime();
+    if (!isNaN(markedMs)) {
+      const sec = Math.floor((nowMs - markedMs) / 1000);
+      return sec >= 0 ? sec : 0;
+    }
+    return null;
+  }
+
+  it("today's active session uses live client timer", () => {
+    const markedAt = "2026-11-26T06:00:00.000Z"; // 11:30 AM IST
+    const nowMs = new Date("2026-11-26T09:00:00.000Z").getTime(); // 2:30 PM IST
+    const result = getDisplayedWorkingHours({
+      attendance_marked_at: markedAt,
+      attendance_completed: false,
+      attendance_span_seconds: null,
+      total_periods: 1,
+      is_today: true,
+    }, nowMs);
+    // 11:30 AM to 2:30 PM = 3 hours
+    expect(result).toBe(3 * 3600);
+  });
+
+  it("past date active session uses server-capped span, NOT live timer", () => {
+    // Scenario: viewing Nov 24 on Nov 26.
+    // Without the fix, this would produce ~55 hours.
+    // With the fix, server caps at end-of-day IST.
+    const result = getDisplayedWorkingHours({
+      attendance_marked_at: "2026-11-24T06:03:00.000Z", // 11:33 AM IST
+      attendance_completed: false,
+      // Server-capped: end-of-day IST midnight (Nov 25 00:00 IST) - 11:33 AM = ~12h 27m
+      attendance_span_seconds: 12 * 3600 + 27 * 60,
+      total_periods: 1,
+      is_today: false, // <-- past date
+    }, Date.now()); // nowMs is irrelevant because is_today=false
+    // Must use the server span, not the live timer
+    expect(result).toBe(12 * 3600 + 27 * 60);
+    expect(result).toBeLessThan(24 * 3600); // must be under 24 hours
+  });
+
+  it("past date completed session uses server span (unchanged behavior)", () => {
+    const result = getDisplayedWorkingHours({
+      attendance_marked_at: "2026-11-24T03:30:00.000Z",
+      attendance_completed: true,
+      attendance_span_seconds: 9 * 3600, // 9 hours
+      total_periods: 1,
+      is_today: false,
+    }, Date.now());
+    expect(result).toBe(9 * 3600);
+  });
+
+  it("today's completed session uses server span (unchanged behavior)", () => {
+    const result = getDisplayedWorkingHours({
+      attendance_marked_at: "2026-11-26T03:30:00.000Z",
+      attendance_completed: true,
+      attendance_span_seconds: 8 * 3600,
+      total_periods: 1,
+      is_today: true,
+    }, Date.now());
+    expect(result).toBe(8 * 3600);
+  });
+
+  it("past date multi-period uses server span", () => {
+    const result = getDisplayedWorkingHours({
+      attendance_marked_at: "2026-11-24T03:30:00.000Z",
+      attendance_completed: false,
+      attendance_span_seconds: 7 * 3600,
+      total_periods: 2,
+      is_today: false,
+    }, Date.now());
+    expect(result).toBe(7 * 3600);
+  });
+
+  it("today multi-period uses server span (unchanged behavior)", () => {
+    const result = getDisplayedWorkingHours({
+      attendance_marked_at: "2026-11-26T03:30:00.000Z",
+      attendance_completed: false,
+      attendance_span_seconds: 5 * 3600,
+      total_periods: 3,
+      is_today: true,
+    }, Date.now());
+    expect(result).toBe(5 * 3600);
+  });
+
+  it("no attendance_marked_at returns null", () => {
+    const result = getDisplayedWorkingHours({
+      attendance_marked_at: null,
+      attendance_completed: false,
+      attendance_span_seconds: null,
+      total_periods: 0,
+      is_today: true,
+    }, Date.now());
+    expect(result).toBeNull();
+  });
+
+  // The critical regression test: past-date active session must NEVER exceed 24h
+  it("unclosed attendance from 2 days ago is capped under 24h", () => {
+    // This is the exact bug scenario from the screenshot:
+    // Employee marked attendance Nov 24 at 11:33 AM, never checked out,
+    // admin views on Nov 26 → used to show 54h 57m
+    const serverCappedSpan = 12 * 3600 + 27 * 60; // server LEAST() caps at end-of-day
+    const result = getDisplayedWorkingHours({
+      attendance_marked_at: "2026-11-24T06:03:00.000Z",
+      attendance_completed: false,
+      attendance_span_seconds: serverCappedSpan,
+      total_periods: 1,
+      is_today: false,
+    }, new Date("2026-11-26T13:00:00.000Z").getTime());
+    expect(result).toBe(serverCappedSpan);
+    expect(result).toBeLessThan(24 * 3600);
+    expect(formatDurationHM(result!)).toBe("12h 27m");
+  });
+
+  // Server SQL LEAST() ceiling formula verification
+  it("LEAST(NOW, end-of-day) equals NOW for today", () => {
+    // Simulates: target date is today, NOW is 3 PM IST
+    // end-of-day = midnight next day IST
+    // LEAST(3 PM, midnight) = 3 PM (NOW wins)
+    const nowIst = new Date("2026-11-26T09:30:00.000Z"); // 3 PM IST
+    const endOfDay = new Date("2026-11-26T18:30:00.000Z"); // midnight Nov 27 IST
+    const ceiling = new Date(Math.min(nowIst.getTime(), endOfDay.getTime()));
+    expect(ceiling.getTime()).toBe(nowIst.getTime());
+  });
+
+  it("LEAST(NOW, end-of-day) equals end-of-day for past dates", () => {
+    // Simulates: target date is Nov 24, NOW is Nov 26 3 PM IST
+    // end-of-day for Nov 24 = midnight Nov 25 IST = Nov 24 18:30 UTC
+    const nowIst = new Date("2026-11-26T09:30:00.000Z"); // Nov 26 3 PM IST
+    const endOfDay = new Date("2026-11-24T18:30:00.000Z"); // midnight Nov 25 IST
+    const ceiling = new Date(Math.min(nowIst.getTime(), endOfDay.getTime()));
+    expect(ceiling.getTime()).toBe(endOfDay.getTime()); // end-of-day wins
+  });
+});

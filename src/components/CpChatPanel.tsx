@@ -242,8 +242,23 @@ function AttachmentDoc({ att, isDark, cpId }: {
 }
 
 const ChatMessage = React.memo(function ChatMessage({
-  m, newDay, isDark, onLightbox, cpId,
-}: { m: ChatItem; newDay: boolean; isDark: boolean; onLightbox: (url: string) => void; cpId?: number }) {
+  m, newDay, isDark, onLightbox, cpId, isAdmin, onDelete,
+}: { m: ChatItem; newDay: boolean; isDark: boolean; onLightbox: (url: string) => void; cpId?: number; isAdmin?: boolean; onDelete?: (messageId: string) => Promise<void> }) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const canDeleteMsg = isAdmin && onDelete && m.source === "cp_chat_messages" && !m.pending;
+
+  const handleDelete = async () => {
+    if (!onDelete) return;
+    setDeleting(true);
+    try {
+      await onDelete(m.id);
+    } catch {
+      setDeleting(false);
+      setConfirmDelete(false);
+    }
+  };
+
   const bgPanel = isDark ? "bg-[#1C1C1E]" : "bg-[#FFFFFF]";
   const bgSubtle = isDark ? "bg-[#2C2C2E]" : "bg-[#F2F2F7]";
   const borderSubtle = isDark ? "border-[#38383A]" : "border-[#E5E5EA]";
@@ -350,6 +365,31 @@ const ChatMessage = React.memo(function ChatMessage({
                 {m.mine && !m.pending && <IoCheckmarkDoneOutline size={12} />}
               </div>
             </div>
+            {canDeleteMsg && (
+              <div className={`opacity-0 group-hover:opacity-100 transition-opacity mt-1 ${m.mine ? 'self-end' : 'self-start'}`}>
+                {confirmDelete ? (
+                  <div className={`inline-flex items-center gap-2 text-[11px] font-medium rounded-lg px-2.5 py-1 ${isDark ? 'bg-[#2C2C2E]' : 'bg-[#F2F2F7]'}`}>
+                    <button onClick={handleDelete} disabled={deleting}
+                      className="text-red-500 hover:text-red-400 disabled:opacity-50 cursor-pointer">
+                      {deleting ? "Deleting\u2026" : "Delete"}
+                    </button>
+                    <span className={textSecondary}>&middot;</span>
+                    <button onClick={() => setConfirmDelete(false)} disabled={deleting}
+                      className={`${textSecondary} hover:opacity-70 cursor-pointer`}>
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setConfirmDelete(true)}
+                    className={`flex items-center p-1 rounded-full transition-colors cursor-pointer ${isDark ? 'hover:bg-white/10' : 'hover:bg-black/5'} ${textSecondary} hover:text-red-500`}
+                    title="Delete message"
+                  >
+                    <IoTrashOutline size={13} />
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
       ) : (
@@ -716,6 +756,10 @@ function CpChatPanel({
     }
   }, [partnerListUrl]);
 
+  // Delta sync refs — cursor is the server clock, fingerprint detects CRM event changes
+  const cursorRef = useRef<string | null>(null);
+  const fingerprintRef = useRef<string | null>(null);
+
   const fetchChat = useCallback(async (id: number) => {
     setLoading(true); setError("");
     try {
@@ -728,6 +772,8 @@ function CpChatPanel({
       if (!thread.success) throw new Error(thread.message || "Could not load this conversation.");
       setData(overview.data);
       setChat(thread.data);
+      cursorRef.current = thread.data?.cursor ?? null;
+      fingerprintRef.current = thread.data?.fingerprint ?? null;
       setPending([]);
     } catch (e: any) {
       setData(null); setChat(null);
@@ -737,12 +783,108 @@ function CpChatPanel({
 
   useEffect(() => {
     if (cpId == null) return;
+    cursorRef.current = null;
+    fingerprintRef.current = null;
     fetchChat(cpId);
     setSeen(prev => {
       const next = { ...prev, [String(cpId)]: Date.now() };
       try { localStorage.setItem("cpChatSeen", JSON.stringify(next)); } catch { }
       return next;
     });
+  }, [cpId, fetchChat]);
+
+  // ── Delta polling — delivers other users' messages without refresh ──
+  // Adaptive: 2s when active, slows to 5s after 15 idle polls, caps at 10s.
+  // Every 5 minutes: forced full refresh (catches deleted messages, refreshes presigned URLs).
+  useEffect(() => {
+    if (cpId == null) return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let running = false;
+    let delay = 2000;
+    let idlePolls = 0;
+    let lastFullAt = Date.now();
+    const ctrl = new AbortController();
+    const FULL_REFRESH_MS = 5 * 60_000;
+
+    const poll = async () => {
+      if (stopped || running) return;
+      if (document.hidden) { timer = setTimeout(poll, delay); return; }
+      if (!cursorRef.current) { timer = setTimeout(poll, 2000); return; }
+      running = true;
+      try {
+        // Periodic full refresh for deleted messages + presigned URL renewal
+        if (Date.now() - lastFullAt > FULL_REFRESH_MS) {
+          await fetchChat(cpId);
+          lastFullAt = Date.now();
+          idlePolls = 0;
+          delay = 2000;
+        } else {
+          const res = await fetch(
+            `/api/channel-partners/${cpId}/chat?since=${encodeURIComponent(cursorRef.current)}`,
+            { cache: "no-store", signal: ctrl.signal }
+          );
+          if (!res.ok) {
+            const status = res.status;
+            if (status === 401 || status === 403 || status === 404) { stopped = true; return; }
+            throw new Error(`HTTP ${status}`);
+          }
+          const json = await res.json();
+          if (!json?.success) throw new Error(json?.message || "Poll failed");
+          const d = json.data;
+          if (d.fingerprint !== fingerprintRef.current) {
+            await fetchChat(cpId);
+            lastFullAt = Date.now();
+            idlePolls = 0;
+            delay = 2000;
+          } else if (d.messages?.length > 0) {
+            setChat((prev: any) => {
+              if (!prev) return prev;
+              const map = new Map((prev.messages || []).map((m: any) => [m.id, m]));
+              for (const m of d.messages) map.set(m.id, m);
+              return { ...prev, messages: [...map.values()].sort((a: any, b: any) => a.ts - b.ts) };
+            });
+            cursorRef.current = d.cursor;
+            fingerprintRef.current = d.fingerprint;
+            idlePolls = 0;
+            delay = 2000;
+          } else {
+            cursorRef.current = d.cursor;
+            idlePolls++;
+            // Adaptive: slow down when no activity
+            if (idlePolls > 30) delay = 10000;
+            else if (idlePolls > 15) delay = 5000;
+            else delay = 2000;
+          }
+        }
+      } catch (e: any) {
+        if (e?.name === "AbortError") return;
+        delay = Math.min(delay * 2, 30000);
+      } finally {
+        running = false;
+      }
+      if (!stopped) timer = setTimeout(poll, delay);
+    };
+
+    timer = setTimeout(poll, 2500);
+
+    const onVisible = () => {
+      if (!document.hidden && !running) {
+        // Resume fast polling on tab focus
+        idlePolls = 0;
+        delay = 2000;
+        clearTimeout(timer);
+        poll();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+      ctrl.abort();
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [cpId, fetchChat]);
 
   const partner = data?.partner;
@@ -840,6 +982,19 @@ function CpChatPanel({
   // Called by <Composer>, which owns the draft. Throws on failure so the
   // composer can put the text back — the same recovery as before, just on the
   // side of the boundary that holds the text.
+  /** Merge POST-confirmed items into chat state and retire the matching pending item. */
+  const confirmSend = useCallback((confirmed: any[], pendingId: string) => {
+    if (confirmed?.length) {
+      setChat((prev: any) => {
+        if (!prev) return prev;
+        const map = new Map((prev.messages || []).map((m: any) => [m.id, m]));
+        for (const m of confirmed) map.set(m.id, m);
+        return { ...prev, messages: [...map.values()].sort((a: any, b: any) => a.ts - b.ts) };
+      });
+    }
+    setPending(p => p.filter(m => m.id !== pendingId));
+  }, []);
+
   const send = useCallback(async (text: string) => {
     if (cpId == null) return;
     const optimistic: ChatItem = {
@@ -856,12 +1011,12 @@ function CpChatPanel({
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.message || "Send failed.");
-      await fetchChat(cpId);
+      confirmSend(json.data, optimistic.id);
     } catch (e: any) {
       setPending(p => p.filter(m => m.id !== optimistic.id));
       throw new Error(e?.message || "Message could not be sent.");
     }
-  }, [cpId, user?.name, fetchChat]);
+  }, [cpId, user?.name, confirmSend]);
 
   /** Send a message with file attachments via multipart/form-data. */
   const sendWithFiles = useCallback(async (text: string, files: File[]) => {
@@ -886,12 +1041,12 @@ function CpChatPanel({
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.message || "Upload failed.");
-      await fetchChat(cpId);
+      confirmSend(json.data, optimisticId);
     } catch (e: any) {
       setPending(p => p.filter(m => m.id !== optimisticId));
       throw new Error(e?.message || "Files could not be sent.");
     }
-  }, [cpId, user?.name, fetchChat]);
+  }, [cpId, user?.name, confirmSend]);
 
   /** Send a camera-captured photo with GPS metadata via the dedicated attachments API. */
   const sendWithCamera = useCallback(async (result: {
@@ -930,12 +1085,35 @@ function CpChatPanel({
       if (!json.success) throw new Error(json.message || "Upload failed.");
       // Revoke the preview blob URL
       if (result.previewUrl) URL.revokeObjectURL(result.previewUrl);
-      await fetchChat(cpId);
+      confirmSend(json.data, optimisticId);
     } catch (e: any) {
       setPending(p => p.filter(m => m.id !== optimisticId));
       console.error("[sendWithCamera]", e?.message);
     }
-  }, [cpId, user?.name, fetchChat]);
+  }, [cpId, user?.name, confirmSend]);
+
+  // Derive admin status from the actual user role, not the isAdmin prop which
+  // is set for all roles in AdminCpChatWrapper. This gates the delete button.
+  const userIsAdmin = useMemo(() => {
+    const r = (user?.role ?? "").toString().trim().toLowerCase().replace(/_/g, " ");
+    return r === "admin" || r === "super admin";
+  }, [user?.role]);
+
+  const deleteMessage = useCallback(async (messageId: string) => {
+    if (cpId == null) return;
+    const dbId = messageId.startsWith("m") ? messageId.slice(1) : messageId;
+    const res = await fetch(`/api/channel-partners/${cpId}/chat`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messageId: dbId }),
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.message || "Delete failed.");
+    setChat((prev: any) => {
+      if (!prev?.messages) return prev;
+      return { ...prev, messages: prev.messages.filter((m: any) => m.id !== messageId) };
+    });
+  }, [cpId]);
 
   // Restrained, subtle colors for avatars
   const getInitialsBg = (name: string) => {
@@ -1298,7 +1476,7 @@ function CpChatPanel({
                     {thread.map((m, i) => {
                       const prev = thread[i - 1];
                       const newDay = !prev || fmtDay(prev.ts) !== fmtDay(m.ts);
-                      return <ChatMessage key={m.id} m={m} newDay={newDay} isDark={isDark} onLightbox={setLightboxUrl} cpId={cpId ?? undefined} />;
+                      return <ChatMessage key={m.id} m={m} newDay={newDay} isDark={isDark} onLightbox={setLightboxUrl} cpId={cpId ?? undefined} isAdmin={userIsAdmin} onDelete={deleteMessage} />;
                     })}
                     <div ref={endRef} className="h-4" />
                   </div>

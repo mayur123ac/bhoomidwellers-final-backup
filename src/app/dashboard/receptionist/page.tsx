@@ -38,6 +38,7 @@ import { useAttendance } from "@/components/AttendanceContext";
 import CrmUpdatesNotification from "@/components/CrmUpdatesNotification";
 import WhatsAppConversationPanel from "@/components/whatsapp/WhatsAppConversationPanel";
 import LostLeadModal from "@/components/LostLeadModal";
+import ReminderModal from "@/components/ReminderModal";
 import { updateLeadLostState, useLostLeadEvents } from "@/lib/lostLeadSync";
 // The notification queue. Built and organization-scoped on the server — see
 // lib/notifications/feed.ts for why it is no longer derived in this file.
@@ -1036,6 +1037,7 @@ export default function ReceptionistDashboard() {
   // Tracks which tab the back button should return to from the detail view.
   const [detailReturnTab, setDetailReturnTab] = useState<string>("recep-leads");
   const [selectedLead, setSelectedLead] = useState<any>(null);
+  const [showReminderModal, setShowReminderModal] = useState(false);
 
   // If the "assigned" tab is showing but there's no detail to display (e.g. the
   // cards sub-view), redirect to the return tab. Assigned Forms cards have been
@@ -2300,6 +2302,20 @@ export default function ReceptionistDashboard() {
       refetchAll();
     } catch { showToast("Network error while restoring", "red"); }
     finally { setIsSavingLost(false); }
+  };
+
+  const handleCreateReminder = async (remindAt: string, note: string) => {
+    if (!selectedLead) return;
+    const res = await fetch("/api/reminders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ leadId: selectedLead.id, remindAt, note: note || null }),
+    });
+    const json = await res.json().catch(() => null);
+    if (!res.ok || !json?.success) {
+      throw new Error(json?.message || "Failed to create reminder.");
+    }
+    showToast("Reminder set successfully");
   };
 
   const handleReopenLead = async () => {
@@ -3742,7 +3758,7 @@ export default function ReceptionistDashboard() {
                         onOpenBookingView={() => { }}
                         onOpenBookingForm={() => setIsClosingModalOpen(true)}
                         onOpenLostModal={openLostLeadModal}
-                        onOpenReminderModal={() => { }}
+                        onOpenReminderModal={() => setShowReminderModal(true)}
                         onOpenWhatsApp={() => setIsWaModalOpen(true)}
                         onRestore={handleRestoreLead}
                         onReopen={handleReopenLead}
@@ -3775,6 +3791,16 @@ export default function ReceptionistDashboard() {
               onReasonChange={(v) => { setLostReason(v); if (lostError) setLostError(""); }}
               onClose={() => setShowLostModal(false)}
               onSubmit={handleMarkLostLead}
+            />
+          )}
+
+          {showReminderModal && selectedLead && (
+            <ReminderModal
+              lead={selectedLead}
+              isDark={isDark}
+              theme={t}
+              onClose={() => setShowReminderModal(false)}
+              onSubmit={handleCreateReminder}
             />
           )}
 
